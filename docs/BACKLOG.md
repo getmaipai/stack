@@ -181,12 +181,18 @@ each item's design section lands in `dev.md` before its code.
   Acceptance: an update and a rollback of a scripted engine with no
   request cut (test); the check's request has exactly the two headers
   (test); the privacy page lists the URLs. Exit: `bash scripts/check.sh`.
-- [ ] **STACK-11b (S): first run on `@stepperize/react`.** The five
-  steps' state, navigation and validation move to the headless
-  stepper; markup stays the kit's; the downloading step renders one
-  progress row per model and engine from the event feed. Acceptance:
-  the first-run Playwright flow from STACK-11 still passes; back
-  always works; screenshots re-taken and judged.
+- [ ] **STACK-11b (M): install and first run, redesigned.** The
+  three-step first run on `@stepperize/react` (nothing downloads),
+  the probe in the person's words, the board's "Set up your AI" card,
+  the sizer screen with "Start small now" and "Get the full plan",
+  downloads as a background job with the honest bar and the
+  network sentence, the abilities selector, Try it opening when the
+  small set lands. The small set's pins (a fast chat model, small STT
+  and TTS, about 1 GB) are chosen with STACK-04b. Design in `ux.md`
+  "Install and first run". Acceptance: the first-run Playwright flow
+  completes in under ninety seconds with no network; a scripted
+  download shows size, speed and time left and survives a pause;
+  screenshots re-taken and judged.
 - [ ] **STACK-12 (M): Try it** is built on shadcn/ui's chat components
   (`message-scroller`, `message`, `bubble`, `attachment`, `marker`)
   added to the kit by the registry, a small SSE hook against the

@@ -17,32 +17,61 @@ Three people use the Stack, and the pages are ordered for the first one:
 - **Home**, which is a client and never sees these pages; it reads the
   same facts over the API and shows them in its own Admin.
 
-## First run
+## Install and first run (redesigned 2026-09-17)
 
-Five steps, one thing per step, a progress rail on the left, a "back"
-that always works.
+The rule: a person is talking to their own AI within minutes of
+opening the app, and a download speed never looks like our app. What
+the well-liked products do: Ollama installs in thirty seconds and
+downloads nothing until asked; Home Assistant asks for an account and
+a name and adds everything heavy later; Apple Intelligence downloads
+its models in the background with a "Preparing" state and a
+notification when ready; Jan redesigned to "chatting in seconds" with
+a small model and background preparation. LM Studio offers a 6 GB
+download during onboarding and its bug tracker has people giving up
+after an hour on a blank screen.
 
-1. **Welcome.** One sentence: "MaiPai Stack runs AI on this computer.
-   Nothing leaves it." The AI-outputs disclaimer, in plain words, once.
-   A "Continue" button.
-2. **Your login.** Operator password (passkey later). This secures the
-   pages and the keys. No email, no account anywhere else.
-3. **This computer.** The probe's result as a card: chip, memory, free
-   space, OS. Under it the proposed profile in the person's words:
-   "This Mac can run the large chat model, voice in and out, and one
-   picture or video job at a time. About 90 GB of downloads." A
-   "Change" link opens the profile list (16, 32, 64, 128 GB tiers), each
-   with what it can and cannot do, never with model names first.
-4. **Downloading.** One bar per model and engine, sizes, a running total,
-   a pause. Each row shows where it comes from and its licence in one
-   line, because that is the last time provenance is optional. The
-   first-run bench runs as each resident model lands and the row turns
-   into a measured number ("uses 41 GB when loaded").
-5. **Ready.** The board (below), everything green, and two cards: "Try
-   it" and "Share with your family" (the Home hand-off).
+**Install** is one download and one open: the app bundle with the
+daemon inside. No terminal, no package manager, no Docker.
 
-If a download fails, the row says why in words ("The internet dropped.
-Downloads resume when it is back.") and nothing else stops.
+**First run is three steps and downloads nothing**, under ninety
+seconds, a progress rail on the left, a "back" that always works:
+
+1. **Welcome.** "MaiPai Stack runs AI on this computer. Nothing leaves
+   it." The AI-outputs disclaimer in plain words, once. Continue.
+2. **Your login.** Operator password (passkey later). No email, no
+   account anywhere else.
+3. **This computer.** The probe as a card in the person's words
+   ("Apple silicon Mac, 24 GB of memory, 153 GB free", never
+   `darwin arm64`), and one line: "Ready. Let's set up your AI."
+
+Then the board, ours, with one card on top: **Set up your AI.**
+
+**The sizer, one screen.** The proposed plan for this machine in the
+person's words (the tier label), a "Change" list of the four tiers,
+each saying what it can and cannot do, and two buttons:
+
+- **Start small now**: a fast chat model plus small voice in and out,
+  about 1 GB, one to three minutes on ordinary broadband. The person
+  is talking to their own AI before the full plan arrives.
+- **Get the full plan**: queued behind the small set.
+
+**Downloads are a background job with an honest bar**: one row per
+model and engine with size, speed, time left, pause and resume, where
+it comes from and its licence in one line, and one sentence that
+separates us from the network: "This is your internet speed. The
+Stack is ready; your bigger model is on its way." A notification when
+it lands. If a download fails, the row says why in words ("The
+internet dropped. Downloads resume when it is back.") and nothing
+else stops.
+
+**The feature selector is abilities, not models**: chat, voice,
+pictures, video, music, each with its size and whether this machine
+can run it, defaults from the tier; anything can be added later from
+the board. Model names sit behind a "details" disclosure for
+tinkerers.
+
+**Try it** opens the moment the small model lands, so the first
+impression is a conversation, not a progress bar.
 
 ## The board
 
