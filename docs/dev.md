@@ -465,6 +465,74 @@ service account. A copied `stack.db` holds no secret in plaintext.
 | Linux, ARM and x64 | `llama-server` (CPU, CUDA, or the accelerator the robot carries), sherpa-onnx for speech, ComfyUI where a GPU exists | MaiPai Bot |
 | Windows, x64 | `llama-server` CUDA, ComfyUI | The CUDA catalogue |
 
+## The API boundary: what is the Stack's and what is Home's (2026-09-17)
+
+The foundational API moved out of Home into the Stack. Home keeps an
+API of its own for everything that is not foundational. These rules
+decide which side a thing lands on, and how the two talk, so the
+boundary never drifts into two copies.
+
+1. **The ownership test.** An endpoint, a record or a setting is the
+   Stack's when it can be served knowing nothing about who is asking
+   beyond a client key: engines, models, hardware, memory, the
+   machine's health, updates of those, a raw inference by role. It is
+   Home's when it needs a person, a household, a conversation, memory,
+   consent, a companion, a package, a schedule, a device, or a
+   notification to a phone. When a thing needs both, it is split at
+   that line and the split is written in the contract table in
+   `integrations.md` (a voice package: the model half is the Stack's,
+   the runtime binding is Home's).
+2. **One fact, one API.** A fact the Stack owns is read from the
+   Stack's API and nowhere else. Home never re-exposes a Stack fact in
+   its own shape: its Admin pages read the Stack through a
+   pass-through (`/api/stack/*` on Home forwards to `/stack/v1/*` on
+   the Stack, adding Home's one client key and Home's own role check,
+   changing nothing else). Go and Bot reach the Stack the same way,
+   through their Home. A translation layer is a bug.
+3. **Same wire, different meaning, never confused.** Both products
+   speak the OpenAI shape on `/v1`. The Stack's `/v1/chat/completions`
+   answers as the model: no memory, no guards, no person. Home's `/v1`
+   answers as the household's assistant: through the turn engine,
+   the guards, memory and the companion, for a signed-in person or a
+   per-person token. Home's `/v1` is never a raw pass-through to the
+   Stack, and the Stack's `/v1` never learns a person. A client that
+   wants the model uses the Stack; one that wants the companion uses
+   Home.
+4. **Keys and people never cross.** The Stack knows clients; Home is
+   one client with one key, held server-side, scoped to the roles
+   Home needs. A person never holds a Stack key, a browser signed in
+   to Home never talks to the Stack directly, and the Stack never
+   stores a person id, not even as a label on a request.
+5. **Stack first, additive always.** A capability Home needs from the
+   engines is added to the Stack's API first, then consumed; it is
+   never re-implemented in Home "for now". Both APIs are additive
+   under the org compatibility rule; the Stack's is versioned under
+   `/stack/v1`, and Home pins a minimum Stack version it checks at
+   boot against `/healthz`.
+6. **One feed, one producer per event.** The Stack's event feed is
+   the only source of engine, model, memory, health and update
+   events; Home bridges them into its notification system and never
+   produces a second copy. Home's own events (a person joined, a
+   backup ran) stay Home's.
+7. **References, not copies.** Home's database holds Stack ids (a
+   model id, an engine tag) and its own facts about them (which
+   companion uses which voice); it never mirrors a Stack record. A
+   Stack fact shown in Home is fetched, cached briefly if at all, and
+   attributed.
+8. **Failure passes through verbatim.** When the Stack is down or a
+   role is offline, Home shows the Stack's `offline_reason` and health
+   items as they are, with its own one line of context, and raises a
+   Repairs entry pointing at the Stack; it never guesses a different
+   cause.
+9. **The contract is tested from both sides.** The Stack ships a
+   contract test suite (every route, its shapes, the identity
+   headers, the 503 and 409 forms) that Home runs against the pinned
+   Stack version in its own gate, the way the spec's round-trip
+   fixtures work for records.
+10. **Docs follow the owner.** A Stack capability is documented in
+    the Stack's docs; Home's docs link there and describe only what
+    Home adds on top.
+
 ## What moves out of Home, later
 
 Nothing migrates until the Stack's first milestone runs on the Studio
