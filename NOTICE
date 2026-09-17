@@ -1,0 +1,10 @@
+MaiPai Stack
+Copyright (c) 2026 Jesse Torres
+
+This product will download third-party engines and models on demand at
+the user's request (llama.cpp, MLX-based servers, ComfyUI, speech
+runtimes, and the models the user selects). None of them are vendored
+here. Each is fetched from its pinned upstream URL, checksum verified,
+and used under its own licence, which the Stack records with the
+download and shows before selection. Attributions for anything this
+repo redistributes are listed here as they are added.

@@ -1,0 +1,10 @@
+# Runtime data, keys, downloads, scratch: never tracked (org CLAUDE.md,
+# Credentials and secrets).
+data/
+data-*/
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+.DS_Store
