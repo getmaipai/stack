@@ -73,6 +73,10 @@ never copied. No item migrates the hub until STACK-16.
   unmodified OpenAI client library completes a chat, an embedding, a
   transcription and a speech render against scripted engines; role
   scoping refuses a disallowed role with a clear error. Committed, engine binding completed by STACK-05.
+- [x] **STACK-07b (S): streaming completions and speech.** Chat streams
+  pass through with identity headers, cancellation, and usage counters;
+  phrase-level TTS streaming remains the contract for its future engine.
+  Verified at <hash>.
 - [x] **STACK-08 (M): operator login and client keys.** Password login,
   keys hashed at rest and shown once, allowed roles, counters, revoke;
   loopback requires a key. Mirror the hub's `auth.ts` and `lib/secrets`

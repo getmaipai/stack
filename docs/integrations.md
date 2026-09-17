@@ -12,7 +12,7 @@ changelog note.
 
 | Surface | Path | Who uses it | Status |
 |---|---|---|---|
-| OpenAI-shaped inference | `/v1/chat/completions`, `/v1/embeddings`, `/v1/audio/transcriptions`, `/v1/audio/speech`, `/v1/images/generations`, `/v1/images/edits` | every client, by role name in `model` | partly (chat, embeddings, audio, images; no image edits) |
+| OpenAI-shaped inference | `/v1/chat/completions`, `/v1/embeddings`, `/v1/audio/transcriptions`, `/v1/audio/speech`, `/v1/images/generations`, `/v1/images/edits` | every client, by role name in `model` | partly (chat and streaming chat, embeddings, audio, images; no image edits) |
 | Streaming speech sessions | `/stack/v1/stt/session` (live words), `/stack/v1/tts/stream` (phrase-level, cancel) | Home's voice path, Bot's household runtime | planned |
 | Roles | `GET /stack/v1/roles` (state, engine, model, residency per role) | Home's Admin, Bot's runtime at boot, the board | built |
 | Jobs | `POST /stack/v1/jobs`, `GET /stack/v1/jobs/:id`, `DELETE` to cancel, result by id | Home's picture, video and music packages | planned |

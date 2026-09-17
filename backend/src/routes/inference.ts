@@ -6,7 +6,7 @@ import { identityHeaders } from "@/lib/identity";
 import { noEngineResponse, resolveRole, UnknownRoleError, UnverifiedModelError } from "@/lib/router";
 import { ROLE_IDS } from "@/roles";
 import { ROLES } from "@/roles";
-import { completeChat, EngineUnavailableError } from "@/lib/supervisor";
+import { completeChat, EngineUnavailableError, streamChat } from "@/lib/supervisor";
 
 const MessageSchema = z.object({ role: z.string(), content: z.unknown() }).passthrough();
 const ChatRequestSchema = z.object({
@@ -44,11 +44,14 @@ async function inferenceReply<T extends Context>(c: T, model: string, body: Reco
     if (!client.allowedRoles.includes(resolution.role)) {
       return jsonReply(c, { error: "Client is not allowed to use this role.", role: resolution.role, allowedRoles: client.allowedRoles }, 403, identityHeaders(null));
     }
-    if (chat && body.stream === true) {
-      return jsonReply(c, { error: "Streaming is not available yet", role: resolution.role }, 400, identityHeaders(null));
-    }
     const definition = ROLES[resolution.role];
     const sharesChat = "sharesModelWith" in definition && definition.sharesModelWith === "chat";
+    if (chat && body.stream === true) {
+      if (definition.wire !== "chat") {
+        return jsonReply(c, { error: "Streaming is not available yet", role: resolution.role }, 400, identityHeaders(null));
+      }
+      return await streamReply(c, model, body, client.id) as never;
+    }
     if (chat && (resolution.role === "chat" || sharesChat)) {
       const result = await completeChat(model, body);
       for (const [name, value] of Object.entries(result.headers)) c.header(name, value);
@@ -76,6 +79,61 @@ async function inferenceReply<T extends Context>(c: T, model: string, body: Reco
     const message = error instanceof UnknownRoleError ? error.message : "Unknown role or model.";
     return jsonReply(c, { error: message, roles: ROLE_IDS }, 400, identityHeaders(null));
   }
+}
+
+async function streamReply<T extends Context>(c: T, model: string, body: Record<string, unknown>, clientId: string): Promise<Response> {
+  const result = await streamChat(model, body, c.req.raw.signal);
+  for (const [name, value] of Object.entries(result.headers)) c.header(name, value);
+  if (!result.body) {
+    const payload = JSON.stringify({ error: result.status === 499 ? "Request cancelled" : "Streaming is unavailable" });
+    return new Response(payload, {
+      status: result.status,
+      headers: { ...result.headers, "content-type": "application/json" },
+    });
+  }
+
+  const decoder = new TextDecoder();
+  let pending = "";
+  let counted = false;
+  let tokensIn = 0;
+  let tokensOut = 0;
+  const recordStreamUsage = (text: string) => {
+    pending += text.replaceAll("\r\n", "\n");
+    const events = pending.split("\n\n");
+    pending = events.pop() ?? "";
+    for (const event of events) {
+      const data = event.split("\n")
+        .find((line) => line.startsWith("data:"))
+        ?.slice(5)
+        .trim();
+      if (!data || data === "[DONE]") continue;
+      try {
+        const parsed = JSON.parse(data) as { usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } };
+        if (typeof parsed.usage?.prompt_tokens === "number") tokensIn = parsed.usage.prompt_tokens;
+        if (typeof parsed.usage?.completion_tokens === "number") tokensOut = parsed.usage.completion_tokens;
+      } catch {
+        // The upstream stream is opaque to callers; an unparseable event
+        // must still be passed through unchanged.
+      }
+    }
+  };
+  const tracked = result.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      controller.enqueue(chunk);
+      recordStreamUsage(decoder.decode(chunk, { stream: true }));
+    },
+    flush() {
+      recordStreamUsage(decoder.decode());
+      if (!counted) {
+        counted = true;
+        recordUsage(clientId, { requests: 1, tokensIn, tokensOut });
+      }
+    },
+  }));
+  return new Response(tracked, {
+    status: result.status,
+    headers: { ...result.headers, "content-type": "text/event-stream", "cache-control": "no-cache" },
+  });
 }
 
 function jsonReply<T extends Context>(c: T, body: unknown, status: 400 | 403 | 409 | 503, headers: Record<string, string>) {

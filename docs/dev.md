@@ -229,6 +229,15 @@ with `{ error, role, state, offline_reason }` so a client can explain the
 actual reason and retry when the state changes. An unknown role or model is
 400 and includes the declared role ids.
 
+Chat roles accept `stream: true` and pass the engine's OpenAI-shaped SSE
+bytes through unchanged, including the final `[DONE]` marker; the
+supervisor keeps the binding busy until the stream ends and treats a
+client cancellation as a normal request end. Speech keeps its
+phrase-level streaming contract for a future bound TTS engine: chunks
+will be playable as they arrive and cancellation will stop the upstream
+request, while an unbound TTS role remains an honest 503 with `none`
+identity headers.
+
 The profile tiers from STACK-02 are reconciled here. `router` and `judge`
 share `chat`'s model, so they are available wherever chat is. `rerank` is
 on demand on p32 and resident-small on p64 and p128. `wakeword` is an

@@ -47,6 +47,7 @@ export async function measureProcessMemoryBytes(pid: number | null): Promise<num
 export interface EngineClient {
   readonly baseUrl: string;
   complete(body: Record<string, unknown>, signal?: AbortSignal): Promise<{ status: number; body: unknown }>;
+  stream?(body: Record<string, unknown>, signal?: AbortSignal): Promise<Response>;
   health(): Promise<boolean>;
 }
 
@@ -90,6 +91,20 @@ class OpenAIEngineClient implements EngineClient {
     }
     const responseBody = await response.json().catch(() => ({ error: `Engine returned HTTP ${response.status}.` }));
     return { status: response.status, body: responseBody };
+  }
+
+  async stream(body: Record<string, unknown>, signal?: AbortSignal): Promise<Response> {
+    try {
+      return await fetch(this.baseUrl.replace(/\/$/, "") + "/v1/chat/completions", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "text/event-stream" },
+        body: JSON.stringify({ ...body, stream: true }),
+        signal,
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") throw error;
+      throw new EngineUnavailableError("Engine streaming request failed: " + (error as Error).message);
+    }
   }
 
   async health(): Promise<boolean> {
@@ -190,6 +205,31 @@ class ScriptedEngineClient implements EngineClient {
         usage: { prompt_tokens: 1, completion_tokens: 4, total_tokens: 5 },
       },
     };
+  }
+
+  async stream(_body: Record<string, unknown>, signal?: AbortSignal): Promise<Response> {
+    const encoder = new TextEncoder();
+    const chunks = [
+      "data: " + JSON.stringify({ choices: [{ delta: { content: "Scripted" } }] }) + "\n\n",
+      "data: " + JSON.stringify({ choices: [{ delta: { content: " Stack" } }] }) + "\n\n",
+      "data: " + JSON.stringify({ usage: { prompt_tokens: 1, completion_tokens: 2 } }) + "\n\n",
+      "data: [DONE]\n\n",
+    ];
+    const body = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        for (const chunk of chunks) {
+          if (signal?.aborted) {
+            controller.error(new DOMException("Cancelled", "AbortError"));
+            return;
+          }
+          controller.enqueue(encoder.encode(chunk));
+          await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        controller.close();
+      },
+      cancel() {},
+    });
+    return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
   }
 
   async health(): Promise<boolean> {
@@ -429,6 +469,89 @@ export async function completeChat(model: string, body: Record<string, unknown>,
   } finally {
     backend.activeRequests--;
     if (state.backend === backend && backend.activeRequests === 0) state.status = { ...state.status, state: "ready" };
+  }
+}
+
+export interface ChatStreamResult {
+  status: number;
+  body: ReadableStream<Uint8Array> | null;
+  headers: Record<string, string>;
+}
+
+function finishStream(backend: ChatBackend): void {
+  backend.activeRequests--;
+  if (state.backend === backend && backend.activeRequests === 0) state.status = { ...state.status, state: "ready" };
+}
+
+function trackedStream(backend: ChatBackend, upstream: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
+  const reader = upstream.getReader();
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    finishStream(backend);
+  };
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const next = await reader.read();
+        if (next.done) {
+          finish();
+          controller.close();
+        } else {
+          controller.enqueue(next.value);
+        }
+      } catch (error) {
+        finish();
+        controller.error(error);
+      }
+    },
+    async cancel(reason) {
+      try {
+        await reader.cancel(reason);
+      } finally {
+        finish();
+      }
+    },
+  });
+}
+
+export async function streamChat(model: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<ChatStreamResult> {
+  const backend = await getChatBackend();
+  backend.activeRequests++;
+  state.status = { ...state.status, state: "busy", kind: backend.kind, identity: backend.identity };
+  try {
+    if (!backend.client.stream) throw new EngineUnavailableError("The engine does not support streaming.");
+    const response = await backend.client.stream({ ...body, model, stream: true }, signal);
+    if (response.status >= 500 && !await backend.client.health()) {
+      throw new EngineUnavailableError("Engine returned HTTP " + response.status + " and is no longer healthy.");
+    }
+    if (!response.body) {
+      finishStream(backend);
+      return { status: response.status, body: null, headers: identityHeaders(backend.identity) };
+    }
+    return { status: response.status, body: trackedStream(backend, response.body), headers: identityHeaders(backend.identity) };
+  } catch (error) {
+    finishStream(backend);
+    if ((error instanceof DOMException && error.name === "AbortError") || signal?.aborted) {
+      return { status: 499, body: null, headers: identityHeaders(backend.identity) };
+    }
+    if (error instanceof EngineUnavailableError) {
+      if (await backend.client.health()) {
+        return { status: 504, body: null, headers: identityHeaders(backend.identity) };
+      }
+      state.backend = null;
+      state.status = { ...state.status, state: "offline", reason: error.reason };
+      void retireBackend(backend);
+      throw error;
+    }
+    if (await backend.client.health()) {
+      return { status: 503, body: null, headers: identityHeaders(backend.identity) };
+    }
+    state.backend = null;
+    state.status = { ...state.status, state: "offline", reason: (error as Error).message };
+    void retireBackend(backend);
+    throw new EngineUnavailableError("Engine streaming request failed: " + (error as Error).message);
   }
 }
 

@@ -47,13 +47,15 @@ test("an unverified model is a 409 with its missing provenance", async () => {
   expect(response.headers.get("x-maipai-engine")).toBe("none");
 });
 
-test("streaming chat is refused honestly", async () => {
+test("streaming chat carries identity headers when no engine answers", async () => {
   const response = await app.request("/v1/chat/completions", {
     method: "POST",
     headers: { ...testClientHeaders, "content-type": "application/json" },
     body: JSON.stringify({ model: "chat", messages: [], stream: true }),
   });
-  expect(response.status).toBe(400);
-  expect(await response.json()).toEqual({ error: "Streaming is not available yet", role: "chat" });
+  expect(response.status).toBe(503);
+  expect((await response.json() as { offline_reason: string }).offline_reason).toContain("No verified");
   expect(response.headers.get("x-maipai-engine")).toBe("none");
+  expect(response.headers.get("x-maipai-model")).toBe("none");
+  expect(response.headers.get("x-maipai-revision")).toBe("none");
 });
