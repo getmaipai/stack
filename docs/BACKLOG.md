@@ -179,6 +179,12 @@ each item's design section lands in `dev.md` before its code.
   Acceptance: an update and a rollback of a scripted engine with no
   request cut (test); the check's request has exactly the two headers
   (test); the privacy page lists the URLs. Exit: `bash scripts/check.sh`.
+- [ ] **STACK-11b (S): first run on `@stepperize/react`.** The five
+  steps' state, navigation and validation move to the headless
+  stepper; markup stays the kit's; the downloading step renders one
+  progress row per model and engine from the event feed. Acceptance:
+  the first-run Playwright flow from STACK-11 still passes; back
+  always works; screenshots re-taken and judged.
 - [ ] **STACK-12 (M): Try it** is built on shadcn/ui's chat components
   (`message-scroller`, `message`, `bubble`, `attachment`, `marker`)
   added to the kit by the registry, a small SSE hook against the

@@ -488,6 +488,51 @@ played through an `<audio>` element. Nothing leaves the machine. Home
 may later adopt the same primitives, add AI Elements on top, or keep
 assistant-ui; that decision belongs to Home's next design pass.
 
+## Third-party pieces, and how an outside update never breaks us (2026-09-17)
+
+The org rule is "download, don't vendor" and "prebuilt over
+hand-built". These are the pieces the Stack takes and the seven
+patterns that keep them from breaking it.
+
+**Taken (each behind one adapter module of ours):** `@huggingface/hub`
+(the official client: model info, file lists, the standard cache
+layout writer, the revision `sha`) in `lib/hf.ts`; `@huggingface/gguf`
+(reads a GGUF's metadata over HTTP range requests, so a model can be
+sized before it is downloaded) in `lib/gguf.ts`; `@stepperize/react`
+(a headless, one-kilobyte step-state library for the first run;
+markup stays the kit's); shadcn/ui's chat components (copied into the
+kit by its registry); llama.cpp's own fit dry run and `llama-server`;
+`bun:ffi` against libSystem for the kernel's memory ledger.
+`systeminformation` is held for Windows and Linux GPU detection later
+(it shells out to `system_profiler` on the Mac, which is slow).
+
+**The patterns:**
+
+1. Dependencies arrive through the package manager with a committed
+   lockfile, and the gate installs with `--frozen-lockfile`: a new
+   upstream release changes nothing until the lock is updated on
+   purpose and the suite is green. Dependabot alerts on, its pull
+   requests off, the monthly sweep updates and re-verifies.
+2. Copy-into-repo components are ours after the copy. The shadcn
+   registry drops source into the kit; there is no runtime
+   dependency, and an upstream change cannot reach us until the
+   registry is re-run deliberately. The kit is the boundary for UI.
+3. Engines and models are pinned by tag and by a checksum we recorded;
+   a new build is an update we choose, verified and kept beside the
+   previous one for rollback.
+4. One adapter module per library, so a breaking API change touches
+   one file, and our tests drive our interface with scripted
+   stand-ins, never the library's internals.
+5. A claim about a library is verified in its installed source and
+   cited; a smoke script runs the real thing (`engine-verify.ts` is
+   the pattern), so an upgrade that changes behavior fails a named
+   check.
+6. A managed host the person installed (Ollama, ComfyUI) is probed for
+   its version and flagged below the one we tested against.
+7. Never a submodule, never a vendored tree, never a fork we maintain.
+   A copied snippet carries its licence, a NOTICE entry, a source
+   comment and a reason here.
+
 ## The API boundary: what is the Stack's and what is Home's (2026-09-17)
 
 The foundational API moved out of Home into the Stack. Home keeps an
