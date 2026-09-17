@@ -105,6 +105,9 @@ never copied. No item migrates the hub until STACK-16.
   with a scripted download; the real store lands in STACK-04b. The board
   measures the computer, lets the operator choose abilities, and keeps an
   honest download bar visible while the deferred password stays deferred.
+- [x] **STACK-11c (M): the dashboard shell.** The branded Stack sidebar,
+  search and command palette, all eleven sections, real monitoring and
+  alert actions, and honest empty states for the work still to come.
 - [ ] **STACK-12 (M): Try it.** The stateless tabs per role with the
   adult acknowledgment once and the AI-outputs disclaimer at first run.
   Acceptance: each tab exercised in Playwright against scripted engines;

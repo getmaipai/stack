@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { api, type OperatorState } from "@/lib/api";
-import { BoardPage } from "@/pages/BoardPage";
+import { DashboardShell } from "@/pages/DashboardShell";
 import { LoginPage } from "@/pages/LoginPage";
 import { Skeleton } from "@/kit/ui/skeleton";
 
@@ -38,8 +38,7 @@ function Gate() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/" element={<BoardPage />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="/*" element={<DashboardShell />} />
     </Routes>
   );
 }

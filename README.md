@@ -8,9 +8,9 @@
 <h3 align="center">Your own local AI stack, made easy.</h3>
 
 <p align="center">
-  <img src="docs/assets/screens/welcome.png" alt="MaiPai Stack first open board" width="31%">
-  <img src="docs/assets/screens/board-light.png" alt="MaiPai Stack board with downloads" width="31%">
-  <img src="docs/assets/screens/sizer.png" alt="MaiPai Stack ability sizer" width="31%">
+  <img src="docs/assets/screens/overview.png" alt="MaiPai Stack overview" width="31%">
+  <img src="docs/assets/screens/monitoring.png" alt="MaiPai Stack monitoring" width="31%">
+  <img src="docs/assets/screens/palette.png" alt="MaiPai Stack command palette" width="31%">
 </p>
 
 <p align="center"><a href="docs/dev.md">Documentation</a> · <a href="https://github.com/getmaipai/stack/releases">Releases</a></p>

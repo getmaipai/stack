@@ -8,6 +8,13 @@ The experience is in [`ux.md`](ux.md), the contracts other MaiPai products
 rely on are in [`integrations.md`](integrations.md), and what is built and
 what is missing is in [`BACKLOG.md`](BACKLOG.md).
 
+The admin ships as one responsive dashboard shell: a persistent desktop
+sidebar becomes an off-canvas phone rail, the command palette is available
+from the Cmd/Ctrl-K and slash shortcuts, and every section has a stable
+route even when its backend capability is still an honest empty state.
+Registry-generated UI is copied under frontend/src/kit/blocks/dashboard/
+and reskinned to the Stack's orange primary token.
+
 Nothing in this file is household content: every person in an example is
 from the org's persona roster.
 

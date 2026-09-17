@@ -9,6 +9,9 @@ the product passes its battle-tested checklist in `docs/dev.md`.
 
 ### Added
 
+- The professional dashboard shell for STACK-11c: eleven Stack sections,
+  responsive sidebar, search/command palette, monitoring chart, alerts,
+  access view, and honest empty states for updates, backups, and Try it.
 - The board-first install flow for STACK-11b: branded hardware and ability
   cards, deferred operator password, scripted setup downloads, pause/resume,
   and honest progress copy.
