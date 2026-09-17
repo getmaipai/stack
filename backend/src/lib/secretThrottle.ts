@@ -1,8 +1,6 @@
 import { getConnInfo } from "hono/bun";
 import type { Context } from "hono";
 
-const TRUST_PROXY = process.env.STACK_TRUST_PROXY === "true";
-
 const WINDOW_MS = 15 * 60_000;
 const MAX_FAILS = 20;
 const MAX_BUCKETS = 5_000;
@@ -14,8 +12,12 @@ interface Bucket {
 }
 const buckets = new Map<string, Bucket>();
 
+function trustProxy(): boolean {
+  return process.env.STACK_TRUST_PROXY === "true";
+}
+
 export function getClientIp(c: Context): string {
-  if (TRUST_PROXY) {
+  if (trustProxy()) {
     const forwarded = c.req.header("x-forwarded-for");
     if (forwarded) return forwarded.split(",")[0]!.trim();
   }

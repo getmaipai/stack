@@ -1,6 +1,7 @@
 import { describe, expect, test, beforeEach } from "bun:test";
 import { app } from "@/app";
 import {
+  getClientIp,
   throttleCheck,
   throttleFail,
   throttleReset,
@@ -82,12 +83,9 @@ describe("__resetThrottleForTests", () => {
 });
 
 describe("getClientIp", () => {
-  test("ignores x-forwarded-for when STACK_TRUST_PROXY is unset", async () => {
+  test("ignores x-forwarded-for when STACK_TRUST_PROXY is unset", () => {
     const original = process.env.STACK_TRUST_PROXY;
     delete process.env.STACK_TRUST_PROXY;
-    const { getClientIp } = await import(
-      `@/lib/secretThrottle?test=${Date.now()}`
-    );
     const c = { req: { header: (name: string) => "10.0.0.1, 172.16.0.1" } };
     const ip = getClientIp(c as any);
     expect(ip).toBe("unknown");
@@ -95,12 +93,9 @@ describe("getClientIp", () => {
     else process.env.STACK_TRUST_PROXY = original;
   });
 
-  test("uses the first x-forwarded-for address when STACK_TRUST_PROXY is set", async () => {
+  test("uses the first x-forwarded-for address when STACK_TRUST_PROXY is set", () => {
     const original = process.env.STACK_TRUST_PROXY;
     process.env.STACK_TRUST_PROXY = "true";
-    const { getClientIp } = await import(
-      `@/lib/secretThrottle?test=${Date.now()}`
-    );
     const c = { req: { header: (name: string) => "10.0.0.1, 172.16.0.1" } };
     const ip = getClientIp(c as any);
     expect(ip).toBe("10.0.0.1");
