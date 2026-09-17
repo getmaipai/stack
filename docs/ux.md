@@ -69,6 +69,67 @@ never a step.
 **Try it** appears on the board the moment the small set lands, so
 the first thing the person does with the Stack is talk to it.
 
+## The shell: a professional AI management dashboard (decided 2026-09-17, evening)
+
+After install, the person sees a management dashboard, not a page:
+calm, professional, one accent, dense where it counts and airy
+everywhere else, with everything one click or one keystroke away. The
+references are the products people trust to run things at home
+(Home Assistant, Synology, Proxmox, Tailscale) restyled in our
+palette; the squint test says "a well-made control room", never a
+copy of any of them.
+
+**Layout.** A left sidebar (the kit's `sidebar` primitive, collapsible
+to icons), a slim top bar, the page. The top bar carries the machine
+in plain words ("Apple silicon Mac, 24 GB"), a search field that is
+also the command palette (the kit's `command` primitive, opened with
+the slash key or Command-K: pages, models, engines, settings, and
+actions like "pause everything" or "check for updates"), the health
+badge (count and worst severity), and the "Share with your family"
+hand-off until Home is installed. Phone width collapses the sidebar
+into a sheet.
+
+**Sections, in sidebar order:**
+
+1. **Overview**: the board from the section below. This computer,
+   Add abilities until a plan exists, the status strip, downloads in
+   flight, the last five notifications, health items with a fix.
+2. **Abilities**: the plan and its tiers, the abilities cards (chat,
+   voice, pictures, video, music) with sizes and "can run", install
+   and remove, the "details" disclosure with model names.
+3. **Models**: the Models page (installed, source, licence, measured
+   footprint, pin, unload, remove, import from other tools, check for
+   a newer revision).
+4. **Engines**: build, kind, roles, health, last restart and why,
+   logs.
+5. **Monitoring**: the live memory bar with each model's measured
+   share and the kernel's pressure, the governor's rules as
+   sentences, per-role throughput and last-request timings, the
+   Logs viewer (tail per engine and the daemon, filter, copy).
+6. **Alerts**: the health list (severity, cause, one fix), the
+   notification center with clear-all, and Alert channels (Telegram,
+   ntfy) with "Send a test" and the verified stamp.
+7. **Updates**: the Stack, engines, models; installed and available,
+   notes, update, skip, go back; "last checked" and "checks are off"
+   plainly.
+8. **Backups**: per the org standard: what a backup contains (the
+   Stack's database, keys, settings and health history; models and
+   engines are `exclude`, rebuildable from their provenance records,
+   said so on the page), a local or SMB target, the schedule and
+   retention, restore, and the emergency kit shown once.
+9. **Access** (the Stack has no people, so not "Accounts"): the
+   operator password (set when first needed), client keys with roles
+   and counters and revoke, LAN access with its warning, sessions.
+10. **Try it**: the tabs per role.
+11. **Settings**: the few declared settings, rendered by the generic
+    renderer.
+
+**Empty and first states are designed, not blank**: a fresh install
+shows Overview with This computer and Add abilities, every other
+section shows one calm sentence and the one action that fills it
+("No models yet. Add an ability and the models it needs arrive
+here."). A spinner never stands in for content longer than a beat.
+
 ## The board
 
 The home page, and what the menu-bar item opens. A grid of role tiles,

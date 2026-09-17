@@ -196,6 +196,19 @@ each item's design section lands in `dev.md` before its code.
   a scripted "Start small" shows size, speed and time left and
   survives a pause; creating a key prompts for the password once;
   screenshots re-taken and judged.
+- [ ] **STACK-11c (M): the dashboard shell.** The sidebar with the
+  eleven sections in `ux.md` "The shell", the top bar with the
+  machine in plain words, the search-and-command palette (slash or
+  Command-K over pages, models, engines, settings and actions), the
+  health badge, the hand-off card; every section route exists with
+  its designed empty state; Overview is the board; Models, Engines,
+  Access, Alerts and Settings render the real routes that exist;
+  Monitoring, Updates, Backups render their empty states until their
+  items land. Acceptance: Playwright walks every section on a fresh
+  data directory and each shows its designed empty state; the palette
+  opens with both keys and jumps to a page and runs an action;
+  screenshots at desktop light, desktop dark and phone, opened and
+  judged.
 - [ ] **STACK-15b (M): the one-line installer.** `install.sh` hosted
   on our GitHub Pages: downloads the compiled Stack binary
   (`bun build --compile`) for the platform from our own GitHub
