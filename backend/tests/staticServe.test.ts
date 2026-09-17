@@ -1,25 +1,28 @@
-import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { afterAll, beforeEach, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { app } from "@/app";
 
-const distDir = join(import.meta.dir, "../../frontend/dist");
+const originalDistDir = process.env.STACK_DIST_DIR;
+const distDir = mkdtempSync(join(tmpdir(), "maipai-stack-dist-"));
+process.env.STACK_DIST_DIR = distDir;
 const indexPath = join(distDir, "index.html");
-const hadIndex = existsSync(indexPath);
-const originalIndex = hadIndex ? readFileSync(indexPath, "utf8") : null;
+const assetsDir = join(distDir, "assets");
+const assetsPath = join(assetsDir, "style.css");
 
-afterEach(() => {
-  if (originalIndex === null) {
-    if (existsSync(indexPath)) unlinkSync(indexPath);
-    if (existsSync(distDir)) rmSync(distDir, { recursive: true, force: true });
-  } else {
-    mkdirSync(distDir, { recursive: true });
-    writeFileSync(indexPath, originalIndex);
-  }
+beforeEach(() => {
+  rmSync(distDir, { recursive: true, force: true });
 });
 
+afterAll(() => {
+  if (originalDistDir === undefined) delete process.env.STACK_DIST_DIR;
+  else process.env.STACK_DIST_DIR = originalDistDir;
+  rmSync(distDir, { recursive: true, force: true });
+});
+
+const { app } = await import("@/app");
+
 test("GET / is a plain message before the frontend is built", async () => {
-  if (existsSync(distDir)) rmSync(distDir, { recursive: true, force: true });
   const response = await app.request("/");
   expect(response.status).toBe(503);
   expect(await response.text()).toBe("UI not built");
@@ -36,4 +39,16 @@ test("GET / serves the built index and client routes fall back to it", async () 
   const route = await app.request("/setup");
   expect(route.status).toBe(200);
   expect(await route.text()).toContain("Stack test");
+});
+
+test("assets are served with the right content type", async () => {
+  mkdirSync(distDir, { recursive: true });
+  writeFileSync(indexPath, "<!doctype html><title>Stack test</title>");
+  mkdirSync(assetsDir, { recursive: true });
+  writeFileSync(assetsPath, "body { color: red; }");
+
+  const asset = await app.request("/assets/style.css");
+  expect(asset.status).toBe(200);
+  expect(asset.headers.get("content-type")).toContain("text/css");
+  expect(await asset.text()).toBe("body { color: red; }");
 });

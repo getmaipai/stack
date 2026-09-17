@@ -60,15 +60,19 @@ app.route("/stack/v1/setup/plan", setupPlanRoutes);
 app.route("/v1", inferenceRoutes);
 
 const here = dirname(fileURLToPath(import.meta.url));
-const distDir = join(here, "..", "..", "frontend", "dist");
-const indexPath = join(distDir, "index.html");
 
 // The daemon owns the API and the built UI on one origin. Checking the
 // filesystem per request lets a deploy build the frontend after the daemon
 // has started without leaving the process stuck in a 404 state.
-app.use("/*", serveStatic({ root: distDir }));
+app.use("/*", async (c, next) => {
+  const distDir = process.env.STACK_DIST_DIR ?? join(here, "..", "..", "frontend", "dist");
+  const handler = serveStatic({ root: distDir });
+  return handler(c, next);
+});
 app.get("*", async (c) => {
   if (c.req.path.startsWith("/api/") || c.req.path.startsWith("/stack/") || c.req.path.startsWith("/v1/")) return c.notFound();
+  const distDir = process.env.STACK_DIST_DIR ?? join(here, "..", "..", "frontend", "dist");
+  const indexPath = join(distDir, "index.html");
   if (!existsSync(indexPath)) return c.text("UI not built", 503);
   return c.html(await Bun.file(indexPath).text());
 });
