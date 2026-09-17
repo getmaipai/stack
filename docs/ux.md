@@ -79,8 +79,13 @@ references are the products people trust to run things at home
 palette; the squint test says "a well-made control room", never a
 copy of any of them.
 
-**Layout.** A left sidebar (the kit's `sidebar` primitive, collapsible
-to icons), a slim top bar, the page. The top bar carries the machine
+**Layout.** shadcn's `dashboard-01` block, installed by the registry
+and re-skinned to ours (the org's prebuilt-over-hand-built rule
+applied to the whole shell): a left sidebar collapsible to icons, a
+slim top bar, the page; its section cards become the status strip,
+its area chart Monitoring's memory over time, its data table the
+Models, Engines and notification tables. Nothing of the block's demo
+content survives. The top bar carries the machine
 in plain words ("Apple silicon Mac, 24 GB"), a search field that is
 also the command palette (the kit's `command` primitive, opened with
 the slash key or Command-K: pages, models, engines, settings, and
