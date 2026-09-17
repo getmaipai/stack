@@ -17,21 +17,24 @@ anything you build on it. Nothing leaves your house.
 
 - **One address**: an OpenAI-compatible API for chat, coding, embeddings,
   voice in, voice out, pictures, video and music, by role, never by model
-  name.
+  name. (designed; the routes exist but no engine answers embeddings,
+  voice or pictures yet)
 - **Sized to your machine**: it measures what your computer can run and
-  proposes a profile in plain words.
+  proposes a profile in plain words. (built)
 - **Provenance first**: every model shows where it came from, its
-  licence and its checksum before it can be used.
+  licence and its checksum before it can be used. (built)
 - **One memory budget**: one governor decides what loads and what waits,
-  so a video job never crashes your chat.
+  so a video job never crashes your chat. (designed)
 - **Watched**: a board of green lights, repairs with one action each,
-  logs per engine.
+  logs per engine. (designed)
 - **Updates with rollback**: opt-in checks, one click to update, one
-  click to go back.
+  click to go back. (designed)
 - **Try it**: a stateless box per role to prove each one works.
+  (designed)
 - **Client keys**: each tool gets a key limited to the roles it may use.
+  (designed)
 - **Complete alone**: run it by itself, or install MaiPai Home on top for
-  your family.
+  your family. (designed)
 
 ## Getting started
 
@@ -44,11 +47,17 @@ bun start
 The Stack listens on `http://127.0.0.1:8770`. Health is at
 `http://127.0.0.1:8770/healthz`, and the API explorer is at
 `http://127.0.0.1:8770/api/docs`.
+`GET /stack/v1/hardware` shows what this computer can run;
+`GET /stack/v1/roles` lists every role and its state.
 
 ## Status
 
-Pre-alpha, design stage. MaiPai Home is what runs our own household
-today; the Stack is the engine layer it will move onto.
+Pre-alpha. On `main`, the Stack starts on one port, measures your
+computer, downloads and verifies the chat engine, declares every role,
+refuses a model without provenance, and binds chat to the engine. It has
+no operator login and no board yet. MaiPai Home still runs the
+household on its own engines until the Stack proves the hub's profile
+on the Studio.
 
 ## Documentation
 
