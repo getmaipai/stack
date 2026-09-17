@@ -12,14 +12,17 @@ changelog note.
 
 | Surface | Path | Who uses it | Status |
 |---|---|---|---|
-| OpenAI-shaped inference | `/v1/chat/completions`, `/v1/embeddings`, `/v1/audio/transcriptions`, `/v1/audio/speech`, `/v1/images/generations`, `/v1/images/edits` | every client, by role name in `model` | partly (chat and streaming chat, embeddings, audio, images; no image edits) |
+| OpenAI-shaped inference | `/v1/chat/completions`, `/v1/embeddings`, `/v1/audio/transcriptions`, `/v1/audio/speech`, `/v1/images/generations`, `/v1/images/edits` | every client, by role name in `model` | partly (chat, streaming chat, embeddings, audio, images; no image edits) |
 | Streaming speech sessions | `/stack/v1/stt/session` (live words), `/stack/v1/tts/stream` (phrase-level, cancel) | Home's voice path, Bot's household runtime | planned |
 | Roles | `GET /stack/v1/roles` (state, engine, model, residency per role) | Home's Admin, Bot's runtime at boot, the board | built |
 | Jobs | `POST /stack/v1/jobs`, `GET /stack/v1/jobs/:id`, `DELETE` to cancel, result by id | Home's picture, video and music packages | planned |
-| Events | `GET /stack/v1/events` (SSE) | Home's notification bridge, the board, the menu bar | planned |
-| Hardware and budget | `GET /stack/v1/hardware`, `GET /stack/v1/budget` | Home's Admin (read-only view), Bot's runtime | partly (hardware; no budget yet) |
+| Events | `GET /stack/v1/events` (SSE) | Home's notification bridge, the board, the menu bar | built |
+| Hardware and budget | `GET /stack/v1/hardware`, `GET /stack/v1/budget` | Home's Admin (read-only view), Bot's runtime | built |
 | Models and engines | `GET /stack/v1/models`, `/engines`; install, pin, unload, remove | the operator; Home's Admin as a view with links | partly (engines; no models yet) |
 | Clients | `/stack/v1/clients` (operator only) | the operator; Home's installer registers Home once | built |
+| Notifications | `GET /stack/v1/notifications`, `POST /stack/v1/notifications/clear`, `POST /stack/v1/notifications/{id}/read`, `POST /stack/v1/notifications/{id}/dismiss` | the operator and Home's notification bridge | built |
+| Repairs | `GET /stack/v1/repairs`, `POST /stack/v1/repairs/{id}/resolve` | the operator and Home's Admin | built |
+| Logs | `GET /stack/v1/logs/{name}` | the operator and Home's Admin | built |
 | Updates | `/stack/v1/updates` (check, apply, roll back) | the operator; Home shows availability through events | planned |
 | Identity headers | `x-maipai-engine`, `x-maipai-model`, `x-maipai-revision` on every reply | every client's identity check | built |
 
