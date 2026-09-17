@@ -1,0 +1,323 @@
+/* Copied from home's kit until KIT-01 extracts `@maipai/ui`; do not edit here. */
+/* The kit's token set (docs/UI.md > Themes): one set of tokens, light and
+ * dark, no raw colors in app code. Home's accent is cyan (brand/README.md's
+ * per-product accent table); everything else here is a reasonable neutral
+ * scale, not yet run through a real theme generator (4.11-adjacent
+ * "themes are a small declared object... full token set generated from
+ * it" is real future scope, deferred: this is one hand-picked default,
+ * not the generator).
+ *
+ * Values are full CSS color functions (`hsl(...)`), not bare component
+ * triples: Tailwind v4's CSS-first `@theme inline` maps `--color-primary`
+ * straight to `var(--primary)` with no wrapping step (unlike v3's JS
+ * config, which used to do `hsl(var(--primary) / <alpha-value>)` for
+ * you), so the variable itself has to already be a valid color. Every
+ * call site reads `var(--x)` directly (in Tailwind's `[var(--x)]`
+ * arbitrary-value form or, on shadcn's generated components, the plain
+ * `bg-primary`/`text-foreground` utilities `@theme inline` below wires
+ * up), never `hsl(var(--x))`. */
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "tw-shimmer";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* The kit's surfaces, pinned. docs/UI.md: phone under 640, tablet to
+   * 1024, desktop above. These happen to equal Tailwind's defaults
+   * today, which is exactly why they are written down: `sm:` and `lg:`
+   * are load-bearing across the primitives, and a later theme edit that
+   * moved them would silently move every grid, rail and split in the
+   * product. kit/responsive.ts holds the same two numbers and a test
+   * fails if the two ever disagree. */
+  --breakpoint-sm: 640px;
+  --breakpoint-lg: 1024px;
+}
+
+:root {
+  --background: hsl(0 0% 100%);
+  --foreground: hsl(240 10% 4%);
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(240 10% 4%);
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(240 10% 4%);
+  --border: hsl(240 6% 90%);
+  --input: hsl(240 6% 90%);
+  --muted: hsl(240 5% 96%);
+  --muted-foreground: hsl(240 4% 46%);
+  --secondary: hsl(240 5% 96%);
+  --secondary-foreground: hsl(240 10% 4%);
+  --accent: hsl(240 5% 96%);
+  --accent-foreground: hsl(240 10% 4%);
+  /* 29%, not the original 40%: the accessibility audit (docs/dev.md,
+   * 2026-09-05) and this session's own screenshot/a11y matrix both found
+   * white text on the 40%-lightness cyan at 2.8:1, under WCAG AA's 4.5:1
+   * floor for normal text - every default-variant Button and the active
+   * sidebar item, on every page (docs/BACKLOG.md's own count: Home,
+   * Chat, People, Memory, Privacy, Settings and its sub-pages). Same
+   * hue and saturation (189, 94%), darkened until white text clears
+   * 4.5:1 with real margin (measures ~5:1 at this lightness) - "on
+   * brand" the way the docs comment above already frames this kind of
+   * change, not a different color. Dark theme's own pairing (a near-
+   * black foreground on a brighter, 55%-lightness cyan) was already
+   * measured at ~10:1 and needs no change. `--ring`/`--sidebar-*` follow
+   * `--primary` to the same value rather than diverging from it (org
+   * standard 1: one definition) - their own contrast requirement
+   * (WCAG 1.4.11, 3:1 against an adjacent color) was never the violation
+   * here and stays comfortably clear at this lightness too. */
+  --primary: hsl(189 94% 29%); /* cyan, MaiPai Home's accent */
+  --primary-foreground: hsl(0 0% 100%);
+  /* Darkened from the original hsl(0 72% 51%), same hue and saturation
+   * (getmaipai/home lane 4 item 1's own follow-up, 2026-09-13): every
+   * "destructive" surface in this kit (Button, Badge) pairs solid
+   * `text-destructive` over a `bg-destructive/10` tint, not white text
+   * on a solid fill - a real gap the a11y matrix had never actually
+   * exercised (Repairs' severity badge only renders when an issue
+   * exists, and nothing before this seeded one). Text over its own
+   * 10%-opacity tint measures ~6.3:1 at this lightness; the original
+   * 51% measured ~4.1:1, under WCAG AA's 4.5:1 floor. */
+  --destructive: hsl(0 72% 38%);
+  --destructive-foreground: hsl(0 0% 100%);
+  --ring: hsl(189 94% 29%);
+  /* 1rem, not shadcn's own 0.75rem default: a visual pass (2026-09-06)
+   * modeled on well-designed native mobile apps found every card, tile
+   * and control there noticeably rounder than this kit's own defaults -
+   * one token bump softens buttons, cards, inputs and popovers together
+   * rather than hand-tuning each. */
+  --radius: 1rem;
+  --sidebar: hsl(0 0% 100%);
+  --sidebar-foreground: hsl(240 10% 4%);
+  --sidebar-primary: hsl(189 94% 29%); /* same contrast fix as --primary above */
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  /* Quiet selection keeps primary actions visually dominant. */
+  --sidebar-accent: color-mix(in srgb, var(--sidebar-primary) 12%, var(--sidebar));
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: hsl(240 6% 90%);
+  --sidebar-ring: hsl(189 94% 29%);
+  --chart-1: hsl(189 94% 40%);
+  --chart-2: hsl(240 4% 46%);
+  --chart-3: hsl(240 6% 70%);
+  --chart-4: hsl(240 6% 30%);
+  --chart-5: hsl(240 10% 4%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --background: hsl(240 10% 6%);
+    --foreground: hsl(0 0% 96%);
+    --card: hsl(240 8% 9%);
+    --card-foreground: hsl(0 0% 96%);
+    --popover: hsl(240 8% 9%);
+    --popover-foreground: hsl(0 0% 96%);
+    --border: hsl(240 6% 18%);
+    --input: hsl(240 6% 18%);
+    --muted: hsl(240 6% 14%);
+    --muted-foreground: hsl(240 5% 65%);
+    --secondary: hsl(240 6% 14%);
+    --secondary-foreground: hsl(0 0% 96%);
+    --accent: hsl(240 6% 14%);
+    --accent-foreground: hsl(0 0% 96%);
+    --primary: hsl(189 84% 55%);
+    --primary-foreground: hsl(240 10% 6%);
+    --ring: hsl(189 84% 55%);
+    /* Lightened, not darkened (same lane 4 item 1 follow-up as :root's
+     * own comment above): a solid destructive/10-20% tint over this
+     * theme's near-black background is itself very dark, so a darker
+     * text color loses contrast against it instead of gaining it -
+     * darkening the way :root's own fix does measures ~2.4:1 here, worse
+     * than the original 51% lightness's ~3.5:1. Lightened to where text
+     * over its own 20%-opacity tint clears 4.5:1 (~4.8:1 measured); dark
+     * themes pairing a lighter accent with a darker surface for the same
+     * semantic role is the same pattern `--primary`'s own dark value
+     * above already uses (55% here vs. `:root`'s 29%). */
+    --destructive: hsl(0 72% 65%);
+    --sidebar: hsl(240 8% 9%);
+    --sidebar-foreground: hsl(0 0% 96%);
+    --sidebar-primary: hsl(189 84% 55%);
+    --sidebar-primary-foreground: hsl(240 10% 6%);
+    --sidebar-accent: color-mix(in srgb, var(--sidebar-primary) 12%, var(--sidebar));
+    --sidebar-accent-foreground: var(--foreground);
+    --sidebar-border: hsl(240 6% 18%);
+    --sidebar-ring: hsl(189 84% 55%);
+  }
+}
+
+.dark {
+  --background: hsl(240 10% 6%);
+  --foreground: hsl(0 0% 96%);
+  --card: hsl(240 8% 9%);
+  --card-foreground: hsl(0 0% 96%);
+  --popover: hsl(240 8% 9%);
+  --popover-foreground: hsl(0 0% 96%);
+  --border: hsl(240 6% 18%);
+  --input: hsl(240 6% 18%);
+  --muted: hsl(240 6% 14%);
+  --muted-foreground: hsl(240 5% 65%);
+  --secondary: hsl(240 6% 14%);
+  --secondary-foreground: hsl(0 0% 96%);
+  --accent: hsl(240 6% 14%);
+  --accent-foreground: hsl(0 0% 96%);
+  --primary: hsl(189 84% 55%);
+  --primary-foreground: hsl(240 10% 6%);
+  --ring: hsl(189 84% 55%);
+  /* Same value and reasoning as the `prefers-color-scheme: dark` block
+   * above (lane 4 item 1 follow-up, 2026-09-13): lightened, not
+   * darkened, since a darker text color loses contrast against this
+   * theme's own dark tinted background instead of gaining it. */
+  --destructive: hsl(0 72% 65%);
+  --sidebar: hsl(240 8% 9%);
+  --sidebar-foreground: hsl(0 0% 96%);
+  --sidebar-primary: hsl(189 84% 55%);
+  --sidebar-primary-foreground: hsl(240 10% 6%);
+  --sidebar-accent: color-mix(in srgb, var(--sidebar-primary) 12%, var(--sidebar));
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: hsl(240 6% 18%);
+  --sidebar-ring: hsl(189 84% 55%);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  @keyframes collapsible-down {
+  from {
+    height:
+    0;
+    }
+  to {
+    height:
+    var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
+    }
+  }
+  @keyframes collapsible-up {
+  from {
+    height:
+    var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
+    }
+  to {
+    height:
+    0;
+    }
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* 16px body text is the kit's hard floor on phone/desktop (docs/UI.md);
+ * the browser default already satisfies it, stated here so it can't drift. */
+html {
+  font-size: 16px;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+/* Plain media-query swap for the two logo PNGs (brand/README.md: light
+ * background needs the dark-glyph variant and vice versa). Keyed off the
+ * same `.dark` class the theme tokens above use (docs/dev.md: "the
+ * appearance setting" wires `ui.appearance` to this class), falling back
+ * to the system preference when no explicit choice has been made. */
+.brand-logo-dark {
+  display: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) .brand-logo-light {
+    display: none;
+  }
+  :root:not(.light) .brand-logo-dark {
+    display: inline;
+  }
+}
+.dark .brand-logo-light {
+  display: none;
+}
+.dark .brand-logo-dark {
+  display: inline;
+}
+
+/* docs/UI.md > Responsive: "prefers-reduced-motion disables transitions
+ * and spinners' spin." One rule, everywhere, rather than every component
+ * that animates checking the media query itself. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* The TV surface's type scale (docs/UI.md: "TV sizes for ten feet"),
+ * applied by the shell as a class on its root when `useSurface().far` is
+ * true - not a media query, since `far` is input-mode detection, not a
+ * viewport width (kit/useSurface.ts). Kept to the one property that
+ * actually matters at ten feet; layout stays the same. */
+.surface-far {
+  font-size: 20px;
+}
+
+@custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
+
+@custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));
+
+/* Switch/Checkbox: Radix's own root only ever sets data-state="checked"|
+ * "unchecked", never a literal data-checked/data-unchecked attribute - a
+ * code review (2026-09-05) found kit/ui/switch.tsx and kit/ui/checkbox.tsx
+ * styled their checked state on the bare (nonexistent) attribute, so a
+ * toggle's fill/thumb-slide never rendered even though the state itself
+ * was correct. Same data-state-or-literal-attribute shape as data-open/
+ * data-closed above. */
+@custom-variant data-checked (&:where([data-state="checked"], [data-checked]:not([data-checked="false"])));
+
+@custom-variant data-unchecked (&:where([data-state="unchecked"], [data-unchecked]:not([data-unchecked="false"])));

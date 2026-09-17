@@ -46,7 +46,8 @@ bun start
 
 The Stack listens on `http://127.0.0.1:8770`. Health is at
 `http://127.0.0.1:8770/healthz`, and the API explorer is at
-`http://127.0.0.1:8770/api/docs`.
+`http://127.0.0.1:8770/api/docs`. The admin UI is at
+`http://127.0.0.1:8770/`.
 `GET /stack/v1/hardware` shows what this computer can run;
 `GET /stack/v1/roles` lists every role and its state.
 

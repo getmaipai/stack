@@ -27,6 +27,10 @@ export interface PostLoadCheck {
   estimatedBytes: number | null;
 }
 
+export function scriptedEnginesEnabled(): boolean {
+  return process.env.STACK_SCRIPTED_ENGINES === "1" && process.env.NODE_ENV !== "production";
+}
+
 export async function measureProcessMemoryBytes(pid: number | null): Promise<number | null> {
   if (pid === null) return null;
   try {
@@ -139,6 +143,15 @@ type BackendFactory = () => Promise<ChatBackend>;
 let testBackendFactory: BackendFactory | null = null;
 
 function initialStatus(): ChatEngineStatus {
+  if (scriptedEnginesEnabled()) {
+    return {
+      kind: "url",
+      state: "ready",
+      reason: null,
+      identity: { host: "stub", build: "scripted", model: "scripted-chat", healthy: true },
+      postLoadCheck: { replyOk: true, actualBytes: null, estimatedBytes: null },
+    };
+  }
   const pin = ENGINE_BINARIES.find((entry) => entry.platform === process.platform && entry.arch === process.arch && !entry.requiresNvidia);
   const installed = !!pin && existsSync(join(engineDir(pin.id), ENGINE_READY_MARKER));
   return { kind: null, state: installed ? "installed" : "notInstalled", reason: null, identity: null, postLoadCheck: null };
@@ -157,6 +170,43 @@ function configuredUrl(): { kind: EngineKind; url: string } | null {
   if (managed) return { kind: "managed", url: managed };
   const url = process.env.STACK_CHAT_ENGINE_URL ?? process.env.MAIPAI_LLAMA_SERVER_URL;
   return url ? { kind: "url", url } : null;
+}
+
+class ScriptedEngineClient implements EngineClient {
+  readonly baseUrl = "in-process://scripted";
+
+  async complete(body: Record<string, unknown>): Promise<{ status: number; body: unknown }> {
+    const messages = Array.isArray(body.messages) ? body.messages : [];
+    const last = messages.at(-1) as { content?: unknown } | undefined;
+    const content = typeof last?.content === "string" && last.content.trim()
+      ? "Scripted Stack reply."
+      : "The scripted Stack engine is ready.";
+    return {
+      status: 200,
+      body: {
+        id: "scripted-completion",
+        object: "chat.completion",
+        choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1, completion_tokens: 4, total_tokens: 5 },
+      },
+    };
+  }
+
+  async health(): Promise<boolean> {
+    return true;
+  }
+}
+
+function scriptedBackend(): ChatBackend {
+  return {
+    client: new ScriptedEngineClient(),
+    kind: "url",
+    identity: { host: "stub", build: "scripted", model: "scripted-chat", healthy: true },
+    pid: null,
+    activeRequests: 0,
+    retired: false,
+    stop: async () => {},
+  };
 }
 
 export async function waitHealthy(client: EngineClient, timeoutMs = LOAD_FLOOR_MS, isAlive: () => boolean = () => true): Promise<void> {
@@ -264,6 +314,7 @@ async function startSpawnedBackend(): Promise<ChatBackend> {
 }
 
 async function startBackend(): Promise<ChatBackend> {
+  if (scriptedEnginesEnabled()) return scriptedBackend();
   if (testBackendFactory) return testBackendFactory();
   const configured = configuredUrl();
   if (configured) return startUrlBackend(configured.kind, configured.url);

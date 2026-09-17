@@ -4,10 +4,14 @@
   "private": true,
   "description": "MaiPai Stack: the local AI foundation. See docs/dev.md.",
   "license": "AGPL-3.0",
-  "workspaces": ["backend"],
+  "workspaces": ["backend", "frontend"],
   "scripts": {
     "start": "bun --cwd backend start",
     "dev": "bun --cwd backend dev",
+    "build": "bun --cwd frontend build",
     "test": "bun --cwd backend test"
+  },
+  "devDependencies": {
+    "playwright": "^1.48.0"
   }
 }

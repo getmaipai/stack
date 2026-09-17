@@ -35,7 +35,7 @@ engines never the platform, clients not people.
 ## Layout
 
 `backend/` (Bun, Hono with `@hono/zod-openapi`, Zod, Drizzle/SQLite),
-`frontend/` (React, Vite, `@maipai/ui`), `docs/` (the three tiers),
+`frontend/` (React, Vite, the copied `@maipai/ui` subset), `docs/` (the three tiers),
 `scripts/check.sh` (the gate: the repo's own lint, format and tests, then
 the pinned `@maipai/standards` core, which needs a sibling
 `getmaipai/.github` checkout at `../.github` or `MAIPAI_STANDARDS_DIR`).

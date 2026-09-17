@@ -156,6 +156,11 @@ the Stack's pages and Home's Admin pages look like one family. A native
 macOS menu-bar item (start, stop, the board's state, "Open") is planned
 after the web UI, not before it.
 
+The Stack's `frontend/` is built into `frontend/dist/` and served by this
+same daemon on its API port, with Vite proxying the API paths in development.
+Until KIT-01 extracts `@maipai/ui`, it carries a copied subset of Home's kit
+under `frontend/src/kit/`; those copied files are not edited in the Stack.
+
 ### Roles and the router
 
 A role is a stable string with a declared wire shape and a declared

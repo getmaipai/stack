@@ -9,6 +9,8 @@ the product passes its battle-tested checklist in `docs/dev.md`.
 
 ### Added
 
+- The first-run admin UI, operator login, role board, memory card,
+  notifications and Repairs list, served by the Stack daemon.
 - The event feed (`/stack/v1/events`, SSE with replay), the durable notification center, Repairs with one action each, and rotating redacted logs per engine.
 - The hardware probe, profile tiers, and `/stack/v1/hardware` route.
 - The pinned engine catalog, verified archive downloader, installer, and engine listing route.

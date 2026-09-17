@@ -24,6 +24,15 @@ if [ "${1:-}" != "--docs" ]; then
 
   echo "== backend: tests"
   (cd backend && bun test)
+
+  echo "== frontend: install"
+  (cd frontend && bun install --silent)
+  echo "== frontend: lint"
+  (cd frontend && bun run lint)
+  echo "== frontend: tests"
+  (cd frontend && bun test)
+  echo "== frontend: build"
+  (cd frontend && bun run build)
 fi
 
 bash "$STANDARDS_DIR/standards/bin/check-core.sh" .

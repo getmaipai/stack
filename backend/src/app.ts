@@ -1,5 +1,9 @@
 import { apiReference } from "@scalar/hono-api-reference";
 import { createRoute, z } from "@hono/zod-openapi";
+import { serveStatic } from "hono/bun";
+import { existsSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { apiRouter } from "@/lib/openapi";
 import { hardwareRoutes } from "@/routes/hardware";
 import { enginesRoutes } from "@/routes/engines";
@@ -52,3 +56,17 @@ app.route("/stack/v1/roles", rolesRoutes);
 app.route("/stack/v1/operator", operatorRoutes);
 app.route("/stack/v1/clients", clientsRoutes);
 app.route("/v1", inferenceRoutes);
+
+const here = dirname(fileURLToPath(import.meta.url));
+const distDir = join(here, "..", "..", "frontend", "dist");
+const indexPath = join(distDir, "index.html");
+
+// The daemon owns the API and the built UI on one origin. Checking the
+// filesystem per request lets a deploy build the frontend after the daemon
+// has started without leaving the process stuck in a 404 state.
+app.use("/*", serveStatic({ root: distDir }));
+app.get("*", async (c) => {
+  if (c.req.path.startsWith("/api/") || c.req.path.startsWith("/stack/") || c.req.path.startsWith("/v1/")) return c.notFound();
+  if (!existsSync(indexPath)) return c.text("UI not built", 503);
+  return c.html(await Bun.file(indexPath).text());
+});

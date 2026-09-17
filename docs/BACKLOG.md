@@ -89,7 +89,9 @@ never copied. No item migrates the hub until STACK-16.
   `getmaipai/.github/docs/UPDATES.md`. Acceptance: an update and a
   rollback of a scripted engine build with no request cut (test); the
   privacy page lists the check.
-- [ ] **STACK-11 (M): the admin UI, first run and the board.** The five
+- [x] **STACK-11 (M): the admin UI, first run and the board.** committed:
+  first run steps 1 to 3 and 5, login, the board; the downloading step
+  and Try it are STACK-12. The five
   first-run steps and the board from `ux.md`, on `@maipai/ui`, generated
   screenshots against a scripted engine set, each opened and judged.
   Acceptance: a fresh data directory completes first run headlessly in
@@ -192,6 +194,12 @@ each item's design section lands in `dev.md` before its code.
   `/v1/audio/transcriptions` for Listen, and `/v1/audio/speech`
   through an `<audio>` element for Speak; stateless; the decision and
   the candidates graded are in `dev.md` "Try it's chat surface".
+
+## Cross-repo
+
+- [ ] **KIT-01 (M): extract the shared UI kit.** Extract `@maipai/ui`
+  from `home/frontend/src/kit` into a package that both repos pin. Until
+  then, the Stack carries a copied subset for its admin shell.
 
 ## Milestone 1: the robot
 
