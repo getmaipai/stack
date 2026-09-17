@@ -9,6 +9,7 @@ the product passes its battle-tested checklist in `docs/dev.md`.
 
 ### Added
 
+- The hardware probe, profile tiers, and `/stack/v1/hardware` route.
 - The Bun backend scaffold with a health route, OpenAPI explorer and SQLite metadata store.
 - The docs site skeleton (`docs/site/`, Astro Starlight) and the first
   user pages (`docs/user/getting-started.md`,

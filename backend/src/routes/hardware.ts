@@ -1,0 +1,62 @@
+import { createRoute, z } from "@hono/zod-openapi";
+import { apiRouter } from "@/lib/openapi";
+import { detectHardware } from "@/lib/hardware";
+import { PROFILE_TIERS, proposeProfile, type ProfileTier, type RoleId } from "@/profiles";
+
+const RoleIdSchema = z.enum(["chat", "coding", "judge", "router", "embed", "rerank", "vision", "stt", "tts", "wakeword", "image", "video", "music"]);
+const CudaDeviceSchema = z.object({
+  index: z.number(),
+  name: z.string(),
+  vramBytes: z.number(),
+  usedVramBytes: z.number().optional(),
+  utilizationPct: z.number().optional(),
+});
+const HardwareInfoSchema = z.object({
+  platform: z.string(),
+  arch: z.string(),
+  totalRamGb: z.number(),
+  cpuCount: z.number(),
+  isAppleSilicon: z.boolean(),
+  unifiedMemoryGb: z.number(),
+  cudaDevices: z.array(CudaDeviceSchema),
+  freeDiskBytes: z.number(),
+  osVersion: z.string(),
+});
+const ProfileTierSchema = z.object({
+  id: z.enum(["p16", "p32", "p64", "p128"]),
+  label: z.string(),
+  minUnifiedGb: z.number(),
+  minVramGb: z.number(),
+  resident: z.array(RoleIdSchema),
+  onDemand: z.array(RoleIdSchema),
+  notAvailable: z.array(RoleIdSchema),
+});
+
+const hardwareRoute = createRoute({
+  method: "get",
+  path: "/",
+  tags: ["Hardware"],
+  summary: "Hardware facts and the proposed profile",
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            hardware: HardwareInfoSchema,
+            proposed: ProfileTierSchema.nullable(),
+            tiers: z.array(ProfileTierSchema),
+          }),
+        },
+      },
+      description: "The detected hardware and profile choices.",
+    },
+  },
+});
+
+export const hardwareRoutes = apiRouter();
+hardwareRoutes.openapi(hardwareRoute, async (c) => {
+  const hardware = await detectHardware();
+  return c.json({ hardware, proposed: proposeProfile(hardware), tiers: PROFILE_TIERS }, 200);
+});
+
+export type { ProfileTier, RoleId };

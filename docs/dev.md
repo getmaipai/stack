@@ -306,6 +306,7 @@ run resident and which on demand, with model choices per role. The
 first-run bench measures, and the Hardware page shows measured numbers
 with the model file and engine build beside each one. No number in the
 UI is a file size pretending to be a memory footprint.
+`backend/src/profiles.ts` is the single declaration for the four profile tiers and their role lists.
 
 ### Safety posture
 

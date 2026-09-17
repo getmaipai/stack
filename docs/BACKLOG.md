@@ -30,11 +30,11 @@ never copied. No item migrates the hub until STACK-16.
   `home/scripts/check.sh`), `.env.example`. Verified at bf9bd7f. Acceptance: `bun start`
   serves `/api/docs` and `/healthz` on the default port; `check.sh`
   green. Out of scope: any engine.
-- [ ] **STACK-02 (M): hardware probe and profiles.** CPU, GPU class,
+- [x] **STACK-02 (M): hardware probe and profiles.** CPU, GPU class,
   unified or discrete memory, free disk, OS; the profile tiers and their
   role lists as one declaration. Mirror `home/backend/src/lib/hardware.ts`.
   Acceptance: `GET /stack/v1/hardware` on the dev Mac reports real values;
-  a unit test for each tier's proposal from a scripted probe. Out of
+  a unit test for each tier's proposal from a scripted probe. Verified at fffabe5. Out of
   scope: the bench.
 - [ ] **STACK-03 (M): engine catalog and downloads.** Pinned builds per
   platform (version, URL, sha256 recorded here), resumable checksummed

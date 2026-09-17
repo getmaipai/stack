@@ -1,6 +1,7 @@
 import { apiReference } from "@scalar/hono-api-reference";
 import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@/lib/openapi";
+import { hardwareRoutes } from "@/routes/hardware";
 import packageJson from "../../package.json";
 
 export const version = packageJson.version;
@@ -34,3 +35,4 @@ app.doc("/api/openapi.json", {
   info: { title: "MaiPai Stack API", version },
 });
 app.get("/api/docs", apiReference({ url: "/api/openapi.json" }));
+app.route("/stack/v1/hardware", hardwareRoutes);
