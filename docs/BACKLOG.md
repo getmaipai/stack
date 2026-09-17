@@ -233,6 +233,22 @@ each item's design section lands in `dev.md` before its code.
   from `home/frontend/src/kit` into a package that both repos pin. Until
   then, the Stack carries a copied subset for its admin shell.
 
+- [ ] **STACK-18 (M): the tray app on Tauri 2.** A `tray/` package:
+  the Stack icon as the tray or menu-bar item colored by the worst
+  health severity, a menu with each role's one line, Open (the web UI
+  in a Tauri window), Pause everything, Resume, Quit; native
+  notifications for `critical` and `error` health items and for
+  `update.available` and `model.installed`, posted under the app's
+  bundle id; an independent poll of `/healthz` that shows "The Stack
+  is not running" with Start when the daemon is down; the daemon as a
+  Tauri sidecar in the app bundle so the bundle is the second install
+  path; the Tauri updater plugin against `app.json`. Acceptance: on
+  this Mac the bundled app shows the icon, a scripted critical health
+  item posts a native notification (screenshot), Pause drains and
+  Resume restores; the bundle installs the service the same way
+  `install.sh` does. Exit: `bash scripts/check.sh` plus the tray
+  package's own `cargo test`.
+
 ## Milestone 1: the robot
 
 - [ ] **STACK-17 (L): the Linux ARM profile.** `llama-server` on the Pi

@@ -547,6 +547,43 @@ kit by its registry); llama.cpp's own fit dry run and `llama-server`;
    A copied snippet carries its licence, a NOTICE entry, a source
    comment and a reason here.
 
+## The shipping shape: daemon, web UI, tray on Tauri, one command to install (decided 2026-09-17)
+
+Decided with Jesse after the survey of Ollama, LM Studio, oMLX,
+mlx-serve, Tailscale and Syncthing, which all ship the same three
+pieces. No Docker anywhere: Docker Desktop on the Mac runs a Linux VM
+with no Metal, so a containerized engine loses the GPU and the unified
+memory; it also means a second thing a person must install, ports and
+volumes to explain, and no clean path to notifications or the menu
+bar. Docker stays a packaging option for a Linux server someday, not
+the architecture.
+
+1. **The daemon** (`maipai-stack`, the Bun service compiled to one
+   binary with the web UI embedded) runs under the OS service manager
+   as the user: a launchd LaunchAgent on macOS, a systemd user service
+   on Linux, a Windows service later. The service manager is the
+   outer watchdog with the settings in `plans/operations-design-2026-09-17.md`
+   section 2; the daemon's supervisor is the inner one. Logs are
+   rotating files under `data/logs`, one per engine plus the daemon's.
+2. **The web UI**, served by the daemon on localhost, is the whole
+   admin surface (the dashboard shell in `ux.md`). Cross-platform for
+   free, nothing to install, the same kit as Home.
+3. **The tray app is Tauri 2**: one codebase for macOS, Linux and
+   Windows, 5 to 10 MB, tray icon, native notifications, updater and
+   sidecar management as first-party plugins; it holds no logic, reads
+   the same event feed Home reads, opens the web UI in its own window,
+   offers Start, Pause and Resume, and is the independent observer
+   that turns red and offers Start when the daemon is down. It is the
+   only process that posts native notifications (a bare daemon cannot
+   on macOS). This is a written deviation from STACK.md's Electron for
+   Desktop: the tray shell has no UI of its own, and a Chromium
+   process sitting in the menu bar all day beside a 70 GB model is the
+   wrong tool; Rust joins the toolchain for this one small app.
+4. **Install** is one command hosted by us that downloads only our
+   own binary from our own release, registers the service and opens
+   the board (`ux.md`, "Install and first open"); the app bundle with
+   the tray is the second path and runs the same steps.
+
 ## The API boundary: what is the Stack's and what is Home's (2026-09-17)
 
 The foundational API moved out of Home into the Stack. Home keeps an
