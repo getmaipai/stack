@@ -5,13 +5,13 @@
   </picture>
 </p>
 
-<h3 align="center">The local AI foundation for your own computer.</h3>
+<h3 align="center">Your own local AI stack, made easy.</h3>
 
 <p align="center"><a href="docs/dev.md">Documentation</a> · <a href="https://github.com/getmaipai/stack/releases">Releases</a></p>
 
-Every engine and model behind MaiPai, installed, sized to your hardware,
-watched, updated and testable from one page, on your own computer, for
-you and anything you build on it. Nothing leaves your house.
+The easy way to run your own local AI: the whole stack installed,
+watched, tested and kept up to date on your own computer, for you and
+anything you build on it. Nothing leaves your house.
 
 ## Features
 
