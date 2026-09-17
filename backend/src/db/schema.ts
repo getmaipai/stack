@@ -53,3 +53,24 @@ export const sessions = sqliteTable("sessions", {
   expiresAt: text("expires_at").notNull(),
   createdAt: text("created_at").notNull(),
 });
+
+export const notifications = sqliteTable("notifications", {
+  id: text("id").primaryKey(),
+  eventId: text("event_id").notNull(),
+  level: text("level").notNull(),
+  title: text("title").notNull(),
+  data: text("data").notNull(),
+  at: text("at").notNull(),
+  readAt: text("read_at"),
+  dismissedAt: text("dismissed_at"),
+});
+
+export const repairs = sqliteTable("repairs", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  detail: text("detail").notNull(),
+  action: text("action").notNull(),
+  level: text("level").notNull().default("passive"),
+  openedAt: text("opened_at").notNull(),
+  resolvedAt: text("resolved_at"),
+});

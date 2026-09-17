@@ -1,5 +1,6 @@
 import os from "node:os";
 import { measureProcessMemoryBytes } from "@/lib/supervisor";
+import { emit } from "@/lib/events";
 
 const GB = 1_073_741_824;
 
@@ -193,6 +194,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
     systemBreaches = low ? systemBreaches + 1 : 0;
     pressurePolls = systemBreaches;
     pressure = systemBreaches >= tuning.systemSustainedPolls;
+    if (pressure && systemBreaches === tuning.systemSustainedPolls) emit({ id: "pressure", data: { freeMemoryBytes, floorBytes: floor } });
     const processReader = options.processMemory ?? ((pid: number) => measureProcessMemoryBytes(pid));
     const now = options.now?.() ?? Date.now();
     for (const item of [...loaded.values()]) {
@@ -202,6 +204,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
           item.processBreaches++;
         } else item.processBreaches = 0;
         if (item.kind === "resident" && item.processBreaches >= tuning.processSustainedPolls) {
+          emit({ id: "pressure", data: { reason: "resident RSS exceeded measured peak", id: item.id } });
           await options.restart?.(item.id);
           item.processBreaches = 0;
         }

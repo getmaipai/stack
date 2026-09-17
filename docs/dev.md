@@ -379,6 +379,11 @@ own notification system (`getmaipai/.github/docs/NOTIFICATIONS.md`); the
 Stack never pushes to a phone itself, because that is Home's relationship
 with the household.
 
+The declarations and in-memory ring are in `backend/src/events.ts` and
+`backend/src/lib/events.ts`; durable notifications are in the same bus,
+Repairs are in `backend/src/lib/repairs.ts`, and redacted daemon and engine
+logs are in `backend/src/lib/log.ts`.
+
 ### Updates
 
 Three things update, each on its own schedule, each opt-in: the Stack

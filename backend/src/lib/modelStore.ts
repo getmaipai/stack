@@ -7,6 +7,7 @@ import type { RoleId } from "@/roles";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
+import { emit } from "@/lib/events";
 
 export const ModelSourceSchema = z.enum(["catalog", "huggingface"]);
 
@@ -250,12 +251,14 @@ async function installRegisteredModel(
   }
   const now = options.now?.() ?? new Date().toISOString();
   const current = getModel(record.id) ?? record;
-  return upsertModel({
+  const installed = upsertModel({
     ...current,
     installedAt: now,
     verifiedAt: now,
     modelPath: destination,
   }, now);
+  emit({ id: "model.installed", data: { model: installed.id, path: installed.modelPath } });
+  return installed;
 }
 
 export function clearModelsForTests(): void {

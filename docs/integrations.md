@@ -61,10 +61,12 @@ relationship with phones, and every screen a person sees. Child safety
 stays in Home because children exist only in Home.
 
 **Notifications.** Home subscribes to the event feed with its key and
-maps events to its own notification types (`NOTIFICATIONS.md`): an
-`update.available` becomes an admin notification, a `repair` becomes a
-Repairs entry in Home's Admin with a link, `pressure` warnings become a
-quiet status. The Stack never notifies a phone; Home does.
+maps `role.state`, `engine.state`, `pressure`, `job.progress`, `job.done`,
+`model.installed`, `update.available`, `update.applied` and `repair` to its
+own notification types (`NOTIFICATIONS.md`): an `update.available` becomes
+an admin notification, a `repair` becomes a Repairs entry in Home's Admin
+with a link, and `pressure` warnings become a quiet status. The Stack never
+notifies a phone; Home does.
 
 **Settings.** Stack settings are declared and rendered in the Stack.
 Home's settings never duplicate them; Home's Admin links across. The one

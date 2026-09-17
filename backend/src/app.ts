@@ -8,6 +8,8 @@ import { inferenceRoutes } from "@/routes/inference";
 import { operatorRoutes } from "@/routes/operator";
 import { clientsRoutes } from "@/routes/clients";
 import { budgetRoutes } from "@/routes/budget";
+import { eventsRoutes } from "@/routes/events";
+import { logsRoutes } from "@/routes/logs";
 import packageJson from "../../package.json";
 
 export const version = packageJson.version;
@@ -44,6 +46,8 @@ app.get("/api/docs", apiReference({ url: "/api/openapi.json" }));
 app.route("/stack/v1/hardware", hardwareRoutes);
 app.route("/stack/v1/engines", enginesRoutes);
 app.route("/stack/v1/budget", budgetRoutes);
+app.route("/stack/v1", eventsRoutes);
+app.route("/stack/v1/logs", logsRoutes);
 app.route("/stack/v1/roles", rolesRoutes);
 app.route("/stack/v1/operator", operatorRoutes);
 app.route("/stack/v1/clients", clientsRoutes);

@@ -7,6 +7,8 @@ import { identityHeaders, readEngineIdentity, type EngineIdentity } from "@/lib/
 import { isModelSelectable, listModels, type ModelRecord } from "@/lib/modelStore";
 import { withTimeout } from "@/lib/withTimeout";
 import { admit, release, startGovernor, type GovernorHandle } from "@/lib/governor";
+import { emit } from "@/lib/events";
+import { raiseRepair } from "@/lib/repairs";
 import type { RoleState } from "@/roles";
 
 export type EngineKind = "spawned" | "managed" | "url";
@@ -187,7 +189,12 @@ function selectedChatModel(): ModelRecord | null {
 async function startUrlBackend(kind: EngineKind, url: string): Promise<ChatBackend> {
   const client = new OpenAIEngineClient(url);
   const identity = await readEngineIdentity(url);
-  if (!identity.healthy) throw new EngineUnavailableError(`The ${kind} engine is offline.`);
+  if (!identity.healthy) {
+    const reason = `The ${kind} engine is offline.`;
+    emit({ id: "engine.state", data: { engine: "chat", state: "offline", reason } });
+    raiseRepair("Chat engine is offline", reason, "check_host");
+    throw new EngineUnavailableError(reason);
+  }
   return { client, kind, identity, pid: null, activeRequests: 0, retired: false, stop: async () => {} };
 }
 
@@ -249,6 +256,8 @@ async function startSpawnedBackend(): Promise<ChatBackend> {
     return backend;
   } catch (error) {
     processHandle.kill();
+    emit({ id: "engine.state", data: { engine: "chat", state: "offline", reason: (error as Error).message } });
+    raiseRepair("Chat engine failed to start", (error as Error).message, "restart_engine");
     release(admission);
     throw error;
   }
@@ -326,6 +335,8 @@ export function reportChatEngineExited(reason = "The spawned engine exited unexp
   state.backend = null;
   state.startingPromise = null;
   state.status = { ...state.status, state: "offline", reason };
+  emit({ id: "engine.state", data: { engine: "chat", state: "offline", reason } });
+  raiseRepair("Chat engine is offline", reason, "restart_engine");
   if (previous) {
     previous.retired = true;
     void previous.stop();
