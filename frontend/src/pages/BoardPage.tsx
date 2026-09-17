@@ -1,215 +1,84 @@
-import { type ReactNode, useEffect } from "react";
+import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { api, type BudgetResponse, type NotificationRecord, type RepairRecord, type RoleRecord } from "@/lib/api";
+import { ApiError, api, type BudgetResponse, type HardwareResponse, type NotificationRecord, type ProfileTier, type RepairRecord, type RoleRecord, type SetupDownload, type SetupMode, type SetupPlanResponse } from "@/lib/api";
+import { plainHardware, plainHardwareDetails } from "@/lib/plainHardware";
 import { useApiResource } from "@/lib/useApiResource";
 import { Badge } from "@/kit/ui/badge";
 import { Button } from "@/kit/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/kit/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/kit/ui/dialog";
+import { Input } from "@/kit/ui/input";
 import { Progress } from "@/kit/ui/progress";
 import { Skeleton } from "@/kit/ui/skeleton";
 import { Toaster } from "@/kit/ui/sonner";
 
-const ROLE_LABELS: Record<string, string> = {
-  chat: "Chat",
-  coding: "Coding",
-  judge: "Judge",
-  router: "Router",
-  embed: "Embeddings",
-  rerank: "Reranking",
-  vision: "Vision",
-  stt: "Voice in",
-  tts: "Voice out",
-  wakeword: "Wake word",
-  image: "Pictures",
-  video: "Video",
-  music: "Music",
-};
+const ROLE_LABELS: Record<string, string> = { chat: "Chat", coding: "Coding", judge: "Judge", router: "Router", embed: "Embeddings", rerank: "Reranking", vision: "Vision", stt: "Voice in", tts: "Voice out", wakeword: "Wake word", image: "Pictures", video: "Video", music: "Music" };
+const ABILITIES: Array<{ id: string; label: string; roles: string[]; size: string; models: string }> = [
+  { id: "chat", label: "Chat", roles: ["chat"], size: "700 MB", models: "A local chat model" },
+  { id: "voice", label: "Voice", roles: ["stt", "tts"], size: "230 MB", models: "A voice-in model and a voice-out model" },
+  { id: "image", label: "Pictures", roles: ["image"], size: "1.8 GB", models: "An on-demand picture model" },
+  { id: "video", label: "Video", roles: ["video"], size: "3.4 GB", models: "An on-demand video model" },
+  { id: "music", label: "Music", roles: ["music"], size: "2.1 GB", models: "An on-demand music model" },
+];
 
-function stateTone(state: RoleRecord["state"]): "default" | "secondary" | "destructive" | "outline" {
-  if (state === "ready") return "default";
-  if (state === "loading" || state === "busy") return "secondary";
-  if (state === "stopped" || state === "offline") return "destructive";
-  return "outline";
+function stateTone(state: RoleRecord["state"]): "default" | "secondary" | "destructive" | "outline" { if (state === "ready") return "default"; if (state === "loading" || state === "busy") return "secondary"; if (state === "stopped" || state === "offline") return "destructive"; return "outline"; }
+function formatBytes(bytes: number): string { if (bytes < 1_000_000) return `${Math.max(0, Math.round(bytes / 1_000))} KB`; if (bytes < 1_000_000_000) return `${Math.max(0, Math.round(bytes / 1_000_000))} MB`; return `${(bytes / 1_000_000_000).toFixed(1)} GB`; }
+function formatSpeed(bytes: number): string { return bytes > 0 ? `${(bytes / 1_000_000).toFixed(1)} MB/s` : "Waiting"; }
+function roleState(role?: RoleRecord): string { if (!role) return "Waiting for the plan"; if (role.state === "ready") return "Ready when asked"; if (role.state === "loading") return "Loading"; if (role.state === "busy") return "Working"; if (role.state === "stopped" || role.state === "offline") return `Stopped: ${role.reason ?? "the engine needs attention"}`; if (role.state === "installed") return "Installed, off"; return "Not installed"; }
+
+function BoardSection({ children, title, description }: { children: ReactNode; title: string; description?: string }) { return <section className="space-y-4"><div><h2 className="text-2xl font-semibold tracking-tight">{title}</h2>{description && <p className="mt-1 text-base text-muted-foreground">{description}</p>}</div>{children}</section>; }
+
+function ProfilePicker({ tiers, selected, onSelect }: { tiers: ProfileTier[]; selected: ProfileTier | null; onSelect: (tier: ProfileTier) => void }) {
+  const [open, setOpen] = useState(false);
+  return <><Button variant="link" className="h-auto p-0" onClick={() => setOpen(true)}>Change</Button><Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[calc(100vh-2rem)] max-w-2xl overflow-y-auto"><DialogHeader><DialogTitle>Choose what this computer can do</DialogTitle><DialogDescription>These profiles use measured hardware facts and describe abilities before model names.</DialogDescription></DialogHeader><div className="grid gap-3">{tiers.map((tier) => <Button className="h-auto justify-start whitespace-normal p-4 text-left" key={tier.id} variant={selected?.id === tier.id ? "secondary" : "outline"} onClick={() => { onSelect(tier); setOpen(false); }}><span><span className="block font-medium">{tier.id.toUpperCase()}</span><span className="block text-base font-normal">{tier.label}</span></span></Button>)}</div></DialogContent></Dialog></>;
 }
 
-function stateText(role: RoleRecord): string {
-  if (role.state === "ready") {
-    if (role.id === "chat" || role.id === "coding") return "Ready, 62 GB loaded";
-    if (role.id === "image" || role.id === "video" || role.id === "music") return "Ready when asked";
-    return "Ready";
-  }
-  if (role.state === "loading") return "Loading";
-  if (role.state === "busy") return "Working, 40%";
-  if (role.state === "stopped" || role.state === "offline") return "Stopped: " + (role.reason ?? "the engine needs attention");
-  if (role.id === "image" || role.id === "video" || role.id === "music") return "Not installed";
-  if (role.state === "installed") return "Off";
-  return "Not installed";
+function HardwareCard({ resource, selectedTier, onTierChange, planChosen }: { resource: { data?: HardwareResponse; loading: boolean; error: Error | null }; selectedTier: ProfileTier | null; onTierChange: (tier: ProfileTier) => void; planChosen: boolean }) {
+  const [noteVisible, setNoteVisible] = useState(() => typeof localStorage === "undefined" || localStorage.getItem("stack.hardware-note-dismissed") !== "1");
+  const profile = selectedTier ?? resource.data?.proposed ?? null;
+  function dismissNote() { localStorage.setItem("stack.hardware-note-dismissed", "1"); setNoteVisible(false); }
+  return <Card><CardHeader><div className="flex flex-wrap items-start justify-between gap-4"><div><CardTitle>This computer</CardTitle><CardDescription className="mt-1 text-base">The Stack measures this machine before it chooses a plan.</CardDescription></div>{resource.data && <ProfilePicker tiers={resource.data.tiers} selected={profile} onSelect={onTierChange} />}</div></CardHeader><CardContent className="space-y-5">{resource.loading && <Skeleton className="h-20 w-full" />}{resource.error && <p className="text-base text-destructive" role="alert">{resource.error.message}</p>}{resource.data && <><div className="rounded-2xl bg-muted p-5"><p className="text-lg font-medium">{plainHardware(resource.data.hardware)}</p><div className="mt-2 space-y-1 text-base text-muted-foreground">{plainHardwareDetails(resource.data.hardware).slice(1).map((line) => <p key={line}>{line}</p>)}</div></div><div><p className="font-medium">{planChosen ? "Selected plan" : "A plan for this computer"}</p><p className="mt-1 max-w-3xl text-base leading-7 text-muted-foreground">{profile?.label ?? "This computer does not meet a profile yet."}</p></div></>}{noteVisible && <div className="flex items-start justify-between gap-4 rounded-2xl border border-border bg-background p-4 text-base leading-7"><p>MaiPai Stack runs AI on this computer. Nothing leaves it. The AI can be wrong, and it is never medical, legal, or professional advice.</p><Button variant="ghost" size="sm" onClick={dismissNote}>Dismiss</Button></div>}</CardContent></Card>;
 }
 
-function formatGb(bytes: number): string {
-  return Math.max(0, Math.round(bytes / 1_073_741_824)) + " GB";
+function AddAbilities({ tier, onInstall, saving }: { tier: ProfileTier | null; onInstall: (mode: SetupMode) => Promise<void>; saving: boolean }) {
+  const [mode, setMode] = useState<SetupMode>("small");
+  function canRun(roles: string[]): boolean { return !!tier && roles.some((role) => [...tier.resident, ...tier.onDemand, ...tier.installedOnly].includes(role)); }
+  return <BoardSection title="Add abilities" description="Start with a small local set. You can change this plan later."><div className="flex flex-wrap items-center gap-3 rounded-2xl border border-primary/30 bg-primary/5 p-4"><div className="flex-1"><p className="font-medium">Start small</p><p className="text-base text-muted-foreground">Chat and voice arrive first, with room for the rest.</p></div><Button variant={mode === "small" ? "default" : "outline"} onClick={() => setMode("small")}>Start small</Button><Button variant={mode === "full" ? "default" : "outline"} onClick={() => setMode("full")}>Full plan</Button><Button onClick={() => void onInstall(mode)} disabled={saving || !tier}>{saving ? "Saving..." : "Install"}</Button></div><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{ABILITIES.map((ability) => { const available = canRun(ability.roles); return <Card key={ability.id} className="flex flex-col"><CardHeader className="pb-3"><div className="flex items-start justify-between gap-3"><CardTitle>{ability.label}</CardTitle><Badge variant={available ? "secondary" : "outline"}>{available ? "Can run" : "Not on this computer"}</Badge></div><CardDescription className="text-base">{ability.size}</CardDescription></CardHeader><CardContent className="mt-auto"><details><summary className="cursor-pointer text-base font-medium">Details</summary><p className="mt-2 text-base text-muted-foreground">{ability.models}</p></details></CardContent></Card>; })}</div></BoardSection>;
 }
 
-function RoleTile({ role }: { role: RoleRecord }) {
-  return (
-    <Card className="min-w-0">
-      <CardHeader className="gap-3">
-        <div className="flex items-start justify-between gap-3">
-          <CardTitle>{ROLE_LABELS[role.id] ?? role.id}</CardTitle>
-          <Badge variant={stateTone(role.state)}>{role.state === "ready" ? "Ready" : role.state}</Badge>
-        </div>
-        <CardDescription className="text-base">{role.description}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <p className="text-base font-medium">{stateText(role)}</p>
-      </CardContent>
-    </Card>
-  );
+function StatusStrip({ roles, budget }: { roles: RoleRecord[]; budget?: BudgetResponse }) {
+  const byId = new Map(roles.map((role) => [role.id, role]));
+  const memoryText = budget ? `${formatBytes(Math.max(0, budget.capBytes - budget.freeMemoryBytes))} in use, ${formatBytes(budget.freeMemoryBytes)} free for jobs` : "Memory status is not available yet";
+  const entries: Array<{ label: string; role?: RoleRecord; text: string }> = [{ label: "Chat", role: byId.get("chat"), text: roleState(byId.get("chat")) }, { label: "Voice", role: byId.get("stt") ?? byId.get("tts"), text: byId.get("stt")?.state === "ready" && byId.get("tts")?.state === "ready" ? "Ready" : roleState(byId.get("stt") ?? byId.get("tts")) }, { label: "Pictures", role: byId.get("image"), text: roleState(byId.get("image")) }, { label: "Video", role: byId.get("video"), text: roleState(byId.get("video")) }, { label: "Music", role: byId.get("music"), text: roleState(byId.get("music")) }, { label: "Memory", text: memoryText }];
+  return <div className="grid grid-cols-1 divide-y divide-border overflow-hidden rounded-2xl border border-border sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-3">{entries.map((entry) => <div className="flex min-h-28 items-start justify-between gap-3 bg-card p-5" key={entry.label}><div><p className="font-medium">{entry.label}</p><p className="mt-2 text-base text-muted-foreground">{entry.text}</p></div>{entry.role && <Badge variant={stateTone(entry.role.state)}>{entry.role.state === "ready" ? "Ready" : entry.role.state}</Badge>}</div>)}</div>;
 }
 
-function MemoryTile({ budget }: { budget: BudgetResponse }) {
-  const used = Math.max(0, budget.capBytes - budget.freeMemoryBytes);
-  const percentage = budget.capBytes > 0 ? Math.min(100, (used / budget.capBytes) * 100) : 0;
-  const message = budget.capBytes > 0
-    ? formatGb(used) + " of " + formatGb(budget.capBytes) + " in use, " + formatGb(budget.freeMemoryBytes) + " free for jobs"
-    : "Memory status is not available yet";
-  return (
-    <Card className={budget.pressure ? "ring-2 ring-destructive" : undefined}>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-3">
-          <CardTitle>Memory</CardTitle>
-          <Badge variant={budget.pressure ? "destructive" : "default"}>{budget.pressure ? "Pressure" : "Healthy"}</Badge>
-        </div>
-        <CardDescription className="text-base">The shared budget for resident and on-demand work.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <p className="text-base font-medium">{message}</p>
-        <Progress value={percentage} aria-label="Memory in use" />
-      </CardContent>
-    </Card>
-  );
+function DownloadsCard({ downloads, health, onRefresh }: { downloads: SetupDownload[]; health: string | null; onRefresh: () => Promise<void> }) {
+  const active = downloads.some((item) => item.status === "downloading");
+  async function action(item: SetupDownload) { await api.post(`/stack/v1/setup/plan/${item.id}/${item.status === "paused" ? "resume" : "pause"}`); await onRefresh(); }
+  if (downloads.length === 0 && !health) return null;
+  return <BoardSection title="Downloads" description="The Stack keeps working while you use the board."><Card><CardContent className="space-y-5 p-5">{active && <p className="text-base leading-7">This is your internet speed. The Stack is ready; your bigger model is on its way.</p>}{health && <p className="text-base text-muted-foreground">{health}</p>}<div className="divide-y divide-border">{downloads.map((item) => { const percent = item.sizeBytes > 0 ? Math.round(item.completedBytes / item.sizeBytes * 100) : 0; const statusText = item.status === "installed" ? "Installed" : item.status === "failed" ? item.reason ?? "Download failed" : item.status === "queued" ? "Queued" : item.status === "paused" ? `Paused · ${item.timeLeftSeconds ?? "unknown"}s left` : `${formatSpeed(item.speedBytesPerSecond)} · ${item.timeLeftSeconds ?? "unknown"}s left`; return <div className="space-y-3 py-4 first:pt-0 last:pb-0" key={item.id}><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-medium">{item.name}</p><p className="text-base text-muted-foreground">{formatBytes(item.sizeBytes)} · {item.source} · {item.licence}</p></div><div className="flex items-center gap-3"><span className="text-base text-muted-foreground">{statusText}</span>{(item.status === "downloading" || item.status === "paused") && <Button size="sm" variant="outline" onClick={() => void action(item)}>{item.status === "paused" ? "Resume" : "Pause"}</Button>}</div></div><Progress value={percent} aria-label={`${item.name} download progress`} /></div>; })}</div></CardContent></Card></BoardSection>;
 }
 
-function BoardSection({ children, title, description }: { children: ReactNode; title: string; description?: string }) {
-  return (
-    <section className="space-y-4">
-      <div>
-        <h2 className="text-2xl font-semibold">{title}</h2>
-        {description && <p className="mt-1 text-base text-muted-foreground">{description}</p>}
-      </div>
-      {children}
-    </section>
-  );
+function Details({ roles }: { roles: RoleRecord[] }) { const folded = roles.filter((role) => ["router", "judge", "embed", "rerank", "wakeword", "vision"].includes(role.id)); return <details className="rounded-2xl border border-border px-5 py-4"><summary className="cursor-pointer font-medium">Details</summary><div className="mt-4 grid gap-3 sm:grid-cols-2">{folded.map((role) => <div className="flex items-center justify-between gap-3" key={role.id}><span>{ROLE_LABELS[role.id]}</span><Badge variant={stateTone(role.state)}>{roleState(role)}</Badge></div>)}</div></details>; }
+
+function ClientKeyDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; onCreated: (key: string) => void }) {
+  const [password, setPassword] = useState(""); const [error, setError] = useState<string | null>(null); const [saving, setSaving] = useState(false);
+  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setSaving(true); setError(null); try { await api.post("/stack/v1/operator/setup", { password }); const result = await api.post<{ key: string }>("/stack/v1/clients", { name: "Stack local tool", allowedRoles: ["chat"] }); onCreated(result.key); onOpenChange(false); } catch (caught) { setError(caught instanceof Error ? caught.message : "The password could not be saved."); } finally { setSaving(false); } }
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><DialogHeader><DialogTitle>Set your operator password</DialogTitle><DialogDescription>The password was deferred until the first key. It secures the board and future keys on this computer.</DialogDescription></DialogHeader><form className="space-y-5" onSubmit={submit}><label className="block space-y-2 text-base font-medium" htmlFor="deferred-password">Operator password<Input id="deferred-password" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>{error && <p className="text-base text-destructive" role="alert">{error}</p>}<Button type="submit" disabled={saving}>{saving ? "Saving..." : "Set password and create key"}</Button></form></DialogContent></Dialog>;
 }
 
 export function BoardPage() {
-  const roles = useApiResource<{ roles: RoleRecord[] }>("/stack/v1/roles");
-  const budget = useApiResource<BudgetResponse>("/stack/v1/budget");
-  const notifications = useApiResource<{ notifications: NotificationRecord[] }>("/stack/v1/notifications");
-  const repairs = useApiResource<{ repairs: RepairRecord[] }>("/stack/v1/repairs");
-  const refetchRoles = roles.refetch;
-  const refetchBudget = budget.refetch;
-  const refetchNotifications = notifications.refetch;
-  const refetchRepairs = repairs.refetch;
-
-  useEffect(() => {
-    if (typeof EventSource === "undefined") return;
-    const stream = new EventSource("/stack/v1/events");
-    stream.onmessage = (event) => {
-      try {
-        const envelope = JSON.parse(event.data) as { id?: string };
-        if (envelope.id === "role.state" || envelope.id === "engine.state") void refetchRoles();
-        if (envelope.id === "pressure") void refetchBudget();
-        if (envelope.id === "repair") {
-          void refetchRepairs();
-          void refetchNotifications();
-        }
-      } catch {
-        // A malformed event cannot take down the board.
-      }
-    };
-    return () => stream.close();
-  }, [refetchBudget, refetchNotifications, refetchRepairs, refetchRoles]);
-
-  async function resolveRepair(id: string) {
-    try {
-      await api.post("/stack/v1/repairs/" + id + "/resolve");
-      await repairs.refetch();
-      toast.success("Repair resolved.");
-    } catch (caught) {
-      toast.error(caught instanceof Error ? caught.message : "The repair could not be resolved.");
-    }
-  }
-
-  const loading = roles.loading || budget.loading || notifications.loading || repairs.loading;
-  const dataError = roles.error ?? budget.error ?? notifications.error ?? repairs.error;
-
-  return (
-    <div className="min-h-screen bg-background text-foreground">
-      <Toaster />
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-5 sm:px-8 lg:px-12">
-          <div>
-            <p className="text-lg font-semibold">MaiPai Stack</p>
-            <p className="text-base text-muted-foreground">Operator board</p>
-          </div>
-          <Badge variant="secondary">Local computer</Badge>
-        </div>
-      </header>
-      <main className="mx-auto max-w-7xl space-y-10 px-4 py-8 sm:px-8 lg:px-12 lg:py-12">
-        <div className="space-y-2">
-          <p className="text-base font-medium text-primary">Everything in one place</p>
-          <h1 className="text-4xl font-semibold tracking-tight">Your local AI board</h1>
-          <p className="max-w-2xl text-base leading-7 text-muted-foreground">A quick view of what this computer can do, what is loaded, and anything that needs a repair.</p>
-        </div>
-        {dataError && <p className="text-base text-destructive" role="alert">{dataError.message}</p>}
-        {loading && !roles.data && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 6 }, (_, index) => <Skeleton className="h-44" key={index} />)}
-          </div>
-        )}
-        {roles.data && (
-          <BoardSection title="Roles" description="Each role is a capability. The Stack chooses the engine behind it.">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {roles.data.roles.map((role) => <RoleTile key={role.id} role={role} />)}
-              {budget.data && <MemoryTile budget={budget.data} />}
-            </div>
-          </BoardSection>
-        )}
-        {notifications.data && (
-          <BoardSection title="Notifications" description="The last five events from this computer.">
-            <Card>
-              <CardContent className="divide-y divide-border p-0">
-                {notifications.data.notifications.slice(0, 5).map((notification) => (
-                  <div className="flex flex-wrap items-center justify-between gap-3 p-4" key={notification.id}>
-                    <p className="text-base">{notification.title}</p>
-                    <time className="text-base text-muted-foreground">{new Date(notification.at).toLocaleString()}</time>
-                  </div>
-                ))}
-                {notifications.data.notifications.length === 0 && <p className="p-4 text-base text-muted-foreground">No notifications yet.</p>}
-              </CardContent>
-            </Card>
-          </BoardSection>
-        )}
-        {repairs.data && (
-          <BoardSection title="Repairs" description="One action for each thing the Stack noticed.">
-            <Card>
-              <CardContent className="divide-y divide-border p-0">
-                {repairs.data.repairs.filter((repair) => !repair.resolvedAt).map((repair) => (
-                  <div className="flex flex-wrap items-center justify-between gap-4 p-4" key={repair.id}>
-                    <div className="min-w-0">
-                      <p className="text-base font-medium">{repair.title}</p>
-                      <p className="text-base text-muted-foreground">{repair.detail}</p>
-                    </div>
-                    <Button variant="outline" onClick={() => void resolveRepair(repair.id)}>Resolve</Button>
-                  </div>
-                ))}
-                {repairs.data.repairs.every((repair) => repair.resolvedAt) && <p className="p-4 text-base text-muted-foreground">No repairs needed.</p>}
-              </CardContent>
-            </Card>
-          </BoardSection>
-        )}
-      </main>
-    </div>
-  );
+  const hardware = useApiResource<HardwareResponse>("/stack/v1/hardware"); const roles = useApiResource<{ roles: RoleRecord[] }>("/stack/v1/roles"); const budget = useApiResource<BudgetResponse>("/stack/v1/budget"); const notifications = useApiResource<{ notifications: NotificationRecord[] }>("/stack/v1/notifications"); const repairs = useApiResource<{ repairs: RepairRecord[] }>("/stack/v1/repairs"); const setup = useApiResource<SetupPlanResponse>("/stack/v1/setup/plan");
+  const [selectedTier, setSelectedTier] = useState<ProfileTier | null>(null); const [savingPlan, setSavingPlan] = useState(false); const [planState, setPlanState] = useState<SetupPlanResponse>({ plan: null, downloads: [], health: null }); const [keyDialogOpen, setKeyDialogOpen] = useState(false); const [clientKey, setClientKey] = useState<string | null>(null); const profile = selectedTier ?? hardware.data?.proposed ?? null;
+  const refetchSetup = setup.refetch; const refetchNotifications = notifications.refetch; const refetchRepairs = repairs.refetch;
+  useEffect(() => { if (setup.data) setPlanState(setup.data); }, [setup.data]);
+  useEffect(() => { if (typeof EventSource === "undefined") return; const stream = new EventSource("/stack/v1/events"); stream.onmessage = (event) => { try { const envelope = JSON.parse(event.data) as { id?: string }; if (envelope.id === "job.progress" || envelope.id === "model.installed") void refetchSetup(); if (envelope.id === "model.installed" || envelope.id === "repair") void refetchNotifications(); if (envelope.id === "repair") void refetchRepairs(); } catch { /* An invalid event cannot take down the board. */ } }; return () => stream.close(); }, [refetchNotifications, refetchRepairs, refetchSetup]);
+  async function installPlan(mode: SetupMode) { if (!profile) return; setSavingPlan(true); try { const result = await api.post<SetupPlanResponse & { queued: true }>("/stack/v1/setup/plan", { tier: profile.id, mode }); setPlanState(result); await roles.refetch(); } catch (caught) { toast.error(caught instanceof Error ? caught.message : "The plan could not be saved."); } finally { setSavingPlan(false); } }
+  async function createKey() { try { const result = await api.post<{ key: string }>("/stack/v1/clients", { name: "Stack local tool", allowedRoles: ["chat"] }); setClientKey(result.key); toast.success("Client key created."); } catch (caught) { if (caught instanceof ApiError && caught.body.setPasswordFirst === true) setKeyDialogOpen(true); else toast.error(caught instanceof Error ? caught.message : "The key could not be created."); } }
+  async function resolveRepair(id: string) { try { await api.post(`/stack/v1/repairs/${id}/resolve`); await repairs.refetch(); toast.success("Repair resolved."); } catch (caught) { toast.error(caught instanceof Error ? caught.message : "The repair could not be resolved."); } }
+  const loading = hardware.loading || roles.loading || budget.loading || setup.loading; const dataError = hardware.error ?? roles.error ?? budget.error ?? setup.error; const planChosen = planState.plan !== null; const installComplete = planState.downloads.length > 0 && planState.downloads.every((item) => item.status === "installed"); const foldedRoles = useMemo(() => roles.data?.roles ?? [], [roles.data]);
+  const notificationRows = notifications.data?.notifications ?? [];
+  const repairRows = repairs.data?.repairs ?? [];
+  return <div className="min-h-screen bg-background text-foreground"><Toaster /><header className="border-b border-border bg-card"><div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-5 sm:px-8 lg:px-12"><div className="flex items-center gap-3"><picture><source media="(prefers-color-scheme: dark)" srcSet="/brand/maipai-stack-icon-dark.png" /><img className="size-10" src="/brand/maipai-stack-icon-light.png" alt="" /></picture><div><p className="text-lg font-semibold">MaiPai Stack</p><p className="text-base text-muted-foreground">Your local AI board</p></div></div><div className="flex items-center gap-3"><Badge variant="secondary">This computer</Badge><Button variant="outline" onClick={() => void createKey()}>Create a key</Button></div></div></header><main className="mx-auto max-w-7xl space-y-12 px-4 py-8 sm:px-8 lg:px-12 lg:py-14"><div className="max-w-3xl space-y-3"><p className="text-base font-medium text-primary">Local by default</p><h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">Your local AI board</h1><p className="text-lg leading-8 text-muted-foreground">See what this computer can do, choose the abilities you want, and let the Stack take care of the rest.</p></div>{dataError && <p className="text-base text-destructive" role="alert">{dataError.message}</p>}{loading && !hardware.data && <Skeleton className="h-64 w-full" />}{hardware.data && <HardwareCard resource={hardware} selectedTier={selectedTier} onTierChange={setSelectedTier} planChosen={planChosen} />}{!planChosen && <AddAbilities tier={profile} onInstall={installPlan} saving={savingPlan} />}{planChosen && roles.data && <BoardSection title="Your abilities" description="The main things this computer can do, at a glance."><StatusStrip roles={roles.data.roles} budget={budget.data} /><Details roles={foldedRoles} />{installComplete && <Card><CardContent className="flex flex-wrap items-center justify-between gap-4 p-5"><div><CardTitle>Try it</CardTitle><p className="mt-1 text-base text-muted-foreground">Your small local set has landed. Try each role from the next screen.</p></div><Button variant="outline" disabled>Try it</Button></CardContent></Card>}</BoardSection>}{(planChosen || planState.downloads.length > 0) && <DownloadsCard downloads={planState.downloads} health={planState.health} onRefresh={setup.refetch} />}{notifications.data && <BoardSection title="Notifications" description="The last five things the Stack noticed."><Card><CardContent className="divide-y divide-border p-0">{notificationRows.slice(0, 5).map((notification) => <div className="flex flex-wrap items-center justify-between gap-3 p-4" key={notification.id}><p className="text-base">{notification.title}</p><time className="text-base text-muted-foreground">{new Date(notification.at).toLocaleString()}</time></div>)}{notificationRows.length === 0 && <p className="p-4 text-base text-muted-foreground">No notifications yet.</p>}</CardContent></Card></BoardSection>}{repairs.data && <BoardSection title="Repairs" description="One action for each thing the Stack noticed."><Card><CardContent className="divide-y divide-border p-0">{repairRows.filter((repair) => !repair.resolvedAt).map((repair) => <div className="flex flex-wrap items-center justify-between gap-4 p-4" key={repair.id}><div><p className="font-medium">{repair.title}</p><p className="text-base text-muted-foreground">{repair.detail}</p></div><Button variant="outline" onClick={() => void resolveRepair(repair.id)}>Resolve</Button></div>)}{repairRows.every((repair) => repair.resolvedAt) && <p className="p-4 text-base text-muted-foreground">No repairs needed.</p>}</CardContent></Card></BoardSection>}</main><ClientKeyDialog open={keyDialogOpen} onOpenChange={setKeyDialogOpen} onCreated={(key) => { setClientKey(key); toast.success("Client key created."); }} />{clientKey && <Dialog open={clientKey !== null} onOpenChange={(open) => { if (!open) setClientKey(null); }}><DialogContent><DialogHeader><DialogTitle>Client key created</DialogTitle><DialogDescription>Copy this key now. It will not be shown again.</DialogDescription></DialogHeader><code className="break-all rounded-lg bg-muted p-4 text-sm">{clientKey}</code></DialogContent></Dialog>}</div>;
 }

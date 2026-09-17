@@ -1,4 +1,4 @@
-export type OperatorState = "setupRequired" | "signedOut" | "signedIn";
+export type OperatorState = { state: "setupRequired" | "signedOut" | "signedIn"; required: boolean };
 
 export interface RoleRecord {
   id: string;
@@ -63,6 +63,43 @@ export interface RepairRecord {
   resolvedAt: string | null;
 }
 
+export type SetupTier = "p16" | "p32" | "p64" | "p128";
+export type SetupMode = "small" | "full";
+export type DownloadStatus = "queued" | "downloading" | "paused" | "installed" | "failed";
+
+export interface SetupDownload {
+  id: string;
+  name: string;
+  sizeBytes: number;
+  completedBytes: number;
+  speedBytesPerSecond: number;
+  timeLeftSeconds: number | null;
+  status: DownloadStatus;
+  source: string;
+  licence: string;
+  reason?: string;
+}
+
+export interface SetupPlan {
+  tier: SetupTier;
+  mode: SetupMode;
+  createdAt: string;
+  health: string | null;
+}
+
+export interface SetupPlanResponse {
+  plan: SetupPlan | null;
+  downloads: SetupDownload[];
+  health: string | null;
+}
+
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number, readonly body: Record<string, unknown>) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { credentials: "same-origin", ...init });
   const body = await response.json().catch(() => ({}));
@@ -70,7 +107,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const message = typeof body === "object" && body !== null && "error" in body
       ? String(body.error)
       : "The Stack returned HTTP " + response.status + ".";
-    throw new Error(message);
+    throw new ApiError(message, response.status, typeof body === "object" && body !== null ? body as Record<string, unknown> : {});
   }
   return body as T;
 }

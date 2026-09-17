@@ -6,6 +6,7 @@ import {
   isOperatorSignedIn,
   issueOperatorSession,
   operatorPasswordThrottle,
+  operatorRequired,
   recordOperatorPasswordFailure,
   requestIp,
   requireOperator,
@@ -14,7 +15,7 @@ import {
   verifyOperatorPassword,
 } from "@/lib/operator";
 
-const StateSchema = z.object({ state: z.enum(["setupRequired", "signedOut", "signedIn"]) });
+const StateSchema = z.object({ state: z.enum(["setupRequired", "signedOut", "signedIn"]), required: z.boolean() });
 const PasswordSchema = z.object({ password: z.string().min(1) });
 
 const stateRoute = createRoute({
@@ -63,12 +64,12 @@ const logoutRoute = createRoute({
 });
 
 export const operatorRoutes = apiRouter();
-operatorRoutes.openapi(stateRoute, (c) => c.json({ state: !hasOperator() ? "setupRequired" : isOperatorSignedIn(c) ? "signedIn" : "signedOut" }, 200));
+operatorRoutes.openapi(stateRoute, (c) => c.json({ state: !hasOperator() ? "setupRequired" : isOperatorSignedIn(c) ? "signedIn" : "signedOut", required: operatorRequired() }, 200));
 operatorRoutes.openapi(setupRoute, async (c) => {
   if (hasOperator()) return c.json({ error: "Operator setup has already completed" }, 409);
   await setOperatorPassword(c.req.valid("json").password);
   issueOperatorSession(c);
-  return c.json({ state: "signedIn" }, 201);
+  return c.json({ state: "signedIn", required: true }, 201);
 });
 operatorRoutes.openapi(loginRoute, async (c) => {
   const ip = requestIp(c);
@@ -84,9 +85,9 @@ operatorRoutes.openapi(loginRoute, async (c) => {
   }
   resetOperatorPasswordThrottle(ip);
   issueOperatorSession(c);
-  return c.json({ state: "signedIn" }, 200);
+  return c.json({ state: "signedIn", required: true }, 200);
 });
 operatorRoutes.openapi(logoutRoute, (c) => {
   clearOperatorSession(c);
-  return c.json({ state: "signedOut" }, 200);
+  return c.json({ state: "signedOut", required: operatorRequired() }, 200);
 });

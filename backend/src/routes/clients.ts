@@ -1,7 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter, ErrorSchema, idParamSchema } from "@/lib/openapi";
 import { issueClient, listClients, resolveClient, revokeClient } from "@/lib/clients";
-import { requireOperator } from "@/lib/operator";
+import { hasOperator, requireOperator } from "@/lib/operator";
 import { RoleIdSchema } from "@/roles";
 
 const ClientSchema = z.object({
@@ -21,6 +21,7 @@ const ClientSchema = z.object({
 const ClientsResponseSchema = z.object({ clients: z.array(ClientSchema) });
 const CreateClientSchema = z.object({ name: z.string().min(1), allowedRoles: z.array(RoleIdSchema) });
 const CreateClientResponseSchema = z.object({ client: ClientSchema, key: z.string() });
+const PasswordRequiredSchema = z.object({ error: z.string(), setPasswordFirst: z.literal(true) });
 
 const listRoute = createRoute({
   method: "get",
@@ -43,6 +44,7 @@ const createRoute_ = createRoute({
   request: { body: { content: { "application/json": { schema: CreateClientSchema } } } },
   responses: {
     201: { content: { "application/json": { schema: CreateClientResponseSchema } }, description: "Client metadata and its raw key, shown once." },
+    409: { content: { "application/json": { schema: PasswordRequiredSchema } }, description: "Set the deferred operator password first." },
     401: { content: { "application/json": { schema: ErrorSchema } }, description: "Operator is not signed in." },
   },
 });
@@ -64,6 +66,7 @@ const deleteRoute = createRoute({
 export const clientsRoutes = apiRouter();
 clientsRoutes.openapi(listRoute, (c) => c.json({ clients: listClients() }, 200));
 clientsRoutes.openapi(createRoute_, (c) => {
+  if (!hasOperator()) return c.json({ error: "Set an operator password before creating a client key", setPasswordFirst: true as const }, 409);
   const body = c.req.valid("json");
   const key = issueClient(body.name, body.allowedRoles);
   const client = resolveClient(key);

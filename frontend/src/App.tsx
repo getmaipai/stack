@@ -3,7 +3,6 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { api, type OperatorState } from "@/lib/api";
 import { BoardPage } from "@/pages/BoardPage";
 import { LoginPage } from "@/pages/LoginPage";
-import { SetupPage } from "@/pages/SetupPage";
 import { Skeleton } from "@/kit/ui/skeleton";
 
 function LoadingPage() {
@@ -20,12 +19,12 @@ function Gate() {
 
   useEffect(() => {
     let active = true;
-    api.get<{ state: OperatorState }>("/stack/v1/operator")
+    api.get<OperatorState>("/stack/v1/operator")
       .then((result) => {
-        if (active) setState(result.state);
+        if (active) setState(result);
       })
       .catch(() => {
-        if (active) setState("signedOut");
+        if (active) setState({ state: "signedOut", required: true });
       });
     return () => {
       active = false;
@@ -33,13 +32,11 @@ function Gate() {
   }, [location.pathname]);
 
   if (!state) return <LoadingPage />;
-  if (state === "setupRequired" && location.pathname !== "/setup") return <Navigate to="/setup" replace />;
-  if (state === "signedOut" && location.pathname !== "/login") return <Navigate to="/login" replace />;
-  if (state === "signedIn" && (location.pathname === "/login" || location.pathname === "/setup")) return <Navigate to="/" replace />;
+  if (state.required && state.state === "signedOut" && location.pathname !== "/login") return <Navigate to="/login" replace />;
+  if ((!state.required || state.state === "signedIn") && (location.pathname === "/login" || location.pathname === "/setup")) return <Navigate to="/" replace />;
 
   return (
     <Routes>
-      <Route path="/setup" element={<SetupPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={<BoardPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />

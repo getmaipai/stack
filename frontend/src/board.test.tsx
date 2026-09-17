@@ -1,54 +1,52 @@
 import { afterEach, expect, mock, test } from "bun:test";
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { App } from "@/App";
 import { BoardPage } from "@/pages/BoardPage";
-import { SetupPage } from "@/pages/SetupPage";
 
 const originalFetch = globalThis.fetch;
 const originalEventSource = globalThis.EventSource;
+const hardware = { platform: "darwin", arch: "arm64", totalRamGb: 24, cpuCount: 10, isAppleSilicon: true, unifiedMemoryGb: 24, cudaDevices: [], freeDiskBytes: 153 * 1_073_741_824, osVersion: "24.6.0" };
+const tier = { id: "p16" as const, label: "This computer can run chat and voice.", minUnifiedGb: 16, minVramGb: 8, resident: ["chat", "stt", "tts"], onDemand: [], installedOnly: [], notAvailable: ["image", "video", "music"] };
+const roles = [{ id: "chat", wire: "chat", residency: "resident", description: "Talk locally.", state: "ready", reason: null }, { id: "stt", wire: "transcription", residency: "resident", description: "Listen locally.", state: "ready", reason: null }, { id: "tts", wire: "speech", residency: "resident", description: "Speak locally.", state: "ready", reason: null }, { id: "image", wire: "job", residency: "jit", description: "Make pictures.", state: "notInstalled", reason: null }];
 
-afterEach(() => {
-  cleanup();
-  globalThis.fetch = originalFetch;
-  globalThis.EventSource = originalEventSource;
-});
-
-function boardFetch(input: RequestInfo | URL): Response {
+function responseFor(input: RequestInfo | URL): Response {
   const path = String(input);
-  if (path.endsWith("/roles")) {
-    return Response.json({
-      roles: [
-        { id: "chat", wire: "chat", residency: "resident", description: "Talk with your local AI.", state: "ready", reason: null },
-        { id: "coding", wire: "chat", residency: "resident", description: "Build and understand things with local AI.", state: "ready", reason: null },
-      ],
-    });
-  }
-  if (path.endsWith("/budget")) return Response.json({ capBytes: 128 * 1_073_741_824, freeMemoryBytes: 30 * 1_073_741_824, pressure: false, loaded: [], queue: [] });
+  if (path.endsWith("/operator")) return Response.json({ state: "setupRequired", required: false });
+  if (path.endsWith("/hardware")) return Response.json({ hardware, proposed: tier, tiers: [tier] });
+  if (path.endsWith("/roles")) return Response.json({ roles });
+  if (path.endsWith("/budget")) return Response.json({ capBytes: 24 * 1_073_741_824, freeMemoryBytes: 12 * 1_073_741_824, pressure: false, loaded: [], queue: [] });
   if (path.endsWith("/notifications")) return Response.json({ notifications: [] });
   if (path.endsWith("/repairs")) return Response.json({ repairs: [] });
+  if (path.endsWith("/setup/plan")) return Response.json({ plan: null, downloads: [], health: null });
   throw new Error("unstubbed fetch: " + path);
 }
 
-test("the board renders a tile per declared role with its state text", async () => {
+afterEach(() => { cleanup(); globalThis.fetch = originalFetch; globalThis.EventSource = originalEventSource; localStorage.clear(); });
+
+test("a fresh install opens on the board with plain hardware and Add abilities", async () => {
   globalThis.EventSource = undefined as unknown as typeof EventSource;
-  globalThis.fetch = mock((input: RequestInfo | URL) => Promise.resolve(boardFetch(input))) as unknown as typeof fetch;
+  globalThis.fetch = mock((input: RequestInfo | URL) => Promise.resolve(responseFor(input))) as unknown as typeof fetch;
   render(<MemoryRouter><BoardPage /></MemoryRouter>);
-
-  await waitFor(() => {
-    expect(document.body.textContent).toContain("Ready, 62 GB loaded");
-    expect(document.body.textContent).toContain("Chat");
-    expect(document.body.textContent).toContain("Coding");
-  });
+  await waitFor(() => { expect(document.body.textContent).toContain("Apple silicon Mac, 24 GB of memory, 153 GB free"); expect(document.body.textContent).toContain("Add abilities"); expect(document.body.textContent).toContain("Start small"); });
 });
 
-test("the operator gate redirects setupRequired to setup", async () => {
-  globalThis.fetch = mock(() => Promise.resolve(Response.json({ state: "setupRequired" }))) as unknown as typeof fetch;
+test("the gate keeps a fresh install on the board without a login", async () => {
+  globalThis.EventSource = undefined as unknown as typeof EventSource;
+  globalThis.fetch = mock((input: RequestInfo | URL) => Promise.resolve(responseFor(input))) as unknown as typeof fetch;
   render(<MemoryRouter initialEntries={["/"]}><App /></MemoryRouter>);
-  await waitFor(() => expect(document.body.textContent).toContain("Welcome to MaiPai Stack"));
+  await waitFor(() => expect(document.body.textContent).toContain("Your local AI board"));
+  expect(document.body.textContent).not.toContain("Welcome back");
 });
 
-test("the ready step keeps the family hand-off wording exact", () => {
-  render(<MemoryRouter><SetupPage initialStep={4} /></MemoryRouter>);
-  expect(document.body.textContent).toContain("The Stack is yours alone. MaiPai Home adds people, kid-safe profiles, memory, and companions on top of it, on this same computer.");
+test("the sizer's Install button calls the setup plan route", async () => {
+  globalThis.EventSource = undefined as unknown as typeof EventSource;
+  const calls: string[] = [];
+  globalThis.fetch = mock((input: RequestInfo | URL, init?: RequestInit) => { calls.push(String(input) + " " + (init?.method ?? "GET")); if (init?.method === "POST") return Promise.resolve(Response.json({ queued: true, plan: { tier: "p16", mode: "small", createdAt: new Date().toISOString(), health: null }, downloads: [], health: null }, { status: 202 })); return Promise.resolve(responseFor(input)); }) as unknown as typeof fetch;
+  render(<MemoryRouter><BoardPage /></MemoryRouter>);
+  await waitFor(() => expect(document.body.textContent).toContain("Install"));
+  const install = Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "Install");
+  expect(install).toBeDefined();
+  fireEvent.click(install!);
+  await waitFor(() => expect(calls.some((call) => call.includes("/stack/v1/setup/plan POST"))).toBe(true));
 });

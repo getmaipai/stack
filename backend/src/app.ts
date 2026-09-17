@@ -11,6 +11,7 @@ import { rolesRoutes } from "@/routes/roles";
 import { inferenceRoutes } from "@/routes/inference";
 import { operatorRoutes } from "@/routes/operator";
 import { clientsRoutes } from "@/routes/clients";
+import { setupPlanRoutes } from "@/routes/setupPlan";
 import { budgetRoutes } from "@/routes/budget";
 import { eventsRoutes } from "@/routes/events";
 import { logsRoutes } from "@/routes/logs";
@@ -55,6 +56,7 @@ app.route("/stack/v1/logs", logsRoutes);
 app.route("/stack/v1/roles", rolesRoutes);
 app.route("/stack/v1/operator", operatorRoutes);
 app.route("/stack/v1/clients", clientsRoutes);
+app.route("/stack/v1/setup/plan", setupPlanRoutes);
 app.route("/v1", inferenceRoutes);
 
 const here = dirname(fileURLToPath(import.meta.url));

@@ -130,7 +130,7 @@ export const requireClientOrOperator = createMiddleware<AppEnv>(async (c, next) 
     await next();
     return;
   }
-  const { isOperatorSignedIn } = await import("@/lib/operator");
-  if (!isOperatorSignedIn(c)) return unauthorized(c);
+  const { isLoopbackRequest, isOperatorSignedIn, operatorRequired } = await import("@/lib/operator");
+  if (!isOperatorSignedIn(c) && (operatorRequired() || !isLoopbackRequest(c))) return unauthorized(c);
   await next();
 });

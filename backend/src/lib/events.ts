@@ -14,11 +14,15 @@ export function emit(event: { id: EventId; data: Record<string, unknown> }): Eve
   if (ring.length > RING_SIZE) ring.shift();
   const definition = EVENTS[event.id];
   if (definition.id !== "job.progress" && definition.id !== "role.state") {
+    const title = definition.template.replace(/\{(\w+)\}/g, (_match, key: string) => {
+      const value = event.data[key];
+      return value === undefined ? `{${key}}` : String(value);
+    });
     db.insert(notifications).values({
       id: `notification-${crypto.randomUUID()}`,
       eventId: envelope.id,
       level: definition.level,
-      title: definition.template,
+      title,
       data: JSON.stringify(envelope.data),
       at: envelope.at,
       readAt: null,

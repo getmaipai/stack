@@ -6,7 +6,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { and, eq, gt, lt } from "drizzle-orm";
 import { createMiddleware } from "hono/factory";
 import { db } from "@/db";
-import { operator, sessions } from "@/db/schema";
+import { meta, operator, sessions } from "@/db/schema";
 import { dataDir } from "@/lib/paths";
 import { getClientIp } from "@/lib/secretThrottle";
 import type { AppEnv } from "@/types";
@@ -17,6 +17,7 @@ const PEPPER_BYTES = 32;
 const WINDOW_MS = 15 * 60_000;
 const MAX_FAILS = 20;
 const MAX_BUCKETS = 5_000;
+const OPERATOR_REQUIRED_KEY = "operator.required";
 
 interface Bucket {
   fails: number;
@@ -52,6 +53,16 @@ export function hasOperator(): boolean {
   return !!db.select({ id: operator.id }).from(operator).where(eq(operator.id, OPERATOR_ID)).get();
 }
 
+export function operatorRequired(): boolean {
+  return db.select({ value: meta.value }).from(meta).where(eq(meta.key, OPERATOR_REQUIRED_KEY)).get()?.value === "true";
+}
+
+function setOperatorRequired(required: boolean): void {
+  db.insert(meta).values({ key: OPERATOR_REQUIRED_KEY, value: String(required) })
+    .onConflictDoUpdate({ target: meta.key, set: { value: String(required) } })
+    .run();
+}
+
 export async function setOperatorPassword(password: string): Promise<void> {
   const now = new Date().toISOString();
   const passwordHash = await Bun.password.hash(applyPepper(password), {
@@ -63,6 +74,7 @@ export async function setOperatorPassword(password: string): Promise<void> {
     .values({ id: OPERATOR_ID, passwordHash, createdAt: now, updatedAt: now })
     .onConflictDoUpdate({ target: operator.id, set: { passwordHash, updatedAt: now } })
     .run();
+  setOperatorRequired(true);
 }
 
 export async function verifyOperatorPassword(password: string): Promise<boolean> {
@@ -115,6 +127,7 @@ export function __resetOperatorThrottleForTests(): void {
 export function __resetOperatorForTests(): void {
   db.delete(sessions).run();
   db.delete(operator).run();
+  db.delete(meta).where(eq(meta.key, OPERATOR_REQUIRED_KEY)).run();
 }
 
 export function generateSessionToken(): string {
@@ -174,9 +187,20 @@ export function isOperatorSignedIn(c: Context<AppEnv>): boolean {
   return !!token && resolveOperatorSession(token);
 }
 
+export function isLoopbackRequest(c: Context): boolean {
+  try {
+    const hostname = new URL(c.req.url).hostname;
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  } catch {
+    return false;
+  }
+}
+
 export const requireOperator = createMiddleware<AppEnv>(async (c, next) => {
   pruneExpiredSessions();
-  if (!isOperatorSignedIn(c)) return c.json({ error: "Operator authentication required" }, 401);
+  if (!isOperatorSignedIn(c) && (operatorRequired() || !isLoopbackRequest(c))) {
+    return c.json({ error: "Operator authentication required" }, 401);
+  }
   await next();
 });
 

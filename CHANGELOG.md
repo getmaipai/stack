@@ -9,6 +9,9 @@ the product passes its battle-tested checklist in `docs/dev.md`.
 
 ### Added
 
+- The board-first install flow for STACK-11b: branded hardware and ability
+  cards, deferred operator password, scripted setup downloads, pause/resume,
+  and honest progress copy.
 - Streaming chat completions now pass through OpenAI-shaped SSE chunks
   with identity headers, abort propagation, and usage counters.
 - The first-run admin UI, operator login, role board, memory card,

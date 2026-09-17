@@ -26,7 +26,7 @@ test("operator setup works once and establishes a session", async () => {
     body: JSON.stringify({ password: "correct horse battery staple" }),
   });
   expect(setup.status).toBe(201);
-  expect(await setup.json()).toEqual({ state: "signedIn" });
+  expect(await setup.json()).toEqual({ state: "signedIn", required: true });
   expect(setup.headers.get("set-cookie")).toContain("stack_session=");
 
   const second = await app.request("/stack/v1/operator/setup", {

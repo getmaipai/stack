@@ -53,24 +53,10 @@
   --secondary-foreground: hsl(240 10% 4%);
   --accent: hsl(240 5% 96%);
   --accent-foreground: hsl(240 10% 4%);
-  /* 29%, not the original 40%: the accessibility audit (docs/dev.md,
-   * 2026-09-05) and this session's own screenshot/a11y matrix both found
-   * white text on the 40%-lightness cyan at 2.8:1, under WCAG AA's 4.5:1
-   * floor for normal text - every default-variant Button and the active
-   * sidebar item, on every page (docs/BACKLOG.md's own count: Home,
-   * Chat, People, Memory, Privacy, Settings and its sub-pages). Same
-   * hue and saturation (189, 94%), darkened until white text clears
-   * 4.5:1 with real margin (measures ~5:1 at this lightness) - "on
-   * brand" the way the docs comment above already frames this kind of
-   * change, not a different color. Dark theme's own pairing (a near-
-   * black foreground on a brighter, 55%-lightness cyan) was already
-   * measured at ~10:1 and needs no change. `--ring`/`--sidebar-*` follow
-   * `--primary` to the same value rather than diverging from it (org
-   * standard 1: one definition) - their own contrast requirement
-   * (WCAG 1.4.11, 3:1 against an adjacent color) was never the violation
-   * here and stays comfortably clear at this lightness too. */
-  --primary: hsl(189 94% 29%); /* cyan, MaiPai Home's accent */
-  --primary-foreground: hsl(0 0% 100%);
+  /* Stack's accent is orange per the MaiPai brand table. Keep the rest of
+   * the copied kit tokens unchanged so this app owns only its primary hue. */
+  --primary: hsl(22 99% 50%);
+  --primary-foreground: hsl(240 10% 4%);
   /* Darkened from the original hsl(0 72% 51%), same hue and saturation
    * (getmaipai/home lane 4 item 1's own follow-up, 2026-09-13): every
    * "destructive" surface in this kit (Button, Badge) pairs solid
@@ -82,7 +68,7 @@
    * 51% measured ~4.1:1, under WCAG AA's 4.5:1 floor. */
   --destructive: hsl(0 72% 38%);
   --destructive-foreground: hsl(0 0% 100%);
-  --ring: hsl(189 94% 29%);
+  --ring: hsl(22 99% 50%);
   /* 1rem, not shadcn's own 0.75rem default: a visual pass (2026-09-06)
    * modeled on well-designed native mobile apps found every card, tile
    * and control there noticeably rounder than this kit's own defaults -
@@ -91,13 +77,13 @@
   --radius: 1rem;
   --sidebar: hsl(0 0% 100%);
   --sidebar-foreground: hsl(240 10% 4%);
-  --sidebar-primary: hsl(189 94% 29%); /* same contrast fix as --primary above */
-  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-primary: hsl(22 99% 50%);
+  --sidebar-primary-foreground: hsl(240 10% 4%);
   /* Quiet selection keeps primary actions visually dominant. */
   --sidebar-accent: color-mix(in srgb, var(--sidebar-primary) 12%, var(--sidebar));
   --sidebar-accent-foreground: var(--foreground);
   --sidebar-border: hsl(240 6% 90%);
-  --sidebar-ring: hsl(189 94% 29%);
+  --sidebar-ring: hsl(22 99% 50%);
   --chart-1: hsl(189 94% 40%);
   --chart-2: hsl(240 4% 46%);
   --chart-3: hsl(240 6% 70%);
@@ -121,9 +107,9 @@
     --secondary-foreground: hsl(0 0% 96%);
     --accent: hsl(240 6% 14%);
     --accent-foreground: hsl(0 0% 96%);
-    --primary: hsl(189 84% 55%);
+    --primary: hsl(22 99% 58%);
     --primary-foreground: hsl(240 10% 6%);
-    --ring: hsl(189 84% 55%);
+    --ring: hsl(22 99% 58%);
     /* Lightened, not darkened (same lane 4 item 1 follow-up as :root's
      * own comment above): a solid destructive/10-20% tint over this
      * theme's near-black background is itself very dark, so a darker
@@ -137,12 +123,12 @@
     --destructive: hsl(0 72% 65%);
     --sidebar: hsl(240 8% 9%);
     --sidebar-foreground: hsl(0 0% 96%);
-    --sidebar-primary: hsl(189 84% 55%);
+    --sidebar-primary: hsl(22 99% 58%);
     --sidebar-primary-foreground: hsl(240 10% 6%);
     --sidebar-accent: color-mix(in srgb, var(--sidebar-primary) 12%, var(--sidebar));
     --sidebar-accent-foreground: var(--foreground);
     --sidebar-border: hsl(240 6% 18%);
-    --sidebar-ring: hsl(189 84% 55%);
+    --sidebar-ring: hsl(22 99% 58%);
   }
 }
 
@@ -161,9 +147,9 @@
   --secondary-foreground: hsl(0 0% 96%);
   --accent: hsl(240 6% 14%);
   --accent-foreground: hsl(0 0% 96%);
-  --primary: hsl(189 84% 55%);
+  --primary: hsl(22 99% 58%);
   --primary-foreground: hsl(240 10% 6%);
-  --ring: hsl(189 84% 55%);
+  --ring: hsl(22 99% 58%);
   /* Same value and reasoning as the `prefers-color-scheme: dark` block
    * above (lane 4 item 1 follow-up, 2026-09-13): lightened, not
    * darkened, since a darker text color loses contrast against this
@@ -171,12 +157,12 @@
   --destructive: hsl(0 72% 65%);
   --sidebar: hsl(240 8% 9%);
   --sidebar-foreground: hsl(0 0% 96%);
-  --sidebar-primary: hsl(189 84% 55%);
+  --sidebar-primary: hsl(22 99% 58%);
   --sidebar-primary-foreground: hsl(240 10% 6%);
   --sidebar-accent: color-mix(in srgb, var(--sidebar-primary) 12%, var(--sidebar));
   --sidebar-accent-foreground: var(--foreground);
   --sidebar-border: hsl(240 6% 18%);
-  --sidebar-ring: hsl(189 84% 55%);
+  --sidebar-ring: hsl(22 99% 58%);
 }
 
 @theme inline {

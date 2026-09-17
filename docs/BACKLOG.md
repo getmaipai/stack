@@ -101,6 +101,10 @@ never copied. No item migrates the hub until STACK-16.
   Acceptance: a fresh data directory completes first run headlessly in
   Playwright and lands on a green board; the "Share with your family"
   card renders. Out of scope: the menu bar.
+- [x] **STACK-11b (M): the board is first open, with no wizard.** Committed
+  with a scripted download; the real store lands in STACK-04b. The board
+  measures the computer, lets the operator choose abilities, and keeps an
+  honest download bar visible while the deferred password stays deferred.
 - [ ] **STACK-12 (M): Try it.** The stateless tabs per role with the
   adult acknowledgment once and the AI-outputs disclaimer at first run.
   Acceptance: each tab exercised in Playwright against scripted engines;

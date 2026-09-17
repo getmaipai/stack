@@ -1042,10 +1042,14 @@
                         "signedOut",
                         "signedIn"
                       ]
+                    },
+                    "required": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
-                    "state"
+                    "state",
+                    "required"
                   ]
                 }
               }
@@ -1093,10 +1097,14 @@
                         "signedOut",
                         "signedIn"
                       ]
+                    },
+                    "required": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
-                    "state"
+                    "state",
+                    "required"
                   ]
                 }
               }
@@ -1154,10 +1162,14 @@
                         "signedOut",
                         "signedIn"
                       ]
+                    },
+                    "required": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
-                    "state"
+                    "state",
+                    "required"
                   ]
                 }
               }
@@ -1207,10 +1219,14 @@
                         "signedOut",
                         "signedIn"
                       ]
+                    },
+                    "required": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
-                    "state"
+                    "state",
+                    "required"
                   ]
                 }
               }
@@ -1490,6 +1506,31 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Set the deferred operator password first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "setPasswordFirst": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "setPasswordFirst"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -1545,6 +1586,480 @@
           },
           "404": {
             "description": "Unknown client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/setup/plan": {
+      "get": {
+        "tags": [
+          "Setup"
+        ],
+        "summary": "Current ability plan and downloads",
+        "responses": {
+          "200": {
+            "description": "The selected plan and honest download status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "plan": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "tier": {
+                          "type": "string",
+                          "enum": [
+                            "p16",
+                            "p32",
+                            "p64",
+                            "p128"
+                          ]
+                        },
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "small",
+                            "full"
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "health": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "tier",
+                        "mode",
+                        "createdAt",
+                        "health"
+                      ]
+                    },
+                    "downloads": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "sizeBytes": {
+                            "type": "integer"
+                          },
+                          "completedBytes": {
+                            "type": "integer"
+                          },
+                          "speedBytesPerSecond": {
+                            "type": "integer"
+                          },
+                          "timeLeftSeconds": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "queued",
+                              "downloading",
+                              "paused",
+                              "installed",
+                              "failed"
+                            ]
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "licence": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "sizeBytes",
+                          "completedBytes",
+                          "speedBytesPerSecond",
+                          "timeLeftSeconds",
+                          "status",
+                          "source",
+                          "licence"
+                        ]
+                      }
+                    },
+                    "health": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "plan",
+                    "downloads",
+                    "health"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Setup"
+        ],
+        "summary": "Choose the first ability plan",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tier": {
+                    "type": "string",
+                    "enum": [
+                      "p16",
+                      "p32",
+                      "p64",
+                      "p128"
+                    ]
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "small",
+                      "full"
+                    ]
+                  }
+                },
+                "required": [
+                  "tier",
+                  "mode"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The plan was recorded and downloads queued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "plan": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "tier": {
+                          "type": "string",
+                          "enum": [
+                            "p16",
+                            "p32",
+                            "p64",
+                            "p128"
+                          ]
+                        },
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "small",
+                            "full"
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "health": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "tier",
+                        "mode",
+                        "createdAt",
+                        "health"
+                      ]
+                    },
+                    "downloads": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "sizeBytes": {
+                            "type": "integer"
+                          },
+                          "completedBytes": {
+                            "type": "integer"
+                          },
+                          "speedBytesPerSecond": {
+                            "type": "integer"
+                          },
+                          "timeLeftSeconds": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "queued",
+                              "downloading",
+                              "paused",
+                              "installed",
+                              "failed"
+                            ]
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "licence": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "sizeBytes",
+                          "completedBytes",
+                          "speedBytesPerSecond",
+                          "timeLeftSeconds",
+                          "status",
+                          "source",
+                          "licence"
+                        ]
+                      }
+                    },
+                    "health": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "queued": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "plan",
+                    "downloads",
+                    "health",
+                    "queued"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Operator authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/setup/plan/{id}/pause": {
+      "post": {
+        "tags": [
+          "Setup"
+        ],
+        "summary": "Pause or resume a setup download",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated download.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "sizeBytes": {
+                      "type": "integer"
+                    },
+                    "completedBytes": {
+                      "type": "integer"
+                    },
+                    "speedBytesPerSecond": {
+                      "type": "integer"
+                    },
+                    "timeLeftSeconds": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "downloading",
+                        "paused",
+                        "installed",
+                        "failed"
+                      ]
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "licence": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "sizeBytes",
+                    "completedBytes",
+                    "speedBytesPerSecond",
+                    "timeLeftSeconds",
+                    "status",
+                    "source",
+                    "licence"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown download.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/setup/plan/{id}/resume": {
+      "post": {
+        "tags": [
+          "Setup"
+        ],
+        "summary": "Pause or resume a setup download",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated download.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "sizeBytes": {
+                      "type": "integer"
+                    },
+                    "completedBytes": {
+                      "type": "integer"
+                    },
+                    "speedBytesPerSecond": {
+                      "type": "integer"
+                    },
+                    "timeLeftSeconds": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "downloading",
+                        "paused",
+                        "installed",
+                        "failed"
+                      ]
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "licence": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "sizeBytes",
+                    "completedBytes",
+                    "speedBytesPerSecond",
+                    "timeLeftSeconds",
+                    "status",
+                    "source",
+                    "licence"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown download.",
             "content": {
               "application/json": {
                 "schema": {

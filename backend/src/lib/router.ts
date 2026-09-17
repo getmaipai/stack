@@ -2,6 +2,7 @@ import { ROLES, ROLE_IDS, type RoleId, type RoleState } from "@/roles";
 import { identityHeaders, installedEngineForMachine } from "@/lib/identity";
 import { getModel, isModelSelectable } from "@/lib/modelStore";
 import { getChatEngineStatus, scriptedEnginesEnabled } from "@/lib/supervisor";
+import { getSetupPlan } from "@/lib/setupPlan";
 
 export interface RoleResolution {
   role: RoleId;
@@ -45,7 +46,9 @@ export function resolveRole(modelField: string): RoleResolution {
     return { role, state: role === "chat" ? getChatEngineStatus().state : installedEngineForMachine() ? "installed" : "notInstalled", binding: null };
   }
   const state = scriptedEnginesEnabled()
-    ? "ready"
+    ? getSetupPlan().plan && !["chat", "stt", "tts"].includes(modelField)
+      ? "notInstalled"
+      : "ready"
     : modelField === "chat"
       ? getChatEngineStatus().state
       : installedEngineForMachine()
