@@ -56,7 +56,9 @@ never copied. No item migrates the hub until STACK-16.
   `backgroundSupervisor.ts`, `engineIdentity.ts`, `enginePostLoadCheck.ts`.
   Acceptance: a scripted engine's crash is restarted without cutting an
   in-flight request (test); a managed host that vanishes shows
-  `offline_reason`. Committed, governor outstanding (STACK-06). Out of scope:
+  `offline_reason`. Committed at c1c4fbb with scripted engines; a live
+  completion through a real llama-server and a verified model on this
+  Mac is outstanding (STACK-14 records it), and the governor is STACK-06. Out of scope:
   the governor's rules.
 - [ ] **STACK-06 (M): the governor.** Profile, admission, one generator,
   eviction (TTL, LRU, pin), the cap, `keep_alive` as a hint; every rule

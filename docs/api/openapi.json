@@ -194,6 +194,27 @@
                             ]
                           }
                         },
+                        "installedOnly": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "chat",
+                              "coding",
+                              "judge",
+                              "router",
+                              "embed",
+                              "rerank",
+                              "vision",
+                              "stt",
+                              "tts",
+                              "wakeword",
+                              "image",
+                              "video",
+                              "music"
+                            ]
+                          }
+                        },
                         "notAvailable": {
                           "type": "array",
                           "items": {
@@ -223,6 +244,7 @@
                         "minVramGb",
                         "resident",
                         "onDemand",
+                        "installedOnly",
                         "notAvailable"
                       ]
                     },
@@ -291,6 +313,27 @@
                               ]
                             }
                           },
+                          "installedOnly": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "chat",
+                                "coding",
+                                "judge",
+                                "router",
+                                "embed",
+                                "rerank",
+                                "vision",
+                                "stt",
+                                "tts",
+                                "wakeword",
+                                "image",
+                                "video",
+                                "music"
+                              ]
+                            }
+                          },
                           "notAvailable": {
                             "type": "array",
                             "items": {
@@ -320,6 +363,7 @@
                           "minVramGb",
                           "resident",
                           "onDemand",
+                          "installedOnly",
                           "notAvailable"
                         ]
                       }
@@ -400,6 +444,609 @@
                   },
                   "required": [
                     "engines"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/roles": {
+      "get": {
+        "tags": [
+          "Roles"
+        ],
+        "summary": "Declared capability roles",
+        "responses": {
+          "200": {
+            "description": "Every declared role and its current state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "wire": {
+                            "type": "string",
+                            "enum": [
+                              "chat",
+                              "embeddings",
+                              "rerank",
+                              "transcription",
+                              "speech",
+                              "job"
+                            ]
+                          },
+                          "residency": {
+                            "type": "string",
+                            "enum": [
+                              "resident",
+                              "jit",
+                              "installed"
+                            ]
+                          },
+                          "endpoints": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "quality": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "fast",
+                                "everyday",
+                                "best"
+                              ]
+                            }
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "sharesModelWith": {
+                            "type": "string",
+                            "enum": [
+                              "chat",
+                              "coding",
+                              "judge",
+                              "router",
+                              "embed",
+                              "rerank",
+                              "vision",
+                              "stt",
+                              "tts",
+                              "wakeword",
+                              "image",
+                              "video",
+                              "music"
+                            ]
+                          },
+                          "id": {
+                            "type": "string",
+                            "enum": [
+                              "chat",
+                              "coding",
+                              "judge",
+                              "router",
+                              "embed",
+                              "rerank",
+                              "vision",
+                              "stt",
+                              "tts",
+                              "wakeword",
+                              "image",
+                              "video",
+                              "music"
+                            ]
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "notInstalled",
+                              "installed",
+                              "loading",
+                              "ready",
+                              "busy",
+                              "stopped",
+                              "offline"
+                            ]
+                          },
+                          "reason": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "wire",
+                          "residency",
+                          "endpoints",
+                          "quality",
+                          "description",
+                          "id",
+                          "state",
+                          "reason"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "roles"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chat/completions": {
+      "post": {
+        "tags": [
+          "Inference"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "messages": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string"
+                        },
+                        "content": {
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "role"
+                      ],
+                      "additionalProperties": {
+                        "nullable": true
+                      }
+                    }
+                  },
+                  "stream": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "model",
+                  "messages"
+                ],
+                "additionalProperties": {
+                  "nullable": true
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "Unknown role or model.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "roles"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No engine is bound to the role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "offline_reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "role",
+                    "state",
+                    "offline_reason"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/embeddings": {
+      "post": {
+        "tags": [
+          "Inference"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "input": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "model",
+                  "input"
+                ],
+                "additionalProperties": {
+                  "nullable": true
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "Unknown role or model.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "roles"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No engine is bound to the role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "offline_reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "role",
+                    "state",
+                    "offline_reason"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audio/transcriptions": {
+      "post": {
+        "tags": [
+          "Inference"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "file": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "model"
+                ],
+                "additionalProperties": {
+                  "nullable": true
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "Unknown role or model.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "roles"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No engine is bound to the role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "offline_reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "role",
+                    "state",
+                    "offline_reason"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audio/speech": {
+      "post": {
+        "tags": [
+          "Inference"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "input": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "model",
+                  "input"
+                ],
+                "additionalProperties": {
+                  "nullable": true
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "Unknown role or model.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "roles"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No engine is bound to the role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "offline_reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "role",
+                    "state",
+                    "offline_reason"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/images/generations": {
+      "post": {
+        "tags": [
+          "Inference"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "prompt": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "model",
+                  "prompt"
+                ],
+                "additionalProperties": {
+                  "nullable": true
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "Unknown role or model.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "roles"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No engine is bound to the role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "offline_reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "role",
+                    "state",
+                    "offline_reason"
                   ]
                 }
               }
