@@ -9,7 +9,7 @@
 
 <p align="center">
   <img src="docs/assets/screens/overview.png" alt="MaiPai Stack overview" width="31%">
-  <img src="docs/assets/screens/monitoring.png" alt="MaiPai Stack monitoring" width="31%">
+  <img src="docs/assets/screens/try-chat-light.png" alt="MaiPai Stack Try it chat" width="31%">
   <img src="docs/assets/screens/palette.png" alt="MaiPai Stack command palette" width="31%">
 </p>
 
@@ -36,7 +36,7 @@ anything you build on it. Nothing leaves your house.
 - **Updates with rollback**: opt-in checks, one click to update, one
   click to go back. (designed)
 - **Try it**: a stateless box per role to prove each one works.
-  (designed)
+  (chat shipped; voice and generators are honest offline/job-shaped states)
 - **Client keys**: each tool gets a key limited to the roles it may use.
   (built)
 - **Complete alone**: run it by itself, or install MaiPai Home on top for

@@ -18,6 +18,7 @@ const WINDOW_MS = 15 * 60_000;
 const MAX_FAILS = 20;
 const MAX_BUCKETS = 5_000;
 const OPERATOR_REQUIRED_KEY = "operator.required";
+const GENERATOR_ACK_KEY = "try.generatorAcknowledged";
 
 interface Bucket {
   fails: number;
@@ -55,6 +56,15 @@ export function hasOperator(): boolean {
 
 export function operatorRequired(): boolean {
   return db.select({ value: meta.value }).from(meta).where(eq(meta.key, OPERATOR_REQUIRED_KEY)).get()?.value === "true";
+}
+
+export function generatorAcknowledged(): boolean {
+  return db.select({ value: meta.value }).from(meta).where(eq(meta.key, GENERATOR_ACK_KEY)).get()?.value === "true";
+}
+
+export function acknowledgeGenerator(): void {
+  db.insert(meta).values({ key: GENERATOR_ACK_KEY, value: "true" })
+    .onConflictDoUpdate({ target: meta.key, set: { value: "true" } }).run();
 }
 
 function setOperatorRequired(required: boolean): void {
@@ -128,6 +138,7 @@ export function __resetOperatorForTests(): void {
   db.delete(sessions).run();
   db.delete(operator).run();
   db.delete(meta).where(eq(meta.key, OPERATOR_REQUIRED_KEY)).run();
+  db.delete(meta).where(eq(meta.key, GENERATOR_ACK_KEY)).run();
 }
 
 export function generateSessionToken(): string {

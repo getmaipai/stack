@@ -1,7 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import { apiRouter } from "@/lib/openapi";
-import { recordUsage, requireClient } from "@/lib/clients";
+import { recordUsage, requireClientOrOperator } from "@/lib/clients";
 import { identityHeaders } from "@/lib/identity";
 import { noEngineResponse, resolveRole, UnknownRoleError, UnverifiedModelError } from "@/lib/router";
 import { ROLE_IDS } from "@/roles";
@@ -41,7 +41,7 @@ async function inferenceReply<T extends Context>(c: T, model: string, body: Reco
   try {
     const resolution = resolveRole(model);
     const client = c.var.client;
-    if (!client.allowedRoles.includes(resolution.role)) {
+    if (client && !client.allowedRoles.includes(resolution.role)) {
       return jsonReply(c, { error: "Client is not allowed to use this role.", role: resolution.role, allowedRoles: client.allowedRoles }, 403, identityHeaders(null));
     }
     const definition = ROLES[resolution.role];
@@ -50,14 +50,14 @@ async function inferenceReply<T extends Context>(c: T, model: string, body: Reco
       if (definition.wire !== "chat") {
         return jsonReply(c, { error: "Streaming is not available yet", role: resolution.role }, 400, identityHeaders(null));
       }
-      return await streamReply(c, model, body, client.id) as never;
+      return await streamReply(c, model, body, client?.id ?? null) as never;
     }
     if (chat && (resolution.role === "chat" || sharesChat)) {
       const result = await completeChat(model, body);
       for (const [name, value] of Object.entries(result.headers)) c.header(name, value);
       if (result.status >= 200 && result.status < 300) {
         const usage = (result.body as { usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } }).usage;
-        recordUsage(client.id, {
+        if (client) recordUsage(client.id, {
           requests: 1,
           tokensIn: typeof usage?.prompt_tokens === "number" ? usage.prompt_tokens : 0,
           tokensOut: typeof usage?.completion_tokens === "number" ? usage.completion_tokens : 0,
@@ -81,7 +81,7 @@ async function inferenceReply<T extends Context>(c: T, model: string, body: Reco
   }
 }
 
-async function streamReply<T extends Context>(c: T, model: string, body: Record<string, unknown>, clientId: string): Promise<Response> {
+async function streamReply<T extends Context>(c: T, model: string, body: Record<string, unknown>, clientId: string | null): Promise<Response> {
   const result = await streamChat(model, body, c.req.raw.signal);
   for (const [name, value] of Object.entries(result.headers)) c.header(name, value);
   if (!result.body) {
@@ -126,7 +126,7 @@ async function streamReply<T extends Context>(c: T, model: string, body: Record<
       recordStreamUsage(decoder.decode());
       if (!counted) {
         counted = true;
-        recordUsage(clientId, { requests: 1, tokensIn, tokensOut });
+        if (clientId) recordUsage(clientId, { requests: 1, tokensIn, tokensOut });
       }
     },
   }));
@@ -141,7 +141,7 @@ function jsonReply<T extends Context>(c: T, body: unknown, status: 400 | 403 | 4
   return c.json(body as never, status as never);
 }
 
-const clientMiddleware = [requireClient];
+const clientMiddleware = [requireClientOrOperator];
 const chatRoute = createRoute({ method: "post", path: "/chat/completions", tags: ["Inference"], middleware: clientMiddleware, request: { body: { content: { "application/json": { schema: ChatRequestSchema } } } }, responses: inferenceResponses });
 const embeddingsRoute = createRoute({ method: "post", path: "/embeddings", tags: ["Inference"], middleware: clientMiddleware, request: { body: { content: { "application/json": { schema: EmbeddingsRequestSchema } } } }, responses: inferenceResponses });
 const transcriptionsRoute = createRoute({ method: "post", path: "/audio/transcriptions", tags: ["Inference"], middleware: clientMiddleware, request: { body: { content: { "application/json": { schema: TranscriptionRequestSchema } } } }, responses: inferenceResponses });

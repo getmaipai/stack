@@ -9,6 +9,9 @@ the product passes its battle-tested checklist in `docs/dev.md`.
 
 ### Added
 
+- Try it for STACK-12: a stateless chat surface with copied shadcn message
+  primitives, live identity and latency metrics, voice offline states, and
+  generator acknowledgement/job placeholders.
 - The professional dashboard shell for STACK-11c: eleven Stack sections,
   responsive sidebar, search/command palette, monitoring chart, alerts,
   access view, and honest empty states for updates, backups, and Try it.

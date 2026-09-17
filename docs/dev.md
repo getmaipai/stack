@@ -15,6 +15,17 @@ route even when its backend capability is still an honest empty state.
 Registry-generated UI is copied under frontend/src/kit/blocks/dashboard/
 and reskinned to the Stack's orange primary token.
 
+The first shipped proof surface is `frontend/src/pages/TryItPage.tsx`.
+It uses the copied chat primitives in
+`frontend/src/kit/ui/{message-scroller,message,bubble,attachment,marker}.tsx`
+and the stateless SSE client in `frontend/src/lib/useStackChat.ts`.
+Chat uses the operator session, sends the `chat` role through the stable
+OpenAI-shaped route, and shows engine identity plus first-token and
+throughput measurements. Speak and Listen stay offline until their roles
+are bound; generator tabs use the one-time operator acknowledgement stored
+in Stack metadata and remain job-shaped until the jobs surface exists. The
+page never creates people, memory, or conversation history.
+
 Nothing in this file is household content: every person in an example is
 from the org's persona roster.
 

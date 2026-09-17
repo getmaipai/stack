@@ -2,6 +2,8 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter, ErrorSchema } from "@/lib/openapi";
 import {
   clearOperatorSession,
+  acknowledgeGenerator,
+  generatorAcknowledged,
   hasOperator,
   isOperatorSignedIn,
   issueOperatorSession,
@@ -17,6 +19,7 @@ import {
 
 const StateSchema = z.object({ state: z.enum(["setupRequired", "signedOut", "signedIn"]), required: z.boolean() });
 const PasswordSchema = z.object({ password: z.string().min(1) });
+const GeneratorAckSchema = z.object({ acknowledged: z.boolean() });
 
 const stateRoute = createRoute({
   method: "get",
@@ -63,6 +66,17 @@ const logoutRoute = createRoute({
   },
 });
 
+const generatorAckRoute = createRoute({
+  method: "get", path: "/generator-ack", tags: ["Operator"], summary: "Read the generator acknowledgment",
+  middleware: [requireOperator] as const,
+  responses: { 200: { content: { "application/json": { schema: GeneratorAckSchema } }, description: "Whether the operator has acknowledged generator output." } },
+});
+const generatorAckSetRoute = createRoute({
+  method: "post", path: "/generator-ack", tags: ["Operator"], summary: "Acknowledge generator output",
+  middleware: [requireOperator] as const, request: { body: { content: { "application/json": { schema: z.object({ acknowledged: z.literal(true) }) } } } },
+  responses: { 200: { content: { "application/json": { schema: GeneratorAckSchema } }, description: "Acknowledgment saved." } },
+});
+
 export const operatorRoutes = apiRouter();
 operatorRoutes.openapi(stateRoute, (c) => c.json({ state: !hasOperator() ? "setupRequired" : isOperatorSignedIn(c) ? "signedIn" : "signedOut", required: operatorRequired() }, 200));
 operatorRoutes.openapi(setupRoute, async (c) => {
@@ -91,3 +105,5 @@ operatorRoutes.openapi(logoutRoute, (c) => {
   clearOperatorSession(c);
   return c.json({ state: "signedOut", required: operatorRequired() }, 200);
 });
+operatorRoutes.openapi(generatorAckRoute, (c) => c.json({ acknowledged: generatorAcknowledged() }, 200));
+operatorRoutes.openapi(generatorAckSetRoute, (c) => { acknowledgeGenerator(); return c.json({ acknowledged: true }, 200); });

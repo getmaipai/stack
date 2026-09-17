@@ -17,6 +17,6 @@ export interface ClientRecord {
 
 export type AppEnv = {
   Variables: {
-    client: ClientRecord;
+    client?: ClientRecord;
   };
 };

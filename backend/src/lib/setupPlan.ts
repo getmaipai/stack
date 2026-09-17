@@ -3,6 +3,13 @@ import { db } from "@/db";
 import { meta } from "@/db/schema";
 import { emit } from "@/lib/events";
 import { scriptedEnginesEnabled } from "@/lib/supervisor";
+import { installCatalogModel } from "@/lib/modelStore";
+import { modelsDir } from "@/lib/paths";
+import { STACK_CHAT_MODEL } from "@/lib/modelCatalog";
+import { detectHardware } from "@/lib/hardware";
+import { ensureEngine } from "@/lib/engineInstall";
+import { selectEngineBinary } from "@/lib/engineCatalog";
+import { join } from "node:path";
 
 export type SetupTier = "p16" | "p32" | "p64" | "p128";
 export type SetupMode = "small" | "full";
@@ -35,6 +42,7 @@ const SCRIPTED_ITEMS: Array<Pick<SetupDownload, "id" | "name" | "sizeBytes" | "s
   { id: "voice-in-model", name: "Voice in model", sizeBytes: 80 * 1_000_000, source: "MaiPai Catalog", licence: "MIT", durationMs: 4_000 },
   { id: "voice-out-model", name: "Voice out model", sizeBytes: 150 * 1_000_000, source: "MaiPai Catalog", licence: "MIT", durationMs: 8_000 },
 ];
+const REAL_ITEMS: Array<Pick<SetupDownload, "id" | "name" | "sizeBytes" | "source" | "licence">> = [{ id: "chat-model", name: "Qwen3 1.7B chat model", sizeBytes: STACK_CHAT_MODEL.download!.approx_bytes, source: "Qwen / Hugging Face", licence: STACK_CHAT_MODEL.license! }];
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let itemStartedAt = 0;
@@ -119,6 +127,20 @@ function tick(): void {
   }
 }
 
+async function installRealPlan(items: SetupDownload[]): Promise<void> {
+  const current = items[0];
+  if (!current) return;
+  current.status = "downloading"; saveDownloads(items);
+  try {
+    const hardware = await detectHardware(); const pin = selectEngineBinary(hardware);
+    if (pin) await ensureEngine(pin, (completed, total) => { current.completedBytes = Math.min(current.sizeBytes, Math.round(completed / Math.max(total, 1) * current.sizeBytes * 0.02)); current.speedBytesPerSecond = 0; saveDownloads(items); });
+    await installCatalogModel(STACK_CHAT_MODEL, { destination: join(modelsDir, `${STACK_CHAT_MODEL.id}.gguf`), download: undefined, now: () => new Date().toISOString() });
+    current.completedBytes = current.sizeBytes; current.status = "installed"; current.timeLeftSeconds = 0; saveDownloads(items); emit({ id: "model.installed", data: { model: STACK_CHAT_MODEL.id, item: current.id } });
+  } catch (caught) {
+    current.status = "failed"; current.reason = caught instanceof Error ? caught.message : "The model could not be installed."; current.speedBytesPerSecond = 0; saveDownloads(items); emit({ id: "repair", data: { title: "Chat model install failed", detail: current.reason } });
+  }
+}
+
 export function getSetupPlan(): { plan: SetupPlan | null; downloads: SetupDownload[]; health: string | null } {
   const plan = read<SetupPlan>(PLAN_KEY);
   return { plan, downloads: downloads(), health: plan?.health ?? null };
@@ -134,14 +156,15 @@ export function chooseSetupPlan(tier: SetupTier, mode: SetupMode): { queued: tru
   };
   const items: SetupDownload[] = scriptedEnginesEnabled()
     ? SCRIPTED_ITEMS.map(({ durationMs: _durationMs, ...item }) => ({ ...item, completedBytes: 0, speedBytesPerSecond: 0, timeLeftSeconds: null, status: "queued" as const }))
-    : [];
+    : REAL_ITEMS.map((item) => ({ ...item, completedBytes: 0, speedBytesPerSecond: 0, timeLeftSeconds: null, status: "queued" as const }));
   write(PLAN_KEY, plan);
   saveDownloads(items);
-  if (items.length > 0) {
+  if (items.length > 0 && scriptedEnginesEnabled()) {
     startNext(items);
     timer = setInterval(tick, 250);
     (timer as unknown as { unref?: () => void }).unref?.();
   }
+  if (items.length > 0 && !scriptedEnginesEnabled()) void installRealPlan(items);
   return { queued: true, plan, downloads: items, health: plan.health };
 }
 

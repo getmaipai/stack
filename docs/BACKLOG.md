@@ -98,6 +98,11 @@ never copied. No item migrates the hub until STACK-16.
   and Try it are STACK-12. The five
   first-run steps and the board from `ux.md`, on `@maipai/ui`, generated
   screenshots against a scripted engine set, each opened and judged.
+- [x] **STACK-12 (M): Try it.** The stateless chat, voice, and generator
+  role tabs, copied shadcn chat primitives, operator acknowledgement, and
+  scripted visual captures are shipped. The pinned Qwen3 1.7B chat model
+  installs through the setup plan; a live completion remains outstanding
+  when the governor cannot admit the model. Verified at cd56396.
   Acceptance: a fresh data directory completes first run headlessly in
   Playwright and lands on a green board; the "Share with your family"
   card renders. Out of scope: the menu bar.
