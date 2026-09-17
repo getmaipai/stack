@@ -1,5 +1,6 @@
 import { ROLES, ROLE_IDS, type RoleId, type RoleState } from "@/roles";
 import { identityHeaders, installedEngineForMachine } from "@/lib/identity";
+import { getModel, isModelSelectable } from "@/lib/modelStore";
 
 export interface RoleResolution {
   role: RoleId;
@@ -17,8 +18,25 @@ export class UnknownRoleError extends Error {
   }
 }
 
+export class UnverifiedModelError extends Error {
+  readonly modelId: string;
+
+  constructor(modelId: string) {
+    super(`Model '${modelId}' is not selectable until its checksum and licence are verified.`);
+    this.name = "UnverifiedModelError";
+    this.modelId = modelId;
+  }
+}
+
 export function resolveRole(modelField: string): RoleResolution {
-  if (!ROLE_IDS.includes(modelField as RoleId)) throw new UnknownRoleError(modelField);
+  if (!ROLE_IDS.includes(modelField as RoleId)) {
+    const model = getModel(modelField);
+    if (!model) throw new UnknownRoleError(modelField);
+    if (!isModelSelectable(model)) throw new UnverifiedModelError(modelField);
+    const role = model.roles[0];
+    if (!role || !ROLE_IDS.includes(role)) throw new UnknownRoleError(modelField);
+    return { role, state: installedEngineForMachine() ? "installed" : "notInstalled", binding: null };
+  }
   return {
     role: modelField as RoleId,
     state: installedEngineForMachine() ? "installed" : "notInstalled",

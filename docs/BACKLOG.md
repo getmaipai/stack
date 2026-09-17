@@ -43,12 +43,12 @@ never copied. No item migrates the hub until STACK-16.
   `modelDownloadJobs.ts`. Acceptance: `llama-server` for macOS arm64
   downloads, verifies and runs `--version`; a test proves a checksum
   mismatch refuses the build. Verified at 1c6d0aa. Out of scope: spawning.
-- [ ] **STACK-04 (M): the model store and provenance.** The model record
+- [x] **STACK-04 (M): the model store and provenance.** The model record
   (`dev.md`, "The model store and provenance"); install from a Catalog
   `model` package and from a Hugging Face repo; a model is selectable only
   with checksum and licence recorded. Acceptance: the record round-trips
   with id, provenance and clock stamp; an unverified model cannot be
-  bound to a role (test). Out of scope: updates.
+  bound to a role (test). Committed, updates outstanding (STACK-10).
 - [ ] **STACK-05 (M): the supervisor.** `spawned`, `managed`, `url`
   engine kinds; spawn, watch, restart, the generation guard, the post-load
   check, the memory report; identity headers on every reply. Copy the

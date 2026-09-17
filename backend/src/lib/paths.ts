@@ -8,3 +8,4 @@ export const dataDir = resolve(
 if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 
 export const stackDbPath = join(dataDir, "stack.db");
+export const modelsDir = join(dataDir, "models");
