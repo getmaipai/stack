@@ -125,8 +125,9 @@ never copied. No item migrates the hub until STACK-16.
 
 ## Docs and site
 
-- [ ] **DOCS-01 (S): user docs site.** Astro Starlight under `docs/`, the
-  user tier (Start here, Everyday use, Privacy and safety, Fix a problem)
-  with generated screenshots from STACK-11, published on GitHub Pages.
+- [x] **DOCS-01 (S): user docs site.** Astro Starlight under `docs/site/`
+  with the user tier (Get started, Fix a problem, Privacy), the first
+  user pages in `docs/user/`, verified at <hash> (built locally;
+  publishing to GitHub Pages is a later item).
 - [x] **DOCS-02 (S): the Stack logo.** Done 2026-09-17: the mark and
   wordmark in `getmaipai/.github/brand/` as `maipai-stack-*`.

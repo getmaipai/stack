@@ -1,3 +1,8 @@
+---
+title: "Privacy: what leaves your house"
+description: What the Stack can send to the internet, and how to make sure nothing does.
+---
+
 # Privacy: what leaves your house
 
 MaiPai Stack runs AI on your own computer. It does not send your chats,
