@@ -1,0 +1,412 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "MaiPai Stack API",
+    "version": "0.1.0"
+  },
+  "components": {
+    "schemas": {},
+    "parameters": {}
+  },
+  "paths": {
+    "/healthz": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Stack process health",
+        "responses": {
+          "200": {
+            "description": "The Stack is running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "uptimeSeconds": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "version",
+                    "uptimeSeconds"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/hardware": {
+      "get": {
+        "tags": [
+          "Hardware"
+        ],
+        "summary": "Hardware facts and the proposed profile",
+        "responses": {
+          "200": {
+            "description": "The detected hardware and profile choices.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "hardware": {
+                      "type": "object",
+                      "properties": {
+                        "platform": {
+                          "type": "string"
+                        },
+                        "arch": {
+                          "type": "string"
+                        },
+                        "totalRamGb": {
+                          "type": "number"
+                        },
+                        "cpuCount": {
+                          "type": "number"
+                        },
+                        "isAppleSilicon": {
+                          "type": "boolean"
+                        },
+                        "unifiedMemoryGb": {
+                          "type": "number"
+                        },
+                        "cudaDevices": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "index": {
+                                "type": "number"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "vramBytes": {
+                                "type": "number"
+                              },
+                              "usedVramBytes": {
+                                "type": "number"
+                              },
+                              "utilizationPct": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "index",
+                              "name",
+                              "vramBytes"
+                            ]
+                          }
+                        },
+                        "freeDiskBytes": {
+                          "type": "number"
+                        },
+                        "osVersion": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "platform",
+                        "arch",
+                        "totalRamGb",
+                        "cpuCount",
+                        "isAppleSilicon",
+                        "unifiedMemoryGb",
+                        "cudaDevices",
+                        "freeDiskBytes",
+                        "osVersion"
+                      ]
+                    },
+                    "proposed": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "enum": [
+                            "p16",
+                            "p32",
+                            "p64",
+                            "p128"
+                          ]
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "minUnifiedGb": {
+                          "type": "number"
+                        },
+                        "minVramGb": {
+                          "type": "number"
+                        },
+                        "resident": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "chat",
+                              "coding",
+                              "judge",
+                              "router",
+                              "embed",
+                              "rerank",
+                              "vision",
+                              "stt",
+                              "tts",
+                              "wakeword",
+                              "image",
+                              "video",
+                              "music"
+                            ]
+                          }
+                        },
+                        "onDemand": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "chat",
+                              "coding",
+                              "judge",
+                              "router",
+                              "embed",
+                              "rerank",
+                              "vision",
+                              "stt",
+                              "tts",
+                              "wakeword",
+                              "image",
+                              "video",
+                              "music"
+                            ]
+                          }
+                        },
+                        "notAvailable": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "chat",
+                              "coding",
+                              "judge",
+                              "router",
+                              "embed",
+                              "rerank",
+                              "vision",
+                              "stt",
+                              "tts",
+                              "wakeword",
+                              "image",
+                              "video",
+                              "music"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "label",
+                        "minUnifiedGb",
+                        "minVramGb",
+                        "resident",
+                        "onDemand",
+                        "notAvailable"
+                      ]
+                    },
+                    "tiers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "enum": [
+                              "p16",
+                              "p32",
+                              "p64",
+                              "p128"
+                            ]
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "minUnifiedGb": {
+                            "type": "number"
+                          },
+                          "minVramGb": {
+                            "type": "number"
+                          },
+                          "resident": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "chat",
+                                "coding",
+                                "judge",
+                                "router",
+                                "embed",
+                                "rerank",
+                                "vision",
+                                "stt",
+                                "tts",
+                                "wakeword",
+                                "image",
+                                "video",
+                                "music"
+                              ]
+                            }
+                          },
+                          "onDemand": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "chat",
+                                "coding",
+                                "judge",
+                                "router",
+                                "embed",
+                                "rerank",
+                                "vision",
+                                "stt",
+                                "tts",
+                                "wakeword",
+                                "image",
+                                "video",
+                                "music"
+                              ]
+                            }
+                          },
+                          "notAvailable": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "chat",
+                                "coding",
+                                "judge",
+                                "router",
+                                "embed",
+                                "rerank",
+                                "vision",
+                                "stt",
+                                "tts",
+                                "wakeword",
+                                "image",
+                                "video",
+                                "music"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "label",
+                          "minUnifiedGb",
+                          "minVramGb",
+                          "resident",
+                          "onDemand",
+                          "notAvailable"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "hardware",
+                    "proposed",
+                    "tiers"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/engines": {
+      "get": {
+        "tags": [
+          "Engines"
+        ],
+        "summary": "Pinned engine builds",
+        "responses": {
+          "200": {
+            "description": "Pinned builds and their local installation state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "engines": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "platform": {
+                            "type": "string",
+                            "enum": [
+                              "darwin",
+                              "win32"
+                            ]
+                          },
+                          "arch": {
+                            "type": "string",
+                            "enum": [
+                              "arm64",
+                              "x64"
+                            ]
+                          },
+                          "verified": {
+                            "type": "boolean"
+                          },
+                          "installed": {
+                            "type": "boolean"
+                          },
+                          "matchesThisMachine": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "label",
+                          "platform",
+                          "arch",
+                          "verified",
+                          "installed",
+                          "matchesThisMachine"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "engines"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

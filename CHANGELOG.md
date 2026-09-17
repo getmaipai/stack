@@ -19,3 +19,5 @@ the product passes its battle-tested checklist in `docs/dev.md`.
   the integration contracts for Home, Bot, Go and Catalog
   (`docs/integrations.md`), the privacy page (`docs/user/privacy.md`) and
   the backlog.
+- The generated API document (`docs/api/openapi.json`) and its drift check
+  in the gate, with the API reference wired into the docs site.

@@ -15,17 +15,15 @@ export default defineConfig({
       title: "MaiPai Stack",
       description: "Docs for MaiPai Stack, the easy way to run your own local AI.",
       social: [{ icon: "github", label: "GitHub", href: "https://github.com/getmaipai/stack" }],
-      // The API document (docs/api/openapi.json) lands with the API docs
-      // item; until then this plugin entry is commented out.
-      // plugins: [
-      //   starlightOpenAPI([
-      //     {
-      //       base: "api",
-      //       schema: "../api/openapi.json",
-      //       label: "API reference",
-      //     },
-      //   ]),
-      // ],
+      plugins: [
+        starlightOpenAPI([
+          {
+            base: "api",
+            schema: "../api/openapi.json",
+            label: "API reference",
+          },
+        ]),
+      ],
       sidebar: [
         {
           label: "Guide",
@@ -35,7 +33,7 @@ export default defineConfig({
           label: "Developer",
           items: [{ autogenerate: { directory: "dev" } }],
         },
-        // ...openAPISidebarGroups,
+        ...openAPISidebarGroups,
       ],
     }),
   ],

@@ -13,6 +13,15 @@ if [ "${1:-}" != "--docs" ]; then
   (cd backend && bun install --silent)
   echo "== backend: typecheck"
   (cd backend && bunx tsc --noEmit)
+
+  echo "== backend: API docs, regenerate and check for drift"
+  (cd backend && bun run gen:api-docs >/dev/null)
+  if ! git diff --quiet -- docs/api; then
+    echo "docs/api/ is out of date with the route registrations in backend/src/app.ts and its route files. Run 'bun run gen:api-docs' in backend/ and commit the result."
+    git --no-pager diff --stat -- docs/api
+    exit 1
+  fi
+
   echo "== backend: tests"
   (cd backend && bun test)
 fi
