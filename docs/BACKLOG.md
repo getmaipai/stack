@@ -240,6 +240,18 @@ each item's design section lands in `dev.md` before its code.
   from `home/frontend/src/kit` into a package that both repos pin. Until
   then, the Stack carries a copied subset for its admin shell.
 
+- [ ] **STACK-19 (M): engine management.** Controls (start, stop,
+  restart, probe, install a build, make current with drain and swap,
+  remove), per-engine configuration declared once and rendered
+  generically (context, slots, threads, prompt cache, flash
+  attention; host URL and expected version for managed), and a
+  version state that is a fact (current, not current with the reason,
+  needs restart) from the store's tags and the updates' newest pinned
+  build. Design in `ux.md` "Engines". Acceptance: each control calls
+  its route against a scripted engine (test per control); a config
+  change marks needs-restart and the restart applies it; "not
+  current" appears when a newer pinned build exists (test); the page
+  screenshot opened and judged.
 - [ ] **STACK-18 (M): the tray app on Tauri 2.** A `tray/` package:
   the Stack icon as the tray or menu-bar item colored by the worst
   health severity, a menu with each role's one line, Open (the web UI

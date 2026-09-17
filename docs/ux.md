@@ -185,10 +185,30 @@ org's batch rule.
 
 ## Engines
 
-The same shape for engines: build, platform, kind (spawned, managed,
-url), which roles it holds, health, last restart and why, a log link. A
-managed host shows its probe result and `offline_reason` in words when it
-is gone ("ComfyUI is not running. Start it and this row turns green.").
+One row per engine: name, kind (spawned, managed, url), the roles it
+holds, health, the running build, and a version state that is a real
+fact: **current** (the running build is the tag marked current and no
+newer pinned build exists), **not current** (a newer pinned build is
+installed or available; the row says which), **needs restart** (the
+current tag changed while the old build is still running). Last
+restart and why, a log link. A managed host shows its probe result,
+its version against the one we tested, and `offline_reason` in words
+when it is gone ("ComfyUI is not running. Start it and this row turns
+green.").
+
+**Controls** per row: Start, Stop, Restart (spawned only; a managed
+host gets Probe), Install a build (from the pinned list for this
+machine, with the honest download bar), Make current (switch the tag
+with a drain and swap, the previous kept for Go back), Remove a build
+(never the current one; never a build a role is bound to).
+
+**Configuration** per engine, declared once and rendered by the
+generic settings renderer: context length, slots, threads, prompt
+cache size, flash attention, for `llama-server`; the host URL and the
+expected version for a managed host; the port is shown, never edited.
+A change that needs a restart says so and offers it; the values in
+effect and the values pending are both visible until then.
+
 
 ## Hardware and memory
 
