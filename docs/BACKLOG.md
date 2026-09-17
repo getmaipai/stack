@@ -23,11 +23,11 @@ never copied. No item migrates the hub until STACK-16.
 - [x] **STACK-00 (M): the design.** `dev.md`, `ux.md`,
   `integrations.md`, the privacy page, this backlog, the org decision
   record. Done 2026-09-17.
-- [ ] **STACK-01 (S): repo scaffold.** `package.json` with Bun and Hono,
+- [x] **STACK-01 (S): repo scaffold.** `package.json` with Bun and Hono,
   `@hono/zod-openapi` wired with the explorer at `/api/docs`, Drizzle
   and SQLite under `data/`, one health route, `scripts/check.sh` running
   lint, format, tests and the standards core (mirror
-  `home/scripts/check.sh`), `.env.example`. Acceptance: `bun start`
+  `home/scripts/check.sh`), `.env.example`. Verified at bf9bd7f. Acceptance: `bun start`
   serves `/api/docs` and `/healthz` on the default port; `check.sh`
   green. Out of scope: any engine.
 - [ ] **STACK-02 (M): hardware probe and profiles.** CPU, GPU class,

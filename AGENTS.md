@@ -10,8 +10,8 @@ Org standards apply and are auto-loaded from the parent directory
 CLAUDE.md (source:
 [getmaipai/.github](https://github.com/getmaipai/.github)).
 
-Started 2026-09-17 as a design, no code yet: [docs/dev.md](docs/dev.md)
-is the design record, [docs/ux.md](docs/ux.md) the experience,
+Started 2026-09-17: [docs/dev.md](docs/dev.md) is the design record,
+[docs/ux.md](docs/ux.md) is the experience,
 [docs/integrations.md](docs/integrations.md) the seams with Home, Bot,
 Go and Catalog, and [docs/BACKLOG.md](docs/BACKLOG.md) what is built and
 what is missing. The hub's engine layer (`home/backend/src/lib/engine*`,
@@ -32,7 +32,7 @@ The ten design principles are in `docs/dev.md`; the first three are the
 ones a session is most likely to trip on: roles not models, hosts are
 engines never the platform, clients not people.
 
-## Layout (planned, per STACK.md)
+## Layout
 
 `backend/` (Bun, Hono with `@hono/zod-openapi`, Zod, Drizzle/SQLite),
 `frontend/` (React, Vite, `@maipai/ui`), `docs/` (the three tiers),

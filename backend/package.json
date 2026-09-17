@@ -1,0 +1,27 @@
+{
+  "name": "@maipai/stack-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MaiPai Stack local API server.",
+  "license": "AGPL-3.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --hot src/index.ts",
+    "start": "bun run src/index.ts",
+    "test": "bun test",
+    "lint": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate"
+  },
+  "dependencies": {
+    "@hono/zod-openapi": "^1.6.3",
+    "@scalar/hono-api-reference": "^0.12.0",
+    "drizzle-orm": "^0.44.6",
+    "hono": "^4.10.7",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.0",
+    "drizzle-kit": "^0.31.6",
+    "typescript": "^5.9.3"
+  }
+}

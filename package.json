@@ -1,0 +1,13 @@
+{
+  "name": "@maipai/stack",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MaiPai Stack: the local AI foundation. See docs/dev.md.",
+  "license": "AGPL-3.0",
+  "workspaces": ["backend"],
+  "scripts": {
+    "start": "bun --cwd backend start",
+    "dev": "bun --cwd backend dev",
+    "test": "bun --cwd backend test"
+  }
+}

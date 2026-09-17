@@ -35,8 +35,15 @@ anything you build on it. Nothing leaves your house.
 
 ## Getting started
 
-Not yet: the Stack is a design with no code. The first milestone is
-tracked in [docs/BACKLOG.md](docs/BACKLOG.md).
+```bash
+git clone https://github.com/getmaipai/stack.git
+cd stack && bun install
+bun start
+```
+
+The Stack listens on `http://127.0.0.1:8770`. Health is at
+`http://127.0.0.1:8770/healthz`, and the API explorer is at
+`http://127.0.0.1:8770/api/docs`.
 
 ## Status
 
