@@ -45,17 +45,21 @@ anything you build on it. Nothing leaves your house.
 ## Getting started
 
 ```bash
-git clone https://github.com/getmaipai/stack.git
-cd stack && bun install
-bun start
+curl -fsSL https://getmaipai.github.io/stack/install.sh | sh
 ```
 
-The Stack listens on `http://127.0.0.1:8770`. Health is at
+Then open `http://127.0.0.1:8770`. Health is at
 `http://127.0.0.1:8770/healthz`, and the API explorer is at
 `http://127.0.0.1:8770/api/docs`. The admin UI is at
 `http://127.0.0.1:8770/`.
 `GET /stack/v1/hardware` shows what this computer can run;
 `GET /stack/v1/roles` lists every role and its state.
+
+To uninstall the service and binary while keeping your data:
+
+```bash
+curl -fsSL https://getmaipai.github.io/stack/install.sh | sh -s -- --uninstall
+```
 
 ## Status
 

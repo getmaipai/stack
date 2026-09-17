@@ -174,6 +174,16 @@ the Stack's pages and Home's Admin pages look like one family. A native
 macOS menu-bar item (start, stop, the board's state, "Open") is planned
 after the web UI, not before it.
 
+The release build is a single `maipai-stack-darwin-arm64` executable made
+with Bun's compile mode. The built frontend and migration files are
+embedded, so the binary can serve the board without a checkout. On macOS,
+`install-service` writes `~/Library/LaunchAgents/com.maipai.stack.plist`
+with `RunAtLoad`, `KeepAlive { SuccessfulExit: false }`,
+`ThrottleInterval 30`, and logs under the Stack data directory; `start`,
+`stop`, `status`, `open`, and `uninstall-service` operate that agent.
+Linux `systemd --user` and Windows service support remain named TODOs with
+the same restart-on-failure design.
+
 The Stack's `frontend/` is built into `frontend/dist/` and served by this
 same daemon on its API port, with Vite proxying the API paths in development.
 Until KIT-01 extracts `@maipai/ui`, it carries a copied subset of Home's kit

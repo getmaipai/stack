@@ -60,6 +60,23 @@ app.route("/stack/v1/setup/plan", setupPlanRoutes);
 app.route("/v1", inferenceRoutes);
 
 const here = dirname(fileURLToPath(import.meta.url));
+const embeddedAssets = new Map<string, Blob>();
+for (const asset of Bun.embeddedFiles ?? []) {
+  const name = (asset as Blob & { name: string }).name.replaceAll("\\", "/").replace(/^.*\/frontend\/dist\//, "");
+  const cleanName = name.replace(/^\/+/, "");
+  embeddedAssets.set(`/${cleanName}`, asset);
+  embeddedAssets.set(`/assets/${cleanName.split("/").pop() ?? cleanName}`, asset);
+}
+
+function contentType(path: string): string {
+  return path.endsWith(".html") ? "text/html; charset=utf-8" : path.endsWith(".js") ? "text/javascript; charset=utf-8" : path.endsWith(".css") ? "text/css; charset=utf-8" : path.endsWith(".json") ? "application/json" : path.endsWith(".svg") ? "image/svg+xml" : path.endsWith(".png") ? "image/png" : "application/octet-stream";
+}
+
+app.use("/*", async (c, next) => {
+  const asset = embeddedAssets.get(c.req.path === "/" ? "/index.html" : c.req.path);
+  if (asset) return new Response(asset, { headers: { "content-type": contentType(c.req.path) } });
+  await next();
+});
 
 // The daemon owns the API and the built UI on one origin. Checking the
 // filesystem per request lets a deploy build the frontend after the daemon
@@ -73,6 +90,8 @@ app.get("*", async (c) => {
   if (c.req.path.startsWith("/api/") || c.req.path.startsWith("/stack/") || c.req.path.startsWith("/v1/")) return c.notFound();
   const distDir = process.env.STACK_DIST_DIR ?? join(here, "..", "..", "frontend", "dist");
   const indexPath = join(distDir, "index.html");
+  const embeddedIndex = embeddedAssets.get("/index.html");
+  if (embeddedIndex) return c.html(await embeddedIndex.text());
   if (!existsSync(indexPath)) return c.text("UI not built", 503);
   return c.html(await Bun.file(indexPath).text());
 });

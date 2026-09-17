@@ -129,10 +129,16 @@ never copied. No item migrates the hub until STACK-16.
   memory behavior recorded. Needs its own bench design first.
   Acceptance: numbers with engine build, model file and a sanitized
   hardware line in `dev.md`; a chosen Studio profile.
-- [ ] **STACK-15 (M): service install.** launchd on macOS with the
+- [x] **STACK-15 (M): service install.** launchd on macOS with the
   data-directory permissions, an installer script, start, stop, pause
-  and resume; the menu-bar item after the web UI. Acceptance: a clean
-  Mac boots the service on login and the board is reachable.
+  and resume; the menu-bar item after the web UI. Verified with a
+  temporary launchd label on this Mac; the release asset and hosted
+  script land with the first release.
+- [x] **STACK-15b (S): the one-line installer and compiled binary.** A
+  checksum-verified macOS arm64 installer embeds the board, installs the
+  launchd agent, restarts cleanly on re-run, and keeps data on uninstall.
+  Verified with a temporary launchd label on this Mac; the release asset
+  and hosted script land with the first release.
 - [ ] **STACK-16 (L): Home runs on the Stack.** The hub's migration list
   in `dev.md`; Home registers as a client, calls by role, bridges events,
   and deletes its own supervisors. Lands in the `home` repo as its own

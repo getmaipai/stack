@@ -9,6 +9,9 @@ the product passes its battle-tested checklist in `docs/dev.md`.
 
 ### Added
 
+- The one-line macOS arm64 installer and compiled single-file daemon for
+  STACK-15 and STACK-15b, with checksum verification and launchd service
+  controls.
 - Try it for STACK-12: a stateless chat surface with copied shadcn message
   primitives, live identity and latency metrics, voice offline states, and
   generator acknowledgement/job placeholders.
