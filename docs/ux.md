@@ -247,6 +247,11 @@ with each model's measured share. This is the page that answers "what
 can this machine do" honestly, and every number on it was measured on
 this machine.
 
+The memory numbers come from the kernel ledger: available percentage,
+pressure level, reclaimable free bytes, and each process's footprint. A
+badge says `(estimated)` until a dry run or successful load records the
+model's measured footprint and context length.
+
 The profile names resident and on-demand models; measured peaks replace
 file-size estimates after the first-run bench, and estimates are labeled
 `(estimated)`. An on-demand load starts only when free memory after its

@@ -1,15 +1,18 @@
 import { existsSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
-import { ENGINE_BINARIES, ENGINE_READY_MARKER } from "@/lib/engineCatalog";
+import { ENGINE_BINARIES, ENGINE_READY_MARKER, selectEngineBinary } from "@/lib/engineCatalog";
 import { engineBinaryPath, engineDir } from "@/lib/engineInstall";
+import { detectHardware } from "@/lib/hardware";
 import { identityHeaders, readEngineIdentity, type EngineIdentity } from "@/lib/identity";
-import { isModelSelectable, listModels, type ModelRecord } from "@/lib/modelStore";
+import { isModelSelectable, listModels, recordMeasuredFootprint, type ModelRecord } from "@/lib/modelStore";
 import { withTimeout } from "@/lib/withTimeout";
 import { admit, release, startGovernor, type GovernorHandle } from "@/lib/governor";
 import { emit } from "@/lib/events";
 import { raiseRepair } from "@/lib/repairs";
 import type { RoleState } from "@/roles";
+import { getMemoryReader } from "@/lib/memory";
+import { readGgufFacts } from "@/lib/gguf";
 
 export type EngineKind = "spawned" | "managed" | "url";
 
@@ -33,15 +36,40 @@ export function scriptedEnginesEnabled(): boolean {
 
 export async function measureProcessMemoryBytes(pid: number | null): Promise<number | null> {
   if (pid === null) return null;
+  return getMemoryReader().processFootprint(pid);
+}
+
+export interface FootprintEstimate { bytes: number; estimated: boolean; contextLength: number; source: "dry-run" | "gguf"; }
+
+function parseFitBytes(output: string): number | null {
+  const matches = [...output.matchAll(/(?:memory|ram|footprint|requires?)[^\n]*?(\d+(?:\.\d+)?)\s*(GiB|MiB|GB|MB|bytes)/gi)];
+  const match = matches.at(-1);
+  if (!match) return null;
+  const value = Number(match[1]); const unit = match[2]?.toLowerCase();
+  return unit === "gib" || unit === "gb" ? Math.round(value * 1_073_741_824) : unit === "mib" || unit === "mb" ? Math.round(value * 1_048_576) : Math.round(value);
+}
+
+export async function dryRunFootprint(modelPath: string, contextLength: number): Promise<number | null> {
   try {
-    const processHandle = Bun.spawn(["ps", "-o", "rss=", "-p", String(pid)], { stdout: "pipe", stderr: "ignore" });
-    const output = await new Response(processHandle.stdout).text();
+    const hardware = await detectHardware(); const pin = selectEngineBinary(hardware);
+    const fit = process.env.STACK_FIT_BINARY ?? (pin ? join(engineDir(pin.id), "llama-fit-params") : "");
+    if (!fit || !existsSync(fit)) return null;
+    const processHandle = Bun.spawn([fit, "--model", modelPath, "--ctx-size", String(contextLength), "--fit", "on", "--fit-print", "on"], { stdout: "pipe", stderr: "pipe" });
+    const output = `${await new Response(processHandle.stdout).text()}\n${processHandle.stderr ? await new Response(processHandle.stderr).text() : ""}`;
     await processHandle.exited;
-    const residentKb = Number.parseInt(output.trim(), 10);
-    return Number.isFinite(residentKb) && residentKb > 0 ? residentKb * 1024 : null;
-  } catch {
-    return null;
-  }
+    return parseFitBytes(output);
+  } catch { return null; }
+}
+
+export async function estimateFootprint(repo: string, file: string, contextLength: number): Promise<FootprintEstimate> {
+  const url = `https://huggingface.co/${repo}/resolve/main/${file}`;
+  const facts = await readGgufFacts(url);
+  const head = await fetch(url, { method: "HEAD" });
+  const weights = Number(head.headers.get("content-length") ?? 0);
+  const quantization = facts.quantization.toLowerCase();
+  const bytesPerElement = quantization.includes("q4") || quantization === "2" || quantization === "3" ? 18 / 32 : quantization.includes("q8") || quantization === "7" || quantization === "8" ? 34 / 32 : 2;
+  const kvBytes = 2 * facts.layers * facts.kvHeads * facts.headDim * contextLength * bytesPerElement;
+  return { bytes: Math.ceil(weights + kvBytes + 256 * 1_048_576), estimated: true, contextLength, source: "gguf" };
 }
 
 export interface EngineClient {
@@ -259,7 +287,7 @@ export async function waitHealthy(client: EngineClient, timeoutMs = LOAD_FLOOR_M
   throw new EngineUnavailableError(`Engine did not become healthy before the load timeout (${Math.ceil(timeoutMs / 1000)}s).`);
 }
 
-export async function postLoadCheck(client: EngineClient, pid: number | null): Promise<PostLoadCheck> {
+export async function postLoadCheck(client: EngineClient, pid: number | null, contextLength = 4096): Promise<PostLoadCheck> {
   const result = await withTimeout(
     client.complete({ model: "chat", messages: [{ role: "user", content: "Reply with just the word OK." }], max_tokens: 16 }),
     timeoutOverrides.postLoadMs ?? DEFAULT_POST_LOAD_TIMEOUT_MS,
@@ -296,7 +324,7 @@ async function startSpawnedBackend(): Promise<ChatBackend> {
   }
   if (!model?.modelPath) throw new EngineUnavailableError("No verified and installed chat model is available.");
 
-  const admission = await admit({ id: "chat", kind: "resident", requestedBytes: model.sizeBytes ?? 0, modelFileBytes: model.sizeBytes, measuredPeakBytes: null, engine: "llama-server" });
+  const admission = await admit({ id: "chat", kind: "resident", requestedBytes: model.sizeBytes ?? 0, modelFileBytes: model.sizeBytes, measuredPeakBytes: model.measuredFootprintBytes, engine: "llama-server" });
   if ("queued" in admission) throw new EngineUnavailableError(`Chat admission is queued at position ${admission.position}.`);
   if ("refused" in admission) throw new EngineUnavailableError(admission.reason);
 
@@ -320,7 +348,9 @@ async function startSpawnedBackend(): Promise<ChatBackend> {
     void exitFailure.catch(() => {});
     await Promise.race([waitHealthy(client, loadTimeoutForModel(model.sizeBytes), () => !exited), exitFailure]);
     const identity = await readEngineIdentity(client.baseUrl);
-    const check = await postLoadCheck(client, processHandle.pid);
+    const contextLength = typeof model.engineRequirements.contextLength === "number" ? model.engineRequirements.contextLength : 4096;
+    const check = await postLoadCheck(client, processHandle.pid, contextLength);
+    if (check.actualBytes !== null) recordMeasuredFootprint(model.id, check.actualBytes, contextLength);
     state.status.postLoadCheck = check;
     const backend: ChatBackend = {
       client,

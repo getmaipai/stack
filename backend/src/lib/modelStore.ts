@@ -28,6 +28,8 @@ export interface ModelRecord {
   hostIdentity: Record<string, unknown> | null;
   firstBootAt: string;
   modelPath: string | null;
+  measuredFootprintBytes: number | null;
+  measuredContextLength: number | null;
 }
 
 export interface ModelRecordInput {
@@ -44,6 +46,8 @@ export interface ModelRecordInput {
   verifiedAt?: string | null;
   hostIdentity?: Record<string, unknown> | null;
   modelPath?: string | null;
+  measuredFootprintBytes?: number | null;
+  measuredContextLength?: number | null;
 }
 
 export interface DownloadModelOptions {
@@ -112,6 +116,8 @@ function toRecord(row: typeof models.$inferSelect): ModelRecord {
     hostIdentity: row.hostIdentity ? parseJson<Record<string, unknown>>(row.hostIdentity, {}) : null,
     firstBootAt: row.firstBootAt,
     modelPath: row.modelPath,
+    measuredFootprintBytes: row.measuredFootprintBytes,
+    measuredContextLength: row.measuredContextLength,
   };
 }
 
@@ -122,6 +128,10 @@ export function getModel(id: string): ModelRecord | null {
 
 export function listModels(): ModelRecord[] {
   return db.select().from(models).all().map(toRecord);
+}
+
+export function recordMeasuredFootprint(id: string, footprintBytes: number, contextLength: number): void {
+  db.update(models).set({ measuredFootprintBytes: footprintBytes, measuredContextLength: contextLength }).where(eq(models.id, id)).run();
 }
 
 export function isModelSelectable(record: ModelRecord | null): boolean {
@@ -146,6 +156,8 @@ export function upsertModel(input: ModelRecordInput, now = new Date().toISOStrin
     hostIdentity: input.hostIdentity ?? null,
     firstBootAt: existing?.firstBootAt ?? now,
     modelPath: carries("modelPath") ? input.modelPath ?? null : existing?.modelPath ?? null,
+    measuredFootprintBytes: carries("measuredFootprintBytes") ? input.measuredFootprintBytes ?? null : existing?.measuredFootprintBytes ?? null,
+    measuredContextLength: carries("measuredContextLength") ? input.measuredContextLength ?? null : existing?.measuredContextLength ?? null,
   };
   db.insert(models).values({
     id: record.id,
@@ -162,6 +174,8 @@ export function upsertModel(input: ModelRecordInput, now = new Date().toISOStrin
     hostIdentity: record.hostIdentity ? json(record.hostIdentity) : null,
     firstBootAt: record.firstBootAt,
     modelPath: record.modelPath,
+    measuredFootprintBytes: record.measuredFootprintBytes,
+    measuredContextLength: record.measuredContextLength,
   }).onConflictDoUpdate({
     target: models.id,
     set: {
@@ -177,6 +191,8 @@ export function upsertModel(input: ModelRecordInput, now = new Date().toISOStrin
       verifiedAt: record.verifiedAt,
       hostIdentity: record.hostIdentity ? json(record.hostIdentity) : null,
       modelPath: record.modelPath,
+      measuredFootprintBytes: record.measuredFootprintBytes,
+      measuredContextLength: record.measuredContextLength,
     },
   }).run();
   return record;

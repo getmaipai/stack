@@ -20,6 +20,8 @@ export const models = sqliteTable("models", {
   hostIdentity: text("host_identity"),
   firstBootAt: text("first_boot_at").notNull(),
   modelPath: text("model_path"),
+  measuredFootprintBytes: integer("measured_footprint_bytes"),
+  measuredContextLength: integer("measured_context_length"),
 });
 
 export const operator = sqliteTable("operator", {

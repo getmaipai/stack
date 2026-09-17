@@ -67,6 +67,10 @@ never copied. No item migrates the hub until STACK-16.
   rule with scripted memory readings; a queued job reports its position.
   Verified at <hash> with scripted readings; live pressure behavior on the
   Studio is STACK-14.
+- [x] **STACK-06b (M): the kernel's memory ledger.** Three OS readers behind
+  one interface, kernel pressure watermarks, measured process footprints,
+  and dry-run model sizing. Verified at f682ed0; the Windows reader is a
+  named stub because it could not be tested on this Mac.
 - [x] **STACK-07 (M): roles and the router.** The role declaration, role
   by name in `model`, the OpenAI-shaped endpoints for text, embeddings,
   audio and images, the streaming speech sessions. Acceptance: an

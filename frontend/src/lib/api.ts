@@ -7,6 +7,7 @@ export interface RoleRecord {
   description: string;
   state: "notInstalled" | "installed" | "loading" | "ready" | "busy" | "stopped" | "offline";
   reason: string | null;
+  model?: { id: string; sizeBytes: number | null; measuredFootprintBytes: number | null; measuredContextLength: number | null; estimated: boolean } | null;
 }
 
 export interface HardwareInfo {
@@ -41,7 +42,8 @@ export interface HardwareResponse {
 export interface BudgetResponse {
   capBytes: number;
   freeMemoryBytes: number;
-  pressure: boolean;
+  availablePercent: number;
+  pressure: "normal" | "warn" | "critical";
   loaded: Array<{ id: string; kind: string; peakBytes: number; measured: boolean }>;
   queue: Array<{ id: string; position: number; kind: string }>;
 }

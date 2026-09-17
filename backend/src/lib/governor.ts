@@ -1,6 +1,6 @@
-import os from "node:os";
 import { measureProcessMemoryBytes } from "@/lib/supervisor";
 import { emit } from "@/lib/events";
+import { getMemoryReader, type MemoryPressure, type MemoryReader } from "@/lib/memory";
 
 const GB = 1_073_741_824;
 
@@ -59,7 +59,8 @@ export interface GovernorLoadedModel {
 export interface GovernorStatus {
   capBytes: number;
   freeMemoryBytes: number;
-  pressure: boolean;
+  availablePercent: number;
+  pressure: MemoryPressure;
   loaded: GovernorLoadedModel[];
   queue: Array<{ id: string; position: number; kind: GovernorKind }>;
 }
@@ -85,12 +86,19 @@ interface GovernorTuning {
 
 let tuning: GovernorTuning = { ...GovernorRules, tiers: undefined as never, engineMultipliers: undefined as never } as unknown as GovernorTuning;
 let activeTier: GovernorTier = "p16";
-let totalMemoryBytes = os.totalmem();
-let freeMemoryBytes = os.freemem();
-let pressure = false;
+let totalMemoryBytes = 0;
+let freeMemoryBytes = 0;
+let availablePercent = 0;
+let pressure: MemoryPressure = "normal";
 let pressurePolls = 0;
 const loaded = new Map<string, LoadedInternal>();
 const queue: Array<GovernorRequest> = [];
+
+const initialMemory = getMemoryReader().read();
+totalMemoryBytes = initialMemory.totalBytes;
+freeMemoryBytes = initialMemory.freeBytes;
+availablePercent = initialMemory.availablePercent;
+pressure = initialMemory.pressure;
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -112,6 +120,7 @@ function workingMargin(): number {
 }
 
 function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
+  if (pressure !== "normal") return false;
   const generatorBusy = request.kind === "generator" && [...loaded.values()].some((item) => item.kind === "generator");
   if (generatorBusy) return false;
   const cap = Math.max(0, totalMemoryBytes - tuning.osMarginBytes);
@@ -159,6 +168,7 @@ export function getGovernorStatus(): GovernorStatus {
   return {
     capBytes: Math.max(0, totalMemoryBytes - tuning.osMarginBytes),
     freeMemoryBytes,
+    availablePercent,
     pressure,
     loaded: [...loaded.values()].map(({ peakBaselineBytes: _baseline, processBreaches: _breaches, keepAliveSeconds: _keepAlive, ...item }) => item),
     queue: queue.map((request, index) => ({ id: request.id, position: index + 1, kind: request.kind })),
@@ -172,8 +182,11 @@ export interface StartGovernorOptions {
   totalMemory?: () => number;
   freeMemory?: () => number;
   processMemory?: (pid: number) => Promise<number | null>;
+  memoryReader?: MemoryReader;
+  loadInFlight?: () => boolean;
   unload?: (id: string) => Promise<void> | void;
   restart?: (id: string) => Promise<void> | void;
+  abort?: (id: string) => Promise<void> | void;
   now?: () => number;
   tier?: GovernorTier;
 }
@@ -182,20 +195,29 @@ export function startGovernor(options: StartGovernorOptions): () => void {
   activeTier = options.tier ?? activeTier;
   let stopped = false;
   let systemBreaches = 0;
-  const timer = setInterval(() => void poll(), options.pollMs ?? tuning.pollMs);
+  const memoryReader = options.memoryReader ?? getMemoryReader();
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const schedule = (): void => {
+    if (!stopped) timer = setTimeout(async () => { await poll(); schedule(); }, options.loadInFlight?.() ? 1_000 : options.pollMs ?? tuning.pollMs);
+  };
   void poll();
+  schedule();
 
   async function poll(): Promise<void> {
     if (stopped) return;
-    totalMemoryBytes = options.totalMemory?.() ?? os.totalmem();
-    freeMemoryBytes = options.freeMemory?.() ?? os.freemem();
+    const reading = memoryReader.read();
+    totalMemoryBytes = options.totalMemory?.() ?? reading.totalBytes;
+    freeMemoryBytes = options.freeMemory?.() ?? reading.freeBytes;
+    availablePercent = reading.availablePercent;
+    const kernelPressure = reading.pressure;
     const floor = Math.max(totalMemoryBytes * tuning.systemLowWaterPct, tuning.systemLowWaterFloorBytes);
     const low = freeMemoryBytes < floor;
     systemBreaches = low ? systemBreaches + 1 : 0;
     pressurePolls = systemBreaches;
-    pressure = systemBreaches >= tuning.systemSustainedPolls;
-    if (pressure && systemBreaches === tuning.systemSustainedPolls) emit({ id: "pressure", data: { freeMemoryBytes, floorBytes: floor } });
-    const processReader = options.processMemory ?? ((pid: number) => measureProcessMemoryBytes(pid));
+    const arithmeticPressure: MemoryPressure = systemBreaches >= tuning.systemSustainedPolls ? "warn" : "normal";
+    pressure = kernelPressure === "critical" ? "critical" : kernelPressure === "warn" || arithmeticPressure === "warn" ? "warn" : "normal";
+    if (pressure !== "normal" && (systemBreaches === tuning.systemSustainedPolls || kernelPressure !== "normal")) emit({ id: "pressure", data: { freeMemoryBytes, floorBytes: floor, pressure, availablePercent } });
+    const processReader = options.processMemory ?? ((pid: number) => Promise.resolve(memoryReader.processFootprint(pid)));
     const now = options.now?.() ?? Date.now();
     for (const item of [...loaded.values()]) {
       if (item.pid === options.pid) {
@@ -211,7 +233,11 @@ export function startGovernor(options: StartGovernorOptions): () => void {
       }
       const idleLimit = (item.idleTtlSeconds + item.keepAliveSeconds) * 1000;
       const idle = now - new Date(item.lastUsedAt).getTime() >= idleLimit;
-      if (item.kind === "jit" && !item.pinned && (idle || pressure)) {
+      if (item.kind === "generator" && pressure === "critical") {
+        await options.abort?.(item.id);
+        emit({ id: "pressure", data: { reason: "critical kernel memory pressure aborted a generator", id: item.id, pressure } });
+      }
+      if (item.kind === "jit" && !item.pinned && (idle || pressure !== "normal")) {
         await options.unload?.(item.id);
         loaded.delete(item.id);
       }
@@ -220,7 +246,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
 
   return () => {
     stopped = true;
-    clearInterval(timer);
+    if (timer) clearTimeout(timer);
   };
 }
 
@@ -247,8 +273,10 @@ export function __resetGovernorForTests(): void {
     osMarginBytes: GovernorRules.osMarginBytes,
   };
   activeTier = "p16";
-  totalMemoryBytes = os.totalmem();
-  freeMemoryBytes = os.freemem();
-  pressure = false;
+  const reading = getMemoryReader().read();
+  totalMemoryBytes = reading.totalBytes;
+  freeMemoryBytes = reading.freeBytes;
+  availablePercent = reading.availablePercent;
+  pressure = "normal";
   pressurePolls = 0;
 }

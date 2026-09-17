@@ -8,6 +8,7 @@ import {
   startGovernor,
   type GovernorHandle,
 } from "@/lib/governor";
+import { scriptedMemoryReader } from "@/lib/memory/scripted";
 
 const GB = 1_073_741_824;
 const stops: Array<() => void> = [];
@@ -97,4 +98,25 @@ test("release advances the queue", async () => {
   release(first);
   await Bun.sleep(0);
   expect(getGovernorStatus().queue).toHaveLength(0);
+});
+
+test("kernel warn pressure pauses admission and reports the available percent", async () => {
+  const stop = startGovernor({ pid: 1, pollMs: 1, memoryReader: scriptedMemoryReader([{ totalBytes: 64 * GB, freeBytes: 32 * GB, availablePercent: 8, pressure: "warn" }]) });
+  stops.push(stop);
+  await Bun.sleep(5);
+  expect(getGovernorStatus()).toMatchObject({ pressure: "warn", availablePercent: 8 });
+  expect(await admit({ id: "pressure-blocked", kind: "resident", requestedBytes: GB })).toEqual({ queued: true, position: 1 });
+});
+
+test("kernel critical pressure aborts an in-flight generator", async () => {
+  await admit({ id: "generator-critical", kind: "generator", requestedBytes: GB });
+  const aborted: string[] = [];
+  const stop = startGovernor({ pid: 1, pollMs: 1, memoryReader: scriptedMemoryReader([
+    { totalBytes: 64 * GB, freeBytes: 32 * GB, availablePercent: 50, pressure: "normal" },
+    { totalBytes: 64 * GB, freeBytes: GB, availablePercent: 2, pressure: "critical" },
+  ]), abort: (id) => { aborted.push(id); } });
+  stops.push(stop);
+  await Bun.sleep(5);
+  expect(getGovernorStatus().pressure).toBe("critical");
+  expect(aborted).toContain("generator-critical");
 });

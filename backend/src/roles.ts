@@ -136,4 +136,5 @@ export const RoleRecordSchema = RoleDefinitionSchema.extend({
   id: RoleIdSchema,
   state: RoleStateSchema,
   reason: z.string().nullable(),
+  model: z.object({ id: z.string(), sizeBytes: z.number().int().nullable(), measuredFootprintBytes: z.number().int().nullable(), measuredContextLength: z.number().int().nullable(), estimated: z.boolean() }).nullable().optional(),
 });

@@ -9,6 +9,9 @@ the product passes its battle-tested checklist in `docs/dev.md`.
 
 ### Added
 
+- The kernel memory ledger for STACK-06b: macOS FFI, Linux proc and PSI
+  twin, Windows named stub, pressure watermarks, measured footprints, GGUF
+  estimates, and llama-fit-params dry runs.
 - The one-line macOS arm64 installer and compiled single-file daemon for
   STACK-15 and STACK-15b, with checksum verification and launchd service
   controls.

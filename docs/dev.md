@@ -389,6 +389,50 @@ RSS cap for a spawned child; and letting each engine decide, which cannot
 enforce one budget across engines. The poll-and-act decision keeps one
 owner for the machine-wide budget and reuses measured process memory.
 
+## Memory: the kernel's ledger (STACK-06b, 2026-09-17)
+
+The governor reads one `MemoryReader` interface rather than asking each
+engine or the JavaScript runtime for a guess:
+
+```text
+{ totalBytes, availablePercent,
+  pressure: "normal" | "warn" | "critical", freeBytes,
+  processFootprint(pid) }
+```
+
+On macOS, `hw.memsize` supplies `totalBytes`,
+`kern.memorystatus_level` supplies the available percentage,
+`kern.memorystatus_vm_pressure_level` supplies the dispatch mask (1
+normal, 2 warn, 4 critical), and `host_statistics64` combines free,
+inactive, and purgeable pages for `freeBytes`. `proc_pid_rusage` with
+`RUSAGE_INFO_V4` supplies `ri_phys_footprint` for a process. These calls
+use Bun's `bun:ffi` against `libSystem.B.dylib`, and every failure keeps
+the previous reading and raises a warning health item.
+
+The Linux reader uses `MemAvailable` from `/proc/meminfo`, PSI memory
+`some avg10` above 10 as warn and above 50 as critical, and
+`VmRSS` from `/proc/<pid>/status`. The Windows reader uses
+`GlobalMemoryStatusEx` and `GetProcessMemoryInfo`; its FFI surface is a
+named TODO until it can be tested on Windows. The interface and scripted
+reader keep the governor portable. `os.freemem()` is removed because the
+research probe saw its 0.09 GB reading on a Mac that the kernel reported
+as 61 percent free.
+
+The soft watermark evicts the least recently used unpinned JIT model and
+pauses admission. The hard watermark aborts the in-flight generator and
+raises a critical health item. Kernel warn or critical pressure is always
+the corresponding soft or hard watermark, regardless of arithmetic. The
+poll is every 5 seconds while idle and every second during a load.
+
+Before a first load, the dry-run path checks the pinned llama.cpp archive
+for `llama-fit-params`; the b10797 macOS archive contains it. That tool's
+fit result is stored with the model and context. If it is absent, the
+adapter uses `llama-server --fit-print`, then its buffer log lines in the
+same shape as Ollama. A model not yet downloaded uses the GGUF header and
+the KV formula only as an explicitly estimated badge. After a successful
+post-load check, the measured process footprint and context length replace
+the estimate on the model record.
+
 ### Jobs
 
 Image, video and music (and long TTS renders) are jobs: `POST` returns a

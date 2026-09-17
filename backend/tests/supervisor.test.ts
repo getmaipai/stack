@@ -186,6 +186,13 @@ test("post-load checks time out instead of hanging", async () => {
   }
 });
 
+test("post-load checks record the kernel footprint when a process is present", async () => {
+  const { postLoadCheck } = await import("@/lib/supervisor");
+  const check = await postLoadCheck({ baseUrl: "scripted", health: async () => true, complete: async () => ({ status: 200, body: { choices: [{ message: { content: "OK" } }] } }) }, process.pid);
+  expect(check.replyOk).toBe(true);
+  expect(check.actualBytes).toBeGreaterThan(1_048_576);
+});
+
 test("a free spawned port is selected before engine launch", async () => {
   const { findFreePort } = await import("@/lib/supervisor");
   const port = await findFreePort();

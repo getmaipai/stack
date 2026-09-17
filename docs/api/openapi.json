@@ -484,8 +484,16 @@
                     "freeMemoryBytes": {
                       "type": "integer"
                     },
+                    "availablePercent": {
+                      "type": "number"
+                    },
                     "pressure": {
-                      "type": "boolean"
+                      "type": "string",
+                      "enum": [
+                        "normal",
+                        "warn",
+                        "critical"
+                      ]
                     },
                     "loaded": {
                       "type": "array",
@@ -566,6 +574,7 @@
                   "required": [
                     "capBytes",
                     "freeMemoryBytes",
+                    "availablePercent",
                     "pressure",
                     "loaded",
                     "queue"
@@ -996,6 +1005,37 @@
                           "reason": {
                             "type": "string",
                             "nullable": true
+                          },
+                          "model": {
+                            "type": "object",
+                            "nullable": true,
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "sizeBytes": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "measuredFootprintBytes": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "measuredContextLength": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "estimated": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "sizeBytes",
+                              "measuredFootprintBytes",
+                              "measuredContextLength",
+                              "estimated"
+                            ]
                           }
                         },
                         "required": [

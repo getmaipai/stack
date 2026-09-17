@@ -24,6 +24,7 @@ repo redistributes are listed here as they are added.
 - cmdk (MIT) - https://github.com/pacocoursey/cmdk (the command palette)
 - recharts (MIT) - https://recharts.org (the monitoring chart)
 - @tanstack/react-table (MIT) - https://tanstack.com/table (table primitives used by the admin shell)
+- @huggingface/gguf (MIT) - https://github.com/huggingface/huggingface.js (GGUF header and remote range parser)
 
 The MaiPai Stack brand assets are used under the MaiPai brand rules in
 getmaipai/.github/brand/README.md.

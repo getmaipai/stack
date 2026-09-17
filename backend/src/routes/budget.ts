@@ -6,7 +6,8 @@ import { getGovernorStatus } from "@/lib/governor";
 const BudgetSchema = z.object({
   capBytes: z.number().int(),
   freeMemoryBytes: z.number().int(),
-  pressure: z.boolean(),
+  availablePercent: z.number(),
+  pressure: z.enum(["normal", "warn", "critical"]),
   loaded: z.array(z.object({
     id: z.string(),
     kind: z.enum(["resident", "jit", "generator"]),
