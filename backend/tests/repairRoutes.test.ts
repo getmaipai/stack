@@ -46,6 +46,14 @@ test("an engine crash opens a repair that is resolved once and 404 after", async
 });
 
 test("the repair routes require a session", async () => {
+  expect((await app.request("/stack/v1/repairs", { headers })).status).toBe(200);
+  expect((await app.request("/stack/v1/repairs/unknown/resolve", { method: "POST", headers })).status).toBe(404);
+
+  await app.request("/stack/v1/operator/setup", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ password: "correct horse battery staple" }),
+  });
   expect((await app.request("/stack/v1/repairs", { headers })).status).toBe(401);
   expect((await app.request("/stack/v1/repairs/unknown/resolve", { method: "POST", headers })).status).toBe(401);
 });
