@@ -25,6 +25,13 @@ A red tile means one job has stopped, and the row under it says why in words.
 2. If the page still will not open, check that no other app is using the same port.
 3. If it still will not open, the page is on this computer only. Make sure you are on the same computer that runs the Stack.
 
+## If the Stack says memory is tight
+
+1. Wait for the current picture or video job to finish. One runs at a time, and the next one waits its turn.
+2. Close other programs that use a lot of memory.
+3. If it keeps happening, choose a smaller plan on the [Hardware page](/guide/what-your-computer-can-run/).
+4. The Stack never starts a job when it would push your computer past its limit, so "tight" means waiting, not breaking.
+
 ## If a tool says it is not allowed
 
 1. Check that the key is not revoked. A revoked key is refused every time the tool tries to use it.

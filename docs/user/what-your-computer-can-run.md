@@ -3,7 +3,7 @@ title: What your computer can run
 description: The four sizes the Stack offers, and what each one runs.
 ---
 
-The first time you open the Stack, it measures your computer and proposes a plan that fits it. Below are the four plans and what each one runs.
+The first time you open the Stack, it measures your computer and proposes a plan that fits it. The numbers below were measured on your computer, not guessed. Below are the four plans and what each one runs.
 
 ## 16 GB
 
