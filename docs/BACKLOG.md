@@ -60,11 +60,13 @@ never copied. No item migrates the hub until STACK-16.
   completion through a real llama-server and a verified model on this
   Mac is outstanding (STACK-14 records it), and the governor is STACK-06. Out of scope:
   the governor's rules.
-- [ ] **STACK-06 (M): the governor.** Profile, admission, one generator,
+- [x] **STACK-06 (M): the governor.** Profile, admission, one generator,
   eviction (TTL, LRU, pin), the cap, `keep_alive` as a hint; every rule
   readable as a sentence on the Hardware page. Seed from
   `home/backend/src/lib/resourceGovernor.ts`. Acceptance: a test per
   rule with scripted memory readings; a queued job reports its position.
+  Verified at <hash> with scripted readings; live pressure behavior on the
+  Studio is STACK-14.
 - [x] **STACK-07 (M): roles and the router.** The role declaration, role
   by name in `model`, the OpenAI-shaped endpoints for text, embeddings,
   audio and images, the streaming speech sessions. Acceptance: an

@@ -464,6 +464,119 @@
         }
       }
     },
+    "/stack/v1/budget": {
+      "get": {
+        "tags": [
+          "Hardware"
+        ],
+        "summary": "Current memory governor budget",
+        "responses": {
+          "200": {
+            "description": "Current cap, loaded models, pressure and queue.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "capBytes": {
+                      "type": "integer"
+                    },
+                    "freeMemoryBytes": {
+                      "type": "integer"
+                    },
+                    "pressure": {
+                      "type": "boolean"
+                    },
+                    "loaded": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "resident",
+                              "jit",
+                              "generator"
+                            ]
+                          },
+                          "peakBytes": {
+                            "type": "integer"
+                          },
+                          "measured": {
+                            "type": "boolean"
+                          },
+                          "lastUsedAt": {
+                            "type": "string"
+                          },
+                          "idleTtlSeconds": {
+                            "type": "integer"
+                          },
+                          "pinned": {
+                            "type": "boolean"
+                          },
+                          "pid": {
+                            "type": "integer",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "peakBytes",
+                          "measured",
+                          "lastUsedAt",
+                          "idleTtlSeconds",
+                          "pinned",
+                          "pid"
+                        ]
+                      }
+                    },
+                    "queue": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "position": {
+                            "type": "integer"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "resident",
+                              "jit",
+                              "generator"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "position",
+                          "kind"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "capBytes",
+                    "freeMemoryBytes",
+                    "pressure",
+                    "loaded",
+                    "queue"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/roles": {
       "get": {
         "tags": [

@@ -6,6 +6,7 @@ import { engineBinaryPath, engineDir } from "@/lib/engineInstall";
 import { identityHeaders, readEngineIdentity, type EngineIdentity } from "@/lib/identity";
 import { isModelSelectable, listModels, type ModelRecord } from "@/lib/modelStore";
 import { withTimeout } from "@/lib/withTimeout";
+import { admit, release, startGovernor, type GovernorHandle } from "@/lib/governor";
 import type { RoleState } from "@/roles";
 
 export type EngineKind = "spawned" | "managed" | "url";
@@ -51,6 +52,8 @@ export interface ChatBackend {
   stop(): Promise<void>;
   activeRequests: number;
   retired: boolean;
+  governorHandle?: GovernorHandle;
+  stopGovernor?: () => void;
 }
 
 export class EngineUnavailableError extends Error {
@@ -196,6 +199,10 @@ async function startSpawnedBackend(): Promise<ChatBackend> {
   }
   if (!model?.modelPath) throw new EngineUnavailableError("No verified and installed chat model is available.");
 
+  const admission = await admit({ id: "chat", kind: "resident", requestedBytes: model.sizeBytes ?? 0, modelFileBytes: model.sizeBytes, measuredPeakBytes: null, engine: "llama-server" });
+  if ("queued" in admission) throw new EngineUnavailableError(`Chat admission is queued at position ${admission.position}.`);
+  if ("refused" in admission) throw new EngineUnavailableError(admission.reason);
+
   const port = await findFreePort();
   const processHandle = Bun.spawn([engineBinaryPath(pin), "--model", model.modelPath, "--port", String(port)], {
     stdout: "ignore",
@@ -225,6 +232,8 @@ async function startSpawnedBackend(): Promise<ChatBackend> {
       pid: processHandle.pid,
       activeRequests: 0,
       retired: false,
+      governorHandle: admission,
+      stopGovernor: startGovernor({ pid: processHandle.pid }),
       stop: async () => {
         processHandle.kill();
         await processHandle.exited;
@@ -240,6 +249,7 @@ async function startSpawnedBackend(): Promise<ChatBackend> {
     return backend;
   } catch (error) {
     processHandle.kill();
+    release(admission);
     throw error;
   }
 }
@@ -285,8 +295,10 @@ export async function getChatBackend(): Promise<ChatBackend> {
 
 async function retireBackend(backend: ChatBackend): Promise<void> {
   backend.retired = true;
+  backend.stopGovernor?.();
   while (backend.activeRequests > 0) await new Promise((resolve) => setTimeout(resolve, 10));
   await backend.stop();
+  if (backend.governorHandle) release(backend.governorHandle);
 }
 
 export async function restartChatEngine(): Promise<void> {

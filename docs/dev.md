@@ -308,6 +308,45 @@ understand it; the decisions are ours, because they span every engine on
 the machine, not one process. The hub's `resourceGovernor.ts` is the
 seed.
 
+## The governor's rules (STACK-06, 2026-09-17)
+
+The profile input names the resident set and the on-demand set. The
+first-run bench fills each resident model's measured peak; until then the
+governor estimates the peak as the model file size times the declared
+multiplier for its engine and labels that number `(estimated)`.
+
+Admission reads free memory now and the requested peak. An on-demand load
+or generator job starts only when free memory now minus the requested peak
+leaves the profile's `workingMarginBytes`: 4 GB on p16, 8 GB on p32, 12 GB
+on p64, and 20 GB on p128. Only one generator runs at a time; a request
+that cannot be admitted enters the queue with a position, or is refused
+with a reason when the queue of four is full.
+
+Eviction reads idle time, last use, pin state, system pressure and resident
+RSS. A JIT model unloads after `idleTtlSeconds`, 600 by default; under
+pressure, defined as free system memory below 10 percent or 1 GiB for two
+polls, the least recently used JIT model unloads first. A pinned model
+never unloads and the Hardware page shows its memory cost. A resident model
+restarts when its process RSS is above 1.3 times its measured peak plus
+500 MB for three polls.
+
+The cap input is total memory minus the OS margin, 8 GB by default. No
+admission may exceed that cap.
+
+The `keep_alive` input extends a model's idle TTL, but never beyond the cap
+and never for a generator.
+
+On the robot, the body's power and thermal budget is an additional input
+to admission. It uses the same thresholds and actions; this is named here
+for GOV-01 and is not built in STACK-06.
+
+The rejected alternatives are a static reservation, which ignores current
+pressure and measured peaks; an OS-level cap, which the hub's governor
+header rejects because macOS and Windows do not provide a clean native
+RSS cap for a spawned child; and letting each engine decide, which cannot
+enforce one budget across engines. The poll-and-act decision keeps one
+owner for the machine-wide budget and reuses measured process memory.
+
 ### Jobs
 
 Image, video and music (and long TTS renders) are jobs: `POST` returns a

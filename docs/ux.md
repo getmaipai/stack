@@ -108,6 +108,17 @@ with each model's measured share. This is the page that answers "what
 can this machine do" honestly, and every number on it was measured on
 this machine.
 
+The profile names resident and on-demand models; measured peaks replace
+file-size estimates after the first-run bench, and estimates are labeled
+`(estimated)`. An on-demand load starts only when free memory after its
+requested peak leaves the tier's working margin: 4 GB on p16, 8 GB on p32,
+12 GB on p64, or 20 GB on p128. One generator runs at a time; a request
+waits in a four-place queue or is refused with a reason. A JIT model
+expires after 600 seconds idle, and pressure unloads the least recently
+used unpinned JIT model; a pinned model never unloads. The cap is total
+memory minus the 8 GB OS margin, and `keep_alive` extends idle time only
+within that cap and never for generators.
+
 ## Clients and keys
 
 A row per client: name, key prefix, allowed roles, counters, created,

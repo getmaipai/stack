@@ -28,6 +28,8 @@ the product passes its battle-tested checklist in `docs/dev.md`.
   (`docs/user/what-your-computer-can-run.md`).
 - Operator setup and login, role-scoped client keys, counters and revoke
   routes for the Stack API.
+- The memory governor's admission, queue, eviction, cap and budget status
+  route.
 
 ### Security
 
