@@ -5,6 +5,8 @@ import { hardwareRoutes } from "@/routes/hardware";
 import { enginesRoutes } from "@/routes/engines";
 import { rolesRoutes } from "@/routes/roles";
 import { inferenceRoutes } from "@/routes/inference";
+import { operatorRoutes } from "@/routes/operator";
+import { clientsRoutes } from "@/routes/clients";
 import packageJson from "../../package.json";
 
 export const version = packageJson.version;
@@ -41,4 +43,6 @@ app.get("/api/docs", apiReference({ url: "/api/openapi.json" }));
 app.route("/stack/v1/hardware", hardwareRoutes);
 app.route("/stack/v1/engines", enginesRoutes);
 app.route("/stack/v1/roles", rolesRoutes);
+app.route("/stack/v1/operator", operatorRoutes);
+app.route("/stack/v1/clients", clientsRoutes);
 app.route("/v1", inferenceRoutes);

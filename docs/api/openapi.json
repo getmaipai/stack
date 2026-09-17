@@ -5,7 +5,19 @@
     "version": "0.1.0"
   },
   "components": {
-    "schemas": {},
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ]
+      }
+    },
     "parameters": {}
   },
   "paths": {
@@ -586,6 +598,541 @@
         }
       }
     },
+    "/stack/v1/operator": {
+      "get": {
+        "tags": [
+          "Operator"
+        ],
+        "summary": "Operator authentication state",
+        "responses": {
+          "200": {
+            "description": "Current operator state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "setupRequired",
+                        "signedOut",
+                        "signedIn"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/operator/setup": {
+      "post": {
+        "tags": [
+          "Operator"
+        ],
+        "summary": "Set the operator password during first run",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "password": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "password"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Operator created and signed in.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "setupRequired",
+                        "signedOut",
+                        "signedIn"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Operator setup has already completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/operator/login": {
+      "post": {
+        "tags": [
+          "Operator"
+        ],
+        "summary": "Sign in the operator",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "password": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "password"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Operator signed in.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "setupRequired",
+                        "signedOut",
+                        "signedIn"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Password refused.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many failed attempts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/operator/logout": {
+      "post": {
+        "tags": [
+          "Operator"
+        ],
+        "summary": "Sign out the operator",
+        "responses": {
+          "200": {
+            "description": "Operator signed out.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "setupRequired",
+                        "signedOut",
+                        "signedIn"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Operator is not signed in.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/clients": {
+      "get": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "List role-scoped client keys",
+        "responses": {
+          "200": {
+            "description": "Client metadata without key values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "clients": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "keyPrefix": {
+                            "type": "string"
+                          },
+                          "allowedRoles": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "chat",
+                                "coding",
+                                "judge",
+                                "router",
+                                "embed",
+                                "rerank",
+                                "vision",
+                                "stt",
+                                "tts",
+                                "wakeword",
+                                "image",
+                                "video",
+                                "music"
+                              ]
+                            }
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "lastSeenAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "revokedAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "requests": {
+                            "type": "integer"
+                          },
+                          "tokensIn": {
+                            "type": "integer"
+                          },
+                          "tokensOut": {
+                            "type": "integer"
+                          },
+                          "audioSeconds": {
+                            "type": "integer"
+                          },
+                          "jobs": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "keyPrefix",
+                          "allowedRoles",
+                          "createdAt",
+                          "lastSeenAt",
+                          "revokedAt",
+                          "requests",
+                          "tokensIn",
+                          "tokensOut",
+                          "audioSeconds",
+                          "jobs"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "clients"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Operator is not signed in.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "Create a role-scoped client key",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "allowedRoles": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "chat",
+                        "coding",
+                        "judge",
+                        "router",
+                        "embed",
+                        "rerank",
+                        "vision",
+                        "stt",
+                        "tts",
+                        "wakeword",
+                        "image",
+                        "video",
+                        "music"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "name",
+                  "allowedRoles"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Client metadata and its raw key, shown once.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "client": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "keyPrefix": {
+                          "type": "string"
+                        },
+                        "allowedRoles": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "chat",
+                              "coding",
+                              "judge",
+                              "router",
+                              "embed",
+                              "rerank",
+                              "vision",
+                              "stt",
+                              "tts",
+                              "wakeword",
+                              "image",
+                              "video",
+                              "music"
+                            ]
+                          }
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "lastSeenAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "revokedAt": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "requests": {
+                          "type": "integer"
+                        },
+                        "tokensIn": {
+                          "type": "integer"
+                        },
+                        "tokensOut": {
+                          "type": "integer"
+                        },
+                        "audioSeconds": {
+                          "type": "integer"
+                        },
+                        "jobs": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "keyPrefix",
+                        "allowedRoles",
+                        "createdAt",
+                        "lastSeenAt",
+                        "revokedAt",
+                        "requests",
+                        "tokensIn",
+                        "tokensOut",
+                        "audioSeconds",
+                        "jobs"
+                      ]
+                    },
+                    "key": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "client",
+                    "key"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Operator is not signed in.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/clients/{id}": {
+      "delete": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "Revoke a client key",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "client-example"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Client revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Operator is not signed in.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/chat/completions": {
       "post": {
         "tags": [
@@ -656,6 +1203,53 @@
                   "required": [
                     "error",
                     "roles"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A client key is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The client key is not scoped to this role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "allowedRoles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "role",
+                    "allowedRoles"
                   ]
                 }
               }
@@ -759,6 +1353,53 @@
               }
             }
           },
+          "401": {
+            "description": "A client key is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The client key is not scoped to this role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "allowedRoles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "role",
+                    "allowedRoles"
+                  ]
+                }
+              }
+            }
+          },
           "503": {
             "description": "No engine is bound to the role.",
             "content": {
@@ -841,6 +1482,53 @@
                   "required": [
                     "error",
                     "roles"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A client key is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The client key is not scoped to this role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "allowedRoles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "role",
+                    "allowedRoles"
                   ]
                 }
               }
@@ -934,6 +1622,53 @@
               }
             }
           },
+          "401": {
+            "description": "A client key is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The client key is not scoped to this role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "allowedRoles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "role",
+                    "allowedRoles"
+                  ]
+                }
+              }
+            }
+          },
           "503": {
             "description": "No engine is bound to the role.",
             "content": {
@@ -1017,6 +1752,53 @@
                   "required": [
                     "error",
                     "roles"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A client key is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The client key is not scoped to this role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "allowedRoles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "role",
+                    "allowedRoles"
                   ]
                 }
               }

@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
 import { app } from "@/app";
+import { testClientHeaders } from "./authTest";
 
 test("GET /stack/v1/hardware returns hardware, proposal, and tiers", async () => {
-  const response = await app.request("/stack/v1/hardware");
+  const response = await app.request("/stack/v1/hardware", { headers: testClientHeaders });
   expect(response.status).toBe(200);
   const body = await response.json() as { hardware: { freeDiskBytes: number; osVersion: string }; proposed: unknown; tiers: unknown[] };
   expect(body.hardware.freeDiskBytes).toBeGreaterThan(0);
@@ -11,7 +12,7 @@ test("GET /stack/v1/hardware returns hardware, proposal, and tiers", async () =>
 });
 
 test("GET /stack/v1/hardware proposal is null or one of the tiers, and labels stay plain", async () => {
-  const response = await app.request("/stack/v1/hardware");
+  const response = await app.request("/stack/v1/hardware", { headers: testClientHeaders });
   expect(response.status).toBe(200);
   const body = await response.json() as {
     proposed: { id: string } | null;

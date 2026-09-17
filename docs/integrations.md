@@ -23,8 +23,12 @@ changelog note.
 | Updates | `/stack/v1/updates` (check, apply, roll back) | the operator; Home shows availability through events |
 | Identity headers | `x-maipai-engine`, `x-maipai-model`, `x-maipai-revision` on every reply | every client's identity check |
 
-Authentication: a client key as a bearer token. Loopback needs one too,
-so a stray local process cannot spend the household's memory.
+Authentication: the operator uses `/stack/v1/operator/setup`, `/login`,
+`/logout` and the state route; clients use keys created and revoked through
+`/stack/v1/clients`. Inference and streaming speech use a client key as a
+bearer token, and loopback needs one too, so a stray local process cannot
+spend the household's memory. The roles, hardware and engines reads accept
+either a client key or the operator session.
 
 ## MaiPai Home
 

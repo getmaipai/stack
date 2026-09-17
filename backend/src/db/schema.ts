@@ -21,3 +21,35 @@ export const models = sqliteTable("models", {
   firstBootAt: text("first_boot_at").notNull(),
   modelPath: text("model_path"),
 });
+
+export const operator = sqliteTable("operator", {
+  id: text("id").primaryKey(),
+  passwordHash: text("password_hash").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const clients = sqliteTable("clients", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  keyHash: text("key_hash").notNull().unique(),
+  keyPrefix: text("key_prefix").notNull(),
+  allowedRoles: text("allowed_roles").notNull(),
+  createdAt: text("created_at").notNull(),
+  lastSeenAt: text("last_seen_at"),
+  revokedAt: text("revoked_at"),
+  requests: integer("requests").notNull().default(0),
+  tokensIn: integer("tokens_in").notNull().default(0),
+  tokensOut: integer("tokens_out").notNull().default(0),
+  audioSeconds: integer("audio_seconds").notNull().default(0),
+  jobs: integer("jobs").notNull().default(0),
+});
+
+export const sessions = sqliteTable("sessions", {
+  id: text("id").primaryKey(),
+  operatorId: text("operator_id").notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  userAgent: text("user_agent"),
+  expiresAt: text("expires_at").notNull(),
+  createdAt: text("created_at").notNull(),
+});

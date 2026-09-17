@@ -1,6 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import { apiRouter } from "@/lib/openapi";
+import { recordUsage, requireClient } from "@/lib/clients";
 import { identityHeaders } from "@/lib/identity";
 import { noEngineResponse, resolveRole, UnknownRoleError } from "@/lib/router";
 import { ROLE_IDS } from "@/roles";
@@ -25,19 +26,34 @@ const NoEngineSchema = z.object({
   state: z.string(),
   offline_reason: z.string(),
 });
+const RoleForbiddenSchema = z.object({ error: z.string(), role: z.string(), allowedRoles: z.array(z.string()) });
 const inferenceResponses = {
   400: { content: { "application/json": { schema: UnknownModelSchema } }, description: "Unknown role or model." },
+  401: { content: { "application/json": { schema: z.object({ error: z.string() }) } }, description: "A client key is required." },
+  403: { content: { "application/json": { schema: RoleForbiddenSchema } }, description: "The client key is not scoped to this role." },
   503: { content: { "application/json": { schema: NoEngineSchema } }, description: "No engine is bound to the role." },
 } as const;
 
 async function inferenceReply<T extends Context>(c: T, model: string, body: Record<string, unknown>, chat = false) {
   try {
     const resolution = resolveRole(model);
+    const client = c.var.client;
+    if (!client.allowedRoles.includes(resolution.role)) {
+      return jsonReply(c, { error: "Client is not allowed to use this role.", role: resolution.role, allowedRoles: client.allowedRoles }, 403, identityHeaders(null));
+    }
     const definition = ROLES[resolution.role];
     const sharesChat = "sharesModelWith" in definition && definition.sharesModelWith === "chat";
     if (chat && (resolution.role === "chat" || sharesChat)) {
       const result = await completeChat(model, body);
       for (const [name, value] of Object.entries(result.headers)) c.header(name, value);
+      if (result.status >= 200 && result.status < 300) {
+        const usage = (result.body as { usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } }).usage;
+        recordUsage(client.id, {
+          requests: 1,
+          tokensIn: typeof usage?.prompt_tokens === "number" ? usage.prompt_tokens : 0,
+          tokensOut: typeof usage?.completion_tokens === "number" ? usage.completion_tokens : 0,
+        });
+      }
       return c.json(result.body as never, result.status as never);
     }
     const result = noEngineResponse(resolution.role);
@@ -53,16 +69,17 @@ async function inferenceReply<T extends Context>(c: T, model: string, body: Reco
   }
 }
 
-function jsonReply<T extends Context>(c: T, body: unknown, status: 400 | 503, headers: Record<string, string>) {
+function jsonReply<T extends Context>(c: T, body: unknown, status: 400 | 403 | 503, headers: Record<string, string>) {
   for (const [name, value] of Object.entries(headers)) c.header(name, value);
   return c.json(body as never, status as never);
 }
 
-const chatRoute = createRoute({ method: "post", path: "/chat/completions", tags: ["Inference"], request: { body: { content: { "application/json": { schema: ChatRequestSchema } } } }, responses: inferenceResponses });
-const embeddingsRoute = createRoute({ method: "post", path: "/embeddings", tags: ["Inference"], request: { body: { content: { "application/json": { schema: EmbeddingsRequestSchema } } } }, responses: inferenceResponses });
-const transcriptionsRoute = createRoute({ method: "post", path: "/audio/transcriptions", tags: ["Inference"], request: { body: { content: { "application/json": { schema: TranscriptionRequestSchema } } } }, responses: inferenceResponses });
-const speechRoute = createRoute({ method: "post", path: "/audio/speech", tags: ["Inference"], request: { body: { content: { "application/json": { schema: SpeechRequestSchema } } } }, responses: inferenceResponses });
-const imagesRoute = createRoute({ method: "post", path: "/images/generations", tags: ["Inference"], request: { body: { content: { "application/json": { schema: ImageRequestSchema } } } }, responses: inferenceResponses });
+const clientMiddleware = [requireClient];
+const chatRoute = createRoute({ method: "post", path: "/chat/completions", tags: ["Inference"], middleware: clientMiddleware, request: { body: { content: { "application/json": { schema: ChatRequestSchema } } } }, responses: inferenceResponses });
+const embeddingsRoute = createRoute({ method: "post", path: "/embeddings", tags: ["Inference"], middleware: clientMiddleware, request: { body: { content: { "application/json": { schema: EmbeddingsRequestSchema } } } }, responses: inferenceResponses });
+const transcriptionsRoute = createRoute({ method: "post", path: "/audio/transcriptions", tags: ["Inference"], middleware: clientMiddleware, request: { body: { content: { "application/json": { schema: TranscriptionRequestSchema } } } }, responses: inferenceResponses });
+const speechRoute = createRoute({ method: "post", path: "/audio/speech", tags: ["Inference"], middleware: clientMiddleware, request: { body: { content: { "application/json": { schema: SpeechRequestSchema } } } }, responses: inferenceResponses });
+const imagesRoute = createRoute({ method: "post", path: "/images/generations", tags: ["Inference"], middleware: clientMiddleware, request: { body: { content: { "application/json": { schema: ImageRequestSchema } } } }, responses: inferenceResponses });
 
 export const inferenceRoutes = apiRouter();
 inferenceRoutes.openapi(chatRoute, (c) => inferenceReply(c, c.req.valid("json").model, c.req.valid("json"), true));

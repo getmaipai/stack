@@ -10,6 +10,7 @@ import {
   type ChatBackend,
   type EngineClient,
 } from "@/lib/supervisor";
+import { testClientHeaders } from "./authTest";
 
 const originalUrl = process.env.STACK_MANAGED_ENGINE_URL;
 const originalChatUrl = process.env.STACK_CHAT_ENGINE_URL;
@@ -51,7 +52,7 @@ test("a managed engine completes chat with identity headers", async () => {
 
   const response = await app.request("/v1/chat/completions", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { ...testClientHeaders, "content-type": "application/json" },
     body: JSON.stringify({ model: "chat", messages: [{ role: "user", content: "hi" }] }),
   });
   expect(response.status).toBe(200);
@@ -71,7 +72,7 @@ test("a vanished managed engine returns its offline reason", async () => {
   setSupervisorFactoryForTests(async () => backend(client, "managed"));
   const response = await app.request("/v1/chat/completions", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { ...testClientHeaders, "content-type": "application/json" },
     body: JSON.stringify({ model: "chat", messages: [] }),
   });
   expect(response.status).toBe(503);

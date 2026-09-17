@@ -71,11 +71,12 @@ never copied. No item migrates the hub until STACK-16.
   unmodified OpenAI client library completes a chat, an embedding, a
   transcription and a speech render against scripted engines; role
   scoping refuses a disallowed role with a clear error. Committed, engine binding completed by STACK-05.
-- [ ] **STACK-08 (M): operator login and client keys.** Password login,
+- [x] **STACK-08 (M): operator login and client keys.** Password login,
   keys hashed at rest and shown once, allowed roles, counters, revoke;
   loopback requires a key. Mirror the hub's `auth.ts` and `lib/secrets`
   pattern. Acceptance: a revoked key is refused within one request; the
-  key never appears in a log or a response after creation (test).
+  key never appears in a log or a response after creation (test). Verified
+  at <hash>.
 - [ ] **STACK-09 (M): events and notifications.** The SSE feed with the
   typed events in `dev.md`; the Notifications page; the Repairs list.
   Acceptance: an engine crash produces `engine.state` and a Repairs row

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { app } from "@/app";
 import { resolveRole, UnknownRoleError } from "@/lib/router";
+import { testClientHeaders } from "./authTest";
 
 test("a role name resolves without a binding", () => {
   const result = resolveRole("chat");
@@ -13,7 +14,7 @@ test("an unknown role or model is rejected with the declared roles", async () =>
   expect(() => resolveRole("made-up-model")).toThrow(UnknownRoleError);
   const response = await app.request("/v1/chat/completions", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { ...testClientHeaders, "content-type": "application/json" },
     body: JSON.stringify({ model: "made-up-model", messages: [] }),
   });
   expect(response.status).toBe(400);
@@ -24,7 +25,7 @@ test("an unknown role or model is rejected with the declared roles", async () =>
 test("an unbound role is a 503 with a reason and empty identity headers", async () => {
   const response = await app.request("/v1/chat/completions", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { ...testClientHeaders, "content-type": "application/json" },
     body: JSON.stringify({ model: "chat", messages: [] }),
   });
   expect(response.status).toBe(503);

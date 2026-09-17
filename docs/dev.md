@@ -326,6 +326,9 @@ seconds of audio, jobs) and a revoke button. Home gets one key. Bot on its
 own hardware runs its own Stack and needs none from the hub's. A
 developer's tool gets a key scoped to what it should be able to spend.
 
+Operator passwords and sessions are implemented in `backend/src/lib/operator.ts`.
+Role-scoped key issuance, revocation and usage counters are implemented in `backend/src/lib/clients.ts`.
+
 ### Events and notifications
 
 `GET /stack/v1/events` is a server-sent stream of typed events:

@@ -26,3 +26,9 @@ the product passes its battle-tested checklist in `docs/dev.md`.
   in the gate, with the API reference wired into the docs site.
 - The "What your computer can run" page
   (`docs/user/what-your-computer-can-run.md`).
+- Operator setup and login, role-scoped client keys, counters and revoke
+  routes for the Stack API.
+
+### Security
+
+- Bumped `drizzle-orm` to `^0.45.2` to address the SQL injection advisory.

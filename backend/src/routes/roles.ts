@@ -1,5 +1,6 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@/lib/openapi";
+import { requireClientOrOperator } from "@/lib/clients";
 import { resolveRole } from "@/lib/router";
 import { ROLE_IDS, RoleRecordSchema, ROLES } from "@/roles";
 
@@ -10,6 +11,7 @@ const rolesRoute = createRoute({
   path: "/",
   tags: ["Roles"],
   summary: "Declared capability roles",
+  middleware: [requireClientOrOperator] as const,
   responses: {
     200: {
       content: { "application/json": { schema: RolesResponseSchema } },

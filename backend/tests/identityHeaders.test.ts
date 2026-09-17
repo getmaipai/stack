@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { app } from "@/app";
+import { testClientHeaders } from "./authTest";
 
 const bodies: Record<string, Record<string, unknown>> = {
   "/v1/chat/completions": { model: "chat", messages: [] },
@@ -14,7 +15,7 @@ test("every OpenAI route carries identity headers when no engine answers", async
   for (const path of Object.keys(document.paths).filter((candidate) => candidate.startsWith("/v1/"))) {
     const response = await app.request(path, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { ...testClientHeaders, "content-type": "application/json" },
       body: JSON.stringify(bodies[path]),
     });
     expect(response.status).toBe(503);
@@ -22,4 +23,13 @@ test("every OpenAI route carries identity headers when no engine answers", async
     expect(response.headers.get("x-maipai-model")).toBe("none");
     expect(response.headers.get("x-maipai-revision")).toBe("none");
   }
+  const unauthenticated = await app.request("/v1/chat/completions", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(bodies["/v1/chat/completions"]),
+  });
+  expect(unauthenticated.status).toBe(401);
+  expect(unauthenticated.headers.get("x-maipai-engine")).toBe("none");
+  expect(unauthenticated.headers.get("x-maipai-model")).toBe("none");
+  expect(unauthenticated.headers.get("x-maipai-revision")).toBe("none");
 });

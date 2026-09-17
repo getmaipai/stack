@@ -2,6 +2,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { apiRouter } from "@/lib/openapi";
+import { requireClientOrOperator } from "@/lib/clients";
 import { detectHardware } from "@/lib/hardware";
 import { ENGINE_BINARIES, ENGINE_READY_MARKER, selectEngineBinary } from "@/lib/engineCatalog";
 import { engineDir } from "@/lib/engineInstall";
@@ -20,6 +21,7 @@ const enginesRoute = createRoute({
   path: "/",
   tags: ["Engines"],
   summary: "Pinned engine builds",
+  middleware: [requireClientOrOperator] as const,
   responses: {
     200: {
       content: { "application/json": { schema: z.object({ engines: z.array(EngineSchema) }) } },

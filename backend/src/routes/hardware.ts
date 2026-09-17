@@ -1,5 +1,6 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@/lib/openapi";
+import { requireClientOrOperator } from "@/lib/clients";
 import { detectHardware } from "@/lib/hardware";
 import { PROFILE_TIERS, proposeProfile, type ProfileTier, type RoleId } from "@/profiles";
 
@@ -38,6 +39,7 @@ const hardwareRoute = createRoute({
   path: "/",
   tags: ["Hardware"],
   summary: "Hardware facts and the proposed profile",
+  middleware: [requireClientOrOperator] as const,
   responses: {
     200: {
       content: {
