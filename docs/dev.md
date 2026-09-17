@@ -371,8 +371,8 @@ people, consent, packages, and everything a person can see.
 
 ## Open questions for the owner
 
-1. **Name.** `stack` and "MaiPai Stack" are assumed; "Station" was the
-   runner-up. Renaming costs nothing before the remote exists.
+1. **Name.** Decided 2026-09-17: `stack`, "MaiPai Stack". The public
+   repo is `github.com/getmaipai/stack`.
 2. **Logo.** Done 2026-09-17: `maipai-stack-{icon,logo}-{light,dark}.png`
    in `getmaipai/.github/brand/` (orange accent, three stacked layers).
 3. **Installer shape.** Recommended: Home's installer installs the Stack
