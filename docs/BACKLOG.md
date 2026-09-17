@@ -181,18 +181,27 @@ each item's design section lands in `dev.md` before its code.
   Acceptance: an update and a rollback of a scripted engine with no
   request cut (test); the check's request has exactly the two headers
   (test); the privacy page lists the URLs. Exit: `bash scripts/check.sh`.
-- [ ] **STACK-11b (M): install and first run, redesigned.** The
-  three-step first run on `@stepperize/react` (nothing downloads),
-  the probe in the person's words, the board's "Set up your AI" card,
-  the sizer screen with "Start small now" and "Get the full plan",
-  downloads as a background job with the honest bar and the
-  network sentence, the abilities selector, Try it opening when the
-  small set lands. The small set's pins (a fast chat model, small STT
-  and TTS, about 1 GB) are chosen with STACK-04b. Design in `ux.md`
-  "Install and first run". Acceptance: the first-run Playwright flow
-  completes in under ninety seconds with no network; a scripted
-  download shows size, speed and time left and survives a pause;
+- [ ] **STACK-11b (M): the first open is the board.** No wizard: the
+  board is the first screen with This computer in plain words, the
+  Add abilities cards with sizes and "can run", the "Start small"
+  suggestion, downloads as a background job with the honest bar and
+  the network sentence, the one-time dismissible note; the operator
+  password is deferred until a client key is created or LAN access is
+  switched on. Design in `ux.md` "Install and first open". Acceptance:
+  a fresh data directory opens straight to the board with no network;
+  a scripted "Start small" shows size, speed and time left and
+  survives a pause; creating a key prompts for the password once;
   screenshots re-taken and judged.
+- [ ] **STACK-15b (M): the one-line installer.** `install.sh` hosted
+  on our GitHub Pages: downloads the compiled Stack binary
+  (`bun build --compile`) for the platform from our own GitHub
+  release with its sha256 checked, installs under the home folder,
+  registers the launchd agent (later systemd), starts it, opens the
+  board; re-running updates; an uninstall flag removes everything but
+  the data directory. Acceptance: on a clean macOS user account the
+  command ends with the board open in under a minute, with the log
+  pasted; the script is shellcheck-clean; nothing but our own release
+  is downloaded (the script's URLs enumerated in the privacy page).
 - [ ] **STACK-12 (M): Try it** is built on shadcn/ui's chat components
   (`message-scroller`, `message`, `bubble`, `attachment`, `marker`)
   added to the kit by the registry, a small SSE hook against the

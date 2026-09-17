@@ -17,61 +17,57 @@ Three people use the Stack, and the pages are ordered for the first one:
 - **Home**, which is a client and never sees these pages; it reads the
   same facts over the API and shows them in its own Admin.
 
-## Install and first run (redesigned 2026-09-17)
+## Install and first open (decided 2026-09-17, evening)
 
-The rule: a person is talking to their own AI within minutes of
-opening the app, and a download speed never looks like our app. What
-the well-liked products do: Ollama installs in thirty seconds and
-downloads nothing until asked; Home Assistant asks for an account and
-a name and adds everything heavy later; Apple Intelligence downloads
-its models in the background with a "Preparing" state and a
-notification when ready; Jan redesigned to "chatting in seconds" with
-a small model and background preparation. LM Studio offers a 6 GB
-download during onboarding and its bug tracker has people giving up
-after an hour on a blank screen.
+The owner's rule, after seeing the five-step wizard: no wizard. One
+command installs, the full app opens, and the board itself shows what
+to add. Ollama proved the shape; the products that make people click
+through steps before they see anything are the ones people abandon.
 
-**Install** is one download and one open: the app bundle with the
-daemon inside. No terminal, no package manager, no Docker.
+**Install** is one line in Terminal, hosted by us, and downloads only
+our own compiled binary from our own GitHub release (nothing from a
+third party at install time; engines and models arrive later, when an
+ability is chosen):
 
-**First run is three steps and downloads nothing**, under ninety
-seconds, a progress rail on the left, a "back" that always works:
+    curl -fsSL https://getmaipai.github.io/stack/install.sh | sh
 
-1. **Welcome.** "MaiPai Stack runs AI on this computer. Nothing leaves
-   it." The AI-outputs disclaimer in plain words, once. Continue.
-2. **Your login.** Operator password (passkey later). No email, no
-   account anywhere else.
-3. **This computer.** The probe as a card in the person's words
-   ("Apple silicon Mac, 24 GB of memory, 153 GB free", never
-   `darwin arm64`), and one line: "Ready. Let's set up your AI."
+The script puts the Stack under the person's home folder, registers
+it with launchd so it starts at login, starts it, and opens the
+browser on the board. Under a minute. The same script updates an
+existing install. A downloadable app bundle with the menu-bar item is
+the second path, later; it runs the same steps.
 
-Then the board, ours, with one card on top: **Set up your AI.**
+**The first screen is the full app.** No modal, no steps. The board:
 
-**The sizer, one screen.** The proposed plan for this machine in the
-person's words (the tier label), a "Change" list of the four tiers,
-each saying what it can and cannot do, and two buttons:
+- **This computer**, measured automatically and said in plain words
+  ("Apple silicon Mac, 24 GB of memory, 153 GB free"), with the plan
+  this machine can run and a "Change" link.
+- **Add abilities**: cards for Chat, Voice, Pictures, Video and Music,
+  each with its size, "can run" or "not on this computer", and an
+  Install button; a "Start small" suggestion preselected (a fast chat
+  model plus small voice in and out, about 1 GB) so one click starts a
+  conversation within minutes. Model names sit behind a "details"
+  disclosure for tinkerers.
+- **Downloads** as a background job with the honest bar (size, speed,
+  time left, pause, resume, source and licence in one line) and the
+  sentence "This is your internet speed. The Stack is ready; your
+  bigger model is on its way." A notification when a row lands.
+- The status strip, notifications and Repairs as before, empty and
+  calm on a fresh install.
+- A one-line note the first time, dismissible: "MaiPai Stack runs AI
+  on this computer. Nothing leaves it. The AI can be wrong, and it is
+  never medical, legal, or professional advice."
 
-- **Start small now**: a fast chat model plus small voice in and out,
-  about 1 GB, one to three minutes on ordinary broadband. The person
-  is talking to their own AI before the full plan arrives.
-- **Get the full plan**: queued behind the small set.
+**No login until it matters.** On this computer, on loopback, the
+board opens without a password (Ollama has none either). The first
+time the person creates a client key for a tool, or switches on LAN
+access, the Stack asks them to set the operator password once, right
+there, and the admin routes require it from then on. The adult
+acknowledgment stays as one dialog before the first picture or video,
+never a step.
 
-**Downloads are a background job with an honest bar**: one row per
-model and engine with size, speed, time left, pause and resume, where
-it comes from and its licence in one line, and one sentence that
-separates us from the network: "This is your internet speed. The
-Stack is ready; your bigger model is on its way." A notification when
-it lands. If a download fails, the row says why in words ("The
-internet dropped. Downloads resume when it is back.") and nothing
-else stops.
-
-**The feature selector is abilities, not models**: chat, voice,
-pictures, video, music, each with its size and whether this machine
-can run it, defaults from the tier; anything can be added later from
-the board. Model names sit behind a "details" disclosure for
-tinkerers.
-
-**Try it** opens the moment the small model lands, so the first
-impression is a conversation, not a progress bar.
+**Try it** appears on the board the moment the small set lands, so
+the first thing the person does with the Stack is talk to it.
 
 ## The board
 
