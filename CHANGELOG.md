@@ -24,3 +24,5 @@ the product passes its battle-tested checklist in `docs/dev.md`.
   the backlog.
 - The generated API document (`docs/api/openapi.json`) and its drift check
   in the gate, with the API reference wired into the docs site.
+- The "What your computer can run" page
+  (`docs/user/what-your-computer-can-run.md`).

@@ -8,3 +8,16 @@ here. Each is fetched from its pinned upstream URL, checksum verified,
 and used under its own licence, which the Stack records with the
 download and shows before selection. Attributions for anything this
 repo redistributes are listed here as they are added.
+
+- hono (MIT) - https://hono.dev (the backend HTTP framework)
+- @hono/zod-openapi (MIT) - https://github.com/honojs/middleware (OpenAPI schemas for the backend routes)
+- @scalar/hono-api-reference (MIT) - https://github.com/scalar/scalar (the in-browser API reference for the backend)
+- zod (MIT) - https://zod.dev (schema validation for the backend routes)
+- drizzle-orm (Apache-2.0) - https://orm.drizzle.team (the backend database layer)
+- drizzle-kit (MIT) - https://orm.drizzle.team (generating the backend database schema)
+- typescript (Apache-2.0) - https://www.typescriptlang.org/ (the backend language)
+- @types/bun (MIT) - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/bun (type definitions for the backend)
+- astro (MIT) - https://astro.build (the docs site)
+- @astrojs/starlight (MIT) - https://starlight.astro.build (the docs site theme)
+- starlight-openapi (MIT) - https://github.com/HiDeoo/starlight-openapi (the docs site API reference)
+- sharp (Apache-2.0) - https://sharp.pixelplumbing.com (image processing for the docs site)
