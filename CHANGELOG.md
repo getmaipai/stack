@@ -9,6 +9,7 @@ the product passes its battle-tested checklist in `docs/dev.md`.
 
 ### Added
 
+- The event feed (`/stack/v1/events`, SSE with replay), the durable notification center, Repairs with one action each, and rotating redacted logs per engine.
 - The hardware probe, profile tiers, and `/stack/v1/hardware` route.
 - The pinned engine catalog, verified archive downloader, installer, and engine listing route.
 - The model provenance store with Catalog and Hugging Face install paths and verified role selection.

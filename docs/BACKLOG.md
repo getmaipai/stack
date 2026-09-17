@@ -79,10 +79,10 @@ never copied. No item migrates the hub until STACK-16.
   pattern. Acceptance: a revoked key is refused within one request; the
   key never appears in a log or a response after creation (test). Verified
   at <hash>.
-- [ ] **STACK-09 (M): events and notifications.** The SSE feed with the
+- [x] **STACK-09 (M): events and notifications.** The SSE feed with the
   typed events in `dev.md`; the Notifications page; the Repairs list.
   Acceptance: an engine crash produces `engine.state` and a Repairs row
-  with one action (test); Home's bridge shape documented in the API.
+  with one action (test); Home's bridge shape documented in the API. Verified at dd781aa (the tick and the changelog line were added at landing; the lane's commit omitted them).
 - [ ] **STACK-10 (M): updates.** Opt-in check, download beside the
   current build, drain under the guard, swap, keep the old build, one-click
   rollback; for the Stack, engines and models. Per
