@@ -1,6 +1,7 @@
 import { ROLES, ROLE_IDS, type RoleId, type RoleState } from "@/roles";
 import { identityHeaders, installedEngineForMachine } from "@/lib/identity";
 import { getModel, isModelSelectable } from "@/lib/modelStore";
+import { getChatEngineStatus } from "@/lib/supervisor";
 
 export interface RoleResolution {
   role: RoleId;
@@ -35,11 +36,12 @@ export function resolveRole(modelField: string): RoleResolution {
     if (!isModelSelectable(model)) throw new UnverifiedModelError(modelField);
     const role = model.roles[0];
     if (!role || !ROLE_IDS.includes(role)) throw new UnknownRoleError(modelField);
-    return { role, state: installedEngineForMachine() ? "installed" : "notInstalled", binding: null };
+    return { role, state: role === "chat" ? getChatEngineStatus().state : installedEngineForMachine() ? "installed" : "notInstalled", binding: null };
   }
+  const state = modelField === "chat" ? getChatEngineStatus().state : installedEngineForMachine() ? "installed" : "notInstalled";
   return {
     role: modelField as RoleId,
-    state: installedEngineForMachine() ? "installed" : "notInstalled",
+    state,
     binding: null,
   };
 }

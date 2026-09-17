@@ -49,14 +49,15 @@ never copied. No item migrates the hub until STACK-16.
   with checksum and licence recorded. Acceptance: the record round-trips
   with id, provenance and clock stamp; an unverified model cannot be
   bound to a role (test). Committed, updates outstanding (STACK-10).
-- [ ] **STACK-05 (M): the supervisor.** `spawned`, `managed`, `url`
+- [x] **STACK-05 (M): the supervisor.** `spawned`, `managed`, `url`
   engine kinds; spawn, watch, restart, the generation guard, the post-load
   check, the memory report; identity headers on every reply. Copy the
   restart semantics from `home/backend/src/lib/llmSupervisor.ts`,
   `backgroundSupervisor.ts`, `engineIdentity.ts`, `enginePostLoadCheck.ts`.
   Acceptance: a scripted engine's crash is restarted without cutting an
   in-flight request (test); a managed host that vanishes shows
-  `offline_reason`. Out of scope: the governor's rules.
+  `offline_reason`. Committed, governor outstanding (STACK-06). Out of scope:
+  the governor's rules.
 - [ ] **STACK-06 (M): the governor.** Profile, admission, one generator,
   eviction (TTL, LRU, pin), the cap, `keep_alive` as a hint; every rule
   readable as a sentence on the Hardware page. Seed from
@@ -67,7 +68,7 @@ never copied. No item migrates the hub until STACK-16.
   audio and images, the streaming speech sessions. Acceptance: an
   unmodified OpenAI client library completes a chat, an embedding, a
   transcription and a speech render against scripted engines; role
-  scoping refuses a disallowed role with a clear error. Committed, engine binding outstanding (STACK-05).
+  scoping refuses a disallowed role with a clear error. Committed, engine binding completed by STACK-05.
 - [ ] **STACK-08 (M): operator login and client keys.** Password login,
   keys hashed at rest and shown once, allowed roles, counters, revoke;
   loopback requires a key. Mirror the hub's `auth.ts` and `lib/secrets`

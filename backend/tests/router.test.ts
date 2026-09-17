@@ -6,7 +6,7 @@ test("a role name resolves without a binding", () => {
   const result = resolveRole("chat");
   expect(result.role).toBe("chat");
   expect(result.binding).toBeNull();
-  expect(["notInstalled", "installed"]).toContain(result.state);
+  expect(["notInstalled", "installed", "loading", "ready", "busy", "stopped", "offline"]).toContain(result.state);
 });
 
 test("an unknown role or model is rejected with the declared roles", async () => {

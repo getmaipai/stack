@@ -4,6 +4,8 @@ import { apiRouter } from "@/lib/openapi";
 import { identityHeaders } from "@/lib/identity";
 import { noEngineResponse, resolveRole, UnknownRoleError } from "@/lib/router";
 import { ROLE_IDS } from "@/roles";
+import { ROLES } from "@/roles";
+import { completeChat, EngineUnavailableError } from "@/lib/supervisor";
 
 const MessageSchema = z.object({ role: z.string(), content: z.unknown() }).passthrough();
 const ChatRequestSchema = z.object({
@@ -28,12 +30,24 @@ const inferenceResponses = {
   503: { content: { "application/json": { schema: NoEngineSchema } }, description: "No engine is bound to the role." },
 } as const;
 
-function inferenceReply<T extends Context>(c: T, model: string) {
+async function inferenceReply<T extends Context>(c: T, model: string, body: Record<string, unknown>, chat = false) {
   try {
     const resolution = resolveRole(model);
+    const definition = ROLES[resolution.role];
+    const sharesChat = "sharesModelWith" in definition && definition.sharesModelWith === "chat";
+    if (chat && (resolution.role === "chat" || sharesChat)) {
+      const result = await completeChat(model, body);
+      for (const [name, value] of Object.entries(result.headers)) c.header(name, value);
+      return c.json(result.body as never, result.status as never);
+    }
     const result = noEngineResponse(resolution.role);
     return jsonReply(c, result.body, result.status, result.headers);
   } catch (error) {
+    if (error instanceof EngineUnavailableError) {
+      const reason = error.reason;
+      const result = noEngineResponse("chat");
+      return jsonReply(c, { ...result.body, state: "offline", offline_reason: reason }, result.status, result.headers);
+    }
     const message = error instanceof UnknownRoleError ? error.message : "Unknown role or model.";
     return jsonReply(c, { error: message, roles: ROLE_IDS }, 400, identityHeaders(null));
   }
@@ -51,8 +65,8 @@ const speechRoute = createRoute({ method: "post", path: "/audio/speech", tags: [
 const imagesRoute = createRoute({ method: "post", path: "/images/generations", tags: ["Inference"], request: { body: { content: { "application/json": { schema: ImageRequestSchema } } } }, responses: inferenceResponses });
 
 export const inferenceRoutes = apiRouter();
-inferenceRoutes.openapi(chatRoute, (c) => inferenceReply(c, c.req.valid("json").model));
-inferenceRoutes.openapi(embeddingsRoute, (c) => inferenceReply(c, c.req.valid("json").model));
-inferenceRoutes.openapi(transcriptionsRoute, (c) => inferenceReply(c, c.req.valid("json").model));
-inferenceRoutes.openapi(speechRoute, (c) => inferenceReply(c, c.req.valid("json").model));
-inferenceRoutes.openapi(imagesRoute, (c) => inferenceReply(c, c.req.valid("json").model));
+inferenceRoutes.openapi(chatRoute, (c) => inferenceReply(c, c.req.valid("json").model, c.req.valid("json"), true));
+inferenceRoutes.openapi(embeddingsRoute, (c) => inferenceReply(c, c.req.valid("json").model, c.req.valid("json")));
+inferenceRoutes.openapi(transcriptionsRoute, (c) => inferenceReply(c, c.req.valid("json").model, c.req.valid("json")));
+inferenceRoutes.openapi(speechRoute, (c) => inferenceReply(c, c.req.valid("json").model, c.req.valid("json")));
+inferenceRoutes.openapi(imagesRoute, (c) => inferenceReply(c, c.req.valid("json").model, c.req.valid("json")));
