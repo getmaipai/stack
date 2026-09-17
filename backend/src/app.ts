@@ -2,6 +2,7 @@ import { apiReference } from "@scalar/hono-api-reference";
 import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@/lib/openapi";
 import { hardwareRoutes } from "@/routes/hardware";
+import { enginesRoutes } from "@/routes/engines";
 import packageJson from "../../package.json";
 
 export const version = packageJson.version;
@@ -36,3 +37,4 @@ app.doc("/api/openapi.json", {
 });
 app.get("/api/docs", apiReference({ url: "/api/openapi.json" }));
 app.route("/stack/v1/hardware", hardwareRoutes);
+app.route("/stack/v1/engines", enginesRoutes);

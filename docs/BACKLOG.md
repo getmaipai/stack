@@ -36,13 +36,13 @@ never copied. No item migrates the hub until STACK-16.
   Acceptance: `GET /stack/v1/hardware` on the dev Mac reports real values;
   a unit test for each tier's proposal from a scripted probe. Verified at fffabe5. Out of
   scope: the bench.
-- [ ] **STACK-03 (M): engine catalog and downloads.** Pinned builds per
+- [x] **STACK-03 (M): engine catalog and downloads.** Pinned builds per
   platform (version, URL, sha256 recorded here), resumable checksummed
   downloads with a clear offline failure. Copy the hard-won parts of
   `home/backend/src/lib/engineCatalog.ts`, `modelDownload.ts`,
   `modelDownloadJobs.ts`. Acceptance: `llama-server` for macOS arm64
   downloads, verifies and runs `--version`; a test proves a checksum
-  mismatch refuses the build. Out of scope: spawning.
+  mismatch refuses the build. Verified at 1c6d0aa. Out of scope: spawning.
 - [ ] **STACK-04 (M): the model store and provenance.** The model record
   (`dev.md`, "The model store and provenance"); install from a Catalog
   `model` package and from a Hugging Face repo; a model is selectable only
