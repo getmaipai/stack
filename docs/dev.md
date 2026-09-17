@@ -373,8 +373,8 @@ people, consent, packages, and everything a person can see.
 
 1. **Name.** `stack` and "MaiPai Stack" are assumed; "Station" was the
    runner-up. Renaming costs nothing before the remote exists.
-2. **Logo.** The brand set has no Stack mark yet; the README uses the
-   MaiPai brand logo until one exists.
+2. **Logo.** Done 2026-09-17: `maipai-stack-{icon,logo}-{light,dark}.png`
+   in `getmaipai/.github/brand/` (orange accent, three stacked layers).
 3. **Installer shape.** Recommended: Home's installer installs the Stack
    first and then itself; the Stack's own installer stands alone. Confirm.
 4. **Bot's split.** Recommended: wake word and voice activity stay in the
