@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { PROFILE_TIERS, proposeProfile, type RoleId } from "@/profiles";
+import { PROFILE_TIERS, proposeProfile } from "@/profiles";
+import type { RoleId } from "@/roles";
 import type { HardwareInfo } from "@/lib/hardware";
 
 function hw(overrides: Partial<HardwareInfo>): HardwareInfo {
@@ -41,7 +42,7 @@ test("does not propose a profile for CPU-only hardware", () => {
 test("each tier's role lists are disjoint and cover every role", () => {
   const roles: RoleId[] = ["chat", "coding", "judge", "router", "embed", "rerank", "vision", "stt", "tts", "wakeword", "image", "video", "music"];
   for (const tier of PROFILE_TIERS) {
-    const all = [...tier.resident, ...tier.onDemand, ...tier.notAvailable];
+    const all = [...tier.resident, ...tier.onDemand, ...tier.installedOnly, ...tier.notAvailable];
     expect(new Set(all).size).toBe(all.length);
     expect(new Set(all)).toEqual(new Set(roles));
   }

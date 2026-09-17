@@ -1,12 +1,12 @@
 import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { ENGINE_READY_MARKER, type EngineArchive, type EngineBinaryPin } from "@/lib/engineCatalog";
 import { extractArchive } from "@/lib/archive";
 import { downloadUrl } from "@/lib/download";
 import { dataDir } from "@/lib/paths";
 
 export function engineDir(id: string): string {
-  return join(process.env.STACK_DATA_DIR ?? dataDir, "engines", id);
+  return join(resolve(process.env.STACK_DATA_DIR ?? dataDir), "engines", id);
 }
 
 export function engineBinaryPath(pin: EngineBinaryPin): string {

@@ -29,6 +29,7 @@ const ProfileTierSchema = z.object({
   minVramGb: z.number(),
   resident: z.array(RoleIdSchema),
   onDemand: z.array(RoleIdSchema),
+  installedOnly: z.array(RoleIdSchema),
   notAvailable: z.array(RoleIdSchema),
 });
 

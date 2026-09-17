@@ -1,8 +1,8 @@
 import type { HardwareInfo } from "@/lib/hardware";
 import { primaryBudgetBytes } from "@/lib/hardware";
+import type { RoleId } from "@/roles";
 
-// codexhigh-03 moves this union to roles.ts when the role declaration lands.
-export type RoleId = "chat" | "coding" | "judge" | "router" | "embed" | "rerank" | "vision" | "stt" | "tts" | "wakeword" | "image" | "video" | "music";
+export type { RoleId } from "@/roles";
 
 export interface ProfileTier {
   id: "p16" | "p32" | "p64" | "p128";
@@ -11,6 +11,7 @@ export interface ProfileTier {
   minVramGb: number;
   resident: RoleId[];
   onDemand: RoleId[];
+  installedOnly: RoleId[];
   notAvailable: RoleId[];
 }
 
@@ -20,36 +21,40 @@ export const PROFILE_TIERS: ProfileTier[] = [
     label: "This computer can run chat and voice, with embeddings when needed. Pictures, video, and music are not available.",
     minUnifiedGb: 16,
     minVramGb: 8,
-    resident: ["chat", "stt", "tts"],
+    resident: ["chat", "judge", "router", "stt", "tts"],
     onDemand: ["embed"],
-    notAvailable: ["coding", "judge", "router", "rerank", "vision", "wakeword", "image", "video", "music"],
+    installedOnly: ["wakeword"],
+    notAvailable: ["coding", "rerank", "vision", "image", "video", "music"],
   },
   {
     id: "p32",
     label: "This computer can run chat, voice, and embeddings, with the judge when needed. Generators are not available.",
     minUnifiedGb: 32,
     minVramGb: 16,
-    resident: ["chat", "embed", "stt", "tts"],
-    onDemand: ["judge"],
-    notAvailable: ["coding", "router", "rerank", "vision", "wakeword", "image", "video", "music"],
+    resident: ["chat", "judge", "router", "embed", "stt", "tts"],
+    onDemand: ["rerank"],
+    installedOnly: ["wakeword"],
+    notAvailable: ["coding", "vision", "image", "video", "music"],
   },
   {
     id: "p64",
     label: "This computer can run chat, voice, and embeddings, plus one picture job at a time. Video and music are not available.",
     minUnifiedGb: 64,
     minVramGb: 24,
-    resident: ["chat", "judge", "embed", "stt", "tts"],
+    resident: ["chat", "judge", "router", "embed", "rerank", "stt", "tts"],
     onDemand: ["image"],
-    notAvailable: ["coding", "router", "rerank", "vision", "wakeword", "video", "music"],
+    installedOnly: ["wakeword"],
+    notAvailable: ["coding", "vision", "video", "music"],
   },
   {
     id: "p128",
     label: "This computer can run chat, voice, embeddings, coding, and one picture, video, or music job at a time.",
     minUnifiedGb: 128,
     minVramGb: 48,
-    resident: ["chat", "judge", "embed", "stt", "tts"],
+    resident: ["chat", "judge", "router", "embed", "rerank", "stt", "tts"],
     onDemand: ["coding", "vision", "image", "video", "music"],
-    notAvailable: ["router", "rerank", "wakeword"],
+    installedOnly: ["wakeword"],
+    notAvailable: [],
   },
 ];
 

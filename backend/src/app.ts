@@ -3,6 +3,8 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@/lib/openapi";
 import { hardwareRoutes } from "@/routes/hardware";
 import { enginesRoutes } from "@/routes/engines";
+import { rolesRoutes } from "@/routes/roles";
+import { inferenceRoutes } from "@/routes/inference";
 import packageJson from "../../package.json";
 
 export const version = packageJson.version;
@@ -38,3 +40,5 @@ app.doc("/api/openapi.json", {
 app.get("/api/docs", apiReference({ url: "/api/openapi.json" }));
 app.route("/stack/v1/hardware", hardwareRoutes);
 app.route("/stack/v1/engines", enginesRoutes);
+app.route("/stack/v1/roles", rolesRoutes);
+app.route("/v1", inferenceRoutes);

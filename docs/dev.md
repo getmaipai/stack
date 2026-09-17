@@ -183,6 +183,57 @@ build answered), `x-maipai-model` and `x-maipai-revision`. This is the
 hub's `engineIdentity` check promoted to a contract: a client can always
 prove who answered.
 
+## Roles and the wire contract (STACK-07, 2026-09-17)
+
+The role declaration is one `ROLES` constant in `backend/src/roles.ts`,
+keyed by the thirteen `RoleId` values above. Each entry declares its wire
+kind (`chat`, `embeddings`, `rerank`, `transcription`, `speech`, or
+`job`), residency (`resident`, `jit`, or `installed`), the OpenAI-shaped
+paths it answers, its supported quality choices, and one sentence for its
+board tile. `router` and `judge` are distinct roles because they have
+different policy and telemetry even when they use the same engine model;
+both declare `sharesModelWith: "chat"` by default. This keeps the role
+table honest and lets a later supervisor bind them separately without
+making clients learn an implementation detail.
+
+The request `model` field accepts either a role id such as `chat` or a
+concrete installed model id. A role name is the default because existing
+OpenAI client libraries already send `model` and need no MaiPai header,
+custom SDK, or per-role path. The router resolves that name to a role,
+then to its binding. Headers and per-role paths were rejected because a
+header is easy for generic clients to drop and a path duplicates the wire
+contract that the role already declares.
+
+Role state is one enum: `notInstalled`, `installed`, `loading`, `ready`,
+`busy`, `stopped`, or `offline`, with a reason alongside `stopped` and
+`offline`. A `spawned` engine moves through installed, loading, ready and
+busy, then stopped or offline on an operator stop or failed health check.
+A `managed` engine starts at installed or ready after a probe and becomes
+offline with the probe reason when it vanishes. A `url` engine uses the
+same installed, ready, busy and offline states, but the Stack never starts
+or stops it. The board, event feed, and `GET /stack/v1/roles` use this one
+state vocabulary.
+
+Every engine-produced reply carries `x-maipai-engine`,
+`x-maipai-model`, and `x-maipai-revision`. These promote Home's
+`EngineIdentity` into a cross-product wire contract: `host` maps to the
+engine header, the model file name maps to the model header, and
+`build` maps to the revision header. If no engine answered, all three are
+`none`, including on a 503. An unbound role is never a 404. It returns 503
+with `{ error, role, state, offline_reason }` so a client can explain the
+actual reason and retry when the state changes. An unknown role or model is
+400 and includes the declared role ids.
+
+The profile tiers from STACK-02 are reconciled here. `router` and `judge`
+share `chat`'s model, so they are available wherever chat is. `rerank` is
+on demand on p32 and resident-small on p64 and p128. `wakeword` is an
+installed-only model for a body process and is not loaded by the Stack.
+The four profile lists are therefore `resident`, `onDemand`,
+`installedOnly`, and `notAvailable`, which remain disjoint and cover every
+role. The declaration and the router are intentionally limited to
+selection, state, and the no-engine response. Engine binding, streaming,
+jobs, and keys belong to later items.
+
 ### Engines and the supervisor
 
 An engine entry in the engine catalog is one of three kinds, taken

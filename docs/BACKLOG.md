@@ -62,12 +62,12 @@ never copied. No item migrates the hub until STACK-16.
   readable as a sentence on the Hardware page. Seed from
   `home/backend/src/lib/resourceGovernor.ts`. Acceptance: a test per
   rule with scripted memory readings; a queued job reports its position.
-- [ ] **STACK-07 (M): roles and the router.** The role declaration, role
+- [x] **STACK-07 (M): roles and the router.** The role declaration, role
   by name in `model`, the OpenAI-shaped endpoints for text, embeddings,
   audio and images, the streaming speech sessions. Acceptance: an
   unmodified OpenAI client library completes a chat, an embedding, a
   transcription and a speech render against scripted engines; role
-  scoping refuses a disallowed role with a clear error.
+  scoping refuses a disallowed role with a clear error. Committed, engine binding outstanding (STACK-05).
 - [ ] **STACK-08 (M): operator login and client keys.** Password login,
   keys hashed at rest and shown once, allowed roles, counters, revoke;
   loopback requires a key. Mirror the hub's `auth.ts` and `lib/secrets`
