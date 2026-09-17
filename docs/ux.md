@@ -85,14 +85,18 @@ applied to the whole shell): a left sidebar collapsible to icons, a
 slim top bar, the page; its section cards become the status strip,
 its area chart Monitoring's memory over time, its data table the
 Models, Engines and notification tables. Nothing of the block's demo
-content survives. The top bar carries the machine
-in plain words ("Apple silicon Mac, 24 GB"), a search field that is
-also the command palette (the kit's `command` primitive, opened with
-the slash key or Command-K: pages, models, engines, settings, and
-actions like "pause everything" or "check for updates"), the health
-badge (count and worst severity), and the "Share with your family"
-hand-off until Home is installed. Phone width collapses the sidebar
-into a sheet.
+content survives. The top bar carries the page
+title, a search field that is also the command palette (the kit's
+`command` primitive, opened with the slash key or Command-K: pages,
+models, engines, settings, and actions like "pause everything" or
+"check for updates"), one primary "Try it" button (the single quick
+action; everything else lives in the palette), the notification bell
+with its unread count and a popover with clear all, and the profile
+menu (the operator's state, set a password, sign out, Access, the API
+docs). System health lives at the bottom of the sidebar as a colored
+dot and one sentence, the dot alone when collapsed; the "Share with
+your family" hand-off card sits above it until Home is installed.
+Phone width collapses the sidebar into a sheet.
 
 **Sections, in sidebar order:**
 
