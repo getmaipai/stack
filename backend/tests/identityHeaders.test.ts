@@ -1,7 +1,20 @@
-import { expect, test } from "bun:test";
-import { app } from "@/app";
-import { testClientHeaders } from "./authTest";
-import { registerCatalogModel } from "@/lib/modelStore";
+import { afterAll, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+const originalDataDir = process.env.STACK_DATA_DIR;
+const testDataDir = mkdtempSync(join(tmpdir(), "maipai-stack-identity-headers-"));
+process.env.STACK_DATA_DIR = testDataDir;
+const { app } = await import("@/app");
+const { testClientHeaders } = await import("./authTest");
+const { registerCatalogModel } = await import("@/lib/modelStore");
+
+afterAll(() => {
+  if (originalDataDir === undefined) delete process.env.STACK_DATA_DIR;
+  else process.env.STACK_DATA_DIR = originalDataDir;
+  rmSync(testDataDir, { recursive: true, force: true });
+});
 
 const bodies: Record<string, Record<string, unknown>> = {
   "/v1/chat/completions": { model: "chat", messages: [] },
@@ -53,8 +66,16 @@ test("streaming chat carries identity headers when no engine answers", async () 
     headers: { ...testClientHeaders, "content-type": "application/json" },
     body: JSON.stringify({ model: "chat", messages: [], stream: true }),
   });
+  const plain = await app.request("/v1/chat/completions", {
+    method: "POST",
+    headers: { ...testClientHeaders, "content-type": "application/json" },
+    body: JSON.stringify({ model: "chat", messages: [] }),
+  });
   expect(response.status).toBe(503);
-  expect((await response.json() as { offline_reason: string }).offline_reason).toContain("No verified");
+  const streamingReason = (await response.json() as { offline_reason: string }).offline_reason;
+  expect(typeof streamingReason).toBe("string");
+  expect(streamingReason.length).toBeGreaterThan(0);
+  expect(streamingReason).toBe((await plain.json() as { offline_reason: string }).offline_reason);
   expect(response.headers.get("x-maipai-engine")).toBe("none");
   expect(response.headers.get("x-maipai-model")).toBe("none");
   expect(response.headers.get("x-maipai-revision")).toBe("none");
