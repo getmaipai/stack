@@ -83,7 +83,7 @@ never copied. No item migrates the hub until STACK-16.
   typed events in `dev.md`; the Notifications page; the Repairs list.
   Acceptance: an engine crash produces `engine.state` and a Repairs row
   with one action (test); Home's bridge shape documented in the API. Verified at dd781aa (the tick and the changelog line were added at landing; the lane's commit omitted them).
-- [ ] **STACK-10 (M): updates.** Opt-in check, download beside the
+- [ ] **STACK-10 (M): updates.** Superseded by the survey's shape in milestone 0b below. Opt-in check, download beside the
   current build, drain under the guard, swap, keep the old build, one-click
   rollback; for the Stack, engines and models. Per
   `getmaipai/.github/docs/UPDATES.md`. Acceptance: an update and a
@@ -120,6 +120,69 @@ never copied. No item migrates the hub until STACK-16.
   and deletes its own supervisors. Lands in the `home` repo as its own
   items after STACK-14 proves the Studio profile. Needs its design pass
   in `home/docs/dev.md` first.
+
+## Milestone 0b: what the field survey changed (2026-09-17)
+
+Decided in [`plans/operations-design-2026-09-17.md`](plans/operations-design-2026-09-17.md);
+each item's design section lands in `dev.md` before its code.
+
+- [ ] **STACK-07b (M): streaming.** `stream: true` on `/v1/chat/completions`
+  proxies the engine's SSE token stream with the identity headers on
+  the response, cancellation on client disconnect, and the
+  phrase-level TTS stream for `/v1/audio/speech`. Files: `backend/src/lib/supervisor.ts`,
+  `routes/inference.ts`. Acceptance: an unmodified OpenAI client
+  receives streamed deltas from a scripted engine; disconnect aborts
+  the engine request without retiring the backend (test). Exit:
+  `bash scripts/check.sh`.
+- [ ] **STACK-06b (M): the governor reads the kernel's ledger.** A
+  `bun:ffi` memory reader (`kern.memorystatus_level`,
+  `kern.memorystatus_vm_pressure_level`, `host_statistics64`,
+  `proc_pid_rusage` phys_footprint) with Linux and Windows twins
+  behind one interface; soft and hard watermarks; the dry-run
+  measurement path (`llama-fit-params` for GGUF) and the measured
+  footprint stored per model and context; `os.freemem()` removed.
+  Acceptance: on this Mac the reader's free percent matches
+  `memory_pressure` within one point (pasted); watermark tests with
+  scripted readings; a model's badge shows a dry-run number. Exit:
+  `bash scripts/check.sh`.
+- [ ] **STACK-04b (L): the store layout, import, remove.** Models in
+  the Hugging Face cache layout under `data/models/hub`; engines as
+  `data/engines/<name>/<tag>/` with a manifest and a `current` link;
+  the import scan of other tools' directories with links, never
+  copies; ranged parallel downloads with per-part resume and a
+  full-file hash; reference-counted remove with a one-hour prune
+  grace. Design section first. Acceptance: a model in a temp
+  `HF_HUB_CACHE` is imported by link and served; a blob shared by two
+  manifests survives one remove; the tests from STACK-03 and -04
+  still pass. Exit: `bash scripts/check.sh`.
+- [ ] **STACK-09b (M): one health list.** Health items (code, severity,
+  title, text, since, cause, one fix, learn-more), keyed and
+  idempotent, `GET /stack/v1/health`, `health.changed` on the feed;
+  Repairs become health items with a fix; the board renders the HA
+  shape. Acceptance: raising a code twice yields one item; resolving
+  removes it; the enumeration of every producer (supervisor,
+  governor, model store, updates) with its test. Exit:
+  `bash scripts/check.sh`.
+- [ ] **STACK-09c (M): alert channels.** `{type, name, config,
+  verifiedAt}` in a registry, Telegram and ntfy providers, "Send a
+  test" returning the provider's error, an unverified channel is a
+  warning item, a privacy-page row per channel type. Acceptance: a
+  scripted provider receives the test and the verified stamp lands;
+  the privacy page lists both. Exit: `bash scripts/check.sh`.
+- [ ] **STACK-10 (M): updates** (moved here from milestone 0 with the
+  survey's shape): three hosted manifests, opt-in check offered once
+  on the second launch with only `If-None-Match` and a user agent
+  sent, engines pinned by `bNNNN` resolved through `nightly-tag.txt`
+  and cross-checked against GitHub's asset digest, drain and swap
+  with automatic rollback on a failed post-swap check, keep-previous
+  directories, the weekly model-revision watch, the page's API.
+  Acceptance: an update and a rollback of a scripted engine with no
+  request cut (test); the check's request has exactly the two headers
+  (test); the privacy page lists the URLs. Exit: `bash scripts/check.sh`.
+- [ ] **STACK-12 (M): Try it** is built on the `assistant-ui` thread
+  component from the packaged kit (KIT-01), stateless, against the
+  Stack's own `/v1` routes; the Speak and Listen tabs on the shared
+  mic and playback primitives.
 
 ## Milestone 1: the robot
 
