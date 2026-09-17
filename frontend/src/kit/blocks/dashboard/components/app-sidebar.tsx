@@ -15,7 +15,7 @@ const items = [
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const location = useLocation();
-  return <Sidebar collapsible="offcanvas" {...props}>
+  return <Sidebar collapsible="icon" {...props}>
     <SidebarHeader><SidebarMenu><SidebarMenuItem><SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:p-1.5!">
       <Link to="/"><img className="size-7" src="/brand/maipai-stack-icon-light.png" alt="" /><span className="text-base font-semibold">MaiPai Stack</span></Link>
     </SidebarMenuButton></SidebarMenuItem></SidebarMenu></SidebarHeader>

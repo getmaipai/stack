@@ -17,6 +17,26 @@ test("the Stack shell lists every section in order", () => {
   expect(text).toContain("Updates are checked on request");
 });
 
+test("the collapsed rail keeps every section and carries a tooltip on each button", () => {
+  render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
+  const trigger = document.querySelector('[data-sidebar="trigger"]') ?? document.querySelector("button[aria-label*='sidebar']") ?? document.querySelector("button[aria-label*='menu']");
+  if (!trigger) throw new Error("no sidebar trigger found");
+  fireEvent.click(trigger);
+  const buttons = Array.from(document.querySelectorAll('[data-slot="sidebar-menu-button"]'));
+  const sections = ["Overview", "Abilities", "Models", "Engines", "Monitoring", "Alerts", "Updates", "Backups", "Access", "Try it", "Settings"];
+  const text = document.body.textContent ?? "";
+  for (const title of sections) {
+    expect(text).toContain(title);
+  }
+  for (const button of buttons) {
+    const link = button.querySelector("a");
+    const text = link?.textContent?.trim() ?? "";
+    if (sections.includes(text)) {
+      expect(button.innerHTML).toContain(text);
+    }
+  }
+});
+
 test("command palette opens from both shortcuts and jumps to Models", async () => {
   render(<MemoryRouter initialEntries={["/updates"]}><DashboardShell /></MemoryRouter>);
   globalThis.fetch = mock(() => Promise.resolve(Response.json({ roles: [] }))) as unknown as typeof fetch;
