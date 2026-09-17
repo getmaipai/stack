@@ -30,6 +30,8 @@ the product passes its battle-tested checklist in `docs/dev.md`.
   routes for the Stack API.
 - The memory governor's admission, queue, eviction, cap and budget status
   route.
+- The "Keys for your tools" user page
+  (`docs/user/keys-for-your-tools.md`).
 
 ### Security
 

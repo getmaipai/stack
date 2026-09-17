@@ -25,4 +25,10 @@ A red tile means one job has stopped, and the row under it says why in words.
 2. If the page still will not open, check that no other app is using the same port.
 3. If it still will not open, the page is on this computer only. Make sure you are on the same computer that runs the Stack.
 
+## If a tool says it is not allowed
+
+1. Check that the key is not revoked. A revoked key is refused every time the tool tries to use it.
+2. Check that the ability the tool asked for is included in the key. If the tool asked for pictures and the key only allows chat, that is why it was refused.
+3. Make a new key with the abilities the tool needs, and give the tool the new key.
+
 Still need help? Open the Stack, choose Settings, and check "Check for updates" is switched off if you want nothing to leave at all. The Stack keeps working without it.
