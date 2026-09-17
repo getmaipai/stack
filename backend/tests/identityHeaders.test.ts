@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { app } from "@/app";
 import { testClientHeaders } from "./authTest";
+import { registerCatalogModel } from "@/lib/modelStore";
 
 const bodies: Record<string, Record<string, unknown>> = {
   "/v1/chat/completions": { model: "chat", messages: [] },
@@ -32,4 +33,27 @@ test("every OpenAI route carries identity headers when no engine answers", async
   expect(unauthenticated.headers.get("x-maipai-engine")).toBe("none");
   expect(unauthenticated.headers.get("x-maipai-model")).toBe("none");
   expect(unauthenticated.headers.get("x-maipai-revision")).toBe("none");
+});
+
+test("an unverified model is a 409 with its missing provenance", async () => {
+  registerCatalogModel({ id: "unverified-review-model", role: "chat", license: "Apache-2.0", revision: "rev" });
+  const response = await app.request("/v1/chat/completions", {
+    method: "POST",
+    headers: { ...testClientHeaders, "content-type": "application/json" },
+    body: JSON.stringify({ model: "unverified-review-model", messages: [] }),
+  });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ model: "unverified-review-model", reason: "unverified" });
+  expect(response.headers.get("x-maipai-engine")).toBe("none");
+});
+
+test("streaming chat is refused honestly", async () => {
+  const response = await app.request("/v1/chat/completions", {
+    method: "POST",
+    headers: { ...testClientHeaders, "content-type": "application/json" },
+    body: JSON.stringify({ model: "chat", messages: [], stream: true }),
+  });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ error: "Streaming is not available yet", role: "chat" });
+  expect(response.headers.get("x-maipai-engine")).toBe("none");
 });

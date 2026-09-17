@@ -1,10 +1,10 @@
 import { eq } from "drizzle-orm";
 import { db, sqlite } from "@/db";
 import { models } from "@/db/schema";
-import { downloadUrl, type DownloadOptions } from "@/lib/download";
+import { downloadUrl, DownloadVerificationError, sha256OfFile, type DownloadOptions } from "@/lib/download";
 import { modelsDir } from "@/lib/paths";
 import type { RoleId } from "@/roles";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 
@@ -73,6 +73,16 @@ export interface HuggingFaceModelInput {
   engineRequirements?: Record<string, unknown>;
 }
 
+export class ProvenanceIncompleteError extends Error {
+  readonly missing: string[];
+
+  constructor(missing: string[]) {
+    super(`Model provenance is incomplete: missing ${missing.join(", ")}.`);
+    this.name = "ProvenanceIncompleteError";
+    this.missing = missing;
+  }
+}
+
 function json(value: unknown): string {
   return JSON.stringify(value);
 }
@@ -119,6 +129,7 @@ export function isModelSelectable(record: ModelRecord | null): boolean {
 
 export function upsertModel(input: ModelRecordInput, now = new Date().toISOString()): ModelRecord {
   const existing = getModel(input.id);
+  const carries = (field: keyof ModelRecordInput): boolean => Object.prototype.hasOwnProperty.call(input, field);
   const record: ModelRecord = {
     id: input.id,
     roles: input.roles,
@@ -129,11 +140,11 @@ export function upsertModel(input: ModelRecordInput, now = new Date().toISOStrin
     sizeBytes: input.sizeBytes ?? null,
     licence: input.licence ?? null,
     engineRequirements: input.engineRequirements ?? {},
-    installedAt: input.installedAt ?? null,
-    verifiedAt: input.verifiedAt ?? null,
+    installedAt: carries("installedAt") ? input.installedAt ?? null : existing?.installedAt ?? null,
+    verifiedAt: carries("verifiedAt") ? input.verifiedAt ?? null : existing?.verifiedAt ?? null,
     hostIdentity: input.hostIdentity ?? null,
     firstBootAt: existing?.firstBootAt ?? now,
-    modelPath: input.modelPath ?? null,
+    modelPath: carries("modelPath") ? input.modelPath ?? null : existing?.modelPath ?? null,
   };
   db.insert(models).values({
     id: record.id,
@@ -215,15 +226,28 @@ async function installRegisteredModel(
   download: { url: string; sha256: string; approx_bytes: number } | undefined,
   options: DownloadModelOptions,
 ): Promise<ModelRecord> {
-  if (!download?.sha256 || !record.licence) return record;
+  const missing = [
+    ...(!download?.sha256 || !record.sha256 ? ["sha256"] : []),
+    ...(!record.licence ? ["licence"] : []),
+  ];
+  if (missing.length > 0) throw new ProvenanceIncompleteError(missing);
+  const verifiedDownload = download!;
   const destination = options.destination;
   mkdirSync(join(destination, ".."), { recursive: true });
   const downloader = options.download ?? downloadUrl;
+  if (existsSync(destination)) {
+    const actual = await sha256OfFile(destination);
+    if (actual !== verifiedDownload.sha256.toLowerCase()) rmSync(destination, { force: true });
+  }
   const downloadOptions: DownloadOptions = {
-    expectedSha256: download.sha256,
-    ...(download.approx_bytes > 0 ? { expectedBytes: download.approx_bytes } : {}),
+    expectedSha256: verifiedDownload.sha256,
   };
-  await downloader(download.url, destination, downloadOptions);
+  await downloader(verifiedDownload.url, destination, downloadOptions);
+  const actual = await sha256OfFile(destination);
+  if (actual !== verifiedDownload.sha256.toLowerCase()) {
+    rmSync(destination, { force: true });
+    throw new DownloadVerificationError(`Model failed checksum verification`);
+  }
   const now = options.now?.() ?? new Date().toISOString();
   const current = getModel(record.id) ?? record;
   return upsertModel({

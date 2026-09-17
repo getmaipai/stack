@@ -400,6 +400,19 @@ data/
 Everything under `data/` is ignored by git and readable only by the
 service account. A copied `stack.db` holds no secret in plaintext.
 
+## Block B review, 2026-09-17
+
+1. Model re-registration preserves installed state: fixed at <hash>, test `re-registering an installed catalog model preserves its install`.
+2. Existing model files are hash-checked before verification: fixed at <hash>, tests `an incorrect existing model file is replaced and verified by hash` and `a corrupt downloaded model is never marked verified`.
+3. Spawned engine loading waits on liveness with a size-scaled timeout: fixed at <hash>, test `waitHealthy accepts a delayed loading response within the tuned timeout`.
+4. Streaming chat is refused with an honest 400: fixed at <hash>, test `streaming chat is refused honestly`.
+5. Living engine 5xx responses and cancellations do not retire the backend: fixed at <hash>, tests `a living engine's 500 is returned without retirement` and `an aborted completion is a cancellation and does not retire the engine`.
+6. Incomplete model provenance throws a typed error: fixed at <hash>, test `an incomplete Hugging Face provenance record throws before writing`.
+7. Post-load and completion calls have bounded timeouts: fixed at <hash>, test `post-load checks time out instead of hanging`.
+8. Spawned launches probe a free port and race process exit: fixed at <hash>, test `a free spawned port is selected before engine launch`.
+9. Unverified model ids return a 409 with missing fields: fixed at <hash>, test `an unverified model is a 409 with its missing provenance`.
+10. Model download size estimates are advisory while engine archive sizes stay strict: fixed at <hash>, test `a model size estimate is advisory when its hash matches`.
+
 ## Platform profiles
 
 | Platform | Engines | First customer |

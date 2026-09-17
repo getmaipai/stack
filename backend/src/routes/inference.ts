@@ -3,7 +3,7 @@ import type { Context } from "hono";
 import { apiRouter } from "@/lib/openapi";
 import { recordUsage, requireClient } from "@/lib/clients";
 import { identityHeaders } from "@/lib/identity";
-import { noEngineResponse, resolveRole, UnknownRoleError } from "@/lib/router";
+import { noEngineResponse, resolveRole, UnknownRoleError, UnverifiedModelError } from "@/lib/router";
 import { ROLE_IDS } from "@/roles";
 import { ROLES } from "@/roles";
 import { completeChat, EngineUnavailableError } from "@/lib/supervisor";
@@ -27,10 +27,13 @@ const NoEngineSchema = z.object({
   offline_reason: z.string(),
 });
 const RoleForbiddenSchema = z.object({ error: z.string(), role: z.string(), allowedRoles: z.array(z.string()) });
+const StreamingUnavailableSchema = z.object({ error: z.literal("Streaming is not available yet"), role: z.string() });
+const UnverifiedModelSchema = z.object({ error: z.string(), model: z.string(), reason: z.literal("unverified"), missing: z.array(z.string()) });
 const inferenceResponses = {
-  400: { content: { "application/json": { schema: UnknownModelSchema } }, description: "Unknown role or model." },
+  400: { content: { "application/json": { schema: z.union([UnknownModelSchema, StreamingUnavailableSchema]) } }, description: "Unknown role or unsupported streaming request." },
   401: { content: { "application/json": { schema: z.object({ error: z.string() }) } }, description: "A client key is required." },
   403: { content: { "application/json": { schema: RoleForbiddenSchema } }, description: "The client key is not scoped to this role." },
+  409: { content: { "application/json": { schema: UnverifiedModelSchema } }, description: "The model provenance is incomplete." },
   503: { content: { "application/json": { schema: NoEngineSchema } }, description: "No engine is bound to the role." },
 } as const;
 
@@ -40,6 +43,9 @@ async function inferenceReply<T extends Context>(c: T, model: string, body: Reco
     const client = c.var.client;
     if (!client.allowedRoles.includes(resolution.role)) {
       return jsonReply(c, { error: "Client is not allowed to use this role.", role: resolution.role, allowedRoles: client.allowedRoles }, 403, identityHeaders(null));
+    }
+    if (chat && body.stream === true) {
+      return jsonReply(c, { error: "Streaming is not available yet", role: resolution.role }, 400, identityHeaders(null));
     }
     const definition = ROLES[resolution.role];
     const sharesChat = "sharesModelWith" in definition && definition.sharesModelWith === "chat";
@@ -64,12 +70,15 @@ async function inferenceReply<T extends Context>(c: T, model: string, body: Reco
       const result = noEngineResponse("chat");
       return jsonReply(c, { ...result.body, state: "offline", offline_reason: reason }, result.status, result.headers);
     }
+    if (error instanceof UnverifiedModelError) {
+      return jsonReply(c, { error: error.message, model: error.modelId, reason: "unverified", missing: error.missing }, 409, identityHeaders(null));
+    }
     const message = error instanceof UnknownRoleError ? error.message : "Unknown role or model.";
     return jsonReply(c, { error: message, roles: ROLE_IDS }, 400, identityHeaders(null));
   }
 }
 
-function jsonReply<T extends Context>(c: T, body: unknown, status: 400 | 403 | 503, headers: Record<string, string>) {
+function jsonReply<T extends Context>(c: T, body: unknown, status: 400 | 403 | 409 | 503, headers: Record<string, string>) {
   for (const [name, value] of Object.entries(headers)) c.header(name, value);
   return c.json(body as never, status as never);
 }

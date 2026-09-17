@@ -1,9 +1,11 @@
 import { existsSync } from "node:fs";
+import { createServer } from "node:net";
 import { join } from "node:path";
 import { ENGINE_BINARIES, ENGINE_READY_MARKER } from "@/lib/engineCatalog";
 import { engineBinaryPath, engineDir } from "@/lib/engineInstall";
 import { identityHeaders, readEngineIdentity, type EngineIdentity } from "@/lib/identity";
 import { isModelSelectable, listModels, type ModelRecord } from "@/lib/modelStore";
+import { withTimeout } from "@/lib/withTimeout";
 import type { RoleState } from "@/roles";
 
 export type EngineKind = "spawned" | "managed" | "url";
@@ -74,6 +76,7 @@ class OpenAIEngineClient implements EngineClient {
         signal,
       });
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") throw error;
       throw new EngineUnavailableError(`Engine request failed: ${(error as Error).message}`);
     }
     const responseBody = await response.json().catch(() => ({ error: `Engine returned HTTP ${response.status}.` }));
@@ -88,6 +91,35 @@ class OpenAIEngineClient implements EngineClient {
       return false;
     }
   }
+}
+
+const DEFAULT_POST_LOAD_TIMEOUT_MS = 120_000;
+const DEFAULT_COMPLETION_TIMEOUT_MS = 10 * 60_000;
+const LOAD_FLOOR_MS = 60_000;
+const LOAD_PER_GB_MS = 60_000;
+const LOAD_CEILING_MS = 20 * 60_000;
+let timeoutOverrides: { loadFloorMs?: number; postLoadMs?: number; completionMs?: number } = {};
+
+export function setSupervisorTimeoutsForTests(overrides: { loadFloorMs?: number; postLoadMs?: number; completionMs?: number } | null): void {
+  timeoutOverrides = overrides ?? {};
+}
+
+export function loadTimeoutForModel(sizeBytes: number | null | undefined): number {
+  const floor = timeoutOverrides.loadFloorMs ?? LOAD_FLOOR_MS;
+  const scaled = floor + Math.ceil((sizeBytes ?? 0) / (1024 ** 3)) * LOAD_PER_GB_MS;
+  return Math.min(LOAD_CEILING_MS, Math.max(floor, scaled));
+}
+
+export async function findFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = createServer();
+    probe.once("error", reject);
+    probe.listen(0, "127.0.0.1", () => {
+      const address = probe.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      probe.close((error) => error ? reject(error) : resolve(port));
+    });
+  });
 }
 
 interface SupervisorState {
@@ -122,17 +154,22 @@ function configuredUrl(): { kind: EngineKind; url: string } | null {
   return url ? { kind: "url", url } : null;
 }
 
-async function waitHealthy(client: EngineClient, timeoutMs = 15_000): Promise<void> {
+export async function waitHealthy(client: EngineClient, timeoutMs = LOAD_FLOOR_MS, isAlive: () => boolean = () => true): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    if (!isAlive()) throw new EngineUnavailableError("Engine exited before becoming healthy.");
     if (await client.health()) return;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  throw new EngineUnavailableError("Engine did not become healthy before the startup deadline.");
+  throw new EngineUnavailableError(`Engine did not become healthy before the load timeout (${Math.ceil(timeoutMs / 1000)}s).`);
 }
 
-async function postLoadCheck(client: EngineClient, pid: number | null): Promise<PostLoadCheck> {
-  const result = await client.complete({ model: "chat", messages: [{ role: "user", content: "Reply with just the word OK." }], max_tokens: 16 });
+export async function postLoadCheck(client: EngineClient, pid: number | null): Promise<PostLoadCheck> {
+  const result = await withTimeout(
+    client.complete({ model: "chat", messages: [{ role: "user", content: "Reply with just the word OK." }], max_tokens: 16 }),
+    timeoutOverrides.postLoadMs ?? DEFAULT_POST_LOAD_TIMEOUT_MS,
+    () => new EngineUnavailableError("The post-load check timed out."),
+  );
   const content = (result.body as { choices?: Array<{ message?: { content?: unknown } }> }).choices?.[0]?.message?.content;
   if (result.status < 200 || result.status >= 300 || typeof content !== "string" || !content.trim()) {
     throw new EngineUnavailableError("Post-load check did not receive a usable completion.");
@@ -159,14 +196,25 @@ async function startSpawnedBackend(): Promise<ChatBackend> {
   }
   if (!model?.modelPath) throw new EngineUnavailableError("No verified and installed chat model is available.");
 
-  const port = 18770 + Math.floor(Math.random() * 1000);
+  const port = await findFreePort();
   const processHandle = Bun.spawn([engineBinaryPath(pin), "--model", model.modelPath, "--port", String(port)], {
     stdout: "ignore",
-    stderr: "ignore",
+    stderr: "pipe",
   });
   const client = new OpenAIEngineClient(`http://127.0.0.1:${port}`);
+  const stderrText = processHandle.stderr ? new Response(processHandle.stderr).text() : Promise.resolve("");
+  let exited = false;
+  const exitPromise = processHandle.exited.then((code) => {
+    exited = true;
+    return code;
+  });
   try {
-    await waitHealthy(client);
+    const exitFailure = exitPromise.then(async (code) => {
+      const lines = (await stderrText).trim().split("\n").slice(-5).join(" | ");
+      throw new EngineUnavailableError(`Engine exited before becoming healthy (code ${code})${lines ? `: ${lines}` : "."}`);
+    });
+    void exitFailure.catch(() => {});
+    await Promise.race([waitHealthy(client, loadTimeoutForModel(model.sizeBytes), () => !exited), exitFailure]);
     const identity = await readEngineIdentity(client.baseUrl);
     const check = await postLoadCheck(client, processHandle.pid);
     state.status.postLoadCheck = check;
@@ -277,10 +325,26 @@ export async function completeChat(model: string, body: Record<string, unknown>,
   backend.activeRequests++;
   state.status = { ...state.status, state: "busy", kind: backend.kind, identity: backend.identity };
   try {
-    const result = await backend.client.complete({ ...body, model }, signal);
-    if (result.status >= 500) throw new EngineUnavailableError(`Engine returned HTTP ${result.status}.`);
+    const completionMs = typeof body.timeout_ms === "number" && body.timeout_ms > 0 ? body.timeout_ms : (timeoutOverrides.completionMs ?? DEFAULT_COMPLETION_TIMEOUT_MS);
+    const result = await withTimeout(
+      backend.client.complete({ ...body, model }, signal),
+      completionMs,
+      () => new EngineUnavailableError(`Engine completion timed out after ${Math.ceil(completionMs / 1000)}s.`),
+    );
+    if (result.status >= 500) {
+      if (!await backend.client.health()) {
+        throw new EngineUnavailableError(`Engine returned HTTP ${result.status} and is no longer healthy.`);
+      }
+    }
     return { ...result, headers: identityHeaders(backend.identity) };
   } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      return { status: 499, body: { error: "Request cancelled" }, headers: identityHeaders(backend.identity) };
+    }
+    if (await backend.client.health()) {
+      const message = (error as Error).message;
+      return { status: error instanceof EngineUnavailableError ? 504 : 503, body: { error: message }, headers: identityHeaders(backend.identity) };
+    }
     const unavailable = error instanceof EngineUnavailableError
       ? error
       : new EngineUnavailableError(`Engine request failed: ${(error as Error).message}`);

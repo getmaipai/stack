@@ -21,11 +21,13 @@ export class UnknownRoleError extends Error {
 
 export class UnverifiedModelError extends Error {
   readonly modelId: string;
+  readonly missing: string[];
 
-  constructor(modelId: string) {
+  constructor(modelId: string, missing = ["sha256", "licence", "verifiedAt"]) {
     super(`Model '${modelId}' is not selectable until its checksum and licence are verified.`);
     this.name = "UnverifiedModelError";
     this.modelId = modelId;
+    this.missing = missing;
   }
 }
 
@@ -33,7 +35,11 @@ export function resolveRole(modelField: string): RoleResolution {
   if (!ROLE_IDS.includes(modelField as RoleId)) {
     const model = getModel(modelField);
     if (!model) throw new UnknownRoleError(modelField);
-    if (!isModelSelectable(model)) throw new UnverifiedModelError(modelField);
+    if (!isModelSelectable(model)) throw new UnverifiedModelError(modelField, [
+      ...(!model.sha256 ? ["sha256"] : []),
+      ...(!model.licence ? ["licence"] : []),
+      ...(!model.verifiedAt ? ["verifiedAt"] : []),
+    ]);
     const role = model.roles[0];
     if (!role || !ROLE_IDS.includes(role)) throw new UnknownRoleError(modelField);
     return { role, state: role === "chat" ? getChatEngineStatus().state : installedEngineForMachine() ? "installed" : "notInstalled", binding: null };

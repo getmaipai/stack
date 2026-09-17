@@ -32,3 +32,10 @@ the product passes its battle-tested checklist in `docs/dev.md`.
 ### Security
 
 - Bumped `drizzle-orm` to `^0.45.2` to address the SQL injection advisory.
+
+### Fixed
+
+- Model re-registration no longer clears installed model state.
+- Existing model files are verified by checksum before they are marked installed.
+- Fixed the remaining block B review findings across supervisor timeouts,
+  liveness, streaming refusal, provenance errors and advisory model sizes.

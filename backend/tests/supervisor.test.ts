@@ -136,3 +136,58 @@ test("a start from an old generation is stopped before the new one is installed"
   await first;
   expect(starts).toBe(2);
 });
+
+test("a living engine's 500 is returned without retirement", async () => {
+  let calls = 0;
+  let stopCalls = 0;
+  const client: EngineClient = {
+    baseUrl: "http://scripted",
+    complete: async () => ++calls === 1 ? { status: 500, body: { error: "busy" } } : { status: 200, body: { ok: true } },
+    health: async () => true,
+  };
+  setSupervisorFactoryForTests(async () => backend(client, "managed", async () => { stopCalls++; }));
+  expect((await completeChat("chat", {})).status).toBe(500);
+  expect((await completeChat("chat", {})).status).toBe(200);
+  expect(stopCalls).toBe(0);
+});
+
+test("an aborted completion is a cancellation and does not retire the engine", async () => {
+  let stopCalls = 0;
+  const client: EngineClient = {
+    baseUrl: "http://scripted",
+    complete: async () => { throw new DOMException("Cancelled", "AbortError"); },
+    health: async () => false,
+  };
+  setSupervisorFactoryForTests(async () => backend(client, "managed", async () => { stopCalls++; }));
+  const result = await completeChat("chat", {}, AbortSignal.abort());
+  expect(result.status).toBe(499);
+  expect(stopCalls).toBe(0);
+});
+
+test("waitHealthy accepts a delayed loading response within the tuned timeout", async () => {
+  let calls = 0;
+  const { waitHealthy, setSupervisorTimeoutsForTests } = await import("@/lib/supervisor");
+  setSupervisorTimeoutsForTests({ loadFloorMs: 100 });
+  try {
+    await waitHealthy({ health: async () => ++calls > 1, baseUrl: "scripted", complete: async () => ({ status: 200, body: {} }) }, 300);
+    expect(calls).toBeGreaterThan(1);
+  } finally {
+    setSupervisorTimeoutsForTests(null);
+  }
+});
+
+test("post-load checks time out instead of hanging", async () => {
+  const { postLoadCheck, setSupervisorTimeoutsForTests } = await import("@/lib/supervisor");
+  setSupervisorTimeoutsForTests({ postLoadMs: 10 });
+  try {
+    await expect(postLoadCheck({ baseUrl: "scripted", health: async () => true, complete: () => new Promise(() => {}) }, null)).rejects.toThrow();
+  } finally {
+    setSupervisorTimeoutsForTests(null);
+  }
+});
+
+test("a free spawned port is selected before engine launch", async () => {
+  const { findFreePort } = await import("@/lib/supervisor");
+  const port = await findFreePort();
+  expect(port).toBeGreaterThan(0);
+});
