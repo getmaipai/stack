@@ -32,7 +32,7 @@ anything you build on it. Nothing leaves your house.
 - **Try it**: a stateless box per role to prove each one works.
   (designed)
 - **Client keys**: each tool gets a key limited to the roles it may use.
-  (designed)
+  (built)
 - **Complete alone**: run it by itself, or install MaiPai Home on top for
   your family. (designed)
 

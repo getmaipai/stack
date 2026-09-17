@@ -19,7 +19,7 @@ changelog note.
 | Events | `GET /stack/v1/events` (SSE) | Home's notification bridge, the board, the menu bar | planned |
 | Hardware and budget | `GET /stack/v1/hardware`, `GET /stack/v1/budget` | Home's Admin (read-only view), Bot's runtime | partly (hardware; no budget yet) |
 | Models and engines | `GET /stack/v1/models`, `/engines`; install, pin, unload, remove | the operator; Home's Admin as a view with links | partly (engines; no models yet) |
-| Clients | `/stack/v1/clients` (operator only) | the operator; Home's installer registers Home once | planned |
+| Clients | `/stack/v1/clients` (operator only) | the operator; Home's installer registers Home once | built |
 | Updates | `/stack/v1/updates` (check, apply, roll back) | the operator; Home shows availability through events | planned |
 | Identity headers | `x-maipai-engine`, `x-maipai-model`, `x-maipai-revision` on every reply | every client's identity check | built |
 
