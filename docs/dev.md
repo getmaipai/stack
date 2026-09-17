@@ -465,6 +465,29 @@ service account. A copied `stack.db` holds no secret in plaintext.
 | Linux, ARM and x64 | `llama-server` (CPU, CUDA, or the accelerator the robot carries), sherpa-onnx for speech, ComfyUI where a GPU exists | MaiPai Bot |
 | Windows, x64 | `llama-server` CUDA, ComfyUI | The CUDA catalogue |
 
+## Try it's chat surface: shadcn's chat components (2026-09-17)
+
+Decided on Jesse's direction to use a prebuilt, minimal chat surface
+the household hub can adopt later if it makes sense (Home's current
+assistant-ui thread is not a constraint on the Stack). Candidates
+graded: shadcn/ui's own chat components (June 2026: `message-scroller`,
+`message`, `bubble`, `attachment`, `marker`; MIT; installed by the same
+registry and copy-into-repo model as the kit); Vercel AI Elements
+(Apache-2.0, richer, tied to the AI SDK's `useChat`; the natural
+upgrade path for reasoning and tool-call displays); deep-chat (MIT web
+component whose built-in speech uses the browser's Web Speech API,
+which sends audio to a cloud recognizer on Chrome, so its headline
+feature breaks the promise); assistant-ui (MIT, complete, a framework
+rather than a minimal set).
+
+The Stack's Try it uses shadcn's chat components on the kit, a small
+hook of its own that reads `/v1/chat/completions` server-sent events
+(a fetch and a `data:` line parser), a mic button recording with
+`MediaRecorder` to `/v1/audio/transcriptions`, and `/v1/audio/speech`
+played through an `<audio>` element. Nothing leaves the machine. Home
+may later adopt the same primitives, add AI Elements on top, or keep
+assistant-ui; that decision belongs to Home's next design pass.
+
 ## The API boundary: what is the Stack's and what is Home's (2026-09-17)
 
 The foundational API moved out of Home into the Stack. Home keeps an

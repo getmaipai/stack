@@ -179,10 +179,13 @@ each item's design section lands in `dev.md` before its code.
   Acceptance: an update and a rollback of a scripted engine with no
   request cut (test); the check's request has exactly the two headers
   (test); the privacy page lists the URLs. Exit: `bash scripts/check.sh`.
-- [ ] **STACK-12 (M): Try it** is built on the `assistant-ui` thread
-  component from the packaged kit (KIT-01), stateless, against the
-  Stack's own `/v1` routes; the Speak and Listen tabs on the shared
-  mic and playback primitives.
+- [ ] **STACK-12 (M): Try it** is built on shadcn/ui's chat components
+  (`message-scroller`, `message`, `bubble`, `attachment`, `marker`)
+  added to the kit by the registry, a small SSE hook against the
+  Stack's own `/v1/chat/completions`, `MediaRecorder` to
+  `/v1/audio/transcriptions` for Listen, and `/v1/audio/speech`
+  through an `<audio>` element for Speak; stateless; the decision and
+  the candidates graded are in `dev.md` "Try it's chat surface".
 
 ## Milestone 1: the robot
 
