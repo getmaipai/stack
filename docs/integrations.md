@@ -73,7 +73,7 @@ in Home stops.
 
 ## MaiPai Bot
 
-Bot leverages the Stack and never requires Home. This follows from the
+Bot builds on the Stack and never requires Home. This follows from the
 robot's design record (`bot/docs/dev.md`, section 2 and section 4): two
 processes on the robot, the household runtime (the hub's own TypeScript
 on Bun) and the Python body that owns every piece of hardware, with
