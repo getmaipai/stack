@@ -196,7 +196,14 @@ so on, with an ungrouped default. The Models page shows the tree with
 each group's size on disk, memory while loaded, and utilization
 (requests, tokens, time loaded, last used) rolled up from its models
 and subgroups; Monitoring shows utilization by group over time.
-Drag to move a model or a group; batch select works across groups.
+Every group row also carries **status** (how many of its models are
+loaded, ready, on demand or failed, and the worst health item beneath
+it as the row's dot), **consumption** (memory now, disk, requests and
+tokens over the period, rolled up), and **management**: actions on the
+group that apply to everything beneath it, with an inline confirmation
+naming the count ("Unload 4 models?"): load, unload, pin, unpin, check
+for updates, move, remove. Drag to move a model or a group; batch
+select works across groups.
 
 ## Engines
 

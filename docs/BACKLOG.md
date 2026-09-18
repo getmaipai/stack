@@ -247,7 +247,11 @@ each item's design section lands in `dev.md` before its code.
   supervisor (requests, tokens in and out, seconds loaded, peak memory
   while loaded, last used) and rolled up by group through the tree;
   routes to create, rename, move and remove groups and to move
-  models; the Models page as a tree with rollups and drag to move;
+  models; per-group status (loaded, ready, on demand, failed counts
+  and the worst health item) and group actions that apply beneath
+  (load, unload, pin, unpin, check for updates, move, remove) with
+  the count confirmed inline; the Models page as a tree with rollups
+  and drag to move;
   Monitoring's utilization by group. Acceptance: a nested rollup
   counts a model once (test); a nickname changes no API behavior
   (test: a request by nickname is 400, by id works); the tree renders
