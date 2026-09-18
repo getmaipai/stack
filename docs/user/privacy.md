@@ -9,7 +9,7 @@ MaiPai Stack runs AI on your own computer. It does not send your chats,
 images, voice, or anything you make to us or to anyone else. There is
 no account with us, no analytics, and no crash reports.
 
-Two things can go out to the internet, and only when you turn them on.
+Only explicitly enabled features can go out to the internet.
 
 | What | When it happens | What it carries | Who receives it |
 |---|---|---|---|
@@ -17,6 +17,8 @@ Two things can go out to the internet, and only when you turn them on.
 | Downloading a model or an engine | Only when you pick one to install, or accept an update | The name of the file you asked for | The site that publishes it (for example Hugging Face or GitHub), straight from your computer |
 | Installing the Stack | Only when you run the one-line installer | The installer script | `https://getmaipai.github.io/stack/install.sh` |
 | Downloading the installer release | Only when you run the one-line installer | The Stack binary and its checksum file | `https://github.com/getmaipai/stack/releases/latest/download/maipai-stack-darwin-arm64` and `https://github.com/getmaipai/stack/releases/latest/download/SHA256SUMS` |
+| Telegram alert channel | Only after you configure and verify a Telegram channel | The alert sentence and the configured chat ID | Telegram's Bot API |
+| ntfy alert channel | Only after you configure and verify an ntfy channel | The alert sentence and the configured topic | The ntfy server URL you chose |
 
 Everything else stays on your computer. The Stack listens only to
 programs on the same machine unless you choose to open it to your home

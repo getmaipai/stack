@@ -78,6 +78,13 @@
       "when": 1789771000000,
       "tag": "0010_check_runs",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1789772000000,
+      "tag": "0011_alert_channels",
+      "breakpoints": true
     }
   ]
 }

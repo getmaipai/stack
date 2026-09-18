@@ -72,6 +72,20 @@ export interface NotificationRecord {
   dismissedAt: string | null;
 }
 
+export interface ChannelRecord {
+  id: string;
+  type: "telegram" | "ntfy";
+  name: string;
+  serverUrl?: string;
+  topic?: string;
+  verifiedAt: string | null;
+  createdAt: string;
+  lastError: string | null;
+  lastSentAt: string | null;
+  status: "verified" | "unverified" | "failing";
+  configPresent: true;
+}
+
 export interface RepairRecord {
   id: string;
   title: string;
@@ -131,7 +145,7 @@ export interface SetupPlanResponse {
 
 export interface EngineSetting {
   key: string;
-  type: "number" | "boolean" | "text" | "enum";
+  type: "number" | "boolean" | "text" | "secret" | "password" | "enum";
   default: string | number | boolean;
   group?: string;
   options?: Array<{ value: string; label: string }>;

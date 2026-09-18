@@ -245,7 +245,7 @@ each item's design section lands in `dev.md` before its code.
   `bash scripts/check.sh`.
   Landed: the tick with its verified commit is the STACK-09b line in
   milestone 0; this entry is the design.
-- [ ] **STACK-09c (M): alert channels.** `{type, name, config,
+- [x] **STACK-09c (M): alert channels.** `{type, name, config,
   verifiedAt}` in a registry, Telegram and ntfy providers, "Send a
   test" returning the provider's error, an unverified channel is a
   warning item, a privacy-page row per channel type. Acceptance: a

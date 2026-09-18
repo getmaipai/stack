@@ -158,5 +158,18 @@ export const checkRuns = sqliteTable("check_runs", {
   fitTogetherReason: text("fit_together_reason"),
 });
 
+export const channels = sqliteTable("channels", {
+  id: text("id").primaryKey(),
+  type: text("type").notNull(),
+  name: text("name").notNull(),
+  config: text("config").notNull(),
+  verifiedAt: text("verified_at"),
+  createdAt: text("created_at").notNull(),
+  lastError: text("last_error"),
+  lastSentAt: text("last_sent_at"),
+  failureCount: integer("failure_count").notNull().default(0),
+  pausedAt: text("paused_at"),
+});
+
 // Compatibility name for the old repair adapter and its route alias.
 export const repairs = health;

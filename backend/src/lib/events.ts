@@ -28,6 +28,10 @@ export function emit(event: { id: EventId; data: Record<string, unknown> }): Eve
       readAt: null,
       dismissedAt: null,
     }).run();
+    const severity = typeof event.data.severity === "string" ? event.data.severity : undefined;
+    if (definition.level === "immediate" || (event.id === "health.changed" && (severity === "error" || severity === "critical"))) {
+      void import("@/lib/channels").then(({ notifyAlertChannels }) => notifyAlertChannels(title));
+    }
   }
   return envelope;
 }

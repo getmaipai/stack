@@ -1746,6 +1746,490 @@
         }
       }
     },
+    "/stack/v1/channels": {
+      "get": {
+        "tags": [
+          "Channels"
+        ],
+        "responses": {
+          "200": {
+            "description": "List configured alert channels without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "channels": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "telegram",
+                              "ntfy"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "serverUrl": {
+                            "type": "string"
+                          },
+                          "topic": {
+                            "type": "string"
+                          },
+                          "verifiedAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "lastError": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "lastSentAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "verified",
+                              "unverified",
+                              "failing"
+                            ]
+                          },
+                          "configPresent": {
+                            "type": "boolean",
+                            "enum": [
+                              true
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "type",
+                          "name",
+                          "verifiedAt",
+                          "createdAt",
+                          "lastError",
+                          "lastSentAt",
+                          "status",
+                          "configPresent"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "channels"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Channels"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "telegram",
+                      "ntfy"
+                    ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "config": {
+                    "type": "object",
+                    "properties": {
+                      "botToken": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "chatId": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "serverUrl": {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      "topic": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "accessToken": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "type",
+                  "name",
+                  "config"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Create an alert channel.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "telegram",
+                        "ntfy"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "serverUrl": {
+                      "type": "string"
+                    },
+                    "topic": {
+                      "type": "string"
+                    },
+                    "verifiedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "lastError": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastSentAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "verified",
+                        "unverified",
+                        "failing"
+                      ]
+                    },
+                    "configPresent": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "type",
+                    "name",
+                    "verifiedAt",
+                    "createdAt",
+                    "lastError",
+                    "lastSentAt",
+                    "status",
+                    "configPresent"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid channel.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/channels/{id}": {
+      "patch": {
+        "tags": [
+          "Channels"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "telegram",
+                      "ntfy"
+                    ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "config": {
+                    "type": "object",
+                    "properties": {
+                      "botToken": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "chatId": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "serverUrl": {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      "topic": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "accessToken": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Update an alert channel.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "telegram",
+                        "ntfy"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "serverUrl": {
+                      "type": "string"
+                    },
+                    "topic": {
+                      "type": "string"
+                    },
+                    "verifiedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "lastError": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lastSentAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "verified",
+                        "unverified",
+                        "failing"
+                      ]
+                    },
+                    "configPresent": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "type",
+                    "name",
+                    "verifiedAt",
+                    "createdAt",
+                    "lastError",
+                    "lastSentAt",
+                    "status",
+                    "configPresent"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown channel.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Channels"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Delete an alert channel.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown channel.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/channels/{id}/test": {
+      "post": {
+        "tags": [
+          "Channels"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Send a test alert.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown channel.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Provider rejected the test.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/logs/{name}": {
       "get": {
         "tags": [

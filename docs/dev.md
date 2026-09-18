@@ -732,8 +732,10 @@ a generator cannot.
 
 ### Privacy
 
-Loopback by default. Two outbound classes, both opt-in and both on the
-privacy page: the update check and model or engine downloads, each
+Loopback by default. Alert channels are a third outbound class, explicitly
+opt-in and listed on the privacy page: Telegram and ntfy receive only
+urgent notifications and serious health changes after a successful test.
+The update check and model or engine downloads are also opt-in, each
 straight from the machine to the upstream host, never through a MaiPai
 service. No analytics, no telemetry, no crash reports, no identifiers.
 

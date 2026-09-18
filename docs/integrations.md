@@ -26,6 +26,7 @@ changelog note.
 | Jobs and downloads | `job.progress` feed rows plus pause and resume endpoints | Home's package surfaces and the board | partly (ranged model and engine transfer; job API planned) |
 | Clients | `/stack/v1/clients` (operator only) | the operator; Home's installer registers Home once | built |
 | Notifications | `GET /stack/v1/notifications`, `POST /stack/v1/notifications/clear`, `POST /stack/v1/notifications/{id}/read`, `POST /stack/v1/notifications/{id}/dismiss` | the operator and Home's notification bridge | built |
+| Alert channels | `GET /stack/v1/channels`, create, update, delete, and `POST /stack/v1/channels/{id}/test` | the operator; Telegram or ntfy after explicit verification | built |
 | Repairs | `GET /stack/v1/repairs`, `POST /stack/v1/repairs/{id}/resolve` | the operator and Home's Admin | built |
 | Logs | `GET /stack/v1/logs/{name}` | the operator and Home's Admin | built |
 | Updates | `/stack/v1/updates` (check, apply, roll back) | the operator; Home shows availability through events | planned |

@@ -26,6 +26,7 @@ import { detectedRoutes } from "@/routes/detected";
 import { settingsRoutes } from "@/routes/settings";
 import { speedTestRoutes } from "@/routes/speedTest";
 import { checkRoutes } from "@/routes/check";
+import { channelsRoutes } from "@/routes/channels";
 import packageJson from "../../package.json";
 import { assertShowroomAllowed } from "@/showroom/fixture";
 
@@ -66,6 +67,7 @@ app.route("/stack/v1/hardware", hardwareRoutes);
 app.route("/stack/v1/engines", enginesRoutes);
 app.route("/stack/v1/budget", budgetRoutes);
 app.route("/stack/v1", eventsRoutes);
+app.route("/stack/v1", channelsRoutes);
 app.route("/stack/v1/logs", logsRoutes);
 app.route("/stack/v1/series", seriesRoutes);
 app.route("/stack/v1/groups", groupsRoutes);
