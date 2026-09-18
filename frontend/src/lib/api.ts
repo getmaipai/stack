@@ -109,8 +109,9 @@ export interface HealthItem {
 export interface CheckResult {
   at: string;
   ok: boolean;
-  results: Array<{ role: string; ok: boolean; ms: number; reason: string | null; skipped?: boolean }>;
+  results: Array<{ role: string; ok: boolean; ms: number; reason: string | null; loadMs: number | null; skipped?: boolean }>;
   fitTogether: { ok: boolean; reason: string | null };
+  reason: string | null;
 }
 
 export type SetupTier = "p16" | "p32" | "p64" | "p128";

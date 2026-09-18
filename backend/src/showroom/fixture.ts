@@ -62,7 +62,7 @@ export const showroomChannels = [
   { id: "showroom-telegram", type: "telegram" as const, name: "Family Telegram", verifiedAt: new Date(now.getTime() - 2 * 86400000).toISOString(), createdAt: new Date(now.getTime() - 15 * 86400000).toISOString(), lastError: null, lastSentAt: new Date(now.getTime() - 3600000).toISOString(), status: "verified" as const, configPresent: true as const },
   { id: "showroom-ntfy", type: "ntfy" as const, name: "Phone alerts", serverUrl: "https://ntfy.sh", topic: "maipai-home-demo", verifiedAt: null, createdAt: new Date(now.getTime() - 3 * 86400000).toISOString(), lastError: null, lastSentAt: null, status: "unverified" as const, configPresent: true as const },
 ];
-export const showroomCheck = { at: new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString(), ok: true, results: ["chat", "coding", "judge", "image", "stt", "tts"].map((role, index) => ({ role, ok: true, ms: 28 + index * 9, reason: null })), fitTogether: { ok: true, reason: null } };
+export const showroomCheck = { at: new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString(), ok: true, results: ["chat", "coding", "judge", "image", "stt", "tts"].map((role, index) => ({ role, ok: true, ms: 28 + index * 9, reason: null, loadMs: null })), fitTogether: { ok: true, reason: null }, reason: null };
 
 export function showroomSeries(range: "hour" | "day" | "week") {
   const count = range === "hour" ? 6 : range === "day" ? 12 : 24;

@@ -7097,6 +7097,10 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "loadMs": {
+                            "type": "integer",
+                            "nullable": true
+                          },
                           "skipped": {
                             "type": "boolean"
                           }
@@ -7105,7 +7109,8 @@
                           "role",
                           "ok",
                           "ms",
-                          "reason"
+                          "reason",
+                          "loadMs"
                         ]
                       }
                     },
@@ -7124,13 +7129,18 @@
                         "ok",
                         "reason"
                       ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "nullable": true
                     }
                   },
                   "required": [
                     "at",
                     "ok",
                     "results",
-                    "fitTogether"
+                    "fitTogether",
+                    "reason"
                   ]
                 }
               }
@@ -7188,6 +7198,10 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "loadMs": {
+                            "type": "integer",
+                            "nullable": true
+                          },
                           "skipped": {
                             "type": "boolean"
                           }
@@ -7196,7 +7210,8 @@
                           "role",
                           "ok",
                           "ms",
-                          "reason"
+                          "reason",
+                          "loadMs"
                         ]
                       }
                     },
@@ -7215,13 +7230,18 @@
                         "ok",
                         "reason"
                       ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "nullable": true
                     }
                   },
                   "required": [
                     "at",
                     "ok",
                     "results",
-                    "fitTogether"
+                    "fitTogether",
+                    "reason"
                   ]
                 }
               }

@@ -4,7 +4,7 @@ import { checkRuns } from "@/db/schema";
 import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { getMemoryReader } from "@/lib/memory";
-import { completeChat } from "@/lib/supervisor";
+import { completeChat, getChatEngineStatus } from "@/lib/supervisor";
 import { ROLE_IDS, ROLES, type RoleId } from "@/roles";
 import { resolveRole } from "@/lib/router";
 import type { MemoryReader } from "@/lib/memory/types";
@@ -18,6 +18,7 @@ export interface CheckRoleResult {
   ok: boolean;
   ms: number;
   reason: string | null;
+  loadMs: number | null;
   skipped?: boolean;
 }
 
@@ -31,11 +32,12 @@ export interface CheckRun {
   ok: boolean;
   results: CheckRoleResult[];
   fitTogether: FitTogetherResult;
+  reason: string | null;
 }
 
 export interface CheckOptions {
   roleIds?: RoleId[];
-  requestRole?: (role: RoleId) => Promise<{ status: number; reason?: string }>;
+  requestRole?: (role: RoleId) => Promise<{ status: number; reason?: string; loadMs?: number | null }>;
   fitGenerator?: () => Promise<void>;
   memoryReader?: MemoryReader;
   sampleMs?: number;
@@ -57,33 +59,33 @@ async function checkRole(role: RoleId, options: CheckOptions): Promise<CheckRole
   if (options.requestRole) {
     try {
       const response = await options.requestRole(role);
-      const result = { role, ok: response.status >= 200 && response.status < 300, ms: Math.round(performance.now() - started), reason: response.reason ?? null };
+      const result = { role, ok: response.status >= 200 && response.status < 300, ms: Math.round(performance.now() - started), reason: response.reason ?? null, loadMs: response.loadMs ?? null };
       if (result.ok) resolveHealth(`check-role.${role}`);
       else raise({ code: `check-role.${role}`, severity: "warning", title: `${role} needs attention`, text: result.reason ?? `${role} did not answer the Stack check.`, cause: result.reason ?? "The role smoke test failed.", fix: fixFor(role, result.reason ?? "") });
       return result;
     } catch (error) {
       const reason = error instanceof Error ? error.message : `${role} did not answer the Stack check.`;
       raise({ code: `check-role.${role}`, severity: "warning", title: `${role} needs attention`, text: reason, cause: "The role smoke test threw an error.", fix: fixFor(role, reason) });
-      return { role, ok: false, ms: Math.round(performance.now() - started), reason };
+      return { role, ok: false, ms: Math.round(performance.now() - started), reason, loadMs: null };
     }
   }
   if (ROLES[role].wire !== "chat") {
     const reason = `Skipped: no ${ROLES[role].wire} engine is ready for ${role}.`;
     resolveHealth(`check-role.${role}`);
-    return { role, ok: false, skipped: true, ms: Math.round(performance.now() - started), reason };
+    return { role, ok: false, skipped: true, ms: Math.round(performance.now() - started), reason, loadMs: null };
   }
   try {
     const response = await completeChat(role, { model: role, messages: [{ role: "user", content: CHECK_PROMPT }], max_tokens: 8, chat_template_kwargs: { enable_thinking: false } });
     const ok = response.status >= 200 && response.status < 300;
     const reason = ok ? null : reasonFor(response.body, `${role} returned HTTP ${response.status}.`);
-    const result = { role, ok, ms: Math.round(performance.now() - started), reason };
+    const result = { role, ok, ms: Math.round(performance.now() - started), reason, loadMs: getChatEngineStatus().postLoadCheck?.loadMs ?? null };
     if (ok) resolveHealth(`check-role.${role}`);
     else raise({ code: `check-role.${role}`, severity: "warning", title: `${role} needs attention`, text: reason ?? "The role smoke test failed.", cause: "The role smoke test returned an error.", fix: fixFor(role, reason ?? "") });
     return result;
   } catch (error) {
     const reason = error instanceof Error ? error.message : `${role} did not answer the Stack check.`;
     raise({ code: `check-role.${role}`, severity: "warning", title: `${role} needs attention`, text: reason, cause: "The role smoke test could not complete.", fix: fixFor(role, reason) });
-    return { role, ok: false, ms: Math.round(performance.now() - started), reason };
+    return { role, ok: false, ms: Math.round(performance.now() - started), reason, loadMs: null };
   }
 }
 
@@ -103,7 +105,7 @@ export async function runFitTogetherCheck(options: Pick<CheckOptions, "fitGenera
 }
 
 export async function runCheck(options: CheckOptions = {}): Promise<CheckRun> {
-  const roleIds = options.roleIds ?? ROLE_IDS.filter((role) => resolveRole(role).state === "ready");
+  const roleIds = options.roleIds ?? ROLE_IDS.filter((role) => ["installed", "ready"].includes(resolveRole(role).state));
   const results: CheckRoleResult[] = [];
   for (const role of roleIds) {
     emit({ id: "check.progress", data: { role, state: "running" } });
@@ -122,16 +124,18 @@ export async function runCheck(options: CheckOptions = {}): Promise<CheckRun> {
   if (fitTogether.ok) resolveHealth("check-fit-together");
   else raise({ code: "check-fit-together", severity: "critical", title: "The Stack did not fit together", text: fitTogether.reason ?? "The resident set could not run a generator safely.", cause: "The fit-together check reached a failing condition.", fix: { label: "Free memory", action: "free_memory" } });
   const at = new Date().toISOString();
-  const ok = results.every((result) => result.ok || result.skipped) && fitTogether.ok;
+  const reason = roleIds.length === 0 ? "Nothing to check: no ability is installed." : null;
+  const ok = roleIds.length > 0 && results.every((result) => result.ok || result.skipped) && fitTogether.ok;
   db.insert(checkRuns).values({ at, ok: ok ? 1 : 0, results: JSON.stringify(results), fitTogetherOk: fitTogether.ok ? 1 : 0, fitTogetherReason: fitTogether.reason }).run();
   emit({ id: "check.done", data: { ok, roleCount: results.length, fitTogetherOk: fitTogether.ok } });
-  return { at, ok, results, fitTogether };
+  return { at, ok, results, fitTogether, reason };
 }
 
 export function latestCheck(): CheckRun | null {
   const row = db.select().from(checkRuns).orderBy(desc(checkRuns.at)).limit(1).get();
   if (!row) return null;
-  return { at: row.at, ok: row.ok === 1, results: JSON.parse(row.results) as CheckRoleResult[], fitTogether: { ok: row.fitTogetherOk === 1, reason: row.fitTogetherReason } };
+  const results = JSON.parse(row.results) as CheckRoleResult[];
+  return { at: row.at, ok: row.ok === 1, results, fitTogether: { ok: row.fitTogetherOk === 1, reason: row.fitTogetherReason }, reason: results.length === 0 && row.ok === 0 ? "Nothing to check: no ability is installed." : null };
 }
 
 export function shouldRunNightly(active: boolean): boolean { return !active; }

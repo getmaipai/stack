@@ -13,6 +13,18 @@ test("a failing scripted role raises its named fix and a passing rerun resolves 
   expect(listHealth()).toEqual([]);
 });
 
+test("an installed role reports the load time from its first check", async () => {
+  const checked = await runCheck({ roleIds: ["chat"], requestRole: async () => ({ status: 200, loadMs: 2100 }) });
+  expect(checked.ok).toBe(true);
+  expect(checked.results).toEqual([{ role: "chat", ok: true, ms: expect.any(Number), reason: null, loadMs: 2100 }]);
+});
+
+test("an empty check is not a pass", async () => {
+  const checked = await runCheck({ roleIds: [] });
+  expect(checked.ok).toBe(false);
+  expect(checked.reason).toBe("Nothing to check: no ability is installed.");
+});
+
 test("the fit-together check fails when pressure reaches critical", async () => {
   let reads = 0;
   const result = await runFitTogetherCheck({ sampleMs: 1, memoryReader: { read: () => ({ totalBytes: 100, freeBytes: 50, availablePercent: 50, pressure: reads++ > 0 ? "critical" : "normal" }), processFootprint: () => null }, fitGenerator: async () => { await new Promise((resolve) => setTimeout(resolve, 8)); } });
