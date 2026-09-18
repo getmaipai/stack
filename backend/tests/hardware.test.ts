@@ -3,10 +3,14 @@ import {
   detectHardware,
   primaryBudgetBytes,
   __resetHardwareCacheForTests,
+  __setClockForTests,
   type HardwareInfo,
 } from "@/lib/hardware";
 
-beforeEach(__resetHardwareCacheForTests);
+beforeEach(() => {
+  __resetHardwareCacheForTests();
+  __setClockForTests(null);
+});
 
 function hw(overrides: Partial<HardwareInfo>): HardwareInfo {
   return {
@@ -35,10 +39,13 @@ describe("detectHardware", () => {
   });
 
   test("caches within its TTL", async () => {
+    let t = 0;
+    __setClockForTests(() => t);
     const first = await detectHardware();
+    t += 4_000;
     const second = await detectHardware();
     expect(second).toBe(first);
-    __resetHardwareCacheForTests();
+    t += 2_000;
     const third = await detectHardware();
     expect(third).not.toBe(first);
     expect(third).toEqual(first);

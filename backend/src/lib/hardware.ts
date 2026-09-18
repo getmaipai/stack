@@ -64,9 +64,14 @@ function detectIsAppleSilicon(): boolean {
 
 const DETECTION_CACHE_MS = 5_000;
 let cached: { at: number; info: HardwareInfo } | null = null;
+let now = () => Date.now();
+
+export function __setClockForTests(clock: (() => number) | null): void {
+  now = clock ?? (() => Date.now());
+}
 
 export async function detectHardware(): Promise<HardwareInfo> {
-  if (cached && Date.now() - cached.at < DETECTION_CACHE_MS) return cached.info;
+  if (cached && now() - cached.at < DETECTION_CACHE_MS) return cached.info;
   const totalRamGb = Math.round(os.totalmem() / 1_073_741_824);
   const isAppleSilicon = detectIsAppleSilicon();
   const cudaDevices = isAppleSilicon ? [] : await detectCudaDevices();
@@ -83,7 +88,7 @@ export async function detectHardware(): Promise<HardwareInfo> {
     freeDiskBytes: disk.bavail * disk.bsize,
     osVersion: os.release(),
   };
-  cached = { at: Date.now(), info };
+  cached = { at: now(), info };
   return info;
 }
 
