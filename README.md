@@ -8,7 +8,7 @@
 <h3 align="center">Your own local AI stack, made easy.</h3>
 
 <p align="center">
-  <img src="docs/assets/screens/overview.png" alt="MaiPai Stack overview" width="31%">
+  <img src="docs/assets/screens/overview-console-light.png" alt="MaiPai Stack Overview console" width="31%">
   <img src="docs/assets/screens/try-chat-light.png" alt="MaiPai Stack Try it chat" width="31%">
   <img src="docs/assets/screens/palette.png" alt="MaiPai Stack command palette" width="31%">
   <img src="docs/assets/screens/engines-panel.png" alt="MaiPai Stack engine property panel" width="31%">

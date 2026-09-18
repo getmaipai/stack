@@ -80,5 +80,37 @@ export const health = sqliteTable("health", {
   ignoredAt: text("ignored_at"),
 });
 
+export const usageSamples = sqliteTable("usage_samples", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  at: text("at").notNull(),
+  ability: text("ability"),
+  clientId: text("client_id"),
+  modelId: text("model_id"),
+  requests: integer("requests").notNull().default(0),
+  tokensIn: integer("tokens_in").notNull().default(0),
+  tokensOut: integer("tokens_out").notNull().default(0),
+  jobs: integer("jobs").notNull().default(0),
+});
+
+export const memorySamples = sqliteTable("memory_samples", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  at: text("at").notNull(),
+  totalBytes: integer("total_bytes").notNull(),
+  freeBytes: integer("free_bytes").notNull(),
+  availablePercent: integer("available_percent").notNull(),
+  pressure: text("pressure").notNull(),
+  loadedBytes: integer("loaded_bytes").notNull().default(0),
+});
+
+export const speedResults = sqliteTable("speed_results", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  at: text("at").notNull(),
+  ability: text("ability"),
+  modelId: text("model_id"),
+  engine: text("engine"),
+  firstTokenMs: integer("first_token_ms"),
+  tokensPerSecond: integer("tokens_per_second"),
+});
+
 // Compatibility name for the old repair adapter and its route alias.
 export const repairs = health;

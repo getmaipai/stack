@@ -109,6 +109,9 @@ never copied. No item migrates the hub until STACK-16.
 - [x] **STACK-35 (M): property panel.** One reusable docked or mobile-sheet
   panel for engines, models, and detected stores with actions, tabs, keyboard
   selection, and inline destructive confirmation. Verified at da31809.
+- [x] **STACK-36 (M): Overview console.** Range-aware usage, memory, and speed
+  series backed by durable samples, with seven widgets, status rings, and
+  showroom captures. Verified at ed67582.
 - [x] **STACK-11 (M): the admin UI, first run and the board.** committed:
   first run steps 1 to 3 and 5, login, the board; the downloading step
   and Try it are STACK-12. The five

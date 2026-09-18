@@ -2,6 +2,7 @@ import { measureProcessMemoryBytes } from "@/lib/supervisor";
 import { emit } from "@/lib/events";
 import { getMemoryReader, type MemoryPressure, type MemoryReader } from "@/lib/memory";
 import { raise, resolve as resolveHealth } from "@/lib/health";
+import { recordMemorySample } from "@/lib/series";
 
 const GB = 1_073_741_824;
 
@@ -223,6 +224,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
     pressurePolls = systemBreaches;
     const arithmeticPressure: MemoryPressure = systemBreaches >= tuning.systemSustainedPolls ? "warn" : "normal";
     pressure = kernelPressure === "critical" ? "critical" : kernelPressure === "warn" || arithmeticPressure === "warn" ? "warn" : "normal";
+    recordMemorySample({ totalBytes: totalMemoryBytes, freeBytes: freeMemoryBytes, availablePercent, pressure, loadedBytes: loadedBytes() });
     if (pressure === "critical") {
       raise({ code: "memory-pressure-critical", severity: "critical", title: "Memory pressure is critical", text: "The governor is stopping work to protect this computer.", cause: "The kernel reported critical memory pressure.", fix: { label: "Free memory", action: "free_memory" } });
       resolveHealth("memory-pressure-warn");

@@ -43,6 +43,13 @@
       "when": 1789690000000,
       "tag": "0005_health_list",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789760000000,
+      "tag": "0006_console_series",
+      "breakpoints": true
     }
   ]
 }

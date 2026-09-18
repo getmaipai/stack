@@ -6,6 +6,7 @@ import { getIcon } from "@/kit/icons";
 import { api, type BudgetResponse, type EngineRecord, type EngineSetting, type NotificationRecord, type RepairRecord, type RoleRecord } from "@/lib/api";
 import { BoardPage } from "@/pages/BoardPage";
 import { TryItPage } from "@/pages/TryItPage";
+import { OverviewPage } from "@/pages/OverviewPage";
 import { useApiResource } from "@/lib/useApiResource";
 import { AppSidebar } from "@/kit/blocks/dashboard/components/app-sidebar";
 import { SiteHeader } from "@/kit/blocks/dashboard/components/site-header";
@@ -112,5 +113,5 @@ export function DashboardShell() {
   return <SidebarProvider><AppSidebar repairs={repairRows} roles={roleRows} /><SidebarInset><SiteHeader title={title} onSearch={() => setPaletteOpen(true)} /><Routes><Route path="/" element={<BoardPageProxy />} /><Route path="/abilities" element={<AbilitiesProxy />} /><Route path="/models" element={<ModelsPage />} /><Route path="/engines" element={<EnginesPage />} /><Route path="/monitoring" element={<MonitoringPage />} /><Route path="/alerts" element={<AlertsPage />} /><Route path="/updates" element={<SimplePage title="Updates" description="Keep the Stack current without losing control." emptyTitle="Updates are checked on request" emptyDetail="There is nothing to apply yet. The update service will appear here when an update is available." />} /><Route path="/backups" element={<SimplePage title="Backups" description="A quiet place for the data that belongs to your household." emptyTitle="No backup target yet" emptyDetail="Choose where the Stack should keep an encrypted backup before the first backup runs." />} /><Route path="/access" element={<AccessPage />} /><Route path="/try" element={<TryItPage />} /><Route path="/settings" element={<SimplePage title="Settings" description="The essentials for this local Stack." emptyTitle="Settings stay intentionally small" emptyDetail="Port, data directory, and service state will appear here as the Stack grows." />} /><Route path="*" element={<BoardPageProxy />} /></Routes></SidebarInset><CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} /></SidebarProvider>;
 }
 
-function BoardPageProxy() { return <BoardPage embedded />; }
+function BoardPageProxy() { const roles = useApiResource<{ roles: RoleRecord[] }>("/stack/v1/roles"); const hasPlan = roles.data?.roles.some((role) => role.state !== "notInstalled"); return hasPlan ? <OverviewPage /> : <BoardPage embedded />; }
 function AbilitiesProxy() { return <BoardPage embedded showAbilities />; }

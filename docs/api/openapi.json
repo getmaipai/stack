@@ -1731,6 +1731,253 @@
         }
       }
     },
+    "/stack/v1/series": {
+      "get": {
+        "tags": [
+          "Overview"
+        ],
+        "summary": "Usage, memory, and speed series",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "hour",
+                "day",
+                "week"
+              ],
+              "default": "day"
+            },
+            "required": false,
+            "name": "range",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Local dashboard series for the selected range.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "range": {
+                      "type": "string",
+                      "enum": [
+                        "hour",
+                        "day",
+                        "week"
+                      ]
+                    },
+                    "usage": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "type": "string"
+                          },
+                          "ability": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "clientId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "modelId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "requests": {
+                            "type": "integer"
+                          },
+                          "tokensIn": {
+                            "type": "integer"
+                          },
+                          "tokensOut": {
+                            "type": "integer"
+                          },
+                          "jobs": {
+                            "type": "integer"
+                          },
+                          "totalBytes": {
+                            "type": "integer"
+                          },
+                          "freeBytes": {
+                            "type": "integer"
+                          },
+                          "availablePercent": {
+                            "type": "integer"
+                          },
+                          "pressure": {
+                            "type": "string"
+                          },
+                          "loadedBytes": {
+                            "type": "integer"
+                          },
+                          "engine": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "firstTokenMs": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "tokensPerSecond": {
+                            "type": "integer",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "at"
+                        ]
+                      }
+                    },
+                    "memory": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "type": "string"
+                          },
+                          "ability": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "clientId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "modelId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "requests": {
+                            "type": "integer"
+                          },
+                          "tokensIn": {
+                            "type": "integer"
+                          },
+                          "tokensOut": {
+                            "type": "integer"
+                          },
+                          "jobs": {
+                            "type": "integer"
+                          },
+                          "totalBytes": {
+                            "type": "integer"
+                          },
+                          "freeBytes": {
+                            "type": "integer"
+                          },
+                          "availablePercent": {
+                            "type": "integer"
+                          },
+                          "pressure": {
+                            "type": "string"
+                          },
+                          "loadedBytes": {
+                            "type": "integer"
+                          },
+                          "engine": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "firstTokenMs": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "tokensPerSecond": {
+                            "type": "integer",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "at"
+                        ]
+                      }
+                    },
+                    "speed": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "type": "string"
+                          },
+                          "ability": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "clientId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "modelId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "requests": {
+                            "type": "integer"
+                          },
+                          "tokensIn": {
+                            "type": "integer"
+                          },
+                          "tokensOut": {
+                            "type": "integer"
+                          },
+                          "jobs": {
+                            "type": "integer"
+                          },
+                          "totalBytes": {
+                            "type": "integer"
+                          },
+                          "freeBytes": {
+                            "type": "integer"
+                          },
+                          "availablePercent": {
+                            "type": "integer"
+                          },
+                          "pressure": {
+                            "type": "string"
+                          },
+                          "loadedBytes": {
+                            "type": "integer"
+                          },
+                          "engine": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "firstTokenMs": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "tokensPerSecond": {
+                            "type": "integer",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "at"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "range",
+                    "usage",
+                    "memory",
+                    "speed"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/roles": {
       "get": {
         "tags": [

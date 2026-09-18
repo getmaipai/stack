@@ -9,6 +9,9 @@ the product passes its battle-tested checklist in `docs/dev.md`.
 
 ### Added
 
+- STACK-36 Overview console: range-aware usage, memory, and speed series with
+  seven dashboard widgets, clickable status rings, and showroom captures.
+
 - STACK-35 property panel: reusable engine, model, and detected-store detail
   panels with tabs, action buttons, arrow-key selection, and phone sheets.
 

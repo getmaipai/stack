@@ -51,4 +51,16 @@ export const showroomStorage = { totalBytes: 84_600_000_000, byCategory: { model
 export const showroomBudget = { capBytes: 128 * 1_073_741_824, freeMemoryBytes: 74 * 1_073_741_824, availablePercent: 58, pressure: "normal" as const, loaded: [{ id: "qwen3-27b-instruct", kind: "resident" as const, peakBytes: 21_600_000_000, measured: true, lastUsedAt: now.toISOString(), idleTtlSeconds: 0, pinned: true, pid: 4412 }, { id: "qwen3-4b-kids", kind: "resident" as const, peakBytes: 3_400_000_000, measured: true, lastUsedAt: new Date(now.getTime() - 3600000).toISOString(), idleTtlSeconds: 0, pinned: true, pid: 4414 }], queue: [] };
 export const showroomNotifications = Array.from({ length: 8 }, (_, index) => ({ id: `showroom-notification-${index + 1}`, title: ["Engine b11026 is available", "ComfyUI is not running", "A model revision is ready", "Backup target is not configured", "Chat engine restarted", "Memory returned to normal", "Home connected", "Updates checked"][index]!, level: index === 1 ? "immediate" : "passive", at: new Date(now.getTime() - index * 86400000).toISOString(), data: "{}" }));
 
+export function showroomSeries(range: "hour" | "day" | "week") {
+  const count = range === "hour" ? 6 : range === "day" ? 12 : 24;
+  const step = range === "hour" ? 10 * 60_000 : range === "day" ? 2 * 60 * 60_000 : 6 * 60 * 60_000;
+  const usage = Array.from({ length: count }, (_, index) => {
+    const at = new Date(now.getTime() - (count - index - 1) * step).toISOString();
+    return { at, ability: "chat", clientId: "client-home", modelId: "qwen3-27b-instruct", requests: 12 + index * 3, tokensIn: 420 + index * 38, tokensOut: 690 + index * 51, jobs: index % 4 === 0 ? 1 : 0 };
+  });
+  const memory = Array.from({ length: count }, (_, index) => ({ at: usage[index]!.at, totalBytes: showroomHardware.totalRamGb * 1_073_741_824, freeBytes: (74 - Math.min(index, 4)) * 1_073_741_824, availablePercent: 58 - Math.min(index, 4) * 2, pressure: index > count - 3 ? "warn" : "normal", loadedBytes: 25_000_000_000 + index * 500_000_000 }));
+  const speed = Array.from({ length: Math.min(count, 6) }, (_, index) => ({ at: usage[count - Math.min(count, 6) + index]!.at, ability: "chat", modelId: "qwen3-27b-instruct", engine: "b10797", firstTokenMs: 180 - index * 8, tokensPerSecond: 42 + index * 2 }));
+  return { usage, memory, speed };
+}
+
 export function showroomResolveHealth(code: string): boolean { const item = showroomHealth.find((entry) => entry.code === code); if (!item) return false; showroomHealth.splice(showroomHealth.indexOf(item), 1); return true; }

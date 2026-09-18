@@ -15,6 +15,7 @@ import { getMemoryReader } from "@/lib/memory";
 import { readGgufFacts } from "@/lib/gguf";
 import { hfHubRoot } from "@/lib/store/layout";
 import { activateEngineConfig, settingValues } from "@/settings/engineKeys";
+import { recordSpeedResult } from "@/lib/series";
 
 export type EngineKind = "spawned" | "managed" | "url";
 
@@ -493,6 +494,7 @@ export async function completeChat(model: string, body: Record<string, unknown>,
   backend.activeRequests++;
   state.status = { ...state.status, state: "busy", kind: backend.kind, identity: backend.identity };
   try {
+    const startedAt = performance.now();
     const completionMs = typeof body.timeout_ms === "number" && body.timeout_ms > 0 ? body.timeout_ms : (timeoutOverrides.completionMs ?? DEFAULT_COMPLETION_TIMEOUT_MS);
     const result = await withTimeout(
       backend.client.complete({ ...body, model }, signal),
@@ -503,6 +505,11 @@ export async function completeChat(model: string, body: Record<string, unknown>,
       if (!await backend.client.health()) {
         throw new EngineUnavailableError(`Engine returned HTTP ${result.status} and is no longer healthy.`);
       }
+    }
+    if (result.status >= 200 && result.status < 300) {
+      const usage = (result.body as { usage?: { completion_tokens?: unknown } }).usage;
+      const completionTokens = typeof usage?.completion_tokens === "number" ? usage.completion_tokens : null;
+      recordSpeedResult({ ability: model, modelId: backend.identity.model, engine: backend.identity.build, firstTokenMs: Math.round(performance.now() - startedAt), tokensPerSecond: completionTokens && completionTokens > 0 ? Math.round(completionTokens / Math.max((performance.now() - startedAt) / 1000, 0.001)) : null });
     }
     return { ...result, headers: identityHeaders(backend.identity) };
   } catch (error) {

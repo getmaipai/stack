@@ -7,6 +7,7 @@ import { clients } from "@/db/schema";
 import { identityHeaders } from "@/lib/identity";
 import { ROLE_IDS, type RoleId } from "@/roles";
 import type { AppEnv, ClientRecord } from "@/types";
+import { recordUsageSample } from "@/lib/series";
 
 export interface UsageDelta {
   requests?: number;
@@ -96,6 +97,7 @@ export function recordUsage(id: string, delta: UsageDelta): void {
     audioSeconds: sql`${clients.audioSeconds} + ${audioSeconds}`,
     jobs: sql`${clients.jobs} + ${jobs}`,
   }).where(eq(clients.id, id)).run();
+  recordUsageSample({ clientId: id, ability: null, modelId: null, requests, tokensIn, tokensOut, jobs });
 }
 
 export function listClients(): ClientRecord[] {
