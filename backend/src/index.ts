@@ -11,9 +11,13 @@ async function openBrowser(): Promise<void> {
   await result.exited;
 }
 
+export function serveOptions(): { port: number; hostname: string; fetch: (request: Request) => Response | Promise<Response>; idleTimeout: number } {
+  return { port, hostname: stackSettingValues().lanAccess === true ? "0.0.0.0" : "127.0.0.1", fetch: app.fetch, idleTimeout: 255 };
+}
+
 async function serve(): Promise<void> {
   activateStackConfig();
-  const server = Bun.serve({ port, hostname: stackSettingValues().lanAccess === true ? "0.0.0.0" : "127.0.0.1", fetch: app.fetch });
+  const server = Bun.serve(serveOptions());
   const stopDetection = startDetection();
   let stopping = false;
   const stop = async (exitCode: number): Promise<void> => {

@@ -16,6 +16,24 @@
         "required": [
           "error"
         ]
+      },
+      "CheckStarted": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "running"
+            ]
+          }
+        },
+        "required": [
+          "runId",
+          "state"
+        ]
       }
     },
     "parameters": {}
@@ -7749,90 +7767,30 @@
         "tags": [
           "Health"
         ],
-        "summary": "Check every ready Stack role",
+        "summary": "Check every ready Stack role as a job",
         "responses": {
-          "200": {
-            "description": "The completed Stack check.",
+          "202": {
+            "description": "The check is running; check.progress and check.done events follow.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "at": {
-                      "type": "string"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "results": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "role": {
-                            "type": "string"
-                          },
-                          "ok": {
-                            "type": "boolean"
-                          },
-                          "ms": {
-                            "type": "integer"
-                          },
-                          "reason": {
-                            "type": "string",
-                            "nullable": true
-                          },
-                          "loadMs": {
-                            "type": "integer",
-                            "nullable": true
-                          },
-                          "skipped": {
-                            "type": "boolean"
-                          }
-                        },
-                        "required": [
-                          "role",
-                          "ok",
-                          "ms",
-                          "reason",
-                          "loadMs"
-                        ]
-                      }
-                    },
-                    "fitTogether": {
-                      "type": "object",
-                      "properties": {
-                        "ok": {
-                          "type": "boolean"
-                        },
-                        "reason": {
-                          "type": "string",
-                          "nullable": true
-                        }
-                      },
-                      "required": [
-                        "ok",
-                        "reason"
-                      ]
-                    },
-                    "reason": {
-                      "type": "string",
-                      "nullable": true
-                    }
-                  },
-                  "required": [
-                    "at",
-                    "ok",
-                    "results",
-                    "fitTogether",
-                    "reason"
-                  ]
+                  "$ref": "#/components/schemas/CheckStarted"
                 }
               }
             }
           },
           "400": {
             "description": "The check could not run.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A check is already running.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7852,7 +7810,7 @@
         "summary": "Read the last Stack check",
         "responses": {
           "200": {
-            "description": "The last completed Stack check, if any.",
+            "description": "The last completed Stack check; running state when a check is in flight.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7919,6 +7877,15 @@
                     "reason": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "running"
+                      ]
+                    },
+                    "startedAt": {
+                      "type": "string"
                     }
                   },
                   "required": [

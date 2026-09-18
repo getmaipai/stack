@@ -128,6 +128,16 @@ export interface CheckResult {
   reason: string | null;
 }
 
+export interface CheckStarted {
+  runId: string;
+  state: "running";
+}
+
+export interface CheckLatest {
+  state?: "running";
+  startedAt?: string;
+}
+
 export type SetupTier = "p16" | "p32" | "p64" | "p128";
 export type SetupMode = "small" | "full";
 export type DownloadStatus = "queued" | "downloading" | "paused" | "installed" | "failed";

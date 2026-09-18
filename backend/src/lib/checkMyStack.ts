@@ -11,6 +11,7 @@ import type { MemoryReader } from "@/lib/memory/types";
 import { getActivityReader, hasRecentActivity, type ActivityReader } from "@/lib/activity";
 
 export const NIGHTLY_CHECK_JOB_KIND = "nightly-check";
+let runningCheck: { runId: string; startedAt: string } | null = null;
 const CHECK_PROMPT = "Reply with the word OK";
 
 export interface CheckRoleResult {
@@ -37,6 +38,7 @@ export interface CheckRun {
 
 export interface CheckOptions {
   roleIds?: RoleId[];
+  checkId?: string;
   requestRole?: (role: RoleId) => Promise<{ status: number; reason?: string; loadMs?: number | null }>;
   fitGenerator?: () => Promise<void>;
   memoryReader?: MemoryReader;
@@ -106,7 +108,11 @@ export async function runFitTogetherCheck(options: Pick<CheckOptions, "fitGenera
 
 export async function runCheck(options: CheckOptions = {}): Promise<CheckRun> {
   const roleIds = options.roleIds ?? ROLE_IDS.filter((role) => ["installed", "ready"].includes(resolveRole(role).state));
-  const results: CheckRoleResult[] = [];
+  const checkId = options.checkId ?? crypto.randomUUID();
+  if (runningCheck !== null) return { at: new Date().toISOString(), ok: false, results: [], fitTogether: { ok: false, reason: "A check is already running." }, reason: "A check is already running." };
+  runningCheck = { runId: checkId, startedAt: new Date().toISOString() };
+  try {
+    const results: CheckRoleResult[] = [];
   for (const role of roleIds) {
     emit({ id: "check.progress", data: { role, state: "running" } });
     const result = await checkRole(role, options);
@@ -129,6 +135,17 @@ export async function runCheck(options: CheckOptions = {}): Promise<CheckRun> {
   db.insert(checkRuns).values({ at, ok: ok ? 1 : 0, results: JSON.stringify(results), fitTogetherOk: fitTogether.ok ? 1 : 0, fitTogetherReason: fitTogether.reason }).run();
   emit({ id: "check.done", data: { ok, roleCount: results.length, fitTogetherOk: fitTogether.ok } });
   return { at, ok, results, fitTogether, reason };
+  } finally {
+    runningCheck = null;
+  }
+}
+
+export function runningCheckState(): { runId: string; startedAt: string } | null {
+  return runningCheck;
+}
+
+export function __resetChecksForTests(): void {
+  runningCheck = null;
 }
 
 export function latestCheck(): CheckRun | null {
