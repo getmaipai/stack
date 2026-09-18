@@ -26,12 +26,13 @@ the Studio milestone proves the hub's profile before Home migrates.
 
 | Milestone | Items, in order | Why here |
 |---|---|---|
-| v0.1.0: app and release | STACK-86, STACK-66, STACK-76, STACK-79, STACK-67, STACK-68, STACK-82 | Qualify one pinned chat setup, then make the Tauri shell install it, authenticate its console and prove the first answer. |
-| v0.1.0: help and trust | STACK-87, STACK-55, STACK-37, STACK-69, STACK-70, STACK-28, STACK-29, STACK-71, STACK-72, STACK-77, STACK-78, STACK-73 | Make readiness and repair truthful; close help, settings, privacy, licensing and diagnostics gaps. |
+| v0.1.0: qualified capabilities | STACK-86, STACK-80, STACK-81, STACK-88, STACK-89, STACK-90, STACK-91, STACK-92 | Prove model operations, role wires, update recovery, engine observation and every visible control on a clean account; the [matrix](plans/v0.1.0-capability-matrix.md) sets each claim. |
+| v0.1.0: app and release | STACK-66, STACK-76, STACK-79, STACK-82, STACK-87, STACK-67, STACK-68 | Install the Tauri app and daemon, authenticate its console, prove the first answer and show useful status. |
+| v0.1.0: help and trust | STACK-55, STACK-37, STACK-69, STACK-70, STACK-28, STACK-29, STACK-71, STACK-72, STACK-77, STACK-78, STACK-85, STACK-73 | Make Help, settings, backups, privacy, licensing and diagnostics truthful. |
 | v0.1.0: distribution | RELEASE-STACK-01, STACK-84, STACK-83, SITE-STACK-01 | Build signed artifacts, prove update compatibility and a clean install before the owner authorizes a tag. |
 | Studio proof | STACK-13, STACK-74, STACK-14, STACK-61 | Complete generator jobs and the bench protocol, then measure the Studio and coding context against its real profile. |
 | Home migration | STACK-75, STACK-16 | Pin and test the Stack/Home wire, then migrate Home with rollback after the Studio proof. |
-| Later Mac operations | STACK-04d, STACK-21, STACK-22, STACK-23, STACK-24, STACK-25, STACK-27, STACK-30, STACK-31, STACK-50, STACK-60, STACK-80, STACK-81, STACK-85 | Improve general Hub discovery, the store, maintenance, data layout, search and coding-tool setup after the curated release path works. |
+| Later Mac operations | STACK-04d, STACK-21, STACK-22, STACK-23, STACK-24, STACK-25, STACK-27, STACK-30, STACK-31, STACK-50, STACK-60 | Improve general Hub discovery, the store, maintenance, data layout and coding-tool setup after the qualified release path works. |
 | Optional interfaces | STACK-58, STACK-59, STACK-62, STACK-63 | Each needs the stated owner choice or usage evidence before it becomes a release dependency. |
 | Other platforms and kit | KIT-01, STACK-17 | Extract the shared UI kit and prove the Linux robot profile after the Mac service is stable. |
 
@@ -1203,11 +1204,87 @@ move the Stack across its client boundary.
   live chat check. Reason: an HTTP 200 or old cached result must not be
   shown as a current working Stack.
 
-The mechanism review in
-[`plans/stack-achievability-2026-09-18.md`](plans/stack-achievability-2026-09-18.md)
-withdraws general Hub discovery (STACK-80 and STACK-81) from the v0.1.0
-release gate: the curated pin can ship first. It also withdraws STACK-84
-from later operations and makes it a release gate: an app and daemon
+## Capability-matrix release gates (2026-09-18)
+
+These items implement the bounded cells in the
+[v0.1.0 matrix](plans/v0.1.0-capability-matrix.md). A scripted route
+test is necessary but does not replace the named clean-account walk.
+
+- [ ] **STACK-88 (M): prove the full verified-model lifecycle.** Make
+  rename, nested group and move, load, unload, pin and unpin, and remove
+  work from the real Models page for a qualified GGUF, preserving store
+  references and state after restart. Files: `backend/src/routes/models.ts`,
+  `backend/src/routes/groups.ts`, `backend/src/lib/modelStore.ts`,
+  `frontend/src/pages/ModelsPage.tsx`, `backend/tests/`.
+  Mirror: the temporary-data live walk in `dev.md` and STACK-04c.
+  Acceptance: on a fresh account install one qualified model, perform
+  every named action from its row, restart, confirm group, residency and
+  pin state, then remove it without deleting shared or imported bytes.
+  Out of scope: changing another tool's store or controlling its process.
+  Exit: `bash scripts/check.sh` and the recorded clean-account C3 walk.
+- [ ] **STACK-89 (M): qualify coding and embedding model roles and
+  client keys.** Pin one supported GGUF per role only where the selected
+  llama build and minimum Mac profile can pass a real request; show an
+  honest unavailable state if either fails. Check role-scoped key use,
+  revocation and the Tester on the same wire. Files:
+  `backend/src/lib/modelCatalog.ts`, `backend/src/routes/inference.ts`,
+  `backend/src/routes/clients.ts`, `frontend/src/pages/TryItPage.tsx`,
+  `backend/tests/`, `docs/dev.md`.
+  Mirror: STACK-86 qualification, STACK-07 router and STACK-74 bench.
+  Acceptance: from a fresh supported account each published coding or
+  embedding pin completes a role-appropriate client and Tester request
+  with expected identity and measured memory/disk; wrong-role and revoked
+  keys fail, and an unqualified pin cannot be offered.
+  Out of scope: voice, media, arbitrary Hub repos or a new engine.
+  Exit: `bash scripts/check.sh` and the recorded C6 and C13 walks.
+- [ ] **STACK-90 (M): update one installed model revision safely.** Watch
+  a pinned repository revision, resolve changed files and licence before
+  offering an update, stage verified bytes, run the role, retain the old
+  revision until success, and restore it on failure. Files:
+  `backend/src/updates/models.ts`, `backend/src/routes/updates.ts`,
+  `backend/src/lib/modelStore.ts`, `frontend/src/pages/ModelsPage.tsx`,
+  `backend/tests/`, `docs/user/update.md`.
+  Mirror: STACK-04 provenance, STACK-81 cache checks and the existing
+  engine rollback pattern. Acceptance: on a fresh account a new pinned
+  chat revision reports exact changed files, size and terms; an update
+  passes a role request and removes the old revision only after success;
+  a tampered or incompatible revision rolls back to the working model.
+  Out of scope: automatic revision changes or a claim for every Hub repo.
+  Exit: `bash scripts/check.sh` and the recorded C4 walk.
+- [ ] **STACK-91 (M): monitor owned engines and detected hosts honestly.**
+  Show identity, provenance, state and observed-at time for llama-server,
+  mlx-serve, ComfyUI and detected local hosts where actually present.
+  Enable start, stop and restart only for a Stack-owned llama process;
+  a missing or stale external host becomes offline, not ready. Files:
+  `backend/src/routes/engines.ts`, `backend/src/routes/detected.ts`,
+  `backend/src/lib/detect.ts`, `frontend/src/pages/EnginesPage.tsx`,
+  `backend/tests/`.
+  Mirror: STACK-34 detection and the temporary-data engine live walk.
+  Acceptance: a fresh account scans a real owned engine and a scripted
+  local external host, sees their separate identities and timestamps,
+  exercises owned start, stop and restart, then loses the external host
+  without an attempted control call or false ready badge.
+  Out of scope: installing, updating or controlling external processes.
+  Exit: `bash scripts/check.sh` and the recorded C5 walk.
+- [ ] **STACK-92 (S): make every unavailable control honest.** Apply the
+  matrix's disabled-control inventory to the real console and phone;
+  remove the media Tester placeholder action, cache-clearing no-op and
+  actions that appear available without a qualified host. Files:
+  `frontend/src/pages/TryItPage.tsx`, `frontend/src/pages/SettingsPage.tsx`,
+  `frontend/src/pages/DashboardShell.tsx`, `frontend/src/pages/EnginesPage.tsx`,
+  `frontend/src/pages/ModelsPage.tsx`, `frontend/src/kit/blocks/add-sheet/`,
+  `frontend/tests/`.
+  Mirror: `docs/ux.md` "Scan, and real over mock" item 2 and STACK-82.
+  Acceptance: on a fresh account every visible control is exercised on
+  desktop and phone; unavailable operations are disabled with the
+  matrix sentence, and no enabled control has a no-op or placeholder
+  handler. Out of scope: qualifying a new engine or modality.
+  Exit: `bash scripts/check.sh` and the recorded C8 walk.
+
+The [capability matrix](plans/v0.1.0-capability-matrix.md) restores
+bounded Hub discovery and a verified download path (STACK-80 and
+STACK-81) to the v0.1.0 gate. It does not promise that every search result
+is runnable. STACK-84 is also a release gate: an app and daemon
 update must fail safely before v0.1.0 promises updates. No item for
 universal control of third-party memory or automatic installs of every
 modality is opened: those promises have no bounded acceptance test for

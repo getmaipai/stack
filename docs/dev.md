@@ -1082,6 +1082,16 @@ sentence. The rule:
    implementation is what makes the cell reliable, not a narrower
    promise.
 
+The [v0.1.0 capability matrix](plans/v0.1.0-capability-matrix.md)
+records 30 rows and the clean-account check for each bounded cell. The
+decision is to build complete, verified model operations for each
+qualified role while limiting unqualified engine and media operations
+to observed state. The temporary-data live walk proves useful existing
+actions but cannot stand in for a fresh-account installation. Rejected:
+the chat-only cut, because it leaves feasible model and operations work
+out of the first release; and a universal installer promise, because
+unqualified engines, file sets and role wires have no recovery proof.
+
 ## The field audit: learn each mechanism from the best implementation (decided 2026-09-18, 10:30)
 
 The owner, after the product review: for the products that do parts of

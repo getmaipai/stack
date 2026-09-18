@@ -11,6 +11,14 @@ and the live Mac and robot trials. The product review is
 
 ## Decision boundary
 
+**2026-09-18 scope amendment:** The owner chose reliability by capability,
+not a chat-only release. The [v0.1.0 capability matrix](v0.1.0-capability-matrix.md)
+supersedes the narrow release recommendation in this section and the
+"Whole-program verdict" below. It keeps the curated chat setup as the
+first measured path, then admits model search, download, management and
+updates, other qualified roles, and operational features only after each
+named clean-account check passes. The mechanism risks below still apply.
+
 **Build a dependable Mac service for one curated chat setup first.** Its
 model and engine must have immutable pins, verified bytes, a measured
 footprint, a real answer, a visible failure, and a way back after an update.
@@ -375,6 +383,14 @@ until that path survives a clean install and rollback. The owner decides
 which promises appear in public copy after seeing that evidence.
 
 ## Build order and calls
+
+**2026-09-18 scope amendment:** The order and chat-only stop in this
+section are historical review advice. The current order is the
+[matrix queue](v0.1.0-capability-matrix.md#queue-after-the-field-audit)
+and the v0.1.0 milestone in `../BACKLOG.md`: qualify each model, role,
+update, engine-observation and UI cell, then finish the app and release
+checks. A search result remains exploratory until files, licence, fit and
+role wire are verified.
 
 1. Qualify one immutable chat model and one llama-server Mac build, with
    exact bytes, licence, revision, disk check and conservative fit
