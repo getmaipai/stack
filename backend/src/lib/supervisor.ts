@@ -17,6 +17,7 @@ import { hfHubRoot } from "@/lib/store/layout";
 import { activateEngineConfig, settingValues } from "@/settings/engineKeys";
 import { recordSpeedResult } from "@/lib/series";
 import { recordModelFootprint, recordModelLoaded, recordModelUnloaded } from "@/lib/modelGroups";
+import { getManagedEngineUrl } from "@/lib/detect";
 
 export type EngineKind = "spawned" | "managed" | "url";
 
@@ -213,6 +214,8 @@ const state: SupervisorState = {
 };
 
 function configuredUrl(): { kind: EngineKind; url: string } | null {
+  const adopted = getManagedEngineUrl("chat");
+  if (adopted) return { kind: "managed", url: adopted };
   const managed = process.env.STACK_MANAGED_ENGINE_URL;
   if (managed) return { kind: "managed", url: managed };
   const url = process.env.STACK_CHAT_ENGINE_URL ?? process.env.MAIPAI_LLAMA_SERVER_URL;

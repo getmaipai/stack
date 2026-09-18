@@ -22,6 +22,8 @@ Everything else stays on your computer. The Stack listens only to
 programs on the same machine unless you choose to open it to your home
 network, and even then every program needs a key you created.
 
+Detection looks only at this computer's loopback addresses and local model folders.
+
 If you install MaiPai Home on top of the Stack, Home has its own privacy
 page for the things it can connect to (your accounts, the weather, and so
 on). The Stack itself never talks to those services.

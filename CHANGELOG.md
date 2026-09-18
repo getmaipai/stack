@@ -13,6 +13,10 @@ the product passes its battle-tested checklist in `docs/dev.md`.
   per-model utilization and load seconds, governor-backed group actions, and
   grouped Models and Monitoring showroom captures.
 
+- STACK-34 detect and adopt: loopback-only engine and model-folder probes,
+  explicit role-scoped adoption, version-floor health, and Forget without
+  changing the detected host or source folder.
+
 - STACK-36 Overview console: range-aware usage, memory, and speed series with
   seven dashboard widgets, clickable status rings, and showroom captures.
 

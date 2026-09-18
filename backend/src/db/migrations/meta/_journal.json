@@ -57,6 +57,13 @@
       "when": 1789761000000,
       "tag": "0007_model_groups",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789762000000,
+      "tag": "0008_detected",
+      "breakpoints": true
     }
   ]
 }

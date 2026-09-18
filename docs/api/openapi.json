@@ -2540,10 +2540,21 @@
         "tags": [
           "Detected"
         ],
-        "summary": "List detected stores",
+        "summary": "List locally detected engines and folders",
+        "parameters": [
+          {
+            "schema": {
+              "type": "boolean",
+              "nullable": true
+            },
+            "required": false,
+            "name": "all",
+            "in": "query"
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Stores discovered without adopting them.",
+            "description": "Detected rows, excluding forgotten rows unless requested.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2558,11 +2569,7 @@
                             "type": "string"
                           },
                           "kind": {
-                            "type": "string",
-                            "enum": [
-                              "folder",
-                              "server"
-                            ]
+                            "type": "string"
                           },
                           "name": {
                             "type": "string"
@@ -2570,17 +2577,30 @@
                           "version": {
                             "type": "string"
                           },
-                          "path": {
+                          "where": {
                             "type": "string"
                           },
-                          "candidateModels": {
-                            "type": "integer"
-                          },
-                          "roles": {
+                          "couldHold": {
                             "type": "array",
                             "items": {
                               "type": "string"
                             }
+                          },
+                          "firstSeen": {
+                            "type": "string"
+                          },
+                          "lastSeen": {
+                            "type": "string"
+                          },
+                          "forgotten": {
+                            "type": "boolean"
+                          },
+                          "adopted": {
+                            "type": "boolean"
+                          },
+                          "target": {
+                            "type": "string",
+                            "nullable": true
                           }
                         },
                         "required": [
@@ -2588,9 +2608,96 @@
                           "kind",
                           "name",
                           "version",
-                          "path",
-                          "candidateModels",
-                          "roles"
+                          "where",
+                          "couldHold",
+                          "firstSeen",
+                          "lastSeen",
+                          "forgotten",
+                          "adopted",
+                          "target"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "detected"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/detected/scan": {
+      "post": {
+        "tags": [
+          "Detected"
+        ],
+        "summary": "Run the local detection sweep",
+        "responses": {
+          "200": {
+            "description": "Current local detection results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "detected": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "where": {
+                            "type": "string"
+                          },
+                          "couldHold": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "firstSeen": {
+                            "type": "string"
+                          },
+                          "lastSeen": {
+                            "type": "string"
+                          },
+                          "forgotten": {
+                            "type": "boolean"
+                          },
+                          "adopted": {
+                            "type": "boolean"
+                          },
+                          "target": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "name",
+                          "version",
+                          "where",
+                          "couldHold",
+                          "firstSeen",
+                          "lastSeen",
+                          "forgotten",
+                          "adopted",
+                          "target"
                         ]
                       }
                     }
@@ -2610,7 +2717,7 @@
         "tags": [
           "Detected"
         ],
-        "summary": "adopt a detected store",
+        "summary": "Adopt a detected engine or folder",
         "parameters": [
           {
             "schema": {
@@ -2631,7 +2738,8 @@
                     "type": "array",
                     "items": {
                       "type": "string"
-                    }
+                    },
+                    "minItems": 1
                   }
                 },
                 "required": [
@@ -2643,7 +2751,7 @@
         },
         "responses": {
           "200": {
-            "description": "Detected store updated.",
+            "description": "The detected item is now managed or imported.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2658,21 +2766,38 @@
                     "id": {
                       "type": "string"
                     },
-                    "action": {
+                    "target": {
                       "type": "string"
+                    },
+                    "roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
                     "ok",
                     "id",
-                    "action"
+                    "target",
+                    "roles"
                   ]
                 }
               }
             }
           },
+          "400": {
+            "description": "The host disappeared or roles are invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "404": {
-            "description": "Unknown detected store.",
+            "description": "Unknown detected item.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2689,7 +2814,7 @@
         "tags": [
           "Detected"
         ],
-        "summary": "forget a detected store",
+        "summary": "Forget a detected engine or folder",
         "parameters": [
           {
             "schema": {
@@ -2702,7 +2827,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Detected store updated.",
+            "description": "The row is hidden without changing the source.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2716,22 +2841,18 @@
                     },
                     "id": {
                       "type": "string"
-                    },
-                    "action": {
-                      "type": "string"
                     }
                   },
                   "required": [
                     "ok",
-                    "id",
-                    "action"
+                    "id"
                   ]
                 }
               }
             }
           },
           "404": {
-            "description": "Unknown detected store.",
+            "description": "Unknown detected item.",
             "content": {
               "application/json": {
                 "schema": {

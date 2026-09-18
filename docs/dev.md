@@ -432,6 +432,29 @@ memory and last use per model. The router records a successful served request;
 the supervisor records load and unload timing and measured footprints. Group
 actions fan out through the governor and return one result per model, so a
 single admission refusal does not hide the outcomes for its siblings.
+
+## Detect and adopt (STACK-34, 2026-09-17)
+
+Detection is a local sweep, never a network scan. It probes only `127.0.0.1`
+and `::1`, with a two-second timeout per well-known host: Ollama's
+`GET /api/version` on 11434, LM Studio's `GET /v1/models` on 1234, ComfyUI's
+`GET /system_stats` on 8188, oMLX and mlx-serve's `/v1/models` on their
+defaults, and llama-server's `/health` plus `/props`. It also looks in the
+installed-app, binary, and model-folder locations already named by the
+store/import scanner on macOS; it never starts, stops, or modifies another
+tool.
+
+The `detected` record keeps `id`, `kind`, `name`, `version`, `where`,
+`couldHold: RoleId[]`, `firstSeen`, `lastSeen`, and `forgotten`, along with
+the adoption target. A sweep upserts the last-seen record and emits
+`detected.changed`; a forgotten row stays hidden until a changed version is
+seen, and a row absent for seven days is dropped. Adoption probes again,
+reads identity, compares the version with a tested floor recorded in
+`engineCatalog.ts`, and raises `host.belowTestedVersion` when it is below the
+floor. An engine is then registered as a managed local host for the roles the
+operator chose; a folder is imported by link through the existing import
+scanner. Forget only hides the detected record and removes its registration;
+it never changes the host process or source folder.
 Existing model records gain manifests for their current files. Each move
 is logged, uses an atomic temporary path, and is safe to repeat after a
 partial or already-completed first boot.

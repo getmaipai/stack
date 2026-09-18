@@ -43,6 +43,20 @@ export const modelUsage = sqliteTable("model_usage", {
   lastUsedAt: text("last_used_at"),
 });
 
+export const detected = sqliteTable("detected", {
+  id: text("id").primaryKey(),
+  kind: text("kind").notNull(),
+  name: text("name").notNull(),
+  version: text("version").notNull(),
+  where: text("where").notNull(),
+  couldHold: text("could_hold").notNull(),
+  firstSeen: text("first_seen").notNull(),
+  lastSeen: text("last_seen").notNull(),
+  forgotten: integer("forgotten").notNull().default(0),
+  adopted: integer("adopted").notNull().default(0),
+  target: text("target"),
+});
+
 export const operator = sqliteTable("operator", {
   id: text("id").primaryKey(),
   passwordHash: text("password_hash").notNull(),

@@ -58,6 +58,7 @@ export const ENGINE_BINARIES: EngineBinaryPin[] = [
 ];
 
 export const ENGINE_READY_MARKER = ".engine-ready";
+export const DETECTED_ENGINE_VERSION_FLOORS: Record<string, string> = { ollama: "0.5.0", "lm-studio": "0.3.0", comfyui: "0.3.0", "mlx-serve": "0.1.0", omlx: "0.1.0", "llama-server": "b10797" };
 
 export function selectEngineBinary(hw: HardwareInfo): EngineBinaryPin | null {
   return ENGINE_BINARIES.find(

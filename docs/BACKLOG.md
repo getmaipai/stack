@@ -58,6 +58,10 @@ never copied. No item migrates the hub until STACK-16.
   Nullable display nicknames, one-group model placement, persistent nested
   groups, per-model usage and load seconds, rollups, group actions, and the
   grouped Models and Monitoring surfaces. Verified at <hash>.
+- [x] **STACK-34 (M): detect and adopt.** Loopback-only probes for local
+  engines and known model folders, persisted detection rows, explicit
+  operator adoption or forget, managed-host registration, folder linking,
+  version-floor health, and Engines/Models actions. Verified at <hash>.
 - [x] **STACK-05 (M): the supervisor.** `spawned`, `managed`, `url`
   engine kinds; spawn, watch, restart, the generation guard, the post-load
   check, the memory report; identity headers on every reply. Copy the
