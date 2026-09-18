@@ -3,6 +3,7 @@ import { app } from "@/app";
 import { createModelGroup, getModelUsage, listGroupRollups, performGroupAction, recordModelLoaded, recordModelUnloaded, recordModelUsage, removeModelGroup, setModelRuntimeForTests, updateModelGroup } from "@/lib/modelGroups";
 import { clearModelsForTests, upsertModel } from "@/lib/modelStore";
 import { resetSupervisorForTests } from "@/lib/supervisor";
+import { __resetOperatorForTests, __resetOperatorThrottleForTests } from "@/lib/operator";
 
 const originalScripted = process.env.STACK_SCRIPTED_ENGINES;
 
@@ -10,8 +11,8 @@ function model(id: string, groupId: string | null, nickname = id) {
   return upsertModel({ id, nickname, groupId, roles: ["chat"], source: "catalog", provenance: { licence: "Apache-2.0" }, revision: "test", sha256: "a".repeat(64), sizeBytes: 100, licence: "Apache-2.0", verifiedAt: new Date().toISOString(), installedAt: new Date().toISOString() });
 }
 
-beforeEach(() => { clearModelsForTests(); resetSupervisorForTests(); });
-afterEach(() => { clearModelsForTests(); resetSupervisorForTests(); if (originalScripted === undefined) delete process.env.STACK_SCRIPTED_ENGINES; else process.env.STACK_SCRIPTED_ENGINES = originalScripted; });
+beforeEach(() => { clearModelsForTests(); resetSupervisorForTests(); __resetOperatorForTests(); __resetOperatorThrottleForTests(); });
+afterEach(() => { clearModelsForTests(); resetSupervisorForTests(); __resetOperatorForTests(); __resetOperatorThrottleForTests(); if (originalScripted === undefined) delete process.env.STACK_SCRIPTED_ENGINES; else process.env.STACK_SCRIPTED_ENGINES = originalScripted; });
 
 test("nested group rollups count each model once and removing a middle group reparents", () => {
   const root = createModelGroup("Root"); const middle = createModelGroup("Middle", root.id); const leaf = createModelGroup("Leaf", middle.id);
