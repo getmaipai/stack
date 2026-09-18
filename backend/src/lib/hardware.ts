@@ -26,6 +26,7 @@ export interface HardwareInfo {
   unifiedMemoryGb: number;
   cudaDevices: CudaDevice[];
   freeDiskBytes: number;
+  totalDiskBytes?: number;
   osVersion: string;
 }
 
@@ -96,6 +97,7 @@ export async function detectHardware(): Promise<HardwareInfo> {
     unifiedMemoryGb: isAppleSilicon ? totalRamGb : 0,
     cudaDevices,
     freeDiskBytes: disk.bavail * disk.bsize,
+    totalDiskBytes: disk.blocks * disk.bsize,
     osVersion: await detectOsVersion(),
   };
   cached = { at: now(), info };

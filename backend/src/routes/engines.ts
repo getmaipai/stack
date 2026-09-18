@@ -31,6 +31,7 @@ const EngineSchema = z.object({
   needsRestart: z.boolean(),
   state: z.enum(["current", "notCurrent"]),
   stateReason: z.enum(["newer installed", "newer available"]).nullable(),
+  directory: z.string(),
 });
 const enginesRoute = createRoute({
   method: "get",
@@ -69,6 +70,7 @@ enginesRoutes.openapi(enginesRoute, async (c) => {
     verified: pin.verified,
     installed: existsSync(join(engineDir(pin.id), ENGINE_READY_MARKER)),
     matchesThisMachine: pin.id === selected,
+    directory: engineDir(pin.id),
   })) }, 200);
 });
 

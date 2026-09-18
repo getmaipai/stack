@@ -147,6 +147,9 @@
                         "freeDiskBytes": {
                           "type": "number"
                         },
+                        "totalDiskBytes": {
+                          "type": "number"
+                        },
                         "osVersion": {
                           "type": "string"
                         }
@@ -161,6 +164,7 @@
                         "unifiedMemoryGb",
                         "cudaDevices",
                         "freeDiskBytes",
+                        "totalDiskBytes",
                         "osVersion"
                       ]
                     },
@@ -531,6 +535,9 @@
                               "newer available",
                               null
                             ]
+                          },
+                          "directory": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -548,7 +555,8 @@
                           "notCurrent",
                           "needsRestart",
                           "state",
-                          "stateReason"
+                          "stateReason",
+                          "directory"
                         ]
                       }
                     }
@@ -2311,6 +2319,9 @@
                           },
                           "size": {
                             "type": "integer"
+                          },
+                          "location": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -2321,7 +2332,8 @@
                           "licence",
                           "fetchedAt",
                           "revision",
-                          "size"
+                          "size",
+                          "location"
                         ]
                       }
                     }
@@ -5258,6 +5270,10 @@
                               "nullable": true
                             }
                           },
+                          "modelPath": {
+                            "type": "string",
+                            "nullable": true
+                          },
                           "usage": {
                             "type": "object",
                             "properties": {
@@ -5310,6 +5326,7 @@
                           "licenceFlag",
                           "licenceUrl",
                           "provenance",
+                          "modelPath",
                           "usage"
                         ]
                       }
@@ -5565,6 +5582,10 @@
                             "nullable": true
                           }
                         },
+                        "modelPath": {
+                          "type": "string",
+                          "nullable": true
+                        },
                         "usage": {
                           "type": "object",
                           "properties": {
@@ -5617,6 +5638,7 @@
                         "licenceFlag",
                         "licenceUrl",
                         "provenance",
+                        "modelPath",
                         "usage"
                       ]
                     }
@@ -5860,6 +5882,10 @@
                         "nullable": true
                       }
                     },
+                    "modelPath": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "usage": {
                       "type": "object",
                       "properties": {
@@ -5912,6 +5938,7 @@
                     "licenceFlag",
                     "licenceUrl",
                     "provenance",
+                    "modelPath",
                     "usage"
                   ]
                 }

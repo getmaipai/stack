@@ -23,6 +23,7 @@ const HardwareInfoSchema = z.object({
   unifiedMemoryGb: z.number(),
   cudaDevices: z.array(CudaDeviceSchema),
   freeDiskBytes: z.number(),
+  totalDiskBytes: z.number(),
   osVersion: z.string(),
 });
 const ProfileTierSchema = z.object({
@@ -63,7 +64,7 @@ export const hardwareRoutes = apiRouter();
 hardwareRoutes.openapi(hardwareRoute, async (c) => {
   if (showroom()) return c.json({ hardware: showroomHardware, proposed: showroomProfile, tiers: PROFILE_TIERS } as never, 200);
   const hardware = await detectHardware();
-  return c.json({ hardware: { ...hardware, computerName: hardware.computerName ?? "This computer" }, proposed: proposeProfile(hardware), tiers: PROFILE_TIERS }, 200);
+  return c.json({ hardware: { ...hardware, computerName: hardware.computerName ?? "This computer", totalDiskBytes: hardware.totalDiskBytes ?? 0 }, proposed: proposeProfile(hardware), tiers: PROFILE_TIERS }, 200);
 });
 
 export type { ProfileTier, RoleId };

@@ -7,8 +7,9 @@ const originalEventSource = globalThis.EventSource;
 
 afterEach(() => { cleanup(); globalThis.EventSource = originalEventSource; });
 
-const hardwareResponse = { hardware: { platform: "darwin", arch: "arm64", totalRamGb: 32, cpuCount: 8, isAppleSilicon: true, unifiedMemoryGb: 32, cudaDevices: [], freeDiskBytes: 500_000_000_000, osVersion: "15.0" }, proposed: null, tiers: [] };
-const budgetResponse = { capBytes: 16_000_000_000, freeMemoryBytes: 8_000_000_000, pressure: false, loaded: [], queue: [] };
+const hardwareResponse = { hardware: { platform: "darwin", arch: "arm64", totalRamGb: 32, cpuCount: 8, isAppleSilicon: true, unifiedMemoryGb: 32, cudaDevices: [], freeDiskBytes: 500_000_000_000, totalDiskBytes: 1_000_000_000_000, osVersion: "15.0" }, proposed: null, tiers: [] };
+const budgetResponse = { totalMemoryBytes: 24_000_000_000, capBytes: 16_000_000_000, freeMemoryBytes: 15_700_000_000, pressure: false, loaded: [], queue: [] };
+const storageResponse = { freeDiskBytes: 500_000_000_000, byCategory: { models: 120_000_000_000, engines: 40_000_000_000, logs: 1_000_000_000, backups: 5_000_000_000 } };
 
 function stubStackFetch(responses: Record<string, unknown>): void {
   globalThis.EventSource = undefined as unknown as typeof EventSource;
@@ -21,7 +22,7 @@ function stubStackFetch(responses: Record<string, unknown>): void {
   }) as unknown as typeof fetch;
 }
 
-const boardExtras = { "/stack/v1/hardware": hardwareResponse, "/stack/v1/budget": budgetResponse, "/stack/v1/notifications": { notifications: [] }, "/stack/v1/setup/plan": { plan: null, downloads: [], health: null } };
+const boardExtras = { "/stack/v1/hardware": hardwareResponse, "/stack/v1/budget": budgetResponse, "/stack/v1/storage": storageResponse, "/stack/v1/notifications": { notifications: [] }, "/stack/v1/setup/plan": { plan: null, downloads: [], health: null } };
 
 test("the Stack shell lists every section in order", () => {
   stubStackFetch({ ...boardExtras, "/stack/v1/repairs": { repairs: [] }, "/stack/v1/roles": { roles: [] }, "/stack/v1/operator": { state: "signedOut", required: false } });
@@ -42,7 +43,9 @@ test("the root waits for its plan before choosing the overview instead of mounti
   globalThis.fetch = mock((input: RequestInfo | URL) => {
     const path = new URL(typeof input === "string" ? input : input.toString(), "http://local").pathname;
     if (path.endsWith("/setup/plan")) return new Promise<Response>((resolve) => { resolvePlan = resolve; });
+    if (path.endsWith("/hardware")) return Promise.resolve(Response.json(hardwareResponse));
     if (path.endsWith("/budget")) return Promise.resolve(Response.json(budgetResponse));
+    if (path.endsWith("/storage")) return Promise.resolve(Response.json(storageResponse));
     if (path.endsWith("/roles")) return Promise.resolve(Response.json({ roles: [] }));
     if (path.endsWith("/health")) return Promise.resolve(Response.json({ health: [] }));
     if (path.endsWith("/engines")) return Promise.resolve(Response.json({ engines: [] }));
@@ -256,8 +259,8 @@ test("the shell pins admin below the common group and exposes resources", async 
   render(<MemoryRouter initialEntries={["/settings"]}><DashboardShell /></MemoryRouter>);
   await waitFor(() => expect(document.querySelector('[data-nav-mode="pinned"]')).toBeTruthy());
   expect(document.body.textContent).toContain("Memory");
-  expect(document.body.textContent).toContain("7.5 GB used of 14.9 GB · 14.9 GB budget for models");
-  expect(document.body.textContent).toContain("466 GB free");
+  expect(document.body.textContent).toContain("8.3 GB used of 24 GB · 16 GB budget for models");
+  expect(document.body.textContent).toContain("465.7 GB free");
   const nav = document.querySelector('[data-sidebar="content"]')!;
   expect(nav.textContent?.indexOf("Overview")).toBeLessThan(nav.textContent?.indexOf("Settings") ?? 0);
   expect(document.body.textContent).toContain("Updates");

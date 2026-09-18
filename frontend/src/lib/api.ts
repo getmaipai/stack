@@ -21,6 +21,7 @@ export interface HardwareInfo {
   unifiedMemoryGb: number;
   cudaDevices: Array<{ index: number; name: string; vramBytes: number }>;
   freeDiskBytes: number;
+  totalDiskBytes?: number;
   osVersion: string;
 }
 
@@ -99,6 +100,7 @@ export interface LibraryRecord {
   revision: string;
   size: number;
   etag: string | null;
+  location?: string;
 }
 
 export interface RepairRecord {
@@ -211,6 +213,7 @@ export interface EngineRecord {
   needsRestart: boolean;
   state: "current" | "notCurrent";
   stateReason: "newer installed" | "newer available" | "needs restart" | null;
+  directory?: string;
 }
 
 export class ApiError extends Error {

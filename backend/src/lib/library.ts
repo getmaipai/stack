@@ -21,6 +21,7 @@ let updatesOverride: boolean | null = null;
 const version = "0.1.0";
 function safe(id: string): string { return id.replace(/[^a-zA-Z0-9._-]+/g, "_"); }
 function itemDir(id: string): string { return join(root, safe(id)); }
+export function libraryLocation(id: string): string { return itemDir(id); }
 function metaPath(id: string): string { return join(itemDir(id), "meta.json"); }
 function readMeta(id: string): LibraryItem | null { try { return JSON.parse(readFileSync(metaPath(id), "utf8")) as LibraryItem; } catch { return null; } }
 function writeMeta(item: LibraryItem): void { mkdirSync(itemDir(item.id), { recursive: true, mode: 0o700 }); writeFileSync(metaPath(item.id), JSON.stringify(item, null, 2), { mode: 0o600 }); }
