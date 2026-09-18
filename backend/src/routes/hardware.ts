@@ -14,6 +14,7 @@ const CudaDeviceSchema = z.object({
   utilizationPct: z.number().optional(),
 });
 const HardwareInfoSchema = z.object({
+  computerName: z.string(),
   platform: z.string(),
   arch: z.string(),
   totalRamGb: z.number(),
@@ -62,7 +63,7 @@ export const hardwareRoutes = apiRouter();
 hardwareRoutes.openapi(hardwareRoute, async (c) => {
   if (showroom()) return c.json({ hardware: showroomHardware, proposed: showroomProfile, tiers: PROFILE_TIERS } as never, 200);
   const hardware = await detectHardware();
-  return c.json({ hardware, proposed: proposeProfile(hardware), tiers: PROFILE_TIERS }, 200);
+  return c.json({ hardware: { ...hardware, computerName: hardware.computerName ?? "This computer" }, proposed: proposeProfile(hardware), tiers: PROFILE_TIERS }, 200);
 });
 
 export type { ProfileTier, RoleId };

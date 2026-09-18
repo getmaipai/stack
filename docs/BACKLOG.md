@@ -734,7 +734,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   trims a scripted old ring and leaves state rows (test); the Overview
   reads unchanged. Out of scope: moving text logs into a database.
   Exit: `scripts/check.sh`.
-- [ ] **STACK-51 (M): the shell, second pass.** ux.md "The shell,
+- [x] **STACK-51 (M): the shell, second pass.** ux.md "The shell,
   second pass" (2026-09-18): Abilities leaves the sidebar (its actions
   on Models and the Overview strip); two sidebar groups, common on top
   (Overview, Engines, Models, Clients, Tester, Monitoring) and

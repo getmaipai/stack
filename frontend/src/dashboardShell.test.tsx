@@ -28,12 +28,12 @@ test("the Stack shell lists every section in order", () => {
   render(<MemoryRouter initialEntries={["/updates"]}><DashboardShell /></MemoryRouter>);
   const text = document.body.textContent ?? "";
   let previous = -1;
-  for (const section of ["Overview", "Abilities", "Models", "Engines", "Monitoring", "Alerts", "Updates", "Backups", "Access", "Settings"]) {
+  for (const section of ["Overview", "Engines", "Models", "Clients", "Tester", "Monitoring", "Settings", "Logs", "Alerts"]) {
     const next = text.indexOf(section);
     expect(next).toBeGreaterThan(previous);
     previous = next;
   }
-  expect(text).toContain("Updates are checked on request");
+  expect(text).toContain("Settings");
 });
 
 test("the collapsed rail keeps every section and carries a tooltip on each button", () => {
@@ -43,7 +43,7 @@ test("the collapsed rail keeps every section and carries a tooltip on each butto
   if (!trigger) throw new Error("no sidebar trigger found");
   fireEvent.click(trigger);
   const buttons = Array.from(document.querySelectorAll('[data-slot="sidebar-menu-button"]'));
-  const sections = ["Overview", "Abilities", "Models", "Engines", "Monitoring", "Alerts", "Updates", "Backups", "Access", "Settings"];
+  const sections = ["Overview", "Engines", "Models", "Clients", "Tester", "Monitoring", "Settings", "Logs", "Alerts"];
   const text = document.body.textContent ?? "";
   for (const title of sections) {
     expect(text).toContain(title);
@@ -96,7 +96,7 @@ test("a stopped engine turns the sidebar health dot red", async () => {
   });
   render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
   await waitFor(() => expect(document.body.textContent).toContain("All good"));
-  const dot = document.querySelector('a[href="/alerts"] span[aria-hidden]');
+  const dot = Array.from(document.querySelectorAll('a[href="/alerts"] span[aria-hidden]')).at(-1);
   expect(dot?.className).toContain("bg-red-500");
 });
 
@@ -164,7 +164,7 @@ test("the sidebar shows quiet indicators for engines, updates, alerts, and detec
   const enginesLink = document.querySelector('a[href="/engines"]');
   expect(enginesLink?.textContent).toContain("2");
   // Updates badge
-  const updatesLink = document.querySelector('a[href="/updates"]');
+  const updatesLink = document.querySelector('a[href="/settings"]');
   expect(updatesLink?.textContent).toContain("1");
   // Alerts: severity dot, no count badge
   const alertsLink = document.querySelector('a[href="/alerts"]');
@@ -191,9 +191,10 @@ test("the top bar names this computer and toggles the persisted theme", async ()
     "/stack/v1/operator": { state: "signedOut", required: false },
   });
   render(<MemoryRouter initialEntries={["/updates"]}><DashboardShell /></MemoryRouter>);
-  await waitFor(() => expect(document.querySelector("[data-header-health-dot]")?.getAttribute("aria-label")).toBe("1 thing needs attention"));
+  await waitFor(() => expect(document.querySelector('[data-sidebar="header"] p[title]')?.getAttribute("title")).toBe("1 thing needs attention"));
   expect(document.body.textContent).toContain("This computer");
-  const toggle = document.querySelector('button[aria-label="Use dark mode"]');
+  fireEvent.pointerDown(document.querySelector("[data-profile-trigger]") as HTMLElement);
+  const toggle = await waitFor(() => document.querySelector('button[aria-label="Use dark mode"]'));
   expect(toggle).toBeTruthy();
   fireEvent.click(toggle as HTMLElement);
   expect(document.documentElement.classList.contains("dark")).toBe(true);
@@ -203,7 +204,7 @@ test("the top bar names this computer and toggles the persisted theme", async ()
 });
 
 test("the responsive header keeps three phone actions and no text input", async () => {
-  stubStackFetch({ ...boardExtras, "/stack/v1/repairs": { repairs: [] }, "/stack/v1/roles": { roles: [] }, "/stack/v1/operator": { state: "signedOut", required: false } });
+  stubStackFetch({ ...boardExtras, "/stack/v1/settings": { settings: [] }, "/stack/v1/repairs": { repairs: [] }, "/stack/v1/roles": { roles: [] }, "/stack/v1/operator": { state: "signedOut", required: false } });
   Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 400 });
   render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
   await waitFor(() => expect(document.querySelector('button[aria-label="Search Stack"]')).toBeTruthy());
@@ -214,4 +215,50 @@ test("the responsive header keeps three phone actions and no text input", async 
   Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 1440 });
   render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
   await waitFor(() => expect(document.querySelector("header")?.textContent).toContain("Search Stack"));
+});
+
+test("the shell pins admin below the common group and exposes resources", async () => {
+  Object.defineProperty(window, "innerHeight", { configurable: true, writable: true, value: 1000 });
+  stubStackFetch({ ...boardExtras, "/stack/v1/settings": { settings: [] }, "/stack/v1/repairs": { repairs: [] }, "/stack/v1/roles": { roles: [] }, "/stack/v1/operator": { state: "signedOut", required: false } });
+  render(<MemoryRouter initialEntries={["/settings"]}><DashboardShell /></MemoryRouter>);
+  await waitFor(() => expect(document.querySelector('[data-nav-mode="pinned"]')).toBeTruthy());
+  expect(document.body.textContent).toContain("Memory");
+  expect(document.body.textContent).toContain("7.5 GB of 14.9 GB used");
+  expect(document.body.textContent).toContain("466 GB free");
+  const nav = document.querySelector('[data-sidebar="content"]')!;
+  expect(nav.textContent?.indexOf("Overview")).toBeLessThan(nav.textContent?.indexOf("Settings") ?? 0);
+  expect(document.body.textContent).toContain("Updates");
+  expect(document.body.textContent).toContain("Backups");
+  expect(document.body.textContent).not.toContain("Try it");
+  expect(document.body.textContent).not.toContain("Access");
+  expect(document.querySelector("header input")).toBeNull();
+  Object.defineProperty(window, "innerHeight", { configurable: true, writable: true, value: 560 });
+  cleanup();
+  render(<MemoryRouter initialEntries={["/settings"]}><DashboardShell /></MemoryRouter>);
+  await waitFor(() => expect(document.querySelector('[data-nav-mode="categorized"]')).toBeTruthy());
+  expect(document.querySelector('[data-sidebar="content"]')?.textContent).toContain("Manage");
+});
+
+test("the header pill pauses and resumes the scripted Stack in the centered region", async () => {
+  let state: "running" | "paused" = "running";
+  const calls: string[] = [];
+  globalThis.EventSource = undefined as unknown as typeof EventSource;
+  globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input), "http://local");
+    calls.push(`${url.pathname} ${init?.method ?? "GET"}`);
+    if (url.pathname.endsWith("/run-state") && init?.method === "POST") { state = JSON.parse(String(init.body)).state; return Response.json({ state }); }
+    if (url.pathname.endsWith("/run-state")) return Response.json({ state });
+    const path = url.pathname;
+    const body = path.endsWith("/roles") ? { roles: [{ id: "chat", wire: "chat", residency: "resident", description: "Chat", state: "ready", reason: null }] } : path.endsWith("/hardware") ? hardwareResponse : path.endsWith("/budget") ? budgetResponse : path.endsWith("/repairs") ? { repairs: [] } : path.endsWith("/health") ? { health: [] } : path.endsWith("/engines") ? { engines: [] } : path.endsWith("/updates") ? { app: { available: null }, engines: { available: null }, models: { available: null } } : {};
+    return Response.json(body);
+  }) as unknown as typeof fetch;
+  render(<MemoryRouter initialEntries={["/models"]}><DashboardShell /></MemoryRouter>);
+  await waitFor(() => expect(document.querySelector('button[aria-label="Pause Stack"]')).toBeTruthy());
+  fireEvent.click(document.querySelector('button[aria-label="Pause Stack"]')!);
+  fireEvent.click(Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "Pause")!);
+  await waitFor(() => expect(document.body.textContent).toContain("Paused"));
+  expect(calls).toContain("/stack/v1/run-state POST");
+  fireEvent.click(document.querySelector('button[aria-label="Resume Stack"]')!);
+  await waitFor(() => expect(document.body.textContent).toContain("Running"));
+  expect(calls.filter((call) => call === "/stack/v1/run-state POST")).toHaveLength(2);
 });

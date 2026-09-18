@@ -28,6 +28,7 @@ export const GovernorRules = {
 
 export type GovernorKind = "resident" | "jit" | "generator";
 export type GovernorTier = keyof typeof GovernorRules.tiers;
+export type RunState = "running" | "pausing" | "paused";
 
 export interface GovernorRequest {
   id: string;
@@ -93,6 +94,7 @@ let freeMemoryBytes = 0;
 let availablePercent = 0;
 let pressure: MemoryPressure = "normal";
 let pressurePolls = 0;
+let runState: RunState = "running";
 const loaded = new Map<string, LoadedInternal>();
 const queue: Array<GovernorRequest> = [];
 const refusalCounts = new Map<string, number>();
@@ -131,6 +133,7 @@ function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
 }
 
 export async function admit(request: GovernorRequest): Promise<GovernorHandle | { queued: true; position: number } | { refused: true; reason: string }> {
+  if (runState !== "running") return { refused: true, reason: "The Stack is paused." };
   const peak = peakFor(request);
   if (!canAdmit(request, peak.bytes)) {
     const refusals = (refusalCounts.get(request.id) ?? 0) + 1;
@@ -160,6 +163,23 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
   loaded.set(request.id, item);
   return { id: request.id, kind: request.kind, requestedBytes: peak.bytes };
 }
+
+export function getRunState(): RunState { return runState; }
+
+export function setRunState(next: RunState): void {
+  runState = next;
+  emit({ id: "run.state", data: { state: next } });
+}
+
+export async function pauseAll(): Promise<void> {
+  if (runState === "paused") return;
+  setRunState("pausing");
+  queue.length = 0;
+  for (const item of [...loaded.values()]) loaded.delete(item.id);
+  setRunState("paused");
+}
+
+export function resumeAll(): void { setRunState("running"); }
 
 export function release(handle: GovernorHandle): void {
   loaded.delete(handle.id);
@@ -299,4 +319,5 @@ export function __resetGovernorForTests(): void {
   availablePercent = reading.availablePercent;
   pressure = "normal";
   pressurePolls = 0;
+  runState = "running";
 }

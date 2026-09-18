@@ -8,7 +8,7 @@ import { detectHardware } from "@/lib/hardware";
 import { identityHeaders, readEngineIdentity, type EngineIdentity } from "@/lib/identity";
 import { isModelSelectable, listModels, recordMeasuredFootprint, type ModelRecord } from "@/lib/modelStore";
 import { withTimeout } from "@/lib/withTimeout";
-import { admit, release, startGovernor, type GovernorHandle } from "@/lib/governor";
+import { admit, getRunState, release, startGovernor, type GovernorHandle } from "@/lib/governor";
 import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import type { RoleState } from "@/roles";
@@ -425,6 +425,7 @@ export function getChatEngineStatus(): ChatEngineStatus {
 }
 
 export async function getChatBackend(): Promise<ChatBackend> {
+  if (getRunState() !== "running") throw new EngineUnavailableError("The Stack is paused.");
   if (state.manuallyStopped) throw new EngineUnavailableError("The chat engine was stopped by the operator.");
   if (state.backend) return state.backend;
   if (!state.startingPromise) {

@@ -1240,6 +1240,14 @@ the Stack's, so the list is fixed now:
 rather than a person. Home keeps the turn engine, the guards, memory,
 people, consent, packages, and everything a person can see.
 
+## Pause everything
+
+The run-state control is shared by the header and future tray and palette
+actions. Pausing enters `pausing`, drains in-flight chat through the
+supervisor, refuses new admissions with a 503 reason, unloads governor
+work, and settles on `paused`; resuming restarts the chat engine and
+returns to `running`. The daemon and UI remain available throughout.
+
 ## Two databases: state and measurements (decided 2026-09-18, night)
 
 The owner asked, looking at the Overview's charts, whether all this

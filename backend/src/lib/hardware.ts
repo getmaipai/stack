@@ -17,6 +17,7 @@ export interface CudaDevice {
 }
 
 export interface HardwareInfo {
+  computerName?: string;
   platform: NodeJS.Platform;
   arch: string;
   totalRamGb: number;
@@ -71,6 +72,7 @@ export async function detectHardware(): Promise<HardwareInfo> {
   const cudaDevices = isAppleSilicon ? [] : await detectCudaDevices();
   const disk = statfsSync(dataDir);
   const info: HardwareInfo = {
+    computerName: os.hostname().replace(/\.local$/i, ""),
     platform: process.platform,
     arch: process.arch,
     totalRamGb,

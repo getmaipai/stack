@@ -77,6 +77,9 @@
                     "hardware": {
                       "type": "object",
                       "properties": {
+                        "computerName": {
+                          "type": "string"
+                        },
                         "platform": {
                           "type": "string"
                         },
@@ -131,6 +134,7 @@
                         }
                       },
                       "required": [
+                        "computerName",
                         "platform",
                         "arch",
                         "totalRamGb",
@@ -7295,6 +7299,91 @@
                     "results",
                     "fitTogether",
                     "reason"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/run-state": {
+      "get": {
+        "tags": [
+          "Runtime"
+        ],
+        "summary": "Read the Stack run state",
+        "responses": {
+          "200": {
+            "description": "Current run state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "running",
+                        "pausing",
+                        "paused"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Runtime"
+        ],
+        "summary": "Pause or resume the Stack",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "running",
+                      "paused"
+                    ]
+                  }
+                },
+                "required": [
+                  "state"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated run state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "running",
+                        "pausing",
+                        "paused"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "state"
                   ]
                 }
               }

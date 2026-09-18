@@ -11,6 +11,7 @@ export interface RoleRecord {
 }
 
 export interface HardwareInfo {
+  computerName?: string;
   platform: string;
   arch: string;
   totalRamGb: number;

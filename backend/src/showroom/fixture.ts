@@ -6,7 +6,7 @@ export function assertShowroomAllowed(): void { if (process.env.STACK_SHOWROOM =
 const now = new Date();
 const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
 
-export const showroomHardware = { platform: "darwin", arch: "arm64", totalRamGb: 128, cpuCount: 16, isAppleSilicon: true, unifiedMemoryGb: 128, cudaDevices: [], freeDiskBytes: 2_400_000_000_000, osVersion: "15.6" };
+export const showroomHardware = { computerName: "marlow", platform: "darwin", arch: "arm64", totalRamGb: 128, cpuCount: 16, isAppleSilicon: true, unifiedMemoryGb: 128, cudaDevices: [], freeDiskBytes: 2_400_000_000_000, osVersion: "15.6" };
 export const showroomProfile = { id: "p128" as const, label: "This Studio can run every ability, with the heaviest work on demand.", minUnifiedGb: 128, minVramGb: 0, resident: ["chat", "coding", "judge", "router", "embed", "rerank", "stt", "tts"], onDemand: ["vision", "image", "video", "music"], installedOnly: [], notAvailable: [], speedRange: { min: 45, max: 320 } };
 
 export const showroomModels = [
