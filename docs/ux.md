@@ -89,14 +89,22 @@ content survives. The top bar carries the page
 title, a search field that is also the command palette (the kit's
 `command` primitive, opened with the slash key or Command-K: pages,
 models, engines, settings, and actions like "pause everything" or
-"check for updates"), one primary "Try it" button (the single quick
-action; everything else lives in the palette), the notification bell
+"check for updates"), the notification bell
 with its unread count and a popover with clear all, and the profile
 menu (the operator's state, set a password, sign out, Access, the API
 docs). System health lives at the bottom of the sidebar as a colored
 dot and one sentence, the dot alone when collapsed; the "Share with
 your family" hand-off card sits above it until Home is installed.
 Phone width collapses the sidebar into a sheet.
+
+**Sidebar indicators, the quiet rule (2026-09-17).** A section row
+carries an indicator only when there is something to act on, never as
+decoration, and at most one: a small count for pending actions
+(Engines: detected and not adopted; Updates: available; Models: a
+detected folder), a colored dot in the worst severity for health
+(Alerts), nothing otherwise; hover shows the sentence ("1 engine
+detected, not adopted"). The bottom-left health line stays the
+summary. Try it is a section and a palette entry, not a header button.
 
 **Sections, in sidebar order:**
 
