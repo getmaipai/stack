@@ -215,6 +215,107 @@ minutes for a week by ability, client and model (the `usage_samples`
 ring), speed results per model and engine tag, memory samples per
 five seconds for an hour and per five minutes for a week.
 
+## Look and feel references: UniFi's structure, X's modernism (decided 2026-09-17, night)
+
+The owner's direction, with screens in hand: every page and feature of
+the Stack takes the UniFi Network console as its structural reference
+(Settings, Devices with its filter column and property panel, the
+Dashboard, the Overview tables), and takes X (Twitter) as its reference
+for modernism (the black dark mode, the one pill button, the sticky page
+header, the stream of rows with relative times). The org's trade-dress
+rule frames both: what is listed here is a convention shared by three or
+more consoles or feeds and is free to use; the exact look of either
+product (UniFi's blue-on-white with its icon set, X's black with its
+blue) is a signature and stays out. Everything is drawn in the Stack's
+palette (orange accent, the kit's neutrals), the kit's type and lucide
+icons, and the squint test says "a well-made console", never a copy.
+
+**From UniFi, the structure and the density.**
+
+1. **Real tables for things.** Column headers, one line per row, a
+   leading status dot (green ready, amber loading or attention, red
+   offline, grey detected and not adopted), tabular numbers
+   right-aligned, hairline dividers between rows and no card chrome
+   around each row. A row's cross-references (a model's engine, an
+   engine's roles, a client's key) are links in the accent that open
+   that thing's panel. The table fills the width it has; long names
+   truncate with a tooltip.
+2. **A quiet action row under every table**: "Add" and "Manage" as text
+   links separated by a hairline, under the last row, instead of a
+   large button floating in the page's corner. A page keeps at most one
+   filled primary button, for its one main action.
+3. **Section cards on overview-shaped pages**: a header with the
+   section's icon and title and a collapse chevron on the right; the
+   body is a table or a form, never prose.
+4. **Settings are rows**: the label on the left with an info glyph that
+   opens the explanation, the control on the right (a radio group
+   inline, a checkbox, a select, or a small inline table with its own
+   quiet action row); related rows under a bold group heading. The
+   generic renderer (org SETTINGS.md) renders this shape for the
+   Settings page and for every panel's Settings tab.
+5. **Things pages are three columns on a wide screen**: a collapsible
+   filter column on the left (a search field; collapsible checkbox
+   groups with counts: status, kind, role; a Clear filters link), the
+   table in the middle, the property panel on the right. Below tablet
+   width the filters become a sheet behind a Filter button and the panel
+   becomes the full-height sheet it already is.
+6. **The property panel**, refined: the header carries the name and the
+   status badge; beneath it an icon-tab strip (overview, insights,
+   settings) with tooltips instead of text tabs; a quick-facts block of
+   two or three lines, each a fact with its value; two side-by-side
+   outline buttons for the two most-used actions of that kind (an
+   engine: Logs and Restart; a model: Load and Pin); a "Used by" row of
+   client tiles when usage exists; a sparkline with a small time range;
+   then the key-value list, label muted on the left, value on the
+   right, a copy glyph after ids and paths, and inline actions beside a
+   value where they belong ("Revert" beside a version). Quick actions
+   are icon buttons with tooltips, never letters in circles.
+7. **Time controls are a segmented control** (1h, 1D, 1W, 1M) at the top
+   right of the chart; series toggles are checkboxes with colored legend
+   swatches beside it; every chart on the page honors the one range.
+8. **A facts column on the dashboard**: the computer as a card (icon,
+   name, counts of things by kind joined by connector marks), key facts
+   as label and value rows, versions with "Up to date" and a history
+   glyph, then two full-width outline action buttons (Speed test, Check
+   my Stack).
+9. **Status sentences**: a check glyph and a plain sentence ("Memory
+   headroom is good"), segmented percentage bars, a gradient scale with
+   the measured points on it.
+10. **The top bar**: the instance on the left with its status dot ("This
+    computer"), the theme toggle and the bell with its badge on the
+    right, the search field in between. White surfaces, hairline
+    borders, no drop shadows anywhere in light mode.
+
+**From X, the modernism.**
+
+1. **Dark mode is true black**: near-black surfaces, hairline dividers
+   in place of raised cards, white headings, one accent, muted grey for
+   every secondary line. A card in dark mode is a hairline-bordered
+   region, never a lighter raised slab.
+2. **One pill**: the single primary action on a screen is a fully
+   rounded filled button; everything else is a text action or an icon
+   button. Two filled buttons on one screen is a bug.
+3. **The page header is sticky** and is the page's title: the body does
+   not repeat it. The eyebrow, the large heading and the subtitle
+   triple at the top of every page goes; a page keeps at most one muted
+   sentence under the sticky header when it needs one.
+4. **Relative times** everywhere a time is shown ("3m", "2h",
+   "Yesterday", then the date), the absolute time in a tooltip and in
+   the panel's key-value list.
+5. **Rows read as a stream**: a primary line, a muted meta line under
+   it, hairlines between rows, avatars or icons leading the row, the
+   actions as small icons on hover or at the row's end.
+6. **The sidebar breathes**: larger icons, the active row bold, a
+   generous row height, and an icon-only rail when collapsed (the c-42
+   density item). Underline tabs for switching views within a page.
+7. **The right rail on Overview** holds list cards shaped like a feed's
+   side cards: a bold title, items each with a muted meta line, a "Show
+   more" link at the bottom (Recent activity, Health).
+
+The showroom (`bun run showroom`) is where every one of these is judged:
+a change to the shell or a page is not done until its showroom capture
+is opened and reads as this section describes.
+
 ## The board
 
 The home page, and what the menu-bar item opens. A grid of role tiles,

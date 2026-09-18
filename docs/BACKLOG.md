@@ -535,6 +535,137 @@ layer above; none adds a person or leaves the machine.
   "needs 2 GB free" state instead of loading. Out of scope: quality
   benchmarks, a chat bubble, any write tool. Exit: `scripts/check.sh`.
 
+## Milestone 0d: look and feel (2026-09-17 night, from the owner's references)
+
+The design record is ux.md "Look and feel references: UniFi's
+structure, X's modernism". Each item below is one numbered pattern from
+that section made real in the kit and in the pages, judged on the
+showroom (`bun run showroom`, captures under `docs/assets/screens/`).
+Order matters: the shell items (38 to 40) first, the kit blocks (41,
+42) next, then the pages that use them.
+
+- [ ] **STACK-38 (S): the page header is the title.** The top bar's
+  title is sticky and is the page's title; the eyebrow ("MaiPai
+  Stack"), the large heading and the subtitle at the top of every page
+  body go. A page keeps at most one muted sentence under the header
+  when it needs one. Files: `frontend/src/kit/blocks/dashboard/
+  components/site-header.tsx` (sticky: `sticky top-0 z-30` on the
+  header, a hairline under it), `frontend/src/pages/DashboardShell.tsx`
+  and every page file with the triple (`grep -rn "MaiPai Stack" frontend/
+  src/pages`). Mirror: X's "Home" header. Acceptance: no page renders an
+  `h1` besides the header's; `dashboardShell.test.tsx` asserts the
+  header stays in the document after a long page scrolls (a `sticky`
+  class assertion is enough in happy-dom); showroom captures of
+  Overview, Models and Engines opened and judged. Out of scope: the top
+  bar's instance dot (STACK-46). Exit: `scripts/check.sh`.
+- [ ] **STACK-39 (S): relative times.** `frontend/src/lib/relativeTime.ts`
+  (`formatRelative(iso, now)`: "now" under a minute, "3m", "2h",
+  "Yesterday", then the short date; unit tests for each boundary) and a
+  `RelativeTime` component in `frontend/src/kit/ui/` that renders the
+  relative form with the absolute time in a tooltip and `dateTime` on a
+  `<time>` element. Used by Recent activity on Overview, the
+  notification popover, the health rows and every panel's key-value
+  list (the list shows both). Mirror: X's "3m" timestamps. Acceptance:
+  `relativeTime.test.ts` covers the boundaries; `overview.test.tsx`
+  finds a `<time>` element with a `dateTime`. Exit: `scripts/check.sh`.
+- [ ] **STACK-40 (S): dark is black, light is flat.** `frontend/src/kit/
+  tokens.css` `.dark` block: `--background` and `--card` to a near-black
+  neutral, `--border` a hairline grey, no shadow tokens in use; light
+  mode drops the card drop shadows (`shadow-*` classes on `Card` and the
+  property panel go, the hairline border stays). Mirror: X's dark
+  mode. Acceptance: `grep -rn "shadow-" frontend/src --include=*.tsx`
+  lists only the command palette and popovers (floating layers keep
+  one); showroom `overview-console-dark.png` and `-light.png` opened
+  and judged; every text and border token pair is checked for WCAG AA contrast
+  and the ratios are listed in the commit message. Out of scope: a theme generator. Exit: `scripts/check.sh`.
+- [ ] **STACK-41 (M): the things table.** One block, `frontend/src/kit/
+  blocks/things-table/ThingsTable.tsx`, on the kit's `table.tsx`:
+  column definitions with alignment (numbers right, `tabular-nums`), a
+  leading status dot from a four-state `status` field (ready, attention,
+  offline, detected), hairline rows without per-row card chrome, a
+  truncating name cell with a tooltip, accent link cells that open
+  another thing's panel, group rows that collapse (the Models tree),
+  selection checkboxes, and a quiet action row under the last row
+  (text actions separated by hairlines). Used by Engines, Models (groups
+  and detected rows included), Access clients and keys, Alert channels.
+  Mirror: UniFi's Networks and Devices tables in our palette.
+  Acceptance: `thingsTable.test.tsx` covers the dot states, the sort, the
+  group collapse and the action row; Engines, Models and Access render
+  through it (no page keeps its own row markup; grep for `border-b` in
+  pages is empty); showroom captures opened and judged. Out of scope:
+  the filter column (STACK-43). Exit: `scripts/check.sh`.
+- [ ] **STACK-42 (M): the property panel, refined.** `frontend/src/kit/
+  blocks/property-panel/PropertyPanel.tsx`: quick actions are icon
+  buttons with tooltips (lucide icons per action, given by the panel's
+  caller), never letters in circles; an icon-tab strip with tooltips
+  for Overview, Insights, Settings; a quick-facts block (two or three
+  facts with values) and two side-by-side outline buttons for the two
+  most-used actions of the kind, both provided by the caller; a
+  key-value list block (`KeyValueList`: label muted left, value right,
+  a copy glyph after ids and paths, an optional inline action beside a
+  value) used by every panel in `frontend/src/panels/`; a `Used by` row
+  of client tiles when the item has usage. Mirror: UniFi's device panel
+  in our palette. Acceptance: `panels.test.tsx` finds the icon buttons
+  by their tooltip labels and the key-value rows by label; the copy
+  glyph writes to the clipboard in the test (stubbed); showroom
+  `engines-panel.png`, `models-panel.png`, `detected-panel.png` opened
+  and judged. Exit: `scripts/check.sh`.
+- [ ] **STACK-43 (M): the filter column.** A `FilterColumn` block
+  (`frontend/src/kit/blocks/filter-column/`): a search field,
+  collapsible checkbox groups with counts (status, kind, role, for the
+  page's things), a Clear filters link, collapsible to nothing with a
+  chevron; a Filter button that opens it as a sheet below tablet width.
+  Engines, Models and Access use it in the three-column layout of ux.md
+  item 5 (filters, table, panel). Mirror: UniFi's Devices page in our
+  palette. Acceptance: `filterColumn.test.tsx` filters a fixture list by
+  two groups at once and clears; the three pages render the column on a
+  wide viewport and the button below it (the `--breakpoint-lg` width in
+  `kit/tokens.css`);
+  showroom captures opened and judged. Exit: `scripts/check.sh`.
+- [ ] **STACK-44 (S): one pill.** The `Button` `default` variant is a
+  fully rounded pill; every screen keeps one filled button at most (the
+  page's main action), everything else `outline`, `ghost` or a text
+  link. An audit of `frontend/src/pages` and `panels` lists each filled
+  button per screen in the commit message. Mirror: X's one "Post"
+  button. Acceptance: a `bun test` walk of the showroom fixtures renders
+  each page and asserts at most one `data-variant="default"` button
+  outside dialogs; captures opened and judged. Exit: `scripts/check.sh`.
+- [ ] **STACK-45 (M): Overview's facts column and controls.** The left
+  facts column of ux.md item 8 (the computer card with counts by kind,
+  key facts as label and value rows, versions with "Up to date" and a
+  history glyph, two full-width outline buttons: Speed test, Check my
+  Stack); the time range as a segmented control (1h, 1D, 1W, 1M) with
+  series checkboxes and colored legend swatches beside the usage chart;
+  the right rail's Recent activity and Health as list cards with a
+  muted meta line per item and a Show more link. Files: `frontend/src/
+  pages/OverviewPage.tsx` and the components it splits into. Mirror:
+  UniFi's Dashboard and X's side cards, in our palette. Acceptance:
+  `overview.test.tsx` switches the range and asserts every chart
+  re-queries with it; the buttons call the existing speed test and
+  Check my Stack routes (or show the "coming with STACK-26/20" state
+  until those land); showroom `overview-console-*.png` opened and
+  judged at desktop and phone. Exit: `scripts/check.sh`.
+- [ ] **STACK-46 (S): the top bar.** The instance on the left with its
+  status dot and name ("This computer", the dot in the worst health
+  severity, green when the list is empty), the search field in the
+  middle, the theme toggle and the bell on the right. Files:
+  `site-header.tsx`, `nav-health.tsx` (the health read), the theme
+  toggle from the kit. Acceptance: `dashboardShell.test.tsx` finds the
+  dot's label and the toggle; captures opened and judged. Out of scope:
+  moving This computer off the sidebar footer (it stays until the
+  hand-off card design lands). Exit: `scripts/check.sh`.
+- [ ] **STACK-47 (S): settings as rows.** The generic renderer
+  (`frontend/src/kit/settings/GenericForm.tsx`) renders the shape of
+  ux.md item 4: label left with an info glyph that opens the
+  explanation in a popover, control right (radio group inline for two
+  or three options, select above that, checkbox, input), group
+  headings from the declaration's `group`. The Settings page and every
+  panel's Settings tab render through it. Acceptance:
+  `genericForm.test.tsx` (new, beside the existing frontend tests)
+  finds the info glyph and its popover text and
+  the radio group for a three-option enum; `engines-configure.png`
+  opened and judged. Exit: `scripts/check.sh`.
+
 ## Milestone 1: the robot
 
 - [ ] **STACK-17 (L): the Linux ARM profile.** `llama-server` on the Pi
