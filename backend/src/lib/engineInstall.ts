@@ -17,8 +17,12 @@ export function engineDir(id: string): string {
   return engineTagRoot(name, tag);
 }
 
+export function engineToolPath(pin: EngineBinaryPin, name: string): string {
+  return join(engineDir(pin.id), pin.platform === "win32" ? `${name}.exe` : name);
+}
+
 export function engineBinaryPath(pin: EngineBinaryPin): string {
-  return join(engineDir(pin.id), pin.platform === "win32" ? "llama-server.exe" : "llama-server");
+  return engineToolPath(pin, "llama-server");
 }
 
 async function downloadArchive(pin: EngineBinaryPin, archive: EngineArchive, onProgress: (completed: number, total: number, label: string) => void): Promise<void> {

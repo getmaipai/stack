@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
-import { ENGINE_BINARIES, ENGINE_READY_MARKER, selectEngineBinary } from "@/lib/engineCatalog";
+import { ENGINE_READY_MARKER, installedEnginePin, selectEngineBinary } from "@/lib/engineCatalog";
 import { llamaServerArgs } from "@/lib/engineArgs";
 import { engineBinaryPath, engineDir } from "@/lib/engineInstall";
 import { detectHardware } from "@/lib/hardware";
@@ -203,7 +203,7 @@ function initialStatus(): ChatEngineStatus {
       postLoadCheck: { replyOk: true, actualBytes: null, estimatedBytes: null },
     };
   }
-  const pin = ENGINE_BINARIES.find((entry) => entry.platform === process.platform && entry.arch === process.arch && !entry.requiresNvidia);
+  const pin = installedEnginePin();
   const installed = !!pin && existsSync(join(engineDir(pin.id), ENGINE_READY_MARKER));
   return { kind: null, state: installed ? "installed" : "notInstalled", reason: null, identity: null, postLoadCheck: null };
 }
@@ -336,7 +336,7 @@ async function startUrlBackend(kind: EngineKind, url: string): Promise<ChatBacke
 async function startSpawnedBackend(): Promise<ChatBackend> {
   activateEngineConfig("llama-server", "llama-server");
   const config = settingValues("llama-server", "llama-server");
-  const pin = ENGINE_BINARIES.find((entry) => entry.platform === process.platform && entry.arch === process.arch && !entry.requiresNvidia);
+  const pin = installedEnginePin();
   const model = selectedChatModel();
   if (!pin || !existsSync(join(engineDir(pin.id), ENGINE_READY_MARKER))) {
     throw new EngineUnavailableError("No installed llama-server build is available for this machine.");

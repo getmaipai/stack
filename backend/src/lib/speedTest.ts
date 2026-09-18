@@ -6,7 +6,8 @@ import { latestSpeedResult, recordSpeedResult, type SpeedResult } from "@/lib/se
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { getChatEngineStatus } from "@/lib/supervisor";
 import { currentEngine } from "@/updates/engines";
-import { engineCurrentPath } from "@/lib/store/layout";
+import { engineToolPath } from "@/lib/engineInstall";
+import { installedEnginePin } from "@/lib/engineCatalog";
 
 export const SPEED_TEST_REPETITIONS = 3;
 export const SPEED_TEST_CONTEXT_LENGTH = 4096;
@@ -67,8 +68,8 @@ export function llamaBenchArgs(modelPath: string, repetitions = SPEED_TEST_REPET
 }
 
 function benchPath(): string {
-  const name = process.platform === "win32" ? "llama-bench.exe" : "llama-bench";
-  return join(engineCurrentPath("llama-server"), name);
+  const pin = installedEnginePin();
+  return pin ? engineToolPath(pin, "llama-bench") : join("", "llama-bench");
 }
 
 function regressionCode(modelId: string, contextLength: number): string {

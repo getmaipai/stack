@@ -65,3 +65,7 @@ export function selectEngineBinary(hw: HardwareInfo): EngineBinaryPin | null {
     (pin) => pin.platform === hw.platform && pin.arch === hw.arch && (!pin.requiresNvidia || hw.cudaDevices.length > 0),
   ) ?? null;
 }
+
+export function installedEnginePin(): EngineBinaryPin | null {
+  return ENGINE_BINARIES.find((pin) => pin.platform === process.platform && pin.arch === process.arch && !pin.requiresNvidia) ?? null;
+}
