@@ -1,7 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter, ErrorSchema } from "@/lib/openapi";
 import { requireClientOrOperator } from "@/lib/clients";
-import { resolveRole } from "@/lib/router";
+import { resolveRoleState } from "@/lib/router";
 import { ROLE_IDS, RoleRecordSchema, ROLES } from "@/roles";
 import { getModel, isModelSelectable, listModels } from "@/lib/modelStore";
 import { showroom, showroomRoles } from "@/showroom/fixture";
@@ -25,12 +25,13 @@ const rolesRoute = createRoute({
 export const rolesRoutes = apiRouter();
 rolesRoutes.openapi(rolesRoute, (c) => c.json(showroom() ? { roles: showroomRoles } as never : {
   roles: ROLE_IDS.map((id) => {
+    const state = resolveRoleState(id);
     const model = listModels().find((candidate) => candidate.roles.includes(id));
     return {
     id,
     ...ROLES[id],
-    state: resolveRole(id).state,
-    reason: null,
+    state,
+    reason: state.state === "offline" ? (state.reason ?? null) : null,
     model: model ? { id: model.id, sizeBytes: model.sizeBytes, measuredFootprintBytes: model.measuredFootprintBytes, measuredContextLength: model.measuredContextLength, estimated: model.measuredFootprintBytes === null } : null,
   }; }),
 }, 200));

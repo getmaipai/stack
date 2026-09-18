@@ -26,14 +26,16 @@ export const showroomEngines: EngineRecord[] = [
   { id: "comfyui-managed", label: "ComfyUI · Images", platform: "darwin", arch: "arm64", verified: true, installed: false, matchesThisMachine: false, running: null, currentTag: null, newestTag: null, current: false, notCurrent: true, needsRestart: false, state: "notCurrent", stateReason: "newer installed", directory: "/Users/marlow/Stack/data/engines/comfyui" },
 ];
 
+const readyStamp = { state: { state: "ready" as const, since: new Date(now.getTime() - 60 * 60_000).toISOString(), checkedAt: new Date(now.getTime() - 5 * 60_000).toISOString() } };
+
 export const showroomRoles = [
-  ...[{ id: "chat", label: "Chat" }, { id: "coding", label: "Coding" }, { id: "judge", label: "Judge" }].map(({ id, label }) => ({ id, label, wire: id, residency: "resident", description: `${label} runs on Family chat.`, state: "ready", reason: null, model: { id: "qwen3-27b-instruct", sizeBytes: 17_200_000_000, measuredFootprintBytes: 21_600_000_000, measuredContextLength: 8192, estimated: false } })),
-  { id: "embed", label: "Embeddings", wire: "embeddings", residency: "resident", description: "Find related things locally.", state: "ready", reason: null, model: null },
-  { id: "image", label: "Images", wire: "job", residency: "jit", description: "Make images locally.", state: "ready", reason: null, model: { id: "flux2-klein", sizeBytes: 12_800_000_000, measuredFootprintBytes: 19_100_000_000, measuredContextLength: null, estimated: false } },
-  { id: "video", label: "Video", wire: "job", residency: "jit", description: "Make short videos locally.", state: "ready", reason: null, model: null },
-  { id: "music", label: "Music", wire: "job", residency: "jit", description: "Make music locally.", state: "ready", reason: null, model: null },
-  { id: "stt", label: "Voice in", wire: "transcription", residency: "resident", description: "Listen locally.", state: "ready", reason: null, model: { id: "moonshine-base", sizeBytes: 230_000_000, measuredFootprintBytes: 420_000_000, measuredContextLength: null, estimated: false } },
-  { id: "tts", label: "Voice out", wire: "speech", residency: "resident", description: "Speak locally.", state: "ready", reason: null, model: { id: "piper-en-us", sizeBytes: 65_000_000, measuredFootprintBytes: 180_000_000, measuredContextLength: null, estimated: false } },
+  ...[{ id: "chat", label: "Chat" }, { id: "coding", label: "Coding" }, { id: "judge", label: "Judge" }].map(({ id, label }) => ({ id, label, wire: id, residency: "resident", description: `${label} runs on Family chat.`, ...readyStamp, reason: null, model: { id: "qwen3-27b-instruct", sizeBytes: 17_200_000_000, measuredFootprintBytes: 21_600_000_000, measuredContextLength: 8192, estimated: false } })),
+  { id: "embed", label: "Embeddings", wire: "embeddings", residency: "resident", description: "Find related things locally.", ...readyStamp, reason: null, model: null },
+  { id: "image", label: "Images", wire: "job", residency: "jit", description: "Make images locally.", ...readyStamp, reason: null, model: { id: "flux2-klein", sizeBytes: 12_800_000_000, measuredFootprintBytes: 19_100_000_000, measuredContextLength: null, estimated: false } },
+  { id: "video", label: "Video", wire: "job", residency: "jit", description: "Make short videos locally.", ...readyStamp, reason: null, model: null },
+  { id: "music", label: "Music", wire: "job", residency: "jit", description: "Make music locally.", ...readyStamp, reason: null, model: null },
+  { id: "stt", label: "Voice in", wire: "transcription", residency: "resident", description: "Listen locally.", ...readyStamp, reason: null, model: { id: "moonshine-base", sizeBytes: 230_000_000, measuredFootprintBytes: 420_000_000, measuredContextLength: null, estimated: false } },
+  { id: "tts", label: "Voice out", wire: "speech", residency: "resident", description: "Speak locally.", ...readyStamp, reason: null, model: { id: "piper-en-us", sizeBytes: 65_000_000, measuredFootprintBytes: 180_000_000, measuredContextLength: null, estimated: false } },
 ];
 
 export const showroomClients = [

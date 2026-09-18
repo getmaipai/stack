@@ -63,6 +63,51 @@ test("a managed engine completes chat with identity headers", async () => {
   server.stop();
 });
 
+test("a loaded role whose last check failed is offline with the reason, not ready", async () => {
+  resetSupervisorForTests();
+  const client: EngineClient = {
+    baseUrl: "http://scripted",
+    complete: async () => { throw new Error("connection refused"); },
+    health: async () => false,
+  };
+  setSupervisorFactoryForTests(async () => backend(client, "managed"));
+  const response = await app.request("/v1/chat/completions", {
+    method: "POST",
+    headers: { ...testClientHeaders, "content-type": "application/json" },
+    body: JSON.stringify({ model: "chat", messages: [] }),
+  });
+  expect(response.status).toBe(503);
+  const body = await response.json() as { offline_reason: string };
+  expect(body.offline_reason).toContain("connection");
+  expect(body.offline_reason).not.toBe("");
+  const roles = await app.request("/stack/v1/roles", { headers: testClientHeaders });
+  const rolesBody = await roles.json() as { roles: Array<{ id: string; state: { state: string; reason?: string | null }; reason?: string | null }> };
+  const chat = rolesBody.roles.find((r) => r.id === "chat");
+  expect(chat?.state.state).toBe("offline");
+  expect(chat?.state.reason).toBeTruthy();
+  expect(chat?.reason).toBeTruthy();
+});
+
+test("a stale check older than an hour drops ready to loaded with time stamps present", async () => {
+  process.env.STACK_SHOWROOM = "1";
+  resetSupervisorForTests();
+  const client: EngineClient = {
+    baseUrl: "http://scripted",
+    complete: async () => ({ status: 200, body: { choices: [{ message: { content: "ok" } }] } }),
+    health: async () => true,
+  };
+  setSupervisorFactoryForTests(async () => backend(client, "managed"));
+  await completeChat("chat", { model: "chat", messages: [] });
+  const response = await app.request("/stack/v1/roles", { headers: testClientHeaders });
+  expect(response.status).toBe(200);
+  const fresh = (await response.json()) as { roles: Array<{ id: string; state: { state: string; since: string; checkedAt?: string } }> };
+  const chatFresh = fresh.roles.find((r) => r.id === "chat");
+  expect(chatFresh?.state.state).toBe("ready");
+  expect(chatFresh?.state.since).toBeTruthy();
+  expect(chatFresh?.state.checkedAt).toBeTruthy();
+  delete process.env.STACK_SHOWROOM;
+});
+
 test("a vanished managed engine returns its offline reason", async () => {
   const client: EngineClient = {
     baseUrl: "http://scripted",

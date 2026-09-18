@@ -13,8 +13,29 @@ export const ResidencySchema = z.enum(["resident", "jit", "installed"]);
 export type Residency = z.infer<typeof ResidencySchema>;
 export const QualitySchema = z.enum(["fast", "everyday", "best"]);
 export type Quality = z.infer<typeof QualitySchema>;
-export const RoleStateSchema = z.enum(["notInstalled", "installed", "loading", "ready", "busy", "stopped", "offline"]);
-export type RoleState = z.infer<typeof RoleStateSchema>;
+// The five truthful states a role can be in, declared once here and reused
+// everywhere else (the /stack/v1/roles handler, the check runner, and the
+// supervisor all reference these). `ready` is the only one with a time
+// stamp of its own: it is only claimed while the last real request or
+// post-load check succeeded within the last hour. Every state carries
+// `since`, the moment it was first observed.
+export const RoleStateEnum = z.enum(["notInstalled", "installed", "loaded", "ready", "offline"]);
+export type RoleState = z.infer<typeof RoleStateEnum>;
+
+// The oldest a `ready` claim can be and still hold. Older than this, a role
+// has only been loaded (or worse) and stops claiming readiness.
+export const READY_TTL_MS = 3_600_000;
+
+// The stamped record served on /stack/v1/roles and computed by the check
+// runner. `reason` is only present on `offline`; `checkedAt` is only present
+// on `ready`.
+export const RoleStateRecordSchema = z.object({
+  state: RoleStateEnum,
+  since: z.string(),
+  checkedAt: z.string().optional(),
+  reason: z.string().nullable().optional(),
+});
+export type RoleStateRecord = z.infer<typeof RoleStateRecordSchema>;
 
 export interface RoleDefinition {
   label: string;
@@ -149,7 +170,7 @@ export const RoleDefinitionSchema = z.object({
 
 export const RoleRecordSchema = RoleDefinitionSchema.extend({
   id: RoleIdSchema,
-  state: RoleStateSchema,
+  state: RoleStateRecordSchema,
   reason: z.string().nullable(),
   model: z.object({ id: z.string(), sizeBytes: z.number().int().nullable(), measuredFootprintBytes: z.number().int().nullable(), measuredContextLength: z.number().int().nullable(), estimated: z.boolean() }).nullable().optional(),
 });

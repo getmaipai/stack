@@ -22,9 +22,11 @@ import { getManagedEngineUrl } from "@/lib/detect";
 
 export type EngineKind = "spawned" | "managed" | "url";
 
+export type EngineStatus = RoleState | "loading" | "busy" | "stopped";
+
 export interface ChatEngineStatus {
   kind: EngineKind | null;
-  state: RoleState;
+  state: EngineStatus;
   reason: string | null;
   identity: EngineIdentity | null;
   postLoadCheck: PostLoadCheck | null;
@@ -190,6 +192,7 @@ interface SupervisorState {
   generation: number;
   manuallyStopped: boolean;
   status: ChatEngineStatus;
+  lastRealRequestAt: number | null;
 }
 
 type BackendFactory = () => Promise<ChatBackend>;
@@ -216,6 +219,7 @@ const state: SupervisorState = {
   generation: 0,
   manuallyStopped: false,
   status: initialStatus(),
+  lastRealRequestAt: null,
 };
 
 function configuredUrl(): { kind: EngineKind; url: string } | null {
@@ -442,6 +446,7 @@ export async function getChatBackend(): Promise<ChatBackend> {
       }
       state.backend = backend;
       if (backend.identity.model && getModelById(backend.identity.model)) recordModelLoaded(backend.identity.model);
+      state.lastRealRequestAt = Date.now();
       state.status = { kind: backend.kind, state: "ready", reason: null, identity: backend.identity, postLoadCheck: state.status.postLoadCheck };
       return backend;
     }).catch((error) => {
@@ -520,6 +525,7 @@ export async function completeChat(model: string, body: Record<string, unknown>,
       }
     }
     if (result.status >= 200 && result.status < 300) {
+      state.lastRealRequestAt = Date.now();
       const usage = (result.body as { usage?: { completion_tokens?: unknown } }).usage;
       const completionTokens = typeof usage?.completion_tokens === "number" ? usage.completion_tokens : null;
       recordSpeedResult({ ability: model, modelId: backend.identity.model, engine: backend.identity.build, firstTokenMs: Math.round(performance.now() - startedAt), tokensPerSecond: completionTokens && completionTokens > 0 ? Math.round(completionTokens / Math.max((performance.now() - startedAt) / 1000, 0.001)) : null });
@@ -554,7 +560,10 @@ export interface ChatStreamResult {
 
 function finishStream(backend: ChatBackend): void {
   backend.activeRequests--;
-  if (state.backend === backend && backend.activeRequests === 0) state.status = { ...state.status, state: "ready" };
+  if (state.backend === backend) {
+    if (backend.activeRequests === 0) state.status = { ...state.status, state: "ready" };
+    state.lastRealRequestAt = Date.now();
+  }
 }
 
 function trackedStream(backend: ChatBackend, upstream: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
@@ -635,6 +644,14 @@ export function resetSupervisorForTests(): void {
   state.generation++;
   state.manuallyStopped = false;
   state.status = initialStatus();
+  state.lastRealRequestAt = null;
+}
+
+// The moment the last real request (or post-load check) succeeded, or null
+// if none has since the supervisor started. This is the source of a role's
+// `ready` claim and its `checkedAt` stamp.
+export function lastRealRequestAt(): number | null {
+  return state.lastRealRequestAt;
 }
 
 export function setSupervisorFactoryForTests(factory: BackendFactory | null): void {

@@ -3916,15 +3916,32 @@
                             ]
                           },
                           "state": {
-                            "type": "string",
-                            "enum": [
-                              "notInstalled",
-                              "installed",
-                              "loading",
-                              "ready",
-                              "busy",
-                              "stopped",
-                              "offline"
+                            "type": "object",
+                            "properties": {
+                              "state": {
+                                "type": "string",
+                                "enum": [
+                                  "notInstalled",
+                                  "installed",
+                                  "loaded",
+                                  "ready",
+                                  "offline"
+                                ]
+                              },
+                              "since": {
+                                "type": "string"
+                              },
+                              "checkedAt": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "state",
+                              "since"
                             ]
                           },
                           "reason": {
