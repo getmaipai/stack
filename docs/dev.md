@@ -904,6 +904,43 @@ the architecture.
    the board (`ux.md`, "Install and first open"); the app bundle with
    the tray is the second path and runs the same steps.
 
+## The desktop app is Tauri around the console; the daemon stays the hands (decided 2026-09-18, 05:30)
+
+The owner, going to bed: "we probably need this entire thing as Tauri
+because we will need access to the local system for install, scan,
+delete." Two things are true at once. The system access already exists:
+the daemon is a native Bun process on the machine and does every
+install, scan, delete and spawn today; the web console only asks it
+over loopback. What the console lacks is what a browser tab cannot do:
+a real window with the app's name and icon, a tray item, native file
+and folder pickers ("Import from a folder" must not be a typed path),
+native notifications, launch at login, and the feeling of an installed
+program. That is Tauri's job, and it is the same Tauri 2 shell the tray
+item already planned.
+
+Decisions:
+
+1. **STACK-18 grows from "the tray app" to "the desktop app"**: a Tauri 2
+   app whose main window is the console (loading the daemon's own URL,
+   so there is exactly one frontend), with the tray item and its menu,
+   native notifications, the dialog plugin for file and folder pickers
+   (the Add sheet's Import tab and the backup target use it when the
+   console runs inside Tauri and fall back to a typed path in a plain
+   browser), launch at login, and single-instance. The daemon remains a
+   separate process the app starts and supervises (the org SERVICES.md
+   shape: the service manager owns it; the app only attaches), so a
+   closed window never stops the Stack and a phone on the LAN still
+   works.
+2. **Not Tauri-only.** Moving the daemon's work into the Tauri process
+   would make the Stack stop when the window closes, tie the API to a
+   GUI session, and lose the headless install on a Linux box or a robot
+   (Bot builds on the Linux Stack with no display). The daemon is the
+   product; the app is its front.
+3. **The console detects its host**: `window.__TAURI__` present means
+   native pickers and notifications; absent means browser fallbacks.
+   One code path per capability behind one `host` adapter in the kit,
+   never a fork of the pages.
+
 ## The API boundary: what is the Stack's and what is Home's (2026-09-17)
 
 The foundational API moved out of Home into the Stack. Home keeps an

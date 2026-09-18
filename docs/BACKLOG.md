@@ -376,7 +376,7 @@ each item's design section lands in `dev.md` before its code.
   (test); a forgotten row stays hidden until its version changes
   (test); nothing is probed outside 127.0.0.1 (test asserts the
   address list); screenshot judged.
-- [ ] **STACK-18 (M): the tray app on Tauri 2.** A `tray/` package:
+- [ ] **STACK-18 (M): the desktop app on Tauri 2** (grown from the tray app, dev.md "The desktop app is Tauri around the console"): a `desktop/` package whose main window loads the daemon's console URL, plus everything below;
   the Stack icon as the tray or menu-bar item colored by the worst
   health severity, a menu with each role's one line, Open (the web UI
   in a Tauri window), Pause everything, Resume, Quit; native
@@ -907,6 +907,32 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
 - [ ] **STACK-63 (S, only when per-client usage shows a need):
   per-client request rate and concurrency caps** at the router, each
   with a counter and a health item when hit. Exit: `scripts/check.sh`.
+- [ ] **STACK-64 (S): Scan now.** ux.md "Scan, and real over mock" item 1:
+  a "Scan this computer" text action beside Add on Engines and Models
+  and as the first row of the Add sheet's Import tab; runs `POST
+  /stack/v1/detected/scan`, shows the found rows with Adopt and the
+  sentence with counts and the last scan time. Files: `EnginesPage.tsx`,
+  `ModelsPage.tsx`, `AddSheet.tsx`, `routes/detected.ts` (return counts
+  and `scannedAt`). Acceptance: a scripted sweep yields the sentence
+  and the rows (test); the button on the live console finds the
+  installed engine directory (coordinator-verified). Exit:
+  `scripts/check.sh`.
+- [ ] **STACK-65 (M): the live acceptance walk.** ux.md "Scan, and real
+  over mock" item 2: on a copy of the owner's real data directory on
+  this Mac, with the real llama-server and the installed Qwen3 1.7B,
+  walk every action the console offers and record the result in a
+  table in `docs/dev.md` "Live walk 2026-09-18": Add from the catalog,
+  Import a folder by link, Scan, Adopt a detected tool (Ollama if
+  present), Rename, New group, Move to group, Load, Unload, Pin,
+  Remove, Start, Stop, Restart an engine, Speed test, Check my Stack,
+  Pause everything and Resume, create and revoke a client key, chat in
+  Tester, set and change a setting, Send a test to a channel (scripted
+  receiver), Fetch the docs in the Library, the palette's intents. Each
+  row: the action, the HTTP calls it made, the result, pass or fail
+  with the defect filed as a follow-up item. Anything that cannot work
+  yet gets its one sentence and a disabled control in the same commit.
+  Acceptance: the table exists with every action listed; every fail has
+  an item; no button on the console does nothing. Exit: `scripts/check.sh`.
 ## Milestone 1: the robot
 
 - [ ] **STACK-17 (L): the Linux ARM profile.** `llama-server` on the Pi

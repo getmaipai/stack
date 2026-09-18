@@ -708,6 +708,27 @@ door. Decisions:
    Removal is trivial because nothing was added: the index ships inside
    the app build.
 
+## Scan, and real over mock (decided 2026-09-18, 05:30)
+
+The owner's last two notes before bed: focus on things that actually
+work instead of mock-ups, and add a Scan button that searches the
+system.
+
+1. **Scan now** is a text action beside Add on Engines and Models ("Scan
+   this computer") and the first row of the Add sheet's Import tab; it
+   runs the detection sweep (`POST /stack/v1/detected/scan`) and shows
+   what it found as rows with Adopt, with the sentence "Found 2 tools
+   and 6 model files" or "Nothing new found" and the time of the last
+   scan. The sweep runs on boot and hourly as designed; the button is
+   the person's hand on it.
+2. **Real over mock.** The showroom is for judging the design; the
+   product is the real console on the real data directory. Every
+   action a page offers is exercised against a real data directory
+   (a copy of the owner's, on this Mac) before it is called done, and
+   an action that cannot work yet shows its one sentence and a
+   disabled control, never a working-looking button that does
+   nothing. The live acceptance walk (STACK-65) is the list.
+
 ## Library
 
 One page per installed model and engine: where it came from, its
