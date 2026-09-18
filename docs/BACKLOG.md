@@ -803,6 +803,28 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   (test); no row shows a group name as its title (test on the fixture);
   captures `models-groups.png`, `models-add.png`, `models-row-menu.png`
   opened and judged. Exit: `scripts/check.sh`.
+- [ ] **STACK-54 (M): the phone, second pass.** ux.md "The phone,
+  second pass" (2026-09-18): at phone width a five-tab bottom bar
+  replaces the sidebar sheet; a one-line header (glyph, computer pill
+  with the health dot, the one Add or search glyph); things pages as
+  list rows (glyph tile, name and subtitle, status word and sub-status,
+  dot, chevron) with pill-chip filters; detail pages as grouped
+  key-value cards with placeholder rows, chevron rows and an action
+  list card; the phone Overview as a status strip, 2 by 2 ability
+  tiles, activity rows and a facts card; 44 px touch targets. Files:
+  `frontend/src/kit/blocks/phone/*` (TabBar, PhoneHeader, ListRow,
+  DetailCard, ActionList), `frontend/src/pages/DashboardShell.tsx` (the
+  phone layout switch on measured width), the things pages and panels
+  (a `phone` render path from the same declarations), `OverviewPage.tsx`.
+  Mirror: UniFi's phone app screens described in ux.md, in our palette.
+  Acceptance: at 400 wide the tab bar renders with five tabs and no
+  sidebar trigger (test); a things page renders rows with the status
+  word and a chevron (test); a detail page renders the action list with
+  the destructive action last (test); every tappable element measures
+  44 px or more (test walks the DOM at 400 wide); captures
+  `overview-console-phone.png`, `models-phone.png`,
+  `model-detail-phone.png`, `settings-phone.png` opened and judged.
+  Exit: `scripts/check.sh`.
 ## Milestone 1: the robot
 
 - [ ] **STACK-17 (L): the Linux ARM profile.** `llama-server` on the Pi

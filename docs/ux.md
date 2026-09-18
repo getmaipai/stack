@@ -587,6 +587,47 @@ Each is a decision:
    showed "Family chat" as the title of every model in the group with
    the model id under it).
 
+## The phone, second pass: a tab bar, list rows, grouped detail cards (decided 2026-09-18, 01:45)
+
+The owner sent four screens of UniFi's phone app beside our phone view.
+What they do that we do not, each a decision for phone width (below
+`--breakpoint-sm`); tablet and desktop keep the sidebar shell:
+
+1. **A bottom tab bar, not a sidebar sheet.** Five tabs: Overview,
+   Things (Engines and Models under a segmented control at the top),
+   Tester, Alerts, Settings (Clients, Monitoring and Logs live under
+   Settings' nav on the phone). Icons with a label, the active one in
+   the accent, safe-area padding underneath. The sidebar and its
+   trigger do not exist at phone width.
+2. **The phone header is one line**: the Stack glyph, the computer's
+   name as a pill with the health dot (tap: the health sentence), and
+   on the right the one Add button (a plus in a circle, on pages that
+   add) or the search glyph. No title row: the tab bar says where you
+   are; a page's title appears as the first line of its content.
+3. **List rows are the phone's table.** Every things page renders rows
+   instead of columns: a leading glyph tile, the display name with the
+   id or kind as a muted subtitle, and on the right the status word
+   in its color with a sub-status under it, the dot, and a chevron.
+   Filters are pill chips in a horizontal row above the list ("All ·
+   Groups · Not adopted"). Tapping a row opens the detail page (the
+   panel as a full page with a back chevron), the three dots sit at
+   the row's end behind a long press or the detail page's action list.
+4. **Detail pages are grouped cards**: key-value rows (label left, value
+   right in muted text) in a card; editable rows show a placeholder in
+   the value slot ("Enter a nickname", "Add a note"); rows that lead
+   somewhere end in a chevron ("Group ›", "Settings ›"); the actions
+   are a list card at the end, one per row, the destructive one in
+   red, exactly UniFi's Reconnect and Block card.
+5. **The phone Overview** opens with the status strip as words, then a
+   2 by 2 grid of ability tiles (icon, name, one line of state, a
+   three-dots for the tile's actions), then Recent activity as rows,
+   then the facts as a "This computer" card of key-value rows with
+   Speed test and Check my Stack as its action rows. The hero chart is
+   a tap away ("Charts ›") on the phone.
+6. **Touch sizes**: 44 px minimum on every tappable thing; row height 56
+   px with a subtitle, 48 px without; the tab bar 56 px plus the safe
+   area.
+
 ## Library
 
 One page per installed model and engine: where it came from, its
