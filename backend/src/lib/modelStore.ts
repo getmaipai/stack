@@ -3,6 +3,7 @@ import { db, sqlite } from "@/db";
 import { modelGroups, modelUsage, models } from "@/db/schema";
 import { downloadUrl, DownloadVerificationError, sha256OfFile, type DownloadOptions } from "@/lib/download";
 import { dataDir, modelsDir } from "@/lib/paths";
+import { hfUrl } from "@/lib/hf";
 import type { RoleId } from "@/roles";
 import { existsSync, mkdirSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -80,7 +81,7 @@ export interface HuggingFaceModelInput {
   roles: RoleId[];
   repo: string;
   revision: string;
-  url: string;
+  url?: string;
   sha256?: string | null;
   sizeBytes?: number | null;
   licence?: string | null;
@@ -251,7 +252,7 @@ export async function installHuggingFaceModel(input: HuggingFaceModelInput, opti
     engineRequirements: input.engineRequirements,
   }, options.now?.() ?? new Date().toISOString());
   const installed = await installRegisteredModel(registered, {
-    url: input.url,
+    url: input.url ?? hfUrl(`${input.repo}/resolve/${input.revision}/${basename(options.destination)}`),
     sha256: input.sha256 ?? "",
     approx_bytes: input.sizeBytes ?? 0,
   }, options);

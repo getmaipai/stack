@@ -32,6 +32,7 @@ export const STACK_SETTINGS: StackSettingDeclaration[] = [
   { key: "port", type: "number", default: 8787, label: "Stack port", help: "The local port used by the Stack after restart.", group: "Access", disclosure: "basic", needsRestart: true, range: { min: 1, max: 65535 }, section: "network", order: 20 },
   { key: "historyRetention", type: "number", default: 30, label: "History retention", help: "Days of local event history to retain.", group: "Storage", disclosure: "basic", needsRestart: false, range: { min: 1, max: 3650 }, section: "storage", order: 10 },
   { key: "logLevel", type: "enum", default: "info", label: "Log level", help: "How much diagnostic detail to keep in local logs.", group: "Diagnostics", disclosure: "basic", needsRestart: false, options: [{ value: "error", label: "Errors" }, { value: "warn", label: "Warnings" }, { value: "info", label: "Info" }, { value: "debug", label: "Debug" }], section: "diagnostics", order: 10 },
+  { key: "huggingFaceEndpoint", type: "text", default: "https://huggingface.co", label: "Hugging Face endpoint", help: "Where Hugging Face model downloads come from. Point it at a mirror you run or trust to keep model traffic off the public internet.", group: "Storage", disclosure: "advanced", needsRestart: false, section: "storage", order: 20 },
 ];
 
 function metaKey(key: string, state: "inEffect" | "pending"): string { return `settings.stack.${key}.${state}`; }

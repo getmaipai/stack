@@ -69,8 +69,10 @@ export async function dryRunFootprint(modelPath: string, contextLength: number):
   } catch { return null; }
 }
 
+import { hfUrl } from "@/lib/hf";
+
 export async function estimateFootprint(repo: string, file: string, contextLength: number): Promise<FootprintEstimate> {
-  const url = `https://huggingface.co/${repo}/resolve/main/${file}`;
+  const url = hfUrl(`${repo}/resolve/main/${file}`);
   const facts = await readGgufFacts(url);
   const head = await fetch(url, { method: "HEAD" });
   const weights = Number(head.headers.get("content-length") ?? 0);

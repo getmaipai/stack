@@ -848,7 +848,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   enum entry without a row (proved, then reverted); no new sidebar row
   or Settings section. Out of scope: STACK-57 to -59. Exit:
   `scripts/check.sh`.
-- [ ] **STACK-57 (S): a Hugging Face mirror setting.** `huggingFaceEndpoint`
+- [x] **STACK-57 (S, done b482d59): a Hugging Face mirror setting.** `huggingFaceEndpoint`
   in `settings/stackKeys.ts` (default `huggingface.co`, section
   Storage, Sources row), honored by `lib/hf.ts` and the supervisor's
   `HF_HUB_CACHE` path; provenance recorded identically; the privacy

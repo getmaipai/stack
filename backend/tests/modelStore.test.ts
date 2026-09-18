@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -13,16 +13,22 @@ import {
   upsertModel,
   ProvenanceIncompleteError,
 } from "@/lib/modelStore";
+import { STACK_CHAT_MODEL } from "@/lib/modelCatalog";
+import { hfUrl } from "@/lib/hf";
+import { downloadUrl } from "@/lib/download";
+import { __resetStackSettingsForTests, updateStackConfig } from "@/settings/stackKeys";
 
 const fixtureDir = join(tmpdir(), `maipai-stack-models-${Date.now()}`);
 
 beforeEach(() => {
   clearModelsForTests();
+  __resetStackSettingsForTests();
   mkdirSync(fixtureDir, { recursive: true });
 });
 
 afterEach(() => {
   clearModelsForTests();
+  __resetStackSettingsForTests();
   rmSync(fixtureDir, { recursive: true, force: true });
 });
 
@@ -76,7 +82,6 @@ test("Hugging Face installation records repo and revision", async () => {
     roles: ["chat"],
     repo: "Qwen/Qwen3-8B-GGUF",
     revision: "7c41481f",
-    url: "https://huggingface.co/Qwen/Qwen3-8B-GGUF/resolve/7c41481f/chat.gguf",
     sha256: ggufHash,
     sizeBytes: 4,
     licence: "Apache-2.0",
@@ -173,13 +178,52 @@ test("a corrupt downloaded model is never marked verified", async () => {
   expect(getModel("corrupt-model")?.verifiedAt).toBeNull();
 });
 
+const CONTENT = Buffer.from("x".repeat(40_000), "utf8");
+const MIRROR_SHA256 = createHash("sha256").update(CONTENT).digest("hex");
+const mirrorServer = Bun.serve({
+  port: 0,
+  fetch(request) {
+    const url = new URL(request.url);
+    if (url.pathname === `/Qwen/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q8_0.gguf`) {
+      return new Response(CONTENT, { status: 200, headers: { "content-length": String(CONTENT.length) } });
+    }
+    return new Response("not found", { status: 404 });
+  },
+});
+afterAll(() => mirrorServer.stop(true));
+
+test("a pinned catalog model downloads from the configured Hugging Face mirror", async () => {
+  const mirror = new URL(mirrorServer.url).href.replace(/\/$/, "");
+  updateStackConfig({ huggingFaceEndpoint: mirror });
+  const expectedUrl = hfUrl("Qwen/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q8_0.gguf");
+  expect(expectedUrl).toBe(`${mirror}/Qwen/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q8_0.gguf`);
+  let requestedUrl = "";
+  await installCatalogModel({
+    id: "mirror-chat",
+    role: "chat",
+    license: STACK_CHAT_MODEL.license,
+    revision: STACK_CHAT_MODEL.revision,
+    engine: STACK_CHAT_MODEL.engine,
+    download: { url: expectedUrl, sha256: MIRROR_SHA256, approx_bytes: CONTENT.length },
+  }, {
+    destination: join(fixtureDir, "mirror.gguf"),
+    download: async (url, destination, options) => { requestedUrl = url; await downloadUrl(url, destination, options); },
+  });
+  expect(requestedUrl).toBe(expectedUrl);
+  expect(getModel("mirror-chat")?.verifiedAt).toBeTruthy();
+  expect(readFileSync(join(fixtureDir, "mirror.gguf"))).toEqual(CONTENT);
+});
+
 test("an incomplete Hugging Face provenance record throws before writing", async () => {
+  const mirror = new URL(mirrorServer.url).href.replace(/\/$/, "");
+  updateStackConfig({ huggingFaceEndpoint: mirror });
+  const incompleteUrl = hfUrl("example/model/resolve/main/incomplete.gguf");
   await expect(installHuggingFaceModel({
     id: "hf-incomplete",
     roles: ["chat"],
     repo: "example/model",
     revision: "main",
-    url: "https://huggingface.co/example/model/resolve/main/model.gguf",
+    url: incompleteUrl,
     licence: "Apache-2.0",
   }, { destination: join(fixtureDir, "incomplete.gguf") })).rejects.toThrow(ProvenanceIncompleteError);
 });

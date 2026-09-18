@@ -6,6 +6,7 @@ import { ENGINE_BINARIES } from "@/lib/engineCatalog";
 import { updatesEnabled } from "@/updates/check";
 import { detectHardware } from "@/lib/hardware";
 import { proposeProfile } from "@/profiles";
+import { hfUrl } from "@/lib/hf";
 
 const EntrySchema = z.object({ id: z.string(), name: z.string(), kind: z.enum(["model", "engine"]), roles: z.array(z.string()).optional(), licence: z.string().nullable(), sizeBytes: z.number().int().nullable(), source: z.string(), revision: z.string().nullable(), url: z.string().url().nullable(), sha256: z.string().nullable(), repo: z.string().nullable(), runsOnThisComputer: z.boolean().optional(), files: z.array(z.object({ name: z.string(), sizeBytes: z.number().int().nullable(), url: z.string().url() })).optional() });
 const searchRoute = createRoute({ method: "get", path: "/search", tags: ["Catalog"], summary: "Search the local catalog or Hugging Face", middleware: [requireOperator] as const, request: { query: z.object({ q: z.string().optional(), kind: z.enum(["model", "engine", "huggingface"]).optional() }) }, responses: { 200: { content: { "application/json": { schema: z.object({ enabled: z.boolean(), results: z.array(EntrySchema) }) } }, description: "Catalog entries or Hugging Face results." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "Invalid catalog search." } } });
@@ -28,8 +29,8 @@ catalogRoutes.openapi(searchRoute, async (c) => {
   if (!updatesEnabled()) return c.json({ enabled: false, results: [] }, 200);
   const q = query.q?.trim() ?? "";
   if (!q) return c.json({ enabled: true, results: [] }, 200);
-  const response = await fetch(`https://huggingface.co/api/models?search=${encodeURIComponent(q)}&filter=gguf&limit=20`, { headers: { "if-none-match": "", "user-agent": "maipai-stack/0.1.0 (catalog-search)" } });
+  const response = await fetch(hfUrl(`api/models?search=${encodeURIComponent(q)}&filter=gguf&limit=20`), { headers: { "if-none-match": "", "user-agent": "maipai-stack/0.1.0 (catalog-search)" } });
   if (!response.ok) return c.json({ error: `Hugging Face search returned ${response.status}.` }, 400);
   const entries = await response.json() as Array<{ id?: string; pipeline_tag?: string; tags?: string[] }>;
-  return c.json({ enabled: true, results: entries.filter((entry) => entry.id).map((entry) => ({ id: entry.id!, name: entry.id!, kind: "model" as const, roles: [entry.pipeline_tag === "text-to-image" ? "image" : "chat"], licence: null, sizeBytes: null, source: "Hugging Face", revision: "main", url: `https://huggingface.co/${entry.id}`, sha256: null, repo: entry.id!, files: [] })) }, 200);
+  return c.json({ enabled: true, results: entries.filter((entry) => entry.id).map((entry) => ({ id: entry.id!, name: entry.id!, kind: "model" as const, roles: [entry.pipeline_tag === "text-to-image" ? "image" : "chat"], licence: null, sizeBytes: null, source: "Hugging Face", revision: "main", url: hfUrl(entry.id!), sha256: null, repo: entry.id!, files: [] })) }, 200);
 });
