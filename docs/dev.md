@@ -1050,6 +1050,33 @@ the app bundle or plaintext token file is added. A daemon-down state
 still works without a session. Rejected: treating loopback as implicit
 administrator authority, which conflicts with the client-key rule.
 
+## Scope by what is reliable, capability by capability (decided 2026-09-18, 10:45)
+
+The achievability review recommended a chat-only v0.1.0. The owner's
+answer: the MVP delivers what is reliable, but reliability is judged per
+capability, not per modality, and nothing is excluded wholesale. If
+models can be searched, downloaded, installed, managed, updated and
+uninstalled reliably, v0.1.0 ships all of that for every model kind the
+catalog carries; if engines can only be monitored reliably, v0.1.0 ships
+engine monitoring and shows install and update as disabled with one
+sentence. The rule:
+
+1. **A capability matrix decides the release**: rows are the things
+   (models, engines, clients and keys, updates, health and checks, the
+   tester, settings, backups, the desktop app, the phone), columns are
+   the capabilities (see, search, download, install, manage, update,
+   uninstall, monitor), each cell one of: reliable now (a live check
+   passed on a clean account), reliable with bounded work (an item
+   named), monitor only in v0.1.0, or not in v0.1.0. The matrix lives in
+   `docs/plans/v0.1.0-capability-matrix.md` and is the release's scope.
+2. **A cell ships only with its live check**; a cell that is not in
+   v0.1.0 is a disabled control with its one sentence, never a missing
+   feature and never a working-looking button.
+3. **The field audit feeds the matrix**: where a mechanism is unreliable
+   today because our implementation is weak, the audit's best
+   implementation is what makes the cell reliable, not a narrower
+   promise.
+
 ## The field audit: learn each mechanism from the best implementation (decided 2026-09-18, 10:30)
 
 The owner, after the product review: for the products that do parts of
