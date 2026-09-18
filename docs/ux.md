@@ -662,6 +662,23 @@ door. Decisions:
 4. **Priority.** STACK-37 moves from low to normal: tier 1 (the intent
    table) and tier 3 (the helper panel) are built with Ask; tier 2
    arrives with the Library (STACK-32).
+5. **The helper never depends on the person's engines** (the owner,
+   01:55: "no engine installed, or the engine uninstalled, and our
+   assistant does not work"). Tiers 1 and 2 need no model and always
+   answer. Tier 3 runs on the person's loaded chat engine when one is
+   up and supports tool calls; otherwise on **the Stack's own helper
+   engine**: the pinned llama-server build the Stack itself is
+   installed with, and the pinned small model (`qwen3-1.7b-q8-0`, 1.8
+   GB), kept under the Stack's own store path, not listed among the
+   person's engines and models and not removable from the Engines or
+   Models pages (Settings, Storage shows it with "Remove the helper's
+   model" and the size, and Ask re-offers the download). The installer
+   downloads it with the Stack when the person accepts; if declined or
+   removed, Ask still answers tiers 1 and 2 and the helper's panel
+   says "The helper needs a 1.8 GB model to answer open questions.
+   Download it" with one button. A helper turn never loads the
+   person's models and never evicts them: it is admitted by the
+   governor at low priority and unloads after idle.
 
 ## Library
 
