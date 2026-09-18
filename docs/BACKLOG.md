@@ -117,20 +117,6 @@ never copied. No item migrates the hub until STACK-16.
 - [x] **STACK-35 (M): property panel.** One reusable docked or mobile-sheet
   panel for engines, models, and detected stores with actions, tabs, keyboard
   selection, and inline destructive confirmation. Verified at da31809.
-- [x] **STACK-41 (M): the things table.** One reusable real-table block for
-  Engines, Models, Access and Alerts with status dots, groups, selection,
-  sorting, links and quiet action rows. Verified at 036b70e.
-- [x] **STACK-42 (M): the property panel, refined.** Icon quick actions,
-  overview/insights/settings tabs, quick facts, paired primary actions, and
-  copyable key-value metadata across engines, models, groups, detected stores,
-  clients and channels. Verified at 530e0b0.
-- [x] **STACK-43 (M): the filter column.** A reusable search and collapsible
-  checkbox filter column with live counts, clear behavior, and a responsive
-  sheet on Engines, Models, and Access. Verified at eb41d14.
-- [x] **STACK-45 (M): Overview's facts column and controls.** A facts column
-  for this computer, persisted usage ranges with ability filters, measured
-  memory and storage status, and activity and health list cards. Verified at
-  74b1752.
 - [x] **STACK-36 (M): Overview console.** Range-aware usage, memory, and speed
   series backed by durable samples, with seven widgets, status rings, and
   showroom captures. Verified at ed67582.
@@ -600,7 +586,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   one); showroom `overview-console-dark.png` and `-light.png` opened
   and judged; every text and border token pair is checked for WCAG AA contrast
   and the ratios are listed in the commit message. Out of scope: a theme generator. Exit: `scripts/check.sh`.
-- [ ] **STACK-41 (M): the things table.** One block, `frontend/src/kit/
+- [x] **STACK-41 (M): the things table.** One block, `frontend/src/kit/
   blocks/things-table/ThingsTable.tsx`, on the kit's `table.tsx`:
   column definitions with alignment (numbers right, `tabular-nums`), a
   leading status dot from a four-state `status` field (ready, attention,
@@ -616,7 +602,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   through it (no page keeps its own row markup; grep for `border-b` in
   pages is empty); showroom captures opened and judged. Out of scope:
   the filter column (STACK-43). Exit: `scripts/check.sh`.
-- [ ] **STACK-42 (M): the property panel, refined.** `frontend/src/kit/
+- [x] **STACK-42 (M): the property panel, refined.** `frontend/src/kit/
   blocks/property-panel/PropertyPanel.tsx`: quick actions are icon
   buttons with tooltips (lucide icons per action, given by the panel's
   caller), never letters in circles; an icon-tab strip with tooltips
@@ -632,7 +618,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   glyph writes to the clipboard in the test (stubbed); showroom
   `engines-panel.png`, `models-panel.png`, `detected-panel.png` opened
   and judged. Exit: `scripts/check.sh`.
-- [ ] **STACK-43 (M): the filter column.** A `FilterColumn` block
+- [x] **STACK-43 (M): the filter column.** A `FilterColumn` block
   (`frontend/src/kit/blocks/filter-column/`): a search field,
   collapsible checkbox groups with counts (status, kind, role, for the
   page's things), a Clear filters link, collapsible to nothing with a
@@ -652,7 +638,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   button. Acceptance: a `bun test` walk of the showroom fixtures renders
   each page and asserts at most one `data-variant="default"` button
   outside dialogs; captures opened and judged. Exit: `scripts/check.sh`.
-- [ ] **STACK-45 (M): Overview's facts column and controls.** The left
+- [x] **STACK-45 (M): Overview's facts column and controls.** The left
   facts column of ux.md item 8 (the computer card with counts by kind,
   key facts as label and value rows, versions with "Up to date" and a
   history glyph, two full-width outline buttons: Speed test, Check my
