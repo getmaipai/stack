@@ -3,6 +3,7 @@ import { apiRouter } from "@/lib/openapi";
 import { requireClientOrOperator } from "@/lib/clients";
 import { detectHardware } from "@/lib/hardware";
 import { PROFILE_TIERS, proposeProfile, type ProfileTier, type RoleId } from "@/profiles";
+import { showroom, showroomHardware, showroomProfile } from "@/showroom/fixture";
 
 const RoleIdSchema = z.enum(["chat", "coding", "judge", "router", "embed", "rerank", "vision", "stt", "tts", "wakeword", "image", "video", "music"]);
 const CudaDeviceSchema = z.object({
@@ -58,6 +59,7 @@ const hardwareRoute = createRoute({
 
 export const hardwareRoutes = apiRouter();
 hardwareRoutes.openapi(hardwareRoute, async (c) => {
+  if (showroom()) return c.json({ hardware: showroomHardware, proposed: showroomProfile, tiers: PROFILE_TIERS } as never, 200);
   const hardware = await detectHardware();
   return c.json({ hardware, proposed: proposeProfile(hardware), tiers: PROFILE_TIERS }, 200);
 });

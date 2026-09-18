@@ -6,6 +6,7 @@ import { listModels, removeModel } from "@/lib/modelStore";
 import { importCandidate, importPath, scanImports, type ImportCandidate } from "@/lib/store/importScan";
 import { readModelManifest } from "@/lib/store/manifests";
 import { invalidateStorageAccounting } from "@/lib/store/storage";
+import { showroom, showroomModels } from "@/showroom/fixture";
 
 const ModelSchema = z.object({
   id: z.string(), roles: z.array(z.string()), state: z.enum(["notInstalled", "installed"]), sizeBytes: z.number().int().nullable(), measuredFootprintBytes: z.number().int().nullable(), estimated: z.boolean(), source: z.string(), provenance: z.record(z.string(), z.unknown()),
@@ -21,7 +22,7 @@ function modelView(model: ReturnType<typeof listModels>[number]) {
 }
 
 export const modelsRoutes = apiRouter();
-modelsRoutes.openapi(listRoute, (c) => c.json({ models: listModels().map(modelView) }, 200));
+modelsRoutes.openapi(listRoute, (c) => c.json({ models: showroom() ? showroomModels as never : listModels().map(modelView) }, 200));
 modelsRoutes.openapi(pullRoute, (c) => {
   const body = c.req.valid("json");
   if (!body.url || !body.sha256 || !body.licence || !body.revision) return c.json({ error: "pull requires url, sha256, licence, and revision before download" }, 400);

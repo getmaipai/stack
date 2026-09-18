@@ -9,6 +9,10 @@ the product passes its battle-tested checklist in `docs/dev.md`.
 
 ### Added
 
+- STACK-36 showroom mode: a development-only believable household fixture
+  behind the real routes, with a `bun run showroom` command and full-page
+  screenshot capture support.
+
 - STACK-19 engine management: operator controls, declarative engine
   configuration with restart state, derived version status, install progress,
   protected build removal, and the Engines page with Configure sheet.

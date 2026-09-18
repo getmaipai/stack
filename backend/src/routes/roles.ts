@@ -4,6 +4,7 @@ import { requireClientOrOperator } from "@/lib/clients";
 import { resolveRole } from "@/lib/router";
 import { ROLE_IDS, RoleRecordSchema, ROLES } from "@/roles";
 import { getModel, isModelSelectable, listModels } from "@/lib/modelStore";
+import { showroom, showroomRoles } from "@/showroom/fixture";
 
 const RolesResponseSchema = z.object({ roles: z.array(RoleRecordSchema) });
 
@@ -22,7 +23,7 @@ const rolesRoute = createRoute({
 });
 
 export const rolesRoutes = apiRouter();
-rolesRoutes.openapi(rolesRoute, (c) => c.json({
+rolesRoutes.openapi(rolesRoute, (c) => c.json(showroom() ? { roles: showroomRoles } as never : {
   roles: ROLE_IDS.map((id) => {
     const model = listModels().find((candidate) => candidate.roles.includes(id));
     return {

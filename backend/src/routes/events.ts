@@ -6,6 +6,7 @@ import { listRepairs, resolveRepair } from "@/lib/repairs";
 import { requireOperator } from "@/lib/operator";
 import { EventEnvelopeSchema } from "@/events";
 import { ignore, list as listHealth, resolve } from "@/lib/health";
+import { showroom, showroomHealth, showroomNotifications, showroomResolveHealth } from "@/showroom/fixture";
 
 const eventsRoute = createRoute({ method: "get", path: "/events", tags: ["Events"], summary: "Stream Stack events", middleware: [requireClientOrOperator] as const, responses: { 200: { content: { "text/event-stream": { schema: z.string() } }, description: "Event envelopes, replayable by sequence." } } });
 const notificationsRoute = createRoute({ method: "get", path: "/notifications", tags: ["Notifications"], middleware: [requireClientOrOperator] as const, responses: { 200: { content: { "application/json": { schema: z.object({ notifications: z.array(z.unknown()) }) } }, description: "Recent operator notifications." } } });
@@ -25,13 +26,13 @@ function sse(envelopes: unknown[]): Response {
 
 export const eventsRoutes = apiRouter();
 eventsRoutes.openapi(eventsRoute, (c) => sse(eventsAfter(Number(c.req.header("last-event-id") ?? 0))));
-eventsRoutes.openapi(notificationsRoute, (c) => c.json({ notifications: listNotifications() }, 200));
+eventsRoutes.openapi(notificationsRoute, (c) => c.json({ notifications: showroom() ? showroomNotifications : listNotifications() }, 200));
 eventsRoutes.openapi(readRoute, (c) => markRead(c.req.valid("param").id) ? c.json({ ok: true as const }, 200) : c.json({ error: "Unknown notification" }, 404));
 eventsRoutes.openapi(dismissRoute, (c) => dismiss(c.req.valid("param").id) ? c.json({ ok: true as const }, 200) : c.json({ error: "Unknown notification" }, 404));
-eventsRoutes.openapi(clearRoute, (c) => { clearAll(); return c.json({ ok: true as const }, 200); });
+eventsRoutes.openapi(clearRoute, (c) => { if (showroom()) { showroomNotifications.splice(0); return c.json({ ok: true as const }, 200); } clearAll(); return c.json({ ok: true as const }, 200); });
 eventsRoutes.openapi(repairsRoute, (c) => c.json({ repairs: listRepairs() }, 200));
 eventsRoutes.openapi(resolveRoute, (c) => resolveRepair(c.req.valid("param").id) ? c.json({ ok: true as const }, 200) : c.json({ error: "Unknown repair" }, 404));
-eventsRoutes.openapi(healthRoute, (c) => c.json({ health: listHealth() }, 200));
-for (const action of ["resolve", "ignore"] as const) eventsRoutes.openapi(healthActionRoute(action), (c) => { const code = c.req.valid("param").code; const changed = action === "resolve" ? resolve(code) : ignore(code); return changed ? c.json({ ok: true as const }, 200) : c.json({ error: "Unknown health item" }, 404); });
+eventsRoutes.openapi(healthRoute, (c) => c.json({ health: showroom() ? showroomHealth : listHealth() }, 200));
+for (const action of ["resolve", "ignore"] as const) eventsRoutes.openapi(healthActionRoute(action), (c) => { const code = c.req.valid("param").code; const changed = showroom() ? showroomResolveHealth(code) : action === "resolve" ? resolve(code) : ignore(code); return changed ? c.json({ ok: true as const }, 200) : c.json({ error: "Unknown health item" }, 404); });
 
 export { emit };

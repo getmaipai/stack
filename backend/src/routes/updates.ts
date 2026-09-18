@@ -3,6 +3,7 @@ import { apiRouter, ErrorSchema } from "@/lib/openapi";
 import { requireOperator } from "@/lib/operator";
 import { check, setUpdatesEnabled, skip, state } from "@/updates/check";
 import { rollbackEngine, swapEngine } from "@/updates/engines";
+import { showroom, showroomUpdates } from "@/showroom/fixture";
 
 const StateSchema = z.object({ installed: z.string(), available: z.string().nullable(), notes: z.string().nullable(), size: z.number().int().nullable(), lastChecked: z.string().nullable(), checksEnabled: z.boolean(), skipped: z.boolean() });
 const listRoute = createRoute({ method: "get", path: "/", tags: ["Updates"], summary: "Update status", middleware: [requireOperator] as const, responses: { 200: { content: { "application/json": { schema: z.object({ app: StateSchema, engines: StateSchema, models: StateSchema }) } }, description: "Installed and available updates." } } });
@@ -11,7 +12,7 @@ const settingsRoute = createRoute({ method: "post", path: "/settings", tags: ["U
 const skipRoute = createRoute({ method: "post", path: "/skip", tags: ["Updates"], summary: "Skip an update", middleware: [requireOperator] as const, request: { body: { content: { "application/json": { schema: z.object({ kind: z.enum(["app", "engines", "models"]) }) } } } }, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.literal(true) }) } }, description: "Update skipped." } } });
 const engineRoute = (action: "apply" | "rollback") => createRoute({ method: "post", path: `/engines/{name}/${action}`, tags: ["Updates"], summary: `${action} an engine update`, middleware: [requireOperator] as const, request: { params: z.object({ name: z.string(), tag: z.string().optional() }), body: { content: { "application/json": { schema: z.object({ tag: z.string() }) } } } }, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.literal(true) }) } }, description: "Engine update applied." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "Engine update failed." } } });
 export const updatesRoutes = apiRouter();
-updatesRoutes.openapi(listRoute, (c) => c.json({ app: state("app"), engines: state("engines"), models: state("models") }, 200));
+updatesRoutes.openapi(listRoute, (c) => c.json(showroom() ? showroomUpdates : { app: state("app"), engines: state("engines"), models: state("models") }, 200));
 updatesRoutes.openapi(checkRoute, async (c) => { const [app, engines, models] = await Promise.all([check("app"), check("engines"), check("models")]); return c.json({ app, engines, models }, 200); });
 updatesRoutes.openapi(settingsRoute, (c) => { const enabled = c.req.valid("json").enabled; setUpdatesEnabled(enabled); return c.json({ enabled }, 200); });
 updatesRoutes.openapi(skipRoute, (c) => { skip(c.req.valid("json").kind); return c.json({ ok: true as const }, 200); });

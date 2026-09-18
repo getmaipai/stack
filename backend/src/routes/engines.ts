@@ -13,6 +13,7 @@ import { readEngineConfig, updateEngineConfig } from "@/settings/engineKeys";
 import { getChatBackend, getChatEngineStatus, restartChatEngine, stopChatEngine } from "@/lib/supervisor";
 import { readEngineIdentity } from "@/lib/identity";
 import { emit } from "@/lib/events";
+import { showroom, showroomEngines } from "@/showroom/fixture";
 
 const EngineSchema = z.object({
   id: z.string(),
@@ -47,6 +48,7 @@ const enginesRoute = createRoute({
 
 export const enginesRoutes = apiRouter();
 enginesRoutes.openapi(enginesRoute, async (c) => {
+  if (showroom()) return c.json({ engines: showroomEngines } as never, 200);
   const hardware = await detectHardware();
   const selected = selectEngineBinary(hardware)?.id;
   const status = getChatEngineStatus();

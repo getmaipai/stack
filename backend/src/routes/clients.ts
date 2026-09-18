@@ -3,6 +3,7 @@ import { apiRouter, ErrorSchema, idParamSchema } from "@/lib/openapi";
 import { issueClient, listClients, resolveClient, revokeClient } from "@/lib/clients";
 import { hasOperator, requireOperator } from "@/lib/operator";
 import { RoleIdSchema } from "@/roles";
+import { showroom, showroomClients } from "@/showroom/fixture";
 
 const ClientSchema = z.object({
   id: z.string(),
@@ -64,7 +65,7 @@ const deleteRoute = createRoute({
 });
 
 export const clientsRoutes = apiRouter();
-clientsRoutes.openapi(listRoute, (c) => c.json({ clients: listClients() }, 200));
+clientsRoutes.openapi(listRoute, (c) => c.json({ clients: showroom() ? showroomClients as never : listClients() }, 200));
 clientsRoutes.openapi(createRoute_, (c) => {
   if (!hasOperator()) return c.json({ error: "Set an operator password before creating a client key", setPasswordFirst: true as const }, 409);
   const body = c.req.valid("json");

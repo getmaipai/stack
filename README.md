@@ -141,6 +141,11 @@ Standards live in [getmaipai/.github](https://github.com/getmaipai/.github).
 `scripts/check.sh` runs the pinned `@maipai/standards` core; it needs a
 sibling checkout of `getmaipai/.github`.
 
+To judge the full UI with a believable household-sized fixture, build the
+frontend and run `bun run showroom`. It serves the local showroom at
+`http://127.0.0.1:8770`; `STACK_SHOWROOM=1` is a developer switch, never on by
+default, and the backend refuses it in production.
+
 ---
 
 MaiPai is open-source software for personal, self-hosted, non-commercial

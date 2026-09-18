@@ -21,6 +21,9 @@ import { budgetRoutes } from "@/routes/budget";
 import { eventsRoutes } from "@/routes/events";
 import { logsRoutes } from "@/routes/logs";
 import packageJson from "../../package.json";
+import { assertShowroomAllowed } from "@/showroom/fixture";
+
+assertShowroomAllowed();
 
 export const version = packageJson.version;
 export const app = apiRouter();
