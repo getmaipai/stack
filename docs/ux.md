@@ -135,6 +135,30 @@ Phone width collapses the sidebar into a sheet.
 12. **Settings**: the few declared settings, rendered by the generic
     renderer.
 
+**The list and the panel (the UniFi pattern, decided 2026-09-17).**
+Every page that holds things (Engines, Models and their groups,
+Clients under Access, Alert channels, detected items) is the same
+shape: a table of rows on the left of the page, and a **property
+panel** on the right that opens when a row is clicked and stays open
+as the person moves between rows (arrow keys work). Each row shows the
+name, a status badge (ready, loading, offline with the reason,
+detected and not adopted, update available, updating, needs restart),
+the version or size inline, and what it holds or serves. The panel's
+header carries the name, the status badge and a row of quick-action
+icon buttons for that kind of thing (an engine: Start, Stop, Restart,
+Update when one is available, Make current, Logs, Forget; a model:
+Load, Unload, Pin, Update, Remove; a detected item: Adopt, Forget; a
+group: the seven group actions; a client: Revoke), each with a
+tooltip and the kit's inline confirmation where it destroys. Beneath,
+tabs: **Overview** (the metadata: kind, version and whether it is
+current, where it lives, roles or abilities, provenance and licence,
+measured footprint and speed, last used, the docs links), **Settings**
+(the declared configuration rendered generically, pending and
+in-effect values), **Insights** (usage over time, the tail of its
+log). On phone width the panel is a full-height sheet. The block's
+data table provides the rows; the panel is one component used by
+every page, never rebuilt per page.
+
 **Empty and first states are designed, not blank**: a fresh install
 shows Overview with This computer and Add abilities, every other
 section shows one calm sentence and the one action that fills it

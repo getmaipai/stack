@@ -295,6 +295,15 @@ each item's design section lands in `dev.md` before its code.
   change marks needs-restart and the restart applies it; "not
   current" appears when a newer pinned build exists (test); the page
   screenshot opened and judged.
+- [ ] **STACK-35 (M): the property panel.** One `PropertyPanel`
+  component (header with name, status badge and quick-action buttons;
+  Overview, Settings, Insights tabs) used by Engines, Models and
+  groups, Access clients, Alert channels and detected items, with the
+  table on the left and the panel staying open across rows and arrow
+  keys; the per-kind action sets in `ux.md` "The list and the panel".
+  Acceptance: each page opens the panel on a row and moves with arrow
+  keys (test); every action calls its route (test per kind);
+  screenshots of the panel on Engines and Models, opened and judged.
 - [ ] **STACK-34 (M): detect and adopt.** Discovery of engines and
   model folders the Stack did not install: well-known loopback ports
   (Ollama 11434, LM Studio 1234, ComfyUI 8188, oMLX, mlx-serve 11234,
