@@ -1317,6 +1317,13 @@ uses three sources: the signed local catalog, an opt-in Hugging Face search, and
 local imports or an upload staged for provenance assignment. Hugging Face search
 is gated by the existing outbound switch and is recorded in the privacy page.
 
+The phone surface is a second renderer over those same page declarations and
+routes, selected by the shell from the measured viewport width below 640 px.
+It changes navigation and density to a bottom tab bar, list rows, grouped
+detail cards and a phone Overview, but it does not create a second data path.
+The phone renderer stays in the shared kit blocks so desktop and phone keep the
+same action labels, statuses and route ownership.
+
 ## Open questions for the owner
 
 1. **Name.** Decided 2026-09-17: `stack`, "MaiPai Stack". The public

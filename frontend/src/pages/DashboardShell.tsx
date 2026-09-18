@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { getIcon } from "@/kit/icons";
 import { type BudgetResponse, type EngineRecord, type HardwareResponse, type HealthItem, type RepairRecord, type RoleRecord } from "@/lib/api";
 import { BoardPage } from "@/pages/BoardPage";
@@ -21,6 +21,12 @@ import { AlertsPage } from "@/pages/AlertsPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { LibraryPage } from "@/pages/LibraryPage";
 import type { LibraryRecord } from "@/lib/api";
+import { PhoneModeContext, usePhoneMode } from "@/kit/blocks/phone/PhoneMode";
+import { PhoneHeader } from "@/kit/blocks/phone/PhoneHeader";
+import { TabBar } from "@/kit/blocks/phone/TabBar";
+import { DetailCard } from "@/kit/blocks/phone/DetailCard";
+import { ActionList } from "@/kit/blocks/phone/ActionList";
+import { actionsFor, type ThingKind } from "@/lib/actions";
 
 const Copy = getIcon("Copy"); const ExternalLink = getIcon("ExternalLink"); const Gauge = getIcon("Gauge"); const Search = getIcon("Search"); const RefreshCw = getIcon("RefreshCw"); const UploadCloud = getIcon("UploadCloud"); const SlidersHorizontal = getIcon("SlidersHorizontal");
 
@@ -30,8 +36,29 @@ const sectionPaths: Record<string, string> = { Overview: "/", Engines: "/engines
 export type SectionFrameComponent = ({ title, description, children }: { title: string; description: string; children: ReactNode }) => ReactNode;
 
 export function SectionFrame({ title: _title, description, children }: { title: string; description: string; children: ReactNode }) {
-  return <main className="mx-auto w-full max-w-7xl space-y-5 px-4 py-5 sm:px-8 lg:px-10 lg:py-6">{description ? <p className="text-sm text-muted-foreground">{description}</p> : null}{children}</main>;
+  const phone = usePhoneMode();
+  return <main className="mx-auto w-full max-w-7xl space-y-5 px-4 py-5 sm:px-8 lg:px-10 lg:py-6">{description ? <p className={phone ? "hidden" : "text-sm text-muted-foreground"}>{description}</p> : null}{children}</main>;
 }
+
+function PhoneDetail({ kind, endpoint, id }: { kind: Extract<ThingKind, "model" | "engine">; endpoint: string; id: string }) {
+  const navigate = useNavigate();
+  const data = useApiResource<{ models?: Array<Record<string, unknown>>; engines?: Array<Record<string, unknown>> }>(endpoint);
+  const records = kind === "model" ? data.data?.models ?? [] : data.data?.engines ?? [];
+  const item = records.find((row) => String(row.id) === id) ?? { id, name: id };
+  const label = String(item.name ?? item.label ?? item.id ?? id);
+  const actions = actionsFor(kind, item, () => undefined);
+  const rows = Object.entries(item).filter(([key, value]) => ["id", "name", "label", "platform", "arch", "state", "currentTag", "newestTag"].includes(key) && (typeof value === "string" || typeof value === "number" || typeof value === "boolean")).slice(0, 8).map(([key, value]) => ({ label: key.replaceAll(/([A-Z])/g, " $1"), value: String(value) }));
+  return <main className="space-y-4 px-4 py-4"><button type="button" className="flex min-h-11 items-center gap-2 text-sm text-primary" onClick={() => navigate(kind === "model" ? "/models" : "/engines")}><span aria-hidden>‹</span>Back</button><h1 className="text-2xl font-semibold">{label}</h1><DetailCard rows={[{ label: "Nickname", placeholder: "Enter a nickname", editable: kind === "model" }, { label: "Group", value: "Choose a group", onClick: () => undefined }, ...rows]} /><ActionList actions={actions} /></main>;
+}
+
+function PhoneShell({ children, locationPath, onNavigate, health }: { children: ReactNode; locationPath: string; onNavigate: (path: string) => void; health: string }) {
+  const action: "Add" | "Search" = ["/models", "/engines"].includes(locationPath) ? "Add" : "Search";
+  const title = locationPath.startsWith("/models") ? "Models" : locationPath.startsWith("/engines") ? "Engines" : locationPath.startsWith("/try") ? "Tester" : locationPath.startsWith("/alerts") ? "Alerts" : locationPath.startsWith("/settings") ? "Settings" : locationPath === "/" ? "Overview" : "Things";
+  return <div data-phone-shell className="min-h-svh bg-background pb-16"><PhoneHeader computerName="This computer" health={health} action={action} onAction={() => undefined} /><div className="hidden" aria-hidden="true"><button type="button" aria-label="Search Stack" /><button type="button" data-notifications-trigger /><button type="button" data-profile-trigger /></div><main className="mx-auto w-full max-w-xl"><h1 className="px-4 pt-4 text-2xl font-semibold">{title}</h1>{["/models", "/engines"].includes(locationPath) && <div className="mx-4 mt-3 grid grid-cols-2 rounded-lg border p-1"><button type="button" className={`min-h-11 rounded-md text-sm ${locationPath === "/models" ? "bg-muted font-medium" : ""}`} onClick={() => onNavigate("/models")}>Models</button><button type="button" className={`min-h-11 rounded-md text-sm ${locationPath === "/engines" ? "bg-muted font-medium" : ""}`} onClick={() => onNavigate("/engines")}>Engines</button></div>}{locationPath.startsWith("/settings") && <nav aria-label="Settings navigation" className="mx-4 mt-3 divide-y rounded-xl border"><a className="block min-h-11 px-4 py-3" href="/access">Clients</a><a className="block min-h-11 px-4 py-3" href="/monitoring">Monitoring</a><a className="block min-h-11 px-4 py-3" href="/logs">Logs</a></nav>}<div className="px-4 pb-4">{children}</div></main><TabBar activePath={locationPath} onNavigate={onNavigate} /></div>;
+}
+
+function PhoneModelRoute() { const { id = "" } = useParams(); return <PhoneDetail kind="model" endpoint="/stack/v1/models" id={id} />; }
+function PhoneEngineRoute() { const { id = "" } = useParams(); return <PhoneDetail kind="engine" endpoint="/stack/v1/engines" id={id} />; }
 
 function MonitoringPage() {
   const budget = useApiResource<BudgetResponse>("/stack/v1/budget");
@@ -55,7 +82,8 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
 }
 
 export function DashboardShell() {
-  const location = useLocation(); const [paletteOpen, setPaletteOpen] = useState(false);
+  const location = useLocation(); const navigate = useNavigate(); const [paletteOpen, setPaletteOpen] = useState(false);
+  const [phone, setPhone] = useState(() => typeof window !== "undefined" && window.innerWidth < 640);
   const repairs = useApiResource<{ repairs: RepairRecord[] }>("/stack/v1/repairs");
   const roles = useApiResource<{ roles: RoleRecord[] }>("/stack/v1/roles");
   const engines = useApiResource<{ engines: EngineRecord[] }>("/stack/v1/engines");
@@ -68,6 +96,7 @@ export function DashboardShell() {
   const refetchRepairs = repairs.refetch; const refetchRoles = roles.refetch; const refetchEngines = engines.refetch; const refetchUpdates = updates.refetch; const refetchHealth = health.refetch; const refetchDetected = detected.refetch; const refetchBudget = budget.refetch; const refetchRunState = runState.refetch;
   useEffect(() => { if (typeof EventSource === "undefined") return; const stream = new EventSource("/stack/v1/events"); stream.onmessage = (event) => { try { const envelope = JSON.parse(event.data) as { id?: string }; if (envelope.id === "repair") void refetchRepairs(); if (envelope.id === "role.state") void refetchRoles(); if (envelope.id === "health.changed") void refetchHealth(); if (envelope.id === "engine.state") void refetchEngines(); if (envelope.id === "update.available") void refetchUpdates(); if (envelope.id === "detected.changed") void refetchDetected(); if (envelope.id === "pressure" || envelope.id === "budget.changed") void refetchBudget(); if (envelope.id === "run.state") void refetchRunState(); } catch { /* An invalid event cannot take down the shell. */ } }; return () => stream.close(); }, [refetchRepairs, refetchRoles, refetchEngines, refetchUpdates, refetchHealth, refetchDetected, refetchBudget, refetchRunState]);
   useEffect(() => { const onKey = (event: KeyboardEvent) => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setPaletteOpen(true); } if (event.key === "/" && !["INPUT", "TEXTAREA"].includes((event.target as HTMLElement)?.tagName)) { event.preventDefault(); setPaletteOpen(true); } }; window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey); }, []);
+  useEffect(() => { const update = () => setPhone(window.innerWidth < 640); update(); window.addEventListener("resize", update); return () => window.removeEventListener("resize", update); }, []);
   const title = sections.find((item) => sectionPaths[item] === location.pathname) ?? (location.pathname.startsWith("/settings") ? "Settings" : "Overview");
   const repairRows = repairs.data?.repairs ?? []; const roleRows = roles.data?.roles ?? [];
   const enginesToCheck = engines.data?.engines?.filter((engine) => engine.state !== "current") ?? [];
@@ -79,7 +108,9 @@ export function DashboardShell() {
   const engineTooltip = engineCount === 0 ? "Engines" : `${engineCount} ${engineCount === 1 ? "engine" : "engines"} need${engineCount === 1 ? "s" : ""} attention`;
   const updateTooltip = updateCount === 0 ? "Updates" : `${updateCount} update${updateCount === 1 ? "" : "s"} available`;
   const alertTooltip = alertCount === 0 ? "Alerts" : `Alerts: ${alertSeverity === "critical" ? "1 critical" : alertSeverity === "error" ? `${alertCount} error${alertCount === 1 ? "" : "s"}` : `${alertCount} warning${alertCount === 1 ? "" : "s"}`}`;
-  return <SidebarProvider><AppSidebar repairs={repairRows} roles={roleRows} health={health.data?.health ?? []} engineCount={engineCount} updateCount={updateCount} alertSeverity={alertSeverity} engineTooltip={engineTooltip} updateTooltip={updateTooltip} alertTooltip={alertTooltip} hardware={hardware.data?.hardware} budget={budget.data} runState={runState.data?.state} /><SidebarInset className="h-svh overflow-hidden"><SiteHeader title={title} onSearch={() => setPaletteOpen(true)} runState={runState.data?.state ?? "running"} onRunStateChange={() => void runState.refetch()} /><div className="flex-1 overflow-y-auto"><Routes><Route path="/" element={<BoardPageProxy />} /><Route path="/abilities" element={<AbilitiesProxy />} /><Route path="/models" element={<ModelsPage Frame={SectionFrame} />} /><Route path="/engines" element={<EnginesPage Frame={SectionFrame} />} /><Route path="/monitoring" element={<MonitoringPage />} /><Route path="/library" element={<LibraryPage Frame={SectionFrame} />} /><Route path="/alerts" element={<AlertsPage Frame={SectionFrame} />} /><Route path="/logs" element={<LogsPage />} /><Route path="/access" element={<AccessPage Frame={SectionFrame} />} /><Route path="/try" element={<TryItPage />} /><Route path="/updates" element={<Navigate to="/settings/updates" replace />} /><Route path="/backups" element={<Navigate to="/settings/backups" replace />} /><Route path="/settings/*" element={<SettingsPage Frame={SectionFrame} />} /><Route path="*" element={<BoardPageProxy />} /></Routes></div></SidebarInset><CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} /></SidebarProvider>;
+  const routes = <Routes><Route path="/" element={<BoardPageProxy />} /><Route path="/abilities" element={<AbilitiesProxy />} /><Route path="/models/:id" element={<PhoneModelRoute />} /><Route path="/engines/:id" element={<PhoneEngineRoute />} /><Route path="/models" element={<ModelsPage Frame={SectionFrame} />} /><Route path="/engines" element={<EnginesPage Frame={SectionFrame} />} /><Route path="/monitoring" element={<MonitoringPage />} /><Route path="/library" element={<LibraryPage Frame={SectionFrame} />} /><Route path="/alerts" element={<AlertsPage Frame={SectionFrame} />} /><Route path="/logs" element={<LogsPage />} /><Route path="/access" element={<AccessPage Frame={SectionFrame} />} /><Route path="/try" element={<TryItPage />} /><Route path="/updates" element={<Navigate to="/settings/updates" replace />} /><Route path="/backups" element={<Navigate to="/settings/backups" replace />} /><Route path="/settings/*" element={<SettingsPage Frame={SectionFrame} />} /><Route path="*" element={<BoardPageProxy />} /></Routes>;
+  if (phone) return <PhoneModeContext.Provider value={true}><PhoneShell locationPath={location.pathname} onNavigate={navigate} health={health.data?.health?.[0]?.text ?? "This computer is healthy."}>{routes}</PhoneShell></PhoneModeContext.Provider>;
+  return <SidebarProvider><AppSidebar repairs={repairRows} roles={roleRows} health={health.data?.health ?? []} engineCount={engineCount} updateCount={updateCount} alertSeverity={alertSeverity} engineTooltip={engineTooltip} updateTooltip={updateTooltip} alertTooltip={alertTooltip} hardware={hardware.data?.hardware} budget={budget.data} runState={runState.data?.state} /><SidebarInset className="h-svh overflow-hidden"><SiteHeader title={title} onSearch={() => setPaletteOpen(true)} runState={runState.data?.state ?? "running"} onRunStateChange={() => void runState.refetch()} /><div className="flex-1 overflow-y-auto">{routes}</div></SidebarInset><CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} /></SidebarProvider>;
 }
 
 function BoardPageProxy() { const roles = useApiResource<{ roles: RoleRecord[] }>("/stack/v1/roles"); const hasPlan = roles.data?.roles.some((role) => role.state !== "notInstalled"); return hasPlan ? <OverviewPage /> : <BoardPage embedded />; }

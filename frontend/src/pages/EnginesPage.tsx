@@ -17,6 +17,7 @@ import { PropertyPanel } from "@/kit/blocks/property-panel/PropertyPanel";
 import { labelForRole } from "@/lib/modelStates";
 import { actionsFor } from "@/lib/actions";
 import { AddSheet } from "@/kit/blocks/add-sheet/AddSheet";
+import { usePhoneMode } from "@/kit/blocks/phone/PhoneMode";
 
 type DetectedStore = { id: string; name: string; kind: string; version: string; path?: string; where?: string; candidateModels?: number; roles?: string[]; couldHold?: string[] };
 type EngineRow = { kind: "engine"; engine: EngineRecord } | { kind: "detected"; store: DetectedStore };
@@ -25,9 +26,11 @@ const LoaderCircle = getIcon("LoaderCircle");
 function engineName(engine: EngineRecord): string { const marker = engine.id.indexOf("-b"); return marker > 0 ? engine.id.slice(0, marker) : engine.id; }
 function engineTag(engine: EngineRecord): string { const marker = engine.id.indexOf("-b"); return marker > 0 ? engine.id.slice(marker + 1).split("-")[0] ?? engine.id : engine.id; }
 function engineStatus(engine: EngineRecord): ThingStatus { return !engine.installed || !engine.running ? "offline" : engine.needsRestart || engine.notCurrent ? "attention" : "ready"; }
+function detectedName(store: DetectedStore): string { return store.name.endsWith(` ${store.version}`) ? store.name : `${store.name} ${store.version}`; }
 
 export function EnginesPage({ Frame }: { Frame: SectionFrameComponent }) {
   const navigate = useNavigate();
+  const phone = usePhoneMode();
   const engines = useApiResource<{ engines: EngineRecord[] }>("/stack/v1/engines");
   const detectedStores = useApiResource<{ detected: DetectedStore[] }>("/stack/v1/detected");
   const roles = useApiResource<{ roles: RoleRecord[] }>("/stack/v1/roles");
@@ -67,7 +70,7 @@ export function EnginesPage({ Frame }: { Frame: SectionFrameComponent }) {
   if (engines.loading || detectedStores.loading) return <Frame title="Engines" description="Builds, health, controls, and the settings that shape each runtime."><LoaderCircle className="animate-spin" /></Frame>;
   if (rows.length === 0) return <Frame title="Engines" description="Builds, health, controls, and the settings that shape each runtime."><PageEmptyState title="No engine builds are available" detail="The Stack will show verified local engine builds here when the store has them." /></Frame>;
 
-  return <Frame title="Engines" description="Builds, health, controls, and the settings that shape each runtime."><div className="flex justify-end"><Button onClick={() => setAddOpen(true)}><span aria-hidden="true">＋</span>Add</Button></div><ThingsPage filter={{ search: { value: filterSearch, onChange: setFilterSearch, placeholder: "Search engines" }, groups: filterGroups, onClear: () => { setFilterSearch(""); setFilterSelections({}); } }} table={<ThingsTable<EngineRow>
+  return <Frame title="Engines" description="Builds, health, controls, and the settings that shape each runtime."><div className={phone ? "hidden" : "flex justify-end"}><Button onClick={() => setAddOpen(true)}><span aria-hidden="true">＋</span>Add</Button></div><ThingsPage filter={{ search: { value: filterSearch, onChange: setFilterSearch, placeholder: "Search engines" }, groups: filterGroups, onClear: () => { setFilterSearch(""); setFilterSelections({}); } }} table={<ThingsTable<EngineRow>
     columns={[
       { key: "build", header: "Build", width: "36%", render: (row) => row.kind === "detected" ? <div><p className="font-medium">Detected, not adopted · {row.store.name}</p><p className="text-xs text-muted-foreground">{row.store.version} · {row.store.path ?? row.store.where}</p></div> : <div><p className="font-medium">{row.engine.label}</p><p className="text-xs text-muted-foreground">{row.engine.id}</p></div> },
       { key: "platform", header: "Platform", width: "18%", render: (row) => row.kind === "detected" ? `${row.store.kind} · ${row.store.candidateModels ?? 0} candidates` : `${row.engine.platform} · ${row.engine.arch}` },
@@ -79,8 +82,9 @@ export function EnginesPage({ Frame }: { Frame: SectionFrameComponent }) {
     getStatus={(row) => row.kind === "detected" ? "detected" : engineStatus(row.engine)}
     selectedKey={selectedEngine ? `engine:${selectedEngine.id}` : undefined}
     onLink={(target) => navigate(target)}
-    onRowClick={(row) => { if (row.kind === "detected") setDetectedOpen(true); else selectAt(engines.data?.engines.findIndex((engine) => engine.id === row.engine.id) ?? 0); }}
+    onRowClick={(row) => { if (row.kind === "detected") setDetectedOpen(true); else if (phone) navigate(`/engines/${encodeURIComponent(row.engine.id)}`); else selectAt(engines.data?.engines.findIndex((engine) => engine.id === row.engine.id) ?? 0); }}
     rowActions={rowActions}
+    phoneRow={(row) => row.kind === "detected" ? { name: detectedName(row.store), subtitle: `Not adopted · ${(row.store.couldHold ?? row.store.roles ?? []).map(roleLabel).join(", ") || "Unassigned"}`, status: "Not adopted", tone: "detected" } : { name: row.engine.label, subtitle: `${row.engine.platform} · ${row.engine.arch}`, status: row.engine.state === "current" ? "Current" : "Not current", tone: engineStatus(row.engine) }}
     getRowProps={(row) => row.kind === "engine" ? { "data-testid": `engine-row-${row.engine.id}`, tabIndex: 0, onKeyDown: (event) => { if (event.key === "ArrowDown") { event.preventDefault(); selectAt(selected + 1); } if (event.key === "ArrowUp") { event.preventDefault(); selectAt(selected - 1); } } } : { className: "bg-muted/30" }}
     empty="No engine builds are available."
   />} panel={panelOpen || detectedOpen ? <>{selectedEngine && <EnginePanel engine={selectedEngine} open={panelOpen} settings={config.data?.settings} draft={draft} onClose={() => setPanelOpen(false)} onAction={panelAction} onConfigChange={(key, value) => setDraft((current) => ({ ...current, [key]: value }))} onSave={saveConfig} />}{detected && detectedData && <PropertyPanel kind="Detected" item={{ name: detected.name }} status="Detected" actions={detectedData.actions} facts={detectedData.facts} primaryActions={detectedData.primaryActions} tabs={{ overview: detectedData.overview }} open={detectedOpen} onClose={() => setDetectedOpen(false)} />}</> : null} /><AddSheet kind="engine" open={addOpen} onOpenChange={setAddOpen} onAdded={() => void engines.refetch()} /></Frame>;

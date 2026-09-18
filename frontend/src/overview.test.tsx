@@ -44,6 +44,7 @@ test("Overview requests the selected series range and renders scripted widgets",
 });
 
 test("Overview changes its grid layout at desktop, tablet, and phone widths", async () => {
+  const originalWidth = window.innerWidth;
   globalThis.fetch = mock((input: RequestInfo | URL) => {
     const path = String(input);
     if (path.endsWith("/roles")) return Promise.resolve(Response.json({ roles: [{ id: "chat", state: "ready", description: "Chat", model: null }] }));
@@ -63,6 +64,7 @@ test("Overview changes its grid layout at desktop, tablet, and phone widths", as
     if (expected !== "phone") for (const category of ["models", "engines", "logs", "backups"]) expect(document.body.textContent).toContain(category);
     cleanup();
   }
+  Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: originalWidth });
 });
 
 test("speed sentence names the engine build for one and two results", () => {

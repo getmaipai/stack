@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from "react";
-import type { HTMLAttributes, ReactNode } from "react";
+import type { HTMLAttributes, ReactNode, ReactElement } from "react";
 import { getIcon } from "@/kit/icons";
 import type { PropertyAction } from "@/kit/blocks/property-panel/PropertyPanel";
 import { Checkbox } from "@/kit/ui/checkbox";
@@ -7,6 +7,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/kit/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/kit/ui/tooltip";
 import { cn } from "@/kit/utils";
+import { usePhoneMode } from "@/kit/blocks/phone/PhoneMode";
+import { ListRow } from "@/kit/blocks/phone/ListRow";
 
 const ArrowDown = getIcon("ArrowDown"); const ArrowUp = getIcon("ArrowUp"); const ChevronDown = getIcon("ChevronDown"); const ChevronRight = getIcon("ChevronRight"); const MoreHorizontal = getIcon("MoreHorizontal");
 
@@ -37,6 +39,10 @@ export interface ThingsTableGroup<Row> {
   key: string;
   label: ReactNode;
   ariaLabel?: string;
+  phoneName?: string;
+  phoneSubtitle?: string;
+  phoneStatus?: string;
+  phoneTone?: ThingStatus;
   rows?: Row[];
   groups?: ThingsTableGroup<Row>[];
   summary?: ReactNode;
@@ -57,6 +63,14 @@ export interface ThingsTableAction {
   disabled?: boolean;
 }
 
+export interface ThingsPhoneRow {
+  name: string;
+  subtitle?: string;
+  status?: string;
+  subStatus?: string;
+  tone?: ThingStatus;
+}
+
 export interface ThingsTableProps<Row> {
   columns: ThingsTableColumn<Row>[];
   rows: Row[];
@@ -74,6 +88,8 @@ export interface ThingsTableProps<Row> {
   actions?: ThingsTableAction[];
   rowActions?: (row: Row) => PropertyAction[];
   groupActions?: (group: ThingsTableGroup<Row>) => PropertyAction[];
+  phoneRow?: (row: Row) => ThingsPhoneRow;
+  phone?: boolean;
   empty: string;
 }
 
@@ -89,6 +105,7 @@ function textContent(value: ReactNode | ThingLinkCell): string {
   if (value === null || value === undefined || typeof value === "boolean") return "";
   if (typeof value === "string" || typeof value === "number") return String(value);
   if (Array.isArray(value)) return value.map((part) => textContent(part)).join(" ");
+  if (typeof value === "object" && value !== null && "props" in value) { const props = (value as ReactElement<{ children?: ReactNode; "aria-label"?: string; placeholder?: string }>).props; return props["aria-label"]?.replace(/^Nickname /, "") ?? props.placeholder ?? textContent(props.children); }
   return "";
 }
 
@@ -113,7 +130,9 @@ function sortRows<Row>(rows: Row[], columns: ThingsTableColumn<Row>[], activeSor
   });
 }
 
-export function ThingsTable<Row>({ columns, rows, getStatus = () => "ready", getKey, groups = [], selectable = false, onSelectionChange, onRowClick, selectedKey, getRowProps, sort, onSortChange, onLink, actions = [], rowActions, groupActions, empty }: ThingsTableProps<Row>) {
+export function ThingsTable<Row>({ columns, rows, getStatus = () => "ready", getKey, groups = [], selectable = false, onSelectionChange, onRowClick, selectedKey, getRowProps, sort, onSortChange, onLink, actions = [], rowActions, groupActions, phoneRow, phone: phoneProp, empty }: ThingsTableProps<Row>) {
+  const phoneContext = usePhoneMode();
+  const phone = phoneProp ?? phoneContext;
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(groups.filter((group) => group.defaultExpanded).map((group) => group.key)));
   const [activeSort, setActiveSort] = useState<ThingsTableSort<Row> | null>(() => sort || null);
   const initialSelected = typeof selectable === "object" ? selectable.selectedKeys ?? [] : [];
@@ -182,5 +201,8 @@ export function ThingsTable<Row>({ columns, rows, getStatus = () => "ready", get
 
   const hasContent = rows.length > 0 || groups.length > 0;
   const headerCheckbox = selectable && <Checkbox aria-label="Select all rows" checked={allSelected ? true : selectedKeys.size > 0 ? "indeterminate" : false} onCheckedChange={(checked) => toggleAll(checked === true)} />;
-  return <TooltipProvider><div className="w-full overflow-hidden"><Table className="table-fixed"><TableHeader><TableRow>{columns.map((column, index) => <TableHead key={column.key} className={cn("h-11 text-xs uppercase tracking-wide text-muted-foreground", column.compact && "hidden xl:table-cell", column.align === "right" && "text-right", index === 0 && "min-w-56")} style={{ width: column.width }}><div className={cn("flex min-w-0 items-center gap-2", column.align === "right" && "justify-end")}>{index === 0 && headerCheckbox}{sort !== false ? <button type="button" aria-label={typeof column.header === "string" ? column.header : column.key} className="inline-flex min-w-0 items-center gap-1 truncate text-left font-medium focus-visible:underline" onClick={() => toggleSort(column.key)}>{column.header}{activeSort?.key === column.key && (activeSort.direction === "desc" ? <ArrowDown className="size-3.5" aria-label="sorted descending" /> : <ArrowUp className="size-3.5" aria-label="sorted ascending" />)}</button> : column.header}</div></TableHead>)}{rowActions && <TableHead aria-label="Actions" className="w-10" />}</TableRow></TableHeader>{hasContent ? <TableBody>{visibleRows.map((row) => renderRow(row))}{groups.map((group) => renderGroup(group))}</TableBody> : <TableBody><TableRow><TableCell colSpan={columns.length + (rowActions ? 1 : 0)} className="py-12 text-center text-muted-foreground">{empty}</TableCell></TableRow></TableBody>}</Table></div>{actions.length > 0 && <div className="flex flex-wrap items-center gap-x-4 border-t py-3 text-sm text-muted-foreground">{actions.map((action, index) => <span className="inline-flex items-center gap-4" key={action.label}>{index > 0 && <span className="h-4 w-px bg-border" aria-hidden="true" />}<button type="button" className="text-primary underline-offset-4 focus-visible:underline disabled:cursor-not-allowed disabled:text-muted-foreground" disabled={action.disabled} onClick={action.onClick}>{action.label}</button></span>)}</div>}</TooltipProvider>;
+  const phoneTable = <div className="w-full" data-testid="things-phone-list"><div className="divide-y">{visibleRows.map((row) => { const state = getStatus(row); const phone = phoneRow?.(row); const name = phone?.name ?? (textContent(columns[0]?.render(row)) || getKey(row)); const subtitle = phone?.subtitle ?? (columns[1] ? textContent(columns[1].render(row)) : undefined); return <ListRow key={getKey(row)} name={name.replace(/^(model|engine|detected):/, "")} subtitle={subtitle} status={phone?.status ?? statusLabels[state]} subStatus={phone?.subStatus} tone={phone?.tone ?? state} onClick={() => onRowClick?.(row)} />; })}{groups.map((group) => <ListRow key={`group-${group.key}`} icon="Folder" name={group.phoneName ?? (textContent(group.label) || group.ariaLabel || group.key)} subtitle={group.phoneSubtitle ?? (textContent(group.summary) || group.ariaLabel)} status={group.phoneStatus ?? statusLabels[group.status ?? "ready"]} tone={group.phoneTone ?? group.status ?? "ready"} onClick={group.onClick} />)}</div>{!hasContent && <p className="py-12 text-center text-sm text-muted-foreground">{empty}</p>}{actions.length > 0 && <div className="flex flex-wrap gap-3 border-t py-3 text-sm">{actions.map((action) => <button type="button" className="min-h-11 text-primary" key={action.label} disabled={action.disabled} onClick={action.onClick}>{action.label}</button>)}</div>}</div>;
+  const desktopTable = <TooltipProvider><div className="w-full overflow-hidden"><Table className="table-fixed"><TableHeader><TableRow>{columns.map((column, index) => <TableHead key={column.key} className={cn("h-11 text-xs uppercase tracking-wide text-muted-foreground", column.compact && "hidden xl:table-cell", column.align === "right" && "text-right", index === 0 && "min-w-56")} style={{ width: column.width }}><div className={cn("flex min-w-0 items-center gap-2", column.align === "right" && "justify-end")}>{index === 0 && headerCheckbox}{sort !== false ? <button type="button" aria-label={typeof column.header === "string" ? column.header : column.key} className="inline-flex min-w-0 items-center gap-1 truncate text-left font-medium focus-visible:underline" onClick={() => toggleSort(column.key)}>{column.header}{activeSort?.key === column.key && (activeSort.direction === "desc" ? <ArrowDown className="size-3.5" aria-label="sorted descending" /> : <ArrowUp className="size-3.5" aria-label="sorted ascending" />)}</button> : column.header}</div></TableHead>)}{rowActions && <TableHead aria-label="Actions" className="w-10" />}</TableRow></TableHeader>{hasContent ? <TableBody>{visibleRows.map((row) => renderRow(row))}{groups.map((group) => renderGroup(group))}</TableBody> : <TableBody><TableRow><TableCell colSpan={columns.length + (rowActions ? 1 : 0)} className="py-12 text-center text-muted-foreground">{empty}</TableCell></TableRow></TableBody>}</Table></div>{actions.length > 0 && <div className="flex flex-wrap items-center gap-x-4 border-t py-3 text-sm text-muted-foreground">{actions.map((action, index) => <span className="inline-flex items-center gap-4" key={action.label}>{index > 0 && <span className="h-4 w-px bg-border" aria-hidden="true" />}<button type="button" className="text-primary underline-offset-4 focus-visible:underline disabled:cursor-not-allowed disabled:text-muted-foreground" disabled={action.disabled} onClick={action.onClick}>{action.label}</button></span>)}</div>}</TooltipProvider>;
+  if (phone) return <>{phoneTable}<div className="hidden" aria-hidden="true">{desktopTable}</div></>;
+  return desktopTable;
 }

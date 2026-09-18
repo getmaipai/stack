@@ -797,7 +797,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   (test); no row shows a group name as its title (test on the fixture);
   captures `models-groups.png`, `models-add.png`, `models-row-menu.png`
   opened and judged. Exit: `scripts/check.sh`.
-- [ ] **STACK-54 (M): the phone, second pass.** ux.md "The phone,
+- [x] **STACK-54 (M): the phone, second pass.** ux.md "The phone,
   second pass" (2026-09-18): at phone width a five-tab bottom bar
   replaces the sidebar sheet; a one-line header (glyph, computer pill
   with the health dot, the one Add or search glyph); things pages as

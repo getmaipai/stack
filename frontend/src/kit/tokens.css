@@ -91,6 +91,14 @@
   --chart-5: hsl(240 10% 4%);
 }
 
+@media (max-width: 639px) {
+  [data-phone-shell] button,
+  [data-phone-shell] a {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
 @media (prefers-color-scheme: dark) {
   :root:not(.light) {
     --background: hsl(240 10% 6%);

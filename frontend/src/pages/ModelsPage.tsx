@@ -17,6 +17,7 @@ import { labelForRole, MODEL_RUNTIME_STATE_LABELS, MODEL_SOURCE_LABELS } from "@
 import { displayName } from "@/lib/names";
 import { actionsFor } from "@/lib/actions";
 import { AddSheet } from "@/kit/blocks/add-sheet/AddSheet";
+import { usePhoneMode } from "@/kit/blocks/phone/PhoneMode";
 
 type Group = { id: string; name: string; parentId: string | null; modelCount: number; bytesOnDisk: number; memoryBytes: number; usage: { requests: number; tokens: number; secondsLoaded?: number; peakMemoryBytes?: number }; status: { loaded: number; ready: number; onDemand: number; failed: number }; worstHealth: string | null };
 type Model = { id: string; roles: string[]; state: string; runtimeState?: string; sizeBytes: number | null; measuredFootprintBytes: number | null; estimated: boolean; source: string; groupId?: string | null; nickname?: string | null; provenance: Record<string, unknown> };
@@ -24,9 +25,11 @@ type DetectedStore = { id: string; name: string; kind: string; version: string; 
 type ModelRow = { kind: "model"; model: Model } | { kind: "detected"; store: DetectedStore };
 
 function modelStatus(model: Model): ThingStatus { return model.runtimeState === "failed" ? "attention" : model.runtimeState === "loaded" || model.runtimeState === "ready" ? "ready" : "attention"; }
+function detectedName(store: DetectedStore): string { return store.name.endsWith(` ${store.version}`) ? store.name : `${store.name} ${store.version}`; }
 
 export function ModelsPage({ Frame }: { Frame: SectionFrameComponent }) {
   const navigate = useNavigate();
+  const phone = usePhoneMode();
   const groups = useApiResource<{ groups: Group[] }>("/stack/v1/groups");
   const models = useApiResource<{ models: Model[] }>("/stack/v1/models");
   const detectedStores = useApiResource<{ detected: DetectedStore[] }>("/stack/v1/detected");
@@ -84,10 +87,12 @@ export function ModelsPage({ Frame }: { Frame: SectionFrameComponent }) {
       return {
       key: group.id,
       ariaLabel: group.name,
+      phoneName: group.name,
+      phoneSubtitle: `${group.modelCount} models · ${Math.round(group.bytesOnDisk / 1_000_000_000 * 10) / 10} GB`,
       label: <div><p><input aria-label={`Rename ${group.id}`} className="w-48 max-w-full bg-transparent font-medium outline-none" value={renames[group.id] ?? group.name} onChange={(event) => setRenames((current) => ({ ...current, [group.id]: event.target.value }))} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === "Enter") void rename(group); }} onBlur={() => void rename(group)} /><span className="sr-only">{group.name}</span></p><p className="text-xs text-muted-foreground">{group.modelCount} models · {Math.round(group.bytesOnDisk / 1_000_000_000 * 10) / 10} GB · {group.usage.requests} requests</p></div>,
       rows: childRows,
       groups: childGroups,
-      summary: <><span>{group.status.loaded} loaded · {group.status.ready} ready · {group.status.onDemand} on demand</span><span className="ml-4">{group.memoryBytes ? `${Math.round(group.memoryBytes / 1_000_000_000 * 10) / 10} GB in use` : "Not loaded"}</span></>,
+      summary: `${group.status.loaded} loaded · ${group.status.ready} ready · ${group.status.onDemand} on demand · ${group.usage.requests} requests · ${group.memoryBytes ? `${Math.round(group.memoryBytes / 1_000_000_000 * 10) / 10} GB in use` : "Not loaded"}`,
       status: group.worstHealth ? "attention" : "ready",
       onClick: () => setSelected({ kind: "group", id: group.id }),
     };
@@ -101,7 +106,7 @@ export function ModelsPage({ Frame }: { Frame: SectionFrameComponent }) {
   const detectedPanelData = selectedDetected ? detectedPanel(`${selectedDetected.name} · ${selectedDetected.path ?? selectedDetected.where ?? "local"}`, (action) => { if (action.startsWith("adopt")) void adopt(selectedDetected, action.split(":")[1]?.split(",").filter(Boolean)); }, selectedDetected.couldHold ?? selectedDetected.roles) : null;
 
   if (noModels) return <Frame title="Models" description="Grouped models, measured footprints, nicknames, and utilization."><PageEmptyState title="No models are installed yet" detail="Choose an ability to bring the first local model to this computer." action={<Button asChild><a href="/abilities">Add abilities</a></Button>} /></Frame>;
-  return <Frame title="Models" description="Grouped models, measured footprints, nicknames, and utilization."><div className="flex justify-end"><Button onClick={() => setAddOpen(true)}><span aria-hidden="true">＋</span>Add</Button></div><ThingsPage filter={{ search: { value: filterSearch, onChange: setFilterSearch, placeholder: "Search models" }, groups: filterGroups, onClear: () => { setFilterSearch(""); setFilterSelections({}); } }} table={<ThingsTable<ModelRow>
+  return <Frame title="Models" description="Grouped models, measured footprints, nicknames, and utilization."><div className={phone ? "hidden" : "flex justify-end"}><Button onClick={() => setAddOpen(true)}><span aria-hidden="true">＋</span>Add</Button></div><ThingsPage filter={{ search: { value: filterSearch, onChange: setFilterSearch, placeholder: "Search models" }, groups: filterGroups, onClear: () => { setFilterSearch(""); setFilterSelections({}); } }} table={<ThingsTable<ModelRow>
     columns={[
       { key: "name", header: "Name", width: "32%", render: (row) => row.kind === "detected" ? <div><p className="font-medium">Detected, not adopted · {row.store.name}</p><p className="text-xs text-muted-foreground">{row.store.version} · {row.store.path ?? row.store.where}</p></div> : <div className="min-w-0"><input aria-label={`Nickname ${row.model.id}`} className="block w-44 max-w-full truncate bg-transparent font-medium outline-none" defaultValue={renames[row.model.id] ?? row.model.nickname ?? ""} placeholder={displayName(row.model.id)} onKeyDown={(event) => { if (event.key === "Escape") { event.currentTarget.value = row.model.nickname ?? ""; event.currentTarget.blur(); } if (event.key === "Enter") event.currentTarget.blur(); }} onBlur={(event) => void renameModel(row.model, event.target.value)} onClick={(event) => event.stopPropagation()} /><p className="truncate text-xs text-muted-foreground">{row.model.nickname && row.model.nickname !== displayName(row.model.id) ? row.model.id : displayName(row.model.id) !== row.model.id ? row.model.id : null}</p><p className="truncate text-xs text-muted-foreground xl:hidden">{groupRows.find((group) => group.id === row.model.groupId)?.name ?? "Ungrouped"}</p></div> },
       { key: "roles", header: "Roles", width: "17%", render: (row) => row.kind === "detected" ? linkCell("/abilities", (row.store.couldHold ?? row.store.roles ?? []).map(roleLabel).join(", ") || "Unassigned") : linkCell("/abilities", row.model.roles.map(roleLabel).join(", ")) },
@@ -118,9 +123,10 @@ export function ModelsPage({ Frame }: { Frame: SectionFrameComponent }) {
     selectedKey={selected ? `${selected.kind}:${selected.id}` : undefined}
     getRowProps={(row) => row.kind === "detected" ? { className: "bg-muted/30" } : {}}
     onLink={(target) => navigate(target)}
-    onRowClick={(row) => setSelected(row.kind === "detected" ? { kind: "detected", id: row.store.id } : { kind: "model", id: row.model.id })}
+    onRowClick={(row) => { if (phone && row.kind === "model") navigate(`/models/${encodeURIComponent(row.model.id)}`); else setSelected(row.kind === "detected" ? { kind: "detected", id: row.store.id } : { kind: "model", id: row.model.id }); }}
     actions={[{ label: "New group", onClick: () => void createGroup(null) }, ...(selected?.kind === "group" ? [{ label: "New subgroup", onClick: () => void createGroup(selected.id) }] : []), ...(selectedModels.length > 0 ? [{ label: `Move ${selectedModels.length} to group`, onClick: () => { const name = window.prompt("Group name or id"); const group = groupRows.find((item) => item.id === name?.trim() || item.name === name?.trim()); if (group) void Promise.all(selectedModels.map((id) => moveModel(modelRows.find((model) => model.id === id)!, group.id))).then(() => setSelectedModels([])); } }, { label: `Remove ${selectedModels.length}`, onClick: () => void Promise.all(selectedModels.map((id) => api.delete(`/stack/v1/models/${id}`))).then(() => models.refetch()) }] : [])]}
     rowActions={rowActions}
+    phoneRow={(row) => row.kind === "detected" ? { name: detectedName(row.store), subtitle: `Not adopted · ${(row.store.couldHold ?? row.store.roles ?? []).map(roleLabel).join(", ") || "Unassigned"}`, status: "Not adopted", tone: "detected" } : { name: row.model.nickname?.trim() || displayName(row.model.id), subtitle: row.model.roles.map(roleLabel).join(", "), status: stateLabel(row.model.runtimeState ?? row.model.state), tone: modelStatus(row.model) }}
     groupActions={(group) => actionsFor("group", { count: groupRows.find((item) => item.id === group.key)?.modelCount ?? 0 }, (action) => { const match = groupRows.find((item) => item.id === group.key); if (match) void groupAction(match, action); }, "row")}
     empty="No models or detected stores are available."
   />} panel={selected ? <>{selectedGroup && groupPanelData && <PropertyPanel kind="Group" item={{ name: selectedGroup.name }} status={selectedGroup.worstHealth ? "Needs attention" : "Ready"} actions={groupPanelData.actions} facts={groupPanelData.facts} primaryActions={groupPanelData.primaryActions} tabs={{ overview: groupPanelData.overview }} open onClose={() => setSelected(null)} />}{selectedModel && modelPanelData && <PropertyPanel kind="Model" item={{ name: selectedModel.nickname ?? displayName(selectedModel.id) }} status={selectedModel.state} actions={modelPanelData.actions} facts={modelPanelData.facts} primaryActions={modelPanelData.primaryActions} tabs={{ overview: modelPanelData.overview, insights: modelPanelData.insights }} open onClose={() => setSelected(null)} />}{selectedDetected && detectedPanelData && <PropertyPanel kind="Detected" item={{ name: selectedDetected.name }} status="Detected" actions={detectedPanelData.actions} facts={detectedPanelData.facts} primaryActions={detectedPanelData.primaryActions} tabs={{ overview: detectedPanelData.overview }} open onClose={() => setSelected(null)} />}</> : null} /><AddSheet kind="model" open={addOpen} onOpenChange={setAddOpen} onAdded={() => { void models.refetch(); void detectedStores.refetch(); }} /></Frame>;
