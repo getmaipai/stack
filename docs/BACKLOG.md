@@ -917,7 +917,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   and the rows (test); the button on the live console finds the
   installed engine directory (coordinator-verified). Exit:
   `scripts/check.sh`.
-- [ ] **STACK-65 (M): the live acceptance walk.** ux.md "Scan, and real
+- [x] **STACK-65 (M): the live acceptance walk.** ux.md "Scan, and real
   over mock" item 2: on a copy of the owner's real data directory on
   this Mac, with the real llama-server and the installed Qwen3 1.7B,
   walk every action the console offers and record the result in a

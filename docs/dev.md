@@ -1257,6 +1257,44 @@ the person's own loaded chat engine when they switch it on.
 
 ## What moves out of Home, later
 
+## Live walk 2026-09-18
+
+This walk used a temporary copy of the owner's Stack data on port 8772.
+The copied model metadata was rewritten inside that temporary copy so its
+absolute path pointed at the copied model; the owner's data was never used
+as the server's writable data directory.
+
+| Action | HTTP calls | Result | Status |
+| --- | --- | --- | --- |
+| Add from the catalog | `POST /stack/v1/models` | Existing resident Qwen catalog entry was accepted as a resumable local job; no new job remained after the existing verified model was reconciled. | Pass |
+| Import a folder by link | `POST /stack/v1/models/import` with the temporary fixture path | Returned an installed imported model, then the temporary record was removed. | Pass |
+| Scan | `POST /stack/v1/detected/scan` | Returned one detected folder, one tool, one model file, and a scan timestamp. | Pass |
+| Adopt a detected tool | `POST /stack/v1/detected/{id}/adopt` with `chat` | No Ollama model store was present on the Mac, so a scripted detected folder was adopted; the response returned an imported-model target. | Pass |
+| Rename | `PATCH /stack/v1/models/{id}` | Resident model nickname changed to “Live Qwen”. | Pass |
+| New group | `POST /stack/v1/groups` | Created “Live walk”. | Pass |
+| Move to group | `PATCH /stack/v1/models/{id}` | Resident model moved into the new group; group rollup counted one model. | Pass |
+| Load | `POST /stack/v1/models/{id}/actions` with `load` | Returned `ok: true`. | Pass |
+| Unload | `POST /stack/v1/models/{id}/actions` with `unload` | Returned `ok: true`. | Pass |
+| Pin | `POST /stack/v1/models/{id}/actions` with `pin` | Returned `ok: true`. | Pass |
+| Remove | `DELETE /stack/v1/models/{imported-id}` | Removed the temporary imported model with `ok: true`. | Pass |
+| Start an engine | `POST /stack/v1/engines/llama-server/start` | Returned `ok: true`. | Pass |
+| Stop an engine | `POST /stack/v1/engines/llama-server/stop` | Returned `ok: true`. | Pass |
+| Restart an engine | `POST /stack/v1/engines/llama-server/restart` | Returned `ok: true`; the engine was running again afterward. | Pass |
+| Speed test | `POST /stack/v1/speed-test` | Recorded a real resident-model result: 2,218 prompt tokens/s, 115 generated tokens/s, 1,055 ms load, and 40 ms first token. | Pass |
+| Check my Stack | `POST /stack/v1/check`, then `GET /stack/v1/check/latest` | The first poll arrived while the role was loading; the completed rerun reported chat `ok: true` and fit-together `ok: true`. | Pass |
+| Pause everything | `POST /stack/v1/run-state` with `paused`, then `GET /stack/v1/run-state` | Returned and reported `paused`. | Pass |
+| Resume | `POST /stack/v1/run-state` with `running`, then `GET /stack/v1/run-state` | Returned and reported `running`. | Pass |
+| Create a client key | `POST /stack/v1/operator/login`, then `POST /stack/v1/clients` | Created a chat-scoped tester key and returned its metadata once. | Pass |
+| Chat in Tester | `POST /v1/chat/completions` with the tester key | Returned HTTP 200 with a real local response and usage counts. | Pass |
+| Revoke a client key | `DELETE /stack/v1/clients/{id}`, then `POST /v1/chat/completions` with the old key | Revocation returned `ok: true`; reuse returned HTTP 401. | Pass |
+| Set and change a setting | Two `PUT /stack/v1/settings` calls for `stackName` | Changed the temporary copy from “Live walk” to “Live walk changed”. | Pass |
+| Send a test to a channel | `POST /stack/v1/channels`, then `POST /stack/v1/channels/{id}/test` | A local scripted ntfy receiver returned 200; the channel became verified with a last-sent timestamp. | Pass |
+| Fetch the docs in Library | `PUT /stack/v1/settings` for updates, `POST /stack/v1/library/fetch`, then `GET /stack/v1/library` | Fetched one local engine page; the Library listed one page and search returned one result. | Pass |
+| Palette intents | `GET /stack/v1/library`, `/stack/v1/settings`, `/stack/v1/updates`, `/api/docs`, and Library search | Section routes, settings/update destinations, API docs, and Library search all returned HTTP 200. | Pass |
+
+The temporary server was killed by PID, port 8772 was verified free, and
+the temporary copy was moved to Trash after the walk.
+
 ## Speed test
 
 The Stack runs the pinned archive's `llama-bench` for the resident chat
