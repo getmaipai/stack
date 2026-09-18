@@ -1327,6 +1327,16 @@
         "tags": [
           "Notifications"
         ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "durable",
+            "in": "query"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Recent operator notifications.",
@@ -2299,6 +2309,27 @@
             },
             "required": false,
             "name": "range",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "window",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "usage",
+                "memory",
+                "speed"
+              ]
+            },
+            "required": false,
+            "name": "metric",
             "in": "query"
           }
         ],

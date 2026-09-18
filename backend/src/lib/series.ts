@@ -33,10 +33,21 @@ export function latestSpeedResult(modelId: string, contextLength: number): Speed
 
 export function readSeries(range: SeriesRange) {
   const since = sinceFor(range);
+  const end = Date.now();
+  const bucketCount = range === "hour" ? 13 : range === "day" ? 25 : 29;
+  const step = durations[range] / (bucketCount - 1);
+  const buckets = Array.from({ length: bucketCount }, (_, index) => new Date(end - durations[range] + index * step).toISOString());
   const where = gte(usageSamples.at, since);
+  const usageRows = db.select().from(usageSamples).where(where).all();
+  const memoryRows = db.select().from(memorySamples).where(and(gte(memorySamples.at, since))).all();
+  const speedRows = db.select().from(speedResults).where(and(gte(speedResults.at, since))).all();
+  const nearest = <T extends { at: string }>(rows: T[], at: string): T | undefined => rows.reduce<T | undefined>((best, row) => {
+    if (!best) return row;
+    return Math.abs(new Date(row.at).getTime() - new Date(at).getTime()) < Math.abs(new Date(best.at).getTime() - new Date(at).getTime()) ? row : best;
+  }, undefined);
   return {
-    usage: db.select().from(usageSamples).where(where).all().map(({ id: _id, ...sample }) => sample),
-    memory: db.select().from(memorySamples).where(and(gte(memorySamples.at, since))).all().map(({ id: _id, ...sample }) => sample),
-    speed: db.select().from(speedResults).where(and(gte(speedResults.at, since))).all().map(({ id: _id, ...sample }) => sample),
+    usage: buckets.map((at) => { const rows = usageRows.filter((row) => Math.abs(new Date(row.at).getTime() - new Date(at).getTime()) <= step / 2); const sample = rows[0]; if (!sample) return { at, ability: null, clientId: null, modelId: null, requests: 0, tokensIn: 0, tokensOut: 0, jobs: 0 }; const { id: _id, ...rest } = sample; return { ...rest, at }; }),
+    memory: buckets.map((at) => { const sample = nearest(memoryRows, at); if (!sample) return { at, totalBytes: 0, freeBytes: 0, availablePercent: 0, pressure: "normal", loadedBytes: 0 }; const { id: _id, ...rest } = sample; return { ...rest, at }; }),
+    speed: buckets.map((at) => { const sample = nearest(speedRows, at); if (!sample) return { at, ability: null, modelId: null, engine: null, firstTokenMs: null, loadMs: null, measuredFootprintBytes: null, promptTps: null, tokensPerSecond: null, contextLength: null }; const { id: _id, ...rest } = sample; return { ...rest, at }; }),
   };
 }

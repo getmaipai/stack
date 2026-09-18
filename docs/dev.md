@@ -1278,6 +1278,11 @@ writer batches inserts per five seconds, and a missing or corrupt
 failure. This is STACK-50 in the backlog; nothing moves until the
 Overview second pass has settled what it reads.
 
+The Overview reads a complete selected time window from the series endpoint,
+including empty buckets, so a quiet Stack keeps its time axis honest. Recent
+activity requests durable notifications only; progress events stay in the
+live event stream and do not become history.
+
 ## Open questions for the owner
 
 1. **Name.** Decided 2026-09-17: `stack`, "MaiPai Stack". The public

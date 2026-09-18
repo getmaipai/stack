@@ -696,7 +696,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   the useful first state before the detail. Captures at 400px were
   opened and judged. Exit: `scripts/check.sh`.
 
-- [ ] **STACK-49 (M): Overview, second pass.** ux.md "Overview, second
+- [x] **STACK-49 (M): Overview, second pass.** ux.md "Overview, second
   pass" made real: no prose in widgets; the one-line status strip in
   words with counts (the ring cards go); one hero chart with Usage,
   Memory and Speed as tabs, series toggles and the range in its

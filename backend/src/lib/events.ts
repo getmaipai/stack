@@ -40,10 +40,11 @@ export function eventsAfter(lastEventId: number): EventEnvelope[] {
   return ring.filter((event) => event.seq > lastEventId);
 }
 
-export function listNotifications(): unknown[] {
+export function listNotifications(durableOnly = false): unknown[] {
   const cutoff = new Date(Date.now() - THIRTY_DAYS_MS).toISOString();
   db.delete(notifications).where(lt(notifications.at, cutoff)).run();
-  return db.select().from(notifications).where(isNull(notifications.dismissedAt)).orderBy(desc(notifications.at)).all();
+  const rows = db.select().from(notifications).where(isNull(notifications.dismissedAt)).orderBy(desc(notifications.at)).all();
+  return durableOnly ? rows.filter((row) => EVENTS[row.eventId as EventId]?.durable === true) : rows;
 }
 
 export function markRead(id: string): boolean {

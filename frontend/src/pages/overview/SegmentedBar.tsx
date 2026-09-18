@@ -1,0 +1,14 @@
+import { Card, CardContent, CardHeader, CardTitle } from "@/kit/ui/card";
+
+function formatBytes(bytes: number): string { if (bytes < 1_000_000_000) return `${Math.round(bytes / 1_000_000)} MB`; if (bytes < 1_000_000_000_000) return `${(bytes / 1_000_000_000).toFixed(1)} GB`; return `${(bytes / 1_000_000_000_000).toFixed(1)} TB`; }
+
+export function StorageBar({ values, free }: { values: Record<string, number>; free?: number }) {
+  const entries = Object.entries(values).filter(([, value]) => value > 0);
+  const total = entries.reduce((sum, [, value]) => sum + value, 0);
+  return <Card data-widget><CardHeader className="pb-3"><CardTitle className="text-base">Storage</CardTitle></CardHeader><CardContent className="space-y-3">{total > 0 && <div className="flex h-7 overflow-hidden rounded-md" aria-label="Storage usage">{entries.map(([key, value]) => <div className="min-w-1 bg-primary/80 even:bg-primary/40" key={key} style={{ width: `${value / total * 100}%` }} title={`${key}: ${formatBytes(value)}`} data-storage-segment={key} />)}</div>}<div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">{entries.map(([key, value]) => <span className="flex justify-between gap-2" key={key}><span>{key}</span><span className="tabular-nums">{formatBytes(value)}</span></span>)}</div><div className="text-sm text-muted-foreground">{free === undefined ? "Waiting for storage accounting." : `${formatBytes(free)} free`}</div></CardContent></Card>;
+}
+
+export function HeadroomScale({ availablePercent, pressure }: { availablePercent?: number; pressure?: string }) {
+  const value = availablePercent ?? 0;
+  return <Card data-widget><CardHeader className="pb-3"><CardTitle className="text-base">Memory headroom</CardTitle></CardHeader><CardContent className="space-y-3"><div className="relative h-5 rounded-full bg-gradient-to-r from-destructive via-amber-400 to-emerald-500" aria-label={`Memory headroom ${value}%`}><span className="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background bg-foreground shadow" style={{ left: `${Math.max(2, Math.min(98, value))}%` }} /></div><div className="flex items-center justify-between text-sm"><span className="font-medium tabular-nums">{value}% available</span><span className={pressure === "normal" ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}>{pressure ?? "unknown"}</span></div><div data-status-sentence className="flex items-center gap-2 text-sm"><span aria-hidden="true" className="text-emerald-600">✓</span>{pressure === "normal" ? "Memory headroom is good" : pressure === "warn" ? "Memory is getting tight" : "Memory pressure is high"}</div></CardContent></Card>;
+}

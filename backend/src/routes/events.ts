@@ -9,7 +9,7 @@ import { ignore, list as listHealth, resolve } from "@/lib/health";
 import { showroom, showroomHealth, showroomNotifications, showroomResolveHealth } from "@/showroom/fixture";
 
 const eventsRoute = createRoute({ method: "get", path: "/events", tags: ["Events"], summary: "Stream Stack events", middleware: [requireClientOrOperator] as const, responses: { 200: { content: { "text/event-stream": { schema: z.string() } }, description: "Event envelopes, replayable by sequence." } } });
-const notificationsRoute = createRoute({ method: "get", path: "/notifications", tags: ["Notifications"], middleware: [requireClientOrOperator] as const, responses: { 200: { content: { "application/json": { schema: z.object({ notifications: z.array(z.unknown()) }) } }, description: "Recent operator notifications." } } });
+const notificationsRoute = createRoute({ method: "get", path: "/notifications", tags: ["Notifications"], middleware: [requireClientOrOperator] as const, request: { query: z.object({ durable: z.string().optional() }) }, responses: { 200: { content: { "application/json": { schema: z.object({ notifications: z.array(z.unknown()) }) } }, description: "Recent operator notifications." } } });
 const readRoute = createRoute({ method: "post", path: "/notifications/{id}/read", tags: ["Notifications"], middleware: [requireClientOrOperator] as const, request: { params: idParamSchema("id") }, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.literal(true) }) } }, description: "Notification marked read." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown notification." } } });
 const dismissRoute = createRoute({ method: "post", path: "/notifications/{id}/dismiss", tags: ["Notifications"], middleware: [requireClientOrOperator] as const, request: { params: idParamSchema("id") }, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.literal(true) }) } }, description: "Notification dismissed." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown notification." } } });
 const clearRoute = createRoute({ method: "post", path: "/notifications/clear", tags: ["Notifications"], middleware: [requireClientOrOperator] as const, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.literal(true) }) } }, description: "Notifications cleared." } } });
@@ -26,7 +26,7 @@ function sse(envelopes: unknown[]): Response {
 
 export const eventsRoutes = apiRouter();
 eventsRoutes.openapi(eventsRoute, (c) => sse(eventsAfter(Number(c.req.header("last-event-id") ?? 0))));
-eventsRoutes.openapi(notificationsRoute, (c) => c.json({ notifications: showroom() ? showroomNotifications : listNotifications() }, 200));
+eventsRoutes.openapi(notificationsRoute, (c) => { const durable = c.req.valid("query").durable === "1"; const rows = showroom() ? showroomNotifications.filter((item) => !durable || item.durable !== false) : listNotifications(durable); return c.json({ notifications: rows }, 200); });
 eventsRoutes.openapi(readRoute, (c) => markRead(c.req.valid("param").id) ? c.json({ ok: true as const }, 200) : c.json({ error: "Unknown notification" }, 404));
 eventsRoutes.openapi(dismissRoute, (c) => dismiss(c.req.valid("param").id) ? c.json({ ok: true as const }, 200) : c.json({ error: "Unknown notification" }, 404));
 eventsRoutes.openapi(clearRoute, (c) => { if (showroom()) { showroomNotifications.splice(0); return c.json({ ok: true as const }, 200); } clearAll(); return c.json({ ok: true as const }, 200); });
