@@ -106,7 +106,7 @@ detected folder), a colored dot in the worst severity for health
 detected, not adopted"). The bottom-left health line stays the
 summary. Try it is a section and a palette entry, not a header button.
 
-**Sections, in sidebar order:**
+**Sections, in sidebar order** (superseded by "The shell, second pass" for the grouping and for Abilities, which is no longer a sidebar row):
 
 1. **Overview**: the board from the section below. This computer,
    Add abilities until a plan exists, the status strip, downloads in
@@ -214,6 +214,51 @@ Every number is a recorded one: usage samples are kept per five
 minutes for a week by ability, client and model (the `usage_samples`
 ring), speed results per model and engine tag, memory samples per
 five seconds for an hour and per five minutes for a week.
+
+## The shell, second pass: common on top, administrative at the bottom (decided 2026-09-18, 01:20)
+
+The owner, with UniFi's rail beside ours, on five points; each is a
+decision:
+
+1. **Abilities leaves the sidebar.** A plan and its ability cards are
+   not a place a person visits; they are an action. "Add abilities"
+   lives on the Models page's action row and on the Overview's status
+   strip (and on the board, which is the first screen until a plan
+   exists). The `/abilities` route stays as the destination of those
+   actions; it has no sidebar row.
+2. **Common on top, administrative at the bottom**, UniFi's rail: the
+   top group is Overview, Models, Engines, Monitoring, Library (when
+   built), Try it; the bottom group, above the resource block, is
+   Alerts, Updates, Backups, Access, Settings. A hairline separates the
+   groups; the bottom group stays at the bottom of the sidebar at every
+   height (flex, not a scroll away).
+3. **The header search is a magnifying glass**, an icon button that
+   opens the command palette (typing anywhere in the palette is the
+   input); the header carries no text field at any width. The right
+   group is search, bell, profile (theme toggle in the profile menu).
+4. **The sidebar's bottom block is resources, not a health line**: two
+   compact meters with a label and a value, memory ("12.3 of 24 GB
+   used") and disk ("157 GB free"), drawn from the budget and hardware
+   routes, plus a third line when the governor is paused or under
+   pressure; the health sentence moves out (the health dot is on
+   Alerts and on the instance line below). When collapsed to icons, the
+   block is the memory ring alone.
+5. **The instance is a subtitle under the logo**, not a header item: the
+   top-left reads "MaiPai Stack" with, under it in muted text, the
+   computer's name (the machine's own name from the OS; the showroom
+   uses a persona name) and the health dot. "This computer" leaves the
+   header.
+6. **A run state pill in the header's center.** The owner asked whether
+   a play and pause control for all services belongs there. Yes, as a
+   state that is also the control, because the header center is empty
+   once search is an icon and a stack of engines has exactly one
+   emergency lever: "Running" with a pause glyph; pressed, it drains
+   the roles, unloads the models, pauses downloads and jobs (the tray's
+   "Pause everything", one implementation shared with the tray and the
+   palette), and the pill reads "Paused" in amber with a play glyph.
+   The state comes from the governor; a pause never stops the daemon or
+   the UI. The kit's inline confirmation applies to pause when a
+   request is in flight ("2 requests in flight; pause anyway?").
 
 ## Overview, second pass: the chart is the hero, prose is gone (decided 2026-09-18, night)
 
