@@ -3467,6 +3467,9 @@
                       "items": {
                         "type": "object",
                         "properties": {
+                          "label": {
+                            "type": "string"
+                          },
                           "wire": {
                             "type": "string",
                             "enum": [
@@ -3591,6 +3594,7 @@
                           }
                         },
                         "required": [
+                          "label",
                           "wire",
                           "residency",
                           "endpoints",

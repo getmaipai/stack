@@ -5,7 +5,7 @@ import { Badge } from "@/kit/ui/badge";
 import { ThingsTable, linkCell, type ThingsTableGroup, type ThingStatus } from "@/kit/blocks/things-table/ThingsTable";
 import { applyFilters, countFilterOptions, type FilterGroup } from "@/kit/blocks/filter-column/FilterColumn";
 import { ThingsPage } from "@/kit/blocks/things-page/ThingsPage";
-import { api } from "@/lib/api";
+import { api, type RoleRecord } from "@/lib/api";
 import { useApiResource } from "@/lib/useApiResource";
 import type { SectionFrameComponent } from "@/pages/DashboardShell";
 import { PageEmptyState } from "@/pages/PageEmptyState";
@@ -13,6 +13,7 @@ import { modelPanel } from "@/panels/model";
 import { detectedPanel } from "@/panels/detected";
 import { groupPanel } from "@/panels/group";
 import { PropertyPanel } from "@/kit/blocks/property-panel/PropertyPanel";
+import { labelForRole, MODEL_RUNTIME_STATE_LABELS, MODEL_SOURCE_LABELS } from "@/lib/modelStates";
 
 type Group = { id: string; name: string; parentId: string | null; modelCount: number; bytesOnDisk: number; memoryBytes: number; usage: { requests: number; tokens: number; secondsLoaded?: number; peakMemoryBytes?: number }; status: { loaded: number; ready: number; onDemand: number; failed: number }; worstHealth: string | null };
 type Model = { id: string; roles: string[]; state: string; runtimeState?: string; sizeBytes: number | null; measuredFootprintBytes: number | null; estimated: boolean; source: string; groupId?: string | null; nickname?: string | null; provenance: Record<string, unknown> };
@@ -26,6 +27,7 @@ export function ModelsPage({ Frame }: { Frame: SectionFrameComponent }) {
   const groups = useApiResource<{ groups: Group[] }>("/stack/v1/groups");
   const models = useApiResource<{ models: Model[] }>("/stack/v1/models");
   const detectedStores = useApiResource<{ detected: DetectedStore[] }>("/stack/v1/detected");
+  const roles = useApiResource<{ roles: RoleRecord[] }>("/stack/v1/roles");
   const refetchDetected = detectedStores.refetch;
   const refetchGroups = groups.refetch;
   useEffect(() => { if (typeof EventSource === "undefined") return; const stream = new EventSource("/stack/v1/events"); stream.onmessage = (event) => { try { if ((JSON.parse(event.data) as { id?: string }).id === "detected.changed") void refetchDetected(); } catch { /* ignore malformed feed data */ } }; return () => stream.close(); }, [refetchDetected]);
@@ -42,6 +44,9 @@ export function ModelsPage({ Frame }: { Frame: SectionFrameComponent }) {
   const selectedDetected = selected?.kind === "detected" ? detectedRows.find((item) => item.id === selected.id) : null;
   const modelGroup = selectedModel?.groupId ? groupRows.find((group) => group.id === selectedModel.groupId) : null;
   const noModels = !groups.loading && !models.loading && !detectedStores.loading && groupRows.length === 0 && modelRows.length === 0 && detectedRows.length === 0;
+  const roleLabel = useCallback((id: string) => labelForRole(id, roles.data?.roles), [roles.data]);
+  const stateLabel = (state: string) => MODEL_RUNTIME_STATE_LABELS[state] ?? state;
+  const sourceLabel = (source: string) => MODEL_SOURCE_LABELS[source.toLocaleLowerCase()] ?? source;
 
   async function groupAction(group: Group, action: string) { if (action === "remove") await api.delete(`/stack/v1/groups/${group.id}`); else if (action !== "move") await api.post(`/stack/v1/groups/${group.id}/actions`, { action }); await groups.refetch(); await models.refetch(); }
   async function adopt(store: DetectedStore, selectedRoles?: string[]) { await fetch(`/stack/v1/detected/${store.id}/adopt`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ roles: selectedRoles ?? store.couldHold ?? store.roles ?? [] }) }); await detectedStores.refetch(); setSelected(null); }
@@ -52,12 +57,12 @@ export function ModelsPage({ Frame }: { Frame: SectionFrameComponent }) {
 
   const allRows = useMemo<ModelRow[]>(() => [...detectedRows.map((store) => ({ kind: "detected" as const, store })), ...modelRows.map((model) => ({ kind: "model" as const, model }))], [detectedRows, modelRows]);
   const filterAccessors = useMemo(() => ({
-    status: (row: ModelRow) => row.kind === "detected" ? "Detected" : row.model.runtimeState ?? row.model.state,
-    role: (row: ModelRow) => row.kind === "detected" ? row.store.couldHold ?? row.store.roles ?? [] : row.model.roles,
+    status: (row: ModelRow) => row.kind === "detected" ? "Not adopted" : stateLabel(row.model.runtimeState ?? row.model.state),
+    role: (row: ModelRow) => row.kind === "detected" ? (row.store.couldHold ?? row.store.roles ?? []).map(roleLabel) : row.model.roles.map(roleLabel),
     group: (row: ModelRow) => row.kind === "detected" ? "Detected" : groupRows.find((group) => group.id === row.model.groupId)?.name ?? "Ungrouped",
-    source: (row: ModelRow) => row.kind === "detected" ? row.store.kind : row.model.source,
-    search: (row: ModelRow) => row.kind === "detected" ? [row.store.name, row.store.version, row.store.path ?? row.store.where ?? ""] : [row.model.id, row.model.nickname ?? "", row.model.roles.join(" ")],
-  }), [groupRows]);
+    source: (row: ModelRow) => row.kind === "detected" ? sourceLabel(row.store.kind) : sourceLabel(row.model.source),
+    search: (row: ModelRow) => row.kind === "detected" ? [row.store.name, row.store.version, row.store.path ?? row.store.where ?? ""] : [row.model.id, row.model.nickname ?? "", row.model.roles.map(roleLabel).join(" ")],
+  }), [groupRows, roleLabel]);
   const filteredAllRows = useMemo(() => applyFilters(allRows, filterSearch, filterSelections, filterAccessors), [allRows, filterAccessors, filterSearch, filterSelections]);
   const filterGroups = useMemo<FilterGroup[]>(() => {
     const group = (id: "status" | "role" | "group" | "source", title: string): FilterGroup => ({ id, title, options: countFilterOptions(allRows, filterAccessors[id]), selected: filterSelections[id] ?? new Set<string>(), onChange: (selected) => setFilterSelections((current) => ({ ...current, [id]: selected })) });
@@ -93,10 +98,10 @@ export function ModelsPage({ Frame }: { Frame: SectionFrameComponent }) {
   return <Frame title="Models" description="Grouped models, measured footprints, nicknames, and utilization."><ThingsPage filter={{ search: { value: filterSearch, onChange: setFilterSearch, placeholder: "Search models" }, groups: filterGroups, onClear: () => { setFilterSearch(""); setFilterSelections({}); } }} table={<ThingsTable<ModelRow>
     columns={[
       { key: "name", header: "Name", width: "38%", render: (row) => row.kind === "detected" ? <div><p className="font-medium">Detected, not adopted · {row.store.name}</p><p className="text-xs text-muted-foreground">{row.store.version} · {row.store.path ?? row.store.where}</p></div> : <div className="min-w-0"><input aria-label={`Nickname ${row.model.id}`} className="block w-44 max-w-full truncate bg-transparent font-medium outline-none" defaultValue={row.model.nickname ?? ""} placeholder={row.model.id} onBlur={(event) => void renameModel(row.model, event.target.value)} onClick={(event) => event.stopPropagation()} /><span className="block truncate text-xs text-muted-foreground">{row.model.id}</span></div> },
-      { key: "roles", header: "Roles", render: (row) => row.kind === "detected" ? linkCell("/abilities", row.store.couldHold?.join(", ") ?? row.store.roles?.join(", ") ?? "Unassigned") : linkCell("/abilities", row.model.roles.join(", ")) },
+      { key: "roles", header: "Roles", render: (row) => row.kind === "detected" ? linkCell("/abilities", (row.store.couldHold ?? row.store.roles ?? []).map(roleLabel).join(", ") || "Unassigned") : linkCell("/abilities", row.model.roles.map(roleLabel).join(", ")) },
       { key: "size", header: "Storage", align: "right", render: (row) => row.kind === "detected" ? `${row.store.candidateModels ?? 0} candidates` : `${row.model.sizeBytes ? `${Math.round(row.model.sizeBytes / 1_000_000 * 10) / 10} MB` : "Size unknown"} · ${row.model.measuredFootprintBytes ? `${Math.round(row.model.measuredFootprintBytes / 1_000_000 * 10) / 10} MB measured` : "Not measured"}` },
       { key: "group", header: "Group", render: (row) => row.kind === "detected" ? <Badge variant="outline">Adopt</Badge> : <select aria-label={`Move ${row.model.id}`} className="max-w-36 bg-transparent" defaultValue={row.model.groupId ?? ""} onChange={(event) => void moveModel(row.model, event.target.value)} onClick={(event) => event.stopPropagation()}><option value="">Ungrouped</option>{groupRows.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select> },
-      { key: "state", header: "State", align: "right", render: (row) => row.kind === "detected" ? "Detected" : <><Badge variant="secondary">{row.model.runtimeState ?? row.model.state}</Badge>{row.model.estimated && <span className="ml-2 text-xs text-muted-foreground">estimated</span>}</> },
+      { key: "state", header: "State", align: "right", render: (row) => row.kind === "detected" ? "Not adopted" : <><Badge variant="secondary">{stateLabel(row.model.runtimeState ?? row.model.state)}</Badge>{row.model.estimated && <span className="ml-2 text-xs text-muted-foreground">estimated</span>}</> },
     ]}
     rows={rows}
     groups={groupTree}

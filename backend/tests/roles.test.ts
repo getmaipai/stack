@@ -6,6 +6,10 @@ test("every RoleId has a declaration", () => {
   for (const id of ROLE_IDS) expect(ROLES[id]).toBeDefined();
 });
 
+test("every role has a person-readable label", () => {
+  for (const id of ROLE_IDS) expect(ROLES[id].label.trim()).not.toBe("");
+});
+
 test("every declared endpoint exists in the OpenAPI document", async () => {
   const document = await (await app.request("/api/openapi.json")).json() as { paths: Record<string, unknown> };
   for (const id of ROLE_IDS) {

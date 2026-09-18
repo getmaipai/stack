@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getIcon } from "@/kit/icons";
-import type { EngineRecord, EngineSetting } from "@/lib/api";
+import type { EngineRecord, EngineSetting, RoleRecord } from "@/lib/api";
 import { api } from "@/lib/api";
 import { useApiResource } from "@/lib/useApiResource";
 import { Badge } from "@/kit/ui/badge";
@@ -13,6 +13,7 @@ import { PageEmptyState } from "@/pages/PageEmptyState";
 import { detectedPanel } from "@/panels/detected";
 import { EnginePanel } from "@/panels/engine";
 import { PropertyPanel } from "@/kit/blocks/property-panel/PropertyPanel";
+import { labelForRole } from "@/lib/modelStates";
 
 type DetectedStore = { id: string; name: string; kind: string; version: string; path?: string; where?: string; candidateModels?: number; roles?: string[]; couldHold?: string[] };
 type EngineRow = { kind: "engine"; engine: EngineRecord } | { kind: "detected"; store: DetectedStore };
@@ -26,6 +27,7 @@ export function EnginesPage({ Frame }: { Frame: SectionFrameComponent }) {
   const navigate = useNavigate();
   const engines = useApiResource<{ engines: EngineRecord[] }>("/stack/v1/engines");
   const detectedStores = useApiResource<{ detected: DetectedStore[] }>("/stack/v1/detected");
+  const roles = useApiResource<{ roles: RoleRecord[] }>("/stack/v1/roles");
   const [selected, setSelected] = useState(0);
   const [panelOpen, setPanelOpen] = useState(false);
   const [detectedOpen, setDetectedOpen] = useState(false);
@@ -41,12 +43,13 @@ export function EnginesPage({ Frame }: { Frame: SectionFrameComponent }) {
   async function panelAction(action: string) { const engine = engines.data?.engines[selected]; if (!engine) return; const name = engineName(engine); if (action === "logs") return; if (action === "update") return control(`/stack/v1/engines/${name}/current`, { tag: engine.newestTag }); if (action.startsWith("current:")) return control(`/stack/v1/engines/${name}/current`, { tag: action.slice(8) }); if (action === "remove") return api.delete(`/stack/v1/engines/${name}/builds/${engineTag(engine)}`).then(() => engines.refetch()); return control(`/stack/v1/engines/${name}/${action}`); }
 
   const rows = useMemo<EngineRow[]>(() => [...(detectedStores.data?.detected ?? []).map((store) => ({ kind: "detected" as const, store })), ...(engines.data?.engines ?? []).map((engine) => ({ kind: "engine" as const, engine }))], [detectedStores.data?.detected, engines.data?.engines]);
+  const roleLabel = useCallback((id: string) => labelForRole(id, roles.data?.roles), [roles.data]);
   const filterAccessors = useMemo(() => ({
     status: (row: EngineRow) => row.kind === "detected" ? "Detected" : engineStatus(row.engine) === "attention" ? "Needs attention" : engineStatus(row.engine) === "offline" ? "Offline" : "Ready",
     kind: (row: EngineRow) => row.kind === "detected" ? row.store.kind : "Engine",
-    role: (row: EngineRow) => row.kind === "detected" ? row.store.couldHold ?? row.store.roles ?? [] : "Runtime",
+    role: (row: EngineRow) => row.kind === "detected" ? (row.store.couldHold ?? row.store.roles ?? []).map(roleLabel) : "Runtime",
     search: (row: EngineRow) => row.kind === "detected" ? [row.store.name, row.store.version, row.store.path ?? row.store.where ?? ""] : [row.engine.label, row.engine.id, row.engine.platform, row.engine.arch],
-  }), []);
+  }), [roleLabel]);
   const filteredRows = useMemo(() => applyFilters(rows, filterSearch, filterSelections, filterAccessors), [filterAccessors, filterSearch, filterSelections, rows]);
   const filterGroups = useMemo<FilterGroup[]>(() => {
     const group = (id: "status" | "kind" | "role", title: string): FilterGroup => ({ id, title, options: countFilterOptions(rows, filterAccessors[id]), selected: filterSelections[id] ?? new Set<string>(), onChange: (selected) => setFilterSelections((current) => ({ ...current, [id]: selected })) });
@@ -63,7 +66,7 @@ export function EnginesPage({ Frame }: { Frame: SectionFrameComponent }) {
     columns={[
       { key: "build", header: "Build", width: "38%", render: (row) => row.kind === "detected" ? <div><p className="font-medium">Detected, not adopted · {row.store.name}</p><p className="text-xs text-muted-foreground">{row.store.version} · {row.store.path ?? row.store.where}</p></div> : <div><p className="font-medium">{row.engine.label}</p><p className="text-xs text-muted-foreground">{row.engine.id}</p></div> },
       { key: "platform", header: "Platform", render: (row) => row.kind === "detected" ? `${row.store.kind} · ${row.store.candidateModels ?? 0} candidates` : `${row.engine.platform} · ${row.engine.arch}` },
-      { key: "roles", header: "Roles", render: (row) => row.kind === "detected" ? row.store.couldHold?.join(", ") ?? row.store.roles?.join(", ") ?? "Unassigned" : linkCell("/abilities", "View abilities") },
+      { key: "roles", header: "Roles", render: (row) => row.kind === "detected" ? (row.store.couldHold ?? row.store.roles ?? []).map(roleLabel).join(", ") || "Unassigned" : linkCell("/abilities", "View abilities") },
       { key: "state", header: "State", align: "right", render: (row) => row.kind === "detected" ? <Badge variant="outline">Adopt</Badge> : <div><Badge variant={row.engine.notCurrent ? "secondary" : "default"}>{row.engine.state === "current" ? "Current" : "Not current"}</Badge><p className="mt-1 text-xs text-muted-foreground">{row.engine.stateReason ?? "Ready"}{row.engine.currentTag && ` · ${row.engine.currentTag}`}</p>{row.engine.needsRestart && <p className="mt-1 text-xs font-medium text-primary">Needs restart</p>}</div> },
     ]}
     rows={filteredRows}

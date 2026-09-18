@@ -2,6 +2,7 @@ export type OperatorState = { state: "setupRequired" | "signedOut" | "signedIn";
 
 export interface RoleRecord {
   id: string;
+  label: string;
   wire: string;
   residency: string;
   description: string;

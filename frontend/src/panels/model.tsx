@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { PropertyAction } from "@/kit/blocks/property-panel/PropertyPanel";
 import { KeyValueList } from "@/kit/blocks/property-panel/KeyValueList";
+import { MODEL_RUNTIME_STATE_LABELS } from "@/lib/modelStates";
 
 export interface ModelPanelData { id: string; nickname?: string; group?: string; source?: string; licence?: string; sizeBytes?: number | null; measuredFootprintBytes?: number | null; runtimeState?: string; }
 export interface ModelPanelResult { actions: PropertyAction[]; primaryActions: [PropertyAction, PropertyAction]; facts: Array<{ label: string; value: ReactNode }>; overview: ReactNode; insights: ReactNode }
@@ -14,5 +15,5 @@ export function modelPanel(model: ModelPanelData, onAction: (action: string) => 
     { label: "Remove", icon: "Square", onClick: () => onAction("remove"), destructive: true },
   ];
   const primaryActions: [PropertyAction, PropertyAction] = [loaded ? actions[1]! : actions[0]!, actions[2]!];
-  return { actions, primaryActions, facts: [{ label: "State", value: model.runtimeState ?? "Ready" }, { label: "Source", value: model.source ?? "Local" }, { label: "Size", value: model.sizeBytes ?? "Unknown" }], overview: <KeyValueList items={[{ label: "Kind", value: "Model" }, { label: "Model id", value: model.id, copy: true }, { label: "Group", value: model.group ?? "Ungrouped" }, { label: "Source", value: model.source ?? "Local" }, { label: "Licence", value: model.licence ?? "Licence not recorded" }, { label: "Size on disk", value: model.sizeBytes ?? "Unknown" }, { label: "Measured footprint", value: model.measuredFootprintBytes ?? "Not measured" }]} />, insights: <p className="text-sm text-muted-foreground">Usage over time will appear here.</p> };
+  return { actions, primaryActions, facts: [{ label: "State", value: MODEL_RUNTIME_STATE_LABELS[model.runtimeState ?? ""] ?? model.runtimeState ?? "Ready" }, { label: "Source", value: model.source ?? "Local" }, { label: "Size", value: model.sizeBytes ?? "Unknown" }], overview: <KeyValueList items={[{ label: "Kind", value: "Model" }, { label: "Model id", value: model.id, copy: true }, { label: "Group", value: model.group ?? "Ungrouped" }, { label: "Source", value: model.source ?? "Local" }, { label: "Licence", value: model.licence ?? "Licence not recorded" }, { label: "Size on disk", value: model.sizeBytes ?? "Unknown" }, { label: "Measured footprint", value: model.measuredFootprintBytes ?? "Not measured" }]} />, insights: <p className="text-sm text-muted-foreground">Usage over time will appear here.</p> };
 }

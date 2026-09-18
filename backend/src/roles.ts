@@ -17,6 +17,7 @@ export const RoleStateSchema = z.enum(["notInstalled", "installed", "loading", "
 export type RoleState = z.infer<typeof RoleStateSchema>;
 
 export interface RoleDefinition {
+  label: string;
   wire: Wire;
   residency: Residency;
   endpoints: string[];
@@ -27,6 +28,7 @@ export interface RoleDefinition {
 
 export const ROLES = {
   chat: {
+    label: "Chat",
     wire: "chat",
     residency: "resident",
     endpoints: ["/v1/chat/completions"],
@@ -34,6 +36,7 @@ export const ROLES = {
     description: "Talk with your local AI.",
   },
   coding: {
+    label: "Coding",
     wire: "chat",
     residency: "resident",
     endpoints: ["/v1/chat/completions"],
@@ -42,6 +45,7 @@ export const ROLES = {
     sharesModelWith: "chat",
   },
   judge: {
+    label: "Judge",
     wire: "chat",
     residency: "resident",
     endpoints: ["/v1/chat/completions"],
@@ -50,6 +54,7 @@ export const ROLES = {
     sharesModelWith: "chat",
   },
   router: {
+    label: "Router",
     wire: "chat",
     residency: "resident",
     endpoints: ["/v1/chat/completions"],
@@ -58,6 +63,7 @@ export const ROLES = {
     sharesModelWith: "chat",
   },
   embed: {
+    label: "Embeddings",
     wire: "embeddings",
     residency: "resident",
     endpoints: ["/v1/embeddings"],
@@ -65,6 +71,7 @@ export const ROLES = {
     description: "Find related things in your local data.",
   },
   rerank: {
+    label: "Re-rank",
     wire: "rerank",
     residency: "resident",
     endpoints: [],
@@ -72,6 +79,7 @@ export const ROLES = {
     description: "Put the most useful local results first.",
   },
   vision: {
+    label: "Vision",
     wire: "chat",
     residency: "jit",
     endpoints: ["/v1/chat/completions"],
@@ -80,6 +88,7 @@ export const ROLES = {
     sharesModelWith: "chat",
   },
   stt: {
+    label: "Voice in",
     wire: "transcription",
     residency: "resident",
     endpoints: ["/v1/audio/transcriptions"],
@@ -87,6 +96,7 @@ export const ROLES = {
     description: "Turn your voice into words locally.",
   },
   tts: {
+    label: "Voice out",
     wire: "speech",
     residency: "resident",
     endpoints: ["/v1/audio/speech"],
@@ -94,6 +104,7 @@ export const ROLES = {
     description: "Read words aloud on your computer.",
   },
   wakeword: {
+    label: "Wake word",
     wire: "speech",
     residency: "installed",
     endpoints: [],
@@ -101,6 +112,7 @@ export const ROLES = {
     description: "Listen for a wake word in a body process.",
   },
   image: {
+    label: "Images",
     wire: "job",
     residency: "jit",
     endpoints: ["/v1/images/generations"],
@@ -108,6 +120,7 @@ export const ROLES = {
     description: "Make an image on your computer.",
   },
   video: {
+    label: "Video",
     wire: "job",
     residency: "jit",
     endpoints: [],
@@ -115,6 +128,7 @@ export const ROLES = {
     description: "Make a video on your computer.",
   },
   music: {
+    label: "Music",
     wire: "job",
     residency: "jit",
     endpoints: [],
@@ -124,6 +138,7 @@ export const ROLES = {
 } satisfies Record<RoleId, RoleDefinition>;
 
 export const RoleDefinitionSchema = z.object({
+  label: z.string(),
   wire: WireSchema,
   residency: ResidencySchema,
   endpoints: z.array(z.string()),

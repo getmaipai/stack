@@ -27,12 +27,13 @@ export const showroomEngines: EngineRecord[] = [
 ];
 
 export const showroomRoles = [
-  ...["chat", "coding", "judge"].map((id) => ({ id, wire: id, residency: "resident", description: `${id} runs on Family chat.`, state: "ready", reason: null, model: { id: "qwen3-27b-instruct", sizeBytes: 17_200_000_000, measuredFootprintBytes: 21_600_000_000, measuredContextLength: 8192, estimated: false } })),
-  { id: "image", wire: "job", residency: "jit", description: "Make images locally.", state: "ready", reason: null, model: { id: "flux2-klein", sizeBytes: 12_800_000_000, measuredFootprintBytes: 19_100_000_000, measuredContextLength: null, estimated: false } },
-  { id: "video", wire: "job", residency: "jit", description: "Make short videos locally.", state: "ready", reason: null, model: null },
-  { id: "music", wire: "job", residency: "jit", description: "Make music locally.", state: "ready", reason: null, model: null },
-  { id: "stt", wire: "transcription", residency: "resident", description: "Listen locally.", state: "ready", reason: null, model: { id: "moonshine-base", sizeBytes: 230_000_000, measuredFootprintBytes: 420_000_000, measuredContextLength: null, estimated: false } },
-  { id: "tts", wire: "speech", residency: "resident", description: "Speak locally.", state: "ready", reason: null, model: { id: "piper-en-us", sizeBytes: 65_000_000, measuredFootprintBytes: 180_000_000, measuredContextLength: null, estimated: false } },
+  ...[{ id: "chat", label: "Chat" }, { id: "coding", label: "Coding" }, { id: "judge", label: "Judge" }].map(({ id, label }) => ({ id, label, wire: id, residency: "resident", description: `${label} runs on Family chat.`, state: "ready", reason: null, model: { id: "qwen3-27b-instruct", sizeBytes: 17_200_000_000, measuredFootprintBytes: 21_600_000_000, measuredContextLength: 8192, estimated: false } })),
+  { id: "embed", label: "Embeddings", wire: "embeddings", residency: "resident", description: "Find related things locally.", state: "ready", reason: null, model: null },
+  { id: "image", label: "Images", wire: "job", residency: "jit", description: "Make images locally.", state: "ready", reason: null, model: { id: "flux2-klein", sizeBytes: 12_800_000_000, measuredFootprintBytes: 19_100_000_000, measuredContextLength: null, estimated: false } },
+  { id: "video", label: "Video", wire: "job", residency: "jit", description: "Make short videos locally.", state: "ready", reason: null, model: null },
+  { id: "music", label: "Music", wire: "job", residency: "jit", description: "Make music locally.", state: "ready", reason: null, model: null },
+  { id: "stt", label: "Voice in", wire: "transcription", residency: "resident", description: "Listen locally.", state: "ready", reason: null, model: { id: "moonshine-base", sizeBytes: 230_000_000, measuredFootprintBytes: 420_000_000, measuredContextLength: null, estimated: false } },
+  { id: "tts", label: "Voice out", wire: "speech", residency: "resident", description: "Speak locally.", state: "ready", reason: null, model: { id: "piper-en-us", sizeBytes: 65_000_000, measuredFootprintBytes: 180_000_000, measuredContextLength: null, estimated: false } },
 ];
 
 export const showroomClients = [
