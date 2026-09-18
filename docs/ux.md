@@ -756,6 +756,19 @@ future keys, not current controls. Basic and advanced disclosure, reset,
 the generated reference and section master toggles still need an audit
 against org SETTINGS.md.
 
+**The governor is visible and configurable (decided 2026-09-18, 12:45).**
+The memory governor has a Settings section, **Memory**: "Memory for
+models" (the budget cap as a slider over total physical memory, the
+default from the governor's rule, the remainder labeled "kept for your
+Mac"), the pressure watermarks as advanced rows, and the idle unload
+times (STACK-23) beside it; live apply with the restart bar where a key
+needs it. Monitoring shows what the governor is doing right now: the
+budget bar with each loaded model's measured share, the pressure word,
+and its last decisions as sentences with times ("Paused an on-demand
+image model at 11:02: memory was tight"), from the governor's own log.
+The sidebar's memory block reads "8.3 GB used of 24 GB · 16 GB budget
+for models".
+
 **Second pass (decided 2026-09-18, 01:30).** The owner put our Settings
 (two checkboxes, a filled Save button, a page of empty space) beside
 UniFi's (a settings nav with search, section cards with an icon, a
