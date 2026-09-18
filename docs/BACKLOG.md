@@ -754,6 +754,28 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   palette reaches them (test); captures at 1440 and 400 opened and
   judged. Exit: `scripts/check.sh`.
 
+- [ ] **STACK-52 (M): Settings, second pass.** ux.md "Settings" second
+  pass (2026-09-18): the settings nav with "Find a setting" and the
+  section rows plus the computer group; section cards (icon, title,
+  chevron) with settings rows or a things table and its action row;
+  the sections General, Updates, Backups, Network and access, Alert
+  channels, Storage, Maintenance, Engines, and Hardware, Diagnostics,
+  Reset under the computer's name; live apply with the sticky restart
+  bar for `needsRestart` keys, no Save button; unbuilt sections show
+  their declared rows disabled with the item's name. Files:
+  `frontend/src/pages/SettingsPage.tsx` split into
+  `frontend/src/pages/settings/*`, `frontend/src/kit/settings/
+  GenericForm.tsx` (live apply, the saved tick), `backend/src/settings/
+  stackKeys.ts` (the sections declared with `section` and `order`,
+  Rule 5's index served on `/stack/v1/settings/index`), the former
+  Updates and Backups pages' content moved in. Mirror: UniFi's Settings
+  in our palette; org SETTINGS.md Rules 4 to 6. Acceptance: no filled
+  button on the page until a restart-pending change exists (test); a
+  change applies without Save and the tick shows (test); "Find a
+  setting" finds a key by label and by `@modified` (test); every
+  declared section renders a card (test walks the declaration);
+  captures `settings.png`, `settings-updates.png`, `settings-phone.png`
+  opened and judged. Exit: `scripts/check.sh`.
 ## Milestone 1: the robot
 
 - [ ] **STACK-17 (L): the Linux ARM profile.** `llama-server` on the Pi

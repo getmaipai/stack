@@ -656,6 +656,52 @@ models. Log level. Language. Each setting is declared once in the
 settings definition and rendered by the generic renderer, per
 `getmaipai/.github/docs/SETTINGS.md`, so the page is never hand-built.
 
+**Second pass (decided 2026-09-18, 01:30).** The owner put our Settings
+(two checkboxes, a filled Save button, a page of empty space) beside
+UniFi's (a settings nav with search, section cards with an icon, a
+title and a chevron, tables with a quiet action row, live apply). The
+org standard already asks for most of UniFi's shape (Rule 5: one index
+and search; Rule 6: live apply, defaults and reset, a master toggle per
+section); ours had none of it. The decisions:
+
+1. **Settings has its own second-level nav**, UniFi's Settings pattern:
+   a column on the left of the page with "Find a setting" at the top
+   (the settings index, `@modified` filter) and the sections as rows;
+   below a hairline, the machine-specific group under the computer's
+   name. The content area shows one section, or all of them stacked
+   when "Overview" is chosen.
+2. **Sections are cards**: an icon, the title, a chevron to collapse; the
+   body is settings rows (label, info glyph, control) or, where the
+   section holds things, the things table with its quiet action row
+   ("Add a channel", "Manage"). Never a heading floating over bare
+   rows.
+3. **The sections**, each drawn from a declaration: Overview; General
+   (this Stack's name, theme, language later); Updates (the check
+   switch, the last check, the three manifests' state, the update and
+   go-back actions, moved here from the former Updates page); Backups
+   (target, schedule, retention, restore, the emergency kit, moved
+   here from the former Backups page); Network and access (LAN access,
+   port, the operator password card, sessions); Alert channels (the
+   table and its panel); Storage (the data directory, the two
+   databases and their sizes, history retention, "Sweep unreferenced
+   files"); Maintenance (the window, bandwidth cap, "Run maintenance
+   now", from STACK-22); Engines (one row per installed engine linking
+   to its panel's Settings tab, Rule 1: a setting lives with the thing
+   it configures). Under the computer's name: Hardware (the measured
+   facts, read-only), Diagnostics (log level, "Open Logs", "Copy a
+   support bundle" later), Reset (clear caches, forget detected things,
+   the destructive ones with the kit's confirm).
+4. **Live apply, no Save button.** A control applies on change and shows
+   the kit's inline saved tick; a key marked `needsRestart` collects
+   into a sticky bar at the bottom of the page ("2 changes need a
+   restart of the chat engine", Apply now, Discard), UniFi's Apply
+   Changes bar; the page keeps zero filled buttons until that bar
+   appears, which is then the one.
+5. **Every section has something in it.** A section whose feature is not
+   built yet shows its declared rows disabled with one muted sentence
+   naming the item ("Backups arrive with STACK-11"), never an empty
+   card and never a hidden section, so the shape is judged now.
+
 ## Share with your family: the Home hand-off
 
 The card that appears on the Ready step and stays on the board until Home
