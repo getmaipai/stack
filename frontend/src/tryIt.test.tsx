@@ -5,14 +5,46 @@ import { TryItPage } from "@/pages/TryItPage";
 
 afterEach(() => cleanup());
 
-test("Try it shows the ready chat tab and verbatim offline reasons", async () => {
-  globalThis.fetch = mock((input: RequestInfo | URL) => { const path = String(input); if (path.endsWith("/roles")) return Promise.resolve(Response.json({ roles: [
-    { id: "chat", wire: "chat", residency: "resident", description: "Talk locally.", state: "ready", reason: null },
-    { id: "tts", wire: "speech", residency: "resident", description: "Speak locally.", state: "offline", reason: "The voice engine is waiting for its first install." },
-    { id: "image", wire: "job", residency: "jit", description: "Make images.", state: "notInstalled", reason: null },
-  ] })); return Promise.resolve(Response.json({ acknowledged: false })); }) as unknown as typeof fetch;
-  render(<MemoryRouter><TryItPage initialRole="tts" /></MemoryRouter>);
-  await waitFor(() => expect(document.body.textContent).toContain("Chat"));
-  expect(document.body.textContent).toContain("Speak"); expect(document.body.textContent).toContain("Images");
-  expect(document.body.textContent).toContain("The voice engine is waiting for its first install.");
+function stubRoles(roles: Array<{ id: string; state: string; reason: string | null }>): void {
+  globalThis.fetch = mock(async (input: RequestInfo | URL) => {
+    const path = new URL(String(input), "http://local").pathname;
+    if (path.endsWith("/roles")) return new Response(JSON.stringify({ roles: roles.map((role) => ({ id: role.id, wire: role.id, residency: "resident", description: "", state: role.state, reason: role.reason })) }), { status: 200, headers: { "content-type": "application/json" } });
+    return new Response(JSON.stringify({ acknowledged: false }), { status: 200, headers: { "content-type": "application/json" } });
+  }) as unknown as typeof fetch;
+}
+
+test("Try it shows an underline tab per role in page order", async () => {
+  stubRoles([
+    { id: "chat", state: "ready", reason: null },
+    { id: "tts", state: "offline", reason: null },
+    { id: "stt", state: "offline", reason: null },
+    { id: "image", state: "notInstalled", reason: null },
+    { id: "video", state: "notInstalled", reason: null },
+    { id: "music", state: "notInstalled", reason: null },
+  ]);
+  render(<MemoryRouter><TryItPage /></MemoryRouter>);
+  await waitFor(() => expect(document.querySelector('[data-slot="tabs"]')).not.toBeNull());
+  const triggers = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-slot="tabs-trigger"]'));
+  expect(triggers.map((trigger) => trigger.textContent)).toEqual(["Chat", "Voice out", "Voice in", "Images", "Video", "Music"]);
+});
+
+test("an uninstalled generator role shows its tab and the offline reason", async () => {
+  stubRoles([
+    { id: "chat", state: "ready", reason: null },
+    { id: "image", state: "notInstalled", reason: "The Image engine is waiting for its first install." },
+  ]);
+  render(<MemoryRouter><TryItPage initialRole="image" /></MemoryRouter>);
+  await waitFor(() => expect(document.body.textContent).toContain("Not ready"));
+  expect(document.body.textContent).toContain("The Image engine is waiting for its first install.");
+});
+
+test("an offline chat tab shows its empty state with the reason and no composer", async () => {
+  stubRoles([
+    { id: "chat", state: "offline", reason: "The chat engine is waiting for its first install." },
+  ]);
+  render(<MemoryRouter><TryItPage initialRole="chat" /></MemoryRouter>);
+  await waitFor(() => expect(document.body.textContent).toContain("Not ready"));
+  expect(document.body.textContent).toContain("Chat is not ready yet.");
+  expect(document.body.textContent).toContain("The chat engine is waiting for its first install.");
+  expect(document.querySelector("#try-chat-composer")).toBeNull();
 });
