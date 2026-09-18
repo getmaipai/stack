@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { deriveEngineVersionState } from "@/lib/engineState";
-import { engineCommandArgs, getChatBackend, resetSupervisorForTests, restartChatEngine, setSupervisorFactoryForTests, stopChatEngine } from "@/lib/supervisor";
+import { getChatBackend, resetSupervisorForTests, restartChatEngine, setSupervisorFactoryForTests, stopChatEngine } from "@/lib/supervisor";
+import { llamaServerArgs } from "@/lib/engineArgs";
 import { __resetEngineSettingsForTests, readEngineConfig, updateEngineConfig } from "@/settings/engineKeys";
 
 afterEach(() => {
@@ -41,5 +42,23 @@ test("spawned controls start, stop, and restart a scripted engine", async () => 
 });
 
 test("command construction uses declared effective engine settings", () => {
-  expect(engineCommandArgs({ contextLength: 8192, slots: 2, threads: 8, cacheRamMb: 512, flashAttention: false }, "/tmp/model.gguf", 8080)).toEqual(["--model", "/tmp/model.gguf", "--port", "8080", "--ctx-size", "8192", "--parallel", "2", "--threads", "8", "--cache-ram-mb", "512", "--no-flash-attn"]);
+  const config = { contextLength: 8192, slots: 2, threads: 8, cacheRamMb: 512, flashAttention: false };
+  const args = llamaServerArgs({ modelPath: "/tmp/model.gguf", port: 8080, config, contextLength: 8192, kvCacheQuantized: false });
+  expect(args).toEqual([
+    "--model", "/tmp/model.gguf",
+    "--port", "8080",
+    "--host", "127.0.0.1",
+    "-c", "8192",
+    "-fa", "off",
+    "-ngl", "all",
+    "--reasoning", "off",
+    "-ub", "1024",
+    "--no-webui",
+    "--metrics",
+    "--jinja",
+    "--cache-reuse", "256",
+    "--parallel", "2",
+    "--threads", "8",
+    "--cache-ram-mb", "512",
+  ]);
 });

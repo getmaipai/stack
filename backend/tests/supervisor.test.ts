@@ -198,3 +198,9 @@ test("a free spawned port is selected before engine launch", async () => {
   const port = await findFreePort();
   expect(port).toBeGreaterThan(0);
 });
+
+test("a reasoning-only reply passes the post-load check", async () => {
+  const { postLoadCheck } = await import("@/lib/supervisor");
+  const check = await postLoadCheck({ baseUrl: "scripted", health: async () => true, complete: async () => ({ status: 200, body: { choices: [{ message: { content: "", reasoning_content: "OK" } }] } }) }, null);
+  expect(check.replyOk).toBe(true);
+});

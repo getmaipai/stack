@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { ENGINE_BINARIES, ENGINE_READY_MARKER, selectEngineBinary } from "@/lib/engineCatalog";
+import { llamaServerArgs } from "@/lib/engineArgs";
 import { engineBinaryPath, engineDir } from "@/lib/engineInstall";
 import { detectHardware } from "@/lib/hardware";
 import { identityHeaders, readEngineIdentity, type EngineIdentity } from "@/lib/identity";
@@ -295,13 +296,17 @@ export async function waitHealthy(client: EngineClient, timeoutMs = LOAD_FLOOR_M
 }
 
 export async function postLoadCheck(client: EngineClient, pid: number | null, contextLength = 4096): Promise<PostLoadCheck> {
+  // `enable_thinking: false` asks the template to answer in content; a
+  // thinking model that answers in reasoning_content is still alive.
   const result = await withTimeout(
-    client.complete({ model: "chat", messages: [{ role: "user", content: "Reply with just the word OK." }], max_tokens: 16 }),
+    client.complete({ model: "chat", messages: [{ role: "user", content: "Reply with just the word OK." }], max_tokens: 32, chat_template_kwargs: { enable_thinking: false } }),
     timeoutOverrides.postLoadMs ?? DEFAULT_POST_LOAD_TIMEOUT_MS,
     () => new EngineUnavailableError("The post-load check timed out."),
   );
-  const content = (result.body as { choices?: Array<{ message?: { content?: unknown } }> }).choices?.[0]?.message?.content;
-  if (result.status < 200 || result.status >= 300 || typeof content !== "string" || !content.trim()) {
+  const message = (result.body as { choices?: Array<{ message?: { content?: unknown; reasoning_content?: unknown } }> }).choices?.[0]?.message;
+  const content = typeof message?.content === "string" ? message.content : null;
+  const reasoning = typeof message?.reasoning_content === "string" ? message.reasoning_content : null;
+  if (result.status < 200 || result.status >= 300 || !(content && content.trim()) && !(reasoning && reasoning.trim())) {
     throw new EngineUnavailableError("Post-load check did not receive a usable completion.");
   }
   return { replyOk: true, actualBytes: await measureProcessMemoryBytes(pid), estimatedBytes: null };
@@ -325,17 +330,6 @@ async function startUrlBackend(kind: EngineKind, url: string): Promise<ChatBacke
   return { client, kind, identity, pid: null, activeRequests: 0, retired: false, stop: async () => {} };
 }
 
-export function engineCommandArgs(config: Record<string, number | boolean | string>, modelPath: string, port: number): string[] {
-  const args = ["--model", modelPath, "--port", String(port)];
-  if (typeof config.contextLength === "number") args.push("--ctx-size", String(config.contextLength));
-  if (typeof config.slots === "number") args.push("--parallel", String(config.slots));
-  if (typeof config.threads === "number" && config.threads > 0) args.push("--threads", String(config.threads));
-  if (typeof config.cacheRamMb === "number" && config.cacheRamMb > 0) args.push("--cache-ram-mb", String(config.cacheRamMb));
-  if (config.flashAttention === true) args.push("--flash-attn");
-  if (config.flashAttention === false) args.push("--no-flash-attn");
-  return args;
-}
-
 async function startSpawnedBackend(): Promise<ChatBackend> {
   activateEngineConfig("llama-server", "llama-server");
   const config = settingValues("llama-server", "llama-server");
@@ -351,7 +345,8 @@ async function startSpawnedBackend(): Promise<ChatBackend> {
   if ("refused" in admission) throw new EngineUnavailableError(admission.reason);
 
   const port = await findFreePort();
-  const processHandle = Bun.spawn([engineBinaryPath(pin), ...engineCommandArgs(config, model.modelPath, port)], {
+  const contextLength = typeof config.contextLength === "number" ? config.contextLength : 4096;
+  const processHandle = Bun.spawn([engineBinaryPath(pin), ...llamaServerArgs({ modelPath: model.modelPath, port, config, contextLength, kvCacheQuantized: process.platform === "darwin" })], {
     stdout: "ignore",
     stderr: "pipe",
     env: { ...process.env, HF_HUB_CACHE: hfHubRoot },
@@ -371,7 +366,6 @@ async function startSpawnedBackend(): Promise<ChatBackend> {
     void exitFailure.catch(() => {});
     await Promise.race([waitHealthy(client, loadTimeoutForModel(model.sizeBytes), () => !exited), exitFailure]);
     const identity = await readEngineIdentity(client.baseUrl);
-    const contextLength = typeof model.engineRequirements.contextLength === "number" ? model.engineRequirements.contextLength : 4096;
     const check = await postLoadCheck(client, processHandle.pid, contextLength);
     if (check.actualBytes !== null) { recordMeasuredFootprint(model.id, check.actualBytes, contextLength); recordModelFootprint(model.id, check.actualBytes); }
     state.status.postLoadCheck = check;
