@@ -955,6 +955,52 @@ boundary never drifts into two copies.
     the Stack's docs; Home's docs link there and describe only what
     Home adds on top.
 
+## The seams: how a third-party thing enters the Stack (decided 2026-09-18)
+
+The owner asked whether the Stack needs apps, plugins, or something
+like them. The design-resolver read the platform documents; the answer
+is no extension system, no packages, no sidebar row, and the word for
+what exists is **seams**. Everything a person or a third party can add
+to a Stack already arrives through one of four:
+
+1. **The engine catalog**: a new engine kind (a vLLM build, a TTS
+   server) is a pinned build in this repo's per-platform catalog,
+   chosen by declaration ("Engines and the supervisor"; the pins are
+   the Stack's own catalog, never Catalog packages, integrations.md).
+2. **A host the person points at**: a server they run (`managed` or
+   `url` engine kinds) is configuration. The Add sheet (ux.md "Things
+   pages, second pass") gains a fourth tab for it, "A server you run".
+3. **A model with its provenance recorded**: from the Catalog, from
+   Hugging Face, or from a folder by link (a NAS is a folder). A private
+   mirror is one declared setting, `huggingFaceEndpoint`, honored by
+   the store and the supervisor, with the privacy row saying "or the
+   mirror you chose".
+4. **A channel or target the person configures**, each with a privacy
+   row in the same commit: alert providers are code here (Telegram,
+   ntfy; a `webhook` provider would cover Discord, Gotify and Home
+   Assistant with one privacy shape), backup targets likewise.
+
+Nothing is ever installed as code into the Stack from a catalog, and
+the Stack never consumes MCP: tools a model calls on someone's behalf
+need a person to authorize them and a turn engine to run them, which
+is Home's Connector kind; a developer's own tools already pass through
+the OpenAI-shaped `chat` wire. The Stack *serves* MCP (`stack-library`).
+Themes are Home's (per-person objects); the Stack has one operator and
+a light or dark toggle. A metrics exporter, if wanted, is a read-only
+route (`GET /stack/v1/metrics` in Prometheus text), not an extension.
+
+Rejected: a Stack "add-on" kind in the Catalog (a second package system
+with its own review path, and outside code inside the one process that
+holds the memory budget; contradicts AGENTS.md "no packages"); UniFi's
+"applications" on the console (UniFi's are whole products; ours are
+Home and Bot, clients with their own consoles); the helper consuming
+third-party MCP servers (no person to authorize a tool; breaks the
+read-only registry). Console: nothing new. The channel seam gets a
+mechanical guard: a test that fails when a channel type exists without
+a privacy-page row. Items: STACK-56 (the docs and the guard), STACK-57
+(the mirror setting), STACK-58 (`webhook`, the owner's call), STACK-59
+(the metrics route, the owner's call).
+
 ## The helper: an assistant inside the console (research, 2026-09-17)
 
 The owner's question: a chatbot in the app that helps a person

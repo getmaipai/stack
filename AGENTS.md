@@ -25,7 +25,8 @@ The Stack knows clients, not people. One operator login, per-client API
 keys scoped to roles, no Person, no household, no memory, no history, no
 personality, no packages. Test surfaces are stateless. The moment a
 second person wants a turn, that is MaiPai Home's job, and the Stack's
-page says so. Anything that needs to know who is asking does not belong
+page says so. There is no extension system either: a third-party
+thing enters only through the four seams in docs/dev.md "The seams". Anything that needs to know who is asking does not belong
 in this repo.
 
 The ten design principles are in `docs/dev.md`; the first three are the

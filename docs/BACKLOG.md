@@ -849,6 +849,38 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   renders its Learn more link (test); Help lists the three doors
   (test); captures `palette.png` opened and judged. Exit:
   `scripts/check.sh`.
+- [ ] **STACK-56 (S): the seams, written down and guarded.** dev.md "The
+  seams" is the record; this item adds the two ux.md sentences (the
+  Add sheet's fourth tab "A server you run" in "Things pages, second
+  pass" item 1; the Sources row in "Settings" item 3) and the
+  integrations.md contract row for the metrics route (planned), then
+  makes the channel seam mechanical: a `bun:test` in `backend/tests/`
+  reads every `ChannelType` from `lib/channels/index.ts` and fails
+  unless `docs/user/privacy.md` has a row naming it (mirror the
+  update-check privacy test from STACK-10). Acceptance: the docs
+  sentences exist and prose-lint clean; the test fails on a temporary
+  enum entry without a row (proved, then reverted); no new sidebar row
+  or Settings section. Out of scope: STACK-57 to -59. Exit:
+  `scripts/check.sh`.
+- [ ] **STACK-57 (S): a Hugging Face mirror setting.** `huggingFaceEndpoint`
+  in `settings/stackKeys.ts` (default `huggingface.co`, section
+  Storage, Sources row), honored by `lib/hf.ts` and the supervisor's
+  `HF_HUB_CACHE` path; provenance recorded identically; the privacy
+  row "Downloading a model" gains "or the mirror you chose".
+  Acceptance: a scripted mirror URL receives the download request
+  (test); the row exists. Exit: `scripts/check.sh`.
+- [ ] **STACK-58 (S, owner's call): a `webhook` alert channel.** One
+  provider in `lib/channels/providers.ts` posting the alert sentence as
+  JSON to a URL the person chose, with an optional bearer token
+  (encrypted like the others); the privacy row has ntfy's shape ("the
+  server URL you chose"). Acceptance: the scripted receiver gets the
+  test message and the verified stamp lands; the seams guard passes.
+  Exit: `scripts/check.sh`.
+- [ ] **STACK-59 (S, owner's call): `GET /stack/v1/metrics`.** Prometheus
+  text format from the data `series`, memory and health already own;
+  operator or client key; read-only; no outbound row. Acceptance: the
+  route renders a scripted sample set and a scraper fixture parses it
+  (test). Exit: `scripts/check.sh`.
 ## Milestone 1: the robot
 
 - [ ] **STACK-17 (L): the Linux ARM profile.** `llama-server` on the Pi
