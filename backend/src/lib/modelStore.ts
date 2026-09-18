@@ -2,9 +2,10 @@ import { eq } from "drizzle-orm";
 import { db, sqlite } from "@/db";
 import { modelGroups, modelUsage, models } from "@/db/schema";
 import { downloadUrl, DownloadVerificationError, sha256OfFile, type DownloadOptions } from "@/lib/download";
-import { modelsDir } from "@/lib/paths";
+import { dataDir, modelsDir } from "@/lib/paths";
 import type { RoleId } from "@/roles";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { z } from "zod";
 import { emit } from "@/lib/events";
@@ -318,6 +319,9 @@ export function removeModel(id: string): boolean {
 }
 
 export function clearModelsForTests(): void {
+  if (!realpathSync(dataDir).startsWith(realpathSync(tmpdir()))) {
+    throw new Error("clearModelsForTests refused: data dir is not under the OS temp directory");
+  }
   for (const model of listModels()) removeModelManifest(model.id);
   db.delete(modelUsage).run();
   db.delete(modelGroups).run();

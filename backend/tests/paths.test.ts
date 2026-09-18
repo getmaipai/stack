@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -18,6 +18,12 @@ afterAll(() => {
   if (originalDataDir === undefined) delete process.env.STACK_DATA_DIR;
   else process.env.STACK_DATA_DIR = originalDataDir;
   rmSync(testDataDir, { recursive: true, force: true });
+});
+
+test("the suite runs against a temp data dir", () => {
+  const dataDir = process.env.STACK_DATA_DIR;
+  expect(dataDir).toBeDefined();
+  expect(realpathSync(dataDir as string).startsWith(realpathSync(tmpdir()))).toBe(true);
 });
 
 test("dataDir is the STACK_DATA_DIR dir and is private", () => {
