@@ -628,6 +628,41 @@ What they do that we do not, each a decision for phone width (below
    px with a subtitle, 48 px without; the tab bar 56 px plus the safe
    area.
 
+## Docs and the helper, where they live in the console (decided 2026-09-18, 01:50)
+
+The owner could not find the docs or the assistant in the console. The
+docs exist (the user docs site at `getmaipai.github.io/stack`, the API
+explorer at `/api/docs`, and the Library for what is installed) and the
+helper is designed (dev.md "The helper", three tiers) but neither has a
+door. Decisions:
+
+1. **Ask is the door to both.** The header's magnifying glass becomes a
+   sparkles glyph labeled "Ask" (UniFi's phone app puts the same glyph
+   in the middle of its tab bar). It opens the command palette, whose
+   input reads "Search or ask", and the palette answers in tiers: pages
+   and things (search), the intent table for the enumerable questions
+   ("how many engines", "is chat up to date"), Library and docs hits
+   under "From the docs", and, when none of that answers, "Ask the
+   helper" which opens the helper as a panel in the right slot (the
+   property panel's place). On the phone Ask is the middle tab.
+2. **The helper is the Stack's, and stateless.** It runs on the loaded
+   chat engine (or the Stack's own small pinned model when no person
+   engine is up, as dev.md says), with the read-only tool set over
+   `/stack/v1`, and every action it suggests is a proposal card ("Restart
+   the chat engine", one button) that the person presses. It keeps no
+   history past the panel being closed and knows no people: it is the
+   operator's helper for this Stack, which is why it can live here and
+   still honor the line. A good household assistant that remembers is
+   Home's, and the helper's empty state says so once.
+3. **Docs have three doors**: "Help" in the profile menu (the docs site,
+   the API explorer, the Library); a "Learn more" link on every health
+   item and every disabled unbuilt section, pointing at the docs page
+   for that item; and the "From the docs" group in Ask. The docs site
+   opens in a new tab; the Library opens in the console.
+4. **Priority.** STACK-37 moves from low to normal: tier 1 (the intent
+   table) and tier 3 (the helper panel) are built with Ask; tier 2
+   arrives with the Library (STACK-32).
+
 ## Library
 
 One page per installed model and engine: where it came from, its

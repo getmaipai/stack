@@ -531,7 +531,7 @@ layer above; none adds a person or leaves the machine.
   "how do I" and "what did I install". Acceptance: a query that matches
   only a Library page returns it from the site's search box.
 
-- [ ] **STACK-37 (M, low priority): the helper.** The in-console
+- [ ] **STACK-37 (M): the helper.** (Priority raised 2026-09-18; the door is Ask, ux.md "Docs and the helper".) The in-console
   assistant of dev.md "The helper" (2026-09-17), built in three tiers
   so most questions never reach a model. Tier 1: an intent table in
   the command palette that answers the enumerable questions from the
@@ -825,6 +825,22 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   `overview-console-phone.png`, `models-phone.png`,
   `model-detail-phone.png`, `settings-phone.png` opened and judged.
   Exit: `scripts/check.sh`.
+- [ ] **STACK-55 (S): Ask and the doors to the docs.** ux.md "Docs and
+  the helper" decisions 1 and 3: the header glyph becomes sparkles
+  "Ask" opening the palette with "Search or ask", groups for pages and
+  things, the intent table (STACK-37 tier 1), "From the docs" (the docs
+  site's Pagefind index fetched from the site when the outbound switch
+  is on, else the local Library only), and "Ask the helper" (opens the
+  helper panel, STACK-37 tier 3, or its "coming" state until built);
+  "Help" in the profile menu with the docs site, the API explorer and
+  the Library; "Learn more" on health items and unbuilt sections. Files:
+  `site-header.tsx`, `profile-menu.tsx`, the palette in
+  `DashboardShell.tsx`, `backend/src/lib/health.ts` (a `docsPath` per
+  item code, one map). Acceptance: the palette answers "how many
+  engines" with the count from a stubbed route (test); a health item
+  renders its Learn more link (test); Help lists the three doors
+  (test); captures `palette.png` opened and judged. Exit:
+  `scripts/check.sh`.
 ## Milestone 1: the robot
 
 - [ ] **STACK-17 (L): the Linux ARM profile.** `llama-server` on the Pi
