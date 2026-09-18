@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { app } from "@/app";
@@ -6,6 +6,7 @@ import { __resetOperatorForTests, __resetOperatorThrottleForTests } from "@/lib/
 import { engineTagRoot } from "@/lib/store/layout";
 
 let dataDir: string | null = null;
+beforeEach(() => { __resetOperatorForTests(); __resetOperatorThrottleForTests(); });
 afterEach(() => { __resetOperatorForTests(); __resetOperatorThrottleForTests(); if (dataDir) rmSync(dataDir, { recursive: true, force: true }); dataDir = null; delete process.env.STACK_SCRIPTED_ENGINES; delete process.env.STACK_MANAGED_ENGINE_URL; });
 
 async function operatorCookie(): Promise<string> {

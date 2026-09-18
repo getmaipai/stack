@@ -37,9 +37,8 @@ test("an engine crash opens a repair that is resolved once and 404 after", async
 
   const resolved = await app.request(`/stack/v1/repairs/${id}/resolve`, { method: "POST", headers: auth });
   expect(resolved.status).toBe(200);
-  const after = await (await app.request("/stack/v1/repairs", { headers: auth })).json() as { repairs: Array<{ id: string; resolvedAt: string | null }> };
-  expect(after.repairs[0]!.id).toBe(id);
-  expect(after.repairs[0]!.resolvedAt).not.toBeNull();
+  const after = await (await app.request("/stack/v1/repairs", { headers: auth })).json() as { repairs: Array<{ id: string }> };
+  expect(after.repairs.find((r) => r.id === id)).toBeUndefined();
 
   const again = await app.request(`/stack/v1/repairs/${id}/resolve`, { method: "POST", headers: auth });
   expect(again.status).toBe(404);
