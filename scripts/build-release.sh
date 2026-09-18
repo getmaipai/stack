@@ -36,7 +36,9 @@ chmod 755 "$output"
 mkdir -p "$ROOT/desktop/src-tauri/binaries"
 cp "$output" "$ROOT/desktop/src-tauri/binaries/maipai-stack-$rust_triple"
 chmod 755 "$ROOT/desktop/src-tauri/binaries/maipai-stack-$rust_triple"
-(cd "$DIST" && shasum -a 256 "$(basename "$output")" > SHA256SUMS)
+cp "$ROOT/installer/install.sh" "$DIST/install.sh"
+chmod 755 "$DIST/install.sh"
+(cd "$DIST" && shasum -a 256 "$(basename "$output")" install.sh > SHA256SUMS)
 
 if [[ "${1:-}" == "--dry-run" ]]; then
   echo "Release $VERSION (dry run)"
@@ -50,8 +52,6 @@ for kind in app engines models; do
 {"version":"$VERSION","notes":"See the release notes.","pub_date":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","platforms":{"darwin-arm64":{"url":"https://github.com/getmaipai/stack/releases/download/v$VERSION/$(basename "$output")","sha256":"$checksum","size":$size,"signature":"unsigned"}}}
 JSON
 done
-cp "$ROOT/installer/install.sh" "$DIST/install.sh"
-chmod 755 "$DIST/install.sh"
 if [[ "${1:-}" == "--dry-run" ]]; then echo "Dry run complete"; fi
 
 echo "Built $output"

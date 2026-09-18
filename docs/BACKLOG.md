@@ -926,7 +926,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   Mirror: the current daemon-only release script.
   Out of scope: new person records or Home-side features.
   Acceptance: the named flow passes an offline scripted test and its documented live check.
-- [ ] **SITE-STACK-01 (S): the org site hosts install.sh.** The
+- [x] **SITE-STACK-01 (S): the org site hosts install.sh.** The
   installer served at `getmaipai.github.io/stack/install.sh` from the
   docs site build, pinned to the latest release's assets by checksum;
   the privacy row already names it. Acceptance: the built site contains

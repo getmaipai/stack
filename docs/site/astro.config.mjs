@@ -10,6 +10,8 @@ import starlightOpenAPI, { openAPISidebarGroups } from "starlight-openapi";
 // (generated later by the Stack's own `bun run gen:api-docs`, never
 // hand-written) via starlight-openapi.
 export default defineConfig({
+  site: "https://getmaipai.github.io/stack",
+  base: "/stack",
   integrations: [
     starlight({
       title: "MaiPai Stack",

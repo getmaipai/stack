@@ -4,9 +4,10 @@
   "version": "0.0.1",
   "scripts": {
     "sync": "node scripts/sync-content.mjs",
-    "dev": "bun run sync && astro dev",
-    "start": "astro dev",
-    "build": "bun run sync && astro build",
+    "sync:install": "node scripts/sync-install.mjs",
+    "dev": "bun run sync && bun run sync:install && astro dev",
+    "start": "bun run sync:install && astro dev",
+    "build": "bun run sync && bun run sync:install && astro build",
     "preview": "astro preview",
     "astro": "astro"
   },

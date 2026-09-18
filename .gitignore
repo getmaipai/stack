@@ -20,5 +20,6 @@ desktop/src-tauri/binaries/*
 docs/site/node_modules/
 docs/site/dist/
 docs/site/.astro/
+docs/site/public/
 docs/site/src/content/docs/guide/
 docs/site/src/content/docs/dev/
