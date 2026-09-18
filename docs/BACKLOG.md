@@ -347,7 +347,10 @@ layer above; none adds a person or leaves the machine.
 - [ ] **STACK-20 (M): Check my Stack.** One click (and nightly in the
   maintenance window, quietly) runs a real smoke test per ready role:
   a completion, a transcription of a bundled two-second clip, a speech
-  render, a small image tile; each pass or fail with the health item
+  render, a small image tile; then the fit-together check: with the
+  resident set loaded, start one generator job and watch the kernel's
+  pressure and the governor's decisions, pass only if pressure never
+  reaches critical; each pass or fail with the health item
   and its fix; the last result on the Overview health card
   ("Checked 2 hours ago, all good"). Acceptance: a scripted failing
   role yields a health item with a fix; the nightly run is skipped
@@ -389,11 +392,21 @@ layer above; none adds a person or leaves the machine.
   Backups, per the org standard. Acceptance: export then import on a
   scripted smaller machine drops the abilities that do not fit and
   says so.
-- [ ] **STACK-26 (S): the speed test.** "How fast is my Mac" on
-  Monitoring: first-token time and tokens per second per loaded model,
-  time to load, compared with the tier's expected range, stored
-  history so a regression after an update is visible. Acceptance: a
-  scripted engine yields the numbers; a second run shows the delta.
+- [ ] **STACK-26 (M): the speed test, on `llama-bench`.** After a
+  model installs and after any engine update, in the maintenance
+  window, run llama.cpp's own `llama-bench` from the pinned archive
+  for that model (prompt processing and generation tokens per second
+  at the household's context, three repetitions), record first-token
+  time and load time from the supervisor's own timers and the
+  measured footprint, and keep the history per model, engine tag and
+  context. Monitoring shows "your Mac: N tokens per second on this
+  model, was M before the update" against the tier's expected range;
+  a regression past ten percent raises a warning health item naming
+  the update, with Go back one click away. Quality benchmarks are out
+  of scope by decision (a trend line, Home's judge if anywhere).
+  Acceptance: a scripted `llama-bench` output parses into the record
+  (test); a second run with a lower number raises the item (test);
+  the page's numbers are the recorded ones (screenshot judged).
 - [ ] **STACK-27 (S): the weekly digest.** One passive notification a
   week: what was used and how much, what updated, what is tight, what
   could be cleaned, in five plain sentences; off by default on the
