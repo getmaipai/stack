@@ -240,6 +240,18 @@ each item's design section lands in `dev.md` before its code.
   from `home/frontend/src/kit` into a package that both repos pin. Until
   then, the Stack carries a copied subset for its admin shell.
 
+- [ ] **STACK-04c (M): nicknames, groups, utilization by group.** A
+  `nickname` on the model record (display only); a `groups` table
+  (`id`, `name`, `parentId`) with each model in exactly one group and
+  an ungrouped default; per-model usage recorded by the router and
+  supervisor (requests, tokens in and out, seconds loaded, peak memory
+  while loaded, last used) and rolled up by group through the tree;
+  routes to create, rename, move and remove groups and to move
+  models; the Models page as a tree with rollups and drag to move;
+  Monitoring's utilization by group. Acceptance: a nested rollup
+  counts a model once (test); a nickname changes no API behavior
+  (test: a request by nickname is 400, by id works); the tree renders
+  scripted groups with their rollups (screenshot judged).
 - [ ] **STACK-19 (M): engine management.** Controls (start, stop,
   restart, probe, install a build, make current with drain and swap,
   remove), per-engine configuration declared once and rendered

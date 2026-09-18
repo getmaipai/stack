@@ -187,6 +187,17 @@ Hugging Face" option for the operator, which fills the provenance record
 before the model turns on. Multi-select with remove and clear-all, per the
 org's batch rule.
 
+**Nicknames and groups.** A model can be given a nickname (shown
+everywhere a person reads; the API keeps the model id and the role
+ids, so a nickname never changes what a client sends). Models live in
+groups that nest like folders, each model in exactly one group, so a
+rollup counts nothing twice: "Family chat", "Kids", "Experiments" and
+so on, with an ungrouped default. The Models page shows the tree with
+each group's size on disk, memory while loaded, and utilization
+(requests, tokens, time loaded, last used) rolled up from its models
+and subgroups; Monitoring shows utilization by group over time.
+Drag to move a model or a group; batch select works across groups.
+
 ## Engines
 
 One row per engine: name, kind (spawned, managed, url), the roles it
