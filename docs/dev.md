@@ -43,6 +43,31 @@ Linux arriving for the robot and Windows for the CUDA catalogue. Same
 shape on every OS: one config, one API, one set of docs; only the engine
 list per platform differs.
 
+## Why the Stack, against the alternatives (2026-09-17)
+
+The question the project has to answer, in the owner's words: why
+would people use this instead of downloading and installing on their
+own, or using another project. The user-facing answer is the README's
+"Why the Stack" section; this is the same answer checked against the
+field, so every claim points at something built or designed here.
+
+| Alternative | What it gives you | What it does not, and the Stack does |
+|---|---|---|
+| Doing it yourself (Ollama plus LM Studio plus ComfyUI plus a speech server) | Each piece is good at its job | Five ports and configs; no one governs memory across them; no shared health, alerts or updates; every tool you use is bound to a specific engine |
+| Ollama | The best single-model chat server, one-command install | Chat only (no voice, pictures, video, music); a guessed memory estimate; no health or update page; a vendor updater that sends a device id |
+| LM Studio | A polished desktop app, model discovery, headless mode | Closed source; update checks and model searches leave the machine with no named opt-out; one person's app, not a service others build on; loads refused that would have fit |
+| LocalAI | One OpenAI-compatible engine over many backends, model gallery | No memory governor across backends, no health list, no updates with rollback, OCI packaging on a Mac service; its speech and image backends are not the strongest ones |
+| Harbor | A one-command Docker playground for fifty services | Docker first, a developer's tool; no supervisor, governor, notifications or updates |
+| Jan, Open WebUI, LibreChat, LobeChat | A chat app with users and history | An app, not a foundation: their own people and storage, licence terms in two cases; nothing a household hub can sit on |
+| oMLX, mlx-serve | Excellent single-purpose Apple silicon servers | No provenance, no management, no health, no updates; the Stack runs them as engines |
+
+The Stack's claim is the operating layer: one address by role, one
+measured memory budget, provenance before selection, health with a
+fix, updates with rollback, alerts without a vendor, private by
+construction, and a household hub that can install on top. Where
+another project does a piece better, the Stack uses it as an engine
+rather than competing with it, and says so on the Engines page.
+
 ## What the Stack is not: the line
 
 The Stack knows **clients**, not **people**.
