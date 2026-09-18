@@ -1,8 +1,8 @@
 <p align="center">
-  <picture>
+  <image>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/getmaipai/.github/main/brand/maipai-stack-logo-dark.png">
     <img src="https://raw.githubusercontent.com/getmaipai/.github/main/brand/maipai-stack-logo-light.png" alt="MaiPai Stack" width="360">
-  </picture>
+  </image>
 </p>
 
 <h3 align="center">Your own local AI stack, made easy.</h3>
@@ -27,7 +27,7 @@ a company, is kept, and may be read or used. The Stack puts the same
 kind of AI on your own computer, where nothing leaves the house.
 
 **What it does for you.** You get an assistant you can talk to and
-type to, that can listen and read aloud, make pictures and short
+type to, that can listen and read aloud, make images and short
 videos and music, and help you write and code, all running on the Mac
 you already own, with no account and no subscription. Tools you already
 use (a coding assistant, a notes app, a home hub) can use it too,
@@ -45,12 +45,12 @@ profiles and memory, one click.
 ## Why the Stack, and not doing it yourself
 
 You can download Ollama for chat, LM Studio for a second opinion,
-ComfyUI for pictures, a speech server for voice, and wire them up.
+ComfyUI for images, a speech server for voice, and wire them up.
 People do. Here is what you get from the Stack instead, and every
 line is something it does or is designed to do, not a promise:
 
 - **One address for everything.** Chat, coding, voice in and out,
-  pictures, video and music sit behind one API, asked for by what you
+  images, video and music sit behind one API, asked for by what you
   want ("chat"), never by which engine or file. Swap an engine and no
   tool you use breaks. On your own, that is five programs, five ports
   and five settings files.
@@ -79,9 +79,9 @@ line is something it does or is designed to do, not a promise:
 ## Features
 
 - **One address**: an OpenAI-compatible API for chat, coding, embeddings,
-  voice in, voice out, pictures, video and music, by role, never by model
+  voice in, voice out, images, video and music, by role, never by model
   name. (designed; the routes exist but no engine answers embeddings,
-  voice or pictures yet)
+  voice or images yet)
 - **Sized to your machine**: it measures what your computer can run and
   proposes a profile in plain words. (built)
 - **Provenance first**: every model shows where it came from, its

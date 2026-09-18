@@ -440,7 +440,7 @@ layer above; none adds a person or leaves the machine.
   logging standard covers the bundle.
 - [ ] **STACK-30 (M): abilities by intent.** On the Abilities page,
   "What do you want to do?" (a chat assistant; help with homework;
-  dictation; make pictures; code) picks the abilities and models for
+  dictation; make images; code) picks the abilities and models for
   this machine and explains the choice in one sentence; the tier list
   stays behind "Change". Acceptance: each intent maps to a set that
   fits each tier (test per intent per tier).

@@ -54,7 +54,7 @@ field, so every claim points at something built or designed here.
 | Alternative | What it gives you | What it does not, and the Stack does |
 |---|---|---|
 | Doing it yourself (Ollama plus LM Studio plus ComfyUI plus a speech server) | Each piece is good at its job | Five ports and configs; no one governs memory across them; no shared health, alerts or updates; every tool you use is bound to a specific engine |
-| Ollama | The best single-model chat server, one-command install | Chat only (no voice, pictures, video, music); a guessed memory estimate; no health or update page; a vendor updater that sends a device id |
+| Ollama | The best single-model chat server, one-command install | Chat only (no voice, images, video, music); a guessed memory estimate; no health or update page; a vendor updater that sends a device id |
 | LM Studio | A polished desktop app, model discovery, headless mode | Closed source; update checks and model searches leave the machine with no named opt-out; one person's app, not a service others build on; loads refused that would have fit |
 | LocalAI | One OpenAI-compatible engine over many backends, model gallery | No memory governor across backends, no health list, no updates with rollback, OCI packaging on a Mac service; its speech and image backends are not the strongest ones |
 | Harbor | A one-command Docker playground for fifty services | Docker first, a developer's tool; no supervisor, governor, notifications or updates |
@@ -76,7 +76,7 @@ It has one operator login (the person who installed it) and per-client API
 keys (Home, Bot, a developer's own tool). It has no Person record, no
 household, no memory, no conversation history, no personality, no
 packages, no apps. Its test surfaces are stateless: a chat box that
-forgets, a picture box that draws once. The moment a second person in the
+forgets, a image box that draws once. The moment a second person in the
 house wants a turn, that is MaiPai Home's job, and the Stack's own page
 says so at exactly that moment (see `ux.md`, "Share with your family").
 
@@ -88,8 +88,8 @@ and two safety paths. The precedent everyone already accepts: Ollama has
 no users, the app on top does.
 
 The worked case that fixed the line (2026-09-17): Oliver installs the
-Stack, sets his operator login, tests chat, pictures and video as
-himself. He wants his kid Sprout to try it, without pictures or video.
+Stack, sets his operator login, tests chat, images and video as
+himself. He wants his kid Sprout to try it, without images or video.
 Sprout is a child profile in Home, restricted by default, opted in only
 by an adult and never for generators; the Stack never learns Sprout's
 name. What the Stack does offer Oliver is a client key scoped to roles,

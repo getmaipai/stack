@@ -42,7 +42,7 @@ the second path, later; it runs the same steps.
 - **This computer**, measured automatically and said in plain words
   ("Apple silicon Mac, 24 GB of memory, 153 GB free"), with the plan
   this machine can run and a "Change" link.
-- **Add abilities**: cards for Chat, Voice, Pictures, Video and Music,
+- **Add abilities**: cards for Chat, Voice, Images, Video and Music,
   each with its size, "can run" or "not on this computer", and an
   Install button; a "Start small" suggestion preselected (a fast chat
   model plus small voice in and out, about 1 GB) so one click starts a
@@ -63,7 +63,7 @@ board opens without a password (Ollama has none either). The first
 time the person creates a client key for a tool, or switches on LAN
 access, the Stack asks them to set the operator password once, right
 there, and the admin routes require it from then on. The adult
-acknowledgment stays as one dialog before the first picture or video,
+acknowledgment stays as one dialog before the first image or video,
 never a step.
 
 **Try it** appears on the board the moment the small set lands, so
@@ -104,7 +104,7 @@ Phone width collapses the sidebar into a sheet.
    Add abilities until a plan exists, the status strip, downloads in
    flight, the last five notifications, health items with a fix.
 2. **Abilities**: the plan and its tiers, the abilities cards (chat,
-   voice, pictures, video, music) with sizes and "can run", install
+   voice, images, video, music) with sizes and "can run", install
    and remove, the "details" disclosure with model names.
 3. **Models**: the Models page (installed, source, licence, measured
    footprint, pin, unload, remove, import from other tools, check for
@@ -192,7 +192,7 @@ the top right that every chart honors:
    detected-not-adopted) with counts by kind and by ability; click a
    ring segment to the filtered list and its panel.
 4. **Usage over time**: requests and tokens as an area chart by
-   ability (chat, voice, pictures, video, music) and, toggled, by
+   ability (chat, voice, images, video, music) and, toggled, by
    client; the top three models and top three clients for the range.
 5. **Memory and storage**: memory over time with the pressure band
    and each loaded model's share; the storage stacked bar by category.
@@ -217,8 +217,8 @@ each a status and one line:
 | Chat | "Ready, 62 GB loaded" | "Loading" | "Off" | "Stopped: <reason>" |
 | Coding | same | | | |
 | Voice in / Voice out | "Ready" | | | |
-| Pictures / Video / Music | "Ready when asked" (on-demand) | "Working, 40%" | "Not installed" | |
-| Memory | "78 of 128 GB in use, 30 GB free for jobs" | "Tight: a picture job will wait" | | "Over: something was unloaded" |
+| Images / Video / Music | "Ready when asked" (on-demand) | "Working, 40%" | "Not installed" | |
+| Memory | "78 of 128 GB in use, 30 GB free for jobs" | "Tight: a image job will wait" | | "Over: something was unloaded" |
 
 Under the tiles: the last five notifications, and a "Repairs" list backed
 by the daemon's health items if the Stack noticed anything (a model whose
@@ -238,7 +238,7 @@ that remembers, install MaiPai Home.").
 - **Speak**: type a sentence, hear it. Voice picker for the installed
   voices. Latency shown.
 - **Listen**: a mic button, live words as they arrive.
-- **Picture, Video, Music**: a prompt, a quality choice (fast, everyday,
+- **Image, Video, Music**: a prompt, a quality choice (fast, everyday,
   best), a progress bar, the result, and the memory delta the job caused.
   Before the first generation, the one-time adult acknowledgment: one
   clear dialog, one confirmation, never again.
@@ -347,7 +347,7 @@ effect and the values pending are both visible until then.
 ## Hardware and memory
 
 The probe card, the chosen profile with a "Change" link, the governor's
-rules stated as sentences ("One picture or video job at a time. A job
+rules stated as sentences ("One image or video job at a time. A job
 waits when less than 20 GB is free."), and a live bar of what is loaded
 with each model's measured share. This is the page that answers "what
 can this machine do" honestly, and every number on it was measured on

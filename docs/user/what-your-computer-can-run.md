@@ -7,26 +7,26 @@ The first time you open the Stack, it measures your computer and proposes a plan
 
 ## 16 GB
 
-This computer can run chat and voice, with embeddings when needed. Pictures, video, and music are not available.
+This computer can run chat and voice, with embeddings when needed. Images, video, and music are not available.
 
-All the time: chat, voice in, voice out. When you ask: embeddings. For a robot or another device: the wake word. Not on this computer: coding, finding the best results, pictures, video, music.
+All the time: chat, voice in, voice out. When you ask: embeddings. For a robot or another device: the wake word. Not on this computer: coding, finding the best results, images, video, music.
 
 ## 32 GB
 
 This computer can run chat, voice, and embeddings, with the judge when needed. Generators are not available.
 
-All the time: chat, voice in, voice out, embeddings. When you ask: the judge. For a robot or another device: the wake word. Not on this computer: coding, pictures, video, music.
+All the time: chat, voice in, voice out, embeddings. When you ask: the judge. For a robot or another device: the wake word. Not on this computer: coding, images, video, music.
 
 ## 64 GB
 
-This computer can run chat, voice, and embeddings, plus one picture job at a time. Video and music are not available.
+This computer can run chat, voice, and embeddings, plus one image job at a time. Video and music are not available.
 
-All the time: chat, voice in, voice out, embeddings, the judge. When you ask: pictures. For a robot or another device: the wake word. Not on this computer: coding, video, music.
+All the time: chat, voice in, voice out, embeddings, the judge. When you ask: images. For a robot or another device: the wake word. Not on this computer: coding, video, music.
 
 ## 128 GB
 
-This computer can run chat, voice, embeddings, coding, and one picture, video, or music job at a time.
+This computer can run chat, voice, embeddings, coding, and one image, video, or music job at a time.
 
-All the time: chat, voice in, voice out, embeddings, the judge. When you ask: coding, pictures, video, music. For a robot or another device: the wake word.
+All the time: chat, voice in, voice out, embeddings, the judge. When you ask: coding, images, video, music. For a robot or another device: the wake word.
 
 Still need help? Open fix-a-problem and look for your situation.

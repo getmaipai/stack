@@ -27,7 +27,7 @@ A red tile means one job has stopped, and the row under it says why in words.
 
 ## If the Stack says memory is tight
 
-1. Wait for the current picture or video job to finish. One runs at a time, and the next one waits its turn.
+1. Wait for the current image or video job to finish. One runs at a time, and the next one waits its turn.
 2. Close other programs that use a lot of memory.
 3. If it keeps happening, choose a smaller plan on the [Hardware page](/guide/what-your-computer-can-run/).
 4. The Stack never starts a job when it would push your computer past its limit, so "tight" means waiting, not breaking.
@@ -35,7 +35,7 @@ A red tile means one job has stopped, and the row under it says why in words.
 ## If a tool says it is not allowed
 
 1. Check that the key is not revoked. A revoked key is refused every time the tool tries to use it.
-2. Check that the ability the tool asked for is included in the key. If the tool asked for pictures and the key only allows chat, that is why it was refused.
+2. Check that the ability the tool asked for is included in the key. If the tool asked for images and the key only allows chat, that is why it was refused.
 3. Make a new key with the abilities the tool needs, and give the tool the new key.
 
 Still need help? Open the Stack, choose Settings, and check "Check for updates" is switched off if you want nothing to leave at all. The Stack keeps working without it.

@@ -6,7 +6,7 @@ description: What the Stack can send to the internet, and how to make sure nothi
 # Privacy: what leaves your house
 
 MaiPai Stack runs AI on your own computer. It does not send your chats,
-pictures, voice, or anything you make to us or to anyone else. There is
+images, voice, or anything you make to us or to anyone else. There is
 no account with us, no analytics, and no crash reports.
 
 Two things can go out to the internet, and only when you turn them on.
