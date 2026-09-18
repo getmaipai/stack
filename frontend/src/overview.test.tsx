@@ -35,3 +35,25 @@ test("Overview requests the selected series range and renders scripted widgets",
   fireEvent.click(Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "Speed test")!);
   await waitFor(() => expect(document.body.textContent).toContain("Coming with the speed test item."));
 });
+
+test("Overview changes its grid layout at desktop, tablet, and phone widths", async () => {
+  globalThis.fetch = mock((input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path.endsWith("/roles")) return Promise.resolve(Response.json({ roles: [{ id: "chat", state: "ready", description: "Chat", model: null }] }));
+    if (path.includes("/series")) return Promise.resolve(Response.json({ range: "day", usage: [], memory: [], speed: [] }));
+    if (path.endsWith("/budget")) return Promise.resolve(Response.json({ capBytes: 1, freeMemoryBytes: 1, availablePercent: 100, pressure: "normal", loaded: [], queue: [] }));
+    if (path.endsWith("/hardware")) return Promise.resolve(Response.json({ hardware: { freeDiskBytes: 1, osVersion: "15.0" } }));
+    if (path.endsWith("/healthz")) return Promise.resolve(Response.json({ version: "0.1.0", uptimeSeconds: 0 }));
+    if (path.endsWith("/updates")) return Promise.resolve(Response.json({ app: { installed: "0.1.0", available: null } }));
+    if (path.endsWith("/storage")) return Promise.resolve(Response.json({ freeDiskBytes: 1, byCategory: { models: 10, engines: 5, logs: 1, backups: 1 } }));
+    return Promise.resolve(Response.json({}));
+  }) as unknown as typeof fetch;
+  for (const [width, expected, column] of [[1440, "desktop", "lg:grid-cols-12"], [1024, "tablet", "sm:grid-cols-1"], [400, "phone", "grid-cols-1"]] as const) {
+    Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: width });
+    render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
+    await waitFor(() => expect(document.querySelector(`[data-layout="${expected}"]`)).toBeTruthy());
+    expect(document.querySelector(`[data-layout="${expected}"]`)?.className).toContain(column);
+    for (const category of ["models", "engines", "logs", "backups"]) expect(document.body.textContent).toContain(category);
+    cleanup();
+  }
+});
