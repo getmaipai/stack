@@ -240,6 +240,24 @@ its version against the one we tested, and `offline_reason` in words
 when it is gone ("ComfyUI is not running. Start it and this row turns
 green.").
 
+**Detect and adopt** (the Ubiquiti model). The Stack looks on this
+computer, never on the network, for engines it did not install: a
+running server on a well-known loopback port (Ollama, LM Studio's
+`llmster`, ComfyUI, oMLX, mlx-serve, a bare `llama-server`), an
+installed app or binary in the usual places, a folder of models
+another tool downloaded. Each shows on the Engines page (or the Models
+page, for a folder) as a row in a **Detected, not adopted** state with
+what it is, its version, where it is, and what it could hold, and it
+stays there, plainly, until the person acts. **Adopt** probes it,
+records its identity and version against the one we tested, asks
+which roles it may hold, and from then on the Stack manages it as a
+`managed` engine (health, the version state, offline reasons, the
+roles it serves) without ever starting or stopping it. For a folder,
+adopt is the import: the models are linked, never copied, with their
+provenance. **Forget** hides a detected row; the next detection sweep
+does not bring it back unless it changes. Adopting is never
+automatic, and detection never leaves the machine.
+
 **Controls** per row: Start, Stop, Restart (spawned only; a managed
 host gets Probe), Install a build (from the pinned list for this
 machine, with the honest download bar), Make current (switch the tag

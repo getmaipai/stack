@@ -283,6 +283,23 @@ each item's design section lands in `dev.md` before its code.
   change marks needs-restart and the restart applies it; "not
   current" appears when a newer pinned build exists (test); the page
   screenshot opened and judged.
+- [ ] **STACK-34 (M): detect and adopt.** Discovery of engines and
+  model folders the Stack did not install: well-known loopback ports
+  (Ollama 11434, LM Studio 1234, ComfyUI 8188, oMLX, mlx-serve 11234,
+  any `llama-server` answering `/health`), installed apps and binaries
+  in the usual places, the model folders from the import scan;
+  detection on boot and in the maintenance window, loopback only,
+  never the network. A `detected` table (kind, name, version, where,
+  what it could hold, `forgotten`); rows on Engines and Models in the
+  "Detected, not adopted" state; Adopt (probe, identity, version
+  against the tested floor, choose roles, register as `managed` or
+  import by link), Forget; a health item when an adopted host is
+  below the tested version. Design in `ux.md` "Detect and adopt".
+  Acceptance: a scripted Ollama on a loopback port is detected, shown
+  as not adopted, adopted with the chat role and served through it
+  (test); a forgotten row stays hidden until its version changes
+  (test); nothing is probed outside 127.0.0.1 (test asserts the
+  address list); screenshot judged.
 - [ ] **STACK-18 (M): the tray app on Tauri 2.** A `tray/` package:
   the Stack icon as the tray or menu-bar item colored by the worst
   health severity, a menu with each role's one line, Open (the web UI
