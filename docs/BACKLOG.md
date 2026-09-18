@@ -127,6 +127,10 @@ never copied. No item migrates the hub until STACK-16.
 - [x] **STACK-43 (M): the filter column.** A reusable search and collapsible
   checkbox filter column with live counts, clear behavior, and a responsive
   sheet on Engines, Models, and Access. Verified at eb41d14.
+- [x] **STACK-45 (M): Overview's facts column and controls.** A facts column
+  for this computer, persisted usage ranges with ability filters, measured
+  memory and storage status, and activity and health list cards. Verified at
+  74b1752.
 - [x] **STACK-36 (M): Overview console.** Range-aware usage, memory, and speed
   series backed by durable samples, with seven widgets, status rings, and
   showroom captures. Verified at ed67582.

@@ -1,5 +1,11 @@
 import type { HardwareInfo } from "@/lib/api";
 
+export function osPlain(osVersion: string): string {
+  const major = osVersion.split(".")[0];
+  if (major === "") return "macOS";
+  return `macOS ${major}`;
+}
+
 function platformName(hardware: HardwareInfo): string {
   if (hardware.platform === "darwin" && hardware.isAppleSilicon) return "Apple silicon Mac";
   if (hardware.platform === "darwin") return "Intel Mac";
