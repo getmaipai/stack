@@ -820,16 +820,27 @@ its roles, and hands the operator to Home's own first run, where the
 household is created. Nothing is imported, because there is nothing to
 import.
 
-## The desktop app and menu bar (decided 2026-09-18, 07:00)
+## The desktop app and menu bar (decided 2026-09-18, 07:00; the menu rewritten 12:30 after the owner's first run)
 
-The Tauri app opens the daemon's console in one native window. Its tray
-item observes health independently and offers Open, Pause everything,
-Resume and Quit. It keeps the daemon running when the window closes.
-STACK-66 installs and starts the bundled daemon; STACK-67 completes the
-role, memory and check summary in the menu; STACK-68 adds per-kind native
-notifications with an Open action. Native pickers come from the app's
-host adapter. The browser remains a complete console, with typed-path
-fallbacks for local file selection.
+The desktop app is Tauri around the console (dev.md "The desktop app is
+Tauri around the console"): one window that loads the console, native
+pickers and notifications behind the `host` adapter, and one tray icon.
+
+**The menu bar.** One tray icon, tinted by state (all good, attention,
+paused). Its menu is short and only what a person needs from a menu bar:
+
+1. A status line, not clickable: "Running · Chat ready" (installed roles
+   only, as words, never a state id; nothing that is not installed is
+   listed), or "Paused", or "Not running".
+2. **Pause** or **Resume**, one item showing the opposite of the current
+   state, never both.
+3. **Open**, which opens or focuses the app window.
+4. A separator, then **Quit** ("the Stack keeps running" as a tooltip,
+   not in the label).
+
+Everything else (Check my Stack, logs, uninstall, per-role detail) lives
+in the app, one click away through Open. The menu never shows a
+developer word.
 
 ## Copy rules for this repo
 
