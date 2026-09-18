@@ -1050,6 +1050,39 @@ the app bundle or plaintext token file is added. A daemon-down state
 still works without a session. Rejected: treating loopback as implicit
 administrator authority, which conflicts with the client-key rule.
 
+## The field audit: learn each mechanism from the best implementation (decided 2026-09-18, 10:30)
+
+The owner, after the product review: for the products that do parts of
+what the Stack does, audit their features, review their code, and bring
+the features and mechanisms into the Stack; where several do the same
+thing, determine the best implementation; this includes the UI. The
+rules that shape how:
+
+1. **Study, then depend or re-implement; never copy.** Other projects'
+   code is read to learn the mechanism (how LM Studio estimates fit,
+   how Ollama resolves and pulls a model, how Open WebUI lays out a
+   model list). What comes back is a design in our words and, where a
+   maintained library exists, a dependency through the package manager.
+   A copied snippet follows the org's exception rules (AGPL-compatible
+   licence, NOTICE entry, source comment, justification) and is rare.
+   Proprietary products (LM Studio, Msty) are studied from their
+   behaviour and documentation only.
+2. **One audit per mechanism, across projects**, not one per project:
+   first run and onboarding; model discovery, metadata and download;
+   engine management and updates; memory, residency and eviction;
+   status, health and repairs; per-client access and accounting;
+   the console's information architecture and the things pages. Each
+   audit names the implementations compared, the winner and why, what
+   the Stack adopts, and the items that build it, with "mirror" pointing
+   at the studied source by URL and path.
+3. **Licences are checked before anything is learned from code**: the
+   project's licence is recorded in the audit; AGPL, MIT, Apache and
+   BSD sources may be read; a snippet may only ever come from an
+   AGPL-compatible one.
+4. The audits are docs (`docs/plans/field-audit-<mechanism>.md`), then
+   items; the items are built like any other, with the audit as their
+   design note.
+
 ## The API boundary: what is the Stack's and what is Home's (2026-09-17)
 
 The foundational API moved out of Home into the Stack. Home keeps an
