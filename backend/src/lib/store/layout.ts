@@ -40,6 +40,15 @@ export function engineManifestPath(name: string, tag: string): string { return j
 export function engineCurrentPath(name: string): string { return join(currentEngineRoot(), name, "current"); }
 
 export function externalImportRoots(): Record<string, string> {
+  const override = process.env.STACK_SCAN_ROOTS;
+  if (override) {
+    const roots: Record<string, string> = {};
+    for (const part of override.split(",")) {
+      const [key, path] = part.split(":");
+      if (key && path) roots[key] = path;
+    }
+    if (Object.keys(roots).length) return roots;
+  }
   const home = cacheHome();
   return {
     huggingface: join(home, ".cache", "huggingface", "hub"),

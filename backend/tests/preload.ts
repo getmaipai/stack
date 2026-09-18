@@ -19,3 +19,10 @@ if (!process.env.STACK_DATA_DIR) {
   );
   process.exit(1);
 }
+
+if (!process.env.STACK_SCAN_ROOTS) {
+  const roots = ["huggingface", "ollama", "mlx-serve", "omlx", "lm-studio"]
+    .map((source) => `${source}=${mkdtempSync(join(tmpdir(), `maipai-scan-${source}-`))}`)
+    .join(",");
+  process.env.STACK_SCAN_ROOTS = roots;
+}
