@@ -703,7 +703,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   the range (test); Recent activity excludes non-durable events (test);
   captures at 1440, 1024 and 400 opened and judged. Exit:
   `scripts/check.sh`.
-- [ ] **STACK-50 (M): two databases, state and measurements.** dev.md
+- [ ] **STACK-50 (M, owner agreed 2026-09-18): two databases, state and measurements.** dev.md
   "Two databases" (2026-09-18): `stack.db` keeps state (settings,
   models, groups, clients, channels, operator, detected, open health),
   `metrics.db` takes the measurements (usage_samples, memory_samples,
@@ -856,14 +856,14 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   row "Downloading a model" gains "or the mirror you chose".
   Acceptance: a scripted mirror URL receives the download request
   (test); the row exists. Exit: `scripts/check.sh`.
-- [ ] **STACK-58 (S, owner's call): a `webhook` alert channel.** One
+- [ ] **STACK-58 (S, filed, not built until asked; owner agreed 2026-09-18): a `webhook` alert channel.** One
   provider in `lib/channels/providers.ts` posting the alert sentence as
   JSON to a URL the person chose, with an optional bearer token
   (encrypted like the others); the privacy row has ntfy's shape ("the
   server URL you chose"). Acceptance: the scripted receiver gets the
   test message and the verified stamp lands; the seams guard passes.
   Exit: `scripts/check.sh`.
-- [ ] **STACK-59 (S, owner's call): `GET /stack/v1/metrics`.** Prometheus
+- [ ] **STACK-59 (S, filed, not built until asked; owner agreed 2026-09-18): `GET /stack/v1/metrics`.** Prometheus
   text format from the data `series`, memory and health already own;
   operator or client key; read-only; no outbound row. Acceptance: the
   route renders a scripted sample set and a scraper fixture parses it
@@ -879,7 +879,8 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   this key for?" preset row: "A coding tool" preselects `chat`,
   `coding`, `embed`; after creation a Connect step with the address, the
   key, copy buttons for a generic `OPENAI_BASE_URL` and `OPENAI_API_KEY`
-  block and for the harnesses the owner names, model field `coding`),
+  block and for OpenCode, Aider and Continue (owner agreed 2026-09-18;
+  Claude Code and Codex CLI listed as coming), model field `coding`),
   `docs/user/keys-for-your-tools.md` ("Use it with a coding tool"),
   `docs/integrations.md` (contract row for `GET /v1/models`; the connect
   sentence), `docs/ux.md` "Clients and keys" (the Connect step). Mirror:

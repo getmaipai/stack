@@ -242,8 +242,9 @@ decision:
    exists). The `/abilities` route stays as the destination of those
    actions; it has no sidebar row.
 2. **Common on top, administrative at the bottom**, UniFi's rail, the
-   rows named by the owner (01:25): the top group is Overview (the
-   console's home, first as UniFi's Dashboard is), then Engines,
+   rows named by the owner (01:25; Overview stays first, confirmed 09:30):
+   the top group is Overview (the console's home, first as UniFi's
+   Dashboard is), then Engines,
    Models, Clients, Tester, Monitoring; the bottom group, above the
    resource block, is Settings, Logs, Alerts. That renames two rows and
    folds three: "Try it" becomes **Tester** everywhere a person reads
