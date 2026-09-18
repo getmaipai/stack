@@ -33,6 +33,7 @@ export const STACK_SETTINGS: StackSettingDeclaration[] = [
   { key: "historyRetention", type: "number", default: 30, label: "History retention", help: "Days of local event history to retain.", group: "Storage", disclosure: "basic", needsRestart: false, range: { min: 1, max: 3650 }, section: "storage", order: 10 },
   { key: "logLevel", type: "enum", default: "info", label: "Log level", help: "How much diagnostic detail to keep in local logs.", group: "Diagnostics", disclosure: "basic", needsRestart: false, options: [{ value: "error", label: "Errors" }, { value: "warn", label: "Warnings" }, { value: "info", label: "Info" }, { value: "debug", label: "Debug" }], section: "diagnostics", order: 10 },
   { key: "huggingFaceEndpoint", type: "text", default: "https://huggingface.co", label: "Hugging Face endpoint", help: "Where Hugging Face model downloads come from. Point it at a mirror you run or trust to keep model traffic off the public internet.", group: "Storage", disclosure: "advanced", needsRestart: false, section: "storage", order: 20 },
+  { key: "weeklyDigest", type: "boolean", default: false, label: "Weekly digest", help: "Send a short weekly summary of usage, updates, memory, cleanup, and check status to the alert channels.", group: "Alerts", disclosure: "basic", needsRestart: false, section: "alerts", order: 10 },
 ];
 
 function metaKey(key: string, state: "inEffect" | "pending"): string { return `settings.stack.${key}.${state}`; }

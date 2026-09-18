@@ -2,6 +2,7 @@ import { app } from "@/app";
 import { installLaunchdService, launchdStatus, startLaunchdService, stopLaunchdService, uninstallLaunchdService } from "@/service/launchd";
 import { startDetection } from "@/lib/detect";
 import { activateStackConfig, stackSettingValues } from "@/settings/stackKeys";
+import { runWeeklyDigest } from "@/lib/digest";
 
 const port = Number(process.env.PORT ?? 8770);
 
@@ -15,14 +16,19 @@ export function serveOptions(): { port: number; hostname: string; fetch: (reques
   return { port, hostname: stackSettingValues().lanAccess === true ? "0.0.0.0" : "127.0.0.1", fetch: app.fetch, idleTimeout: 255 };
 }
 
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
 async function serve(): Promise<void> {
   activateStackConfig();
   const server = Bun.serve(serveOptions());
   const stopDetection = startDetection();
+  const digestTimer = setInterval(() => { runWeeklyDigest(); }, WEEK_MS);
+  (digestTimer as unknown as { unref?: () => void }).unref?.();
   let stopping = false;
   const stop = async (exitCode: number): Promise<void> => {
     if (stopping) return;
     stopping = true;
+    clearInterval(digestTimer);
     stopDetection();
     server.stop(true);
     process.exitCode = exitCode;
