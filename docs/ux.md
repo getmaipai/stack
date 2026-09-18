@@ -215,6 +215,70 @@ minutes for a week by ability, client and model (the `usage_samples`
 ring), speed results per model and engine tag, memory samples per
 five seconds for an hour and per five minutes for a week.
 
+## Overview, second pass: the chart is the hero, prose is gone (decided 2026-09-18, night)
+
+The owner put the live Overview beside UniFi's Dashboard and called ours
+ugly. He is right, and the reasons are specific. Ours is a grid of
+rounded boxes, each opening with a title and a sentence of prose
+("Requests and tokens served in the selected range.") before any
+number; three ring cards spend a third of the top row on "Ready 0,
+Roles 13, Attention 0" with a badge under each; the charts are small
+and their axes zoom to whatever minute has data; Recent activity is a
+feed of progress events ("Check chat is running."); the Speed sentence
+prints a file name and a full revision string. UniFi's page has one
+sentence of prose on it (the status line under the density scale), one
+big chart, dense tile strips and segmented bars, and every number is a
+thing the person recognizes.
+
+The decisions, replacing widgets 1 to 6 of "Overview: the console
+dashboard" above where they differ:
+
+1. **No prose in widgets.** A widget is a title row (the title left,
+   its controls right) and its content. Descriptions move to tooltips
+   on an info glyph, or go. The page keeps zero sentences of
+   explanation; the one sentence allowed is a status sentence with a
+   check glyph.
+2. **The status strip is one line, in words with counts**, at the top
+   of the middle column: "Chat ready · 1 model loaded · 2 engines
+   current · All clear", each segment a link to its page, the health
+   segment colored by severity. The three ring cards go. A count is
+   shown only when the thing exists; "Ready 0" never appears.
+3. **One hero chart.** Usage, Memory and Speed are tabs on a single
+   chart panel that spans the middle column (UniFi's Internet | WiFi
+   tabs): the toolbar row holds the tabs on the left, the series
+   toggles with swatches and the 1h/1D/1W/1M control on the right; the
+   chart fills the panel's width and a fixed height (280 px desktop).
+   The axis always spans the chosen range; sparse data leaves empty
+   space rather than zooming to a minute. Under the chart, one status
+   sentence with a check glyph for the active tab ("Memory headroom is
+   good", "94 tokens per second on Qwen3 1.7B, up from 63 on b10797").
+4. **Tile strips.** Below the chart, three strips of small square
+   tiles with a glyph, a name under it and a count in a tooltip, the
+   way UniFi shows Top APs and Top Clients: Models (loaded first, then
+   ready, then on demand; size in the tooltip), Clients (by requests in
+   the range), Engines (by role served). Each tile opens its panel. A
+   strip with nothing shows one row of the empty sentence.
+5. **Segmented bars.** Storage by category as one segmented bar with the
+   legend as key-value rows; memory headroom as a gradient scale with
+   the current point on it and the pressure word; both with the check
+   sentence beneath.
+6. **The facts column** is one card, not two: the computer row (glyph,
+   "This computer", the counts joined by connector marks) at the top,
+   the key-value facts, "Up to date" with the history glyph, the two
+   full-width outline buttons, then the last Check my Stack result as a
+   sentence ("Checked 17m ago, all good").
+7. **The rail** holds Recent activity and Health as list cards with a
+   muted meta line, and Recent activity shows durable events only:
+   installs, updates applied, checks finished with their verdict,
+   health items opened or resolved; progress events ("is running", "is
+   N percent complete") never appear there. Every sentence names things
+   by display name (Qwen3 1.7B, build b10797), never by file name,
+   role id or full revision string.
+
+Every number stays a recorded one. The showroom fixture carries a full
+day of samples so the captures show the hero chart with data across
+the whole range.
+
 ## Look and feel references: UniFi's structure, X's modernism (decided 2026-09-17, night)
 
 The owner's direction, with screens in hand: every page and feature of

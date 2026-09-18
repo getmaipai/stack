@@ -688,6 +688,26 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   the radio group for a three-option enum; `engines-configure.png`
   opened and judged. Verified at dd70cfa. Exit: `scripts/check.sh`.
 
+- [ ] **STACK-49 (M): Overview, second pass.** ux.md "Overview, second
+  pass" made real: no prose in widgets; the one-line status strip in
+  words with counts (the ring cards go); one hero chart with Usage,
+  Memory and Speed as tabs, series toggles and the range in its
+  toolbar, axes spanning the range, a check sentence beneath; tile
+  strips for Models, Clients, Engines; segmented storage bar and the
+  memory headroom scale; the facts column as one card ending with the
+  last check result; the rail's Recent activity showing durable events
+  only, by display name. Files: `frontend/src/pages/OverviewPage.tsx`
+  split into `frontend/src/pages/overview/*` (StatusStrip, HeroChart,
+  TileStrip, SegmentedBar, FactsColumn, Rail), `backend/src/lib/series.ts`
+  (the range always returned as a full window), `backend/src/events.ts`
+  (a `durable` flag per template), `backend/src/showroom/fixture.ts`
+  (a full day of samples). Mirror: UniFi's Dashboard in our palette.
+  Acceptance: the page renders no `<p>` inside a widget except the
+  check sentence (test walks the DOM); the strip omits zero counts
+  (test); each tab re-queries with the range and the axis domain equals
+  the range (test); Recent activity excludes non-durable events (test);
+  captures at 1440, 1024 and 400 opened and judged. Exit:
+  `scripts/check.sh`.
 ## Milestone 1: the robot
 
 - [ ] **STACK-17 (L): the Linux ARM profile.** `llama-server` on the Pi
