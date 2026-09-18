@@ -41,8 +41,8 @@ async function serve(): Promise<void> {
 async function main(): Promise<void> {
   const command = process.argv[2] ?? "serve";
   if (command === "serve") return serve();
-  if (command === "install-service") { console.log(`Installed ${installLaunchdService()}`); return; }
-  if (command === "uninstall-service") { uninstallLaunchdService(); console.log("Service removed. Data was kept."); return; }
+  if (command === "install-service") { console.log(`Installed ${installLaunchdService(process.env.STACK_SERVICE_PROGRAM ?? process.execPath)}`); return; }
+  if (command === "uninstall-service") { uninstallLaunchdService(); if (process.argv.includes("--remove-data")) { const { rmSync } = await import("node:fs"); const { resolve } = await import("node:path"); const data = process.env.STACK_DATA_DIR ? resolve(process.env.STACK_DATA_DIR) : ""; if (data) rmSync(data, { recursive: true, force: true }); console.log("Service and data removed."); } else console.log("Service removed. Data was kept."); return; }
   if (command === "start") { startLaunchdService(); console.log("Service started."); return; }
   if (command === "stop") { stopLaunchdService(); console.log("Service stopped."); return; }
   if (command === "status") { console.log(launchdStatus()); return; }

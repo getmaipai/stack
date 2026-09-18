@@ -10,5 +10,5 @@
     "frontendDist": "../../frontend/dist"
   },
   "app": { "withGlobalTauri": true, "windows": [], "security": { "csp": null }, "trayIcon": { "iconPath": "icons/maipai-stack-icon.png", "tooltip": "MaiPai Stack" } },
-  "bundle": { "active": true, "targets": "all", "icon": ["icons/maipai-stack-icon.png"] }
+  "bundle": { "active": true, "targets": "all", "icon": ["icons/maipai-stack-icon.png"], "externalBin": ["binaries/maipai-stack"] }
 }

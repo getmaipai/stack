@@ -12,6 +12,10 @@ output="$DIST/maipai-stack-$target"
 rm -f "$output"
 bun build --compile "$ROOT/scripts/release-entry.ts" --outfile "$output" --asset-naming='[name].[ext]'
 chmod 755 "$output"
+(cd "$ROOT/frontend" && bun run build >/dev/null)
+mkdir -p "$ROOT/desktop/src-tauri/binaries"
+cp "$output" "$ROOT/desktop/src-tauri/binaries/maipai-stack-$target"
+chmod 755 "$ROOT/desktop/src-tauri/binaries/maipai-stack-$target"
 (cd "$DIST" && shasum -a 256 "$(basename "$output")" > SHA256SUMS)
 
 echo "Built $output"

@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "The Stack desktop shell capabilities",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:default", "notification:default", "shell:allow-open", "autostart:default", "window-state:default"]
+  "permissions": ["core:default", "dialog:default", "notification:default", "shell:allow-open", {"identifier":"shell:allow-execute", "allow":[{"name":"binaries/maipai-stack", "args":true}]}, "autostart:default", "window-state:default"]
 }

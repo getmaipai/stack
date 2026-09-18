@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::{process::Command, thread, time::Duration};
+use std::{path::PathBuf, thread, time::Duration};
 
 use serde_json::Value;
 use tauri::{
@@ -11,29 +11,35 @@ use tauri::{
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_notification::NotificationExt;
+use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_shell::ShellExt;
 
 const DAEMON_URL: &str = "http://127.0.0.1:8770";
 const SERVICE_LABEL: &str = "com.maipai.stack";
 
 #[tauri::command]
-fn start_daemon() -> Result<(), String> {
-    let uid = Command::new("id")
-        .arg("-u")
-        .output()
-        .map_err(|error| error.to_string())?;
-    let uid = String::from_utf8_lossy(&uid.stdout).trim().to_string();
-    let target = format!("gui/{uid}/{SERVICE_LABEL}");
-    Command::new("launchctl")
-        .args(["kickstart", &target])
-        .output()
-        .map_err(|error| error.to_string())
-        .and_then(|output| {
-            if output.status.success() {
-                Ok(())
-            } else {
-                Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+fn launch_agent_path() -> PathBuf {
+    PathBuf::from(std::env::var("HOME").unwrap_or_default()).join("Library/LaunchAgents").join(format!("{SERVICE_LABEL}.plist"))
+}
+
+fn run_sidecar(app: &AppHandle, args: &[&str]) -> Result<(), String> {
+    app.shell().sidecar("maipai-stack").map_err(|e| e.to_string())?.args(args).spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn start_daemon(app: AppHandle) -> Result<(), String> { run_sidecar(&app, &["start-service"]) }
+
+fn ensure_daemon(app: AppHandle) {
+    thread::spawn({
+        let app = app.clone();
+        move || {
+            if ureq::get(&format!("{DAEMON_URL}/healthz")).call().is_ok() { open_console(&app); return; }
+            let args = if launch_agent_path().exists() { ["start-service"] } else { ["install-service"] };
+            if run_sidecar(&app, &args).is_ok() {
+                for _ in 0..30 { if ureq::get(&format!("{DAEMON_URL}/healthz")).call().is_ok() { open_console(&app); break; } thread::sleep(Duration::from_millis(500)); }
             }
-        })
+        }
+    });
 }
 
 fn open_console(app: &AppHandle) {
@@ -187,9 +193,10 @@ fn main() {
             let pause = MenuItemBuilder::with_id("pause", "Pause everything").build(app)?;
             let resume = MenuItemBuilder::with_id("resume", "Resume").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "Quit the app (the Stack keeps running)").build(app)?;
+            let uninstall = MenuItemBuilder::with_id("uninstall", "Uninstall the Stack…").build(app)?;
             let menu = MenuBuilder::new(app)
                 .item(&role_chat).item(&role_stt).item(&role_tts).item(&role_image).item(&role_video).item(&role_music)
-                .separator().item(&open).item(&pause).item(&resume).separator().item(&quit).build()?;
+                .separator().item(&open).item(&pause).item(&resume).separator().item(&uninstall).item(&quit).build()?;
             let tray_icon = Image::from_bytes(icon_bytes("ok"))?;
             tauri::tray::TrayIconBuilder::with_id("main")
                 .icon(tray_icon)
@@ -199,6 +206,14 @@ fn main() {
                     "open" => open_console(app),
                     "pause" => post_run_state("paused"),
                     "resume" => post_run_state("running"),
+                    "uninstall" => {
+                        let app = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            if !app.dialog().message("Remove the Stack service? The daemon will stop.").title("Uninstall the Stack").kind(tauri_plugin_dialog::MessageDialogKind::Warning).blocking_show() { return; }
+                            if !app.dialog().message("Remove the Stack data directory too? This cannot be undone.").title("Remove Stack data").kind(tauri_plugin_dialog::MessageDialogKind::Warning).blocking_show() { return; }
+                            let _ = run_sidecar(&app, &["uninstall-service", "--remove-data"]);
+                        });
+                    },
                     "quit" => app.exit(0),
                     _ => {}
                 })
@@ -212,6 +227,7 @@ fn main() {
                 .build()?;
             poll_tray(app.handle().clone(), vec![role_chat, role_stt, role_tts, role_image, role_video, role_music]);
             watch_events(app.handle().clone());
+            ensure_daemon(app.handle().clone());
             Ok(())
         })
         .run(tauri::generate_context!())

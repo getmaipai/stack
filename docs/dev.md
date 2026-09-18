@@ -966,8 +966,8 @@ program, in landing order, each an item with its brief in the queue:
 1. **The app** (STACK-18, resumed from the WIP): window, tray, pickers,
    notifications, single instance, launch at login, the `host` adapter.
 2. **The app owns the daemon's lifecycle on this computer** (STACK-66):
-   the compiled daemon (`bun build --compile`, already built by
-   `scripts/build-release.sh`) ships inside the app bundle as a Tauri
+   the compiled daemon (`bun build --compile`, built and copied into
+   `desktop/src-tauri/binaries/` by `scripts/build-release.sh`) ships inside the app bundle as a Tauri
    sidecar; on first launch the app installs the LaunchAgent that runs
    the sidecar (SERVICES.md), on later launches it attaches; the
    fallback page's Start asks launchd; Quit never stops the daemon;

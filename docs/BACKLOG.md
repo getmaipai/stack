@@ -862,7 +862,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   Acceptance: the table exists with every action listed; every fail has
   an item; no button on the console does nothing. Exit: `scripts/check.sh`.
   Verified on main at 85fda5a.
-- [ ] **STACK-66 (M): the app owns the daemon's lifecycle.** dev.md "The
+- [x] **STACK-66 (M): the app owns the daemon's lifecycle.** dev.md "The
   desktop program" item 2: the compiled daemon as a Tauri sidecar; first
   launch installs the LaunchAgent that runs it (`backend/src/service/
   launchd.ts`), later launches attach; the fallback page's Start;
