@@ -5,7 +5,7 @@ import { externalImportRoots, modelManifestPath } from "@/lib/store/layout";
 import { scanHfCache } from "@/lib/store/hfCache";
 import { writeModelManifest, type ModelManifest, type StoreBlob } from "@/lib/store/manifests";
 
-export type ImportSource = "huggingface" | "ollama" | "mlx-serve" | "omlx" | "lm-studio";
+export type ImportSource = "huggingface" | "ollama" | "mlx-serve" | "omlx" | "lm-studio" | "folder";
 
 export interface ImportCandidate {
   source: ImportSource;

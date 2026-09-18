@@ -624,10 +624,10 @@ system.
 1. **Scan now** is a text action beside Add on Engines and Models ("Scan
    this computer") and the first row of the Add sheet's Import tab; it
    runs the detection sweep (`POST /stack/v1/detected/scan`) and shows
-   what it found as rows with Adopt, with the sentence "Found 2 tools
-   and 6 model files" or "Nothing new found" and the time of the last
-   scan. The sweep runs on boot and hourly as designed; the button is
-   the person's hand on it.
+   what it found as rows with Adopt or Import by link, with the sentence
+   "Found 2 tools and 6 model files" or "Nothing new found" and the time
+   of the last scan. The sweep runs on boot and hourly as designed; the
+   button is the person's hand on it.
 2. **Real over mock.** The showroom is for judging the design; the
    product is the real console on the real data directory. Every
    action a page offers is exercised against a real data directory

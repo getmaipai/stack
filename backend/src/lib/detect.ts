@@ -7,7 +7,7 @@ import { emit } from "@/lib/events";
 import { raise } from "@/lib/health";
 import { readEngineIdentity } from "@/lib/identity";
 import { engineRoot, externalImportRoots } from "@/lib/store/layout";
-import { importCandidate, scanImports } from "@/lib/store/importScan";
+import { importCandidate, scanImports, type ImportCandidate } from "@/lib/store/importScan";
 import { upsertModel } from "@/lib/modelStore";
 import { ROLE_IDS, type RoleId } from "@/roles";
 import { DETECTED_ENGINE_VERSION_FLOORS } from "@/lib/engineCatalog";
@@ -19,6 +19,7 @@ const RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 type Fetcher = (input: string | URL, init?: RequestInit) => Promise<Response>;
 export type DetectedKind = "ollama" | "lm-studio" | "comfyui" | "mlx-serve" | "omlx" | "llama-server" | "folder";
 export interface DetectedRecord { id: string; kind: DetectedKind; name: string; version: string; where: string; couldHold: RoleId[]; firstSeen: string; lastSeen: string; forgotten: boolean; adopted: boolean; target: string | null; }
+export interface FoundFileRecord { id: string; kind: "file"; name: string; source: string; path: string; sizeBytes: number; digest: string; couldHold: RoleId[]; }
 interface Probe { kind: DetectedKind; name: string; version: string; where: string; couldHold: RoleId[]; }
 const managedBindings = new Map<string, string>();
 const LAST_SCAN_KEY = "detected.lastScan";
@@ -77,6 +78,18 @@ export function scanCounts(rows: DetectedRecord[] = listDetected()): { tools: nu
   try { installedTools = readdirSync(engineRoot, { withFileTypes: true }).filter((entry) => entry.isDirectory()).length; } catch { /* no installed engine directory yet */ }
   const modelFiles = scanImports().length;
   return { tools: rows.filter((row) => row.kind !== "folder").length + installedTools, modelFiles };
+}
+
+function fileRoles(name: string): RoleId[] {
+  const value = name.toLowerCase();
+  if (/embed|bge|e5/.test(value)) return ["embed"];
+  if (/vision|llava|qwen-vl/.test(value)) return ["chat", "vision"];
+  if (/code|coder|starcoder|deepseek/.test(value)) return ["chat", "coding"];
+  return [];
+}
+
+export function foundFiles(): FoundFileRecord[] {
+  return scanImports().map((item: ImportCandidate) => ({ id: `file:${item.digest}`, kind: "file" as const, name: item.name.split("/").pop() ?? item.name, source: item.source, path: item.path, sizeBytes: item.sizeBytes, digest: item.digest, couldHold: fileRoles(item.name) }));
 }
 
 export async function detectAll(fetcher: Fetcher = fetch): Promise<DetectedRecord[]> {
