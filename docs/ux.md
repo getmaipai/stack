@@ -240,8 +240,14 @@ decision:
    own administrative row (the log viewer that "Monitoring" carried:
    tail per engine and the daemon, filter, copy). Library, when built,
    joins the top group after Models. A hairline separates the groups;
-   the bottom group stays at the bottom of the sidebar at every height
-   (flex, not a scroll away).
+   the bottom group stays at the bottom of the sidebar (flex, not a
+   scroll away) while the window is tall enough to hold both groups
+   and the resource block without scrolling. When it is not (the owner,
+   01:30: "if it doesn't make sense to bottom-align, use categories"),
+   the sidebar renders the same two groups as labeled categories in
+   one list, "Manage" over the top rows and "Administer" over the
+   bottom rows, the way UniFi's Settings nav labels its groups; the
+   switch is by measured height, never by device type.
 3. **The header search is a magnifying glass**, an icon button that
    opens the command palette (typing anywhere in the palette is the
    input); the header carries no text field at any width. The right
