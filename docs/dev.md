@@ -692,6 +692,13 @@ options. The configuration API
 shows both in-effect and pending values until the next start, when pending
 values become in effect.
 
+The Stack settings page is driven by the declaration index at
+`/stack/v1/settings/index`. It groups the declared keys into section cards,
+keeps search and `@modified` filtering in the shell, and renders controls
+through the generic settings form. A key applies as soon as it changes; keys
+marked `needsRestart` remain pending in the database and are collected by a
+sticky restart bar with Apply now and Discard actions.
+
 ## The showroom
 
 `STACK_SHOWROOM=1` is a development-only mode that feeds the normal routes a

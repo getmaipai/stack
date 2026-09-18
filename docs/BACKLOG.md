@@ -762,7 +762,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   palette reaches them (test); captures at 1440 and 400 opened and
   judged. Exit: `scripts/check.sh`.
 
-- [ ] **STACK-52 (M): Settings, second pass.** ux.md "Settings" second
+- [x] **STACK-52 (M): Settings, second pass.** ux.md "Settings" second
   pass (2026-09-18): the settings nav with "Find a setting" and the
   section rows plus the computer group; section cards (icon, title,
   chevron) with settings rows or a things table and its action row;

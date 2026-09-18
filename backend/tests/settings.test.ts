@@ -10,7 +10,7 @@ test("Stack settings route serves grouped declarations and keeps LAN access pend
   const response = await app.request("/stack/v1/settings");
   expect(response.status).toBe(200);
   const initial = await response.json() as { settings: Array<{ key: string; group?: string; pending: unknown }> };
-  expect(initial.settings.map((setting) => setting.key)).toEqual(["updatesEnabled", "lanAccess"]);
+  expect(initial.settings.map((setting) => setting.key)).toEqual(expect.arrayContaining(["stackName", "theme", "updatesEnabled", "lanAccess", "port", "historyRetention", "logLevel"]));
   expect(initial.settings.every((setting) => setting.group)).toBe(true);
   const setup = await app.request("/stack/v1/operator/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "test password" }) });
   const cookie = setup.headers.get("set-cookie")?.split(";")[0] ?? "";

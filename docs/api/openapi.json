@@ -6717,6 +6717,8 @@
                               "number",
                               "boolean",
                               "text",
+                              "secret",
+                              "password",
                               "enum"
                             ]
                           },
@@ -6753,6 +6755,12 @@
                                 "label"
                               ]
                             }
+                          },
+                          "section": {
+                            "type": "string"
+                          },
+                          "order": {
+                            "type": "number"
                           },
                           "label": {
                             "type": "string"
@@ -6874,6 +6882,8 @@
                               "number",
                               "boolean",
                               "text",
+                              "secret",
+                              "password",
                               "enum"
                             ]
                           },
@@ -6910,6 +6920,12 @@
                                 "label"
                               ]
                             }
+                          },
+                          "section": {
+                            "type": "string"
+                          },
+                          "order": {
+                            "type": "number"
                           },
                           "label": {
                             "type": "string"
@@ -7017,6 +7033,199 @@
                         }
                       }
                     }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/settings/index": {
+      "get": {
+        "tags": [
+          "Settings"
+        ],
+        "summary": "Read the Stack settings index",
+        "responses": {
+          "200": {
+            "description": "Declared settings index.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sections": {
+                      "type": "array",
+                      "items": {
+                        "nullable": true
+                      }
+                    },
+                    "settings": {
+                      "type": "array",
+                      "items": {
+                        "nullable": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "sections",
+                    "settings"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/settings/apply": {
+      "post": {
+        "tags": [
+          "Settings"
+        ],
+        "summary": "Apply pending Stack settings",
+        "responses": {
+          "200": {
+            "description": "Applied pending settings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "settings": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "number",
+                              "boolean",
+                              "text",
+                              "secret",
+                              "password",
+                              "enum"
+                            ]
+                          },
+                          "default": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              }
+                            ]
+                          },
+                          "group": {
+                            "type": "string"
+                          },
+                          "options": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "value": {
+                                  "type": "string"
+                                },
+                                "label": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "label"
+                              ]
+                            }
+                          },
+                          "section": {
+                            "type": "string"
+                          },
+                          "order": {
+                            "type": "number"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "help": {
+                            "type": "string"
+                          },
+                          "disclosure": {
+                            "type": "string",
+                            "enum": [
+                              "basic",
+                              "advanced",
+                              "developer"
+                            ]
+                          },
+                          "needsRestart": {
+                            "type": "boolean"
+                          },
+                          "range": {
+                            "type": "object",
+                            "properties": {
+                              "min": {
+                                "type": "number"
+                              },
+                              "max": {
+                                "type": "number"
+                              }
+                            }
+                          },
+                          "inEffect": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              }
+                            ]
+                          },
+                          "pending": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "nullable": true
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "type",
+                          "default",
+                          "label",
+                          "help",
+                          "disclosure",
+                          "needsRestart",
+                          "inEffect",
+                          "pending"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "settings"
                   ]
                 }
               }

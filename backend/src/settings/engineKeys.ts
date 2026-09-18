@@ -19,6 +19,8 @@ export interface EngineSettingDeclaration {
   disclosure: Disclosure;
   needsRestart: boolean;
   range?: { min?: number; max?: number };
+  section?: string;
+  order?: number;
 }
 
 export const ENGINE_SETTINGS: Record<EngineKind, EngineSettingDeclaration[]> = {

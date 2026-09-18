@@ -158,6 +158,17 @@ export interface EngineSetting {
   range?: { min?: number; max?: number };
   inEffect: string | number | boolean;
   pending: string | number | boolean | null;
+  section?: string;
+  order?: number;
+}
+
+export interface StackSettingSection {
+  id: string;
+  title: string;
+  icon: string;
+  order: number;
+  itemId?: string;
+  computer?: boolean;
 }
 
 export interface EngineRecord {
