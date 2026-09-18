@@ -201,3 +201,17 @@ test("the top bar names this computer and toggles the persisted theme", async ()
   fireEvent.click(document.querySelector('button[aria-label="Use light mode"]') as HTMLElement);
   expect(document.documentElement.classList.contains("dark")).toBe(false);
 });
+
+test("the responsive header keeps three phone actions and no text input", async () => {
+  stubStackFetch({ ...boardExtras, "/stack/v1/repairs": { repairs: [] }, "/stack/v1/roles": { roles: [] }, "/stack/v1/operator": { state: "signedOut", required: false } });
+  Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 400 });
+  render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
+  await waitFor(() => expect(document.querySelector('button[aria-label="Search Stack"]')).toBeTruthy());
+  expect(document.querySelector("header input")).toBeNull();
+  expect(document.querySelector("[data-notifications-trigger]")).toBeTruthy();
+  expect(document.querySelector("[data-profile-trigger]")).toBeTruthy();
+  cleanup();
+  Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 1440 });
+  render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
+  await waitFor(() => expect(document.querySelector("header")?.textContent).toContain("Search Stack"));
+});

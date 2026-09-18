@@ -5,6 +5,7 @@ import {
   acknowledgeGenerator,
   generatorAcknowledged,
   hasOperator,
+  isLoopbackRequest,
   isOperatorSignedIn,
   issueOperatorSession,
   operatorPasswordThrottle,
@@ -78,7 +79,7 @@ const generatorAckSetRoute = createRoute({
 });
 
 export const operatorRoutes = apiRouter();
-operatorRoutes.openapi(stateRoute, (c) => c.json({ state: !hasOperator() ? "setupRequired" : isOperatorSignedIn(c) ? "signedIn" : "signedOut", required: operatorRequired() }, 200));
+operatorRoutes.openapi(stateRoute, (c) => c.json({ state: !hasOperator() ? "setupRequired" : isOperatorSignedIn(c) ? "signedIn" : "signedOut", required: operatorRequired() || !isLoopbackRequest(c) }, 200));
 operatorRoutes.openapi(setupRoute, async (c) => {
   if (hasOperator()) return c.json({ error: "Operator setup has already completed" }, 409);
   await setOperatorPassword(c.req.valid("json").password);

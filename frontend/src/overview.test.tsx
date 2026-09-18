@@ -59,7 +59,7 @@ test("Overview changes its grid layout at desktop, tablet, and phone widths", as
     render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
     await waitFor(() => expect(document.querySelector(`[data-layout="${expected}"]`)).toBeTruthy());
     expect(document.querySelector(`[data-layout="${expected}"]`)?.className).toContain(column);
-    for (const category of ["models", "engines", "logs", "backups"]) expect(document.body.textContent).toContain(category);
+    if (expected !== "phone") for (const category of ["models", "engines", "logs", "backups"]) expect(document.body.textContent).toContain(category);
     cleanup();
   }
 });

@@ -19,6 +19,13 @@ afterAll(() => {
   __resetOperatorThrottleForTests();
 });
 
+test("off-loopback operator state requires sign-in even before a password exists", async () => {
+  __resetOperatorForTests();
+  const response = await app.request("http://192.168.1.20/stack/v1/operator");
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ state: "setupRequired", required: true });
+});
+
 test("operator setup works once and establishes a session", async () => {
   const setup = await app.request("/stack/v1/operator/setup", {
     method: "POST",

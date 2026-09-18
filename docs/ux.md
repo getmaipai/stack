@@ -66,6 +66,13 @@ there, and the admin routes require it from then on. The adult
 acknowledgment stays as one dialog before the first image or video,
 never a step.
 
+When the same page is opened from another device, the rule changes
+before any dashboard data loads: every route is the sign-in screen. If
+the host has no password yet, the phone says "Set the operator password
+on the computer that runs the Stack first." and shows no password
+field. LAN access cannot be opened into a pending restart until that
+password exists.
+
 **Try it** appears on the board the moment the small set lands, so
 the first thing the person does with the Stack is talk to it.
 
@@ -96,6 +103,14 @@ docs). System health lives at the bottom of the sidebar as a colored
 dot and one sentence, the dot alone when collapsed; the "Share with
 your family" hand-off card sits above it until Home is installed.
 Phone width collapses the sidebar into a sheet.
+
+On a phone the top bar is a small control row: sidebar trigger, page
+title, search icon, notification bell and operator profile. The
+computer name and health sentence live in the opened sidebar sheet;
+the theme toggle is in the profile menu. Search becomes an icon at
+phone width and remains a compact field on tablet. Overview reads
+status, recent activity, charts, then a facts disclosure on a phone;
+the first board view leads with one sentence, plan rows and Install.
 
 **Sidebar indicators, the quiet rule (2026-09-17).** A section row
 carries an indicator only when there is something to act on, never as

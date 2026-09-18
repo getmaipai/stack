@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api, type OperatorState } from "@/lib/api";
 import { useApiResource } from "@/lib/useApiResource";
 import { ClientKeyDialog } from "@/pages/ClientKeyDialog";
+import { ThemeToggle } from "@/kit/blocks/dashboard/components/theme-toggle";
 import { getIcon } from "@/kit/icons";
 import { Button } from "@/kit/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/kit/ui/dropdown-menu";
@@ -27,6 +28,7 @@ export function ProfileMenu({ onSignedIn, onSignedOut }: { onSignedIn?: () => vo
       <DropdownMenuLabel>Operator</DropdownMenuLabel>
       <DropdownMenuLabel className="font-normal text-muted-foreground">{hasPassword ? "Signed in" : "Password not set"}</DropdownMenuLabel>
       <DropdownMenuSeparator />
+      <DropdownMenuItem className="sm:hidden" onSelect={(event) => event.preventDefault()}><ThemeToggle always /><span>Theme</span></DropdownMenuItem>
       {!hasPassword && <DropdownMenuItem onSelect={() => setPasswordDialogOpen(true)}><Lock />Set a password</DropdownMenuItem>}
       {state === "signedIn" && <DropdownMenuItem onSelect={() => void signOut()}><LogOut />Sign out</DropdownMenuItem>}
       <DropdownMenuItem asChild><Link to="/access"><KeyRound />Access</Link></DropdownMenuItem>

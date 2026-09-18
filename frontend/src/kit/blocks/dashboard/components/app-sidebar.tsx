@@ -4,7 +4,7 @@ import { getIcon } from "@/kit/icons";
 import { Link, useLocation } from "react-router-dom";
 import type { HealthItem, RepairRecord, RoleRecord } from "@/lib/api";
 import { NavMain } from "@/kit/blocks/dashboard/components/nav-main";
-import { NavHealth } from "@/kit/blocks/dashboard/components/nav-health";
+import { NavHealth, healthSummary } from "@/kit/blocks/dashboard/components/nav-health";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/kit/ui/sidebar";
 
 const items = [
@@ -17,10 +17,12 @@ const items = [
 export function AppSidebar({ repairs, roles, health = [], engineCount = 0, updateCount = 0, alertSeverity = null, engineTooltip = "Engines", updateTooltip = "Updates", alertTooltip = "Alerts", ...props }: React.ComponentProps<typeof Sidebar> & { repairs: RepairRecord[]; roles: RoleRecord[]; health?: HealthItem[]; engineCount?: number; updateCount?: number; alertSeverity?: "critical" | "error" | "warning" | null; engineTooltip?: string; updateTooltip?: string; alertTooltip?: string }) {
   const location = useLocation();
   const badges: Record<string, number> = { Engines: engineCount, Updates: updateCount };
+  const { tone, sentence } = healthSummary(repairs, roles, health);
+  const healthDot = { good: "bg-emerald-500", warn: "bg-amber-500", bad: "bg-red-500" }[tone];
   return <Sidebar collapsible="icon" className="p-3 pb-4" {...props}>
     <SidebarHeader className="p-0"><SidebarMenu><SidebarMenuItem><SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:p-1.5!">
       <Link to="/"><img className="size-7" src="/brand/maipai-stack-icon-light.png" alt="" /><span className="text-base font-semibold">MaiPai Stack</span></Link>
-    </SidebarMenuButton></SidebarMenuItem></SidebarMenu></SidebarHeader>
+    </SidebarMenuButton></SidebarMenuItem></SidebarMenu><div className="px-3 pt-3 sm:hidden"><p className="text-sm font-medium">This computer</p><p className="mt-1 flex items-center gap-2 text-xs text-muted-foreground"><span aria-hidden className={`size-2 rounded-full ${healthDot}`} />{sentence}</p></div></SidebarHeader>
     <SidebarContent><NavMain items={items.map(([title, url, icon]) => ({ title, url, icon: getIcon(icon), isActive: location.pathname === url, badge: badges[title] ?? 0, dot: title === "Alerts" ? alertSeverity : null, tooltip: title === "Engines" ? engineTooltip : title === "Updates" ? updateTooltip : title === "Alerts" ? alertTooltip : undefined }))} /></SidebarContent>
     <SidebarFooter><NavHealth repairs={repairs} roles={roles} health={health} /></SidebarFooter>
   </Sidebar>;

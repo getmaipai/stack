@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { App } from "@/App";
 import { BoardPage } from "@/pages/BoardPage";
+import { LoginPage } from "@/pages/LoginPage";
 
 const originalFetch = globalThis.fetch;
 const originalEventSource = globalThis.EventSource;
@@ -36,8 +37,26 @@ test("the gate keeps a fresh install on the board without a login", async () => 
   globalThis.EventSource = undefined as unknown as typeof EventSource;
   globalThis.fetch = mock((input: RequestInfo | URL) => Promise.resolve(responseFor(input))) as unknown as typeof fetch;
   render(<MemoryRouter initialEntries={["/"]}><App /></MemoryRouter>);
-  await waitFor(() => expect(document.body.textContent).toContain("Your local AI board"));
+  await waitFor(() => expect(document.body.textContent).toContain("This computer can run chat and voice locally."));
   expect(document.body.textContent).not.toContain("Welcome back");
+});
+
+test("an off-laptop required session renders only the login page", async () => {
+  globalThis.fetch = mock((input: RequestInfo | URL) => String(input).endsWith("/operator") ? Promise.resolve(Response.json({ state: "signedOut", required: true })) : Promise.resolve(responseFor(input))) as unknown as typeof fetch;
+  render(<MemoryRouter initialEntries={["/models"]}><App /></MemoryRouter>);
+  await waitFor(() => expect(document.body.textContent).toContain("Sign in to manage this Stack from another device."));
+  expect(document.querySelector('[data-slot="sidebar"]')).toBeNull();
+  expect(document.querySelector('[data-testid="property-panel"]')).toBeNull();
+  expect(document.querySelector("header")).toBeNull();
+});
+
+test("the login copy distinguishes an existing operator from first setup", () => {
+  render(<MemoryRouter><LoginPage state={{ state: "signedOut", required: true }} /></MemoryRouter>);
+  expect(document.body.textContent).toContain("Sign in to manage this Stack from another device.");
+  cleanup();
+  render(<MemoryRouter><LoginPage state={{ state: "setupRequired", required: true }} /></MemoryRouter>);
+  expect(document.body.textContent).toContain("Set the operator password on the computer that runs the Stack first.");
+  expect(document.querySelector("input")).toBeNull();
 });
 
 test("the sizer's Install button calls the setup plan route", async () => {

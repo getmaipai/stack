@@ -688,6 +688,14 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   the radio group for a three-option enum; `engines-configure.png`
   opened and judged. Verified at dd70cfa. Exit: `scripts/check.sh`.
 
+- [x] **STACK-48 (M): the first phone and the first LAN request.** An
+  off-laptop request renders only the sign-in gate, a fresh Stack tells
+  the owner to set its password on the host, and LAN access refuses to
+  become pending until that password exists. The shell keeps its title
+  and three quiet icon actions on a phone; the board and Overview put
+  the useful first state before the detail. Captures at 400px were
+  opened and judged. Exit: `scripts/check.sh`.
+
 - [ ] **STACK-49 (M): Overview, second pass.** ux.md "Overview, second
   pass" made real: no prose in widgets; the one-line status strip in
   words with counts (the ring cards go); one hero chart with Usage,

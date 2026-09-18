@@ -32,12 +32,12 @@ function Gate() {
   }, [location.pathname]);
 
   if (!state) return <LoadingPage />;
-  if (state.required && state.state === "signedOut" && location.pathname !== "/login") return <Navigate to="/login" replace />;
+  if (state.required && state.state !== "signedIn" && location.pathname !== "/login") return <Navigate to="/login" replace />;
   if ((!state.required || state.state === "signedIn") && (location.pathname === "/login" || location.pathname === "/setup")) return <Navigate to="/" replace />;
 
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
+      <Route path="/login" element={<LoginPage state={state} />} />
       <Route path="/*" element={<DashboardShell />} />
     </Routes>
   );

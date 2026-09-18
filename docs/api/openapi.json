@@ -6964,6 +6964,28 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Operator password required before LAN access.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "setPasswordFirst": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
           }
         }
       }
