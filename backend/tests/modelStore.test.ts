@@ -184,7 +184,7 @@ const mirrorServer = Bun.serve({
   port: 0,
   fetch(request) {
     const url = new URL(request.url);
-    if (url.pathname === `/Qwen/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q8_0.gguf`) {
+    if (url.pathname === `/Qwen/Qwen3-1.7B-GGUF/resolve/${STACK_CHAT_MODEL.revision}/Qwen3-1.7B-Q8_0.gguf`) {
       return new Response(CONTENT, { status: 200, headers: { "content-length": String(CONTENT.length) } });
     }
     return new Response("not found", { status: 404 });
@@ -195,8 +195,8 @@ afterAll(() => mirrorServer.stop(true));
 test("a pinned catalog model downloads from the configured Hugging Face mirror", async () => {
   const mirror = new URL(mirrorServer.url).href.replace(/\/$/, "");
   updateStackConfig({ huggingFaceEndpoint: mirror });
-  const expectedUrl = hfUrl("Qwen/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q8_0.gguf");
-  expect(expectedUrl).toBe(`${mirror}/Qwen/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q8_0.gguf`);
+  const expectedUrl = hfUrl(`Qwen/Qwen3-1.7B-GGUF/resolve/${STACK_CHAT_MODEL.revision}/Qwen3-1.7B-Q8_0.gguf`);
+  expect(expectedUrl).toBe(`${mirror}/Qwen/Qwen3-1.7B-GGUF/resolve/${STACK_CHAT_MODEL.revision}/Qwen3-1.7B-Q8_0.gguf`);
   let requestedUrl = "";
   await installCatalogModel({
     id: "mirror-chat",

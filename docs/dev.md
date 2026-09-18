@@ -364,6 +364,23 @@ The hub's `engineCatalog.ts` (pinned builds per platform, checksums
 computed once and recorded) and `modelDownload.ts` (resumable,
 checksummed, self-healing downloads) are the starting point.
 
+### Qualification (STACK-86, 2026-09-18)
+
+The Stack ships one chat pin and one engine pin, and qualification is the
+test that holds both to their declarations. The chat pin is
+`Qwen/Qwen3-1.7B-GGUF`, Q8_0, Apache-2.0, at the Hub commit
+`90862c4b9d2787eaed51d12237eafdfe7c5f6077`, a file whose sha256
+(`061b54da…590cb1a`) was verified against a live download of that
+commit, and whose declared size (`1,834,426,016` bytes) is the size the
+Hub reports for it. The engine pin is `llama-server` build `b10797`
+(macOS arm64 verified), each archive carrying its own asset digest.
+`backend/tests/qualification.test.ts` asserts all of it offline: the
+revision is an immutable commit, never `main`; the digest, size, and
+licence are present; the declared footprint plus the default context and
+the governor's working margin fits every tier at or above the pin's
+declared `p16`; and every engine pin declares a build tag and an asset
+digest. A loosened pin fails that test before it reaches a customer.
+
 ## The store (STACK-04b, 2026-09-17)
 
 The Stack owns one store under its data directory while preserving the
