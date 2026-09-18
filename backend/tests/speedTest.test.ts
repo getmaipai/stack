@@ -85,6 +85,7 @@ test("the speed runner finds llama-bench in the pinned tag without a current lin
   const result = await runSpeedTest(benchModel, { repetitions: 1 });
   expect(result.promptTps).toBe(612);
   expect(result.tokensPerSecond).toBe(44);
+  expect(result.engine).toMatch(/^b\d+$/);
 });
 
 test("the operator speed-test route returns the showroom record", async () => {

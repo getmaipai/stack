@@ -34,6 +34,12 @@ function relativeTime(value: string): string { const minutes = Math.max(0, Math.
 function formatUptime(seconds: number): string { const hours = Math.floor(seconds / 3600); const days = Math.floor(hours / 24); if (days > 0) return `${days}d ${hours % 24}h`; return `${hours}h ${Math.floor(seconds / 60) % 60}m`; }
 function initialRange(): Range { const saved = typeof window === "undefined" ? null : window.localStorage.getItem("maipai-overview-range"); return saved === "hour" || saved === "day" || saved === "week" || saved === "month" ? saved : "day"; }
 function layoutFor(width: number): Layout { return width >= 1200 ? "desktop" : width >= 640 ? "tablet" : "phone"; }
+export function formatSpeedSentence(latest: SpeedResult | undefined, previous: SpeedResult | undefined): string {
+  if (!latest?.tokensPerSecond) return "No speed test has been recorded yet.";
+  const model = latest.modelId ?? "the resident chat model";
+  const build = latest.engine ? ` (${latest.engine})` : "";
+  return `Your Mac: ${latest.tokensPerSecond} tokens per second on ${model}${build}${previous?.tokensPerSecond ? `, was ${previous.tokensPerSecond} before ${latest.engine ?? "the last engine update"}` : ""}.`;
+}
 function useLayout(): Layout {
   const [layout, setLayout] = useState<Layout>(() => layoutFor(typeof window === "undefined" ? 1440 : window.innerWidth));
   useEffect(() => { const update = () => setLayout(layoutFor(window.innerWidth)); update(); window.addEventListener("resize", update); return () => window.removeEventListener("resize", update); }, []);
@@ -91,7 +97,8 @@ export function OverviewPage() {
   const speed = (series.data?.speed ?? []).map((item) => ({ ...item, label: labelFor(item.at), tps: item.tokensPerSecond ?? 0 }));
   const latestSpeed = speed.at(-1);
   const previousSpeed = speed.at(-2);
-  const speedSentence = latestSpeed?.tokensPerSecond ? `Your Mac: ${latestSpeed.tokensPerSecond} tokens per second on ${latestSpeed.modelId ?? "the resident chat model"}${previousSpeed?.tokensPerSecond ? `, was ${previousSpeed.tokensPerSecond} before ${latestSpeed.engine ?? "the last engine update"}` : ""}.` : "No speed test has been recorded yet.";
+  const speedCopy = formatSpeedSentence(latestSpeed, previousSpeed);
+  const speedSentence = speedCopy;
   const healthItems = (health.data?.health ?? []).slice(0, 4).map((item) => ({ id: item.code, primary: item.title, meta: `${relativeTime(item.since)} · ${item.text}` }));
   const activityItems = (notifications.data?.notifications ?? []).slice(0, 4).map((item) => ({ id: item.id, primary: item.title, meta: relativeTime(item.at) }));
   const statusLinks = [{ label: "Ready", value: ready, href: "/models", tone: "default" as const }, { label: "Roles", value: roleRows.length, href: "/engines", tone: "secondary" as const }, { label: "Attention", value: attention, href: "/alerts", tone: attention ? "destructive" as const : "secondary" as const }];

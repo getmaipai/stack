@@ -2,6 +2,7 @@ import { afterEach, expect, mock, test } from "bun:test";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { DashboardShell } from "@/pages/DashboardShell";
+import { formatSpeedSentence } from "@/pages/OverviewPage";
 
 const originalFetch = globalThis.fetch;
 afterEach(() => { cleanup(); globalThis.fetch = originalFetch; localStorage.removeItem("maipai-overview-range"); });
@@ -61,4 +62,11 @@ test("Overview changes its grid layout at desktop, tablet, and phone widths", as
     for (const category of ["models", "engines", "logs", "backups"]) expect(document.body.textContent).toContain(category);
     cleanup();
   }
+});
+
+test("speed sentence names the engine build for one and two results", () => {
+  const latest = { at: "2026-09-18T00:00:00.000Z", ability: "chat", modelId: "qwen3-1.7b", engine: "b10797", firstTokenMs: null, loadMs: null, measuredFootprintBytes: null, promptTps: 2199, tokensPerSecond: 113, contextLength: 4096 };
+  const previous = { ...latest, engine: "b10600", tokensPerSecond: 41 };
+  expect(formatSpeedSentence(latest, undefined)).toBe("Your Mac: 113 tokens per second on qwen3-1.7b (b10797).");
+  expect(formatSpeedSentence(latest, previous)).toBe("Your Mac: 113 tokens per second on qwen3-1.7b (b10797), was 41 before b10797.");
 });

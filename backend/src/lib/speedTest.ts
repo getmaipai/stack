@@ -5,9 +5,9 @@ import { listModels } from "@/lib/modelStore";
 import { latestSpeedResult, recordSpeedResult, type SpeedResult } from "@/lib/series";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { getChatEngineStatus } from "@/lib/supervisor";
-import { currentEngine } from "@/updates/engines";
 import { engineToolPath } from "@/lib/engineInstall";
 import { installedEnginePin } from "@/lib/engineCatalog";
+import { resolveEnginePin } from "@/updates/engines";
 
 export const SPEED_TEST_REPETITIONS = 3;
 export const SPEED_TEST_CONTEXT_LENGTH = 4096;
@@ -109,11 +109,12 @@ export async function runSpeedTest(model: ModelRecord, options: { contextLength?
   if (exitCode !== 0) throw new Error(`llama-bench failed with exit code ${exitCode}.${stderr.trim() ? ` ${stderr.trim().split("\n").slice(-1)[0]}` : ""}`);
   const parsed = parseLlamaBenchOutput(stdout);
   const status = getChatEngineStatus();
+  const pin = installedEnginePin();
   const previous = latestSpeedResult(model.id, contextLength);
   const result = recordSpeedResult({
     ability: "chat",
     modelId: model.id,
-    engine: currentEngine("llama-server") ?? status.identity?.build ?? null,
+    engine: pin ? resolveEnginePin(pin.id) : status.identity?.build ?? null,
     firstTokenMs: status.postLoadCheck?.firstTokenMs ?? null,
     loadMs: status.postLoadCheck?.loadMs ?? null,
     measuredFootprintBytes: model.measuredFootprintBytes,
