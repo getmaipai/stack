@@ -566,7 +566,9 @@ Each is a decision:
    detected tools' folders and any path typed or picked, imported by
    link; and "Upload from this device" for a browser on another
    machine, a streamed upload with a progress row in the downloads
-   list). Adding is never spread across pages or hidden in a menu.
+   list), and **A server you run** (a server the person runs: a
+   `managed` or `url` engine kind, declared by address, STACK-56).
+   Adding is never spread across pages or hidden in a menu.
 2. **Three dots on every row.** A kebab icon button at the right end of
    each row (visible on hover on a pointer device, always on touch)
    opens the row's actions: the same declared list the panel header
@@ -848,7 +850,9 @@ section); ours had none of it. The decisions:
 3. **The sections**, each drawn from a declaration: Overview; General
    (this Stack's name, theme, language later); Updates (the check
    switch, the last check, the three manifests' state, the update and
-   go-back actions, moved here from the former Updates page); Backups
+   go-back actions, moved here from the former Updates page); Sources
+   (the Hugging Face endpoint, default `huggingface.co`, STACK-57);
+   Backups
    (target, schedule, retention, restore, the emergency kit, moved
    here from the former Backups page); Network and access (LAN access,
    port, the operator password card, sessions); Alert channels (the

@@ -30,6 +30,7 @@ changelog note.
 | Repairs | `GET /stack/v1/repairs`, `POST /stack/v1/repairs/{id}/resolve` | the operator and Home's Admin | built |
 | Logs | `GET /stack/v1/logs/{name}` | the operator and Home's Admin | built |
 | Updates | `/stack/v1/updates` (check, apply, roll back) | the operator; Home shows availability through events | planned |
+| Metrics | `GET /stack/v1/metrics` | a scraper the operator runs | planned (STACK-59) |
 | Identity headers | `x-maipai-engine`, `x-maipai-model`, `x-maipai-revision` on every reply | every client's identity check | built |
 
 The Status column is derived from `docs/api/openapi.json` and refreshed whenever a row's paths land; a row that says built has its paths in the generated document.

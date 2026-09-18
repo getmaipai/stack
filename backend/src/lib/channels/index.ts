@@ -6,6 +6,7 @@ import { decryptChannelConfig, encryptChannelConfig } from "@/lib/channels/crypt
 import { send, type ChannelConfig, type ChannelFetch } from "@/lib/channels/providers";
 
 export type ChannelType = "telegram" | "ntfy";
+export const CHANNEL_TYPES = ["telegram", "ntfy"] as const;
 export type ChannelInput = { type: ChannelType; name: string; config: ChannelConfig };
 export type ChannelRecord = typeof channels.$inferSelect;
 

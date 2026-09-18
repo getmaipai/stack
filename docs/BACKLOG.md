@@ -835,7 +835,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   renders its Learn more link (test); Help lists the three doors
   (test); captures `palette.png` opened and judged. Exit:
   `scripts/check.sh`.
-- [ ] **STACK-56 (S): the seams, written down and guarded.** dev.md "The
+- [x] **STACK-56 (S): the seams, written down and guarded.** (Landed 2026-09-18, c-48.) dev.md "The
   seams" is the record; this item adds the two ux.md sentences (the
   Add sheet's fourth tab "A server you run" in "Things pages, second
   pass" item 1; the Sources row in "Settings" item 3) and the
