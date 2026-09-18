@@ -687,7 +687,8 @@ restart), `cacheRamMb` (number, default 0, developer, restart), and
 `flashAttention` (boolean, default true, advanced, restart). Managed engines
 declare `hostUrl` (text, default empty, basic, restart) and `expectedVersion`
 (text, default empty, advanced, restart). Every declaration carries its type,
-default, disclosure level, and restart requirement. The configuration API
+default, group, disclosure level, restart requirement, and optional enum
+options. The configuration API
 shows both in-effect and pending values until the next start, when pending
 values become in effect.
 

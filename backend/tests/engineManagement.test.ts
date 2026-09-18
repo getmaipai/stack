@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { deriveEngineVersionState } from "@/lib/engineState";
 import { getChatBackend, resetSupervisorForTests, restartChatEngine, setSupervisorFactoryForTests, stopChatEngine } from "@/lib/supervisor";
 import { llamaServerArgs } from "@/lib/engineArgs";
-import { __resetEngineSettingsForTests, readEngineConfig, updateEngineConfig } from "@/settings/engineKeys";
+import { __resetEngineSettingsForTests, ENGINE_SETTINGS, readEngineConfig, updateEngineConfig } from "@/settings/engineKeys";
 
 afterEach(() => {
   delete process.env.STACK_SCRIPTED_ENGINES;
@@ -15,6 +15,10 @@ test("version state distinguishes current, newer installed, and newer available"
   expect(deriveEngineVersionState({ running: "b2", currentTag: "b2", newestTag: "b2", needsRestart: false }).state).toBe("current");
   expect(deriveEngineVersionState({ running: "b1", currentTag: "b2", newestTag: "b2", needsRestart: false }).stateReason).toBe("newer installed");
   expect(deriveEngineVersionState({ running: "b1", currentTag: "b1", newestTag: "b2", needsRestart: false }).stateReason).toBe("newer available");
+});
+
+test("every engine setting has a group for the generic renderer", () => {
+  for (const declarations of Object.values(ENGINE_SETTINGS)) for (const declaration of declarations) expect(declaration.group).toBeTruthy();
 });
 
 test("engine configuration validates type and range, then activates pending values on restart", async () => {

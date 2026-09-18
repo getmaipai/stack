@@ -4,13 +4,16 @@ import { db } from "@/db";
 import { meta } from "@/db/schema";
 
 export type EngineKind = "llama-server" | "managed";
-export type EngineSettingType = "number" | "boolean" | "text";
+export type EngineSettingType = "number" | "boolean" | "text" | "enum";
 export type Disclosure = "basic" | "advanced" | "developer";
+export interface SettingOption { value: string; label: string; }
 
 export interface EngineSettingDeclaration {
   key: string;
   type: EngineSettingType;
   default: number | boolean | string;
+  group?: string;
+  options?: SettingOption[];
   label: string;
   help: string;
   disclosure: Disclosure;
@@ -20,21 +23,22 @@ export interface EngineSettingDeclaration {
 
 export const ENGINE_SETTINGS: Record<EngineKind, EngineSettingDeclaration[]> = {
   "llama-server": [
-    { key: "contextLength", type: "number", default: 4096, label: "Context length", help: "How much conversation the engine can hold at once.", disclosure: "advanced", needsRestart: true, range: { min: 128, max: 131072 } },
-    { key: "slots", type: "number", default: 1, label: "Parallel slots", help: "How many requests the engine can serve concurrently.", disclosure: "advanced", needsRestart: true, range: { min: 1, max: 128 } },
-    { key: "threads", type: "number", default: 0, label: "CPU threads", help: "CPU threads used by the engine. Zero lets the engine choose.", disclosure: "developer", needsRestart: true, range: { min: 0, max: 256 } },
-    { key: "cacheRamMb", type: "number", default: 0, label: "Cache RAM", help: "Optional cache reservation in megabytes.", disclosure: "developer", needsRestart: true, range: { min: 0, max: 1_048_576 } },
-    { key: "flashAttention", type: "boolean", default: true, label: "Flash attention", help: "Use the faster attention implementation when supported.", disclosure: "advanced", needsRestart: true },
+    { key: "contextLength", type: "number", default: 4096, label: "Context length", help: "How much conversation the engine can hold at once.", group: "Memory and context", disclosure: "advanced", needsRestart: true, range: { min: 128, max: 131072 } },
+    { key: "slots", type: "number", default: 1, label: "Parallel slots", help: "How many requests the engine can serve concurrently.", group: "Performance", disclosure: "advanced", needsRestart: true, range: { min: 1, max: 128 } },
+    { key: "threads", type: "number", default: 0, label: "CPU threads", help: "CPU threads used by the engine. Zero lets the engine choose.", group: "Host", disclosure: "developer", needsRestart: true, range: { min: 0, max: 256 } },
+    { key: "cacheRamMb", type: "number", default: 0, label: "Cache RAM", help: "Optional cache reservation in megabytes.", group: "Memory and context", disclosure: "developer", needsRestart: true, range: { min: 0, max: 1_048_576 } },
+    { key: "flashAttention", type: "boolean", default: true, label: "Flash attention", help: "Use the faster attention implementation when supported.", group: "Performance", disclosure: "advanced", needsRestart: true },
   ],
   managed: [
-    { key: "hostUrl", type: "text", default: "", label: "Host URL", help: "The local or remote managed engine endpoint.", disclosure: "basic", needsRestart: true },
-    { key: "expectedVersion", type: "text", default: "", label: "Expected version", help: "Optional build string used when checking a managed host.", disclosure: "advanced", needsRestart: true },
+    { key: "hostUrl", type: "text", default: "", label: "Host URL", help: "The local or remote managed engine endpoint.", group: "Host", disclosure: "basic", needsRestart: true },
+    { key: "expectedVersion", type: "text", default: "", label: "Expected version", help: "Optional build string used when checking a managed host.", group: "Host", disclosure: "advanced", needsRestart: true },
   ],
 };
 
 const valueSchema = (declaration: EngineSettingDeclaration): z.ZodTypeAny => {
   if (declaration.type === "boolean") return z.boolean();
   if (declaration.type === "text") return z.string();
+  if (declaration.type === "enum") return z.string().refine((value) => declaration.options?.some((option) => option.value === value) ?? false, "Invalid setting option");
   return z.number().int().min(declaration.range?.min ?? Number.MIN_SAFE_INTEGER).max(declaration.range?.max ?? Number.MAX_SAFE_INTEGER);
 };
 

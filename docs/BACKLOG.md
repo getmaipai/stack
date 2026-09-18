@@ -676,7 +676,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   dot's label and the toggle; captures opened and judged. Out of scope:
   moving This computer off the sidebar footer (it stays until the
   hand-off card design lands). Exit: `scripts/check.sh`.
-- [ ] **STACK-47 (S): settings as rows.** The generic renderer
+- [x] **STACK-47 (S): settings as rows.** The generic renderer
   (`frontend/src/kit/settings/GenericForm.tsx`) renders the shape of
   ux.md item 4: label left with an info glyph that opens the
   explanation in a popover, control right (radio group inline for two
@@ -686,7 +686,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   `genericForm.test.tsx` (new, beside the existing frontend tests)
   finds the info glyph and its popover text and
   the radio group for a three-option enum; `engines-configure.png`
-  opened and judged. Exit: `scripts/check.sh`.
+  opened and judged. Verified at dd70cfa. Exit: `scripts/check.sh`.
 
 ## Milestone 1: the robot
 

@@ -110,12 +110,15 @@ export interface SetupPlanResponse {
 
 export interface EngineSetting {
   key: string;
-  type: "number" | "boolean" | "text";
+  type: "number" | "boolean" | "text" | "enum";
   default: string | number | boolean;
+  group?: string;
+  options?: Array<{ value: string; label: string }>;
   label: string;
   help: string;
   disclosure: "basic" | "advanced" | "developer";
   needsRestart: boolean;
+  range?: { min?: number; max?: number };
   inEffect: string | number | boolean;
   pending: string | number | boolean | null;
 }

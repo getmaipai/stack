@@ -1,6 +1,7 @@
 import { app } from "@/app";
 import { installLaunchdService, launchdStatus, startLaunchdService, stopLaunchdService, uninstallLaunchdService } from "@/service/launchd";
 import { startDetection } from "@/lib/detect";
+import { activateStackConfig, stackSettingValues } from "@/settings/stackKeys";
 
 const port = Number(process.env.PORT ?? 8770);
 
@@ -11,7 +12,8 @@ async function openBrowser(): Promise<void> {
 }
 
 async function serve(): Promise<void> {
-  const server = Bun.serve({ port, hostname: "127.0.0.1", fetch: app.fetch });
+  activateStackConfig();
+  const server = Bun.serve({ port, hostname: stackSettingValues().lanAccess === true ? "0.0.0.0" : "127.0.0.1", fetch: app.fetch });
   const stopDetection = startDetection();
   let stopping = false;
   const stop = async (exitCode: number): Promise<void> => {
