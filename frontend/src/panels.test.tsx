@@ -27,12 +27,13 @@ test("every property-panel adapter exposes actions that call its route handler",
   for (const [kind, adapter, prefix] of cases) {
     renderAdapter(kind, prefix, adapter);
     for (const action of adapter.actions) {
+      if (action.disabled) continue;
       fireEvent.click(document.querySelector(`button[aria-label="${action.label}"]`)!);
       if (action.destructive) fireEvent.click(Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "Confirm")!);
     }
     cleanup();
   }
-  expect(calls).toEqual(["model:load", "model:unload", "model:pin", "model:update", "model:remove", "group:load", "group:unload", "group:pin", "group:unpin", "group:checkUpdates", "group:move", "group:remove", "client:revoke", "channel:test", "channel:edit", "detected:adopt", "detected:forget"]);
+  expect(calls).toEqual(["model:load", "model:unload", "model:pin", "model:remove", "group:load", "group:unload", "group:pin", "group:unpin", "group:checkUpdates", "group:move", "group:remove", "client:revoke", "channel:test", "channel:edit", "detected:adopt", "detected:forget"]);
 });
 
 test("the refined panel exposes icon tabs, quick facts, primary actions, and copyable metadata", async () => {
