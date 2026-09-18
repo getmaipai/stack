@@ -280,6 +280,43 @@ Every number stays a recorded one. The showroom fixture carries a full
 day of samples so the captures show the hero chart with data across
 the whole range.
 
+## The panel and the surfaces, third pass (decided 2026-09-18, 12:50, from the owner's side-by-side)
+
+The owner put our Engines page with its panel open beside UniFi's
+Networks page with its panel open. Differences, each a decision:
+
+1. **The panel floats over the content; it never resizes it.** UniFi's
+   pane slides in over the page's right edge; the table underneath
+   keeps every column at full width (the pane hides part of it, and a
+   click outside or the close glyph dismisses it). Ours pushed the
+   content aside and squeezed the table until names truncated. The
+   panel is a fixed overlay (width 420 px at desktop, full width on the
+   phone), no layout shift, `Escape` and a click outside close it, and
+   the selected row stays highlighted beneath.
+2. **Surfaces have levels, not padding.** UniFi's pane is a slightly
+   darker (light mode: grey) background holding white cards edge to
+   edge with a small inset; the cards carry the content, the pane
+   carries no side padding of its own. Ours had one flat surface with
+   generous padding and hairlines. Two surface tokens: the pane
+   background one level below the page, the card one level above it;
+   cards inset 12 px from the pane's edges, 16 px inside; hairlines
+   only inside a card between rows.
+3. **Sections are cards with an icon and a title**, each group of facts
+   or controls its own card ("State", "Configuration", "Usage"), the
+   way UniFi groups "IPv4" and "DHCP"; the key-value rows and the
+   settings rows live inside the cards; inputs stretch to the card's
+   width.
+4. **Nothing squished.** A column, a chip or a badge that does not fit
+   its cell at 1440 wide is a bug; the table is laid out so the name
+   column takes what is left after fixed-width columns, and the panel's
+   header wraps the name to two lines before truncating.
+5. The same surface levels apply to the pages: the page background,
+   section cards one level up (Overview's widgets, Settings' sections),
+   the filter column as a card. The sidebar is one level below the page.
+   Light mode: page `hsl(240 6% 97%)`, card white, sidebar
+   `hsl(240 6% 95%)`; dark: page black, card `hsl(240 6% 7%)`, pane
+   `hsl(240 6% 4%)`.
+
 ## Look and feel references: UniFi's structure, X's modernism (decided 2026-09-17, night)
 
 The owner's direction, with screens in hand: every page and feature of
