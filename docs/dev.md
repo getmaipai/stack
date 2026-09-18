@@ -1077,6 +1077,27 @@ diagnostics bundle (STACK-29), engines kept current (STACK-31), What's
 new (STACK-21), and the two databases (STACK-50) once the owner
 confirms it.
 
+### Maintenance (STACK-22, decided 2026-09-18)
+
+Maintenance has one local scheduler rather than a timer in each feature.
+It reads the declared local start and end times, defaults to 02:00 through
+05:00, and runs the registered work in a fixed order only while the window
+is open. Before starting, and between heavy jobs, it requires five minutes
+without input, AC power, and normal memory pressure. A person returning to
+the computer pauses the current cooperative job; it resumes when the machine
+is quiet again. Work outside the window is deferred with its next local run
+time, which is shown in Settings and Overview.
+
+The scheduler uses ports for the clock, activity reader, battery reader,
+pressure reader, and jobs. That keeps macOS `pmset` at one adapter boundary
+and makes the timing rules offline-testable. We rejected independent cron
+timers because they could overlap, ignore a returned person, and leave no
+single next-run answer. We also rejected treating the window as permission to
+start work on battery or under pressure: quiet hours reduce interruption,
+but do not make resource pressure safe. Downloads receive the configured
+cap at the streaming seam through a token bucket, rather than callers trying
+to pace individual requests.
+
 ## Native console authentication (decided 2026-09-18 review)
 
 The Tauri process is a local observer, not a second privileged API

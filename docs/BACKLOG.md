@@ -315,7 +315,9 @@ layer above; none adds a person or leaves the machine.
   Files: `backend/src/lib/governor.ts, backend/src/routes/settings.ts, frontend/src/pages/SettingsPage.tsx`.
   Mirror: the existing activity skip in Check my Stack.
   Out of scope: new person records or Home-side features.
-  Exit: `bash scripts/check.sh`.
+  The design record is `dev.md` "Maintenance": one local scheduler owns the
+  window, macOS power is behind an adapter, and the download seam owns the
+  cap. Exit: `bash scripts/check.sh`.
 - [ ] **STACK-23 (M): ready when you sit down.** Models unload after an
   idle time the person sets; on battery they unload sooner; the chat
   model warms up before the hour the person usually uses it, learned
