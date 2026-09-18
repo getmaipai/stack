@@ -26,12 +26,12 @@ the Studio milestone proves the hub's profile before Home migrates.
 
 | Milestone | Items, in order | Why here |
 |---|---|---|
-| v0.1.0: app and release | STACK-66, STACK-76, STACK-67, STACK-68, STACK-79, STACK-82 | Make the existing Tauri shell install and authenticate its console, then prove the first-run path and visible actions. |
-| v0.1.0: help and trust | STACK-55, STACK-37, STACK-69, STACK-70, STACK-28, STACK-29, STACK-71, STACK-72, STACK-77, STACK-78, STACK-73, STACK-80 | Make Ask and offline help truthful; close discovery, settings, privacy, licensing and diagnostics gaps before inviting a new operator. |
-| v0.1.0: distribution | STACK-83, RELEASE-STACK-01, SITE-STACK-01 | Prove a clean install before building and verifying release artifacts; the owner authorizes the tag. |
+| v0.1.0: app and release | STACK-86, STACK-66, STACK-76, STACK-79, STACK-67, STACK-68, STACK-82 | Qualify one pinned chat setup, then make the Tauri shell install it, authenticate its console and prove the first answer. |
+| v0.1.0: help and trust | STACK-87, STACK-55, STACK-37, STACK-69, STACK-70, STACK-28, STACK-29, STACK-71, STACK-72, STACK-77, STACK-78, STACK-73 | Make readiness and repair truthful; close help, settings, privacy, licensing and diagnostics gaps. |
+| v0.1.0: distribution | RELEASE-STACK-01, STACK-84, STACK-83, SITE-STACK-01 | Build signed artifacts, prove update compatibility and a clean install before the owner authorizes a tag. |
 | Studio proof | STACK-13, STACK-74, STACK-14, STACK-61 | Complete generator jobs and the bench protocol, then measure the Studio and coding context against its real profile. |
 | Home migration | STACK-75, STACK-16 | Pin and test the Stack/Home wire, then migrate Home with rollback after the Studio proof. |
-| Later Mac operations | STACK-04d, STACK-21, STACK-22, STACK-23, STACK-24, STACK-25, STACK-27, STACK-30, STACK-31, STACK-50, STACK-60, STACK-81, STACK-84, STACK-85 | Improve the store, maintenance, data layout, search and coding-tool setup without holding the first release. |
+| Later Mac operations | STACK-04d, STACK-21, STACK-22, STACK-23, STACK-24, STACK-25, STACK-27, STACK-30, STACK-31, STACK-50, STACK-60, STACK-80, STACK-81, STACK-85 | Improve general Hub discovery, the store, maintenance, data layout, search and coding-tool setup after the curated release path works. |
 | Optional interfaces | STACK-58, STACK-59, STACK-62, STACK-63 | Each needs the stated owner choice or usage evidence before it becomes a release dependency. |
 | Other platforms and kit | KIT-01, STACK-17 | Extract the shared UI kit and prove the Linux robot profile after the Mac service is stable. |
 
@@ -1168,3 +1168,47 @@ move the Stack across its client boundary.
   gives search results instead of an invented repair. Out of
   scope: a dedicated helper model or outbound search. Exit:
   `bash scripts/check.sh`.
+- [ ] **STACK-86 (M): qualify the first Mac chat pin.** Resolve the
+  curated Qwen GGUF to an immutable Hub commit and exact file SHA-256;
+  record licence, file and disk bytes, supported llama-server build,
+  conservative memory estimate and a measured first-load result on the
+  smallest Mac class claimed by v0.1.0. Files:
+  `backend/src/lib/modelCatalog.ts`, `backend/src/lib/engineCatalog.ts`,
+  `backend/src/lib/setupPlan.ts`, `backend/src/routes/catalog.ts`,
+  `docs/dev.md`. Mirror: STACK-04 provenance and STACK-74 bench
+  protocol. Acceptance: a changed Hub `main`, wrong digest, insufficient
+  disk and unsupported Mac each produce a precise refusal; a clean
+  supported Mac completes one authenticated chat request and records
+  peak memory and speed. Out of scope: general Hub search, another model
+  format or a new outbound host. Exit: `bash scripts/check.sh` and the
+  pinned live pull and load. Reason: the first install needs an immutable,
+  measured promise before the wider discovery work in STACK-80 and
+  STACK-81.
+- [ ] **STACK-87 (M): make ready and current claims time-bound.** Tie
+  the overview and tray's ready state to a recent authenticated request
+  through the public chat role and expected engine/model identity; mark
+  the result stale after a pin, model, engine or settings change. Distinguish
+  installed, loaded, ready, not checked and check failed. The release
+  update badge names the last successful check and says unknown when its
+  signed manifest is missing or invalid; skipped non-chat roles cannot
+  make the overall check green. Files: `backend/src/lib/checkMyStack.ts`,
+  `backend/src/updates/check.ts`, `backend/src/updates/manifests.ts`,
+  `backend/src/routes/check.ts`, `frontend/src/pages/OverviewPage.tsx`,
+  `docs/user/update.md`. Mirror: the current post-load check, health list
+  and STACK-84 compatibility plan. Acceptance: scripted stale identity,
+  skipped role, invalid manifest and real chat success produce different
+  status and repair text; a live check after restart records its time and
+  identity. Out of scope: probing uninstalled modalities or changing the
+  safety, consent or privacy paths. Exit: `bash scripts/check.sh` and the
+  live chat check. Reason: an HTTP 200 or old cached result must not be
+  shown as a current working Stack.
+
+The mechanism review in
+[`plans/stack-achievability-2026-09-18.md`](plans/stack-achievability-2026-09-18.md)
+withdraws general Hub discovery (STACK-80 and STACK-81) from the v0.1.0
+release gate: the curated pin can ship first. It also withdraws STACK-84
+from later operations and makes it a release gate: an app and daemon
+update must fail safely before v0.1.0 promises updates. No item for
+universal control of third-party memory or automatic installs of every
+modality is opened: those promises have no bounded acceptance test for
+this team.
