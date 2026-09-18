@@ -9,6 +9,9 @@ the product passes its battle-tested checklist in `docs/dev.md`.
 
 ### Added
 
+- STACK-35 property panel: reusable engine, model, and detected-store detail
+  panels with tabs, action buttons, arrow-key selection, and phone sheets.
+
 - STACK-36 showroom mode: a development-only believable household fixture
   behind the real routes, with a `bun run showroom` command and full-page
   screenshot capture support.

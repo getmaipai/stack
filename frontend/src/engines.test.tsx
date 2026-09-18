@@ -19,12 +19,18 @@ test("the configure sheet renders declared controls and stop uses an inline conf
   const calls: string[] = [];
   globalThis.fetch = mock((input: RequestInfo | URL, init?: RequestInit) => { calls.push(`${String(input)} ${init?.method ?? "GET"}`); if (String(input).includes("/config") && init?.method === "PUT") return Promise.resolve(Response.json({ settings })); if (String(input).includes("/config")) return Promise.resolve(Response.json({ settings })); if (init?.method === "POST") return Promise.resolve(Response.json({ ok: true })); return Promise.resolve(Response.json({ engines })); }) as unknown as typeof fetch;
   render(<MemoryRouter initialEntries={["/engines"]}><DashboardShell /></MemoryRouter>);
-  await waitFor(() => expect(document.body.textContent).toContain("Configure"));
-  fireEvent.click(Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "Configure")!);
-  await waitFor(() => expect(document.body.textContent).toContain("Advanced settings"));
-  fireEvent.click(Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "Advanced settings")!);
-  await waitFor(() => { expect(document.body.textContent).toContain("Context length"); expect(document.querySelector('input[type="number"]')).toBeTruthy(); expect(document.querySelector('[data-testid="generic-engine-form"]')).toBeTruthy(); });
-  fireEvent.click(Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "Stop")!);
-  expect(document.body.textContent).toContain("Stop this engine?");
-  expect(calls.some((call) => call.endsWith("/config GET"))).toBe(true);
+  await waitFor(() => expect(document.querySelector('[data-testid="engine-row-llama-server-b10797-macos-arm64"]')).toBeTruthy());
+  fireEvent.click(document.querySelector('[data-testid="engine-row-llama-server-b10797-macos-arm64"]')!);
+  await waitFor(() => expect(document.querySelector('[data-testid="property-panel"]')).toBeTruthy());
+  expect(document.querySelector('[data-slot="tabs-list"]')).toBeTruthy();
+  expect(document.querySelector('button[aria-label="Stop"]')).toBeTruthy();
+  fireEvent.click(document.querySelector('button[aria-label="Stop"]')!);
+  expect(document.body.textContent).toContain("Stop llama-server");
+});
+
+test("the property panel opens on a row and follows arrow-key selection", async () => {
+  globalThis.fetch = mock((input: RequestInfo | URL) => Promise.resolve(String(input).endsWith("/engines") ? Response.json({ engines: [engines[0], { ...engines[0], id: "llama-server-b10790-macos-arm64", label: "Stable build", state: "current", current: true, notCurrent: false, stateReason: null, needsRestart: false }] }) : Response.json({ settings }))) as unknown as typeof fetch;
+  render(<MemoryRouter initialEntries={["/engines"]}><DashboardShell /></MemoryRouter>);
+  await waitFor(() => expect(document.querySelector('[data-testid="engine-row-llama-server-b10797-macos-arm64"]')).toBeTruthy());
+  const first = document.querySelector('[data-testid="engine-row-llama-server-b10797-macos-arm64"]')!; fireEvent.click(first); expect(document.querySelector('[data-testid="property-panel"]')).toBeTruthy(); fireEvent.keyDown(first, { key: "ArrowDown" }); await waitFor(() => expect(document.body.textContent).toContain("Stable build"));
 });

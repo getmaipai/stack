@@ -11,6 +11,7 @@
   <img src="docs/assets/screens/overview.png" alt="MaiPai Stack overview" width="31%">
   <img src="docs/assets/screens/try-chat-light.png" alt="MaiPai Stack Try it chat" width="31%">
   <img src="docs/assets/screens/palette.png" alt="MaiPai Stack command palette" width="31%">
+  <img src="docs/assets/screens/engines-panel.png" alt="MaiPai Stack engine property panel" width="31%">
 </p>
 
 <p align="center"><a href="docs/dev.md">Documentation</a> · <a href="https://github.com/getmaipai/stack/releases">Releases</a></p>
