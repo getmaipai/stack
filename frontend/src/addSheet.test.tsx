@@ -21,6 +21,7 @@ test("Add sheet installs a catalog model and imports a scripted folder", async (
   fireEvent.mouseDown(importTab);
   fireEvent.click(importTab);
   await waitFor(() => expect(document.querySelector('input[aria-label="Model path"]')).toBeTruthy());
+  expect(document.body.textContent).toContain("Scan this computer");
   fireEvent.change(document.querySelector('input[aria-label="Model path"]')!, { target: { value: "/models/folder.gguf" } });
   fireEvent.click([...document.querySelectorAll("button")].find((button) => button.textContent === "Import path by link")!);
   await waitFor(() => expect(calls.some((call) => call === "POST /stack/v1/models/import")).toBe(true));

@@ -18,6 +18,7 @@ import { labelForRole } from "@/lib/modelStates";
 import { actionsFor } from "@/lib/actions";
 import { AddSheet } from "@/kit/blocks/add-sheet/AddSheet";
 import { usePhoneMode } from "@/kit/blocks/phone/PhoneMode";
+import { ScanStatus, scanComputer, type DetectedScan } from "@/lib/detectedScan";
 
 type DetectedStore = { id: string; name: string; kind: string; version: string; path?: string; where?: string; candidateModels?: number; roles?: string[]; couldHold?: string[] };
 type EngineRow = { kind: "engine"; engine: EngineRecord } | { kind: "detected"; store: DetectedStore };
@@ -41,10 +42,13 @@ export function EnginesPage({ Frame }: { Frame: SectionFrameComponent }) {
   const [filterSelections, setFilterSelections] = useState<Record<string, ReadonlySet<string>>>({});
   const [configuredName, setConfiguredName] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [scanResult, setScanResult] = useState<DetectedScan | null>(null);
+  const [scanBusy, setScanBusy] = useState(false);
   const config = useApiResource<{ settings: EngineSetting[] }>(configuredName ? `/stack/v1/engines/${configuredName}/config` : null);
   const [draft, setDraft] = useState<Record<string, string | number | boolean>>({});
   useEffect(() => { if (config.data) setDraft(Object.fromEntries(config.data.settings.map((setting) => [setting.key, setting.pending ?? setting.inEffect]))); }, [config.data]);
   async function control(path: string, body?: unknown) { await api.post(path, body); await engines.refetch(); }
+  async function scanNow() { setScanBusy(true); try { setScanResult(await scanComputer()); await detectedStores.refetch(); await engines.refetch(); } finally { setScanBusy(false); } }
   async function saveConfig() { if (!configuredName) return; await api.put(`/stack/v1/engines/${configuredName}/config`, draft); await config.refetch(); await engines.refetch(); }
   function selectAt(index: number) { if (!engines.data?.engines.length) return; const next = Math.max(0, Math.min(engines.data.engines.length - 1, index)); setSelected(next); setPanelOpen(true); const engine = engines.data.engines[next]; setConfiguredName(engine ? engineName(engine) : null); }
   async function panelAction(action: string) { const engine = engines.data?.engines[selected]; if (!engine) return; const name = engineName(engine); if (action === "logs") return; if (action === "update") return control(`/stack/v1/engines/${name}/current`, { tag: engine.newestTag }); if (action.startsWith("current:")) return control(`/stack/v1/engines/${name}/current`, { tag: action.slice(8) }); if (action === "remove") return api.delete(`/stack/v1/engines/${name}/builds/${engineTag(engine)}`).then(() => engines.refetch()); return control(`/stack/v1/engines/${name}/${action}`); }
@@ -70,7 +74,7 @@ export function EnginesPage({ Frame }: { Frame: SectionFrameComponent }) {
   if (engines.loading || detectedStores.loading) return <Frame title="Engines" description="Builds, health, controls, and the settings that shape each runtime."><LoaderCircle className="animate-spin" /></Frame>;
   if (rows.length === 0) return <Frame title="Engines" description="Builds, health, controls, and the settings that shape each runtime."><PageEmptyState title="No engine builds are available" detail="The Stack will show verified local engine builds here when the store has them." /></Frame>;
 
-  return <Frame title="Engines" description="Builds, health, controls, and the settings that shape each runtime."><div className={phone ? "hidden" : "flex justify-end"}><Button onClick={() => setAddOpen(true)}><span aria-hidden="true">＋</span>Add</Button></div><ThingsPage filter={{ search: { value: filterSearch, onChange: setFilterSearch, placeholder: "Search engines" }, groups: filterGroups, onClear: () => { setFilterSearch(""); setFilterSelections({}); } }} table={<ThingsTable<EngineRow>
+  return <Frame title="Engines" description="Builds, health, controls, and the settings that shape each runtime."><div className={phone ? "hidden" : "flex justify-end"}><Button onClick={() => setAddOpen(true)}><span aria-hidden="true">＋</span>Add</Button></div><ScanStatus scan={scanResult} /><ThingsPage filter={{ search: { value: filterSearch, onChange: setFilterSearch, placeholder: "Search engines" }, groups: filterGroups, onClear: () => { setFilterSearch(""); setFilterSelections({}); } }} table={<ThingsTable<EngineRow>
     columns={[
       { key: "build", header: "Build", width: "36%", render: (row) => row.kind === "detected" ? <div><p className="font-medium">Detected, not adopted · {row.store.name}</p><p className="text-xs text-muted-foreground">{row.store.version} · {row.store.path ?? row.store.where}</p></div> : <div><p className="font-medium">{row.engine.label}</p><p className="text-xs text-muted-foreground">{row.engine.id}</p></div> },
       { key: "platform", header: "Platform", width: "18%", render: (row) => row.kind === "detected" ? `${row.store.kind} · ${row.store.candidateModels ?? 0} candidates` : `${row.engine.platform} · ${row.engine.arch}` },
@@ -83,6 +87,7 @@ export function EnginesPage({ Frame }: { Frame: SectionFrameComponent }) {
     selectedKey={selectedEngine ? `engine:${selectedEngine.id}` : undefined}
     onLink={(target) => navigate(target)}
     onRowClick={(row) => { if (row.kind === "detected") setDetectedOpen(true); else if (phone) navigate(`/engines/${encodeURIComponent(row.engine.id)}`); else selectAt(engines.data?.engines.findIndex((engine) => engine.id === row.engine.id) ?? 0); }}
+    actions={[{ label: scanBusy ? "Scanning..." : "Scan this computer", onClick: () => void scanNow(), disabled: scanBusy }]}
     rowActions={rowActions}
     phoneRow={(row) => row.kind === "detected" ? { name: detectedName(row.store), subtitle: `Not adopted · ${(row.store.couldHold ?? row.store.roles ?? []).map(roleLabel).join(", ") || "Unassigned"}`, status: "Not adopted", tone: "detected" } : { name: row.engine.label, subtitle: `${row.engine.platform} · ${row.engine.arch}`, status: row.engine.state === "current" ? "Current" : "Not current", tone: engineStatus(row.engine) }}
     getRowProps={(row) => row.kind === "engine" ? { "data-testid": `engine-row-${row.engine.id}`, tabIndex: 0, onKeyDown: (event) => { if (event.key === "ArrowDown") { event.preventDefault(); selectAt(selected + 1); } if (event.key === "ArrowUp") { event.preventDefault(); selectAt(selected - 1); } } } : { className: "bg-muted/30" }}

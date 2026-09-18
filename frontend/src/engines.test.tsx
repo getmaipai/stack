@@ -13,6 +13,7 @@ test("the engines table renders version state and its reason", async () => {
   globalThis.fetch = mock((input: RequestInfo | URL) => Promise.resolve(String(input).endsWith("/engines") ? Response.json({ engines }) : Response.json({ settings }))) as unknown as typeof fetch;
   render(<MemoryRouter initialEntries={["/engines"]}><DashboardShell /></MemoryRouter>);
   await waitFor(() => { expect(document.body.textContent).toContain("Not current"); expect(document.body.textContent).toContain("newer installed"); expect(document.body.textContent).toContain("Needs restart"); });
+  expect(document.body.textContent).toContain("Scan this computer");
 });
 
 test("the configure sheet renders declared controls and stop uses an inline confirmation", async () => {

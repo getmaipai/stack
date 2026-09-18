@@ -3415,10 +3415,31 @@
                           "target"
                         ]
                       }
+                    },
+                    "found": {
+                      "type": "object",
+                      "properties": {
+                        "tools": {
+                          "type": "number"
+                        },
+                        "modelFiles": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "tools",
+                        "modelFiles"
+                      ]
+                    },
+                    "scannedAt": {
+                      "type": "string",
+                      "nullable": true
                     }
                   },
                   "required": [
-                    "detected"
+                    "detected",
+                    "found",
+                    "scannedAt"
                   ]
                 }
               }
@@ -3435,7 +3456,7 @@
         "summary": "Run the local detection sweep",
         "responses": {
           "200": {
-            "description": "Current local detection results.",
+            "description": "Current local detection results and source counts.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3498,10 +3519,31 @@
                           "target"
                         ]
                       }
+                    },
+                    "found": {
+                      "type": "object",
+                      "properties": {
+                        "tools": {
+                          "type": "number"
+                        },
+                        "modelFiles": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "tools",
+                        "modelFiles"
+                      ]
+                    },
+                    "scannedAt": {
+                      "type": "string",
+                      "nullable": true
                     }
                   },
                   "required": [
-                    "detected"
+                    "detected",
+                    "found",
+                    "scannedAt"
                   ]
                 }
               }

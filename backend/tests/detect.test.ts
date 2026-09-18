@@ -46,6 +46,8 @@ test("the route exposes a scan and the address list is loopback only", async () 
   expect(DETECTION_ADDRESSES).toEqual(["127.0.0.1", "::1"]);
   process.env.STACK_SHOWROOM = "1"; process.env.NODE_ENV = "development";
   const response = await app.request("/stack/v1/detected/scan", { method: "POST" }); expect(response.status).toBe(200);
+  const body = await response.json() as { detected: unknown[]; found: { tools: number; modelFiles: number }; scannedAt: string | null };
+  expect(body.detected.length).toBeGreaterThan(0); expect(body.found).toEqual({ tools: 1, modelFiles: 3 }); expect(body.scannedAt).toBeString();
   delete process.env.STACK_SHOWROOM;
 });
 

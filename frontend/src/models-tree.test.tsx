@@ -19,6 +19,7 @@ test("Models renders group rollups, routes group actions, renames, and adopts de
   }) as unknown as typeof fetch;
   render(<MemoryRouter initialEntries={["/models"]}><DashboardShell /></MemoryRouter>);
   await waitFor(() => expect(document.body.textContent).toContain("12 requests"));
+  expect(document.body.textContent).toContain("Scan this computer");
   fireEvent.click([...document.querySelectorAll("p")].find((node) => node.textContent === "Family chat")!.closest("tr")!);
   fireEvent.click(document.querySelector('button[aria-label="Expand Family chat"]')!);
   await waitFor(() => expect(document.querySelector('button[aria-label="Load all"]')).toBeTruthy());

@@ -1,11 +1,12 @@
 import { and, eq, lt } from "drizzle-orm";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { db } from "@/db";
+import { meta } from "@/db/schema";
 import { detected } from "@/db/schema";
 import { emit } from "@/lib/events";
 import { raise } from "@/lib/health";
 import { readEngineIdentity } from "@/lib/identity";
-import { externalImportRoots } from "@/lib/store/layout";
+import { engineRoot, externalImportRoots } from "@/lib/store/layout";
 import { importCandidate, scanImports } from "@/lib/store/importScan";
 import { upsertModel } from "@/lib/modelStore";
 import { ROLE_IDS, type RoleId } from "@/roles";
@@ -20,6 +21,7 @@ export type DetectedKind = "ollama" | "lm-studio" | "comfyui" | "mlx-serve" | "o
 export interface DetectedRecord { id: string; kind: DetectedKind; name: string; version: string; where: string; couldHold: RoleId[]; firstSeen: string; lastSeen: string; forgotten: boolean; adopted: boolean; target: string | null; }
 interface Probe { kind: DetectedKind; name: string; version: string; where: string; couldHold: RoleId[]; }
 const managedBindings = new Map<string, string>();
+const LAST_SCAN_KEY = "detected.lastScan";
 
 function json<T>(value: string, fallback: T): T { try { return JSON.parse(value) as T; } catch { return fallback; } }
 function urlFor(address: string, port: number): string { return `http://${address.includes(":") ? `[${address}]` : address}:${port}`; }
@@ -68,11 +70,21 @@ export function listDetected(includeForgotten = false): DetectedRecord[] {
   const rows = db.select().from(detected).all(); return (includeForgotten ? rows : rows.filter((row) => row.forgotten === 0)).map(toRecord);
 }
 
+export function lastScan(): string | null { return db.select({ value: meta.value }).from(meta).where(eq(meta.key, LAST_SCAN_KEY)).get()?.value ?? null; }
+function recordScan(at: string): void { db.insert(meta).values({ key: LAST_SCAN_KEY, value: at }).onConflictDoUpdate({ target: meta.key, set: { value: at } }).run(); }
+export function scanCounts(rows: DetectedRecord[] = listDetected()): { tools: number; modelFiles: number } {
+  let installedTools = 0;
+  try { installedTools = readdirSync(engineRoot, { withFileTypes: true }).filter((entry) => entry.isDirectory()).length; } catch { /* no installed engine directory yet */ }
+  const modelFiles = scanImports().length;
+  return { tools: rows.filter((row) => row.kind !== "folder").length + installedTools, modelFiles };
+}
+
 export async function detectAll(fetcher: Fetcher = fetch): Promise<DetectedRecord[]> {
   const probes: Probe[] = [];
   for (const address of DETECTION_ADDRESSES) for (const kind of ["ollama", "lm-studio", "comfyui", "mlx-serve", "omlx", "llama-server"] as const) { const probe = await probeAt(kind, address, fetcher); if (probe) probes.push(probe); }
   probes.push(...folderProbes());
   const now = new Date().toISOString(); for (const probe of probes) upsertProbe(probe, now);
+  recordScan(now);
   db.delete(detected).where(lt(detected.lastSeen, new Date(Date.now() - RETENTION_MS).toISOString())).run();
   if (probes.length) emit({ id: "detected.changed", data: { count: probes.length } });
   return listDetected();

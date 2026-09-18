@@ -907,7 +907,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
 - [ ] **STACK-63 (S, only when per-client usage shows a need):
   per-client request rate and concurrency caps** at the router, each
   with a counter and a health item when hit. Exit: `scripts/check.sh`.
-- [ ] **STACK-64 (S): Scan now.** ux.md "Scan, and real over mock" item 1:
+- [x] **STACK-64 (S): Scan now.** ux.md "Scan, and real over mock" item 1:
   a "Scan this computer" text action beside Add on Engines and Models
   and as the first row of the Add sheet's Import tab; runs `POST
   /stack/v1/detected/scan`, shows the found rows with Adopt and the
