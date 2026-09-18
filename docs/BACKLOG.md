@@ -475,6 +475,32 @@ layer above; none adds a person or leaves the machine.
   "how do I" and "what did I install". Acceptance: a query that matches
   only a Library page returns it from the site's search box.
 
+- [ ] **STACK-37 (M, low priority): the helper.** The in-console
+  assistant of dev.md "The helper" (2026-09-17), built in three tiers
+  so most questions never reach a model. Tier 1: an intent table in
+  the command palette that answers the enumerable questions from the
+  API ("how many engines", "are my models up to date", "how much disk
+  do models use") with the number in the row and a jump to the page,
+  each intent with a hit counter. Tier 2: the Library search
+  (STACK-32/33). Tier 3: the `helper` role, a read-only tool set over
+  `/stack/v1` (`health`, `engines`, `models`, `updates`, `storage`,
+  `series`, Library `search`) declared once and also served by the
+  `stack-library` MCP server, run on the loaded `chat` engine when it
+  supports tool calls, else on the Stack's pinned `qwen3-1.7b-q8-0`
+  in its own low-priority llama-server that unloads after idle; the
+  reply renders in the property panel, with "Ask about this" on every
+  health row and alert; any action is a proposal card, never a tool.
+  Mirror `lib/router.ts` for the role and `routes/library` for the
+  tools. Acceptance: the two named questions are answered with no
+  engine running (test on the intent table); a scripted engine
+  (`STACK_SCRIPTED_ENGINES=1`) proves the tool loop answers "why is
+  chat offline" from the health list; the tool set contains no
+  mutating tool (test enumerates the registry); with every person
+  engine stopped the helper still loads on its own process (scripted
+  test); with memory below the watermark the palette shows the
+  "needs 2 GB free" state instead of loading. Out of scope: quality
+  benchmarks, a chat bubble, any write tool. Exit: `scripts/check.sh`.
+
 ## Milestone 1: the robot
 
 - [ ] **STACK-17 (L): the Linux ARM profile.** `llama-server` on the Pi

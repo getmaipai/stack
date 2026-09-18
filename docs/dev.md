@@ -866,6 +866,110 @@ boundary never drifts into two copies.
     the Stack's docs; Home's docs link there and describe only what
     Home adds on top.
 
+## The helper: an assistant inside the console (research, 2026-09-17)
+
+The owner's question: a chatbot in the app that helps a person
+troubleshoot and configure ("how many engines do we have", "are all
+our models up to date"), and what runs it when the person's own
+engines are down. Not a priority to build; this records what the
+field does and the shape we would build, so the item is pickup-ready
+when its turn comes.
+
+**How others do it.** Home Assistant's Assist is the closest match
+and the best design: a deterministic sentence matcher answers first
+(no model involved), and only what it cannot match falls through to
+a conversation agent. That agent, when it is a local model, gets the
+"Assist API" as tools scoped to the entities the person exposed, and
+Home Assistant's own guidance is a tool-calling Qwen3-class model with
+thinking off, at least a 10k context, and a warning that thirty
+exposed entities already cost about 1,300 tokens per request (the
+2026.8 release added a native llama.cpp client:
+[llama.cpp integration](https://www.home-assistant.io/integrations/llama_cpp/),
+[LLM API docs](https://developers.home-assistant.io/docs/core/llm/),
+[hybrid intents then LLM](https://www.home-assistant.io/blog/2025/09/11/ai-in-home-assistant/)).
+Docker Desktop's Gordon is the other useful pattern: an assistant
+beside the object, an icon next to a failed container that analyses
+the error and proposes the fix, plus a CLI form; its flaw for us is
+that it sends the context to Docker's cloud
+([Gordon docs](https://docs.docker.com/ai/gordon/)). Nextcloud's
+Assistant runs where the person hosts it with a pluggable model
+backend and per-task entry points rather than one chat box
+([Nextcloud Assistant](https://nextcloud.com/blog/first-open-source-ai-assistant/)).
+The consoles we otherwise model on (UniFi, Synology, TrueNAS,
+Proxmox) ship no built-in assistant; they answer with a repairs list
+and a help centre, which is what our health list and Library already
+are. So the field's answer is: deterministic answers and a docs search
+first, a model only for the open-ended question, and the model
+proposes rather than acts.
+
+**Three tiers, in order, and most questions never reach the model.**
+
+1. *Answered by the console.* "How many engines" is the Engines page
+   count; "are my models up to date" is the Updates page. The
+   command palette (the header search) grows a small intent table,
+   Assist's sentence matcher in miniature: a typed question that
+   matches routes to the page or widget that holds the answer, with
+   the number in the palette row ("3 engines, 1 detected and not
+   adopted"). Each intent carries a hit counter, per the org's rule
+   that no rule lives without a counter and a row; an intent with no
+   hits in a month is retired.
+2. *Answered by the Library.* "How do I" and "what is" go to the
+   Library search (STACK-32/33): the docs of what is installed plus
+   the user docs, one index. No model.
+3. *Answered by the helper.* Only the open-ended question ("why is
+   chat slow today", "what should I install for homework help on this
+   Mac", "what does this alert mean for me") reaches a model. The
+   helper answers through read-only tools over the Stack's own API:
+   `health` (the one list, its primary evidence), `engines`, `models`,
+   `updates`, `storage`, `series` (the Overview's numbers) and the
+   Library's `search`. Every tool returns a summary sized for a small
+   context (counts and the health rows, never a whole record), the
+   lesson from Assist's entity budget. The helper never performs an
+   action: an adopt, install, restart or setting change is rendered
+   as a proposal card the person clicks, the same card the page would
+   show, so the learned component stays out of the paths that change
+   the machine (the org's rule for learned components, and Gordon's
+   "suggest the fix" shape).
+
+**What runs it.** The helper is its own role, `helper`, never a
+person's ability and never counted in their tiers. Two sources, in
+order: the person's loaded `chat` engine when it is up and its model
+supports tool calling (free, already resident); otherwise the Stack's
+own pinned small model, `qwen3-1.7b-q8-0` (1.8 GB, the same pin Try
+it uses, thinking off, `--jinja` for tool calls), on a separate
+llama-server the governor spawns at the lowest priority and unloads
+after a few idle minutes. It is never resident. That answers the
+owner's "separate small thing": a separate process, not a separate
+download. When the person's engines are down because of a bad flag, a
+crashed process or a failed update, the helper's own process still
+loads and can read the health list that explains it. When they are
+down because memory is exhausted, the helper will not load either;
+tiers 1 and 2 still answer, and the palette says plainly "the helper
+needs 2 GB free; here is what the health list says", which is the
+honest state rather than a spinner.
+
+**Where it lives in the UI.** No floating chat bubble. The palette is
+the front door (a question typed into search is the first tier, and
+"Ask the helper" is the last row when nothing matched), and an "Ask
+about this" action sits on each health row and alert, the Gordon
+pattern, so the question arrives with its object attached. The reply
+renders in the property panel (STACK-35), beside the thing it is
+about, on Try it's chat components (one chat surface, not two).
+
+**One tool surface, three consumers.** The read-only tools are
+declared once and served three ways: to the helper, as the
+`stack-library` MCP server's neighbours (STACK-32 already plans
+`list_installed`, `get_doc`, `search`; the status tools join it), and
+to Home's own assistant, which asks the Stack over the same API and
+never gets a second implementation. Home's assistant knows the
+person; the Stack's helper knows the machine; the line holds.
+
+**Privacy.** Nothing leaves the machine: the helper's context is the
+Stack's own state and the Library, both local, and the Stack holds no
+person data to leak. The privacy page gains no row, because no
+outbound connection is added. The helper is listed on the Abilities
+page as what it is, "the helper, 1.8 GB, loads only when asked".
+
 ## What moves out of Home, later
 
 Nothing migrates until the Stack's first milestone runs on the Studio
