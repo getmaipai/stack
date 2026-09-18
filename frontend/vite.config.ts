@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 // the same paths so the browser stays on one origin during development.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  build: { rollupOptions: { output: { entryFileNames: "assets/index.js", chunkFileNames: "assets/[name].js", assetFileNames: "assets/[name][extname]" } } },
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   server: {
     proxy: {
