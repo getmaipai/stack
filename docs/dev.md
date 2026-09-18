@@ -941,6 +941,60 @@ Decisions:
    One code path per capability behind one `host` adapter in the kit,
    never a fork of the pages.
 
+## The desktop program: from the WIP to a release (decided 2026-09-18, 07:00)
+
+The owner's instruction for the next 36 hours: a fully functioning
+desktop app with notifications and a tray that shows status and pauses
+and resumes everything, clear help docs in the repo and in the app, and
+releases in the repo with clear instructions once the app is ready. The
+program, in landing order, each an item with its brief in the queue:
+
+1. **The app** (STACK-18, resumed from the WIP): window, tray, pickers,
+   notifications, single instance, launch at login, the `host` adapter.
+2. **The app owns the daemon's lifecycle on this computer** (STACK-66):
+   the compiled daemon (`bun build --compile`, already built by
+   `scripts/build-release.sh`) ships inside the app bundle as a Tauri
+   sidecar; on first launch the app installs the LaunchAgent that runs
+   the sidecar (SERVICES.md), on later launches it attaches; the
+   fallback page's Start asks launchd; Quit never stops the daemon;
+   uninstall is one menu item that removes the agent and, on request,
+   the data directory.
+3. **Tray status in depth** (STACK-67): the menu shows each role's one
+   line with its dot, memory used of the budget, the last check's
+   sentence, "Open", "Pause everything" or "Resume", "Check my Stack",
+   "Open Logs", "Quit the app (the Stack keeps running)"; the icon's
+   color follows the worst health severity within five seconds of a
+   change (events feed, with a poll fallback).
+4. **Notifications that a person wants** (STACK-68): native, from the
+   durable events only (installed, updated, check failed, health
+   opened and resolved, paused and resumed), each with an action (Open
+   the page), a per-kind switch in Settings > Alerts, quiet during the
+   maintenance window when STACK-22 lands.
+5. **Help in the app** (STACK-69): a Help page (from the profile menu
+   and the palette) that renders the user docs in the console from the
+   shipped knowledge index, with the same pages the docs site serves;
+   "Learn more" everywhere lands there when offline and on the site
+   when online.
+6. **The user docs, complete for a release** (STACK-70): Install (the
+   app download and the one-line installer), Update, Uninstall, the
+   Tray, the phone, Connect a coding tool, Privacy (current), Fix a
+   problem, each grade-6, each with a generated screenshot judged.
+7. **The release** (RELEASE-STACK-01): `scripts/build-release.sh` builds
+   the compiled daemon and the app bundle (`.dmg` for macOS, notarized
+   later), writes `SHA256SUMS`, the three update manifests and the
+   changelog section from commits since the last tag; the release skill
+   cuts the tag and the GitHub Release with the notes being the
+   changelog and one quoted line of links; the org site hosts
+   `install.sh` (SITE-STACK-01). Cutting a release stays the owner's
+   word, in the moment.
+
+After the program: the maintenance window (STACK-22), ready when you
+sit down (STACK-23), storage hygiene (STACK-24), connect a coding tool
+(STACK-60), licences in plain words (STACK-28), guided fixes and the
+diagnostics bundle (STACK-29), engines kept current (STACK-31), What's
+new (STACK-21), and the two databases (STACK-50) once the owner
+confirms it.
+
 ## The API boundary: what is the Stack's and what is Home's (2026-09-17)
 
 The foundational API moved out of Home into the Stack. Home keeps an

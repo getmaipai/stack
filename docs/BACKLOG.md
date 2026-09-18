@@ -933,6 +933,46 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   yet gets its one sentence and a disabled control in the same commit.
   Acceptance: the table exists with every action listed; every fail has
   an item; no button on the console does nothing. Exit: `scripts/check.sh`.
+- [ ] **STACK-66 (M): the app owns the daemon's lifecycle.** dev.md "The
+  desktop program" item 2: the compiled daemon as a Tauri sidecar; first
+  launch installs the LaunchAgent that runs it (`backend/src/service/
+  launchd.ts`), later launches attach; the fallback page's Start;
+  Quit keeps the daemon; an Uninstall menu item. Acceptance: a fresh
+  user account on this Mac (or a cleaned LaunchAgents dir) gets a
+  running daemon after the first app launch (documented live check);
+  Quit leaves `/healthz` answering; Uninstall removes the agent (test on
+  the plist writer). Exit: `scripts/check.sh`.
+- [ ] **STACK-67 (M): tray status in depth.** dev.md item 3. Acceptance:
+  the menu model (plain TS, tested) renders every role's line, memory,
+  the last check sentence and the five actions; the icon severity
+  follows a scripted health change within five seconds (test on the
+  model with an injected clock); screenshots of the menu judged.
+  Exit: `scripts/check.sh`.
+- [ ] **STACK-68 (S): notifications a person wants.** dev.md item 4.
+  Acceptance: only durable events notify (test); each carries an Open
+  action (test on the model); the per-kind switches exist in Settings >
+  Alerts (test). Exit: `scripts/check.sh`.
+- [ ] **STACK-69 (S): Help in the app.** dev.md item 5. Acceptance: the
+  Help page lists every user doc from the shipped index and renders
+  one (test); "Learn more" on a health item lands on it offline (test).
+  Exit: `scripts/check.sh`.
+- [ ] **STACK-70 (M): the user docs, complete for a release.** dev.md
+  item 6. Acceptance: the eight pages exist, pass the reading-level
+  lint, each with a generated screenshot opened and judged; the docs
+  site builds. Exit: `scripts/check.sh`.
+- [ ] **RELEASE-STACK-01 (M): the release build and manifests.** dev.md
+  item 7: `scripts/build-release.sh` produces the daemon binary, the
+  `.dmg`, `SHA256SUMS`, the three update manifests and the changelog
+  section; a dry run on this Mac produces every artifact (documented);
+  the release skill's checks (NOTICE current for pagefind and the MCP
+  SDK, the README disclaimer block, clean-clone build) pass. Exit:
+  `scripts/check.sh`.
+- [ ] **SITE-STACK-01 (S): the org site hosts install.sh.** The
+  installer served at `getmaipai.github.io/stack/install.sh` from the
+  docs site build, pinned to the latest release's assets by checksum;
+  the privacy row already names it. Acceptance: the built site contains
+  the script and its checksum matches the release asset (test in the
+  site build). Exit: `scripts/check.sh`.
 ## Milestone 1: the robot
 
 - [ ] **STACK-17 (L): the Linux ARM profile.** `llama-server` on the Pi
