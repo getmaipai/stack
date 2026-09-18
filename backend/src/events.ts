@@ -12,7 +12,7 @@ export const EVENTS = {
   "job.progress": { id: "job.progress", level: "time_sensitive", audience: "operator", durable: false, template: "Download is {percent}% complete." },
   "job.done": { id: "job.done", level: "time_sensitive", audience: "operator", durable: false, template: "Download finished." },
   "model.installed": { id: "model.installed", level: "passive", audience: "operator", durable: true, template: "{model} is installed." },
-  "update.available": { id: "update.available", level: "passive", audience: "operator", durable: false, template: "An update is available." },
+  "update.available": { id: "update.available", level: "passive", audience: "operator", durable: true, template: "An update is available." },
   "update.applied": { id: "update.applied", level: "passive", audience: "operator", durable: true, template: "The update was applied." },
   "update.failed": { id: "update.failed", level: "immediate", audience: "operator", durable: true, template: "The update failed." },
   repair: { id: "repair", level: "passive", audience: "operator", durable: true, template: "{title}", actions: ["restart_engine", "reinstall_engine", "free_memory", "check_host"] },

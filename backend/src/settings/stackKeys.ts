@@ -6,7 +6,7 @@ import { hasOperator } from "@/lib/operator";
 import { setUpdatesEnabled, updatesEnabled } from "@/updates/check";
 import type { EngineSettingDeclaration, EngineSettingValue } from "@/settings/engineKeys";
 
-export type StackSectionId = "general" | "updates" | "backups" | "network" | "channels" | "storage" | "maintenance" | "engines" | "hardware" | "diagnostics" | "reset";
+export type StackSectionId = "general" | "updates" | "backups" | "network" | "channels" | "alerts" | "storage" | "maintenance" | "engines" | "hardware" | "diagnostics" | "reset";
 export interface StackSection { id: StackSectionId; title: string; icon: string; order: number; itemId?: string; computer?: boolean; }
 export interface StackSettingDeclaration extends EngineSettingDeclaration { section: StackSectionId; order: number; }
 
@@ -16,6 +16,7 @@ export const STACK_SETTING_SECTIONS: StackSection[] = [
   { id: "backups", title: "Backups", icon: "UploadCloud", order: 30, itemId: "STACK-11" },
   { id: "network", title: "Network and access", icon: "ShieldCheck", order: 40 },
   { id: "channels", title: "Alert channels", icon: "Bell", order: 50 },
+  { id: "alerts", title: "Alerts", icon: "BellRing", order: 55 },
   { id: "storage", title: "Storage", icon: "Database", order: 60 },
   { id: "maintenance", title: "Maintenance", icon: "Wrench", order: 70, itemId: "STACK-22" },
   { id: "engines", title: "Engines", icon: "Cpu", order: 80 },
@@ -28,6 +29,11 @@ export const STACK_SETTINGS: StackSettingDeclaration[] = [
   { key: "stackName", type: "text", default: "MaiPai Stack", label: "Name of this Stack", help: "The name shown in the Stack header and to local clients.", group: "Identity", disclosure: "basic", needsRestart: false, section: "general", order: 10 },
   { key: "theme", type: "enum", default: "system", label: "Theme", help: "Choose light, dark, or follow this computer.", group: "Appearance", disclosure: "basic", needsRestart: false, options: [{ value: "system", label: "System" }, { value: "light", label: "Light" }, { value: "dark", label: "Dark" }], section: "general", order: 20 },
   { key: "updatesEnabled", type: "boolean", default: false, label: "Check for updates", help: "Allow the Stack to check its release manifests when you ask it to.", group: "Update checks", disclosure: "basic", needsRestart: false, section: "updates", order: 10 },
+  { key: "alertModel", type: "boolean", default: true, label: "Tell me when a model finishes installing", help: "Show a native notification when a model is ready.", group: "Notifications", disclosure: "basic", needsRestart: false, section: "alerts", order: 10 },
+  { key: "alertUpdate", type: "boolean", default: true, label: "Tell me when an update is ready", help: "Show a native notification for an update.", group: "Notifications", disclosure: "basic", needsRestart: false, section: "alerts", order: 20 },
+  { key: "alertCheck", type: "boolean", default: true, label: "Tell me when a check fails", help: "Show a native notification when a check needs attention.", group: "Notifications", disclosure: "basic", needsRestart: false, section: "alerts", order: 30 },
+  { key: "alertHealth", type: "boolean", default: true, label: "Tell me when something needs attention", help: "Show a native notification for important health changes.", group: "Notifications", disclosure: "basic", needsRestart: false, section: "alerts", order: 40 },
+  { key: "alertRunState", type: "boolean", default: false, label: "Tell me when the Stack is paused or resumed", help: "Show notifications when another app changes run state.", group: "Notifications", disclosure: "basic", needsRestart: false, section: "alerts", order: 50 },
   { key: "lanAccess", type: "boolean", default: false, label: "LAN access", help: "Expose the Stack beyond this computer. A restart is required and operator sign-in remains required.", group: "Access", disclosure: "basic", needsRestart: true, section: "network", order: 10 },
   { key: "port", type: "number", default: 8787, label: "Stack port", help: "The local port used by the Stack after restart.", group: "Access", disclosure: "basic", needsRestart: true, range: { min: 1, max: 65535 }, section: "network", order: 20 },
   { key: "historyRetention", type: "number", default: 30, label: "History retention", help: "Days of local event history to retain.", group: "Storage", disclosure: "basic", needsRestart: false, range: { min: 1, max: 3650 }, section: "storage", order: 10 },

@@ -30,3 +30,17 @@ export function trayMenu(snapshot: TraySnapshot): string[] {
     "Quit the app (the Stack keeps running)",
   ];
 }
+
+export type DesktopEvent = { id: string; durable: boolean; data?: Record<string, unknown> };
+export type AlertPreferences = { model: boolean; update: boolean; check: boolean; health: boolean; runState: boolean };
+export type DesktopNotification = { title: string; target: string };
+export function notificationsFor(events: DesktopEvent[], preferences: AlertPreferences): DesktopNotification[] {
+  return events.filter((event) => event.durable).flatMap((event) => {
+    if (event.id === "model.installed" && preferences.model) return [{ title: "A model finished installing", target: `/models/${String(event.data?.modelId ?? "")}` }];
+    if ((event.id === "update.applied" || event.id === "update.available") && preferences.update) return [{ title: "A Stack update is ready", target: "/settings/updates" }];
+    if (event.id === "check.done" && event.data?.ok === false && preferences.check) return [{ title: "The Stack check needs attention", target: "/alerts" }];
+    if ((event.id === "health.changed" || event.id === "repair") && preferences.health) return [{ title: "The Stack needs attention", target: "/alerts" }];
+    if (event.id === "run.state" && preferences.runState && event.data?.source !== "app") return [{ title: `The Stack is ${String(event.data?.state ?? "changed")}`, target: "/alerts" }];
+    return [];
+  });
+}

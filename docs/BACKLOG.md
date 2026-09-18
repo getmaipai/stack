@@ -883,7 +883,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   Files: `desktop/src-tauri/src/main.rs, backend/src/routes/roles.ts, backend/src/routes/budget.ts`.
   Mirror: the existing tray poll and role text.
   Out of scope: new person records or Home-side features.
-- [ ] **STACK-68 (S): notifications a person wants.** dev.md item 4.
+- [x] **STACK-68 (S): notifications a person wants.** dev.md item 4.
   Acceptance: only durable events notify (test); each carries an Open
   action (test on the model); the per-kind switches exist in Settings >
   Alerts (test). Exit: `scripts/check.sh`.

@@ -10,3 +10,10 @@ the console with **Open the Stack**. Use **Pause everything** or **Resume** to
 change run state, **Check my Stack** to run a health check, and **Open Logs**
 to see local logs. **Quit the app (the Stack keeps running)** closes only the
 tray app.
+
+## Notifications
+
+Notifications come from important saved events only. Choose model installs,
+updates, failed checks, and health attention in **Settings > Alerts**. Pause
+and resume notifications are off until you turn them on. Each notification
+opens the related page. Progress updates never interrupt you.
