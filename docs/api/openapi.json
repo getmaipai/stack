@@ -2007,6 +2007,9 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "createdAt": {
+                            "type": "string"
+                          },
                           "modelCount": {
                             "type": "integer"
                           },
@@ -2024,11 +2027,19 @@
                               },
                               "tokens": {
                                 "type": "integer"
+                              },
+                              "secondsLoaded": {
+                                "type": "integer"
+                              },
+                              "peakMemoryBytes": {
+                                "type": "integer"
                               }
                             },
                             "required": [
                               "requests",
-                              "tokens"
+                              "tokens",
+                              "secondsLoaded",
+                              "peakMemoryBytes"
                             ]
                           },
                           "status": {
@@ -2063,6 +2074,7 @@
                           "id",
                           "name",
                           "parentId",
+                          "createdAt",
                           "modelCount",
                           "bytesOnDisk",
                           "memoryBytes",
@@ -2076,6 +2088,142 @@
                   "required": [
                     "groups"
                   ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Groups"
+        ],
+        "summary": "Create a model group",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "parentId": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created model group.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "parentId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "modelCount": {
+                      "type": "integer"
+                    },
+                    "bytesOnDisk": {
+                      "type": "integer"
+                    },
+                    "memoryBytes": {
+                      "type": "integer"
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "requests": {
+                          "type": "integer"
+                        },
+                        "tokens": {
+                          "type": "integer"
+                        },
+                        "secondsLoaded": {
+                          "type": "integer"
+                        },
+                        "peakMemoryBytes": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "requests",
+                        "tokens",
+                        "secondsLoaded",
+                        "peakMemoryBytes"
+                      ]
+                    },
+                    "status": {
+                      "type": "object",
+                      "properties": {
+                        "loaded": {
+                          "type": "integer"
+                        },
+                        "ready": {
+                          "type": "integer"
+                        },
+                        "onDemand": {
+                          "type": "integer"
+                        },
+                        "failed": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "loaded",
+                        "ready",
+                        "onDemand",
+                        "failed"
+                      ]
+                    },
+                    "worstHealth": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "parentId",
+                    "createdAt",
+                    "modelCount",
+                    "bytesOnDisk",
+                    "memoryBytes",
+                    "usage",
+                    "status",
+                    "worstHealth"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid group.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -2106,7 +2254,14 @@
                 "type": "object",
                 "properties": {
                   "action": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                      "load",
+                      "unload",
+                      "pin",
+                      "unpin",
+                      "checkUpdates"
+                    ]
                   }
                 },
                 "required": [
@@ -2118,30 +2273,47 @@
         },
         "responses": {
           "200": {
-            "description": "Group action accepted.",
+            "description": "Per-model group action results.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "ok": {
-                      "type": "boolean",
-                      "enum": [
-                        true
-                      ]
-                    },
-                    "action": {
-                      "type": "string"
-                    },
-                    "modelCount": {
-                      "type": "integer"
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "modelId": {
+                            "type": "string"
+                          },
+                          "ok": {
+                            "type": "boolean"
+                          },
+                          "reason": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "modelId",
+                          "ok"
+                        ]
+                      }
                     }
                   },
                   "required": [
-                    "ok",
-                    "action",
-                    "modelCount"
+                    "results"
                   ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Group action failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -2189,10 +2361,7 @@
                     "type": "string",
                     "nullable": true
                   }
-                },
-                "required": [
-                  "name"
-                ]
+                }
               }
             }
           }
@@ -2215,6 +2384,9 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "createdAt": {
+                      "type": "string"
+                    },
                     "modelCount": {
                       "type": "integer"
                     },
@@ -2232,11 +2404,19 @@
                         },
                         "tokens": {
                           "type": "integer"
+                        },
+                        "secondsLoaded": {
+                          "type": "integer"
+                        },
+                        "peakMemoryBytes": {
+                          "type": "integer"
                         }
                       },
                       "required": [
                         "requests",
-                        "tokens"
+                        "tokens",
+                        "secondsLoaded",
+                        "peakMemoryBytes"
                       ]
                     },
                     "status": {
@@ -2271,12 +2451,72 @@
                     "id",
                     "name",
                     "parentId",
+                    "createdAt",
                     "modelCount",
                     "bytesOnDisk",
                     "memoryBytes",
                     "usage",
                     "status",
                     "worstHealth"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid group move.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown group.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Groups"
+        ],
+        "summary": "Remove a model group",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Group removed and its models re-parented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok"
                   ]
                 }
               }
@@ -3890,6 +4130,14 @@
                           "id": {
                             "type": "string"
                           },
+                          "nickname": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "groupId": {
+                            "type": "string",
+                            "nullable": true
+                          },
                           "roles": {
                             "type": "array",
                             "items": {
@@ -3901,6 +4149,15 @@
                             "enum": [
                               "notInstalled",
                               "installed"
+                            ]
+                          },
+                          "runtimeState": {
+                            "type": "string",
+                            "enum": [
+                              "loaded",
+                              "ready",
+                              "onDemand",
+                              "failed"
                             ]
                           },
                           "sizeBytes": {
@@ -3922,17 +4179,57 @@
                             "additionalProperties": {
                               "nullable": true
                             }
+                          },
+                          "usage": {
+                            "type": "object",
+                            "properties": {
+                              "modelId": {
+                                "type": "string"
+                              },
+                              "requests": {
+                                "type": "integer"
+                              },
+                              "tokensIn": {
+                                "type": "integer"
+                              },
+                              "tokensOut": {
+                                "type": "integer"
+                              },
+                              "secondsLoaded": {
+                                "type": "integer"
+                              },
+                              "peakMemoryBytes": {
+                                "type": "integer"
+                              },
+                              "lastUsedAt": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "modelId",
+                              "requests",
+                              "tokensIn",
+                              "tokensOut",
+                              "secondsLoaded",
+                              "peakMemoryBytes",
+                              "lastUsedAt"
+                            ]
                           }
                         },
                         "required": [
                           "id",
+                          "nickname",
+                          "groupId",
                           "roles",
                           "state",
+                          "runtimeState",
                           "sizeBytes",
                           "measuredFootprintBytes",
                           "estimated",
                           "source",
-                          "provenance"
+                          "provenance",
+                          "usage"
                         ]
                       }
                     }
@@ -4126,6 +4423,14 @@
                         "id": {
                           "type": "string"
                         },
+                        "nickname": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "groupId": {
+                          "type": "string",
+                          "nullable": true
+                        },
                         "roles": {
                           "type": "array",
                           "items": {
@@ -4137,6 +4442,15 @@
                           "enum": [
                             "notInstalled",
                             "installed"
+                          ]
+                        },
+                        "runtimeState": {
+                          "type": "string",
+                          "enum": [
+                            "loaded",
+                            "ready",
+                            "onDemand",
+                            "failed"
                           ]
                         },
                         "sizeBytes": {
@@ -4158,17 +4472,57 @@
                           "additionalProperties": {
                             "nullable": true
                           }
+                        },
+                        "usage": {
+                          "type": "object",
+                          "properties": {
+                            "modelId": {
+                              "type": "string"
+                            },
+                            "requests": {
+                              "type": "integer"
+                            },
+                            "tokensIn": {
+                              "type": "integer"
+                            },
+                            "tokensOut": {
+                              "type": "integer"
+                            },
+                            "secondsLoaded": {
+                              "type": "integer"
+                            },
+                            "peakMemoryBytes": {
+                              "type": "integer"
+                            },
+                            "lastUsedAt": {
+                              "type": "string",
+                              "nullable": true
+                            }
+                          },
+                          "required": [
+                            "modelId",
+                            "requests",
+                            "tokensIn",
+                            "tokensOut",
+                            "secondsLoaded",
+                            "peakMemoryBytes",
+                            "lastUsedAt"
+                          ]
                         }
                       },
                       "required": [
                         "id",
+                        "nickname",
+                        "groupId",
                         "roles",
                         "state",
+                        "runtimeState",
                         "sizeBytes",
                         "measuredFootprintBytes",
                         "estimated",
                         "source",
-                        "provenance"
+                        "provenance",
+                        "usage"
                       ]
                     }
                   },
@@ -4224,6 +4578,257 @@
                     }
                   },
                   "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown model.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Models"
+        ],
+        "summary": "Rename or move a model",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nickname": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "groupId": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated model.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "nickname": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "groupId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "notInstalled",
+                        "installed"
+                      ]
+                    },
+                    "runtimeState": {
+                      "type": "string",
+                      "enum": [
+                        "loaded",
+                        "ready",
+                        "onDemand",
+                        "failed"
+                      ]
+                    },
+                    "sizeBytes": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "measuredFootprintBytes": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "estimated": {
+                      "type": "boolean"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "provenance": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "nullable": true
+                      }
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "modelId": {
+                          "type": "string"
+                        },
+                        "requests": {
+                          "type": "integer"
+                        },
+                        "tokensIn": {
+                          "type": "integer"
+                        },
+                        "tokensOut": {
+                          "type": "integer"
+                        },
+                        "secondsLoaded": {
+                          "type": "integer"
+                        },
+                        "peakMemoryBytes": {
+                          "type": "integer"
+                        },
+                        "lastUsedAt": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "modelId",
+                        "requests",
+                        "tokensIn",
+                        "tokensOut",
+                        "secondsLoaded",
+                        "peakMemoryBytes",
+                        "lastUsedAt"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "nickname",
+                    "groupId",
+                    "roles",
+                    "state",
+                    "runtimeState",
+                    "sizeBytes",
+                    "measuredFootprintBytes",
+                    "estimated",
+                    "source",
+                    "provenance",
+                    "usage"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid model placement.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown model.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/models/{id}/actions": {
+      "post": {
+        "tags": [
+          "Models"
+        ],
+        "summary": "Apply a model action",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "load",
+                      "unload",
+                      "pin",
+                      "unpin",
+                      "checkUpdates"
+                    ]
+                  }
+                },
+                "required": [
+                  "action"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Model action result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "modelId": {
+                      "type": "string"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "modelId",
                     "ok"
                   ]
                 }

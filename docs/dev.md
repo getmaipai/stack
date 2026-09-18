@@ -413,6 +413,25 @@ remove.
 
 Boot migration moves existing `data/engines/<id>` directories into the
 versioned engine layout and computes a manifest from the pinned engine.
+
+## Model groups (STACK-04c, 2026-09-17)
+
+Models may have a nullable nickname for display, but inference accepts only
+the declared model id or role id. A nickname is never an alias: it is allowed
+to collide, which keeps the model identifier stable for clients and logs.
+
+Each model belongs to exactly one group or to the ungrouped default. Groups
+form a tree and rollups walk descendants while keeping a model in one set, so
+bytes, memory, status and usage are never counted twice. Moving a group below
+one of its descendants is refused as an ancestry cycle. Removing a group
+reparents its models and child groups to the removed group's parent; it never
+deletes a model.
+
+`model_usage` stores requests, input and output tokens, seconds loaded, peak
+memory and last use per model. The router records a successful served request;
+the supervisor records load and unload timing and measured footprints. Group
+actions fan out through the governor and return one result per model, so a
+single admission refusal does not hide the outcomes for its siblings.
 Existing model records gain manifests for their current files. Each move
 is logged, uses an atomic temporary path, and is safe to repeat after a
 partial or already-completed first boot.

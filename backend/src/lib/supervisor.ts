@@ -16,6 +16,7 @@ import { readGgufFacts } from "@/lib/gguf";
 import { hfHubRoot } from "@/lib/store/layout";
 import { activateEngineConfig, settingValues } from "@/settings/engineKeys";
 import { recordSpeedResult } from "@/lib/series";
+import { recordModelFootprint, recordModelLoaded, recordModelUnloaded } from "@/lib/modelGroups";
 
 export type EngineKind = "spawned" | "managed" | "url";
 
@@ -369,7 +370,7 @@ async function startSpawnedBackend(): Promise<ChatBackend> {
     const identity = await readEngineIdentity(client.baseUrl);
     const contextLength = typeof model.engineRequirements.contextLength === "number" ? model.engineRequirements.contextLength : 4096;
     const check = await postLoadCheck(client, processHandle.pid, contextLength);
-    if (check.actualBytes !== null) recordMeasuredFootprint(model.id, check.actualBytes, contextLength);
+    if (check.actualBytes !== null) { recordMeasuredFootprint(model.id, check.actualBytes, contextLength); recordModelFootprint(model.id, check.actualBytes); }
     state.status.postLoadCheck = check;
     resolveHealth("engine.crashed");
     resolveHealth("post-load-check-failed");
@@ -387,6 +388,7 @@ async function startSpawnedBackend(): Promise<ChatBackend> {
         await processHandle.exited;
       },
     };
+    recordModelLoaded(model.id);
     void processHandle.exited.then(() => {
       if (!backend.retired && state.backend === backend) {
         state.backend = null;
@@ -434,6 +436,7 @@ export async function getChatBackend(): Promise<ChatBackend> {
         return getChatBackend();
       }
       state.backend = backend;
+      if (backend.identity.model && getModelById(backend.identity.model)) recordModelLoaded(backend.identity.model);
       state.status = { kind: backend.kind, state: "ready", reason: null, identity: backend.identity, postLoadCheck: state.status.postLoadCheck };
       return backend;
     }).catch((error) => {
@@ -447,11 +450,16 @@ export async function getChatBackend(): Promise<ChatBackend> {
   return state.startingPromise;
 }
 
+function getModelById(id: string | null): ModelRecord | null {
+  return id ? listModels().find((model) => model.id === id) ?? null : null;
+}
+
 async function retireBackend(backend: ChatBackend): Promise<void> {
   backend.retired = true;
   backend.stopGovernor?.();
   while (backend.activeRequests > 0) await new Promise((resolve) => setTimeout(resolve, 10));
   await backend.stop();
+  if (backend.identity.model) recordModelUnloaded(backend.identity.model);
   if (backend.governorHandle) release(backend.governorHandle);
 }
 

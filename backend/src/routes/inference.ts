@@ -7,6 +7,8 @@ import { noEngineResponse, resolveRole, UnknownRoleError, UnverifiedModelError }
 import { ROLE_IDS } from "@/roles";
 import { ROLES } from "@/roles";
 import { completeChat, EngineUnavailableError, streamChat } from "@/lib/supervisor";
+import { getModel, listModels } from "@/lib/modelStore";
+import { recordModelUsage } from "@/lib/modelGroups";
 
 const MessageSchema = z.object({ role: z.string(), content: z.unknown() }).passthrough();
 const ChatRequestSchema = z.object({
@@ -62,6 +64,8 @@ async function inferenceReply<T extends Context>(c: T, model: string, body: Reco
           tokensIn: typeof usage?.prompt_tokens === "number" ? usage.prompt_tokens : 0,
           tokensOut: typeof usage?.completion_tokens === "number" ? usage.completion_tokens : 0,
         });
+        const modelId = getModel(model)?.id ?? result.headers["x-maipai-model"] ?? listModels().find((entry) => entry.roles.includes(model as never))?.id;
+        if (modelId) recordModelUsage(modelId, { requests: 1, tokensIn: typeof usage?.prompt_tokens === "number" ? usage.prompt_tokens : 0, tokensOut: typeof usage?.completion_tokens === "number" ? usage.completion_tokens : 0 });
       }
       return c.json(result.body as never, result.status as never);
     }

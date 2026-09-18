@@ -31,7 +31,7 @@ test("every property-panel adapter exposes actions that call its route handler",
     }
     cleanup();
   }
-  expect(calls).toEqual(["model:load", "model:unload", "model:pin", "model:update", "model:remove", "group:load", "group:unload", "group:pin", "group:update", "group:rename", "group:remove", "group:clear", "client:revoke", "channel:test", "channel:remove", "detected:adopt", "detected:forget"]);
+  expect(calls).toEqual(["model:load", "model:unload", "model:pin", "model:update", "model:remove", "group:load", "group:unload", "group:pin", "group:unpin", "group:checkUpdates", "group:move", "group:remove", "client:revoke", "channel:test", "channel:remove", "detected:adopt", "detected:forget"]);
 });
 
 test("property panel becomes a full-height phone sheet", async () => {

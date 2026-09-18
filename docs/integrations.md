@@ -20,7 +20,7 @@ changelog note.
 | Health | `GET /stack/v1/health`, resolve or ignore by code | Home's Admin and the Stack board | built |
 | Hardware and budget | `GET /stack/v1/hardware`, `GET /stack/v1/budget` | Home's Admin (read-only view), Bot's runtime | built |
 | Models and engines | `GET /stack/v1/models`, `/engines`; install, pin, unload, remove | the operator; Home's Admin as a view with links | built |
-| Model groups | `GET /stack/v1/groups`; group rollups and actions | the operator; Home's Admin as a view | built (showroom); backend STACK-04c |
+| Model groups | `GET /stack/v1/groups`; create, move, remove, rollups and actions | the operator; Home's Admin as a view | built |
 | Detected stores | `GET /stack/v1/detected`; adopt or forget folders and servers | the operator; Models and Engines pages | built (showroom); backend STACK-34 |
 | Storage | `GET /stack/v1/storage` with model ability buckets and shared bytes | the operator; Home's Admin as a view | built |
 | Jobs and downloads | `job.progress` feed rows plus pause and resume endpoints | Home's package surfaces and the board | partly (ranged model and engine transfer; job API planned) |

@@ -9,8 +9,9 @@ the product passes its battle-tested checklist in `docs/dev.md`.
 
 ### Added
 
-- Models tree: grouped rollups, inline rename, batch selection, detected-store
-  rows, and adopt/forget property-panel actions in the showroom.
+- STACK-04c model groups: persistent nicknames, nested one-membership groups,
+  per-model utilization and load seconds, governor-backed group actions, and
+  grouped Models and Monitoring showroom captures.
 
 - STACK-36 Overview console: range-aware usage, memory, and speed series with
   seven dashboard widgets, clickable status rings, and showroom captures.

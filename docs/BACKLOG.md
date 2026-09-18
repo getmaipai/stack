@@ -54,6 +54,10 @@ never copied. No item migrates the hub until STACK-16.
   import scan, reference-counted remove, storage accounting, and migration.
   Verified at 2665498; Windows and non-range servers use the documented
   fallback paths.
+- [x] **STACK-04c (M): nicknames, nested model groups and utilization.**
+  Nullable display nicknames, one-group model placement, persistent nested
+  groups, per-model usage and load seconds, rollups, group actions, and the
+  grouped Models and Monitoring surfaces. Verified at <hash>.
 - [x] **STACK-05 (M): the supervisor.** `spawned`, `managed`, `url`
   engine kinds; spawn, watch, restart, the generation guard, the post-load
   check, the memory report; identity headers on every reply. Copy the

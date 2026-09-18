@@ -7,6 +7,8 @@ export const meta = sqliteTable("meta", {
 
 export const models = sqliteTable("models", {
   id: text("id").primaryKey(),
+  nickname: text("nickname"),
+  groupId: text("group_id"),
   roles: text("roles").notNull(),
   source: text("source").notNull(),
   provenance: text("provenance").notNull(),
@@ -22,6 +24,23 @@ export const models = sqliteTable("models", {
   modelPath: text("model_path"),
   measuredFootprintBytes: integer("measured_footprint_bytes"),
   measuredContextLength: integer("measured_context_length"),
+});
+
+export const modelGroups = sqliteTable("model_groups", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  parentId: text("parent_id"),
+  createdAt: text("created_at").notNull(),
+});
+
+export const modelUsage = sqliteTable("model_usage", {
+  modelId: text("model_id").primaryKey(),
+  requests: integer("requests").notNull().default(0),
+  tokensIn: integer("tokens_in").notNull().default(0),
+  tokensOut: integer("tokens_out").notNull().default(0),
+  secondsLoaded: integer("seconds_loaded").notNull().default(0),
+  peakMemoryBytes: integer("peak_memory_bytes").notNull().default(0),
+  lastUsedAt: text("last_used_at"),
 });
 
 export const operator = sqliteTable("operator", {

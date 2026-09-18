@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db, sqlite } from "@/db";
-import { models } from "@/db/schema";
+import { modelGroups, modelUsage, models } from "@/db/schema";
 import { downloadUrl, DownloadVerificationError, sha256OfFile, type DownloadOptions } from "@/lib/download";
 import { modelsDir } from "@/lib/paths";
 import type { RoleId } from "@/roles";
@@ -18,6 +18,8 @@ export const ModelSourceSchema = z.enum(["catalog", "huggingface"]);
 // manifests and Hugging Face metadata can grow without changing the DB shape.
 export interface ModelRecord {
   id: string;
+  nickname: string | null;
+  groupId: string | null;
   roles: RoleId[];
   source: "catalog" | "huggingface";
   provenance: Record<string, unknown>;
@@ -37,6 +39,8 @@ export interface ModelRecord {
 
 export interface ModelRecordInput {
   id: string;
+  nickname?: string | null;
+  groupId?: string | null;
   roles: RoleId[];
   source: "catalog" | "huggingface";
   provenance: Record<string, unknown>;
@@ -106,6 +110,8 @@ function parseJson<T>(value: string, fallback: T): T {
 function toRecord(row: typeof models.$inferSelect): ModelRecord {
   return {
     id: row.id,
+    nickname: row.nickname,
+    groupId: row.groupId,
     roles: parseJson<RoleId[]>(row.roles, []),
     source: ModelSourceSchema.parse(row.source),
     provenance: parseJson<Record<string, unknown>>(row.provenance, {}),
@@ -146,6 +152,8 @@ export function upsertModel(input: ModelRecordInput, now = new Date().toISOStrin
   const carries = (field: keyof ModelRecordInput): boolean => Object.prototype.hasOwnProperty.call(input, field);
   const record: ModelRecord = {
     id: input.id,
+    nickname: carries("nickname") ? input.nickname ?? null : existing?.nickname ?? null,
+    groupId: carries("groupId") ? input.groupId ?? null : existing?.groupId ?? null,
     roles: input.roles,
     source: input.source,
     provenance: input.provenance,
@@ -164,6 +172,8 @@ export function upsertModel(input: ModelRecordInput, now = new Date().toISOStrin
   };
   db.insert(models).values({
     id: record.id,
+    nickname: record.nickname,
+    groupId: record.groupId,
     roles: json(record.roles),
     source: record.source,
     provenance: json(record.provenance),
@@ -183,6 +193,8 @@ export function upsertModel(input: ModelRecordInput, now = new Date().toISOStrin
     target: models.id,
     set: {
       roles: json(record.roles),
+      nickname: record.nickname,
+      groupId: record.groupId,
       source: record.source,
       provenance: json(record.provenance),
       revision: record.revision,
@@ -307,5 +319,7 @@ export function removeModel(id: string): boolean {
 
 export function clearModelsForTests(): void {
   for (const model of listModels()) removeModelManifest(model.id);
+  db.delete(modelUsage).run();
+  db.delete(modelGroups).run();
   sqlite.exec("DELETE FROM models");
 }

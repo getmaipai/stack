@@ -22,6 +22,6 @@ test("showroom feeds believable household-sized counts through the normal routes
   expect((await (await app.request("/stack/v1/engines")).json() as { engines: unknown[] }).engines).toHaveLength(3);
   expect((await (await app.request("/stack/v1/clients")).json() as { clients: unknown[] }).clients).toHaveLength(3);
   expect((await (await app.request("/stack/v1/notifications")).json() as { notifications: unknown[] }).notifications).toHaveLength(8);
-  expect((await (await app.request("/stack/v1/groups")).json() as { groups: unknown[] }).groups).toHaveLength(4);
+  expect((await (await app.request("/stack/v1/groups")).json() as { groups: unknown[] }).groups).toHaveLength(3);
   expect((await (await app.request("/stack/v1/detected")).json() as { detected: unknown[] }).detected).toHaveLength(2);
 });
