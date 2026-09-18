@@ -9,6 +9,6 @@
     "devUrl": "http://127.0.0.1:8770",
     "frontendDist": "../../frontend/dist"
   },
-  "app": { "withGlobalTauri": true, "windows": [], "security": { "csp": null }, "trayIcon": { "iconPath": "icons/maipai-stack-icon.png", "tooltip": "MaiPai Stack" } },
+  "app": { "withGlobalTauri": true, "windows": [], "security": { "csp": null } },
   "bundle": { "active": true, "targets": "all", "icon": ["icons/maipai-stack-icon.png"], "externalBin": ["binaries/maipai-stack"] }
 }

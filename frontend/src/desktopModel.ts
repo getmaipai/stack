@@ -9,26 +9,16 @@ export function worstHealth(severities: HealthSeverity[]): HealthSeverity {
 }
 
 export function roleLines(roles: RoleLine[]): string[] {
-  return roles.map((role) => `${role.state === "ready" || role.state === "running" ? "●" : "○"} ${role.label} ${role.state}${role.reason ? ` · ${role.reason}` : ""}`);
+  return roles.filter((role) => !["notInstalled", "not installed", "offline"].includes(role.state)).map((role) => `${role.label} ${role.state === "ready" || role.state === "running" ? "ready" : role.state === "paused" ? "paused" : "not ready"}`);
 }
 
 export function trayMenuModel(state: "running" | "paused", roles: RoleLine[]): string[] {
-  return ["marlow · " + (state === "paused" ? "Paused" : "Running"), ...roleLines(roles), "Open the Stack", state === "paused" ? "Resume" : "Pause everything", "Check my Stack", "Open Logs", "Quit the app (the Stack keeps running)"];
+  return [state === "paused" ? "Paused" : `Running · ${roleLines(roles).join(", ")}`, state === "paused" ? "Resume" : "Pause", "Open", "—", "Quit"];
 }
 
 export function trayMenu(snapshot: TraySnapshot): string[] {
-  if (snapshot.daemon === "down") return ["The Stack is not running · Start"];
-  return [
-    `${snapshot.instance} · ${snapshot.state === "paused" ? "Paused" : "Running"}`,
-    ...roleLines(snapshot.roles),
-    `Memory ${snapshot.memory}`,
-    snapshot.lastCheck,
-    "Open the Stack",
-    snapshot.state === "paused" ? "Resume" : "Pause everything",
-    "Check my Stack",
-    "Open Logs",
-    "Quit the app (the Stack keeps running)",
-  ];
+  if (snapshot.daemon === "down") return ["Not running", "Open", "—", "Quit"];
+  return [snapshot.state === "paused" ? "Paused" : `Running · ${roleLines(snapshot.roles).join(", ")}`, snapshot.state === "paused" ? "Resume" : "Pause", "Open", "—", "Quit"];
 }
 
 export type DesktopEvent = { id: string; durable: boolean; data?: Record<string, unknown> };
