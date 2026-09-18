@@ -10,7 +10,7 @@ import { engineDir, engineIsBound, ensureEngine, removeEngine } from "@/lib/engi
 import { currentEngine, swapEngine } from "@/updates/engines";
 import { deriveEngineVersionState } from "@/lib/engineState";
 import { readEngineConfig, updateEngineConfig } from "@/settings/engineKeys";
-import { getChatBackend, getChatEngineStatus, restartChatEngine, stopChatEngine } from "@/lib/supervisor";
+import { chatEngineCanBeStartedByStack, chatEngineIsStackOwned, getChatBackend, getChatEngineStatus, restartChatEngine, stopChatEngine } from "@/lib/supervisor";
 import { readEngineIdentity } from "@/lib/identity";
 import { emit } from "@/lib/events";
 import { showroom, showroomEngines } from "@/showroom/fixture";
@@ -75,6 +75,7 @@ enginesRoutes.openapi(enginesRoute, async (c) => {
 });
 
 const nameParam = z.object({ name: z.string().openapi({ param: { name: "name", in: "path" } }) });
+export const EXTERNAL_ENGINE_CONTROL_MESSAGE = "Managed outside the Stack.";
 const tagBody = { body: { content: { "application/json": { schema: z.object({ tag: z.string() }) } } } };
 const settingSchema = z.object({
   key: z.string(), type: z.enum(["number", "boolean", "text", "enum"]), default: z.union([z.string(), z.number(), z.boolean()]), group: z.string().optional(), options: z.array(z.object({ value: z.string(), label: z.string() })).optional(),
@@ -91,12 +92,17 @@ enginesRoutes.openapi(configRoute, (c) => c.json({ settings: readEngineConfig(c.
 const updateConfigRoute = createRoute({ method: "put", path: "/{name}/config", tags: ["Engines"], summary: "Update engine configuration", middleware: [requireOperator] as const, request: { params: nameParam, body: { content: { "application/json": { schema: z.record(z.string(), z.unknown()) } } } }, responses: { 200: { content: { "application/json": { schema: z.object({ settings: z.array(z.unknown()) }) } }, description: "Pending engine configuration." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "Invalid engine configuration." } } });
 enginesRoutes.openapi(updateConfigRoute, (c) => { try { const { name } = c.req.valid("param"); return c.json({ settings: updateEngineConfig(name, c.req.valid("json")) }, 200); } catch (error) { return c.json({ error: error instanceof Error ? error.message : "Invalid engine configuration" }, 400); } });
 
-const controlRoute = (action: "start" | "stop" | "restart" | "probe") => createRoute({ method: "post", path: `/{name}/${action}`, tags: ["Engines"], summary: `${action} engine`, middleware: [requireOperator] as const, request: { params: nameParam }, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.literal(true), healthy: z.boolean().optional() }) } }, description: "Engine control completed." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "Engine control failed." } } });
+const controlRoute = (action: "start" | "stop" | "restart" | "probe") => createRoute({ method: "post", path: `/{name}/${action}`, tags: ["Engines"], summary: `${action} engine`, middleware: [requireOperator] as const, request: { params: nameParam }, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.literal(true), healthy: z.boolean().optional() }) } }, description: "Engine control completed." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "Engine control failed." }, 409: { content: { "application/json": { schema: ErrorSchema } }, description: "The process is managed outside the Stack." } } });
 for (const action of ["start", "stop", "restart", "probe"] as const) enginesRoutes.openapi(controlRoute(action), async (c) => {
   const { name } = c.req.valid("param");
+  if (action !== "probe") {
+    const canStart = (action === "start" || action === "restart") && name === "llama-server" && chatEngineCanBeStartedByStack();
+    const ownsRunning = name === "llama-server" && chatEngineIsStackOwned();
+    if (!canStart && !ownsRunning) return c.json({ error: EXTERNAL_ENGINE_CONTROL_MESSAGE }, 409);
+  }
   if (action === "start") await getChatBackend();
   else if (action === "stop") await stopChatEngine();
-  else if (action === "restart") await restartChatEngine();
+  else if (action === "restart") { await restartChatEngine(); await getChatBackend(); }
   else {
     const host = process.env.STACK_MANAGED_ENGINE_URL ?? process.env.MAIPAI_LLAMA_SERVER_URL;
     if (!host) return c.json({ error: "No managed engine host is configured." }, 400);

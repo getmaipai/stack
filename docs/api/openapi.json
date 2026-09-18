@@ -839,6 +839,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "The process is managed outside the Stack.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -886,6 +896,16 @@
           },
           "400": {
             "description": "Engine control failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The process is managed outside the Stack.",
             "content": {
               "application/json": {
                 "schema": {
@@ -947,6 +967,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "The process is managed outside the Stack.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -994,6 +1024,16 @@
           },
           "400": {
             "description": "Engine control failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The process is managed outside the Stack.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3415,6 +3455,13 @@
                           "target": {
                             "type": "string",
                             "nullable": true
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "ready",
+                              "offline"
+                            ]
                           }
                         },
                         "required": [
@@ -3428,7 +3475,8 @@
                           "lastSeen",
                           "forgotten",
                           "adopted",
-                          "target"
+                          "target",
+                          "state"
                         ]
                       }
                     },
@@ -3568,6 +3616,13 @@
                           "target": {
                             "type": "string",
                             "nullable": true
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "ready",
+                              "offline"
+                            ]
                           }
                         },
                         "required": [
@@ -3581,7 +3636,8 @@
                           "lastSeen",
                           "forgotten",
                           "adopted",
-                          "target"
+                          "target",
+                          "state"
                         ]
                       }
                     },

@@ -84,7 +84,7 @@ operatorRoutes.openapi(setupRoute, async (c) => {
   if (hasOperator()) return c.json({ error: "Operator setup has already completed" }, 409);
   await setOperatorPassword(c.req.valid("json").password);
   issueOperatorSession(c);
-  return c.json({ state: "signedIn", required: true }, 201);
+  return c.json({ state: "signedIn" as const, required: true }, 201);
 });
 operatorRoutes.openapi(loginRoute, async (c) => {
   const ip = requestIp(c);
@@ -100,7 +100,7 @@ operatorRoutes.openapi(loginRoute, async (c) => {
   }
   resetOperatorPasswordThrottle(ip);
   issueOperatorSession(c);
-  return c.json({ state: "signedIn", required: true }, 200);
+  return c.json({ state: "signedIn" as const, required: true }, 200);
 });
 operatorRoutes.openapi(logoutRoute, (c) => {
   clearOperatorSession(c);

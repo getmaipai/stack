@@ -4,7 +4,7 @@ import { sentenceFor } from "@/lib/unavailable";
 export type ThingKind = "engine" | "model" | "detected" | "group" | "client";
 export type ActionHandler = (action: string) => void | Promise<void>;
 
-export function actionsFor(kind: ThingKind, item: { loaded?: boolean; current?: boolean; notCurrent?: boolean; newestTag?: string | null; count?: number; name?: string; qualified?: boolean }, onAction: ActionHandler, surface: "panel" | "row" = "panel"): PropertyAction[] {
+export function actionsFor(kind: ThingKind, item: { loaded?: boolean; current?: boolean; notCurrent?: boolean; newestTag?: string | null; count?: number; name?: string; qualified?: boolean; installed?: boolean; running?: string | null }, onAction: ActionHandler, surface: "panel" | "row" = "panel"): PropertyAction[] {
   const qualified = item.qualified ?? true;
   const engineUpdateSentence = sentenceFor("engine-update")!;
   const detectedSentence = sentenceFor("detected-start")!;
@@ -12,8 +12,9 @@ export function actionsFor(kind: ThingKind, item: { loaded?: boolean; current?: 
   const modelUnqualifiedSentence = sentenceFor("model-load-unqualified")!;
   const modelInstallSentence = sentenceFor("model-install-unresolved")!;
   if (kind === "engine") return [
-    { label: "Start", icon: "Play", onClick: () => onAction("start"), disabled: !qualified, sentence: !qualified ? detectedSentence : undefined },
-    { label: "Stop", icon: "Square", onClick: () => onAction("stop"), destructive: true, disabled: !qualified, sentence: !qualified ? detectedSentence : undefined },
+    ...(surface === "row" && item.running ? [{ label: "Stop", icon: "Square", onClick: () => onAction("stop"), destructive: true, disabled: !qualified, sentence: !qualified ? detectedSentence : undefined } as PropertyAction] : []),
+    ...(surface === "row" && item.installed && !item.running ? [{ label: "Start", icon: "Play", onClick: () => onAction("start"), disabled: !qualified, sentence: !qualified ? detectedSentence : undefined } as PropertyAction] : []),
+    ...(surface === "panel" ? [{ label: "Start", icon: "Play", onClick: () => onAction("start"), disabled: !qualified, sentence: !qualified ? detectedSentence : undefined } as PropertyAction, { label: "Stop", icon: "Square", onClick: () => onAction("stop"), destructive: true, disabled: !qualified, sentence: !qualified ? detectedSentence : undefined } as PropertyAction] : []),
     { label: "Restart", icon: "RefreshCw", onClick: () => onAction("restart"), disabled: !qualified, sentence: !qualified ? detectedSentence : undefined },
     ...(item.notCurrent && item.newestTag ? [{ label: "Update", icon: "UploadCloud", onClick: () => onAction("update"), disabled: true, sentence: engineUpdateSentence } as PropertyAction] : []),
     { label: "Make current", icon: "Check", onClick: () => onAction("current") },

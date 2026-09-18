@@ -4,7 +4,7 @@ import { requireOperator } from "@/lib/operator";
 import { adoptDetected, detectAll, forgetDetected, foundFiles, lastScan, listDetected, scanCounts, type DetectedRecord } from "@/lib/detect";
 import { showroom, showroomAdoptDetected, showroomDetected } from "@/showroom/fixture";
 
-const DetectedSchema = z.object({ id: z.string(), kind: z.string(), name: z.string(), version: z.string(), where: z.string(), couldHold: z.array(z.string()), firstSeen: z.string(), lastSeen: z.string(), forgotten: z.boolean(), adopted: z.boolean(), target: z.string().nullable() });
+const DetectedSchema = z.object({ id: z.string(), kind: z.string(), name: z.string(), version: z.string(), where: z.string(), couldHold: z.array(z.string()), firstSeen: z.string(), lastSeen: z.string(), forgotten: z.boolean(), adopted: z.boolean(), target: z.string().nullable(), state: z.enum(["ready", "offline"]) });
 const FoundSchema = z.object({ id: z.string(), kind: z.literal("file"), name: z.string(), source: z.string(), path: z.string(), sizeBytes: z.number().int(), digest: z.string(), couldHold: z.array(z.string()) });
 const scanResponse = z.object({ detected: z.array(DetectedSchema), foundFiles: z.array(FoundSchema), found: z.object({ tools: z.number(), modelFiles: z.number() }), scannedAt: z.string().nullable() });
 const listRoute = createRoute({ method: "get", path: "/", tags: ["Detected"], summary: "List locally detected engines and folders", middleware: [requireOperator] as const, request: { query: z.object({ all: z.coerce.boolean().optional() }) }, responses: { 200: { content: { "application/json": { schema: scanResponse } }, description: "Detected rows, excluding forgotten rows unless requested." } } });
@@ -13,7 +13,7 @@ const adoptRoute = createRoute({ method: "post", path: "/{id}/adopt", tags: ["De
 const forgetRoute = createRoute({ method: "post", path: "/{id}/forget", tags: ["Detected"], summary: "Forget a detected engine or folder", middleware: [requireOperator] as const, request: { params: idParamSchema("id") }, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.literal(true), id: z.string() }) } }, description: "The row is hidden without changing the source." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown detected item." } } });
 
 function showroomRows(): DetectedRecord[] {
-  const now = new Date().toISOString(); return showroomDetected.map((item) => ({ id: item.id, kind: item.kind === "server" ? "comfyui" : "folder", name: item.name, version: item.version, where: item.path, couldHold: item.roles as DetectedRecord["couldHold"], firstSeen: now, lastSeen: now, forgotten: false, adopted: false, target: null }));
+  const now = new Date().toISOString(); return showroomDetected.map((item) => ({ id: item.id, kind: item.kind === "server" ? "comfyui" : "folder", name: item.name, version: item.version, where: item.path, couldHold: item.roles as DetectedRecord["couldHold"], firstSeen: now, lastSeen: now, forgotten: false, adopted: false, target: null, state: "ready" }));
 }
 
 export const detectedRoutes = apiRouter();

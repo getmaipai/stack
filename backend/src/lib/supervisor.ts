@@ -430,6 +430,16 @@ export function getChatEngineStatus(): ChatEngineStatus {
   return { ...state.status };
 }
 
+/** A pid is the proof that this process was launched by this Stack. */
+export function chatEngineIsStackOwned(): boolean {
+  return (state.backend?.kind === "spawned" && state.backend.pid !== null) || (scriptedEnginesEnabled() && state.backend?.identity.host === "stub");
+}
+
+/** Starting is safe only when the configured backend is the Stack's spawned llama-server. */
+export function chatEngineCanBeStartedByStack(): boolean {
+  return !state.backend && !configuredUrl();
+}
+
 export async function getChatBackend(): Promise<ChatBackend> {
   if (getRunState() !== "running") throw new EngineUnavailableError("The Stack is paused.");
   if (state.manuallyStopped) throw new EngineUnavailableError("The chat engine was stopped by the operator.");
@@ -448,6 +458,7 @@ export async function getChatBackend(): Promise<ChatBackend> {
       if (backend.identity.model && getModelById(backend.identity.model)) recordModelLoaded(backend.identity.model);
       state.lastRealRequestAt = Date.now();
       state.status = { kind: backend.kind, state: "ready", reason: null, identity: backend.identity, postLoadCheck: state.status.postLoadCheck };
+      emit({ id: "engine.state", data: { engine: "chat", state: "ready" as const } });
       return backend;
     }).catch((error) => {
       if (generation === state.generation) {
@@ -480,6 +491,7 @@ export async function restartChatEngine(): Promise<void> {
   state.startingPromise = null;
   state.manuallyStopped = false;
   state.status = { ...state.status, state: "loading", reason: null };
+  emit({ id: "engine.state", data: { engine: "chat", state: "loading" as const } });
   if (previous) await retireBackend(previous);
 }
 
@@ -490,6 +502,7 @@ export async function stopChatEngine(): Promise<void> {
   state.backend = null;
   state.startingPromise = null;
   state.status = { ...state.status, state: "stopped", reason: "Stopped by the operator." };
+  emit({ id: "engine.state", data: { engine: "chat", state: "stopped" as const } });
   if (previous) await retireBackend(previous);
 }
 

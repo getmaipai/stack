@@ -18,11 +18,17 @@ export const DETECTION_VERSION_FLOORS = DETECTED_ENGINE_VERSION_FLOORS;
 const RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 type Fetcher = (input: string | URL, init?: RequestInit) => Promise<Response>;
 export type DetectedKind = "ollama" | "lm-studio" | "comfyui" | "mlx-serve" | "omlx" | "llama-server" | "folder";
-export interface DetectedRecord { id: string; kind: DetectedKind; name: string; version: string; where: string; couldHold: RoleId[]; firstSeen: string; lastSeen: string; forgotten: boolean; adopted: boolean; target: string | null; }
+export interface DetectedRecord { id: string; kind: DetectedKind; name: string; version: string; where: string; couldHold: RoleId[]; firstSeen: string; lastSeen: string; forgotten: boolean; adopted: boolean; target: string | null; state: "ready" | "offline"; }
 export interface FoundFileRecord { id: string; kind: "file"; name: string; source: string; path: string; sizeBytes: number; digest: string; couldHold: RoleId[]; }
 interface Probe { kind: DetectedKind; name: string; version: string; where: string; couldHold: RoleId[]; }
 const managedBindings = new Map<string, string>();
 const LAST_SCAN_KEY = "detected.lastScan";
+const MISSED_PROBE_PREFIX = "detected.missed:";
+
+function missedProbeKey(id: string): string { return `${MISSED_PROBE_PREFIX}${id}`; }
+function missedProbeCount(id: string): number { return Number(db.select({ value: meta.value }).from(meta).where(eq(meta.key, missedProbeKey(id))).get()?.value ?? 0); }
+function setMissedProbeCount(id: string, count: number): void { db.insert(meta).values({ key: missedProbeKey(id), value: String(count) }).onConflictDoUpdate({ target: meta.key, set: { value: String(count) } }).run(); }
+function clearMissedProbeCount(id: string): void { db.delete(meta).where(eq(meta.key, missedProbeKey(id))).run(); }
 
 function json<T>(value: string, fallback: T): T { try { return JSON.parse(value) as T; } catch { return fallback; } }
 function urlFor(address: string, port: number): string { return `http://${address.includes(":") ? `[${address}]` : address}:${port}`; }
@@ -57,13 +63,14 @@ function folderProbes(): Probe[] {
 }
 
 function toRecord(row: typeof detected.$inferSelect): DetectedRecord {
-  return { id: row.id, kind: row.kind as DetectedKind, name: row.name, version: row.version, where: row.where, couldHold: json<RoleId[]>(row.couldHold, []), firstSeen: row.firstSeen, lastSeen: row.lastSeen, forgotten: row.forgotten === 1, adopted: row.adopted === 1, target: row.target };
+  return { id: row.id, kind: row.kind as DetectedKind, name: row.name, version: row.version, where: row.where, couldHold: json<RoleId[]>(row.couldHold, []), firstSeen: row.firstSeen, lastSeen: row.lastSeen, forgotten: row.forgotten === 1, adopted: row.adopted === 1, target: row.target, state: missedProbeCount(row.id) >= 2 ? "offline" : "ready" };
 }
 
 function upsertProbe(probe: Probe, now: string): void {
   const id = `${probe.kind}:${probe.where}`;
   const existing = db.select().from(detected).where(eq(detected.id, id)).get();
   const changedVersion = existing && existing.version !== probe.version;
+  clearMissedProbeCount(id);
   db.insert(detected).values({ id, kind: probe.kind, name: probe.name, version: probe.version, where: probe.where, couldHold: JSON.stringify(probe.couldHold), firstSeen: existing?.firstSeen ?? now, lastSeen: now, forgotten: changedVersion ? 0 : existing?.forgotten ?? 0, adopted: existing?.adopted ?? 0, target: existing?.target ?? null }).onConflictDoUpdate({ target: detected.id, set: { kind: probe.kind, name: probe.name, version: probe.version, where: probe.where, couldHold: JSON.stringify(probe.couldHold), lastSeen: now, forgotten: changedVersion ? 0 : existing?.forgotten ?? 0 } }).run();
 }
 
@@ -96,7 +103,9 @@ export async function detectAll(fetcher: Fetcher = fetch): Promise<DetectedRecor
   const probes: Probe[] = [];
   for (const address of DETECTION_ADDRESSES) for (const kind of ["ollama", "lm-studio", "comfyui", "mlx-serve", "omlx", "llama-server"] as const) { const probe = await probeAt(kind, address, fetcher); if (probe) probes.push(probe); }
   probes.push(...folderProbes());
-  const now = new Date().toISOString(); for (const probe of probes) upsertProbe(probe, now);
+  const now = new Date().toISOString(); const found = new Set(probes.map((probe) => `${probe.kind}:${probe.where}`));
+  for (const row of db.select().from(detected).all()) if (row.kind !== "folder" && !row.forgotten && !found.has(row.id)) setMissedProbeCount(row.id, missedProbeCount(row.id) + 1);
+  for (const probe of probes) upsertProbe(probe, now);
   recordScan(now);
   db.delete(detected).where(lt(detected.lastSeen, new Date(Date.now() - RETENTION_MS).toISOString())).run();
   if (probes.length) emit({ id: "detected.changed", data: { count: probes.length } });
@@ -136,4 +145,4 @@ export function forgetDetected(id: string): boolean { const row = db.select().fr
 
 export function startDetection(): () => void { let stopped = false; const run = () => { if (!stopped) void detectAll(); }; run(); const timer = setInterval(run, 60 * 60_000); (timer as unknown as { unref?: () => void }).unref?.(); return () => { stopped = true; clearInterval(timer); }; }
 
-export function clearDetectedForTests(): void { db.delete(detected).run(); managedBindings.clear(); }
+export function clearDetectedForTests(): void { db.delete(detected).run(); for (const row of db.select().from(meta).all()) if (row.key.startsWith(MISSED_PROBE_PREFIX)) db.delete(meta).where(eq(meta.key, row.key)).run(); managedBindings.clear(); }

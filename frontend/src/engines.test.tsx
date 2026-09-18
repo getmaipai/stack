@@ -16,6 +16,17 @@ test("the engines table renders version state and its reason", async () => {
   expect(document.body.textContent).toContain("Scan this computer");
 });
 
+test("an external host is labelled managed outside the Stack and has no engine controls", async () => {
+  const external = { id: "ollama:http://127.0.0.1:11434", name: "Ollama", kind: "ollama", version: "0.6.0", where: "http://127.0.0.1:11434", couldHold: ["chat"], state: "offline" as const };
+  globalThis.fetch = mock((input: RequestInfo | URL) => Promise.resolve(String(input).endsWith("/detected") ? Response.json({ detected: [external] }) : Response.json({ engines: [] }))) as unknown as typeof fetch;
+  render(<MemoryRouter initialEntries={["/engines"]}><DashboardShell /></MemoryRouter>);
+  await waitFor(() => expect(document.body.textContent).toContain("Managed outside the Stack"));
+  expect(document.body.textContent).toContain("Offline");
+  expect(document.body.textContent).not.toContain("Start");
+  expect(document.body.textContent).not.toContain("Stop");
+  expect(document.body.textContent).not.toContain("Restart");
+});
+
 test("the configure sheet renders declared controls and stop uses an inline confirmation", async () => {
   const calls: string[] = [];
   globalThis.fetch = mock((input: RequestInfo | URL, init?: RequestInit) => { calls.push(`${String(input)} ${init?.method ?? "GET"}`); if (String(input).includes("/config") && init?.method === "PUT") return Promise.resolve(Response.json({ settings })); if (String(input).includes("/config")) return Promise.resolve(Response.json({ settings })); if (init?.method === "POST") return Promise.resolve(Response.json({ ok: true })); return Promise.resolve(Response.json({ engines })); }) as unknown as typeof fetch;

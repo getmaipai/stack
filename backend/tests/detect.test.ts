@@ -42,6 +42,15 @@ test("a below-floor host raises health, forget hides it, and a changed version r
   await detectAll(scriptedFetch("0.2.0")); expect(listDetected().some((item) => item.id === row.id)).toBe(true);
 });
 
+test("a detected external host becomes offline only after two missed sweeps", async () => {
+  await detectAll(scriptedFetch("0.6.0"));
+  const id = listDetected().find((item) => item.kind === "ollama")!.id;
+  await detectAll(async () => new Response("not found", { status: 404 }));
+  expect(listDetected().find((item) => item.id === id)?.state).toBe("ready");
+  await detectAll(async () => new Response("not found", { status: 404 }));
+  expect(listDetected().find((item) => item.id === id)?.state).toBe("offline");
+});
+
 test("the route exposes a scan and the address list is loopback only", async () => {
   expect(DETECTION_ADDRESSES).toEqual(["127.0.0.1", "::1"]);
   process.env.STACK_SHOWROOM = "1"; process.env.NODE_ENV = "development";

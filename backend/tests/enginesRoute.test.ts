@@ -35,3 +35,18 @@ test("operator engine controls start, stop, restart, probe, swap, and protect cu
   const invalidInstall = await app.request("/stack/v1/engines/llama-server/install", { method: "POST", headers, body: JSON.stringify({ tag: "b-nope" }) });
   expect(invalidInstall.status).toBe(400);
 });
+
+test("an external host never receives Stack engine controls", async () => {
+  dataDir = mkdtempSync(join(process.env.TMPDIR ?? "/tmp", "maipai-engines-route-")); process.env.STACK_DATA_DIR = dataDir;
+  const cookie = await operatorCookie(); const headers = { cookie, "content-type": "application/json" };
+  const calls: string[] = [];
+  const host = Bun.serve({ port: 0, fetch: (request) => { calls.push(new URL(request.url).pathname); return Response.json({ status: "ok" }); } });
+  try {
+    process.env.STACK_MANAGED_ENGINE_URL = String(host.url).replace(/\/$/, "");
+    for (const action of ["start", "stop", "restart"]) {
+      const response = await app.request(`/stack/v1/engines/managed/${action}`, { method: "POST", headers });
+      expect(response.status).toBe(409); expect((await response.json() as { error: string }).error).toBe("Managed outside the Stack.");
+    }
+    expect(calls).toEqual([]);
+  } finally { host.stop(true); }
+});
