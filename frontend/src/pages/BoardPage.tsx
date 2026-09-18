@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ApiError, api, type BudgetResponse, type HardwareResponse, type NotificationRecord, type ProfileTier, type RepairRecord, type RoleRecord, type SetupDownload, type SetupMode, type SetupPlanResponse } from "@/lib/api";
 import { plainHardware, plainHardwareDetails } from "@/lib/plainHardware";
@@ -7,10 +7,10 @@ import { Badge } from "@/kit/ui/badge";
 import { Button } from "@/kit/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/kit/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/kit/ui/dialog";
-import { Input } from "@/kit/ui/input";
 import { Progress } from "@/kit/ui/progress";
 import { Skeleton } from "@/kit/ui/skeleton";
 import { Toaster } from "@/kit/ui/sonner";
+import { ClientKeyDialog } from "@/pages/ClientKeyDialog";
 
 const ROLE_LABELS: Record<string, string> = { chat: "Chat", coding: "Coding", judge: "Judge", router: "Router", embed: "Embeddings", rerank: "Reranking", vision: "Vision", stt: "Voice in", tts: "Voice out", wakeword: "Wake word", image: "Pictures", video: "Video", music: "Music" };
 const ABILITIES: Array<{ id: string; label: string; roles: string[]; size: string; models: string }> = [
@@ -62,11 +62,6 @@ function DownloadsCard({ downloads, health, onRefresh }: { downloads: SetupDownl
 
 function Details({ roles }: { roles: RoleRecord[] }) { const folded = roles.filter((role) => ["router", "judge", "embed", "rerank", "wakeword", "vision"].includes(role.id)); return <details className="rounded-2xl border border-border px-5 py-4"><summary className="cursor-pointer font-medium">Details</summary><div className="mt-4 grid gap-3 sm:grid-cols-2">{folded.map((role) => <div className="flex items-center justify-between gap-3" key={role.id}><span>{ROLE_LABELS[role.id]}</span><Badge variant={stateTone(role.state)}>{roleState(role)}</Badge></div>)}</div></details>; }
 
-function ClientKeyDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; onCreated: (key: string) => void }) {
-  const [password, setPassword] = useState(""); const [error, setError] = useState<string | null>(null); const [saving, setSaving] = useState(false);
-  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setSaving(true); setError(null); try { await api.post("/stack/v1/operator/setup", { password }); const result = await api.post<{ key: string }>("/stack/v1/clients", { name: "Stack local tool", allowedRoles: ["chat"] }); onCreated(result.key); onOpenChange(false); } catch (caught) { setError(caught instanceof Error ? caught.message : "The password could not be saved."); } finally { setSaving(false); } }
-  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><DialogHeader><DialogTitle>Set your operator password</DialogTitle><DialogDescription>The password was deferred until the first key. It secures the board and future keys on this computer.</DialogDescription></DialogHeader><form className="space-y-5" onSubmit={submit}><label className="block space-y-2 text-base font-medium" htmlFor="deferred-password">Operator password<Input id="deferred-password" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>{error && <p className="text-base text-destructive" role="alert">{error}</p>}<Button type="submit" disabled={saving}>{saving ? "Saving..." : "Set password and create key"}</Button></form></DialogContent></Dialog>;
-}
 
 export function BoardPage({ embedded = false, showAbilities = true }: { embedded?: boolean; showAbilities?: boolean } = {}) {
   const hardware = useApiResource<HardwareResponse>("/stack/v1/hardware"); const roles = useApiResource<{ roles: RoleRecord[] }>("/stack/v1/roles"); const budget = useApiResource<BudgetResponse>("/stack/v1/budget"); const notifications = useApiResource<{ notifications: NotificationRecord[] }>("/stack/v1/notifications"); const repairs = useApiResource<{ repairs: RepairRecord[] }>("/stack/v1/repairs"); const setup = useApiResource<SetupPlanResponse>("/stack/v1/setup/plan");
