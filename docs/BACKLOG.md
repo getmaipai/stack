@@ -413,7 +413,7 @@ that let the Stack set itself up, keep itself healthy, keep itself
 current and keep the person informed. Each is built on the operating
 layer above; none adds a person or leaves the machine.
 
-- [ ] **STACK-20 (M): Check my Stack.** One click (and nightly in the
+- [x] **STACK-20 (M): Check my Stack.** One click (and nightly in the
   maintenance window, quietly) runs a real smoke test per ready role:
   a completion, a transcription of a bundled two-second clip, a speech
   render, a small image tile; then the fit-together check: with the

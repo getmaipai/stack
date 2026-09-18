@@ -149,5 +149,14 @@ export const speedResults = sqliteTable("speed_results", {
   contextLength: integer("context_length"),
 });
 
+export const checkRuns = sqliteTable("check_runs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  at: text("at").notNull(),
+  ok: integer("ok").notNull(),
+  results: text("results").notNull(),
+  fitTogetherOk: integer("fit_together_ok").notNull(),
+  fitTogetherReason: text("fit_together_reason"),
+});
+
 // Compatibility name for the old repair adapter and its route alias.
 export const repairs = health;

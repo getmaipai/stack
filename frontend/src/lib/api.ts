@@ -92,6 +92,13 @@ export interface HealthItem {
   learnMore?: string;
 }
 
+export interface CheckResult {
+  at: string;
+  ok: boolean;
+  results: Array<{ role: string; ok: boolean; ms: number; reason: string | null; skipped?: boolean }>;
+  fitTogether: { ok: boolean; reason: string | null };
+}
+
 export type SetupTier = "p16" | "p32" | "p64" | "p128";
 export type SetupMode = "small" | "full";
 export type DownloadStatus = "queued" | "downloading" | "paused" | "installed" | "failed";

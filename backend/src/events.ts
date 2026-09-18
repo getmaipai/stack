@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const EventLevelSchema = z.enum(["immediate", "time_sensitive", "passive"]);
 export type EventLevel = z.infer<typeof EventLevelSchema>;
-export const EventIdSchema = z.enum(["role.state", "engine.state", "pressure", "job.progress", "job.done", "model.installed", "update.available", "update.applied", "update.failed", "repair", "health.changed", "detected.changed"]);
+export const EventIdSchema = z.enum(["role.state", "engine.state", "pressure", "job.progress", "job.done", "model.installed", "update.available", "update.applied", "update.failed", "repair", "health.changed", "detected.changed", "check.progress", "check.done"]);
 export type EventId = z.infer<typeof EventIdSchema>;
 
 export const EVENTS = {
@@ -18,6 +18,8 @@ export const EVENTS = {
   repair: { id: "repair", level: "passive", audience: "operator", template: "{title}", actions: ["restart_engine", "reinstall_engine", "free_memory", "check_host"] },
   "health.changed": { id: "health.changed", level: "passive", audience: "operator", template: "{title} is {severity}." },
   "detected.changed": { id: "detected.changed", level: "passive", audience: "operator", template: "Local detection changed." },
+  "check.progress": { id: "check.progress", level: "time_sensitive", audience: "operator", template: "Check {role} is {state}." },
+  "check.done": { id: "check.done", level: "passive", audience: "operator", template: "Stack check finished." },
 } as const;
 
 export const EventEnvelopeSchema = z.object({

@@ -6575,6 +6575,177 @@
         }
       }
     },
+    "/stack/v1/check": {
+      "post": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Check every ready Stack role",
+        "responses": {
+          "200": {
+            "description": "The completed Stack check.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "at": {
+                      "type": "string"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "role": {
+                            "type": "string"
+                          },
+                          "ok": {
+                            "type": "boolean"
+                          },
+                          "ms": {
+                            "type": "integer"
+                          },
+                          "reason": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "skipped": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "role",
+                          "ok",
+                          "ms",
+                          "reason"
+                        ]
+                      }
+                    },
+                    "fitTogether": {
+                      "type": "object",
+                      "properties": {
+                        "ok": {
+                          "type": "boolean"
+                        },
+                        "reason": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "ok",
+                        "reason"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "at",
+                    "ok",
+                    "results",
+                    "fitTogether"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The check could not run.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/check/latest": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Read the last Stack check",
+        "responses": {
+          "200": {
+            "description": "The last completed Stack check, if any.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "nullable": true,
+                  "properties": {
+                    "at": {
+                      "type": "string"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "role": {
+                            "type": "string"
+                          },
+                          "ok": {
+                            "type": "boolean"
+                          },
+                          "ms": {
+                            "type": "integer"
+                          },
+                          "reason": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "skipped": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "role",
+                          "ok",
+                          "ms",
+                          "reason"
+                        ]
+                      }
+                    },
+                    "fitTogether": {
+                      "type": "object",
+                      "properties": {
+                        "ok": {
+                          "type": "boolean"
+                        },
+                        "reason": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "ok",
+                        "reason"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "at",
+                    "ok",
+                    "results",
+                    "fitTogether"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/chat/completions": {
       "post": {
         "tags": [

@@ -1071,6 +1071,17 @@ percent below the previous result for the same model and context raises a
 warning that names the engine update and offers Go back. No benchmark data
 leaves the machine.
 
+## Check my Stack
+
+Check my Stack walks every ready role, sends the smallest local request
+for its wire, and records each result with its duration and reason. A
+second fit-together pass runs one generator while sampling the kernel
+pressure every 250 milliseconds, failing before critical pressure can
+continue. Failures become health items with the smallest useful fix, and
+passing reruns resolve the old item. The nightly entry skips when local
+activity was seen in the last five minutes. Progress is local on the
+events feed, and no privacy-page row is needed.
+
 Nothing migrates until the Stack's first milestone runs on the Studio
 beside the hub. When it does, these are the hub files whose jobs become
 the Stack's, so the list is fixed now:

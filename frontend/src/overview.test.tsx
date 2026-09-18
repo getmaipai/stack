@@ -19,6 +19,8 @@ test("Overview requests the selected series range and renders scripted widgets",
     if (path.endsWith("/clients")) return Promise.resolve(Response.json({ clients: [{ id: "client" }] }));
     if (path.endsWith("/updates")) return Promise.resolve(Response.json({ app: { installed: "0.1.0", available: null }, engines: { installed: "b1", available: null }, models: { installed: "m1", available: null } }));
     if (path.endsWith("/storage")) return Promise.resolve(Response.json({ freeDiskBytes: 2_400_000_000_000, byCategory: { models: 10, engines: 5, logs: 1, backups: 0 } }));
+    if (path.endsWith("/check/latest")) return Promise.resolve(Response.json(null));
+    if (path.endsWith("/check")) return Promise.resolve(Response.json({ at: new Date().toISOString(), ok: true, results: [{ role: "chat", ok: true, ms: 42, reason: null }], fitTogether: { ok: true, reason: null } }));
     if (path.endsWith("/health")) return Promise.resolve(Response.json({ health: [] }));
     if (path.endsWith("/notifications")) return Promise.resolve(Response.json({ notifications: [] }));
     if (path.endsWith("/speed-test")) return Promise.resolve(Response.json({ result: { at: new Date().toISOString(), ability: "chat", modelId: "qwen3-1.7b", engine: "b10797", firstTokenMs: 180, loadMs: 1420, measuredFootprintBytes: 1_800_000_000, promptTps: 112, tokensPerSecond: 42, contextLength: 4096 } }));
@@ -35,6 +37,8 @@ test("Overview requests the selected series range and renders scripted widgets",
   await waitFor(() => expect(calls.some((call) => call.includes("/series?range=week") && call.includes("window=week"))).toBe(true));
   fireEvent.click(Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "Speed test")!);
   await waitFor(() => expect(calls.some((call) => call.endsWith("/speed-test"))).toBe(true));
+  fireEvent.click(Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "Check my Stack")!);
+  await waitFor(() => { expect(calls.some((call) => call.endsWith("/check"))).toBe(true); expect(document.body.textContent).toContain("all good"); });
 });
 
 test("Overview changes its grid layout at desktop, tablet, and phone widths", async () => {
