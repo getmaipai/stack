@@ -44,8 +44,8 @@ MaiPai Home and MaiPai Bot are built on.
 
 It delivers on the Mac first (Apple silicon, Metal, unified memory), with
 Linux arriving for the robot and Windows for the CUDA catalogue. Same
-shape on every OS: one config, one API, one set of docs; only the engine
-list per platform differs.
+shape on every OS: one config, one API, one set of docs; service manager, notification
+transport and engine builds differ by platform as listed in org SERVICES.md.
 
 ## Why the Stack, against the alternatives (2026-09-17)
 
@@ -199,12 +199,13 @@ systemd on Linux, a Windows service later. It is loopback-only until the
 operator explicitly exposes it on the LAN, and then only with a key.
 
 The admin UI is React and Vite on `@maipai/ui`, the same kit as Home, so
-the Stack's pages and Home's Admin pages look like one family. A native
-macOS menu-bar item (start, stop, the board's state, "Open") is planned
-after the web UI, not before it.
+the Stack's pages and Home's Admin pages look like one family. The Tauri 2 desktop shell and menu-bar item are present in `desktop/`
+(STACK-18); lifecycle installation, full tray status and release packaging
+remain STACK-66 through STACK-68 and RELEASE-STACK-01.
 
-The release build is a single `maipai-stack-darwin-arm64` executable made
-with Bun's compile mode. The built frontend and migration files are
+The current release script builds a `maipai-stack-darwin-arm64` executable
+with Bun's compile mode. The app bundle and release manifests remain
+RELEASE-STACK-01. The built frontend and migration files are
 embedded, so the binary can serve the board without a checkout. On macOS,
 `install-service` writes `~/Library/LaunchAgents/com.maipai.stack.plist`
 with `RunAtLoad`, `KeepAlive { SuccessfulExit: false }`,
@@ -237,7 +238,9 @@ residency class:
 
 The router resolves a request's role to the loaded engine and model. A
 client selects a role by name in the `model` field (`"chat"`,
-`"image"`), or names a concrete model id when it must. Generator roles
+`"image"`), or names a concrete installed model id when it must.
+`coding` shares the chat binding on smaller tiers only after STACK-60;
+`profiles.ts` currently marks it unavailable below p128. Generator roles
 accept `quality: fast | everyday | best`, which the Stack maps to the
 tiered models the sizing profile installed (the hub's Apple silicon plan
 calls these instant, everyday and quality).
@@ -773,16 +776,16 @@ service account. A copied `stack.db` holds no secret in plaintext.
 
 ## Block B review, 2026-09-17
 
-1. Model re-registration preserves installed state: fixed at <hash>, test `re-registering an installed catalog model preserves its install`.
-2. Existing model files are hash-checked before verification: fixed at <hash>, tests `an incorrect existing model file is replaced and verified by hash` and `a corrupt downloaded model is never marked verified`.
-3. Spawned engine loading waits on liveness with a size-scaled timeout: fixed at <hash>, test `waitHealthy accepts a delayed loading response within the tuned timeout`.
-4. Streaming chat is refused with an honest 400: fixed at <hash>, test `streaming chat is refused honestly`.
-5. Living engine 5xx responses and cancellations do not retire the backend: fixed at <hash>, tests `a living engine's 500 is returned without retirement` and `an aborted completion is a cancellation and does not retire the engine`.
-6. Incomplete model provenance throws a typed error: fixed at <hash>, test `an incomplete Hugging Face provenance record throws before writing`.
-7. Post-load and completion calls have bounded timeouts: fixed at <hash>, test `post-load checks time out instead of hanging`.
-8. Spawned launches probe a free port and race process exit: fixed at <hash>, test `a free spawned port is selected before engine launch`.
-9. Unverified model ids return a 409 with missing fields: fixed at <hash>, test `an unverified model is a 409 with its missing provenance`.
-10. Model download size estimates are advisory while engine archive sizes stay strict: fixed at <hash>, test `a model size estimate is advisory when its hash matches`.
+1. Model re-registration preserves installed state: fixed in the Block B review, test `re-registering an installed catalog model preserves its install`.
+2. Existing model files are hash-checked before verification: fixed in the Block B review, tests `an incorrect existing model file is replaced and verified by hash` and `a corrupt downloaded model is never marked verified`.
+3. Spawned engine loading waits on liveness with a size-scaled timeout: fixed in the Block B review, test `waitHealthy accepts a delayed loading response within the tuned timeout`.
+4. Streaming chat is refused with an honest 400: fixed in the Block B review, test `streaming chat is refused honestly`.
+5. Living engine 5xx responses and cancellations do not retire the backend: fixed in the Block B review, tests `a living engine's 500 is returned without retirement` and `an aborted completion is a cancellation and does not retire the engine`.
+6. Incomplete model provenance throws a typed error: fixed in the Block B review, test `an incomplete Hugging Face provenance record throws before writing`.
+7. Post-load and completion calls have bounded timeouts: fixed in the Block B review, test `post-load checks time out instead of hanging`.
+8. Spawned launches probe a free port and race process exit: fixed in the Block B review, test `a free spawned port is selected before engine launch`.
+9. Unverified model ids return a 409 with missing fields: fixed in the Block B review, test `an unverified model is a 409 with its missing provenance`.
+10. Model download size estimates are advisory while engine archive sizes stay strict: fixed in the Block B review, test `a model size estimate is advisory when its hash matches`.
 
 ## Platform profiles
 
@@ -888,19 +891,19 @@ the architecture.
 2. **The web UI**, served by the daemon on localhost, is the whole
    admin surface (the dashboard shell in `ux.md`). Cross-platform for
    free, nothing to install, the same kit as Home.
-3. **The tray app is Tauri 2**: one codebase for macOS, Linux and
-   Windows, 5 to 10 MB, tray icon, native notifications, updater and
-   sidecar management as first-party plugins; it holds no logic, reads
+3. **The desktop app is Tauri 2**: one codebase for macOS, Linux and
+   Windows, a console window, tray icon, native notifications and
+   sidecar management; it holds no engine logic and reads
    the same event feed Home reads, opens the web UI in its own window,
    offers Start, Pause and Resume, and is the independent observer
    that turns red and offers Start when the daemon is down. It is the
    only process that posts native notifications (a bare daemon cannot
    on macOS). This is a written deviation from STACK.md's Electron for
-   Desktop: the tray shell has no UI of its own, and a Chromium
+   Desktop: the shell reuses the daemon's console, and a Chromium
    process sitting in the menu bar all day beside a 70 GB model is the
    wrong tool; Rust joins the toolchain for this one small app.
-4. **Install** is one command hosted by us that downloads only our
-   own binary from our own release, registers the service and opens
+4. **Install**, when released, is one command hosted by us that downloads
+   only our own binary from our own release, registers the service and opens
    the board (`ux.md`, "Install and first open"); the app bundle with
    the tray is the second path and runs the same steps.
 
@@ -936,8 +939,8 @@ Decisions:
    (the Add sheet's Import tab and the backup target use it when the
    console runs inside Tauri and fall back to a typed path in a plain
    browser), launch at login, and single-instance. The daemon remains a
-   separate process the app starts and supervises (the org SERVICES.md
-   shape: the service manager owns it; the app only attaches), so a
+   separate service process; the app installs or starts it through the
+   service manager and then attaches (org SERVICES.md), so a
    closed window never stops the Stack and a phone on the LAN still
    works.
 2. **Not Tauri-only.** Moving the daemon's work into the Tauri process
@@ -1017,6 +1020,30 @@ diagnostics bundle (STACK-29), engines kept current (STACK-31), What's
 new (STACK-21), and the two databases (STACK-50) once the owner
 confirms it.
 
+## Native console authentication (decided 2026-09-18 review)
+
+The Tauri process is a local observer, not a second privileged API
+client. Today its Rust poll calls `/stack/v1/roles`, `/health` and
+`/events` without credentials and its Pause and Resume POST calls
+`/stack/v1/run-state` without the operator session
+(`desktop/src-tauri/src/main.rs`). Those routes require a client or
+operator, and run-state changes require the operator
+(`backend/src/routes/roles.ts`, `events.ts`, `runState.ts`). The tray
+therefore cannot truthfully claim those actions after a password is set.
+
+STACK-76 moves protected reads and commands through the console webview's
+existing operator session. The native side may poll public `/healthz`
+for down-state observation; the webview supplies role and health status
+and handles protected commands, then sends display-only state to the tray.
+When the operator is signed out, the tray shows "Sign in to see status"
+and opens the console for a protected action. The window can hide without
+ending the webview session; Quit still ends the app but leaves the daemon.
+A changed port comes from the service's active address, not a Rust
+constant (STACK-71). No auth bypass endpoint, raw administrator key in
+the app bundle or plaintext token file is added. A daemon-down state
+still works without a session. Rejected: treating loopback as implicit
+administrator authority, which conflicts with the client-key rule.
+
 ## The API boundary: what is the Stack's and what is Home's (2026-09-17)
 
 The foundational API moved out of Home into the Stack. Home keeps an
@@ -1039,8 +1066,9 @@ boundary never drifts into two copies.
    its own shape: its Admin pages read the Stack through a
    pass-through (`/api/stack/*` on Home forwards to `/stack/v1/*` on
    the Stack, adding Home's one client key and Home's own role check,
-   changing nothing else). Go and Bot reach the Stack the same way,
-   through their Home. A translation layer is a bug.
+   changing nothing else). Go reads through Home or Bot. Bot's own
+   runtime calls its local Stack directly; it does not require Home.
+   A translation layer is a bug.
 3. **Same wire, different meaning, never confused.** Both products
    speak the OpenAI shape on `/v1`. The Stack's `/v1/chat/completions`
    answers as the model: no memory, no guards, no person. Home's `/v1`
@@ -1172,166 +1200,36 @@ appear only here. Items: STACK-60 (connect a coding tool), STACK-61
 (Anthropic pass-through, the owner's call), STACK-63 (per-client caps,
 only when usage shows a need).
 
-## The helper: an assistant inside the console (research, 2026-09-17)
+## The helper: a local answer surface (decided 2026-09-18, 02:05)
 
-The owner's question: a chatbot in the app that helps a person
-troubleshoot and configure ("how many engines do we have", "are all
-our models up to date"), and what runs it when the person's own
-engines are down. Not a priority to build; this records what the
-field does and the shape we would build, so the item is pickup-ready
-when its turn comes.
+The owner revised the 2026-09-17 helper proposal: no model is bundled
+for the helper. Ask first opens pages and live machine facts, then local
+user docs and the Library. The shipped docs index holds setting help,
+health causes and fixes, and page descriptions. An answer card presents
+the matched fact or passage with one Open action. The optional open-question
+path uses the operator's already loaded chat model, only after the operator
+enables it; it has read-only tools and proposes actions for a click. It
+keeps no history and cannot change the machine. When chat is offline, the
+local facts and docs still work. The Stack never runs an agent loop.
 
-**How others do it.** Home Assistant's Assist is the closest match
-and the best design: a deterministic sentence matcher answers first
-(no model involved), and only what it cannot match falls through to
-a conversation agent. That agent, when it is a local model, gets the
-"Assist API" as tools scoped to the entities the person exposed, and
-Home Assistant's own guidance is a tool-calling Qwen3-class model with
-thinking off, at least a 10k context, and a warning that thirty
-exposed entities already cost about 1,300 tokens per request (the
-2026.8 release added a native llama.cpp client:
-[llama.cpp integration](https://www.home-assistant.io/integrations/llama_cpp/),
-[LLM API docs](https://developers.home-assistant.io/docs/core/llm/),
-[hybrid intents then LLM](https://www.home-assistant.io/blog/2025/09/11/ai-in-home-assistant/)).
-Docker Desktop's Gordon is the other useful pattern: an assistant
-beside the object, an icon next to a failed container that analyses
-the error and proposes the fix, plus a CLI form; its flaw for us is
-that it sends the context to Docker's cloud
-([Gordon docs](https://docs.docker.com/ai/gordon/)). Nextcloud's
-Assistant runs where the person hosts it with a pluggable model
-backend and per-task entry points rather than one chat box
-([Nextcloud Assistant](https://nextcloud.com/blog/first-open-source-ai-assistant/)).
-The consoles we otherwise model on (UniFi, Synology, TrueNAS,
-Proxmox) ship no built-in assistant; they answer with a repairs list
-and a help centre, which is what our health list and Library already
-are. So the field's answer is: deterministic answers and a docs search
-first, a model only for the open-ended question, and the model
-proposes rather than acts.
-
-**Three tiers, in order, and most questions never reach the model.**
-
-1. *Answered by the console.* "How many engines" is the Engines page
-   count; "are my models up to date" is the Updates page. The
-   command palette (the header search) grows a small intent table,
-   Assist's sentence matcher in miniature: a typed question that
-   matches routes to the page or widget that holds the answer, with
-   the number in the palette row ("3 engines, 1 detected and not
-   adopted"). Each intent carries a hit counter, per the org's rule
-   that no rule lives without a counter and a row; an intent with no
-   hits in a month is retired.
-2. *Answered by the Library.* "How do I" and "what is" go to the
-   Library search (STACK-32/33): the docs of what is installed plus
-   the user docs, one index. No model.
-3. *Answered by the helper.* Only the open-ended question ("why is
-   chat slow today", "what should I install for homework help on this
-   Mac", "what does this alert mean for me") reaches a model. The
-   helper answers through read-only tools over the Stack's own API:
-   `health` (the one list, its primary evidence), `engines`, `models`,
-   `updates`, `storage`, `series` (the Overview's numbers) and the
-   Library's `search`. Every tool returns a summary sized for a small
-   context (counts and the health rows, never a whole record), the
-   lesson from Assist's entity budget. The helper never performs an
-   action: an adopt, install, restart or setting change is rendered
-   as a proposal card the person clicks, the same card the page would
-   show, so the learned component stays out of the paths that change
-   the machine (the org's rule for learned components, and Gordon's
-   "suggest the fix" shape).
-
-**What runs it.** The helper is its own role, `helper`, never a
-person's ability and never counted in their tiers. Two sources, in
-order: the person's loaded `chat` engine when it is up and its model
-supports tool calling (free, already resident); otherwise the Stack's
-own pinned small model, `qwen3-1.7b-q8-0` (1.8 GB, the same pin Try
-it uses, thinking off, `--jinja` for tool calls), on a separate
-llama-server the governor spawns at the lowest priority and unloads
-after a few idle minutes. It is never resident. That answers the
-owner's "separate small thing": a separate process, not a separate
-download. When the person's engines are down because of a bad flag, a
-crashed process or a failed update, the helper's own process still
-loads and can read the health list that explains it. When they are
-down because memory is exhausted, the helper will not load either;
-tiers 1 and 2 still answer, and the palette says plainly "the helper
-needs 2 GB free; here is what the health list says", which is the
-honest state rather than a spinner.
-
-**Where it lives in the UI.** No floating chat bubble. The palette is
-the front door (a question typed into search is the first tier, and
-"Ask the helper" is the last row when nothing matched), and an "Ask
-about this" action sits on each health row and alert, the Gordon
-pattern, so the question arrives with its object attached. The reply
-renders in the property panel (STACK-35), beside the thing it is
-about, on Try it's chat components (one chat surface, not two).
-
-**One tool surface, three consumers.** The read-only tools are
-declared once and served three ways: to the helper, as the
-`stack-library` MCP server's neighbours (STACK-32 already plans
-`list_installed`, `get_doc`, `search`; the status tools join it), and
-to Home's own assistant, which asks the Stack over the same API and
-never gets a second implementation. Home's assistant knows the
-person; the Stack's helper knows the machine; the line holds.
-
-**Privacy.** Nothing leaves the machine: the helper's context is the
-Stack's own state and the Library, both local, and the Stack holds no
-person data to leak. The privacy page gains no row, because no
-outbound connection is added. The helper is listed on the Abilities
-page as what it is, "the helper, 1.8 GB, loads only when asked".
-
-## The helper without a model: the research (2026-09-18, 02:05)
-
-The owner's revision: no bundled model, because a model that costs disk
-and memory and cannot be removed is what people hate; the helper should
-be static by default, indexed and searchable, and read like an agent
-because its answers are shaped, with the person's own model as an
-optional third tier. What the field has, and what we take:
-
-- **Rule-based intents, Home Assistant's way.** Assist matches a
-  sentence against declared templates (hassil: expansion rules, slot
-  lists, skip words) before any model is involved; it is purely local
-  and deterministic, and a community fuzzy matcher (hass-closest-intent)
-  handles garbled input by picking the closest template
-  ([template syntax](https://developers.home-assistant.io/docs/voice/intent-recognition/template-sentence-syntax/),
-  [hassil](https://github.com/OHF-Voice/hassil)). We take the shape,
-  not the library (Python): the intent table is a declared list of
-  templates with slots for role names, model names and setting labels,
-  skip words, and a closest-match fallback over tokens, each intent
-  with a hit counter and a corpus row (the org rule on rules). Answers
-  come from the live resources the console already holds.
-- **A static full-text index, Pagefind.** The docs site already uses
-  it; its Node API indexes custom records (`addCustomRecord`) beside
-  HTML, so the release build indexes the user docs plus a generated
-  knowledge base (every setting's label and help, every health item's
-  title, cause and fix, every page's purpose sentence) into one
-  bundle shipped in the app; the Library builds a second, local index
-  when pages are fetched, and the console merges the two at query
-  time (`mergeIndex`) ([Node API](https://pagefind.app/docs/node-api/),
-  [multisite](https://pagefind.app/docs/multisite/)). Results carry
-  headings and excerpts (sub-results), which is what an answer card
-  needs. One tool for the site, the console and the Library.
-- **Orama** is the credible alternative: a full-text, vector and hybrid
-  search library under 2 KB that runs in the browser or on the server,
-  BM25 with stemming in thirty languages, and an "answer engine" that
-  needs an LLM behind it ([orama](https://github.com/oramasearch/orama),
-  [answer engine](https://docs.orama.com/docs/orama-js/answer-engine)).
-  Its search half would do the job as well as Pagefind; it loses on
-  the one-tool rule (the docs site is already Pagefind) and its answer
-  half is exactly the model we are not bundling. Revisit if Pagefind's
-  ranking on questions (rather than keywords) proves weak in use.
-- **SQLite FTS5** is built into Bun's SQLite and would index the
-  knowledge base with no dependency, but it answers on the server and
-  the docs site's search runs in the browser; two search paths for one
-  question is the thing to avoid.
-- **Extractive QA models** (a small question-answering transformer in
-  the browser) would produce better sentences from the passage, and
-  are still a model to download; rejected for the default, the same
-  reason as the bundled chat model.
-
-The answer card is therefore shaped without a model: the matched
-intent's sentence with the live number, or the best sub-result's
-heading and first sentence with the value when the hit is a setting or
-a health item, and one "Open" action. The optional third tier runs on
-the person's own loaded chat engine when they switch it on.
+This supersedes the earlier pinned `qwen3-1.7b-q8-0` helper process,
+`helper` role, and 2 GB fallback. They would create an unavoidable
+download and memory cost. `roles.ts` has the thirteen declared roles and
+no helper role. STACK-37 and STACK-55 must implement this revised shape.
+The search source is local by default; fetching the public docs site
+requires an explicit outbound setting and a privacy-page row. A static
+index may use Pagefind, already used by `docs/site/`, but the implementation
+must prove its answer quality on a small question corpus before adding
+phrase templates. Each deterministic text rule needs a hit counter and a
+corpus row; a third phrasing in a week is a classifier candidate under
+the org rule, not another matching rule.
 
 ## What moves out of Home, later
+
+The migration inventory below is a boundary, not a removal order.
+STACK-14 must prove the Studio profile first; STACK-16 then specifies
+Home registration, dual-running, parity checks, rollback and the final
+supervisor removal in Home.
 
 ## Live walk 2026-09-18
 
@@ -1416,6 +1314,22 @@ supervisor, refuses new admissions with a 503 reason, unloads governor
 work, and settles on `paused`; resuming restarts the chat engine and
 returns to `running`. The daemon and UI remain available throughout.
 
+## Backups for the first release (decided 2026-09-18 review)
+
+The Stack's state must be restorable before v0.1.0. STACK-72 declares the
+current `stack.db` as hot state and model and engine bytes as rebuildable,
+creates an encrypted, signed archive with its key outside the archive,
+and stages restore beside live data before a health-checked swap. The
+emergency recovery kit is shown once. STACK-77 adds local and SMB targets,
+a nightly schedule before updates, retention and failure health; STACK-78
+runs the org's headless restore drill before each release and backs up
+before an update or restore. When STACK-50 separates measurements, the
+new `metrics.db` becomes excluded by default and included only on the
+operator's explicit "with history" choice. No backup target is a
+MaiPai-operated service. Remote targets get privacy-page rows in the
+same commit. This follows org `docs/BACKUPS.md`; a plain SQLite copy
+would miss encryption, key recovery, target durability and restore proof.
+
 ## Two databases: state and measurements (decided 2026-09-18, night)
 
 The owner asked, looking at the Overview's charts, whether all this
@@ -1451,8 +1365,9 @@ Both files open through Drizzle with their own migration journal
 (`backend/src/db/state/` and `backend/src/db/metrics/`), the metrics
 writer batches inserts per five seconds, and a missing or corrupt
 `metrics.db` is recreated empty with one health item, never a boot
-failure. This is STACK-50 in the backlog; nothing moves until the
-Overview second pass has settled what it reads.
+failure. This is STACK-50 in the backlog. The Overview second pass is complete,
+so the split can proceed after the release-critical work. The default
+backup and the "with history" option need their own implementation item.
 
 The Overview reads a complete selected time window from the series endpoint,
 including empty buckets, so a quiet Stack keeps its time axis honest. Recent
@@ -1481,8 +1396,9 @@ same action labels, statuses and route ownership.
    repo is `github.com/getmaipai/stack`.
 2. **Logo.** Done 2026-09-17: `maipai-stack-{icon,logo}-{light,dark}.png`
    in `getmaipai/.github/brand/` (orange accent, three stacked layers).
-3. **Installer shape.** Recommended: Home's installer installs the Stack
-   first and then itself; the Stack's own installer stands alone. Confirm.
+3. **Installer shape.** The Stack stands alone through the `.dmg` or
+   one-line installer; Home installs it first when absent, then registers
+   itself as a client. The shared install contract still needs a test.
 4. **Bot's split.** Recommended: wake word and voice activity stay in the
    robot's body process (they are sensor processing, like the camera);
    STT, TTS, chat, judge and embed are Stack roles on the robot's own

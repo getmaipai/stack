@@ -15,7 +15,7 @@ changelog note.
 | OpenAI-shaped inference | `/v1/chat/completions`, `/v1/embeddings`, `/v1/audio/transcriptions`, `/v1/audio/speech`, `/v1/images/generations`, `/v1/images/edits` | every client, by role name in `model` | partly (chat, streaming chat, embeddings, audio, images; no image edits) |
 | Streaming speech sessions | `/stack/v1/stt/session` (live words), `/stack/v1/tts/stream` (phrase-level, cancel) | Home's voice path, Bot's household runtime | planned |
 | Roles | `GET /stack/v1/roles` (state, engine, model, residency per role) | Home's Admin, Bot's runtime at boot, the board | built |
-| Jobs | `POST /stack/v1/jobs`, `GET /stack/v1/jobs/:id`, `DELETE` to cancel, result by id | Home's picture, video and music packages | planned |
+| Jobs | `POST /stack/v1/jobs`, `GET /stack/v1/jobs/:id`, `DELETE` to cancel, result by id | Home's picture, video and music packages | lifecycle routes built; generator execution and result by id planned (STACK-13) |
 | Events | `GET /stack/v1/events` (SSE) | Home's notification bridge, the board, the menu bar | built |
 | Health | `GET /stack/v1/health`, resolve or ignore by code | Home's Admin and the Stack board | built |
 | Hardware and budget | `GET /stack/v1/hardware`, `GET /stack/v1/budget` | Home's Admin (read-only view), Bot's runtime | built |
@@ -30,9 +30,10 @@ changelog note.
 | Library MCP | `bun run mcp:library` over stdio, `list_installed`, `get_doc`, `search` | Home's assistant and coding tools | built |
 | Repairs | `GET /stack/v1/repairs`, `POST /stack/v1/repairs/{id}/resolve` | the operator and Home's Admin | built |
 | Logs | `GET /stack/v1/logs/{name}` | the operator and Home's Admin | built |
-| Updates | `/stack/v1/updates` (check, apply, roll back) | the operator; Home shows availability through events | planned |
+| Updates | `/stack/v1/updates` (check, apply, roll back) | the operator; Home shows availability through events | engine update and rollback built; app release assets pending |
 | Metrics | `GET /stack/v1/metrics` | a scraper the operator runs | planned (STACK-59) |
 | Identity headers | `x-maipai-engine`, `x-maipai-model`, `x-maipai-revision` on every reply | every client's identity check | built |
+| Model discovery | `GET /v1/models` | coding tools before their first request | planned (STACK-60) |
 
 The Status column is derived from `docs/api/openapi.json` and refreshed whenever a row's paths land; a row that says built has its paths in the generated document.
 
@@ -59,7 +60,7 @@ section that is a view of `/stack/v1/roles`, `/hardware` and `/budget`
 with links into the Stack for actions, never a second copy of the facts
 (one definition, one renderer).
 
-**What Home stops doing.** Spawning, downloading, checksumming,
+**What Home stops doing after STACK-16.** Spawning, downloading, checksumming,
 supervising and budgeting engines. The migration list is in `dev.md`
 ("What moves out of Home, later"); it runs only after the Stack's first
 milestone is proven on the Studio beside the hub, and nothing moves
@@ -84,7 +85,7 @@ Home's settings never duplicate them; Home's Admin links across. The one
 Home-side setting is the Stack's address and key, declared once in
 Home's settings definition, filled by the installer.
 
-**Failure.** When the Stack is unreachable, Home's roles go to an honest
+**Failure after migration.** When the Stack is unreachable, Home's roles go to an honest
 offline state (the same `offline_reason` shape the Stack uses for managed
 hosts), the turn engine answers "I can't think right now" in the
 companion's voice with a Repairs entry for the admin, and nothing else
@@ -159,7 +160,9 @@ engine build is not something a community contributes and signs.
 Desktop shows Home. It may show the Stack's board state in its dock badge
 using the same event feed Home already consumes, so there is no second
 subscription. The Stack's own menu-bar item is separate and stack-only,
-for a person who runs the Stack without Home.
+for a person who runs the Stack without Home. The Stack's Tauri app
+loads its own console and local state, not Home's. STACK-66 completes
+the daemon install path; RELEASE-STACK-01 packages the app and daemon.
 
 ## A developer's own tool
 

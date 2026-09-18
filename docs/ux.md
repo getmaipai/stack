@@ -20,7 +20,7 @@ Three people use the Stack, and the pages are ordered for the first one:
 ## Install and first open (decided 2026-09-17, evening)
 
 The owner's rule, after seeing the five-step wizard: no wizard. One
-command installs, the full app opens, and the board itself shows what
+command installs, the board opens, and the board itself shows what
 to add. Ollama proved the shape; the products that make people click
 through steps before they see anything are the ones people abandon.
 
@@ -31,11 +31,12 @@ ability is chosen):
 
     curl -fsSL https://getmaipai.github.io/stack/install.sh | sh
 
-The script puts the Stack under the person's home folder, registers
-it with launchd so it starts at login, starts it, and opens the
-browser on the board. Under a minute. The same script updates an
-existing install. A downloadable app bundle with the menu-bar item is
-the second path, later; it runs the same steps.
+The script installs the checksum-verified daemon under the person's home folder, registers its launchd service, starts it, and opens
+the board in a browser. The hosted script and real release asset are
+SITE-STACK-01 and RELEASE-STACK-01. The current local script is not
+a published release. The Tauri desktop app is the other install path. Its shell exists, but
+its first-launch service install and release bundle are STACK-66 and
+RELEASE-STACK-01.
 
 **The first screen is the full app.** No modal, no steps. The board:
 
@@ -73,90 +74,25 @@ on the computer that runs the Stack first." and shows no password
 field. LAN access cannot be opened into a pending restart until that
 password exists.
 
-**Try it** appears on the board the moment the small set lands, so
+**Tester** appears on the board the moment the small set lands, so
 the first thing the person does with the Stack is talk to it.
 
-## The shell: a professional AI management dashboard (decided 2026-09-17, evening)
+## The shell: a professional AI management dashboard (decided 2026-09-17, evening; revised 2026-09-18, 01:20)
 
-After install, the person sees a management dashboard, not a page:
-calm, professional, one accent, dense where it counts and airy
-everywhere else, with everything one click or one keystroke away. The
-references are the products people trust to run things at home
-(Home Assistant, Synology, Proxmox, Tailscale) restyled in our
-palette; the squint test says "a well-made control room", never a
-copy of any of them.
+The responsive shell has a sticky page title, one search icon opening
+Ask, a bell and profile menu, and a centered Running or Paused control.
+The desktop sidebar has common rows above administrative rows. Common:
+Overview, Engines, Models, Library, Clients, Tester and Monitoring.
+Administrative: Settings, Logs and Alerts. Abilities is an action on
+Overview and Models; Updates and Backups live in Settings. When there is
+room, the administrative group stays at the bottom above the memory and
+disk block; otherwise both groups are labeled in one scrolling list.
+At phone width, the five-tab bar and one-line phone header replace the
+sidebar. The phone rules below are the current decision.
 
-**Layout.** shadcn's `dashboard-01` block, installed by the registry
-and re-skinned to ours (the org's prebuilt-over-hand-built rule
-applied to the whole shell): a left sidebar collapsible to icons, a
-slim top bar, the page; its section cards become the status strip,
-its area chart Monitoring's memory over time, its data table the
-Models, Engines and notification tables. Nothing of the block's demo
-content survives. The top bar carries the page
-title, a search field that is also the command palette (the kit's
-`command` primitive, opened with the slash key or Command-K: pages,
-models, engines, settings, and actions like "pause everything" or
-"check for updates"), the notification bell
-with its unread count and a popover with clear all, and the profile
-menu (the operator's state, set a password, sign out, Access, the API
-docs). System health lives at the bottom of the sidebar as a colored
-dot and one sentence, the dot alone when collapsed; the "Share with
-your family" hand-off card sits above it until Home is installed.
-Phone width collapses the sidebar into a sheet.
-
-On a phone the top bar is a small control row: sidebar trigger, page
-title, search icon, notification bell and operator profile. The
-computer name and health sentence live in the opened sidebar sheet;
-the theme toggle is in the profile menu. Search becomes an icon at
-phone width and remains a compact field on tablet. Overview reads
-status, recent activity, charts, then a facts disclosure on a phone;
-the first board view leads with one sentence, plan rows and Install.
-
-**Sidebar indicators, the quiet rule (2026-09-17).** A section row
-carries an indicator only when there is something to act on, never as
-decoration, and at most one: a small count for pending actions
-(Engines: detected and not adopted; Updates: available; Models: a
-detected folder), a colored dot in the worst severity for health
-(Alerts), nothing otherwise; hover shows the sentence ("1 engine
-detected, not adopted"). The bottom-left health line stays the
-summary. Try it is a section and a palette entry, not a header button.
-
-**Sections, in sidebar order** (superseded by "The shell, second pass" for the grouping and for Abilities, which is no longer a sidebar row):
-
-1. **Overview**: the board from the section below. This computer,
-   Add abilities until a plan exists, the status strip, downloads in
-   flight, the last five notifications, health items with a fix.
-2. **Abilities**: the plan and its tiers, the abilities cards (chat,
-   voice, images, video, music) with sizes and "can run", install
-   and remove, the "details" disclosure with model names.
-3. **Models**: the Models page (installed, source, licence, measured
-   footprint, pin, unload, remove, import from other tools, check for
-   a newer revision).
-4. **Engines**: build, kind, roles, health, last restart and why,
-   logs.
-5. **Monitoring**: the live memory bar with each model's measured
-   share and the kernel's pressure, the governor's rules as
-   sentences, per-role throughput and last-request timings, the
-   Logs viewer (tail per engine and the daemon, filter, copy).
-6. **Alerts**: the health list (severity, cause, one fix), the
-   notification center with clear-all, and Alert channels (Telegram,
-   ntfy) with "Send a test" and the verified stamp.
-7. **Updates**: the Stack, engines, models; installed and available,
-   notes, update, skip, go back; "last checked" and "checks are off"
-   plainly.
-8. **Backups**: per the org standard: what a backup contains (the
-   Stack's database, keys, settings and health history; models and
-   engines are `exclude`, rebuildable from their provenance records,
-   said so on the page), a local or SMB target, the schedule and
-   retention, restore, and the emergency kit shown once.
-9. **Library**: one page per installed model and engine, searchable,
-    served over MCP.
-10. **Access** (the Stack has no people, so not "Accounts"): the
-   operator password (set when first needed), client keys with roles
-   and counters and revoke, LAN access with its warning, sessions.
-11. **Try it**: the tabs per role.
-12. **Settings**: the few declared settings, rendered by the generic
-    renderer.
+A section row shows at most one actionable indicator. Every route has a
+useful empty state. The copied dashboard kit in `frontend/src/kit/` owns
+the shell until KIT-01 extracts the shared package.
 
 **The list and the panel (the UniFi pattern, decided 2026-09-17).**
 Every page that holds things (Engines, Models and their groups,
@@ -188,47 +124,14 @@ section shows one calm sentence and the one action that fills it
 ("No models yet. Add an ability and the models it needs arrive
 here."). A spinner never stands in for content longer than a beat.
 
-## Overview: the console dashboard (decided 2026-09-17, late)
+## Overview: the console dashboard (decided 2026-09-17, late; revised 2026-09-18, night)
 
-The owner's direction: take the ideas of the UniFi Network dashboard
-(a status strip, a speed test on the main page with scheduled results
-and expected thresholds, things by type with health rings, traffic
-over time by category, clients by type, alerts) and make the Stack's
-Overview familiar to anyone who has run a console like it. The org's
-trade-dress rule holds: the widget types and the layout are
-conventions shared by Synology, Home Assistant and Ubiquiti, so they
-are free; the exact look (blue on dark, the specific arrangement) is a
-signature, so Overview is drawn in our palette and type, and the
-squint test must say "a well-made console", never "UniFi".
-
-The widgets, top to bottom, with a time range (hour, day, week) at
-the top right that every chart honors:
-
-1. **Stack status strip**: online, version, uptime, last Check my
-   Stack result and when, the kernel's memory pressure word; one line.
-2. **Speed test**: the last result for the resident chat model
-   (tokens per second for prompt and generation, first-token time,
-   load time) against the tier's expected range, a history sparkline
-   across engine updates, "Scheduled in the maintenance window" or
-   "Run now". From STACK-26.
-3. **Engines and models**: two ring cards (ready, loading, offline,
-   detected-not-adopted) with counts by kind and by ability; click a
-   ring segment to the filtered list and its panel.
-4. **Usage over time**: requests and tokens as an area chart by
-   ability (chat, voice, images, video, music) and, toggled, by
-   client; the top three models and top three clients for the range.
-5. **Memory and storage**: memory over time with the pressure band
-   and each loaded model's share; the storage stacked bar by category.
-6. **Alerts and notifications**: the health items with a fix, the
-   last five notifications.
-7. **This computer** and **Add abilities** move below the widgets
-   once a plan exists; on a fresh install they sit at the top, as
-   designed in "Install and first open".
-
-Every number is a recorded one: usage samples are kept per five
-minutes for a week by ability, client and model (the `usage_samples`
-ring), speed results per model and engine tag, memory samples per
-five seconds for an hour and per five minutes for a week.
+Overview uses two columns: a facts and activity column, and one wide area
+for the status strip, the Usage, Memory and Speed hero chart, model and
+engine tiles, storage and headroom. The range is 1h, 1D, 1W or 1M, and
+empty time buckets stay visible. Recent activity shows durable events.
+The detailed second-pass decision below is the source for layout and copy.
+Speed results and memory values come from local measurements.
 
 ## The shell, second pass: common on top, administrative at the bottom (decided 2026-09-18, 01:20)
 
@@ -439,10 +342,9 @@ icons, and the squint test says "a well-made console", never a copy.
 9. **Status sentences**: a check glyph and a plain sentence ("Memory
    headroom is good"), segmented percentage bars, a gradient scale with
    the measured points on it.
-10. **The top bar**: the instance on the left with its status dot ("This
-    computer"), the theme toggle and the bell with its badge on the
-    right, the search field in between. White surfaces, hairline
-    borders, no drop shadows anywhere in light mode.
+10. **The top bar**: the page title, the centered run-state pill, and
+    Ask, bell and profile actions. The instance lives under the sidebar
+    logo. White surfaces and hairline borders have no card shadows.
 
 **From X, the modernism.**
 
@@ -466,9 +368,9 @@ icons, and the squint test says "a well-made console", never a copy.
 6. **The sidebar breathes**: larger icons, the active row bold, a
    generous row height, and an icon-only rail when collapsed (the c-42
    density item). Underline tabs for switching views within a page.
-7. **The right rail on Overview** holds list cards shaped like a feed's
-   side cards: a bold title, items each with a muted meta line, a "Show
-   more" link at the bottom (Recent activity, Health).
+7. **The left facts column on Overview** holds the health card when
+   needed, computer facts, clients and durable recent activity. The
+   second-pass two-column decision replaces the former right rail.
 
 The showroom (`bun run showroom`) is where every one of these is judged:
 a change to the shell or a page is not done until its showroom capture
@@ -494,7 +396,7 @@ that vanished). The header carries the active count. Each card shows the
 title and why, severity only as color, and exactly one Fix or Learn more
 action, plus Ignore.
 
-## Try it
+## Tester (formerly Try it)
 
 One page, one tab per role the profile can serve. Every tab is stateless
 and says so ("This box forgets when you leave it. For a real assistant
@@ -642,7 +544,7 @@ What they do that we do not, each a decision for phone width (below
    then the facts as a "This computer" card of key-value rows with
    Speed test and Check my Stack as its action rows. The hero chart is
    a tap away ("Charts ›") on the phone.
-6. **Touch sizes**: 44 px minimum on every tappable thing; row height 56
+6. **Touch sizes**: 48 px minimum on every tappable thing; row height 56
    px with a subtitle, 48 px without; the tab bar 56 px plus the safe
    area.
 
@@ -744,8 +646,6 @@ switched on, listed on the privacy page.
 
 ## Engines
 
-One row per engine:## Engines
-
 One row per engine: name, kind (spawned, managed, url), the roles it
 holds, health, the running build, and a version state that is a real
 fact: **current** (the running build is the tag marked current and no
@@ -844,11 +744,13 @@ unread.
 
 ## Settings
 
-Few. Port and LAN exposure (off by default, a warning when on, a key
-required). The update check switch. The idle timeout for on-demand
-models. Log level. Language. Each setting is declared once in the
-settings definition and rendered by the generic renderer, per
-`getmaipai/.github/docs/SETTINGS.md`, so the page is never hand-built.
+The current declared settings include name, theme, update checks, LAN,
+port, history retention, log level and a Hugging Face endpoint.
+`backend/src/settings/stackKeys.ts` owns their defaults, help and
+sections; `GenericForm` renders them. Idle timeout and language are
+future keys, not current controls. Basic and advanced disclosure, reset,
+the generated reference and section master toggles still need an audit
+against org SETTINGS.md.
 
 **Second pass (decided 2026-09-18, 01:30).** The owner put our Settings
 (two checkboxes, a filled Save button, a page of empty space) beside
@@ -895,7 +797,7 @@ section); ours had none of it. The decisions:
    appears, which is then the one.
 5. **Every section has something in it.** A section whose feature is not
    built yet shows its declared rows disabled with one muted sentence
-   naming the item ("Backups arrive with STACK-11"), never an empty
+   naming the item ("Backups arrive with STACK-72"), never an empty
    card and never a hidden section, so the shape is judged now.
 
 ## Share with your family: the Home hand-off
@@ -914,12 +816,16 @@ its roles, and hands the operator to Home's own first run, where the
 household is created. Nothing is imported, because there is nothing to
 import.
 
-## The menu bar (macOS, after the web UI)
+## The desktop app and menu bar (decided 2026-09-18, 07:00)
 
-A small native item: the board's overall state as the icon, a menu with
-each role's one line, "Open the Stack", "Pause everything" (drains the
-roles and unloads, for when the machine is needed for something else),
-"Resume". No chat in the menu bar; that is Desktop's job.
+The Tauri app opens the daemon's console in one native window. Its tray
+item observes health independently and offers Open, Pause everything,
+Resume and Quit. It keeps the daemon running when the window closes.
+STACK-66 installs and starts the bundled daemon; STACK-67 completes the
+role, memory and check summary in the menu; STACK-68 adds per-kind native
+notifications with an Open action. Native pickers come from the app's
+host adapter. The browser remains a complete console, with typed-path
+fallbacks for local file selection.
 
 ## Copy rules for this repo
 

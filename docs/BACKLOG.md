@@ -10,7 +10,7 @@ Size tags: **S** (a session or less), **M** (a real slice, days), **L**
 (a platform-level capability, needs its own design pass first).
 
 **Execution contract for every item:** read `dev.md` and the named files
-before editing. Work on `main`. Bun, Hono with `@hono/zod-openapi`, Zod,
+before editing. Use an isolated worktree and the branch named by the brief; the coordinator lands on `main`. Bun, Hono with `@hono/zod-openapi`, Zod,
 SQLite through Drizzle, React and Vite on `@maipai/ui`; tests in
 `bun:test`, deterministic and offline, engines driven by scripted
 stand-ins. Every item exits with `bash scripts/check.sh` in addition to
@@ -18,50 +18,81 @@ its named check. Hard-won logic is copied from the hub's engine files
 (named per item) and re-read, never re-invented; feature scope and UI are
 never copied. No item migrates the hub until STACK-16.
 
-## Milestone 0: the Stack runs the Studio beside the hub
+## Milestones in execution order (reviewed 2026-09-18)
+
+The area lists below remain the dashboard's item records. Each open item
+has one destination here. The release milestone ships a usable Mac app;
+the Studio milestone proves the hub's profile before Home migrates.
+
+| Milestone | Items, in order | Why here |
+|---|---|---|
+| v0.1.0: app and release | STACK-66, STACK-76, STACK-67, STACK-68 | Make the existing Tauri shell install and authenticate its console, then finish the tray and native alerts. |
+| v0.1.0: help and trust | STACK-55, STACK-37, STACK-69, STACK-70, STACK-28, STACK-29, STACK-71, STACK-72, STACK-77, STACK-78, STACK-73 | Make Ask and offline help truthful; close settings, privacy, licensing and diagnostics gaps before inviting a new operator. |
+| v0.1.0: distribution | RELEASE-STACK-01, SITE-STACK-01 | Build and verify release artifacts before publishing the one-line path; the owner authorizes the tag. |
+| Studio proof | STACK-13, STACK-74, STACK-14, STACK-61 | Complete generator jobs and the bench protocol, then measure the Studio and coding context against its real profile. |
+| Home migration | STACK-75, STACK-16 | Pin and test the Stack/Home wire, then migrate Home with rollback after the Studio proof. |
+| Later Mac operations | STACK-04d, STACK-21, STACK-22, STACK-23, STACK-24, STACK-25, STACK-27, STACK-30, STACK-31, STACK-50, STACK-60 | Improve the store, maintenance, data layout and coding-tool setup without holding the first release. |
+| Optional interfaces | STACK-58, STACK-59, STACK-62, STACK-63 | Each needs the stated owner choice or usage evidence before it becomes a release dependency. |
+| Other platforms and kit | KIT-01, STACK-17 | Extract the shared UI kit and prove the Linux robot profile after the Mac service is stable. |
+
+The former Milestone 0, 0b, 0c and 0d headings were topic groupings,
+not release gates. STACK-04c, STACK-34, STACK-07b, STACK-06b, STACK-09b,
+STACK-10, STACK-11b, STACK-11c, STACK-12, STACK-15b, STACK-19,
+STACK-35 and STACK-36 had repeated entries; each now has one item record.
+STACK-33 is complete in 953eda0. STACK-18 is the existing app shell,
+not the complete release. The host and release work is in STACK-66 and
+RELEASE-STACK-01.
+
+## Built foundation and Studio dependencies
 
 - [x] **STACK-00 (M): the design.** `dev.md`, `ux.md`,
   `integrations.md`, the privacy page, this backlog, the org decision
   record. Done 2026-09-17.
+  Verified on main at e6b48db.
 - [x] **STACK-01 (S): repo scaffold.** `package.json` with Bun and Hono,
   `@hono/zod-openapi` wired with the explorer at `/api/docs`, Drizzle
   and SQLite under `data/`, one health route, `scripts/check.sh` running
   lint, format, tests and the standards core (mirror
-  `home/scripts/check.sh`), `.env.example`. Verified at bf9bd7f. Acceptance: `bun start`
+  `home/scripts/check.sh`), `.env.example`. Verified. Acceptance: `bun start`
   serves `/api/docs` and `/healthz` on the default port; `check.sh`
   green. Out of scope: any engine.
+  Verified on main at 79d1d2d.
 - [x] **STACK-02 (M): hardware probe and profiles.** CPU, GPU class,
   unified or discrete memory, free disk, OS; the profile tiers and their
   role lists as one declaration. Mirror `home/backend/src/lib/hardware.ts`.
   Acceptance: `GET /stack/v1/hardware` on the dev Mac reports real values;
-  a unit test for each tier's proposal from a scripted probe. Verified at fffabe5. Out of
+  a unit test for each tier's proposal from a scripted probe. Verified. Out of
   scope: the bench.
+  Verified on main at ff1584d.
 - [x] **STACK-03 (M): engine catalog and downloads.** Pinned builds per
   platform (version, URL, sha256 recorded here), resumable checksummed
   downloads with a clear offline failure. Copy the hard-won parts of
   `home/backend/src/lib/engineCatalog.ts`, `modelDownload.ts`,
   `modelDownloadJobs.ts`. Acceptance: `llama-server` for macOS arm64
   downloads, verifies and runs `--version`; a test proves a checksum
-  mismatch refuses the build. Verified at 1c6d0aa. Out of scope: spawning.
+  mismatch refuses the build. Verified. Out of scope: spawning.
+  Verified on main at 5c1c8bf.
 - [x] **STACK-04 (M): the model store and provenance.** The model record
   (`dev.md`, "The model store and provenance"); install from a Catalog
   `model` package and from a Hugging Face repo; a model is selectable only
   with checksum and licence recorded. Acceptance: the record round-trips
   with id, provenance and clock stamp; an unverified model cannot be
   bound to a role (test). Committed, updates outstanding (STACK-10).
+  Verified on main at a84e774.
 - [x] **STACK-04b (M): the content-addressed store, imports and ranged
   downloads.** Hugging Face layout, engine tags and manifests, five-tool
   import scan, reference-counted remove, storage accounting, and migration.
-  Verified at 2665498; Windows and non-range servers use the documented
+  Verified; Windows and non-range servers use the documented
   fallback paths.
+  Verified on main at 29135bc.
 - [x] **STACK-04c (M): nicknames, nested model groups and utilization.**
   Nullable display nicknames, one-group model placement, persistent nested
   groups, per-model usage and load seconds, rollups, group actions, and the
-  grouped Models and Monitoring surfaces. Verified at <hash>.
+  grouped Models and Monitoring surfaces. Verified on main at 8767f48.
 - [x] **STACK-34 (M): detect and adopt.** Loopback-only probes for local
   engines and known model folders, persisted detection rows, explicit
   operator adoption or forget, managed-host registration, folder linking,
-  version-floor health, and Engines/Models actions. Verified at <hash>.
+  version-floor health, and Engines/Models actions. Verified on main at fad2f39.
 - [x] **STACK-05 (M): the supervisor.** `spawned`, `managed`, `url`
   engine kinds; spawn, watch, restart, the generation guard, the post-load
   check, the memory report; identity headers on every reply. Copy the
@@ -73,84 +104,88 @@ never copied. No item migrates the hub until STACK-16.
   completion through a real llama-server and a verified model on this
   Mac is outstanding (STACK-14 records it), and the governor is STACK-06. Out of scope:
   the governor's rules.
+  Verified on main at c1c4fbb.
 - [x] **STACK-06 (M): the governor.** Profile, admission, one generator,
   eviction (TTL, LRU, pin), the cap, `keep_alive` as a hint; every rule
   readable as a sentence on the Hardware page. Seed from
   `home/backend/src/lib/resourceGovernor.ts`. Acceptance: a test per
   rule with scripted memory readings; a queued job reports its position.
-  Verified at <hash> with scripted readings; live pressure behavior on the
+  Verified with scripted readings; live pressure behavior on the
   Studio is STACK-14.
+  Verified on main at 642421e.
 - [x] **STACK-06b (M): the kernel's memory ledger.** Three OS readers behind
   one interface, kernel pressure watermarks, measured process footprints,
-  and dry-run model sizing. Verified at f682ed0; the Windows reader is a
+  and dry-run model sizing. Verified; the Windows reader is a
   named stub because it could not be tested on this Mac.
+  Verified on main at a52c7bf.
 - [x] **STACK-07 (M): roles and the router.** The role declaration, role
   by name in `model`, the OpenAI-shaped endpoints for text, embeddings,
   audio and images, the streaming speech sessions. Acceptance: an
   unmodified OpenAI client library completes a chat, an embedding, a
   transcription and a speech render against scripted engines; role
   scoping refuses a disallowed role with a clear error. Committed, engine binding completed by STACK-05.
+  Verified on main at 147e0d4.
 - [x] **STACK-07b (S): streaming completions and speech.** Chat streams
   pass through with identity headers, cancellation, and usage counters;
   phrase-level TTS streaming remains the contract for its future engine.
-  Verified at <hash>.
+  Verified on main at 2fbd33f.
 - [x] **STACK-08 (M): operator login and client keys.** Password login,
   keys hashed at rest and shown once, allowed roles, counters, revoke;
   loopback requires a key. Mirror the hub's `auth.ts` and `lib/secrets`
   pattern. Acceptance: a revoked key is refused within one request; the
-  key never appears in a log or a response after creation (test). Verified
-  at <hash>.
+  key never appears in a log or a response after creation (test). Verified on main at 8556157.
 - [x] **STACK-09 (M): events and notifications.** The SSE feed with the
   typed events in `dev.md`; the Notifications page; the Repairs list.
   Acceptance: an engine crash produces `engine.state` and a Repairs row
-  with one action (test); Home's bridge shape documented in the API. Verified at dd781aa (the tick and the changelog line were added at landing; the lane's commit omitted them).
+  with one action (test); Home's bridge shape documented in the API. Verified (the tick and the changelog line were added at landing; the lane's commit omitted them).
+  Verified on main at dd781aa.
 - [x] **STACK-09b (M): one daemon-owned health list.** Idempotent health
   items with severity, cause, Fix or Learn more, resolve and ignore routes,
-  producer codes, and the Repairs compatibility alias. Verified at f866376.
+  producer codes, and the Repairs compatibility alias. Verified on main at c90af29.
 - [x] **STACK-10 (M): updates.** Opt-in check, conditional manifests,
   engine swap and rollback, and a non-applying model revision watch.
-  Verified at 8ee0683; release manifest generation remains RELEASE-STACK-01.
+  Verified; release manifest generation remains RELEASE-STACK-01.
+  Verified on main at 21d703f.
 - [x] **STACK-19 (M): engine management.** Operator controls, declared
   per-engine configuration with pending restart values, derived version
-  state, install progress, protected removal, and the Engines page. Verified
-  at cd7303b.
+  state, install progress, protected removal, and the Engines page. Verified on main at e69fd4b.
 - [x] **STACK-35 (M): property panel.** One reusable docked or mobile-sheet
   panel for engines, models, and detected stores with actions, tabs, keyboard
-  selection, and inline destructive confirmation. Verified at da31809.
+  selection, and inline destructive confirmation. Verified on main at 663c24a.
 - [x] **STACK-36 (M): Overview console.** Range-aware usage, memory, and speed
   series backed by durable samples, with seven widgets, status rings, and
-  showroom captures. Verified at ed67582.
+  showroom captures. Verified on main at 1b61833.
 - [x] **STACK-11 (M): the admin UI, first run and the board.** committed:
-  first run steps 1 to 3 and 5, login, the board; the downloading step
-  and Try it are STACK-12. The five
-  first-run steps and the board from `ux.md`, on `@maipai/ui`, generated
-  screenshots against a scripted engine set, each opened and judged.
+  the initial first-run shell, login and board on the copied kit.
+  STACK-11b replaced the wizard with board-first setup.
+  Verified on main at 82fac4c.
 - [x] **STACK-12 (M): Try it.** The stateless chat, voice, and generator
   role tabs, copied shadcn chat primitives, operator acknowledgement, and
   scripted visual captures are shipped. The pinned Qwen3 1.7B chat model
   installs through the setup plan; a live completion remains outstanding
-  when the governor cannot admit the model. Verified at cd56396.
-  Acceptance: a fresh data directory completes first run headlessly in
-  Playwright and lands on a green board; the "Share with your family"
-  card renders. Out of scope: the menu bar.
+  when the governor cannot admit the model.
+  The first-run acceptance moved to STACK-11b; the Tester remains
+  stateless and generator roles wait on STACK-13.
+  Verified on main at 223d345.
 - [x] **STACK-11b (M): the board is first open, with no wizard.** Committed
   with a scripted download; the real store lands in STACK-04b. The board
   measures the computer, lets the operator choose abilities, and keeps an
   honest download bar visible while the deferred password stays deferred.
+  Verified on main at 63b3f66.
 - [x] **STACK-11c (M): the dashboard shell.** The branded Stack sidebar,
-  search and command palette, all twelve sections, real monitoring and
-  alert actions, and honest empty states for the work still to come.
-- [x] **STACK-12 (M): Try it.** The stateless tabs per role with the
-  adult acknowledgment once and the AI-outputs disclaimer at first run.
-  Acceptance: each tab exercised in Playwright against scripted engines;
-  the acknowledgment shows exactly once per operator (test).
-  Landed: the tick with its verified commit is the STACK-12 line in
-  milestone 0; this entry is the design.
+  search and command palette, the initial sections, real monitoring and
+  alert actions, and honest empty states. STACK-51 changed the nav.
+  Verified on main at f3d1162.
 - [ ] **STACK-13 (M): jobs and the managed ComfyUI.** The job API,
   progress on the feed, cancel, results by id, the synchronous wrapper;
   ComfyUI as a managed host for image edits. Acceptance: a scripted job
   reports progress and cancels cleanly; the wrapper returns an OpenAI-
   shaped image response.
+  Files: `backend/src/routes/jobs.ts`, `backend/src/lib/supervisor.ts`,
+  `frontend/src/pages/TryItPage.tsx`.
+  Mirror: the current job lifecycle routes and inference wrapper.
+  Out of scope: new person records or Home-side features.
+  Exit: `bash scripts/check.sh`.
 - [ ] **STACK-14 (L): the Studio bench and the MLX engines.** `mlx-serve`
   and `oMLX` as spawned candidates beside `llama-server` and `mlx-lm`,
   measured on the Studio with the residency profiles in the hub's
@@ -158,62 +193,38 @@ never copied. No item migrates the hub until STACK-16.
   memory behavior recorded. Needs its own bench design first.
   Acceptance: numbers with engine build, model file and a sanitized
   hardware line in `dev.md`; a chosen Studio profile.
+  Files: `docs/dev.md`, `backend/src/lib/engineCatalog.ts`,
+  `backend/src/lib/governor.ts`, `scripts/bench/`.
+  Mirror: STACK-74 protocol and the existing speed test.
+  Out of scope: new person records or Home-side features.
+  Exit: `bash scripts/check.sh`.
 - [x] **STACK-15 (M): service install.** launchd on macOS with the
   data-directory permissions, an installer script, start, stop, pause
   and resume; the menu-bar item after the web UI. Verified with a
   temporary launchd label on this Mac; the release asset and hosted
   script land with the first release.
+  Verified on main at e3b2098.
 - [x] **STACK-15b (S): the one-line installer and compiled binary.** A
   checksum-verified macOS arm64 installer embeds the board, installs the
   launchd agent, restarts cleanly on re-run, and keeps data on uninstall.
   Verified with a temporary launchd label on this Mac; the release asset
   and hosted script land with the first release.
+  Verified on main at e3b2098.
 - [ ] **STACK-16 (L): Home runs on the Stack.** The hub's migration list
   in `dev.md`; Home registers as a client, calls by role, bridges events,
   and deletes its own supervisors. Lands in the `home` repo as its own
   items after STACK-14 proves the Studio profile. Needs its design pass
   in `home/docs/dev.md` first.
+  Files: `home/backend/src/lib/engine*.ts, home/backend/src/routes/, docs/integrations.md`. Mirror: STACK-75 contract fixtures and the current Home supervisors.
+  Out of scope: removing Home supervisors before the Studio proof.
+  Exit: `bash scripts/check.sh`.
+  Acceptance: a dual-run check proves each role before removal and a rollback restores the old path.
 
-## Milestone 0b: what the field survey changed (2026-09-17)
+## Field survey decisions (2026-09-17)
 
 Decided in [`plans/operations-design-2026-09-17.md`](plans/operations-design-2026-09-17.md);
 each item's design section lands in `dev.md` before its code.
 
-- [x] **STACK-07b (M): streaming.** `stream: true` on `/v1/chat/completions`
-  proxies the engine's SSE token stream with the identity headers on
-  the response, cancellation on client disconnect, and the
-  phrase-level TTS stream for `/v1/audio/speech`. Files: `backend/src/lib/supervisor.ts`,
-  `routes/inference.ts`. Acceptance: an unmodified OpenAI client
-  receives streamed deltas from a scripted engine; disconnect aborts
-  the engine request without retiring the backend (test). Exit:
-  `bash scripts/check.sh`.
-  Landed: the tick with its verified commit is the STACK-07b line in
-  milestone 0; this entry is the design.
-- [x] **STACK-06b (M): the governor reads the kernel's ledger.** A
-  `bun:ffi` memory reader (`kern.memorystatus_level`,
-  `kern.memorystatus_vm_pressure_level`, `host_statistics64`,
-  `proc_pid_rusage` phys_footprint) with Linux and Windows twins
-  behind one interface; soft and hard watermarks; the dry-run
-  measurement path (`llama-fit-params` for GGUF) and the measured
-  footprint stored per model and context; `os.freemem()` removed.
-  Acceptance: on this Mac the reader's free percent matches
-  `memory_pressure` within one point (pasted); watermark tests with
-  scripted readings; a model's badge shows a dry-run number. Exit:
-  `bash scripts/check.sh`.
-  Landed: the tick with its verified commit is the STACK-06b line in
-  milestone 0; this entry is the design.
-- [x] **STACK-04b (L): the store layout, import, remove.** Models in
-  the Hugging Face cache layout under `data/models/hub`; engines as
-  `data/engines/<name>/<tag>/` with a manifest and a `current` link;
-  the import scan of other tools' directories with links, never
-  copies; ranged parallel downloads with per-part resume and a
-  full-file hash; reference-counted remove with a one-hour prune
-  grace. Design section first. Acceptance: a model in a temp
-  `HF_HUB_CACHE` is imported by link and served; a blob shared by two
-  manifests survives one remove; the tests from STACK-03 and -04
-  still pass. Exit: `bash scripts/check.sh`.
-  Landed: the tick with its verified commit is the STACK-04b line in
-  milestone 0; this entry is the design.
 - [ ] **STACK-04d (S): the store writes through `@huggingface/hub`.**
   Replace `store/hfCache.ts`'s hand-written layout writer with the
   official client's `downloadFileToCacheDir` behind `lib/hf.ts` (the
@@ -221,179 +232,37 @@ each item's design section lands in `dev.md` before its code.
   keeping the read side and the tests; verify in the installed source
   that it produces `models--<org>--<repo>/{blobs,refs,snapshots}` and
   cite the line. Acceptance: the store tests still pass; a NOTICE line.
-- [x] **STACK-09b (M): one health list.** Health items (code, severity,
-  title, text, since, cause, one fix, learn-more), keyed and
-  idempotent, `GET /stack/v1/health`, `health.changed` on the feed;
-  Repairs become health items with a fix; the board renders the HA
-  shape. Acceptance: raising a code twice yields one item; resolving
-  removes it; the enumeration of every producer (supervisor,
-  governor, model store, updates) with its test. Exit:
-  `bash scripts/check.sh`.
-  Landed: the tick with its verified commit is the STACK-09b line in
-  milestone 0; this entry is the design.
+  Files: `backend/src/lib/store/hfCache.ts, backend/src/lib/hf.ts, NOTICE`.
+  Mirror: the existing store tests.
+  Out of scope: new person records or Home-side features.
+  Exit: `bash scripts/check.sh`.
 - [x] **STACK-09c (M): alert channels.** `{type, name, config,
   verifiedAt}` in a registry, Telegram and ntfy providers, "Send a
   test" returning the provider's error, an unverified channel is a
   warning item, a privacy-page row per channel type. Acceptance: a
   scripted provider receives the test and the verified stamp lands;
   the privacy page lists both. Exit: `bash scripts/check.sh`.
-- [x] **STACK-10 (M): updates** (moved here from milestone 0 with the
-  survey's shape; verified at 8ee0683, landed as c90af29's successor): three hosted manifests, opt-in check offered once
-  on the second launch with only `If-None-Match` and a user agent
-  sent, engines pinned by `bNNNN` resolved through `nightly-tag.txt`
-  and cross-checked against GitHub's asset digest, drain and swap
-  with automatic rollback on a failed post-swap check, keep-previous
-  directories, the weekly model-revision watch, the page's API.
-  Acceptance: an update and a rollback of a scripted engine with no
-  request cut (test); the check's request has exactly the two headers
-  (test); the privacy page lists the URLs. Exit: `bash scripts/check.sh`.
-- [x] **STACK-11b (M): the first open is the board.** No wizard: the
-  board is the first screen with This computer in plain words, the
-  Add abilities cards with sizes and "can run", the "Start small"
-  suggestion, downloads as a background job with the honest bar and
-  the network sentence, the one-time dismissible note; the operator
-  password is deferred until a client key is created or LAN access is
-  switched on. Design in `ux.md` "Install and first open". Acceptance:
-  a fresh data directory opens straight to the board with no network;
-  a scripted "Start small" shows size, speed and time left and
-  survives a pause; creating a key prompts for the password once;
-  screenshots re-taken and judged.
-  Landed: the tick with its verified commit is the STACK-11b line in
-  milestone 0; this entry is the design.
-- [x] **STACK-11c (M): the dashboard shell.** The sidebar with the
-  twelve sections in `ux.md` "The shell", the top bar with the
-  machine in plain words, the search-and-command palette (slash or
-  Command-K over pages, models, engines, settings and actions), the
-  health badge, the hand-off card; every section route exists with
-  its designed empty state; Overview is the board; Models, Engines,
-  Access, Alerts and Settings render the real routes that exist;
-  Monitoring, Updates, Backups render their empty states until their
-  items land. Acceptance: Playwright walks every section on a fresh
-  data directory and each shows its designed empty state; the palette
-  opens with both keys and jumps to a page and runs an action;
-  screenshots at desktop light, desktop dark and phone, opened and
-  judged.
-  Landed: the tick with its verified commit is the STACK-11c line in
-  milestone 0; this entry is the design.
-- [x] **STACK-15b (M): the one-line installer.** `install.sh` hosted
-  on our GitHub Pages: downloads the compiled Stack binary
-  (`bun build --compile`) for the platform from our own GitHub
-  release with its sha256 checked, installs under the home folder,
-  registers the launchd agent (later systemd), starts it, opens the
-  board; re-running updates; an uninstall flag removes everything but
-  the data directory. Acceptance: on a clean macOS user account the
-  command ends with the board open in under a minute, with the log
-  pasted; the script is shellcheck-clean; nothing but our own release
-  is downloaded (the script's URLs enumerated in the privacy page).
-  Landed: the tick with its verified commit is the STACK-15b line in
-  milestone 0; this entry is the design.
-- [x] **STACK-12 (M): Try it** is built on shadcn/ui's chat components
-  (`message-scroller`, `message`, `bubble`, `attachment`, `marker`)
-  added to the kit by the registry, a small SSE hook against the
-  Stack's own `/v1/chat/completions`, `MediaRecorder` to
-  `/v1/audio/transcriptions` for Listen, and `/v1/audio/speech`
-  through an `<audio>` element for Speak; stateless; the decision and
-  the candidates graded are in `dev.md` "Try it's chat surface".
-  Landed: the tick with its verified commit is the STACK-12 line in
-  milestone 0; this entry is the design.
-
+  Verified on main at f940652.
 ## Cross-repo
 
-- [ ] **KIT-01 (M): extract the shared UI kit.** Extract `@maipai/ui`
-  from `home/frontend/src/kit` into a package that both repos pin. Until
-  then, the Stack carries a copied subset for its admin shell.
+- [ ] **KIT-01 (M): extract the shared UI kit.** Move the copied
+  dashboard and primitive subset into a versioned `@maipai/ui` package
+  pinned by Home and the Stack. Files: `frontend/src/kit/`,
+  `home/frontend/src/kit/` and the new package manifest. Mirror: org
+  `docs/UI.md` and the current copied kit. Acceptance: both apps build
+  from the same package version, their existing visual captures do not
+  regress, and the Stack has no copied kit source left. Out of scope:
+  changing page behavior or adding a component library. Exit:
+  `bash scripts/check.sh` in each touched repo.
+- [x] **STACK-18 (M): the Tauri 2 desktop shell.** The `desktop/`
+  package loads the daemon's console in a native window, provides a
+  tray with initial status and actions, a daemon-down Start screen,
+  native pickers, single-instance handling and notification hooks.
+  Verified on main at a39948f. The app's service installation is
+  STACK-66; authenticated tray reads and actions are STACK-76; the
+  full menu and per-kind notifications are STACK-67 and STACK-68.
 
-- [ ] **STACK-04c (M): nicknames, groups, utilization by group.** A
-  `nickname` on the model record (display only); a `groups` table
-  (`id`, `name`, `parentId`) with each model in exactly one group and
-  an ungrouped default; per-model usage recorded by the router and
-  supervisor (requests, tokens in and out, seconds loaded, peak memory
-  while loaded, last used) and rolled up by group through the tree;
-  routes to create, rename, move and remove groups and to move
-  models; per-group status (loaded, ready, on demand, failed counts
-  and the worst health item) and group actions that apply beneath
-  (load, unload, pin, unpin, check for updates, move, remove) with
-  the count confirmed inline; the Models page as a tree with rollups
-  and drag to move;
-  Monitoring's utilization by group. Acceptance: a nested rollup
-  counts a model once (test); a nickname changes no API behavior
-  (test: a request by nickname is 400, by id works); the tree renders
-  scripted groups with their rollups (screenshot judged).
-- [x] **STACK-19 (M): engine management.** Controls (start, stop,
-  restart, probe, install a build, make current with drain and swap,
-  remove), per-engine configuration declared once and rendered
-  generically (context, slots, threads, prompt cache, flash
-  attention; host URL and expected version for managed), and a
-  version state that is a fact (current, not current with the reason,
-  needs restart) from the store's tags and the updates' newest pinned
-  build. Design in `ux.md` "Engines". Acceptance: each control calls
-  its route against a scripted engine (test per control); a config
-  change marks needs-restart and the restart applies it; "not
-  current" appears when a newer pinned build exists (test); the page
-  screenshot opened and judged.
-  Landed: the tick with its verified commit is the STACK-19 line in
-  milestone 0; this entry is the design.
-- [x] **STACK-35 (M): the property panel.** One `PropertyPanel`
-  component (header with name, status badge and quick-action buttons;
-  Overview, Settings, Insights tabs) used by Engines, Models and
-  groups, Access clients, Alert channels and detected items, with the
-  table on the left and the panel staying open across rows and arrow
-  keys; the per-kind action sets in `ux.md` "The list and the panel".
-  Acceptance: each page opens the panel on a row and moves with arrow
-  keys (test); every action calls its route (test per kind);
-  screenshots of the panel on Engines and Models, opened and judged.
-  Landed: the tick with its verified commit is the STACK-35 line in
-  milestone 0; this entry is the design.
-- [x] **STACK-36 (M): Overview as the console dashboard.** The seven
-  widgets in `ux.md` "Overview: the console dashboard" on the block's
-  section cards and charts, with the time range; the recorded series
-  behind them (`usage_samples` per five minutes by ability, client and
-  model for a week; memory samples per five seconds for an hour and per
-  five minutes for a week; speed results from STACK-26) written by the
-  router, governor and supervisor and served by `GET /stack/v1/series`
-  with a range parameter. Acceptance: scripted series render every
-  widget with real numbers (screenshots at desktop light, dark and
-  phone, judged); the time range changes every chart (test); the ring
-  segments filter the list (test); the squint test written up in the
-  report against a UniFi screenshot the lane fetches for comparison
-  only, never copied.
-  Landed: the tick with its verified commit is the STACK-36 line in
-  milestone 0; this entry is the design.
-- [ ] **STACK-34 (M): detect and adopt.** Discovery of engines and
-  model folders the Stack did not install: well-known loopback ports
-  (Ollama 11434, LM Studio 1234, ComfyUI 8188, oMLX, mlx-serve 11234,
-  any `llama-server` answering `/health`), installed apps and binaries
-  in the usual places, the model folders from the import scan;
-  detection on boot and in the maintenance window, loopback only,
-  never the network. A `detected` table (kind, name, version, where,
-  what it could hold, `forgotten`); rows on Engines and Models in the
-  "Detected, not adopted" state; Adopt (probe, identity, version
-  against the tested floor, choose roles, register as `managed` or
-  import by link), Forget; a health item when an adopted host is
-  below the tested version. Design in `ux.md` "Detect and adopt".
-  Acceptance: a scripted Ollama on a loopback port is detected, shown
-  as not adopted, adopted with the chat role and served through it
-  (test); a forgotten row stays hidden until its version changes
-  (test); nothing is probed outside 127.0.0.1 (test asserts the
-  address list); screenshot judged.
-- [x] **STACK-18 (M): the desktop app on Tauri 2** (grown from the tray app, dev.md "The desktop app is Tauri around the console"): a `desktop/` package whose main window loads the daemon's console URL, plus everything below;
-  the Stack icon as the tray or menu-bar item colored by the worst
-  health severity, a menu with each role's one line, Open (the web UI
-  in a Tauri window), Pause everything, Resume, Quit; native
-  notifications for `critical` and `error` health items and for
-  `update.available` and `model.installed`, posted under the app's
-  bundle id; an independent poll of `/healthz` that shows "The Stack
-  is not running" with Start when the daemon is down; the daemon as a
-  service-managed process so the app is only its front; STACK-66 adds the
-  bundled sidecar install path; updates continue through the Stack's own
-  update flow, with no Tauri updater or telemetry. Acceptance: on
-  this Mac the bundled app shows the icon, a scripted critical health
-  item posts a native notification (screenshot), Pause drains and
-  Resume restores; the bundle installs the service the same way
-  `install.sh` does. Exit: `bash scripts/check.sh` plus the tray
-  package's own `cargo test`.
-
-## Milestone 0c: self-managing (2026-09-17, from the owner's review)
+## Self-management area (2026-09-17)
 
 The features a person would not think to do, or would find tedious,
 that let the Stack set itself up, keep itself healthy, keep itself
@@ -411,6 +280,7 @@ layer above; none adds a person or leaves the machine.
   ("Checked 2 hours ago, all good"). Acceptance: a scripted failing
   role yields a health item with a fix; the nightly run is skipped
   while the person is active.
+  Verified on main at 5c9b946.
 - [ ] **STACK-21 (M): What's new for your computer.** When the
   Catalog's model index changes (a conditional GET, opt-in with the
   update check), tell the person which new models would run well on
@@ -418,6 +288,10 @@ layer above; none adds a person or leaves the machine.
   Install; never auto-install, never a telemetry call. Acceptance: a
   scripted index with three models yields one recommendation that
   fits the tier and two that are hidden for not fitting.
+  Files: `backend/src/updates/models.ts, frontend/src/pages/OverviewPage.tsx`.
+  Mirror: the current update watch and profile proposal.
+  Out of scope: new person records or Home-side features.
+  Exit: `bash scripts/check.sh`.
 - [ ] **STACK-22 (M): the maintenance window.** Quiet hours the person
   sets once (default 2 to 5 in the morning): downloads, update checks,
   smoke tests, storage sweeps and benchmarks run then; heavy work
@@ -426,6 +300,10 @@ layer above; none adds a person or leaves the machine.
   downloads; "Run maintenance now" on Settings. Acceptance: a scripted
   clock runs the window's jobs inside it and defers them outside;
   activity pauses a scripted download.
+  Files: `backend/src/lib/governor.ts, backend/src/routes/settings.ts, frontend/src/pages/SettingsPage.tsx`.
+  Mirror: the existing activity skip in Check my Stack.
+  Out of scope: new person records or Home-side features.
+  Exit: `bash scripts/check.sh`.
 - [ ] **STACK-23 (M): ready when you sit down.** Models unload after an
   idle time the person sets; on battery they unload sooner; the chat
   model warms up before the hour the person usually uses it, learned
@@ -433,6 +311,10 @@ layer above; none adds a person or leaves the machine.
   anywhere, shown on the Monitoring page as "you usually chat around
   7 pm"). Acceptance: scripted usage records produce the warm-up
   hour; a battery event unloads a JIT model.
+  Files: `backend/src/lib/governor.ts, backend/src/lib/series.ts`.
+  Mirror: the current idle eviction rule.
+  Out of scope: new person records or Home-side features.
+  Exit: `bash scripts/check.sh`.
 - [ ] **STACK-24 (M): storage hygiene.** Find models unused for thirty
   days, duplicate files across tools, orphan blobs, old engine builds
   and stale logs; show what each would free; one click to clean; a
@@ -440,6 +322,10 @@ layer above; none adds a person or leaves the machine.
   rate. Acceptance: a scripted store yields the exact list and sizes;
   the clean removes only what was listed; the disk warning fires on a
   scripted trend.
+  Files: `backend/src/lib/store/, backend/src/routes/storage.ts, frontend/src/pages/SettingsPage.tsx`.
+  Mirror: the current reference-counted remove.
+  Out of scope: new person records or Home-side features.
+  Exit: `bash scripts/check.sh`.
 - [ ] **STACK-25 (M): move to a new computer.** Export "my setup"
   (plan, abilities, groups and nicknames, settings, alert channels
   minus their secrets, the client list minus keys) as one file; on a
@@ -448,6 +334,9 @@ layer above; none adds a person or leaves the machine.
   Backups, per the org standard. Acceptance: export then import on a
   scripted smaller machine drops the abilities that do not fit and
   says so.
+  Files: `backend/src/db/, backend/src/lib/setupPlan.ts, frontend/src/pages/SettingsPage.tsx`. Mirror: the setup plan and STACK-72 backup format.
+  Out of scope: new person records or Home-side features.
+  Exit: `bash scripts/check.sh`.
 - [x] **STACK-26 (M): the speed test, on `llama-bench`.** After a
   model installs and after any engine update, in the maintenance
   window, run llama.cpp's own `llama-bench` from the pinned archive
@@ -463,10 +352,15 @@ layer above; none adds a person or leaves the machine.
   Acceptance: a scripted `llama-bench` output parses into the record
   (test); a second run with a lower number raises the item (test);
   the page's numbers are the recorded ones (screenshot judged).
+  Verified on main at c375461.
 - [ ] **STACK-27 (S): the weekly digest.** One passive notification a
   week: what was used and how much, what updated, what is tight, what
   could be cleaned, in five plain sentences; off by default on the
   Alerts page. Acceptance: a scripted week yields the five sentences.
+  Files: `backend/src/lib/series.ts, backend/src/lib/channels/, frontend/src/pages/AlertsPage.tsx`.
+  Mirror: the durable notification templates.
+  Out of scope: new person records or Home-side features.
+  Exit: `bash scripts/check.sh`.
 - [ ] **STACK-28 (S): licences in plain words.** Every model's licence
   shown as one sentence a parent understands ("free for personal use;
   not for a business") from a small map of the common licences, with
@@ -474,6 +368,10 @@ layer above; none adds a person or leaves the machine.
   before download. Acceptance: the map covers Apache-2.0, MIT, Llama
   community, Gemma terms, Qwen research, CC-BY-NC; an unknown licence
   says "read it before you rely on it".
+  Files: `backend/src/lib/modelCatalog.ts, frontend/src/panels/model.tsx`.
+  Mirror: the existing licence field and model panel.
+  Out of scope: new person records or Home-side features.
+  Exit: `bash scripts/check.sh`.
 - [ ] **STACK-29 (S): guided fixes and a diagnostics bundle.** Every
   health item's "Learn more" opens a page with the exact steps in the
   user docs; "Save a diagnostics file" writes a redacted bundle
@@ -481,18 +379,29 @@ layer above; none adds a person or leaves the machine.
   removed) the person can keep or send to whoever helps them. Nothing
   is sent by the Stack. Acceptance: the redaction test from the
   logging standard covers the bundle.
+  Files: `backend/src/lib/health.ts, backend/src/routes/logs.ts, frontend/src/pages/SettingsPage.tsx`.
+  Mirror: the existing health code and local log route.
+  Out of scope: new person records or Home-side features.
+  Exit: `bash scripts/check.sh`.
 - [ ] **STACK-30 (M): abilities by intent.** On the Abilities page,
   "What do you want to do?" (a chat assistant; help with homework;
   dictation; make images; code) picks the abilities and models for
   this machine and explains the choice in one sentence; the tier list
   stays behind "Change". Acceptance: each intent maps to a set that
   fits each tier (test per intent per tier).
+  Files: `backend/src/lib/setupPlan.ts, frontend/src/pages/BoardPage.tsx`.
+  Mirror: the current ability proposal.
+  Out of scope: new person records or Home-side features.
+  Exit: `bash scripts/check.sh`.
 - [ ] **STACK-31 (S): engines kept current, safely.** An opt-in switch
   on Updates: apply engine updates in the maintenance window with the
   automatic rollback of STACK-10 if the post-swap check fails, and a
   notification either way; model updates are never automatic.
   Acceptance: a scripted failing update rolls back and notifies.
-
+  Files: `backend/src/updates/engines.ts, backend/src/routes/updates.ts`.
+  Mirror: the existing drain, swap and rollback.
+  Out of scope: new person records or Home-side features.
+  Exit: `bash scripts/check.sh`.
 - [x] **STACK-32 (M): the Library.** Local documentation for what is
   installed. When a model or engine is selected, its source page and
   docs links are registered on the record (STACK-04b); the Library
@@ -511,40 +420,27 @@ layer above; none adds a person or leaves the machine.
   refetched only with the revision. Acceptance: two scripted installs
   produce two Library pages found by the palette; the MCP `search`
   returns the right page for a query (test); the privacy row exists.
-- [ ] **STACK-33 (S): the Library in the docs site's search.** The
+  Verified on main at 953eda0.
+- [x] **STACK-33 (S): the Library in the docs site's search.** The
   published docs site's search also covers the Library pages of this
   Stack when opened from the Stack (the site's Pagefind index merged
   with the local one at request time), so one search box answers both
   "how do I" and "what did I install". Acceptance: a query that matches
-  only a Library page returns it from the site's search box.
-
-- [ ] **STACK-37 (M): the helper.** (Priority raised 2026-09-18; the door is Ask, ux.md "Docs and the helper".) The in-console
-  assistant of dev.md "The helper" (2026-09-17), built in three tiers
-  so most questions never reach a model. Tier 1: an intent table in
-  the command palette that answers the enumerable questions from the
-  API ("how many engines", "are my models up to date", "how much disk
-  do models use") with the number in the row and a jump to the page,
-  each intent with a hit counter. Tier 2: the Library search
-  (STACK-32/33). Tier 3: the `helper` role, a read-only tool set over
-  `/stack/v1` (`health`, `engines`, `models`, `updates`, `storage`,
-  `series`, Library `search`) declared once and also served by the
-  `stack-library` MCP server, run on the loaded `chat` engine when it
-  supports tool calls, else on the Stack's pinned `qwen3-1.7b-q8-0`
-  in its own low-priority llama-server that unloads after idle; the
-  reply renders in the property panel, with "Ask about this" on every
-  health row and alert; any action is a proposal card, never a tool.
-  Mirror `lib/router.ts` for the role and `routes/library` for the
-  tools. Acceptance: the two named questions are answered with no
-  engine running (test on the intent table); a scripted engine
-  (`STACK_SCRIPTED_ENGINES=1`) proves the tool loop answers "why is
-  chat offline" from the health list; the tool set contains no
-  mutating tool (test enumerates the registry); with every person
-  engine stopped the helper still loads on its own process (scripted
-  test); with memory below the watermark the palette shows the
-  "needs 2 GB free" state instead of loading. Out of scope: quality
-  benchmarks, a chat bubble, any write tool. Exit: `scripts/check.sh`.
-
-## Milestone 0d: look and feel (2026-09-17 night, from the owner's references)
+  only a Library page returns it from the site's search box. Verified on main at 953eda0.
+- [ ] **STACK-37 (M): a local answer helper.** Ask answers live
+  machine facts and shipped docs without a model. A separately enabled
+  path may use the already loaded chat model with read-only tools and
+  proposal cards. It downloads no helper model, declares no helper
+  role, stores no conversation history, and works in model-free mode
+  when chat is offline. Acceptance: scripted facts and docs answer
+  with no engine running; every tool is read-only; with the switch off
+  no model request occurs; a short question corpus reports correct
+  answer links and rule hit counts. Out of scope: an agent loop,
+  bundled model and automatic action.
+  Files: `frontend/src/pages/DashboardShell.tsx, backend/src/routes/library.ts, docs/site/`.
+  Mirror: the current palette and local Library search.
+  Exit: `bash scripts/check.sh`.
+## Console area (2026-09-17 and 2026-09-18)
 
 The design record is ux.md "Look and feel references: UniFi's
 structure, X's modernism". Each item below is one numbered pattern from
@@ -553,7 +449,7 @@ showroom (`bun run showroom`, captures under `docs/assets/screens/`).
 Order matters: the shell items (38 to 40) first, the kit blocks (41,
 42) next, then the pages that use them.
 
-- [x] **STACK-38 (S): the page header is the title** `7894513`. The top bar's
+- [x] **STACK-38 (S): the page header is the title** `1933cb6`. The top bar's
   title is sticky and is the page's title; the eyebrow ("MaiPai
   Stack"), the large heading and the subtitle at the top of every page
   body go. A page keeps at most one muted sentence under the header
@@ -567,6 +463,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   class assertion is enough in happy-dom); showroom captures of
   Overview, Models and Engines opened and judged. Out of scope: the top
   bar's instance dot (STACK-46). Exit: `scripts/check.sh`.
+  Verified on main at 1933cb6.
 - [x] **STACK-39 (S): relative times.** `frontend/src/lib/relativeTime.ts`
   (`formatRelative(iso, now)`: "now" under a minute, "3m", "2h",
   "Yesterday", then the short date; unit tests for each boundary) and a
@@ -577,7 +474,8 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   list (the list shows both). Mirror: X's "3m" timestamps. Acceptance:
   `relativeTime.test.ts` covers the boundaries; `overview.test.tsx`
   finds a `<time>` element with a `dateTime`. Exit: `scripts/check.sh`.
-- [x] **STACK-40 (S): dark is black, light is flat.** (6723dee) `frontend/src/kit/
+  Verified on main at 209ee9b.
+- [x] **STACK-40 (S): dark is black, light is flat.**  `frontend/src/kit/
   tokens.css` `.dark` block: `--background` and `--card` to a near-black
   neutral, `--border` a hairline grey, no shadow tokens in use; light
   mode drops the card drop shadows (`shadow-*` classes on `Card` and the
@@ -587,6 +485,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   one); showroom `overview-console-dark.png` and `-light.png` opened
   and judged; every text and border token pair is checked for WCAG AA contrast
   and the ratios are listed in the commit message. Out of scope: a theme generator. Exit: `scripts/check.sh`.
+  Verified on main at f482a6e.
 - [x] **STACK-41 (M): the things table.** One block, `frontend/src/kit/
   blocks/things-table/ThingsTable.tsx`, on the kit's `table.tsx`:
   column definitions with alignment (numbers right, `tabular-nums`), a
@@ -603,6 +502,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   through it (no page keeps its own row markup; grep for `border-b` in
   pages is empty); showroom captures opened and judged. Out of scope:
   the filter column (STACK-43). Exit: `scripts/check.sh`.
+  Verified on main at df2155a.
 - [x] **STACK-42 (M): the property panel, refined.** `frontend/src/kit/
   blocks/property-panel/PropertyPanel.tsx`: quick actions are icon
   buttons with tooltips (lucide icons per action, given by the panel's
@@ -619,6 +519,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   glyph writes to the clipboard in the test (stubbed); showroom
   `engines-panel.png`, `models-panel.png`, `detected-panel.png` opened
   and judged. Exit: `scripts/check.sh`.
+  Verified on main at 9cf2649.
 - [x] **STACK-43 (M): the filter column.** A `FilterColumn` block
   (`frontend/src/kit/blocks/filter-column/`): a search field,
   collapsible checkbox groups with counts (status, kind, role, for the
@@ -631,6 +532,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   wide viewport and the button below it (the `--breakpoint-lg` width in
   `kit/tokens.css`);
   showroom captures opened and judged. Exit: `scripts/check.sh`.
+  Verified on main at 90ab8cd.
 - [x] **STACK-44 (S): one pill.** The `Button` `default` variant is a
   fully rounded pill; every screen keeps one filled button at most (the
   page's main action), everything else `outline`, `ghost` or a text
@@ -639,6 +541,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   button. Acceptance: a `bun test` walk of the showroom fixtures renders
   each page and asserts at most one `data-variant="default"` button
   outside dialogs; captures opened and judged. Exit: `scripts/check.sh`.
+  Verified on main at 803cb02.
 - [x] **STACK-45 (M): Overview's facts column and controls.** The left
   facts column of ux.md item 8 (the computer card with counts by kind,
   key facts as label and value rows, versions with "Up to date" and a
@@ -654,6 +557,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   Check my Stack routes (or show the "coming with STACK-26/20" state
   until those land); showroom `overview-console-*.png` opened and
   judged at desktop and phone. Exit: `scripts/check.sh`.
+  Verified on main at fa478a0.
 - [x] **STACK-46 (S): the top bar.** The instance on the left with its
   status dot and name ("This computer", the dot in the worst health
   severity, green when the list is empty), the search field in the
@@ -663,6 +567,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   dot's label and the toggle; captures opened and judged. Out of scope:
   moving This computer off the sidebar footer (it stays until the
   hand-off card design lands). Exit: `scripts/check.sh`.
+  Verified on main at 803cb02.
 - [x] **STACK-47 (S): settings as rows.** The generic renderer
   (`frontend/src/kit/settings/GenericForm.tsx`) renders the shape of
   ux.md item 4: label left with an info glyph that opens the
@@ -673,8 +578,8 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   `genericForm.test.tsx` (new, beside the existing frontend tests)
   finds the info glyph and its popover text and
   the radio group for a three-option enum; `engines-configure.png`
-  opened and judged. Verified at dd70cfa. Exit: `scripts/check.sh`.
-
+  opened and judged. Verified. Exit: `scripts/check.sh`.
+  Verified on main at 3c07a87.
 - [x] **STACK-48 (M): the first phone and the first LAN request.** An
   off-laptop request renders only the sign-in gate, a fresh Stack tells
   the owner to set its password on the host, and LAN access refuses to
@@ -682,7 +587,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   and three quiet icon actions on a phone; the board and Overview put
   the useful first state before the detail. Captures at 400px were
   opened and judged. Exit: `scripts/check.sh`.
-
+  Verified on main at b4479b1.
 - [x] **STACK-49 (M): Overview, second pass.** ux.md "Overview, second
   pass" made real: no prose in widgets; the one-line status strip in
   words with counts (the ring cards go); one hero chart with Usage,
@@ -703,6 +608,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   the range (test); Recent activity excludes non-durable events (test);
   captures at 1440, 1024 and 400 opened and judged. Exit:
   `scripts/check.sh`.
+  Verified on main at 57bdd16.
 - [ ] **STACK-50 (M, owner agreed 2026-09-18): two databases, state and measurements.** dev.md
   "Two databases" (2026-09-18): `stack.db` keeps state (settings,
   models, groups, clients, channels, operator, detected, open health),
@@ -748,7 +654,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   back (test); Updates and Backups render inside Settings and the
   palette reaches them (test); captures at 1440 and 400 opened and
   judged. Exit: `scripts/check.sh`.
-
+  Verified on main at 4283b32.
 - [x] **STACK-52 (M): Settings, second pass.** ux.md "Settings" second
   pass (2026-09-18): the settings nav with "Find a setting" and the
   section rows plus the computer group; section cards (icon, title,
@@ -771,6 +677,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   declared section renders a card (test walks the declaration);
   captures `settings.png`, `settings-updates.png`, `settings-phone.png`
   opened and judged. Exit: `scripts/check.sh`.
+  Verified on main at 5137be6.
 - [x] **STACK-53 (M): things pages, second pass.** ux.md "Things pages,
   second pass" (2026-09-18): one Add pill per page opening the sheet
   with Catalog, Hugging Face and Import tabs (import by link, and a
@@ -798,6 +705,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   (test); no row shows a group name as its title (test on the fixture);
   captures `models-groups.png`, `models-add.png`, `models-row-menu.png`
   opened and judged. Exit: `scripts/check.sh`.
+  Verified on main at 7e9229f.
 - [x] **STACK-54 (M): the phone, second pass.** ux.md "The phone,
   second pass" (2026-09-18): at phone width a five-tab bottom bar
   replaces the sidebar sheet; a one-line header (glyph, computer pill
@@ -820,23 +728,19 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   `overview-console-phone.png`, `models-phone.png`,
   `model-detail-phone.png`, `settings-phone.png` opened and judged.
   Exit: `scripts/check.sh`.
-- [ ] **STACK-55 (S): Ask and the doors to the docs.** ux.md "Docs and
-  the helper" decisions 1 and 3: the header glyph becomes sparkles
-  "Ask" opening the palette with "Search or ask", groups for pages and
-  things, the intent table (STACK-37 tier 1), "From the docs" (the docs
-  site's Pagefind index fetched from the site when the outbound switch
-  is on, else the local Library only), and "Ask the helper" (opens the
-  helper panel, STACK-37 tier 3, or its "coming" state until built);
-  "Help" in the profile menu with the docs site, the API explorer and
-  the Library; "Learn more" on health items and unbuilt sections. Files:
-  `site-header.tsx`, `profile-menu.tsx`, the palette in
-  `DashboardShell.tsx`, `backend/src/lib/health.ts` (a `docsPath` per
-  item code, one map). Acceptance: the palette answers "how many
-  engines" with the count from a stubbed route (test); a health item
-  renders its Learn more link (test); Help lists the three doors
-  (test); captures `palette.png` opened and judged. Exit:
-  `scripts/check.sh`.
-- [x] **STACK-56 (S): the seams, written down and guarded.** (Landed 2026-09-18, c-48.) dev.md "The
+  Verified on main at eeb390e.
+- [ ] **STACK-55 (S): Ask and the doors to local docs.** The header
+  opens Ask with pages, things, live facts and shipped docs results;
+  Help links to the in-app pages, API explorer and Library. An outbound
+  site search is a separate opt-in with a privacy row. Acceptance:
+  Ask answers a count from a stubbed route, a health item opens its
+  shipped help page while offline, and no search keystroke makes a
+  network request by default. Out of scope: the optional model tier
+  in STACK-37.
+  Files: `frontend/src/kit/blocks/dashboard/components/site-header.tsx, frontend/src/pages/DashboardShell.tsx`.
+  Mirror: the current palette and local Library result.
+  Exit: `bash scripts/check.sh`.
+- [x] **STACK-56 (S): the seams, written down and guarded.** (landed 2026-09-18 at 26f8b6a.) dev.md "The
   seams" is the record; this item adds the two ux.md sentences (the
   Add sheet's fourth tab "A server you run" in "Things pages, second
   pass" item 1; the Sources row in "Settings" item 3) and the
@@ -849,6 +753,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   enum entry without a row (proved, then reverted); no new sidebar row
   or Settings section. Out of scope: STACK-57 to -59. Exit:
   `scripts/check.sh`.
+  Verified on main at 26f8b6a.
 - [x] **STACK-57 (S, done b482d59): a Hugging Face mirror setting.** `huggingFaceEndpoint`
   in `settings/stackKeys.ts` (default `huggingface.co`, section
   Storage, Sources row), honored by `lib/hf.ts` and the supervisor's
@@ -856,6 +761,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   row "Downloading a model" gains "or the mirror you chose".
   Acceptance: a scripted mirror URL receives the download request
   (test); the row exists. Exit: `scripts/check.sh`.
+  Verified on main at bb8a3dd.
 - [ ] **STACK-58 (S, filed, not built until asked; owner agreed 2026-09-18): a `webhook` alert channel.** One
   provider in `lib/channels/providers.ts` posting the alert sentence as
   JSON to a URL the person chose, with an optional bearer token
@@ -863,11 +769,17 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   server URL you chose"). Acceptance: the scripted receiver gets the
   test message and the verified stamp lands; the seams guard passes.
   Exit: `scripts/check.sh`.
+  Files: `backend/src/lib/channels/providers.ts, docs/user/privacy.md`.
+  Mirror: the ntfy provider and privacy guard.
+  Out of scope: new person records or Home-side features.
 - [ ] **STACK-59 (S, filed, not built until asked; owner agreed 2026-09-18): `GET /stack/v1/metrics`.** Prometheus
   text format from the data `series`, memory and health already own;
   operator or client key; read-only; no outbound row. Acceptance: the
   route renders a scripted sample set and a scraper fixture parses it
   (test). Exit: `scripts/check.sh`.
+  Files: `backend/src/routes/series.ts, backend/src/routes/hardware.ts`.
+  Mirror: the existing read-only series route.
+  Out of scope: new person records or Home-side features.
 - [ ] **STACK-60 (M): connect a coding tool.** dev.md "Agents and
   harnesses": the tool-capable wire becomes a tested contract and a
   harness gets a door. Files: `backend/src/routes/inference.ts` (add
@@ -901,14 +813,26 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   raised per tier from the measurement. Acceptance: the numbers and the
   engine build recorded in dev.md; a test asserts the declared context
   per tier. Exit: `scripts/check.sh`.
+  Files: `backend/src/profiles.ts, backend/src/lib/engineArgs.ts, docs/dev.md`.
+  Mirror: STACK-74 bench protocol and current role binding.
+  Out of scope: new person records or Home-side features.
 - [ ] **STACK-62 (S, owner's call): Anthropic Messages pass-through.**
   Only when a bound engine serves the shape natively (mlx-serve); never
   a translation layer written here. Acceptance: a scripted engine
   answering the Anthropic shape is reachable at `/v1/messages` with the
   identity headers (test). Exit: `scripts/check.sh`.
-- [ ] **STACK-63 (S, only when per-client usage shows a need):
-  per-client request rate and concurrency caps** at the router, each
-  with a counter and a health item when hit. Exit: `scripts/check.sh`.
+  Files: `backend/src/routes/inference.ts, backend/src/lib/router.ts`.
+  Mirror: the chat pass-through.
+  Out of scope: new person records or Home-side features.
+- [ ] **STACK-63 (S, evidence-gated): per-client caps.** Only
+  after per-client usage shows a need, add request rate and concurrency
+  caps at the router with a counter and one health item per cap.
+  Acceptance: scripted concurrent calls hit the cap, record its counter
+  and recover after the window; other clients remain unaffected. Out
+  Out of scope: a global cap or a person quota.
+  Files: `backend/src/lib/clients.ts`, `backend/src/lib/router.ts`.
+  Mirror: the existing client usage counters.
+  Exit: `bash scripts/check.sh`.
 - [x] **STACK-64 (S): Scan now.** ux.md "Scan, and real over mock" item 1:
   a "Scan this computer" text action beside Add on Engines and Models
   and as the first row of the Add sheet's Import tab; runs `POST
@@ -919,6 +843,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   and the rows (test); the button on the live console finds the
   installed engine directory (coordinator-verified). Exit:
   `scripts/check.sh`.
+  Verified on main at 75f983b.
 - [x] **STACK-65 (M): the live acceptance walk.** ux.md "Scan, and real
   over mock" item 2: on a copy of the owner's real data directory on
   this Mac, with the real llama-server and the installed Qwen3 1.7B,
@@ -935,6 +860,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   yet gets its one sentence and a disabled control in the same commit.
   Acceptance: the table exists with every action listed; every fail has
   an item; no button on the console does nothing. Exit: `scripts/check.sh`.
+  Verified on main at 85fda5a.
 - [ ] **STACK-66 (M): the app owns the daemon's lifecycle.** dev.md "The
   desktop program" item 2: the compiled daemon as a Tauri sidecar; first
   launch installs the LaunchAgent that runs it (`backend/src/service/
@@ -944,50 +870,186 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   running daemon after the first app launch (documented live check);
   Quit leaves `/healthz` answering; Uninstall removes the agent (test on
   the plist writer). Exit: `scripts/check.sh`.
+  Files: `desktop/src-tauri/src/main.rs, desktop/src-tauri/tauri.conf.json, backend/src/service/launchd.ts`.
+  Mirror: the existing compiled daemon and launchd installer.
+  Out of scope: new person records or Home-side features.
 - [ ] **STACK-67 (M): tray status in depth.** dev.md item 3. Acceptance:
   the menu model (plain TS, tested) renders every role's line, memory,
   the last check sentence and the five actions; the icon severity
   follows a scripted health change within five seconds (test on the
   model with an injected clock); screenshots of the menu judged.
   Exit: `scripts/check.sh`.
+  Files: `desktop/src-tauri/src/main.rs, backend/src/routes/roles.ts, backend/src/routes/budget.ts`.
+  Mirror: the existing tray poll and role text.
+  Out of scope: new person records or Home-side features.
 - [ ] **STACK-68 (S): notifications a person wants.** dev.md item 4.
   Acceptance: only durable events notify (test); each carries an Open
   action (test on the model); the per-kind switches exist in Settings >
   Alerts (test). Exit: `scripts/check.sh`.
+  Files: `desktop/src-tauri/src/main.rs, backend/src/events.ts, frontend/src/pages/SettingsPage.tsx`.
+  Mirror: the durable event templates and alert channels.
+  Out of scope: new person records or Home-side features.
 - [ ] **STACK-69 (S): Help in the app.** dev.md item 5. Acceptance: the
   Help page lists every user doc from the shipped index and renders
   one (test); "Learn more" on a health item lands on it offline (test).
   Exit: `scripts/check.sh`.
+  Files: `frontend/src/pages/, docs/user/, docs/site/`.
+  Mirror: the current Library page and local docs index.
+  Out of scope: new person records or Home-side features.
 - [ ] **STACK-70 (M): the user docs, complete for a release.** dev.md
   item 6. Acceptance: the eight pages exist, pass the reading-level
   lint, each with a generated screenshot opened and judged; the docs
   site builds. Exit: `scripts/check.sh`.
+  Files: `docs/user/, docs/assets/screens/, docs/site/`.
+  Mirror: the existing user pages and showroom captures.
+  Out of scope: new person records or Home-side features.
 - [ ] **RELEASE-STACK-01 (M): the release build and manifests.** dev.md
   item 7: `scripts/build-release.sh` produces the daemon binary, the
   `.dmg`, `SHA256SUMS`, the three update manifests and the changelog
   section; a dry run on this Mac produces every artifact (documented);
   the release skill's checks (NOTICE current for pagefind and the MCP
   SDK, the README disclaimer block, clean-clone build) pass. Exit:
-  `scripts/check.sh`.
+  `bash scripts/check.sh`.
+  Files: `scripts/build-release.sh, scripts/release-entry.ts, desktop/src-tauri/tauri.conf.json, CHANGELOG.md, NOTICE`.
+  Mirror: the current daemon-only release script.
+  Out of scope: new person records or Home-side features.
+  Acceptance: the named flow passes an offline scripted test and its documented live check.
 - [ ] **SITE-STACK-01 (S): the org site hosts install.sh.** The
   installer served at `getmaipai.github.io/stack/install.sh` from the
   docs site build, pinned to the latest release's assets by checksum;
   the privacy row already names it. Acceptance: the built site contains
   the script and its checksum matches the release asset (test in the
   site build). Exit: `scripts/check.sh`.
-## Milestone 1: the robot
+  Files: `docs/site/, installer/install.sh, docs/user/install.md`.
+  Mirror: the current local installer and site build.
+  Out of scope: new person records or Home-side features.
 
-- [ ] **STACK-17 (L): the Linux ARM profile.** `llama-server` on the Pi
-  for chat, embed and judge with the robot's pins and flags; the body's
-  speech process as a managed engine; the governor reading the body's
-  power and thermal budget (GOV-01). Confirmed against `bot/docs/dev.md`
-  sections 2 and 4 before it starts.
+## Robot area
 
-## Docs and site
+- [ ] **STACK-17 (L): the Linux ARM profile.** Run the robot's
+  chat, embed and judge roles on pinned `llama-server`, register the
+  body's speech process as managed, and take the body's power and
+  thermal budget into the one governor. Confirm against `bot/docs/dev.md`
+  sections 2 and 4 before building. Files: `backend/src/profiles.ts`,
+  `backend/src/lib/memory/linux.ts`, `docs/integrations.md` and the
+  robot's managed-engine adapter.
+  Mirror: the Mac profile declaration
+  and the Bot design record. Acceptance: on the robot, all three
+  language roles return identity headers; the speech host going away
+  reports offline; a scripted thermal limit defers a load without
+  changing the body's sensor loop. Out of scope: people, pairing and
+  Home migration. Exit: `bash scripts/check.sh` and a robot live check.
+
+## Docs and site area
 
 - [x] **DOCS-01 (S): user docs site.** Astro Starlight under `docs/site/`
   with the user tier (Get started, Fix a problem, Privacy), the first
-  user pages in `docs/user/`, verified at <hash> (built locally;
+  user pages in `docs/user/`, built locally;
   publishing to GitHub Pages is a later item).
+  Verified on main at da29251.
 - [x] **DOCS-02 (S): the Stack logo.** Done 2026-09-17: the mark and
   wordmark in `getmaipai/.github/brand/` as `maipai-stack-*`.
+  Verified on main at bfe5538.
+
+## Release and migration gaps (opened by the 2026-09-18 review)
+
+- [ ] **STACK-71 (M): complete the settings contract.** Give each
+  declared key its local disclosure level, default and reset action;
+  generate the settings reference from the index; make `@modified`
+  and the supported search filters work; align the port default and
+  daemon address; expose a section master
+  switch only where it controls a real section. Files:
+  `backend/src/settings/stackKeys.ts`, `backend/src/routes/settings.ts`,
+  `frontend/src/kit/settings/GenericForm.tsx`, `frontend/src/pages/SettingsPage.tsx`,
+  `docs/user/settings.md`.
+  Mirror: the current live-apply renderer and
+  org `docs/SETTINGS.md` Rules 4 to 6. Acceptance: a test walks every
+  declared key and proves its default, reset, help, level and reference
+  entry; the configured port becomes the daemon and desktop address
+  after restart; `@modified` finds a changed key and reset removes it.
+  Out of scope: new settings or a global advanced mode. Exit:
+  `bash scripts/check.sh`.
+- [ ] **STACK-72 (M): declared, encrypted state backup and staged restore.**
+  Declare `stack.db` as hot state and model and engine bytes as excluded;
+  create a local AES-256-GCM archive with its key in the OS keystore,
+  show an emergency recovery kit once, sign the archive, and stage a
+  restore beside live data before swapping. Files: `backend/src/db/`,
+  `backend/src/routes/`, `frontend/src/pages/SettingsPage.tsx`,
+  `docs/user/backups.md`. Mirror: org `docs/BACKUPS.md` and the
+  existing update rollback pattern. Acceptance: an offline test exports
+  and restores into a fresh directory, refuses a tampered archive, and
+  leaves live data unchanged after a failed restore; the UI lists
+  included and excluded bytes. Out of scope: scheduled targets and
+  the later `metrics.db` split. Exit: `bash scripts/check.sh`.
+- [ ] **STACK-73 (S): audit the first release's privacy and licence
+  surface.** Align the privacy table with every outbound call and
+  install artifact, check the README disclaimer against the current
+  org wording, and show model licence and gated terms before download.
+  Files: `docs/user/privacy.md`, `docs/user/install.md`,
+  `backend/src/lib/hf.ts`, `frontend/src/kit/blocks/add-sheet/AddSheet.tsx`,
+  `NOTICE`, `README.md`. Mirror: the channel/privacy guard and the existing model
+  provenance record. Acceptance: an endpoint inventory test names the
+  release, model, Library and channel hosts and finds a row for each;
+  a gated model cannot start a download without the operator's choice.
+  Out of scope: adding an outbound host. Exit: `bash scripts/check.sh`.
+- [ ] **STACK-74 (M): Studio bench protocol and rollback rehearsal.**
+  Fix the model files, context, engine builds, request mix, pressure
+  samples and pass thresholds before STACK-14 runs; record the
+  baseline from `llama-server` and the recovery path after a failed
+  engine update. Files: `docs/dev.md`, `scripts/bench/`,
+  `backend/src/lib/speedTest.ts`.
+  Mirror: the existing speed test and
+  `docs/plans/operations-design-2026-09-17.md`. Acceptance: one
+  reproducible command logs model digest, build, sanitized hardware,
+  footprint, first token, throughput and pressure, plus a recorded
+  rollback rehearsal. Out of scope: Home migration or a model winner
+  before measurement. Exit: `bash scripts/check.sh` and the named
+  live bench command in its report.
+- [ ] **STACK-75 (M): pin the Stack/Home contract before migration.**
+  Make the Stack's role, identity, offline, event and authorization
+  fixtures consumable by Home's gate and record the minimum compatible
+  Stack version. Files: `backend/tests/`, `docs/integrations.md`,
+  `home/backend/tests/` in the Home worktree when its brief starts.
+  Mirror: `backend/src/app.ts` routes and the existing OpenAPI drift
+  check. Acceptance: both repos run the same fixture set for success,
+  403, 409 and 503 responses and event names against the pinned
+  version; removing a relied-on field fails it. Out of scope: moving
+  any supervisor or person record. Exit: `bash scripts/check.sh` in
+  each touched repo.
+
+- [ ] **STACK-76 (M): authenticate native tray actions through the
+  console.** Keep `/healthz` as the only anonymous native poll; pass
+  protected status and commands through the webview's operator session
+  and show a sign-in action when it expires. Files:
+  `desktop/src-tauri/src/main.rs`, `frontend/src/kit/host.ts`,
+  `frontend/src/pages/DashboardShell.tsx`, `backend/src/routes/runState.ts`.
+  Mirror: the existing session-backed console fetches and the current
+  tray menu. Acceptance: with an operator password set, the tray
+  displays real roles and health and Pause and Resume succeed; after
+  logout, protected data disappear and actions open sign-in; no
+  unauthenticated run-state call succeeds. Out of scope: a new auth
+  bypass, bundled administrator key or changed child safety path.
+  Exit: `bash scripts/check.sh` and a live bundled-app check.
+
+- [ ] **STACK-77 (M): backup targets and schedule.** Add local and SMB
+  targets through one backup-agent port, encryption before a byte leaves
+  the computer, nightly backup before updates, and seven daily, four
+  weekly and three monthly retained copies with a size cap. Files:
+  `backend/src/lib/backup/`, `backend/src/routes/`,
+  `frontend/src/pages/SettingsPage.tsx`, `docs/user/backups.md`,
+  `docs/user/privacy.md`. Mirror: org `docs/BACKUPS.md` and the
+  maintenance scheduler from STACK-22; until STACK-22 lands use a
+  bounded built-in schedule. Acceptance: a scripted SMB target sees
+  only ciphertext, two failures raise a health item, and a scripted
+  clock enforces retention. Out of scope: S3 and Home as a target.
+  Exit: `bash scripts/check.sh`.
+- [ ] **STACK-78 (S): prove restore in the release gate.** Before an
+  update or restore, make a backup; in the release workflow, restore
+  the latest archive into a temporary directory and boot it headlessly
+  through operator sign-in. Files: `scripts/build-release.sh`,
+  `backend/tests/`, `docs/user/backups.md`. Mirror: org
+  `docs/BACKUPS.md` "Restore drill" and the existing launchd smoke test.
+  Acceptance: a dry-run release logs the restored schema and sign-in;
+  a corrupt archive aborts before a tag can be cut. Out of scope:
+  copying model or engine binaries. Exit: `bash scripts/check.sh` and
+  the release dry-run command.
