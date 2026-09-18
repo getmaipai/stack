@@ -881,6 +881,46 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   operator or client key; read-only; no outbound row. Acceptance: the
   route renders a scripted sample set and a scraper fixture parses it
   (test). Exit: `scripts/check.sh`.
+- [ ] **STACK-60 (M): connect a coding tool.** dev.md "Agents and
+  harnesses": the tool-capable wire becomes a tested contract and a
+  harness gets a door. Files: `backend/src/routes/inference.ts` (add
+  `GET /v1/models` listing role ids and installed model ids in OpenAI
+  shape, client key or operator), `backend/src/profiles.ts` and
+  `roles.ts` (`coding` resolves to chat's binding wherever chat runs,
+  its own model only on p128), `backend/tests/inference.test.ts` (new
+  contract tests), `frontend/src/pages/ClientKeyDialog.tsx` (a "What is
+  this key for?" preset row: "A coding tool" preselects `chat`,
+  `coding`, `embed`; after creation a Connect step with the address, the
+  key, copy buttons for a generic `OPENAI_BASE_URL` and `OPENAI_API_KEY`
+  block and for the harnesses the owner names, model field `coding`),
+  `docs/user/keys-for-your-tools.md` ("Use it with a coding tool"),
+  `docs/integrations.md` (contract row for `GET /v1/models`; the connect
+  sentence), `docs/ux.md` "Clients and keys" (the Connect step). Mirror:
+  the streaming pass-through test from STACK-07b; `PropertyPanel` for
+  the Connect step. Acceptance: a scripted engine receives `tools`,
+  `tool_choice` and `response_format` unchanged and the client gets
+  `tool_calls` back, streamed and unstreamed, with identity headers
+  (test); `GET /v1/models` lists every role id (test); on a p32 profile
+  `model: "coding"` answers from the chat binding (test); a key scoped
+  to `chat` only is refused for `coding` with the existing 403 (test);
+  the Connect step capture opened and judged; the user page passes
+  prose lint. Out of scope: STACK-61 to -63, anything named agent in the
+  UI. Exit: `scripts/check.sh`.
+- [ ] **STACK-61 (M, needs a measurement): the coding role's context and
+  model.** The declared minimum context for `coding` (the household's
+  lane needed 32K to 64K) and its p128 model, sized by the first-run
+  bench (principle 10), never assumed; the engine default of 4096 is
+  raised per tier from the measurement. Acceptance: the numbers and the
+  engine build recorded in dev.md; a test asserts the declared context
+  per tier. Exit: `scripts/check.sh`.
+- [ ] **STACK-62 (S, owner's call): Anthropic Messages pass-through.**
+  Only when a bound engine serves the shape natively (mlx-serve); never
+  a translation layer written here. Acceptance: a scripted engine
+  answering the Anthropic shape is reachable at `/v1/messages` with the
+  identity headers (test). Exit: `scripts/check.sh`.
+- [ ] **STACK-63 (S, only when per-client usage shows a need):
+  per-client request rate and concurrency caps** at the router, each
+  with a counter and a health item when hit. Exit: `scripts/check.sh`.
 ## Milestone 1: the robot
 
 - [ ] **STACK-17 (L): the Linux ARM profile.** `llama-server` on the Pi

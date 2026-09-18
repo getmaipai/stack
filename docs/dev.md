@@ -1001,6 +1001,47 @@ a privacy-page row. Items: STACK-56 (the docs and the guard), STACK-57
 (the mirror setting), STACK-58 (`webhook`, the owner's call), STACK-59
 (the metrics route, the owner's call).
 
+## Agents and harnesses: clients, never residents (decided 2026-09-18)
+
+The owner asked whether the Stack should have agents or harnesses. An
+agent is a loop that drives a model through tool calls until a task is
+done; a harness is the program that runs that loop (Claude Code, Codex
+CLI, OpenCode, Aider). The design-resolver read the platform documents;
+they agree three times over. The Stack never runs an agent loop and
+never shows an "Agents" surface: an agent or harness is a **client**, a
+named key scoped to roles, pointed at one address. A loop needs a
+person to authorize tools and a turn engine to run them, and the Stack
+has neither by design ("The line"; "The API boundary" rules 1 and 3;
+"The seams": the Stack never consumes MCP, it serves it). The platform's
+three places for a loop are all outside the Stack: Home's bounded turn
+engine, a harness the developer runs, or a Catalog package. The one loop
+inside the Stack, the helper's optional third tier, is deliberately not
+an agent (read-only tools, proposal cards, stateless, off by default) and
+stays named "the helper".
+
+What the Stack owes the agents beside it, and where it stands
+(2026-09-18): the tool-capable `chat` and `coding` wire exists (`tools`,
+`tool_choice` and `response_format` pass through; `--jinja` is pinned;
+streaming with usage; embeddings) but has no contract test proving it;
+`GET /v1/models`, which most OpenAI-compatible harnesses call first, is
+missing; `coding` is `notAvailable` below p128 in `profiles.ts` while
+`roles.ts` says it shares chat's model, so the `coding` address 503s on
+three of four tiers (a contradiction to resolve toward sharing chat's
+binding wherever chat runs, its own model only on p128); the default
+context of 4096 is unusable for a harness; the key dialog shows a key
+once with no address or config snippet; there is no per-client rate or
+concurrency control (deferred until per-client usage shows a need: no
+rule without a counter). Rejected: a Stack-hosted agent runtime, an
+Agents row, a client `kind` on the record (a preset in the dialog is
+UI, not a record), an Anthropic-Messages or Responses translation layer
+written by us (pass-through only when a bound engine serves the shape
+natively, mlx-serve does). Naming: "a coding tool" in every
+person-facing string; "client" is the record; "agent" and "harness"
+appear only here. Items: STACK-60 (connect a coding tool), STACK-61
+(the coding role's context and model, sized by a bench), STACK-62
+(Anthropic pass-through, the owner's call), STACK-63 (per-client caps,
+only when usage shows a need).
+
 ## The helper: an assistant inside the console (research, 2026-09-17)
 
 The owner's question: a chatbot in the app that helps a person
