@@ -52,3 +52,26 @@ test("assets are served with the right content type", async () => {
   expect(asset.headers.get("content-type")).toContain("text/css");
   expect(await asset.text()).toBe("body { color: red; }");
 });
+
+test("index is revalidated and assets are cached immutable", async () => {
+  mkdirSync(distDir, { recursive: true });
+  writeFileSync(indexPath, "<!doctype html><title>Stack test</title>");
+  mkdirSync(assetsDir, { recursive: true });
+  writeFileSync(assetsPath, "body { color: red; }");
+
+  const root = await app.request("/");
+  expect(root.status).toBe(200);
+  expect(root.headers.get("cache-control")).toBe("no-cache");
+
+  const index = await app.request("/index.html");
+  expect(index.status).toBe(200);
+  expect(index.headers.get("cache-control")).toBe("no-cache");
+
+  const route = await app.request("/setup");
+  expect(route.status).toBe(200);
+  expect(route.headers.get("cache-control")).toBe("no-cache");
+
+  const asset = await app.request("/assets/style.css");
+  expect(asset.status).toBe(200);
+  expect(asset.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+});

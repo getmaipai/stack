@@ -92,9 +92,16 @@ function contentType(path: string): string {
   return path.endsWith(".html") ? "text/html; charset=utf-8" : path.endsWith(".js") ? "text/javascript; charset=utf-8" : path.endsWith(".css") ? "text/css; charset=utf-8" : path.endsWith(".json") ? "application/json" : path.endsWith(".svg") ? "image/svg+xml" : path.endsWith(".png") ? "image/png" : "application/octet-stream";
 }
 
+// Hashed asset names are immutable; index.html is revalidated on every load
+// so a rebuilt UI is never served stale.
+function cacheControl(path: string): string {
+  return path.startsWith("/assets/") ? "public, max-age=31536000, immutable" : "no-cache";
+}
+
 app.use("/*", async (c, next) => {
-  const asset = embeddedAssets.get(c.req.path === "/" ? "/index.html" : c.req.path);
-  if (asset) return new Response(asset, { headers: { "content-type": contentType(c.req.path) } });
+  const path = c.req.path === "/" ? "/index.html" : c.req.path;
+  const asset = embeddedAssets.get(path);
+  if (asset) return new Response(asset, { headers: { "content-type": contentType(path), "cache-control": cacheControl(path) } });
   await next();
 });
 
@@ -103,7 +110,12 @@ app.use("/*", async (c, next) => {
 // has started without leaving the process stuck in a 404 state.
 app.use("/*", async (c, next) => {
   const distDir = process.env.STACK_DIST_DIR ?? join(here, "..", "..", "frontend", "dist");
-  const handler = serveStatic({ root: distDir });
+  const handler = serveStatic({
+    root: distDir,
+    onFound: (path, ctx) => {
+      ctx.header("Cache-Control", cacheControl(ctx.req.path));
+    },
+  });
   return handler(c, next);
 });
 app.get("*", async (c) => {
@@ -111,7 +123,7 @@ app.get("*", async (c) => {
   const distDir = process.env.STACK_DIST_DIR ?? join(here, "..", "..", "frontend", "dist");
   const indexPath = join(distDir, "index.html");
   const embeddedIndex = embeddedAssets.get("/index.html");
-  if (embeddedIndex) return c.html(await embeddedIndex.text());
+  if (embeddedIndex) return c.html(await embeddedIndex.text(), 200, { "cache-control": "no-cache" });
   if (!existsSync(indexPath)) return c.text("UI not built", 503);
-  return c.html(await Bun.file(indexPath).text());
+  return c.html(await Bun.file(indexPath).text(), 200, { "cache-control": "no-cache" });
 });

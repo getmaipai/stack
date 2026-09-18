@@ -214,6 +214,8 @@ the same restart-on-failure design.
 
 The Stack's `frontend/` is built into `frontend/dist/` and served by this
 same daemon on its API port, with Vite proxying the API paths in development.
+Asset names carry content hashes served `immutable` while `index.html` is
+served `no-cache`, so a rebuilt UI is never served stale.
 Until KIT-01 extracts `@maipai/ui`, it carries a copied subset of Home's kit
 under `frontend/src/kit/`; those copied files are not edited in the Stack.
 
