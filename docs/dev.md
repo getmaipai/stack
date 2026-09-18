@@ -997,6 +997,19 @@ program, in landing order, each an item with its brief in the queue:
    `install.sh` (SITE-STACK-01). Cutting a release stays the owner's
    word, in the moment.
 
+**Nothing is ever installed by hand on the owner's machine** (the
+owner, 2026-09-18 09:20: "I should never have to make manual changes
+for Stack; one command, like every other user"). The desktop app and
+the daemon are built by the release workflow on GitHub's macOS runners,
+which carry Rust; a developer who wants to build the app locally runs
+`scripts/dev-setup.sh` once, explicitly (it installs the toolchain the
+build needs and nothing else, and says what it did); `check.sh` never
+installs anything and skips `cargo check` with a stated reason when
+cargo is absent. The person installs the Stack the way every user does:
+the `.dmg`, or `curl -fsSL https://getmaipai.github.io/stack/install.sh
+| sh`. This is the one exception the org allows to "no push-triggered
+Actions": a tag-triggered release workflow in a public repo.
+
 After the program: the maintenance window (STACK-22), ready when you
 sit down (STACK-23), storage hygiene (STACK-24), connect a coding tool
 (STACK-60), licences in plain words (STACK-28), guided fixes and the
