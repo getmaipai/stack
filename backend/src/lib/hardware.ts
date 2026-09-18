@@ -62,6 +62,16 @@ function detectIsAppleSilicon(): boolean {
   return process.platform === "darwin" && (os.cpus()[0]?.model ?? "").includes("Apple");
 }
 
+async function detectOsVersion(): Promise<string> {
+  if (process.platform !== "darwin") return os.release();
+  try {
+    const { stdout } = await execFileAsync("sw_vers", ["-productVersion"], { timeout: 2_000 });
+    return stdout.trim() || os.release();
+  } catch {
+    return os.release();
+  }
+}
+
 const DETECTION_CACHE_MS = 5_000;
 let cached: { at: number; info: HardwareInfo } | null = null;
 let now = () => Date.now();
@@ -86,7 +96,7 @@ export async function detectHardware(): Promise<HardwareInfo> {
     unifiedMemoryGb: isAppleSilicon ? totalRamGb : 0,
     cudaDevices,
     freeDiskBytes: disk.bavail * disk.bsize,
-    osVersion: os.release(),
+    osVersion: await detectOsVersion(),
   };
   cached = { at: now(), info };
   return info;
