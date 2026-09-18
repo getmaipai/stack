@@ -275,6 +275,23 @@ dashboard" above where they differ:
    by display name (Qwen3 1.7B, build b10797), never by file name,
    role id or full revision string.
 
+8. **Two columns, not three** (the owner, 01:15: "you crammed
+   everything into too many columns"). UniFi's Dashboard is a facts
+   column and one wide area of full-width rows; ours had a 3-6-3 grid
+   with the middle split again into pairs, so nothing had room. The
+   Overview is a left column of about 320 px and one wide area. The
+   left column, top to bottom: a health card when anything needs
+   attention (UniFi's "IPv6 detected" card sits in the same place;
+   nothing when clear), the computer facts card (decision 6), then
+   **Clients** as a compact list (name, requests in the range, last
+   seen, a dot for a key that is failing), then Recent activity
+   (decision 7). The wide area, top to bottom, every row full width:
+   the status strip, the hero chart, the Models tile strip, the
+   Engines tile strip, the storage bar and the headroom scale side by
+   side as the one pair the page allows. The right rail goes. Tablet
+   stacks the left column above the wide area; phone follows the
+   codex-107a order.
+
 Every number stays a recorded one. The showroom fixture carries a full
 day of samples so the captures show the hero chart with data across
 the whole range.

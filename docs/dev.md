@@ -1098,6 +1098,44 @@ the Stack's, so the list is fixed now:
 rather than a person. Home keeps the turn engine, the guards, memory,
 people, consent, packages, and everything a person can see.
 
+## Two databases: state and measurements (decided 2026-09-18, night)
+
+The owner asked, looking at the Overview's charts, whether all this
+data logging should be in a database, whether settings should be in a
+database, and whether settings and logging belong together. Where it
+stands: everything is already in SQLite through Drizzle, in one file,
+`data/stack.db`, seventeen tables: the state (models, model groups,
+clients, sessions, operator, channels, detected, the declared settings
+in `meta`) and the measurements (usage_samples, memory_samples,
+speed_results, check_runs, model_usage, notifications, health). Text
+logs are files under `data/logs/`.
+
+The decision is to split by what the data is for, not by table count:
+
+- **`stack.db` holds state**: what the person decided and what the
+  Stack owns (settings, models and their provenance, groups, clients
+  and keys, channels, the operator, detected things, open health
+  items). Small, precious, backed up whole, migrated carefully, never
+  vacuumed under load.
+- **`metrics.db` holds measurements**: the sample rings
+  (usage_samples, memory_samples), speed_results, check_runs,
+  model_usage counters and the notification feed. Large, rebuildable
+  from the next hour of running, retention-trimmed on a schedule
+  (VACUUM there never touches state), excluded from the default backup
+  (the org BACKUPS standard lists it as `exclude`, with "history is
+  rebuilt as the Stack runs" on the page) and included only when the
+  person asks for "with history".
+
+Settings stay in a database, `stack.db`'s `meta`, because a setting is
+state with a clock stamp and a declared default, read by both the
+daemon and the UI through one route; a file would be a second store.
+Both files open through Drizzle with their own migration journal
+(`backend/src/db/state/` and `backend/src/db/metrics/`), the metrics
+writer batches inserts per five seconds, and a missing or corrupt
+`metrics.db` is recreated empty with one health item, never a boot
+failure. This is STACK-50 in the backlog; nothing moves until the
+Overview second pass has settled what it reads.
+
 ## Open questions for the owner
 
 1. **Name.** Decided 2026-09-17: `stack`, "MaiPai Stack". The public

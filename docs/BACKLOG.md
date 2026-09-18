@@ -708,6 +708,24 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   the range (test); Recent activity excludes non-durable events (test);
   captures at 1440, 1024 and 400 opened and judged. Exit:
   `scripts/check.sh`.
+- [ ] **STACK-50 (M): two databases, state and measurements.** dev.md
+  "Two databases" (2026-09-18): `stack.db` keeps state (settings,
+  models, groups, clients, channels, operator, detected, open health),
+  `metrics.db` takes the measurements (usage_samples, memory_samples,
+  speed_results, check_runs, model_usage, notifications) with its own
+  Drizzle journal, batched writes, scheduled retention and VACUUM, and
+  recreation when missing or corrupt (one health item, never a boot
+  failure). Backups: `metrics.db` is `exclude` by default with the
+  sentence on the page, "with history" includes it. Files:
+  `backend/src/db/*` (split into `state/` and `metrics/`),
+  `backend/src/lib/paths.ts` (`metricsDbPath`), every writer of a
+  measurement table, `docs/user/backups.md` when it exists. Mirror: the
+  current `db.ts` and journal. Acceptance: a fresh boot creates both
+  files (test); deleting `metrics.db` while running yields the health
+  item and a fresh file, state untouched (test); the retention job
+  trims a scripted old ring and leaves state rows (test); the Overview
+  reads unchanged. Out of scope: moving text logs into a database.
+  Exit: `scripts/check.sh`.
 ## Milestone 1: the robot
 
 - [ ] **STACK-17 (L): the Linux ARM profile.** `llama-server` on the Pi
