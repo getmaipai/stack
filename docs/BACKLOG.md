@@ -119,6 +119,17 @@ RELEASE-STACK-01.
   and dry-run model sizing. Verified; the Windows reader is a
   named stub because it could not be tested on this Mac.
   Verified on main at a52c7bf.
+- [ ] **STACK-113i (M): visible, configurable governor.** Declare the live
+  model-memory budget and advanced pressure watermarks; log the newest 200
+  governor decisions; show the current budget, pressure, and decisions in
+  Monitoring and the sidebar. Files: `backend/src/lib/governor.ts`,
+  `backend/src/settings/stackKeys.ts`, `backend/src/routes/budget.ts`,
+  `frontend/src/pages/MonitoringPage.tsx`,
+  `frontend/src/kit/blocks/dashboard/components/nav-resources.tsx`.
+  Mirror: ux.md, "The governor is visible and configurable." Acceptance:
+  changing the setting changes scripted admission; a scripted refusal is
+  logged; Monitoring renders decision sentences; the named captures are
+  judged. Exit: `bash scripts/check.sh`.
 - [x] **STACK-07 (M): roles and the router.** The role declaration, role
   by name in `model`, the OpenAI-shaped endpoints for text, embeddings,
   audio and images, the streaming speech sessions. Acceptance: an

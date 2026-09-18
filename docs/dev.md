@@ -543,6 +543,34 @@ owner for the machine-wide budget and reuses measured process memory.
 
 ## Memory: the kernel's ledger (STACK-06b, 2026-09-17)
 
+## Visible memory governor (STACK-113i, 2026-09-18)
+
+The governor remains the sole owner of admission. Its operator controls are
+declared Stack settings, so the Settings page, API reference, stored values,
+and live governor all agree about the same value. `modelBudgetBytes` is the
+cap itself, rather than an OS margin: its default is the current rule of
+total physical memory minus the 8 GiB Mac margin, and the range is zero to
+the detected total. This makes the slider's complementary label, "kept for
+your Mac", truthful on every supported hardware size.
+
+The low-memory percentage, absolute floor, and sustained-poll count are
+advanced settings. The idle unload time is left for STACK-23, which owns the
+usage and warm-up behavior. Settings apply live: the governor reads the
+stored values at each decision, without a second mutable configuration path.
+
+The governor keeps its own bounded, in-memory decision ledger of the newest
+200 admissions, queues, refusals, evictions, and pressure actions. The
+Monitoring page reads that ledger with the current budget status. It can then
+say both what the Stack decided and why, while `RelativeTime` supplies the
+time without inventing history or retaining a person record.
+
+Alternatives rejected: exposing an OS-margin slider would make the Settings
+label describe an indirect subtraction, not the actual model budget;
+persisting the decision ledger would turn transient operating detail into a
+history store; and deriving decisions from events would omit fast-path
+admission outcomes. The bounded governor ledger keeps the source of truth
+next to the rule it explains.
+
 The governor reads one `MemoryReader` interface rather than asking each
 engine or the JavaScript runtime for a guess:
 
