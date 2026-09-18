@@ -187,7 +187,11 @@ remove, "check for update". An "Add" button opens the Catalog's model
 packages first (signed, provenance filled in), and a "from a URL or
 Hugging Face" option for the operator, which fills the provenance record
 before the model turns on. Multi-select with remove and clear-all, per the
-org's batch rule.
+org's batch rule. The Add menu also has Import. It scans the Hugging Face,
+Ollama, mlx-serve, oMLX and LM Studio stores without changing them, shows
+the source path and digest, and imports one selected file by link when
+possible. Storage usage is shown by ability, engines, logs and backups so
+Remove can say what bytes the Stack will actually free.
 
 **Docs on every model.** A model's detail carries quick links derived
 from its provenance, never typed: the model card, the licence, the

@@ -13,6 +13,7 @@ import { raiseRepair } from "@/lib/repairs";
 import type { RoleState } from "@/roles";
 import { getMemoryReader } from "@/lib/memory";
 import { readGgufFacts } from "@/lib/gguf";
+import { hfHubRoot } from "@/lib/store/layout";
 
 export type EngineKind = "spawned" | "managed" | "url";
 
@@ -332,6 +333,7 @@ async function startSpawnedBackend(): Promise<ChatBackend> {
   const processHandle = Bun.spawn([engineBinaryPath(pin), "--model", model.modelPath, "--port", String(port)], {
     stdout: "ignore",
     stderr: "pipe",
+    env: { ...process.env, HF_HUB_CACHE: hfHubRoot },
   });
   const client = new OpenAIEngineClient(`http://127.0.0.1:${port}`);
   const stderrText = processHandle.stderr ? new Response(processHandle.stderr).text() : Promise.resolve("");

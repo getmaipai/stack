@@ -18,7 +18,9 @@ changelog note.
 | Jobs | `POST /stack/v1/jobs`, `GET /stack/v1/jobs/:id`, `DELETE` to cancel, result by id | Home's picture, video and music packages | planned |
 | Events | `GET /stack/v1/events` (SSE) | Home's notification bridge, the board, the menu bar | built |
 | Hardware and budget | `GET /stack/v1/hardware`, `GET /stack/v1/budget` | Home's Admin (read-only view), Bot's runtime | built |
-| Models and engines | `GET /stack/v1/models`, `/engines`; install, pin, unload, remove | the operator; Home's Admin as a view with links | partly (engines; no models yet) |
+| Models and engines | `GET /stack/v1/models`, `/engines`; install, pin, unload, remove | the operator; Home's Admin as a view with links | built |
+| Storage | `GET /stack/v1/storage` with model ability buckets and shared bytes | the operator; Home's Admin as a view | built |
+| Jobs and downloads | `job.progress` feed rows plus pause and resume endpoints | Home's package surfaces and the board | partly (ranged model and engine transfer; job API planned) |
 | Clients | `/stack/v1/clients` (operator only) | the operator; Home's installer registers Home once | built |
 | Notifications | `GET /stack/v1/notifications`, `POST /stack/v1/notifications/clear`, `POST /stack/v1/notifications/{id}/read`, `POST /stack/v1/notifications/{id}/dismiss` | the operator and Home's notification bridge | built |
 | Repairs | `GET /stack/v1/repairs`, `POST /stack/v1/repairs/{id}/resolve` | the operator and Home's Admin | built |

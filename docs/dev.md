@@ -348,6 +348,75 @@ The hub's `engineCatalog.ts` (pinned builds per platform, checksums
 computed once and recorded) and `modelDownload.ts` (resumable,
 checksummed, self-healing downloads) are the starting point.
 
+## The store (STACK-04b, 2026-09-17)
+
+The Stack owns one store under its data directory while preserving the
+layouts that local engines already understand. Models use the Hugging Face
+cache shape:
+
+```text
+data/models/hub/models--<org>--<repo>/
+  blobs/<sha256>
+  refs/main
+  snapshots/<revision>/<file> -> ../../blobs/<sha256>
+```
+
+`refs/main` contains the resolved revision, snapshots are immutable views,
+and the snapshot files link to content-addressed blobs. Spawned Python
+engines receive `HF_HUB_CACHE` pointing at `data/models/hub`, so HF-aware
+engines can use the same bytes without a second download. The Stack keeps
+the model record's licence, source, repository, revision and digest beside
+the manifest and treats a model as installed only when every manifest blob
+exists and hashes correctly.
+
+Engine builds use a separate versioned layout:
+
+```text
+data/engines/<name>/<tag>/
+  manifest.json
+  <extracted assets>
+data/engines/<name>/current -> <tag>
+```
+
+The engine manifest records the asset URL, byte size, GitHub digest, Stack
+SHA-256 and extraction time. Downloads land in a temporary directory,
+verify before extraction, and become visible with an atomic rename. The
+`current` link is the rollback and selection pointer; the former flat
+`data/engines/<id>` layout is migrated once and then remains idempotent.
+
+Import is read-only against other tools. The first-run and on-demand scan
+covers the HF cache, Ollama, mlx-serve, oMLX and LM Studio directories.
+Ollama's `blobs/sha256-<hex>` names provide a digest directly; other files
+are hashed once. A same-volume file is hard-linked into the Stack store,
+otherwise it is symlinked, with a copy only where linking is impossible.
+The manifest records `source: <tool>` and the original path. The Stack
+never writes into another tool's tree and never treats an imported file as
+trusted until its own digest and licence are recorded.
+
+Model and engine downloads split ranged responses into eight parts. Each
+part has a `.partial-N` file and a progress sidecar, and a retry resumes
+from that part's recorded offset. Parts assemble into a temporary file; the
+full SHA-256 gates the manifest write. A server that returns `200` to a
+range request uses the existing single-stream resumable downloader as the
+fallback.
+
+Every manifest lists the blobs it references. Remove deletes the manifest
+first and removes only blobs with no remaining references. An imported link
+loses the Stack link without deleting the source file. A one-hour grace
+period keeps a newly orphaned blob through interrupted pulls; a scheduled
+prune removes expired orphans. Storage accounting counts physical bytes,
+not symlink directory entries, reports shared imported bytes separately,
+and groups model bytes by the abilities served by each model, alongside
+engines, logs, backups, other and the total. The storage response is
+computed on request with a 30-second cache and invalidated after install or
+remove.
+
+Boot migration moves existing `data/engines/<id>` directories into the
+versioned engine layout and computes a manifest from the pinned engine.
+Existing model records gain manifests for their current files. Each move
+is logged, uses an atomic temporary path, and is safe to repeat after a
+partial or already-completed first boot.
+
 ### The governor: one residency budget
 
 The governor is the one place that decides what may be loaded and what

@@ -5,9 +5,11 @@ import { downloadUrl, DownloadVerificationError, sha256OfFile, type DownloadOpti
 import { modelsDir } from "@/lib/paths";
 import type { RoleId } from "@/roles";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { z } from "zod";
 import { emit } from "@/lib/events";
+import { removeModelManifest, writeModelManifest } from "@/lib/store/manifests";
+import { writeHfFile } from "@/lib/store/hfCache";
 
 export const ModelSourceSchema = z.enum(["catalog", "huggingface"]);
 
@@ -231,11 +233,13 @@ export async function installHuggingFaceModel(input: HuggingFaceModelInput, opti
     licence: input.licence ?? null,
     engineRequirements: input.engineRequirements,
   }, options.now?.() ?? new Date().toISOString());
-  return installRegisteredModel(registered, {
+  const installed = await installRegisteredModel(registered, {
     url: input.url,
     sha256: input.sha256 ?? "",
     approx_bytes: input.sizeBytes ?? 0,
   }, options);
+  const cached = writeHfFile({ repo: input.repo, revision: input.revision, filePath: basename(options.destination), sourcePath: options.destination, digest: installed.sha256 ?? undefined });
+  return upsertModel({ ...installed, modelPath: cached.path }, new Date().toISOString());
 }
 
 async function installRegisteredModel(
@@ -273,10 +277,33 @@ async function installRegisteredModel(
     verifiedAt: now,
     modelPath: destination,
   }, now);
+  writeModelManifest({
+    kind: "model",
+    id: installed.id,
+    source: installed.source,
+    sourcePath: destination,
+    repo: typeof installed.provenance.repo === "string" ? installed.provenance.repo : undefined,
+    revision: installed.revision,
+    roles: installed.roles,
+    blobs: [{ digest: installed.sha256 ?? actual, sizeBytes: (await Bun.file(destination).size), path: destination }],
+    sizeBytes: (await Bun.file(destination).size),
+    createdAt: installed.installedAt ?? now,
+  });
   emit({ id: "model.installed", data: { model: installed.id, path: installed.modelPath } });
   return installed;
 }
 
+export function removeModel(id: string): boolean {
+  const model = getModel(id);
+  if (!model) return false;
+  removeModelManifest(id);
+  if (model.modelPath && model.modelPath.startsWith(modelsDir) && existsSync(model.modelPath)) rmSync(model.modelPath, { force: true });
+  db.delete(models).where(eq(models.id, id)).run();
+  emit({ id: "model.installed", data: { model: id, removed: true } });
+  return true;
+}
+
 export function clearModelsForTests(): void {
+  for (const model of listModels()) removeModelManifest(model.id);
   sqlite.exec("DELETE FROM models");
 }

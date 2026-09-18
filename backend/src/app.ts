@@ -12,6 +12,10 @@ import { inferenceRoutes } from "@/routes/inference";
 import { operatorRoutes } from "@/routes/operator";
 import { clientsRoutes } from "@/routes/clients";
 import { setupPlanRoutes } from "@/routes/setupPlan";
+import { modelsRoutes } from "@/routes/models";
+import { storageRoutes } from "@/routes/storage";
+import { jobsRoutes } from "@/routes/jobs";
+import { migrateLegacyStore } from "@/lib/store/migration";
 import { budgetRoutes } from "@/routes/budget";
 import { eventsRoutes } from "@/routes/events";
 import { logsRoutes } from "@/routes/logs";
@@ -57,7 +61,12 @@ app.route("/stack/v1/roles", rolesRoutes);
 app.route("/stack/v1/operator", operatorRoutes);
 app.route("/stack/v1/clients", clientsRoutes);
 app.route("/stack/v1/setup/plan", setupPlanRoutes);
+app.route("/stack/v1/models", modelsRoutes);
+app.route("/stack/v1/storage", storageRoutes);
+app.route("/stack/v1/jobs", jobsRoutes);
 app.route("/v1", inferenceRoutes);
+
+migrateLegacyStore();
 
 const here = dirname(fileURLToPath(import.meta.url));
 const embeddedAssets = new Map<string, Blob>();

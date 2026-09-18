@@ -49,6 +49,11 @@ never copied. No item migrates the hub until STACK-16.
   with checksum and licence recorded. Acceptance: the record round-trips
   with id, provenance and clock stamp; an unverified model cannot be
   bound to a role (test). Committed, updates outstanding (STACK-10).
+- [x] **STACK-04b (M): the content-addressed store, imports and ranged
+  downloads.** Hugging Face layout, engine tags and manifests, five-tool
+  import scan, reference-counted remove, storage accounting, and migration.
+  Verified at 2665498; Windows and non-range servers use the documented
+  fallback paths.
 - [x] **STACK-05 (M): the supervisor.** `spawned`, `managed`, `url`
   engine kinds; spawn, watch, restart, the generation guard, the post-load
   check, the memory report; identity headers on every reply. Copy the

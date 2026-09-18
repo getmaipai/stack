@@ -9,6 +9,10 @@ the product passes its battle-tested checklist in `docs/dev.md`.
 
 ### Added
 
+- The STACK-04b content-addressed store: Hugging Face cache layout, engine
+  manifests, import scanning, ranged downloads with resume, storage
+  accounting, migration, and reference-counted model and engine removal.
+
 - The kernel memory ledger for STACK-06b: macOS FFI, Linux proc and PSI
   twin, Windows named stub, pressure watermarks, measured footprints, GGUF
   estimates, and llama-fit-params dry runs.
