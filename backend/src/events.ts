@@ -7,16 +7,16 @@ export type EventId = z.infer<typeof EventIdSchema>;
 
 export const EVENTS = {
   "role.state": { id: "role.state", level: "passive", audience: "operator", template: "{role} is {state}." },
-  "engine.state": { id: "engine.state", level: "time_sensitive", audience: "operator", template: "The {engine} engine is {state}.", actions: ["restart_engine"] },
+  "engine.state": { id: "engine.state", level: "time_sensitive", audience: "operator", template: "The {engine} engine is {state}." },
   pressure: { id: "pressure", level: "immediate", audience: "operator", template: "Memory pressure needs attention.", actions: ["free_memory"] },
-  "job.progress": { id: "job.progress", level: "time_sensitive", audience: "operator", template: "Job {job} is {percent}% complete." },
-  "job.done": { id: "job.done", level: "time_sensitive", audience: "operator", template: "Job {job} finished." },
-  "model.installed": { id: "model.installed", level: "passive", audience: "operator", template: "Model {model} is installed." },
+  "job.progress": { id: "job.progress", level: "time_sensitive", audience: "operator", template: "Download is {percent}% complete." },
+  "job.done": { id: "job.done", level: "time_sensitive", audience: "operator", template: "Download finished." },
+  "model.installed": { id: "model.installed", level: "passive", audience: "operator", template: "{model} is installed." },
   "update.available": { id: "update.available", level: "passive", audience: "operator", template: "An update is available." },
-  "update.applied": { id: "update.applied", level: "passive", audience: "operator", template: "An update was applied." },
-  "update.failed": { id: "update.failed", level: "immediate", audience: "operator", template: "An update failed." },
-  repair: { id: "repair", level: "passive", audience: "operator", template: "Repair needed: {title}.", actions: ["restart_engine", "reinstall_engine", "free_memory", "check_host"] },
-  "health.changed": { id: "health.changed", level: "passive", audience: "operator", template: "Health item {code} changed." },
+  "update.applied": { id: "update.applied", level: "passive", audience: "operator", template: "The update was applied." },
+  "update.failed": { id: "update.failed", level: "immediate", audience: "operator", template: "The update failed." },
+  repair: { id: "repair", level: "passive", audience: "operator", template: "{title}", actions: ["restart_engine", "reinstall_engine", "free_memory", "check_host"] },
+  "health.changed": { id: "health.changed", level: "passive", audience: "operator", template: "{title} is {severity}." },
   "detected.changed": { id: "detected.changed", level: "passive", audience: "operator", template: "Local detection changed." },
 } as const;
 

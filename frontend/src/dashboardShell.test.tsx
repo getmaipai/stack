@@ -127,6 +127,21 @@ test("the header profile menu opens and offers sign out when signed in", async (
   unmount();
 });
 
+test("the header stays fixed while the routed page scrolls", async () => {
+  stubStackFetch({ ...boardExtras, "/stack/v1/repairs": { repairs: [] }, "/stack/v1/roles": { roles: [] }, "/stack/v1/operator": { state: "signedOut", required: false } });
+  render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
+  await waitFor(() => expect(document.body.textContent).toContain("All good"));
+  const header = document.querySelector("header");
+  expect(header).toBeTruthy();
+  const inset = header?.parentElement;
+  expect(inset).toBeTruthy();
+  const scroller = inset?.querySelector(":scope > div.flex-1");
+  expect(scroller).toBeTruthy();
+  expect(scroller?.contains(header)).toBe(false);
+  expect(scroller?.tagName.toLowerCase()).toBe("div");
+  expect(scroller?.getAttribute("class") ?? "").toContain("overflow-y-auto");
+});
+
 test("the sidebar shows quiet indicators for engines, updates, alerts, and detected models", async () => {
   stubStackFetch({
     ...boardExtras,

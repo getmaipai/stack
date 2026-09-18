@@ -17,8 +17,8 @@ const items = [
 export function AppSidebar({ repairs, roles, health = [], engineCount = 0, updateCount = 0, alertSeverity = null, engineTooltip = "Engines", updateTooltip = "Updates", alertTooltip = "Alerts", ...props }: React.ComponentProps<typeof Sidebar> & { repairs: RepairRecord[]; roles: RoleRecord[]; health?: HealthItem[]; engineCount?: number; updateCount?: number; alertSeverity?: "critical" | "error" | "warning" | null; engineTooltip?: string; updateTooltip?: string; alertTooltip?: string }) {
   const location = useLocation();
   const badges: Record<string, number> = { Engines: engineCount, Updates: updateCount };
-  return <Sidebar collapsible="icon" {...props}>
-    <SidebarHeader><SidebarMenu><SidebarMenuItem><SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:p-1.5!">
+  return <Sidebar collapsible="icon" className="p-3 pb-4" {...props}>
+    <SidebarHeader className="p-0"><SidebarMenu><SidebarMenuItem><SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:p-1.5!">
       <Link to="/"><img className="size-7" src="/brand/maipai-stack-icon-light.png" alt="" /><span className="text-base font-semibold">MaiPai Stack</span></Link>
     </SidebarMenuButton></SidebarMenuItem></SidebarMenu></SidebarHeader>
     <SidebarContent><NavMain items={items.map(([title, url, icon]) => ({ title, url, icon: getIcon(icon), isActive: location.pathname === url, badge: badges[title] ?? 0, dot: title === "Alerts" ? alertSeverity : null, tooltip: title === "Engines" ? engineTooltip : title === "Updates" ? updateTooltip : title === "Alerts" ? alertTooltip : undefined }))} /></SidebarContent>

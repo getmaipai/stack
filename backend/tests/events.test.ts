@@ -1,13 +1,16 @@
 import { beforeEach, expect, test } from "bun:test";
 import { app } from "@/app";
 import { __resetEventsForTests, clearAll, emit, listNotifications } from "@/lib/events";
+import { __resetHealthForTests, raise } from "@/lib/health";
 import { __resetRepairsForTests } from "@/lib/repairs";
 import { reportChatEngineExited } from "@/lib/supervisor";
+import { EVENTS } from "@/events";
 import { testClientHeaders } from "./authTest";
 
 beforeEach(() => {
   __resetEventsForTests();
   __resetRepairsForTests();
+  __resetHealthForTests();
 });
 
 test("an engine crash produces an event, one-action repair, and notification", async () => {
@@ -34,4 +37,53 @@ test("clearAll empties the durable notification center", () => {
   expect(listNotifications()).toHaveLength(1);
   clearAll();
   expect(listNotifications()).toHaveLength(0);
+});
+
+test("notification titles are plain sentences, no codes or placeholders", () => {
+  emit({ id: "engine.state", data: { engine: "chat", state: "stopped" } });
+  emit({ id: "model.installed", data: { model: "Llama" } });
+  emit({ id: "job.done", data: { job: "setup-downloads" } });
+  emit({ id: "update.applied", data: { kind: "engine", name: "chat", tag: "0.4.5" } });
+  emit({ id: "update.failed", data: { kind: "engine", reason: "bad bytes" } });
+  emit({ id: "repair", data: { title: "Chat engine is offline", detail: "reason" } });
+  emit({ id: "detected.changed", data: { count: 1 } });
+  raise({ code: "disk-under-reserve", severity: "warning", title: "Disk space is running low", text: "The Stack is below its 10 GB free-space reserve.", cause: "The filesystem reported less than the Stack's reserve." });
+  const notifications = listNotifications() as Array<{ title: string; eventId: string }>;
+  for (const item of notifications) {
+    expect(item.title).not.toMatch(/-/);
+    expect(item.title).not.toContain("{");
+  }
+});
+
+test("health.changed reads as the item's title with its severity", () => {
+  raise({ code: "disk-under-reserve", severity: "warning", title: "Disk space is running low", text: "The Stack is below its 10 GB free-space reserve.", cause: "The filesystem reported less than the Stack's reserve." });
+  const notifications = listNotifications() as Array<{ title: string; eventId: string }>;
+  const changed = notifications.find((item) => item.eventId === "health.changed");
+  expect(changed?.title).toBe("Disk space is running low is warning.");
+});
+
+test("every event template renders as a plain sentence with no identifier tokens", () => {
+  const samples: Record<string, Record<string, unknown>> = {
+    "role.state": { role: "The chat", state: "ready" },
+    "engine.state": { engine: "chat", state: "stopped" },
+    pressure: { freeMemoryBytes: 1, floorBytes: 1, pressure: "warn", availablePercent: 10 },
+    "job.progress": { job: "setup-downloads", percent: 42, completedBytes: 42, totalBytes: 100 },
+    "job.done": { job: "setup-downloads" },
+    "model.installed": { model: "Llama" },
+    "update.available": { kind: "app" },
+    "update.applied": { kind: "engine", name: "chat", tag: "0.4.5" },
+    "update.failed": { kind: "engine", reason: "bad bytes" },
+    repair: { title: "Chat engine is offline", detail: "reason" },
+    "health.changed": { code: "disk-under-reserve", title: "Disk space is running low", severity: "warning" },
+    "detected.changed": { count: 1 },
+  };
+  for (const [id, data] of Object.entries(samples)) {
+    const definition = EVENTS[id as keyof typeof EVENTS];
+    const title = definition.template.replace(/\{(\w+)\}/g, (_match, key: string) => {
+      const value = data[key];
+      return value === undefined ? `{${key}}` : String(value);
+    });
+    expect(title).not.toContain("{");
+    expect(title).not.toMatch(/[a-z]+\-[a-z]/);
+  }
 });

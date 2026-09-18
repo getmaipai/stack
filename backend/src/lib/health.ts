@@ -11,7 +11,7 @@ export type HealthInput = Omit<HealthItem, "since"> & { since?: string };
 
 function parseFix(value: string | null): HealthFix | undefined { try { const parsed = value ? JSON.parse(value) as HealthFix : undefined; return parsed?.label && parsed.action ? parsed : undefined; } catch { return undefined; } }
 function toItem(row: typeof health.$inferSelect): HealthItem { const fix = parseFix(row.fix); return { code: row.code, severity: row.severity as HealthSeverity, title: row.title, text: row.text, since: row.since, cause: row.cause, ...(fix ? { fix } : {}), ...(row.learnMore ? { learnMore: row.learnMore } : {}) }; }
-function changed(code: string): void { emit({ id: "health.changed", data: { code } }); }
+function changed(code: string): void { const row = db.select({ code: health.code, severity: health.severity, title: health.title }).from(health).where(eq(health.code, code)).get(); emit({ id: "health.changed", data: { code, title: row?.title ?? code, severity: row?.severity ?? "warning" } }); }
 
 export function raise(item: HealthInput, now = new Date()): HealthItem {
   const existing = db.select().from(health).where(eq(health.code, item.code)).get();

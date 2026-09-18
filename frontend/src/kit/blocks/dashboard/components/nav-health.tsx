@@ -17,10 +17,10 @@ export function healthSummary(repairs: RepairRecord[], roles: RoleRecord[], heal
 
 export function NavHealth({ repairs, roles, health }: { repairs: RepairRecord[]; roles: RoleRecord[]; health?: HealthItem[] }) {
   const { tone: toneValue, sentence } = healthSummary(repairs, roles, health);
-  return <SidebarMenu><SidebarMenuItem><SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:p-1.5!">
+  return <SidebarMenu><SidebarMenuItem><SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:p-1.5! h-10 px-3 text-[15px]">
     <Link to="/alerts" title={sentence} className="flex items-center gap-2">
       <span aria-hidden className={`size-2.5 rounded-full ${DOT[toneValue]}`} />
-      <span className="truncate text-sm">{sentence}</span>
+      <span className="truncate">{sentence}</span>
     </Link>
   </SidebarMenuButton></SidebarMenuItem></SidebarMenu>;
 }
