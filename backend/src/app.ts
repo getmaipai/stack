@@ -21,6 +21,8 @@ import { budgetRoutes } from "@/routes/budget";
 import { eventsRoutes } from "@/routes/events";
 import { logsRoutes } from "@/routes/logs";
 import { seriesRoutes } from "@/routes/series";
+import { groupsRoutes } from "@/routes/groups";
+import { detectedRoutes } from "@/routes/detected";
 import packageJson from "../../package.json";
 import { assertShowroomAllowed } from "@/showroom/fixture";
 
@@ -63,6 +65,8 @@ app.route("/stack/v1/budget", budgetRoutes);
 app.route("/stack/v1", eventsRoutes);
 app.route("/stack/v1/logs", logsRoutes);
 app.route("/stack/v1/series", seriesRoutes);
+app.route("/stack/v1/groups", groupsRoutes);
+app.route("/stack/v1/detected", detectedRoutes);
 app.route("/stack/v1/roles", rolesRoutes);
 app.route("/stack/v1/operator", operatorRoutes);
 app.route("/stack/v1/clients", clientsRoutes);

@@ -9,6 +9,9 @@ the product passes its battle-tested checklist in `docs/dev.md`.
 
 ### Added
 
+- Models tree: grouped rollups, inline rename, batch selection, detected-store
+  rows, and adopt/forget property-panel actions in the showroom.
+
 - STACK-36 Overview console: range-aware usage, memory, and speed series with
   seven dashboard widgets, clickable status rings, and showroom captures.
 

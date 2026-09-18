@@ -1,0 +1,10 @@
+import { createRoute, z } from "@hono/zod-openapi";
+import { apiRouter, ErrorSchema, idParamSchema } from "@/lib/openapi";
+import { requireClientOrOperator } from "@/lib/clients";
+import { showroom, showroomAdoptDetected, showroomDetected } from "@/showroom/fixture";
+const DetectedSchema = z.object({ id: z.string(), kind: z.enum(["folder", "server"]), name: z.string(), version: z.string(), path: z.string(), candidateModels: z.number().int(), roles: z.array(z.string()) });
+const listRoute = createRoute({ method: "get", path: "/", tags: ["Detected"], summary: "List detected stores", middleware: [requireClientOrOperator] as const, responses: { 200: { content: { "application/json": { schema: z.object({ detected: z.array(DetectedSchema) }) } }, description: "Stores discovered without adopting them." } } });
+const actionRoute = (action: "adopt" | "forget") => createRoute({ method: "post", path: `/{id}/${action}`, tags: ["Detected"], summary: `${action} a detected store`, middleware: [requireClientOrOperator] as const, request: { params: idParamSchema("id"), body: action === "adopt" ? { content: { "application/json": { schema: z.object({ roles: z.array(z.string()) }) } } } : undefined }, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.literal(true), id: z.string(), action: z.string() }) } }, description: "Detected store updated." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown detected store." } } });
+export const detectedRoutes = apiRouter();
+detectedRoutes.openapi(listRoute, (c) => c.json({ detected: showroom() ? showroomDetected : [] } as never, 200));
+for (const action of ["adopt", "forget"] as const) detectedRoutes.openapi(actionRoute(action), (c) => { const id = c.req.valid("param").id; if (!showroomDetected.some((item) => item.id === id)) return c.json({ error: "Unknown detected store" }, 404); if (showroom()) showroomAdoptDetected(id); return c.json({ ok: true as const, id, action }, 200); });

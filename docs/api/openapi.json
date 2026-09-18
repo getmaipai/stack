@@ -1978,6 +1978,531 @@
         }
       }
     },
+    "/stack/v1/groups": {
+      "get": {
+        "tags": [
+          "Groups"
+        ],
+        "summary": "List model groups",
+        "responses": {
+          "200": {
+            "description": "Model groups and rollups.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "groups": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "parentId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "modelCount": {
+                            "type": "integer"
+                          },
+                          "bytesOnDisk": {
+                            "type": "integer"
+                          },
+                          "memoryBytes": {
+                            "type": "integer"
+                          },
+                          "usage": {
+                            "type": "object",
+                            "properties": {
+                              "requests": {
+                                "type": "integer"
+                              },
+                              "tokens": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "requests",
+                              "tokens"
+                            ]
+                          },
+                          "status": {
+                            "type": "object",
+                            "properties": {
+                              "loaded": {
+                                "type": "integer"
+                              },
+                              "ready": {
+                                "type": "integer"
+                              },
+                              "onDemand": {
+                                "type": "integer"
+                              },
+                              "failed": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "loaded",
+                              "ready",
+                              "onDemand",
+                              "failed"
+                            ]
+                          },
+                          "worstHealth": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "parentId",
+                          "modelCount",
+                          "bytesOnDisk",
+                          "memoryBytes",
+                          "usage",
+                          "status",
+                          "worstHealth"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "groups"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/groups/{id}/actions": {
+      "post": {
+        "tags": [
+          "Groups"
+        ],
+        "summary": "Apply a group action",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "action"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Group action accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "action": {
+                      "type": "string"
+                    },
+                    "modelCount": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "action",
+                    "modelCount"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown group.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/groups/{id}": {
+      "patch": {
+        "tags": [
+          "Groups"
+        ],
+        "summary": "Rename or move a model group",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "parentId": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated model group.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "parentId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "modelCount": {
+                      "type": "integer"
+                    },
+                    "bytesOnDisk": {
+                      "type": "integer"
+                    },
+                    "memoryBytes": {
+                      "type": "integer"
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "requests": {
+                          "type": "integer"
+                        },
+                        "tokens": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "requests",
+                        "tokens"
+                      ]
+                    },
+                    "status": {
+                      "type": "object",
+                      "properties": {
+                        "loaded": {
+                          "type": "integer"
+                        },
+                        "ready": {
+                          "type": "integer"
+                        },
+                        "onDemand": {
+                          "type": "integer"
+                        },
+                        "failed": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "loaded",
+                        "ready",
+                        "onDemand",
+                        "failed"
+                      ]
+                    },
+                    "worstHealth": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "parentId",
+                    "modelCount",
+                    "bytesOnDisk",
+                    "memoryBytes",
+                    "usage",
+                    "status",
+                    "worstHealth"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown group.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/detected": {
+      "get": {
+        "tags": [
+          "Detected"
+        ],
+        "summary": "List detected stores",
+        "responses": {
+          "200": {
+            "description": "Stores discovered without adopting them.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "detected": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "folder",
+                              "server"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "candidateModels": {
+                            "type": "integer"
+                          },
+                          "roles": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "name",
+                          "version",
+                          "path",
+                          "candidateModels",
+                          "roles"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "detected"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/detected/{id}/adopt": {
+      "post": {
+        "tags": [
+          "Detected"
+        ],
+        "summary": "adopt a detected store",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "roles": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "roles"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Detected store updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "action": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "id",
+                    "action"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown detected store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/detected/{id}/forget": {
+      "post": {
+        "tags": [
+          "Detected"
+        ],
+        "summary": "forget a detected store",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detected store updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "action": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "id",
+                    "action"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown detected store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/roles": {
       "get": {
         "tags": [
