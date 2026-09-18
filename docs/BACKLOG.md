@@ -729,25 +729,31 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
 - [ ] **STACK-51 (M): the shell, second pass.** ux.md "The shell,
   second pass" (2026-09-18): Abilities leaves the sidebar (its actions
   on Models and the Overview strip); two sidebar groups, common on top
-  (Overview, Models, Engines, Monitoring, Library, Try it) and
-  administrative pinned at the bottom (Alerts, Updates, Backups,
-  Access, Settings); the header search becomes a magnifying-glass icon
-  opening the palette, no text field at any width; the sidebar's
-  bottom block shows memory used and disk free (the ring alone when
-  collapsed); the instance name and health dot become a subtitle under
-  the logo, "This computer" leaves the header; a Running/Paused pill in
-  the header center that pauses everything (drain, unload, pause
-  downloads and jobs) through the one implementation the tray and the
-  palette use, with inline confirmation when requests are in flight.
-  Files: `frontend/src/kit/blocks/dashboard/components/*`,
-  `frontend/src/pages/DashboardShell.tsx`, `backend/src/lib/governor.ts`
-  (`pauseAll`, `resumeAll`, `runState`), a `/stack/v1/run-state` route.
-  Acceptance: the two groups render with the bottom group pinned at
-  600 px and 1000 px tall (test); no text input in the header at 400
-  and 1440 (test); the resource block reads the stubbed budget and
-  hardware (test); pause drains a scripted engine and the pill reads
-  Paused, resume brings it back (test); captures at 1440 and 400 opened
-  and judged. Exit: `scripts/check.sh`.
+  (Overview, Engines, Models, Clients, Tester, Monitoring) and
+  administrative pinned at the bottom (Settings, Logs, Alerts); "Try
+  it" reads Tester, "Access" reads Clients, Updates and Backups become
+  Settings sections, Logs becomes its own row; the header search is a
+  magnifying-glass icon opening the palette, no text field at any
+  width; the sidebar's bottom block shows memory used and disk free
+  (the ring alone when collapsed); the instance name and health dot
+  become a subtitle under the logo, "This computer" leaves the header;
+  a Running/Paused pill in the header center that pauses everything
+  (drain, unload, pause downloads and jobs) through the one
+  implementation the tray and the palette use, with inline confirmation
+  when requests are in flight. Files:
+  `frontend/src/kit/blocks/dashboard/components/*`,
+  `frontend/src/pages/DashboardShell.tsx`, `SettingsPage.tsx` (the
+  Updates and Backups sections), a `LogsPage.tsx`, `backend/src/lib/
+  governor.ts` (`pauseAll`, `resumeAll`, `runState`), a
+  `/stack/v1/run-state` route. Acceptance: the two groups render in the
+  named order with the bottom group pinned at 600 px and 1000 px tall
+  (test); no text input in the header at 400 and 1440 (test); the
+  resource block reads the stubbed budget and hardware (test); pause
+  drains a scripted engine and the pill reads Paused, resume brings it
+  back (test); Updates and Backups render inside Settings and the
+  palette reaches them (test); captures at 1440 and 400 opened and
+  judged. Exit: `scripts/check.sh`.
+
 ## Milestone 1: the robot
 
 - [ ] **STACK-17 (L): the Linux ARM profile.** `llama-server` on the Pi

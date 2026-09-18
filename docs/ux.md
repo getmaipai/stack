@@ -226,12 +226,22 @@ decision:
    strip (and on the board, which is the first screen until a plan
    exists). The `/abilities` route stays as the destination of those
    actions; it has no sidebar row.
-2. **Common on top, administrative at the bottom**, UniFi's rail: the
-   top group is Overview, Models, Engines, Monitoring, Library (when
-   built), Try it; the bottom group, above the resource block, is
-   Alerts, Updates, Backups, Access, Settings. A hairline separates the
-   groups; the bottom group stays at the bottom of the sidebar at every
-   height (flex, not a scroll away).
+2. **Common on top, administrative at the bottom**, UniFi's rail, the
+   rows named by the owner (01:25): the top group is Overview (the
+   console's home, first as UniFi's Dashboard is), then Engines,
+   Models, Clients, Tester, Monitoring; the bottom group, above the
+   resource block, is Settings, Logs, Alerts. That renames two rows and
+   folds three: "Try it" becomes **Tester** everywhere a person reads
+   it (the route may stay `/try`); "Access" becomes **Clients** (the
+   client keys table, the operator card, LAN access); **Updates** and
+   **Backups** become sections of Settings (UniFi keeps them under
+   System), reachable from the palette and from the Overview facts
+   ("Update available" opens Settings at Updates); **Logs** gets its
+   own administrative row (the log viewer that "Monitoring" carried:
+   tail per engine and the daemon, filter, copy). Library, when built,
+   joins the top group after Models. A hairline separates the groups;
+   the bottom group stays at the bottom of the sidebar at every height
+   (flex, not a scroll away).
 3. **The header search is a magnifying glass**, an icon button that
    opens the command palette (typing anywhere in the palette is the
    input); the header carries no text field at any width. The right
