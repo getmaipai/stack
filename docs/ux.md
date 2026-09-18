@@ -660,15 +660,15 @@ door. Decisions:
    under "From the docs", and, when none of that answers, "Ask the
    helper" which opens the helper as a panel in the right slot (the
    property panel's place). On the phone Ask is the middle tab.
-2. **The helper is the Stack's, and stateless.** It runs on the loaded
-   chat engine (or the Stack's own small pinned model when no person
-   engine is up, as dev.md says), with the read-only tool set over
-   `/stack/v1`, and every action it suggests is a proposal card ("Restart
-   the chat engine", one button) that the person presses. It keeps no
-   history past the panel being closed and knows no people: it is the
-   operator's helper for this Stack, which is why it can live here and
-   still honor the line. A good household assistant that remembers is
-   Home's, and the helper's empty state says so once.
+2. **The helper is the Stack's, stateless, and model-free by default.**
+   It answers from what the console already knows and from a pre-built
+   index, and reads like an assistant because its answers are shaped
+   as answers (one sentence, the number, the link), never as a list of
+   search hits. It keeps no history past the panel being closed and
+   knows no people: it is the operator's helper for this Stack, which
+   is why it can live here and still honor the line. A good household
+   assistant that remembers is Home's, and the helper's empty state
+   says so once.
 3. **Docs have three doors**: "Help" in the profile menu (the docs site,
    the API explorer, the Library); a "Learn more" link on every health
    item and every disabled unbuilt section, pointing at the docs page
@@ -677,23 +677,34 @@ door. Decisions:
 4. **Priority.** STACK-37 moves from low to normal: tier 1 (the intent
    table) and tier 3 (the helper panel) are built with Ask; tier 2
    arrives with the Library (STACK-32).
-5. **The helper never depends on the person's engines** (the owner,
-   01:55: "no engine installed, or the engine uninstalled, and our
-   assistant does not work"). Tiers 1 and 2 need no model and always
-   answer. Tier 3 runs on the person's loaded chat engine when one is
-   up and supports tool calls; otherwise on **the Stack's own helper
-   engine**: the pinned llama-server build the Stack itself is
-   installed with, and the pinned small model (`qwen3-1.7b-q8-0`, 1.8
-   GB), kept under the Stack's own store path, not listed among the
-   person's engines and models and not removable from the Engines or
-   Models pages (Settings, Storage shows it with "Remove the helper's
-   model" and the size, and Ask re-offers the download). The installer
-   downloads it with the Stack when the person accepts; if declined or
-   removed, Ask still answers tiers 1 and 2 and the helper's panel
-   says "The helper needs a 1.8 GB model to answer open questions.
-   Download it" with one button. A helper turn never loads the
-   person's models and never evicts them: it is admitted by the
-   governor at low priority and unloads after idle.
+5. **No model ships with the helper, and none is required** (the owner,
+   02:00: people will hate a bundled model that costs disk and memory
+   and cannot be removed). The default helper has two model-free
+   tiers and one optional tier:
+   - *Answered by the console*: the intent table over live numbers
+     ("how many engines", "is chat up to date", "how much disk do
+     models use"), each intent with a hit counter (the org rule).
+   - *Answered from the index*: one pre-built full-text index, built
+     at release into the app, over the user docs, every declared
+     setting's label and help, every health item's title, cause and
+     fix, every page's purpose sentence, and the Library's pages when
+     they exist (indexed on the machine when fetched). One tool for
+     all of it: Pagefind, which the docs site already uses; the
+     console queries the shipped index and the local Library index
+     together. The answer is the best passage rewritten by shape, not
+     by a model: the passage's first sentence, the value when the hit
+     is a setting or a health item, and "Open" to the page or the
+     docs. Fuzzy and prefix matching so a misspelled question still
+     lands.
+   - *Open questions with your own model*, off by default: a Settings
+     switch, "Let the helper use my chat model for open questions",
+     enables the tool-calling turn on the person's loaded chat engine
+     only, when one is up and supports tools; nothing is downloaded
+     for it, and with the switch off or no engine loaded the panel
+     answers from the two tiers above and says, once, that the switch
+     exists. The Stack never installs a model of its own.
+   Removal is trivial because nothing was added: the index ships inside
+   the app build.
 
 ## Library
 

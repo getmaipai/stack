@@ -1105,6 +1105,61 @@ person data to leak. The privacy page gains no row, because no
 outbound connection is added. The helper is listed on the Abilities
 page as what it is, "the helper, 1.8 GB, loads only when asked".
 
+## The helper without a model: the research (2026-09-18, 02:05)
+
+The owner's revision: no bundled model, because a model that costs disk
+and memory and cannot be removed is what people hate; the helper should
+be static by default, indexed and searchable, and read like an agent
+because its answers are shaped, with the person's own model as an
+optional third tier. What the field has, and what we take:
+
+- **Rule-based intents, Home Assistant's way.** Assist matches a
+  sentence against declared templates (hassil: expansion rules, slot
+  lists, skip words) before any model is involved; it is purely local
+  and deterministic, and a community fuzzy matcher (hass-closest-intent)
+  handles garbled input by picking the closest template
+  ([template syntax](https://developers.home-assistant.io/docs/voice/intent-recognition/template-sentence-syntax/),
+  [hassil](https://github.com/OHF-Voice/hassil)). We take the shape,
+  not the library (Python): the intent table is a declared list of
+  templates with slots for role names, model names and setting labels,
+  skip words, and a closest-match fallback over tokens, each intent
+  with a hit counter and a corpus row (the org rule on rules). Answers
+  come from the live resources the console already holds.
+- **A static full-text index, Pagefind.** The docs site already uses
+  it; its Node API indexes custom records (`addCustomRecord`) beside
+  HTML, so the release build indexes the user docs plus a generated
+  knowledge base (every setting's label and help, every health item's
+  title, cause and fix, every page's purpose sentence) into one
+  bundle shipped in the app; the Library builds a second, local index
+  when pages are fetched, and the console merges the two at query
+  time (`mergeIndex`) ([Node API](https://pagefind.app/docs/node-api/),
+  [multisite](https://pagefind.app/docs/multisite/)). Results carry
+  headings and excerpts (sub-results), which is what an answer card
+  needs. One tool for the site, the console and the Library.
+- **Orama** is the credible alternative: a full-text, vector and hybrid
+  search library under 2 KB that runs in the browser or on the server,
+  BM25 with stemming in thirty languages, and an "answer engine" that
+  needs an LLM behind it ([orama](https://github.com/oramasearch/orama),
+  [answer engine](https://docs.orama.com/docs/orama-js/answer-engine)).
+  Its search half would do the job as well as Pagefind; it loses on
+  the one-tool rule (the docs site is already Pagefind) and its answer
+  half is exactly the model we are not bundling. Revisit if Pagefind's
+  ranking on questions (rather than keywords) proves weak in use.
+- **SQLite FTS5** is built into Bun's SQLite and would index the
+  knowledge base with no dependency, but it answers on the server and
+  the docs site's search runs in the browser; two search paths for one
+  question is the thing to avoid.
+- **Extractive QA models** (a small question-answering transformer in
+  the browser) would produce better sentences from the passage, and
+  are still a model to download; rejected for the default, the same
+  reason as the bundled chat model.
+
+The answer card is therefore shaped without a model: the matched
+intent's sentence with the live number, or the best sub-result's
+heading and first sentence with the value when the hit is a setting or
+a health item, and one "Open" action. The optional third tier runs on
+the person's own loaded chat engine when they switch it on.
+
 ## What moves out of Home, later
 
 ## Speed test
