@@ -776,6 +776,33 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   declared section renders a card (test walks the declaration);
   captures `settings.png`, `settings-updates.png`, `settings-phone.png`
   opened and judged. Exit: `scripts/check.sh`.
+- [ ] **STACK-53 (M): things pages, second pass.** ux.md "Things pages,
+  second pass" (2026-09-18): one Add pill per page opening the sheet
+  with Catalog, Hugging Face and Import tabs (import by link, and a
+  streamed upload from another device); a three-dots menu on every row
+  driven by the same declared action list as the panel header; Rename
+  inline for nicknames, the display name everywhere and the id as
+  subtitle only when different; "Not adopted" visible in the status
+  cell and the filter; groups shown as a chip column and managed in
+  Settings > Groups with "Move to group" in the row menu and the batch
+  bar. Files: `frontend/src/kit/blocks/things-table/ThingsTable.tsx`
+  (the row menu), `frontend/src/kit/blocks/add-sheet/AddSheet.tsx`,
+  `frontend/src/pages/ModelsPage.tsx`, `EnginesPage.tsx`,
+  `frontend/src/panels/*` (one `actions` declaration per kind, shared),
+  `frontend/src/pages/settings/GroupsSection.tsx`, `backend/src/routes/
+  models.ts` (a search over the catalog and Hugging Face behind the
+  opt-in outbound switch; the upload route), `backend/src/lib/names.ts`
+  (display names). Mirror: UniFi's Devices rows and its Add Device
+  flow, in our palette. Acceptance: every row has a menu whose entries
+  equal the panel's actions for that kind (test walks each kind); the
+  Add sheet installs a scripted catalog model and imports a scripted
+  folder (tests); Rename saves and the table and panel show the new
+  name (test); a detected row reads "Not adopted" and the filter finds
+  it (test); Move to group from the row menu and from the batch bar
+  moves the rows (test); the Groups section creates, nests and deletes
+  (test); no row shows a group name as its title (test on the fixture);
+  captures `models-groups.png`, `models-add.png`, `models-row-menu.png`
+  opened and judged. Exit: `scripts/check.sh`.
 ## Milestone 1: the robot
 
 - [ ] **STACK-17 (L): the Linux ARM profile.** `llama-server` on the Pi

@@ -536,6 +536,57 @@ naming the count ("Unload 4 models?"): load, unload, pin, unpin, check
 for updates, move, remove. Drag to move a model or a group; batch
 select works across groups.
 
+## Things pages, second pass: add, act, name, adopt, group (decided 2026-09-18, 01:35)
+
+The owner walked the live Models and Engines pages and named six gaps.
+Each is a decision:
+
+1. **One Add button, with search and browsing built in.** Every things
+   page has one pill, "Add" with a plus glyph, in the header row. It
+   opens a sheet with tabs: **Catalog** (the MaiPai Catalog's models or
+   engines for this page, searchable, each with size, licence in plain
+   words, "runs on this computer" from the tier, and Install), **Hugging
+   Face** (search a repo, pick the GGUF file, licence and size shown,
+   Install), and **Import** (things already on this computer: the
+   detected tools' folders and any path typed or picked, imported by
+   link; and "Upload from this device" for a browser on another
+   machine, a streamed upload with a progress row in the downloads
+   list). Adding is never spread across pages or hidden in a menu.
+2. **Three dots on every row.** A kebab icon button at the right end of
+   each row (visible on hover on a pointer device, always on touch)
+   opens the row's actions: the same declared list the panel header
+   uses for that kind (one declaration per kind drives both), so an
+   engine offers Start, Stop, Restart, Update, Make current, Logs,
+   Forget; a model Load, Unload, Pin, Rename, Move to group, Update,
+   Remove; a detected item Adopt, Forget; a group Rename, Move,
+   Load all, Unload all, Remove group; a client Rotate key, Revoke.
+   Destructive actions carry the kit's inline confirmation.
+3. **Nicknames are a first-class action.** "Rename" in the row menu and
+   in the panel header edits the display name inline (Enter saves,
+   Escape cancels); the display name is what every table, sentence,
+   tile and chart shows; the id is the subtitle only when it differs.
+4. **Adopted is visible.** A detected thing's status cell reads "Not
+   adopted" with the grey dot and Adopt as its primary action; once
+   adopted it reads like any other row ("Ready"); the Status filter
+   offers "Not adopted"; the sidebar's Engines count includes it (the
+   quiet rule).
+5. **Groups are a real feature.** Groups are shown as metadata the way
+   roles are: a Group column with a chip, and the collapsible group
+   headers in the Models tree. They are managed in Settings, Groups
+   section (create, rename, nest by drag or a parent select, delete
+   moves children to the parent, counts and memory per group) and in
+   the Models page's action row ("New group" opens the same dialog).
+   Assignment happens where the things are: "Move to group" in a row's
+   three dots (a submenu with the tree), and on a selection of rows
+   through the batch bar. A group header's three dots offer the group
+   actions.
+6. **A row's title is its display name, once.** The name cell shows the
+   display name (nickname or humanized id, "Qwen3 27B Instruct") and,
+   under it, the id only when it differs, then the roles as small
+   chips; a group's name never appears as a row's title (the screenshot
+   showed "Family chat" as the title of every model in the group with
+   the model id under it).
+
 ## Library
 
 One page per installed model and engine: where it came from, its
