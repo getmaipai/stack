@@ -3,6 +3,8 @@ title: Keys for your tools
 description: How to make a key for one program and how to turn it off.
 ---
 
+See [Connect a coding tool](./connect-a-coding-tool/).
+
 The first time you open the Stack, you set one login for yourself: a password, no email, no account with anyone. That is the only sign-in the Stack has.
 
 A key is a different thing. A key is a password for one program, not for a person. You make a key for a tool you want to use the Stack with, like a script or a little app you wrote yourself.

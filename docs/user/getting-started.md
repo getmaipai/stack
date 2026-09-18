@@ -3,31 +3,34 @@ title: Get started
 description: The board-first install flow for the first time you turn it on.
 ---
 
-Install it with one command:
+## Choose a plan
 
 ```bash
 curl -fsSL https://getmaipai.github.io/stack/install.sh | sh
 ```
 
-Then open `http://127.0.0.1:8770`. The first time you open the Stack, the
-board is ready immediately. It shows what this computer can run in plain
-words, then lets you choose **Start small** or a full plan in **Add
-abilities**. Downloads continue in the background with their size, speed,
-time left, source, licence, and pause or resume controls.
+1. Open the Stack and read the **This computer can run** card.
+2. Choose **Start small** for the lightest plan, or choose **Add abilities** to pick a full plan.
+3. Wait for the board to show the abilities you chose.
+
+![The Stack board](../assets/screens/overview-console-light.png)
 
 The operator password is deferred until the first client key is created.
 That one-time prompt secures the board and future keys. If a download stops,
 the row says why in words, and the other abilities keep working.
 
-When the board is ready, open **Try it** in the sidebar. Choose **Chat**
-and send “Say hello in one sentence” to check the local chat role. This box
-forgets when you leave it; install MaiPai Home for an assistant that keeps
-memory. Speak and Listen remain offline until their engine roles are bound.
+## Try your first chat
+
+1. Choose **Try it** in the sidebar.
+2. Choose **Chat**.
+3. Type a short question and choose **Send**.
+
+![Try a local chat](../assets/screens/try-chat-light.png)
+
+## Find things in the sidebar
+
+The sidebar is in this order: **Home**, **Engines**, **Models**, **Try it**, and **Settings**. Settings holds updates, access, alerts, and storage.
+
+You will know it worked when the board shows your plan and **Try it** returns an answer.
 
 Still need help? Open fix-a-problem and look for your situation.
-
-To uninstall the service and program while keeping your data, run:
-
-```bash
-curl -fsSL https://getmaipai.github.io/stack/install.sh | sh -s -- --uninstall
-```

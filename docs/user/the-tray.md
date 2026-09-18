@@ -1,3 +1,8 @@
+---
+title: Use the Stack tray
+description: Read the icon, pause Stack, and choose notifications.
+---
+
 # The tray
 
 The MaiPai Stack icon shows the local Stack status. Green means all roles are
@@ -17,3 +22,7 @@ Notifications come from important saved events only. Choose model installs,
 updates, failed checks, and health attention in **Settings > Alerts**. Pause
 and resume notifications are off until you turn them on. Each notification
 opens the related page. Progress updates never interrupt you.
+
+![The Stack tray menu](../assets/screens/tray-menu.png)
+
+Still need help? Open [Fix a problem](./fix-a-problem/).

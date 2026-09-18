@@ -1,25 +1,29 @@
-# Open the Stack app
+---
+title: Install MaiPai Stack
+description: Download the app or install Stack with one command.
+---
 
-The first release of MaiPai Stack ships the desktop app alongside the
-daemon. **Open the Stack app** to get the local console in a native window,
-with a menu-bar item for health, Pause everything, Resume and Open.
+## Download the app
 
-The app attaches to the daemon managed by the operating system. Closing the
-window does not stop the Stack, and a browser can still open the same local
-console at `http://127.0.0.1:8770`.
+1. Download the Stack `.dmg` for your Mac.
+2. Open it and drag **MaiPai Stack** to Applications.
+3. Open **MaiPai Stack**. If your Mac asks, choose **Open**.
+4. Follow the first-time flow. Stack checks this computer, starts its local service, and opens the board.
 
-This desktop app arrives with the first release. Until then, run the daemon
-with `bun start` from the repository root and use the browser console.
+## One line in Terminal
 
-## The first time you open the app
+Open Terminal and paste:
 
-The app checks the local daemon. If it is not running, the bundled daemon
-installs its LaunchAgent under `~/Library/LaunchAgents`, starts it, and opens
-the console. Later launches attach to the existing service. Closing or
-quitting the app leaves the Stack running.
+```bash
+curl -fsSL https://getmaipai.github.io/stack/install.sh | sh
+```
 
-## Uninstall
+The installer downloads Stack and its checksum, checks the download, and starts the local service. It sends only those download requests. Your chats, files, keys, and model data stay on this computer. See [Privacy: what leaves your house](./privacy/).
 
-Choose **Uninstall the Stack…** from the menu bar item and confirm twice. This
-removes the service and the Stack data directory. The command-line uninstall
-without `--remove-data` keeps the data for a later install.
+## Open the Stack
+
+Open **MaiPai Stack** from Applications, or open the address shown by the installer in your browser. You will see the board when it is ready.
+
+![The Stack board](../assets/screens/overview-console-light.png)
+
+Still need help? Open [Fix a problem](./fix-a-problem/).

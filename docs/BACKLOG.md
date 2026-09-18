@@ -897,7 +897,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   Files: `frontend/src/pages/, docs/user/, docs/site/`.
   Mirror: the current Library page and local docs index.
   Out of scope: new person records or Home-side features.
-- [ ] **STACK-70 (M): the user docs, complete for a release.** dev.md
+- [x] **STACK-70 (M): the user docs, complete for a release.** dev.md
   item 6. Acceptance: the eight pages exist, pass the reading-level
   lint, each with a generated screenshot opened and judged; the docs
   site builds. Exit: `scripts/check.sh`.

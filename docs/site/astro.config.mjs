@@ -27,7 +27,17 @@ export default defineConfig({
       sidebar: [
         {
           label: "Guide",
-          items: [{ autogenerate: { directory: "guide" } }],
+          items: [
+            { slug: "guide/install" },
+            { slug: "guide/getting-started" },
+            { slug: "guide/update" },
+            { slug: "guide/uninstall" },
+            { slug: "guide/the-tray" },
+            { slug: "guide/on-your-phone" },
+            { slug: "guide/connect-a-coding-tool" },
+            { slug: "guide/privacy" },
+            { slug: "guide/fix-a-problem" },
+          ],
         },
         {
           label: "Developer",
