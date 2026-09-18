@@ -35,6 +35,10 @@ if [ "${1:-}" != "--docs" ]; then
   (cd frontend && bun run build)
 
   if command -v cargo >/dev/null 2>&1; then
+    if [ ! -f desktop/src-tauri/binaries/maipai-stack-aarch64-apple-darwin ]; then
+      echo "== desktop: build sidecar"
+      bash scripts/build-release.sh --sidecar-only
+    fi
     echo "== desktop: cargo check"
     (cd desktop/src-tauri && cargo check)
   else

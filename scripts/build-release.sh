@@ -6,17 +6,36 @@ DIST="$ROOT/dist"
 mkdir -p "$DIST"
 VERSION="${VERSION:-$(sed -n 's/.*"version": "\([^"]*\)".*/\1/p' "$ROOT/package.json" | head -1)}"
 
+target="darwin-arm64"
+rust_triple="aarch64-apple-darwin"
+
+build_sidecar() {
+  (cd "$ROOT/frontend" && bun run build)
+  local output="$DIST/maipai-stack-$target"
+  rm -f "$output"
+  bun build --compile "$ROOT/scripts/release-entry.ts" --outfile "$output" --asset-naming='[name].[ext]'
+  chmod 755 "$output"
+  mkdir -p "$ROOT/desktop/src-tauri/binaries"
+  cp "$output" "$ROOT/desktop/src-tauri/binaries/maipai-stack-$rust_triple"
+  chmod 755 "$ROOT/desktop/src-tauri/binaries/maipai-stack-$rust_triple"
+}
+
+if [[ "${1:-}" == "--sidecar-only" ]]; then
+  build_sidecar
+  echo "Built sidecar $ROOT/desktop/src-tauri/binaries/maipai-stack-$rust_triple"
+  exit 0
+fi
+
 (cd "$ROOT/frontend" && bun run build)
 
-target="darwin-arm64"
 output="$DIST/maipai-stack-$target"
 rm -f "$output"
 bun build --compile "$ROOT/scripts/release-entry.ts" --outfile "$output" --asset-naming='[name].[ext]'
 chmod 755 "$output"
 (cd "$ROOT/frontend" && bun run build >/dev/null)
 mkdir -p "$ROOT/desktop/src-tauri/binaries"
-cp "$output" "$ROOT/desktop/src-tauri/binaries/maipai-stack-$target"
-chmod 755 "$ROOT/desktop/src-tauri/binaries/maipai-stack-$target"
+cp "$output" "$ROOT/desktop/src-tauri/binaries/maipai-stack-$rust_triple"
+chmod 755 "$ROOT/desktop/src-tauri/binaries/maipai-stack-$rust_triple"
 (cd "$DIST" && shasum -a 256 "$(basename "$output")" > SHA256SUMS)
 
 if [[ "${1:-}" == "--dry-run" ]]; then
