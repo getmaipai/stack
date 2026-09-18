@@ -373,7 +373,7 @@ layer above; none adds a person or leaves the machine.
   Mirror: the durable notification templates.
   Out of scope: new person records or Home-side features.
   Exit: `bash scripts/check.sh`.
-- [ ] **STACK-28 (S): licences in plain words.** Every model's licence
+- [x] **STACK-28 (S): licences in plain words.** Every model's licence
   shown as one sentence a parent understands ("free for personal use;
   not for a business") from a small map of the common licences, with
   the full text a click away; a gated or non-commercial licence flagged

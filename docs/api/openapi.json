@@ -5241,6 +5241,17 @@
                           "source": {
                             "type": "string"
                           },
+                          "licenceSentence": {
+                            "type": "string"
+                          },
+                          "licenceFlag": {
+                            "type": "string"
+                          },
+                          "licenceUrl": {
+                            "type": "string",
+                            "nullable": true,
+                            "format": "uri"
+                          },
                           "provenance": {
                             "type": "object",
                             "additionalProperties": {
@@ -5295,6 +5306,9 @@
                           "measuredFootprintBytes",
                           "estimated",
                           "source",
+                          "licenceSentence",
+                          "licenceFlag",
+                          "licenceUrl",
                           "provenance",
                           "usage"
                         ]
@@ -5534,6 +5548,17 @@
                         "source": {
                           "type": "string"
                         },
+                        "licenceSentence": {
+                          "type": "string"
+                        },
+                        "licenceFlag": {
+                          "type": "string"
+                        },
+                        "licenceUrl": {
+                          "type": "string",
+                          "nullable": true,
+                          "format": "uri"
+                        },
                         "provenance": {
                           "type": "object",
                           "additionalProperties": {
@@ -5588,6 +5613,9 @@
                         "measuredFootprintBytes",
                         "estimated",
                         "source",
+                        "licenceSentence",
+                        "licenceFlag",
+                        "licenceUrl",
                         "provenance",
                         "usage"
                       ]
@@ -5815,6 +5843,17 @@
                     "source": {
                       "type": "string"
                     },
+                    "licenceSentence": {
+                      "type": "string"
+                    },
+                    "licenceFlag": {
+                      "type": "string"
+                    },
+                    "licenceUrl": {
+                      "type": "string",
+                      "nullable": true,
+                      "format": "uri"
+                    },
                     "provenance": {
                       "type": "object",
                       "additionalProperties": {
@@ -5869,6 +5908,9 @@
                     "measuredFootprintBytes",
                     "estimated",
                     "source",
+                    "licenceSentence",
+                    "licenceFlag",
+                    "licenceUrl",
                     "provenance",
                     "usage"
                   ]
@@ -6046,6 +6088,17 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "licenceSentence": {
+                            "type": "string"
+                          },
+                          "licenceFlag": {
+                            "type": "string"
+                          },
+                          "licenceUrl": {
+                            "type": "string",
+                            "nullable": true,
+                            "format": "uri"
+                          },
                           "sizeBytes": {
                             "type": "integer",
                             "nullable": true
@@ -6103,6 +6156,9 @@
                           "name",
                           "kind",
                           "licence",
+                          "licenceSentence",
+                          "licenceFlag",
+                          "licenceUrl",
                           "sizeBytes",
                           "source",
                           "revision",

@@ -11,7 +11,7 @@ import { isDesktop, pickFolder } from "@/kit/host";
 
 const Plus = getIcon("Plus");
 
-type Entry = { id: string; name: string; kind: "model" | "engine"; roles?: string[]; licence: string | null; sizeBytes: number | null; source: string; revision: string | null; url: string | null; sha256: string | null; repo: string | null; runsOnThisComputer?: boolean; files?: Array<{ name: string; sizeBytes: number | null; url: string }> };
+type Entry = { id: string; name: string; kind: "model" | "engine"; roles?: string[]; licence: string | null; licenceSentence?: string; licenceFlag?: string; licenceUrl?: string | null; sizeBytes: number | null; source: string; revision: string | null; url: string | null; sha256: string | null; repo: string | null; runsOnThisComputer?: boolean; files?: Array<{ name: string; sizeBytes: number | null; url: string }> };
 type Candidate = { source: string; path: string; digest: string; sizeBytes: number; name: string; repo?: string; revision?: string };
 
 function size(value: number | null): string { if (value === null) return "Size not recorded"; return `${Math.round(value / 1_000_000)} MB`; }

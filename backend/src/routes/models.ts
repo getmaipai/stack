@@ -11,9 +11,10 @@ import { readModelManifest } from "@/lib/store/manifests";
 import { invalidateStorageAccounting } from "@/lib/store/storage";
 import { showroom, showroomModels } from "@/showroom/fixture";
 import { modelsDir } from "@/lib/paths";
+import { licenceInfo } from "@/lib/licences";
 
 const ModelSchema = z.object({
-  id: z.string(), nickname: z.string().nullable(), groupId: z.string().nullable(), roles: z.array(z.string()), state: z.enum(["notInstalled", "installed"]), runtimeState: z.enum(["loaded", "ready", "onDemand", "failed"]), sizeBytes: z.number().int().nullable(), measuredFootprintBytes: z.number().int().nullable(), estimated: z.boolean(), source: z.string(), provenance: z.record(z.string(), z.unknown()), usage: z.object({ modelId: z.string(), requests: z.number().int(), tokensIn: z.number().int(), tokensOut: z.number().int(), secondsLoaded: z.number().int(), peakMemoryBytes: z.number().int(), lastUsedAt: z.string().nullable() }),
+  id: z.string(), nickname: z.string().nullable(), groupId: z.string().nullable(), roles: z.array(z.string()), state: z.enum(["notInstalled", "installed"]), runtimeState: z.enum(["loaded", "ready", "onDemand", "failed"]), sizeBytes: z.number().int().nullable(), measuredFootprintBytes: z.number().int().nullable(), estimated: z.boolean(), source: z.string(), licenceSentence: z.string(), licenceFlag: z.string(), licenceUrl: z.string().url().nullable(), provenance: z.record(z.string(), z.unknown()), usage: z.object({ modelId: z.string(), requests: z.number().int(), tokensIn: z.number().int(), tokensOut: z.number().int(), secondsLoaded: z.number().int(), peakMemoryBytes: z.number().int(), lastUsedAt: z.string().nullable() }),
 });
 const CandidateSchema = z.object({ source: z.string(), path: z.string(), digest: z.string(), sizeBytes: z.number().int(), name: z.string(), repo: z.string().optional(), revision: z.string().optional() });
 const listRoute = createRoute({ method: "get", path: "/", tags: ["Models"], summary: "List installed models", middleware: [requireClientOrOperator] as const, responses: { 200: { content: { "application/json": { schema: z.object({ models: z.array(ModelSchema) }) } }, description: "Installed and known model records." } } });
@@ -25,7 +26,8 @@ const updateRoute = createRoute({ method: "patch", path: "/{id}", tags: ["Models
 const actionRoute = createRoute({ method: "post", path: "/{id}/actions", tags: ["Models"], summary: "Apply a model action", middleware: [requireOperator] as const, request: { params: idParamSchema("id"), body: { content: { "application/json": { schema: z.object({ action: z.enum(["load", "unload", "pin", "unpin", "checkUpdates"]) }) } } } }, responses: { 200: { content: { "application/json": { schema: z.object({ modelId: z.string(), ok: z.boolean(), reason: z.string().optional() }) } }, description: "Model action result." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown model." } } });
 
 export function modelView(model: ReturnType<typeof listModels>[number]) {
-  return { id: model.id, nickname: model.nickname, groupId: model.groupId, roles: model.roles, state: model.modelPath && existsSync(model.modelPath) && readModelManifest(model.id) ? "installed" as const : "notInstalled" as const, runtimeState: modelRuntimeState(model), sizeBytes: model.sizeBytes, measuredFootprintBytes: model.measuredFootprintBytes, estimated: model.measuredFootprintBytes === null, source: model.source, provenance: model.provenance, usage: getModelUsage(model.id) };
+  const info = licenceInfo(model.licence);
+  return { id: model.id, nickname: model.nickname, groupId: model.groupId, roles: model.roles, state: model.modelPath && existsSync(model.modelPath) && readModelManifest(model.id) ? "installed" as const : "notInstalled" as const, runtimeState: modelRuntimeState(model), sizeBytes: model.sizeBytes, measuredFootprintBytes: model.measuredFootprintBytes, estimated: model.measuredFootprintBytes === null, source: model.source, licenceSentence: info.sentence, licenceFlag: info.flag, licenceUrl: info.url, provenance: model.provenance, usage: getModelUsage(model.id) };
 }
 
 function showroomModelView(model: typeof showroomModels[number]) {
