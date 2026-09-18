@@ -26,7 +26,7 @@ test("Models renders group rollups, routes group actions, renames, and adopts de
   await waitFor(() => expect(calls.some((call) => call.method === "POST" && call.path.includes("/groups/group-family/actions"))).toBe(true));
   const input = document.querySelector('input[aria-label="Nickname qwen"]')!;
   fireEvent.change(input, { target: { value: "Household" } }); fireEvent.blur(input);
-  expect(document.querySelector('button[aria-label="Actions for model:qwen"]')).toBeTruthy();
+  expect(document.querySelector('button[aria-label="More actions"]')).toBeTruthy();
   await waitFor(() => expect(calls.some((call) => call.method === "PATCH" && call.path.includes("/models/qwen"))).toBe(true));
   fireEvent.click(document.querySelector('tr.bg-muted\\/30')!);
   fireEvent.click(document.querySelector('button[aria-label="Adopt"]')!);

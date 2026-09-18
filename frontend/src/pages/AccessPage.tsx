@@ -11,6 +11,7 @@ import { clientPanel } from "@/panels/client";
 import { PropertyPanel } from "@/kit/blocks/property-panel/PropertyPanel";
 import { RelativeTime } from "@/kit/ui/relative-time";
 import { labelForRole } from "@/lib/modelStates";
+import { actionsFor } from "@/lib/actions";
 
 type Client = { id: string; name: string; keyPrefix: string; allowedRoles: string[]; requests?: number; tokensIn?: number; tokensOut?: number; createdAt?: string; lastSeenAt?: string | null };
 const FileKey2 = getIcon("FileKey2"); const ShieldCheck = getIcon("ShieldCheck");
@@ -44,6 +45,7 @@ export function AccessPage({ Frame }: { Frame: SectionFrameComponent }) {
     getKey={(row) => row.id}
     onRowClick={(row) => setSelected(row.id)}
     onLink={(target) => { if (target.startsWith("#client-")) setSelected(target.slice("#client-".length)); }}
+    rowActions={(row) => actionsFor("client", row, (action) => { if (action === "revoke") void api.delete(`/stack/v1/clients/${row.id}`).then(() => clients.refetch()); }, "row")}
     empty="No client keys yet."
   /> </div>} panel={client && panel ? <PropertyPanel kind="Client" item={{ name: client.name }} status="Active" actions={panel.actions} facts={panel.facts} primaryActions={panel.primaryActions} tabs={{ overview: panel.overview }} open onClose={() => setSelected(null)} /> : null} /></div></Frame>;
 }

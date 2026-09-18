@@ -20,3 +20,10 @@ test("ThingsTable renders state tooltips, sorts, groups, selection, actions, and
   rerender(<ThingsTable columns={columns} rows={[]} getKey={(row) => row.id} empty="Nothing here yet." />);
   expect(document.body.textContent).toContain("Nothing here yet.");
 });
+
+test("ThingsTable reserves the menu column and renders More actions on every row", () => {
+  render(<ThingsTable columns={[{ key: "name", header: "Name", width: "32%", render: (row: Row) => row.name }, { key: "roles", header: "Roles", width: "17%", render: () => "Chat" }, { key: "storage", header: "Storage", width: "21%", align: "right" as const, render: () => "21600 MB measured" }, { key: "group", header: "Group", width: "13%", render: () => "Family chat" }, { key: "state", header: "State", width: "13%", align: "right" as const, render: (row: Row) => row.status }]} rows={rows} getKey={(row) => row.id} getStatus={(row) => row.status} rowActions={() => [{ label: "Open", onClick: () => {} }]} empty="Nothing here yet." />);
+  const widths = [...document.querySelectorAll("thead th")].map((cell) => Number.parseFloat((cell as HTMLElement).style.width)).filter((width) => Number.isFinite(width));
+  expect(widths.reduce((sum, width) => sum + width, 0)).toBeLessThanOrEqual(96);
+  expect(document.querySelectorAll('button[aria-label="More actions"]')).toHaveLength(rows.length);
+});
