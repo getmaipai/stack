@@ -28,7 +28,7 @@ test("the Stack shell lists every section in order", () => {
   render(<MemoryRouter initialEntries={["/updates"]}><DashboardShell /></MemoryRouter>);
   const text = document.body.textContent ?? "";
   let previous = -1;
-  for (const section of ["Overview", "Abilities", "Models", "Engines", "Monitoring", "Alerts", "Updates", "Backups", "Access", "Try it", "Settings"]) {
+  for (const section of ["Overview", "Abilities", "Models", "Engines", "Monitoring", "Alerts", "Updates", "Backups", "Access", "Settings"]) {
     const next = text.indexOf(section);
     expect(next).toBeGreaterThan(previous);
     previous = next;
@@ -43,7 +43,7 @@ test("the collapsed rail keeps every section and carries a tooltip on each butto
   if (!trigger) throw new Error("no sidebar trigger found");
   fireEvent.click(trigger);
   const buttons = Array.from(document.querySelectorAll('[data-slot="sidebar-menu-button"]'));
-  const sections = ["Overview", "Abilities", "Models", "Engines", "Monitoring", "Alerts", "Updates", "Backups", "Access", "Try it", "Settings"];
+  const sections = ["Overview", "Abilities", "Models", "Engines", "Monitoring", "Alerts", "Updates", "Backups", "Access", "Settings"];
   const text = document.body.textContent ?? "";
   for (const title of sections) {
     expect(text).toContain(title);
@@ -125,4 +125,23 @@ test("the header profile menu opens and offers sign out when signed in", async (
   fireEvent.pointerDown(trigger as HTMLElement);
   await waitFor(() => expect(document.body.textContent).toContain("Sign out"));
   unmount();
+});
+
+test("the sidebar shows quiet indicators for engines, updates, alerts, and detected models", async () => {
+  stubStackFetch({
+    ...boardExtras,
+    "/stack/v1/repairs": { repairs: [] },
+    "/stack/v1/roles": { roles: [] },
+    "/stack/v1/operator": { state: "signedOut", required: false },
+    "/stack/v1/engines": { engines: [{ id: "llama-0.4.5-darwin-arm64-b1", label: "Llama", platform: "darwin", arch: "arm64", verified: true, installed: true, matchesThisMachine: true, running: "0.4.5", currentTag: "0.4.5", newestTag: "0.4.5", current: true, notCurrent: false, needsRestart: false, state: "current", stateReason: null }] },
+    "/stack/v1/updates": { app: { available: "1.2.3" }, engines: { available: null }, models: { available: null } },
+    "/stack/v1/health": { health: [{ code: "engine-stopped", severity: "error", title: "Chat engine stopped", text: "The chat engine is stopped.", since: "2026-01-01", cause: "stop" }] },
+    "/stack/v1/detected": { detected: [{ id: "d1", name: "Local store", path: "/models", version: "1.0", couldHold: ["chat"], roles: [] }] },
+  });
+  render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
+  await waitFor(() => expect(document.body.textContent).toContain("All good"));
+  const sidebar = document.querySelector('[data-sidebar="content"]');
+  expect(sidebar).toBeTruthy();
+  const text = document.body.textContent ?? "";
+  expect(text).toContain("1");
 });

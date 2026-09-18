@@ -3,8 +3,8 @@ import { NavLink } from "react-router-dom";
 import type { Icon } from "@/kit/icons";
 import { SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/kit/ui/sidebar";
 
-export function NavMain({ items }: { items: { title: string; url: string; icon?: Icon; isActive?: boolean }[] }) {
+export function NavMain({ items }: { items: { title: string; url: string; icon?: Icon; isActive?: boolean; badge?: number }[] }) {
   return <SidebarGroup><SidebarGroupLabel>Stack</SidebarGroupLabel><SidebarMenu>{items.map((item) => <SidebarMenuItem key={item.title}>
-    <SidebarMenuButton asChild isActive={item.isActive} tooltip={item.title}><NavLink to={item.url}>{item.icon && <item.icon />}<span>{item.title}</span></NavLink></SidebarMenuButton>
+    <SidebarMenuButton asChild isActive={item.isActive} tooltip={item.title}><NavLink to={item.url}>{item.icon && <item.icon />}<span>{item.title}</span>{item.badge != null && item.badge > 0 && <span className="ml-auto text-xs text-muted-foreground">{item.badge}</span>}</NavLink></SidebarMenuButton>
   </SidebarMenuItem>)}</SidebarMenu></SidebarGroup>;
 }
