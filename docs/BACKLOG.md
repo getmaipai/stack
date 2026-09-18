@@ -1288,6 +1288,20 @@ test is necessary but does not replace the named clean-account walk.
   the two-GPU shape renders two named cards; "not measured" for a null;
   a capture at desktop and phone widths opened and judged. Out of
   scope: controls (STACK-91). Exit: `bash scripts/check.sh`.
+- [ ] **STACK-95 (S): storage is every drive, filtered by a setting.**
+  ux.md "Live" 4. Backend: `live.ts` (STACK-93) lists every user-visible
+  mounted volume (`df -kP` behind the readers double; drop devfs, autofs,
+  `/System/Volumes/*`, `/dev`, `/proc`, `/sys`, `/run`, snapshots) as
+  `{ name, mount, totalBytes, usedBytes, mounted }`; a declared setting
+  `storageDrives` in `settings/stackKeys.ts` Storage section, `"all"` or
+  a list of mount paths, filters what `/stack/v1/live` and the hardware
+  route report; an unmounted chosen drive is returned with `mounted:
+  false`. Frontend: the sidebar disk figure and the Live disk line render
+  the list; Settings > Storage shows "Drives shown" as All or a checklist
+  built from the sampler's drives. Acceptance: a scripted `df` with
+  three volumes and one system volume yields three drives; choosing two
+  hides the third everywhere; an unmounted chosen drive shows "not
+  mounted". Exit: `bash scripts/check.sh`.
 - [ ] **STACK-91 (M): monitor owned engines and detected hosts honestly.**
   Show identity, provenance, state and observed-at time for llama-server,
   mlx-serve, ComfyUI and detected local hosts where actually present.

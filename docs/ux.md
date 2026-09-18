@@ -345,7 +345,16 @@ things. Everything else waits behind these three.
    stop then start. Only a Stack-owned process gets these controls
    (STACK-91); a detected external host shows its state and a link to
    what owns it. The header pill remains the whole-Stack pause.
-4. **Browse, install, remove come after.** The Add sheet (catalog and
+4. **Storage is every drive, by name.** The disk line is a list of
+   drives: each mounted volume a person would recognise (the startup
+   disk, an external, a network share; never the system's hidden
+   volumes), with its name, used of total and a bar. The sidebar's disk
+   figure and the Live section both read this list. Settings > Storage
+   carries one setting, "Drives shown": All drives (default) or a
+   chosen set, ticked from the drives the sampler found; a drive that
+   goes away stays ticked and is listed as "not mounted" until unticked.
+   Model and engine stores show which drive they live on.
+5. **Browse, install, remove come after.** The Add sheet (catalog and
    Hugging Face search) and the row menu's Remove are the surfaces;
    STACK-80 makes their metadata truthful. They are third in order
    because a person cannot judge an install without seeing what it did
