@@ -3,6 +3,7 @@ import { createReadStream, createWriteStream, existsSync, statSync, unlinkSync }
 import { mkdirSync, renameSync } from "node:fs";
 import { dirname } from "node:path";
 import { withTimeout } from "@/lib/withTimeout";
+import { stackSettingValues } from "@/settings/stackKeys";
 
 export interface DownloadProgress {
   completedBytes: number;
@@ -15,6 +16,16 @@ export interface DownloadOptions {
   expectedBytes?: number;
   onProgress?: (progress: DownloadProgress) => void;
   signal?: AbortSignal;
+  downloadCapMbps?: number;
+  now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
+}
+
+async function throttle(bytes: number, capMbps: number | undefined, startedAt: number, now: () => number, sleep: (ms: number) => Promise<void>): Promise<void> {
+  if (!capMbps || capMbps <= 0) return;
+  const expectedMs = bytes / (capMbps * 125); // Mbps to bytes per millisecond.
+  const wait = expectedMs - (now() - startedAt);
+  if (wait > 0) await sleep(wait);
 }
 
 const STREAM_IDLE_TIMEOUT_MS = 90_000;
@@ -59,11 +70,13 @@ async function downloadOnce(url: string, destPath: string, opts: DownloadOptions
   const out = createWriteStream(partPath, { flags: startAt > 0 ? "a" : "w" });
   const reader = res.body.getReader();
   let completedBytes = startAt;
+  const startedAt = (opts.now ?? Date.now)();
   try {
     while (true) {
       const step = await withTimeout(reader.read(), STREAM_IDLE_TIMEOUT_MS, () => new Error(`stalled: no data for ${STREAM_IDLE_TIMEOUT_MS / 1000}s`));
       if (step.done) break;
       completedBytes += step.value.byteLength;
+      await throttle(completedBytes - startAt, opts.downloadCapMbps, startedAt, opts.now ?? Date.now, opts.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))));
       await new Promise<void>((resolve, reject) => out.write(step.value, (err) => (err ? reject(err) : resolve())));
       opts.onProgress?.({ completedBytes, totalBytes, status: "downloading" });
     }
@@ -81,10 +94,12 @@ async function downloadOnce(url: string, destPath: string, opts: DownloadOptions
 
 export async function downloadUrl(url: string, destPath: string, opts: DownloadOptions): Promise<void> {
   if (existsSync(destPath)) return;
+  const configuredCap = Number(stackSettingValues().downloadCapMbps ?? 0);
+  const effectiveOptions = opts.downloadCapMbps === undefined ? { ...opts, downloadCapMbps: configuredCap } : opts;
   let verificationRetried = false;
   for (let attempt = 1; ; attempt += 1) {
     try {
-      await downloadOnce(url, destPath, opts);
+      await downloadOnce(url, destPath, effectiveOptions);
       return;
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") throw err;

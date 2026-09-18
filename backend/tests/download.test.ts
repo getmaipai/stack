@@ -73,6 +73,13 @@ describe("downloadUrl", () => {
     await downloadUrl(`${server.url}/flaky-once`, path, { expectedSha256: SHA256, expectedBytes: CONTENT.length });
     expect(readFileSync(path)).toEqual(CONTENT);
   }, 15_000);
+
+  test("applies the configured cap at the streaming seam", async () => {
+    const path = dest(); let now = 0;
+    await downloadUrl(`${server.url}`, path, { expectedSha256: SHA256, expectedBytes: CONTENT.length, downloadCapMbps: 1, now: () => now, sleep: async (ms) => { now += ms; } });
+    // 50,000 bytes at 1 Mbps needs 400 ms, with no more than 10% drift.
+    expect(now).toBeGreaterThanOrEqual(360); expect(now).toBeLessThanOrEqual(440);
+  });
 });
 
 test("sha256OfFile matches node crypto", async () => {

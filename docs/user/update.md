@@ -11,6 +11,10 @@ description: Check for a new version, install it, or go back one version.
 
 Stack keeps your settings, keys, models, and data. Turn off the update switch when you want Stack to stay on its current version.
 
+Updates that do more work wait for your maintenance window. By default it is
+2:00 AM to 5:00 AM. Change it in **Settings**, then **Maintenance**, or run
+maintenance now when the computer is quiet and plugged in.
+
 ![Update settings](../assets/screens/settings-updates.png)
 
 Still need help? Open [Fix a problem](./fix-a-problem/).

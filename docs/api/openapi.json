@@ -7871,6 +7871,48 @@
         }
       }
     },
+    "/stack/v1/settings/maintenance/run": {
+      "post": {
+        "tags": [
+          "Settings"
+        ],
+        "summary": "Run maintenance now",
+        "responses": {
+          "200": {
+            "description": "Maintenance result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string"
+                    },
+                    "nextRunAt": {
+                      "type": "string"
+                    },
+                    "ran": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "state",
+                    "nextRunAt",
+                    "ran"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/speed-test": {
       "post": {
         "tags": [

@@ -2,12 +2,12 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter, ErrorSchema, idParamSchema } from "@/lib/openapi";
 import { requireClientOrOperator } from "@/lib/clients";
 import { emit } from "@/lib/events";
-import { LIBRARY_FETCH_JOB_KIND } from "@/lib/library";
+import { MAINTENANCE_JOB_KINDS } from "@/lib/maintenance";
 
 const JobSchema = z.object({ id: z.string(), kind: z.string(), state: z.enum(["queued", "running", "paused", "done", "failed", "cancelled"]), completedBytes: z.number().int(), totalBytes: z.number().int(), partCount: z.number().int(), updatedAt: z.string() });
 type Job = z.infer<typeof JobSchema>;
 const jobs = new Map<string, Job>();
-export const registeredMaintenanceJobKinds = [LIBRARY_FETCH_JOB_KIND] as const;
+export const registeredMaintenanceJobKinds = MAINTENANCE_JOB_KINDS;
 const createRoute_ = createRoute({ method: "post", path: "/", tags: ["Jobs"], summary: "Create a Stack job", middleware: [requireClientOrOperator] as const, request: { body: { content: { "application/json": { schema: z.object({ kind: z.string(), totalBytes: z.number().int().nonnegative().default(0), partCount: z.number().int().positive().default(8) }) } } } }, responses: { 201: { content: { "application/json": { schema: z.object({ job: JobSchema }) } }, description: "Job created." } } });
 const listRoute = createRoute({ method: "get", path: "/", tags: ["Jobs"], summary: "List Stack jobs", middleware: [requireClientOrOperator] as const, responses: { 200: { content: { "application/json": { schema: z.object({ jobs: z.array(JobSchema) }) } }, description: "Known jobs." } } });
 const getRoute = createRoute({ method: "get", path: "/{id}", tags: ["Jobs"], summary: "Get a Stack job", middleware: [requireClientOrOperator] as const, request: { params: idParamSchema("id") }, responses: { 200: { content: { "application/json": { schema: z.object({ job: JobSchema }) } }, description: "Job state." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown job." } } });

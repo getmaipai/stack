@@ -304,7 +304,7 @@ layer above; none adds a person or leaves the machine.
   Mirror: the current update watch and profile proposal.
   Out of scope: new person records or Home-side features.
   Exit: `bash scripts/check.sh`.
-- [ ] **STACK-22 (M): the maintenance window.** Quiet hours the person
+- [x] **STACK-22 (M): the maintenance window.** Quiet hours the person
   sets once (default 2 to 5 in the morning): downloads, update checks,
   smoke tests, storage sweeps and benchmarks run then; heavy work
   pauses when the person is active (input in the last five minutes),
