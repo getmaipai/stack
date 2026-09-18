@@ -100,6 +100,23 @@ test("a stopped engine turns the sidebar health dot red", async () => {
   expect(dot?.className).toContain("bg-red-500");
 });
 
+test("the header bell opens the notification popover and shows the unread count", async () => {
+  const now = new Date().toISOString();
+  stubStackFetch({
+    ...boardExtras,
+    "/stack/v1/repairs": { repairs: [] },
+    "/stack/v1/roles": { roles: [] },
+    "/stack/v1/operator": { state: "signedOut", required: false },
+    "/stack/v1/notifications": { notifications: [{ id: "n1", title: "The chat engine is stopped.", level: "time_sensitive", at: now, data: "{}", readAt: null, dismissedAt: null }] },
+  });
+  render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
+  const trigger = document.querySelector("[data-notifications-trigger]");
+  expect(trigger).toBeTruthy();
+  expect(document.body.textContent).toContain("1");
+  fireEvent.pointerDown(trigger as HTMLElement);
+  await waitFor(() => expect(document.body.textContent).toContain("The chat engine is stopped."));
+});
+
 test("the header profile menu opens and offers sign out when signed in", async () => {
   stubStackFetch({ ...boardExtras, "/stack/v1/repairs": { repairs: [] }, "/stack/v1/roles": { roles: [] }, "/stack/v1/operator": { state: "signedIn", required: true } });
   const { unmount } = render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);

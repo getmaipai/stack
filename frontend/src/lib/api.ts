@@ -54,6 +54,8 @@ export interface NotificationRecord {
   level: string;
   at: string;
   data: string;
+  readAt: string | null;
+  dismissedAt: string | null;
 }
 
 export interface RepairRecord {
