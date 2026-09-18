@@ -192,11 +192,13 @@ fn main() {
             let open = MenuItemBuilder::with_id("open", "Open the Stack").build(app)?;
             let pause = MenuItemBuilder::with_id("pause", "Pause everything").build(app)?;
             let resume = MenuItemBuilder::with_id("resume", "Resume").build(app)?;
+            let check = MenuItemBuilder::with_id("check", "Check my Stack").build(app)?;
+            let logs = MenuItemBuilder::with_id("logs", "Open Logs").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "Quit the app (the Stack keeps running)").build(app)?;
             let uninstall = MenuItemBuilder::with_id("uninstall", "Uninstall the Stack…").build(app)?;
             let menu = MenuBuilder::new(app)
                 .item(&role_chat).item(&role_stt).item(&role_tts).item(&role_image).item(&role_video).item(&role_music)
-                .separator().item(&open).item(&pause).item(&resume).separator().item(&uninstall).item(&quit).build()?;
+                .separator().item(&open).item(&pause).item(&resume).item(&check).item(&logs).separator().item(&uninstall).item(&quit).build()?;
             let tray_icon = Image::from_bytes(icon_bytes("ok"))?;
             tauri::tray::TrayIconBuilder::with_id("main")
                 .icon(tray_icon)
@@ -206,6 +208,8 @@ fn main() {
                     "open" => open_console(app),
                     "pause" => post_run_state("paused"),
                     "resume" => post_run_state("running"),
+                    "check" => { let _ = ureq::post(&format!("{DAEMON_URL}/stack/v1/check")).call(); },
+                    "logs" => open_console(app),
                     "uninstall" => {
                         let app = app.clone();
                         tauri::async_runtime::spawn(async move {

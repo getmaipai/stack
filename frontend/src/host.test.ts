@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { roleLines, trayMenuModel, worstHealth } from "@/desktopModel";
+import { roleLines, trayMenu, trayMenuModel, worstHealth } from "@/desktopModel";
 import { notify, pickFile, pickFolder } from "@/kit/host";
 
 test("desktop tray model maps health and role lines without Tauri", () => {
@@ -7,6 +7,8 @@ test("desktop tray model maps health and role lines without Tauri", () => {
   expect(worstHealth(["ok", "critical"])).toBe("critical");
   expect(roleLines([{ label: "Chat", state: "Ready", reason: null }])).toEqual(["Chat: Ready"]);
   expect(trayMenuModel("paused", [{ label: "Chat", state: "Paused" }])).toContain("Resume");
+  expect(trayMenu({ daemon: "running", instance: "marlow", state: "running", roles: [{ label: "Chat", state: "ready" }], memory: "12.3 of 24 GB", lastCheck: "Checked 2h ago, all good" })).toEqual(expect.arrayContaining(["● Chat ready", "Memory 12.3 of 24 GB", "Checked 2h ago, all good", "Check my Stack", "Open Logs"]));
+  expect(trayMenu({ daemon: "down", instance: "marlow", state: "running", roles: [], memory: "", lastCheck: "" })).toEqual(["The Stack is not running · Start"]);
 });
 
 test("host adapter keeps browser pickers typed and notifications local", async () => {

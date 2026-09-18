@@ -874,7 +874,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   Files: `desktop/src-tauri/src/main.rs, desktop/src-tauri/tauri.conf.json, backend/src/service/launchd.ts`.
   Mirror: the existing compiled daemon and launchd installer.
   Out of scope: new person records or Home-side features.
-- [ ] **STACK-67 (M): tray status in depth.** dev.md item 3. Acceptance:
+- [x] **STACK-67 (M): tray status in depth.** dev.md item 3. Acceptance:
   the menu model (plain TS, tested) renders every role's line, memory,
   the last check sentence and the five actions; the icon severity
   follows a scripted health change within five seconds (test on the
