@@ -304,6 +304,19 @@ each item's design section lands in `dev.md` before its code.
   Acceptance: each page opens the panel on a row and moves with arrow
   keys (test); every action calls its route (test per kind);
   screenshots of the panel on Engines and Models, opened and judged.
+- [ ] **STACK-36 (M): Overview as the console dashboard.** The seven
+  widgets in `ux.md` "Overview: the console dashboard" on the block's
+  section cards and charts, with the time range; the recorded series
+  behind them (`usage_samples` per five minutes by ability, client and
+  model for a week; memory samples per five seconds for an hour and per
+  five minutes for a week; speed results from STACK-26) written by the
+  router, governor and supervisor and served by `GET /stack/v1/series`
+  with a range parameter. Acceptance: scripted series render every
+  widget with real numbers (screenshots at desktop light, dark and
+  phone, judged); the time range changes every chart (test); the ring
+  segments filter the list (test); the squint test written up in the
+  report against a UniFi screenshot the lane fetches for comparison
+  only, never copied.
 - [ ] **STACK-34 (M): detect and adopt.** Discovery of engines and
   model folders the Stack did not install: well-known loopback ports
   (Ollama 11434, LM Studio 1234, ComfyUI 8188, oMLX, mlx-serve 11234,

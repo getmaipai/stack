@@ -165,6 +165,48 @@ section shows one calm sentence and the one action that fills it
 ("No models yet. Add an ability and the models it needs arrive
 here."). A spinner never stands in for content longer than a beat.
 
+## Overview: the console dashboard (decided 2026-09-17, late)
+
+The owner's direction: take the ideas of the UniFi Network dashboard
+(a status strip, a speed test on the main page with scheduled results
+and expected thresholds, things by type with health rings, traffic
+over time by category, clients by type, alerts) and make the Stack's
+Overview familiar to anyone who has run a console like it. The org's
+trade-dress rule holds: the widget types and the layout are
+conventions shared by Synology, Home Assistant and Ubiquiti, so they
+are free; the exact look (blue on dark, the specific arrangement) is a
+signature, so Overview is drawn in our palette and type, and the
+squint test must say "a well-made console", never "UniFi".
+
+The widgets, top to bottom, with a time range (hour, day, week) at
+the top right that every chart honors:
+
+1. **Stack status strip**: online, version, uptime, last Check my
+   Stack result and when, the kernel's memory pressure word; one line.
+2. **Speed test**: the last result for the resident chat model
+   (tokens per second for prompt and generation, first-token time,
+   load time) against the tier's expected range, a history sparkline
+   across engine updates, "Scheduled in the maintenance window" or
+   "Run now". From STACK-26.
+3. **Engines and models**: two ring cards (ready, loading, offline,
+   detected-not-adopted) with counts by kind and by ability; click a
+   ring segment to the filtered list and its panel.
+4. **Usage over time**: requests and tokens as an area chart by
+   ability (chat, voice, pictures, video, music) and, toggled, by
+   client; the top three models and top three clients for the range.
+5. **Memory and storage**: memory over time with the pressure band
+   and each loaded model's share; the storage stacked bar by category.
+6. **Alerts and notifications**: the health items with a fix, the
+   last five notifications.
+7. **This computer** and **Add abilities** move below the widgets
+   once a plan exists; on a fresh install they sit at the top, as
+   designed in "Install and first open".
+
+Every number is a recorded one: usage samples are kept per five
+minutes for a week by ability, client and model (the `usage_samples`
+ring), speed results per model and engine tag, memory samples per
+five seconds for an hour and per five minutes for a week.
+
 ## The board
 
 The home page, and what the menu-bar item opens. A grid of role tiles,
