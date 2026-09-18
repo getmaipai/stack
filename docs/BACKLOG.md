@@ -132,10 +132,12 @@ never copied. No item migrates the hub until STACK-16.
 - [x] **STACK-11c (M): the dashboard shell.** The branded Stack sidebar,
   search and command palette, all twelve sections, real monitoring and
   alert actions, and honest empty states for the work still to come.
-- [ ] **STACK-12 (M): Try it.** The stateless tabs per role with the
+- [x] **STACK-12 (M): Try it.** The stateless tabs per role with the
   adult acknowledgment once and the AI-outputs disclaimer at first run.
   Acceptance: each tab exercised in Playwright against scripted engines;
   the acknowledgment shows exactly once per operator (test).
+  Landed: the tick with its verified commit is the STACK-12 line in
+  milestone 0; this entry is the design.
 - [ ] **STACK-13 (M): jobs and the managed ComfyUI.** The job API,
   progress on the feed, cancel, results by id, the synchronous wrapper;
   ComfyUI as a managed host for image edits. Acceptance: a scripted job
@@ -169,7 +171,7 @@ never copied. No item migrates the hub until STACK-16.
 Decided in [`plans/operations-design-2026-09-17.md`](plans/operations-design-2026-09-17.md);
 each item's design section lands in `dev.md` before its code.
 
-- [ ] **STACK-07b (M): streaming.** `stream: true` on `/v1/chat/completions`
+- [x] **STACK-07b (M): streaming.** `stream: true` on `/v1/chat/completions`
   proxies the engine's SSE token stream with the identity headers on
   the response, cancellation on client disconnect, and the
   phrase-level TTS stream for `/v1/audio/speech`. Files: `backend/src/lib/supervisor.ts`,
@@ -177,7 +179,9 @@ each item's design section lands in `dev.md` before its code.
   receives streamed deltas from a scripted engine; disconnect aborts
   the engine request without retiring the backend (test). Exit:
   `bash scripts/check.sh`.
-- [ ] **STACK-06b (M): the governor reads the kernel's ledger.** A
+  Landed: the tick with its verified commit is the STACK-07b line in
+  milestone 0; this entry is the design.
+- [x] **STACK-06b (M): the governor reads the kernel's ledger.** A
   `bun:ffi` memory reader (`kern.memorystatus_level`,
   `kern.memorystatus_vm_pressure_level`, `host_statistics64`,
   `proc_pid_rusage` phys_footprint) with Linux and Windows twins
@@ -188,7 +192,9 @@ each item's design section lands in `dev.md` before its code.
   `memory_pressure` within one point (pasted); watermark tests with
   scripted readings; a model's badge shows a dry-run number. Exit:
   `bash scripts/check.sh`.
-- [ ] **STACK-04b (L): the store layout, import, remove.** Models in
+  Landed: the tick with its verified commit is the STACK-06b line in
+  milestone 0; this entry is the design.
+- [x] **STACK-04b (L): the store layout, import, remove.** Models in
   the Hugging Face cache layout under `data/models/hub`; engines as
   `data/engines/<name>/<tag>/` with a manifest and a `current` link;
   the import scan of other tools' directories with links, never
@@ -198,6 +204,8 @@ each item's design section lands in `dev.md` before its code.
   `HF_HUB_CACHE` is imported by link and served; a blob shared by two
   manifests survives one remove; the tests from STACK-03 and -04
   still pass. Exit: `bash scripts/check.sh`.
+  Landed: the tick with its verified commit is the STACK-04b line in
+  milestone 0; this entry is the design.
 - [ ] **STACK-04d (S): the store writes through `@huggingface/hub`.**
   Replace `store/hfCache.ts`'s hand-written layout writer with the
   official client's `downloadFileToCacheDir` behind `lib/hf.ts` (the
@@ -205,7 +213,7 @@ each item's design section lands in `dev.md` before its code.
   keeping the read side and the tests; verify in the installed source
   that it produces `models--<org>--<repo>/{blobs,refs,snapshots}` and
   cite the line. Acceptance: the store tests still pass; a NOTICE line.
-- [ ] **STACK-09b (M): one health list.** Health items (code, severity,
+- [x] **STACK-09b (M): one health list.** Health items (code, severity,
   title, text, since, cause, one fix, learn-more), keyed and
   idempotent, `GET /stack/v1/health`, `health.changed` on the feed;
   Repairs become health items with a fix; the board renders the HA
@@ -213,6 +221,8 @@ each item's design section lands in `dev.md` before its code.
   removes it; the enumeration of every producer (supervisor,
   governor, model store, updates) with its test. Exit:
   `bash scripts/check.sh`.
+  Landed: the tick with its verified commit is the STACK-09b line in
+  milestone 0; this entry is the design.
 - [ ] **STACK-09c (M): alert channels.** `{type, name, config,
   verifiedAt}` in a registry, Telegram and ntfy providers, "Send a
   test" returning the provider's error, an unverified channel is a
@@ -229,7 +239,7 @@ each item's design section lands in `dev.md` before its code.
   Acceptance: an update and a rollback of a scripted engine with no
   request cut (test); the check's request has exactly the two headers
   (test); the privacy page lists the URLs. Exit: `bash scripts/check.sh`.
-- [ ] **STACK-11b (M): the first open is the board.** No wizard: the
+- [x] **STACK-11b (M): the first open is the board.** No wizard: the
   board is the first screen with This computer in plain words, the
   Add abilities cards with sizes and "can run", the "Start small"
   suggestion, downloads as a background job with the honest bar and
@@ -240,7 +250,9 @@ each item's design section lands in `dev.md` before its code.
   a scripted "Start small" shows size, speed and time left and
   survives a pause; creating a key prompts for the password once;
   screenshots re-taken and judged.
-- [ ] **STACK-11c (M): the dashboard shell.** The sidebar with the
+  Landed: the tick with its verified commit is the STACK-11b line in
+  milestone 0; this entry is the design.
+- [x] **STACK-11c (M): the dashboard shell.** The sidebar with the
   twelve sections in `ux.md` "The shell", the top bar with the
   machine in plain words, the search-and-command palette (slash or
   Command-K over pages, models, engines, settings and actions), the
@@ -253,7 +265,9 @@ each item's design section lands in `dev.md` before its code.
   opens with both keys and jumps to a page and runs an action;
   screenshots at desktop light, desktop dark and phone, opened and
   judged.
-- [ ] **STACK-15b (M): the one-line installer.** `install.sh` hosted
+  Landed: the tick with its verified commit is the STACK-11c line in
+  milestone 0; this entry is the design.
+- [x] **STACK-15b (M): the one-line installer.** `install.sh` hosted
   on our GitHub Pages: downloads the compiled Stack binary
   (`bun build --compile`) for the platform from our own GitHub
   release with its sha256 checked, installs under the home folder,
@@ -263,13 +277,17 @@ each item's design section lands in `dev.md` before its code.
   command ends with the board open in under a minute, with the log
   pasted; the script is shellcheck-clean; nothing but our own release
   is downloaded (the script's URLs enumerated in the privacy page).
-- [ ] **STACK-12 (M): Try it** is built on shadcn/ui's chat components
+  Landed: the tick with its verified commit is the STACK-15b line in
+  milestone 0; this entry is the design.
+- [x] **STACK-12 (M): Try it** is built on shadcn/ui's chat components
   (`message-scroller`, `message`, `bubble`, `attachment`, `marker`)
   added to the kit by the registry, a small SSE hook against the
   Stack's own `/v1/chat/completions`, `MediaRecorder` to
   `/v1/audio/transcriptions` for Listen, and `/v1/audio/speech`
   through an `<audio>` element for Speak; stateless; the decision and
   the candidates graded are in `dev.md` "Try it's chat surface".
+  Landed: the tick with its verified commit is the STACK-12 line in
+  milestone 0; this entry is the design.
 
 ## Cross-repo
 
@@ -293,7 +311,7 @@ each item's design section lands in `dev.md` before its code.
   counts a model once (test); a nickname changes no API behavior
   (test: a request by nickname is 400, by id works); the tree renders
   scripted groups with their rollups (screenshot judged).
-- [ ] **STACK-19 (M): engine management.** Controls (start, stop,
+- [x] **STACK-19 (M): engine management.** Controls (start, stop,
   restart, probe, install a build, make current with drain and swap,
   remove), per-engine configuration declared once and rendered
   generically (context, slots, threads, prompt cache, flash
@@ -305,7 +323,9 @@ each item's design section lands in `dev.md` before its code.
   change marks needs-restart and the restart applies it; "not
   current" appears when a newer pinned build exists (test); the page
   screenshot opened and judged.
-- [ ] **STACK-35 (M): the property panel.** One `PropertyPanel`
+  Landed: the tick with its verified commit is the STACK-19 line in
+  milestone 0; this entry is the design.
+- [x] **STACK-35 (M): the property panel.** One `PropertyPanel`
   component (header with name, status badge and quick-action buttons;
   Overview, Settings, Insights tabs) used by Engines, Models and
   groups, Access clients, Alert channels and detected items, with the
@@ -314,7 +334,9 @@ each item's design section lands in `dev.md` before its code.
   Acceptance: each page opens the panel on a row and moves with arrow
   keys (test); every action calls its route (test per kind);
   screenshots of the panel on Engines and Models, opened and judged.
-- [ ] **STACK-36 (M): Overview as the console dashboard.** The seven
+  Landed: the tick with its verified commit is the STACK-35 line in
+  milestone 0; this entry is the design.
+- [x] **STACK-36 (M): Overview as the console dashboard.** The seven
   widgets in `ux.md` "Overview: the console dashboard" on the block's
   section cards and charts, with the time range; the recorded series
   behind them (`usage_samples` per five minutes by ability, client and
@@ -327,6 +349,8 @@ each item's design section lands in `dev.md` before its code.
   segments filter the list (test); the squint test written up in the
   report against a UniFi screenshot the lane fetches for comparison
   only, never copied.
+  Landed: the tick with its verified commit is the STACK-36 line in
+  milestone 0; this entry is the design.
 - [ ] **STACK-34 (M): detect and adopt.** Discovery of engines and
   model folders the Stack did not install: well-known loopback ports
   (Ollama 11434, LM Studio 1234, ComfyUI 8188, oMLX, mlx-serve 11234,
