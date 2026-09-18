@@ -76,7 +76,7 @@ export const ROLES = {
     residency: "jit",
     endpoints: ["/v1/chat/completions"],
     quality: ["fast", "everyday", "best"],
-    description: "Understand a picture on your computer.",
+    description: "Understand an image on your computer.",
     sharesModelWith: "chat",
   },
   stt: {
@@ -105,7 +105,7 @@ export const ROLES = {
     residency: "jit",
     endpoints: ["/v1/images/generations"],
     quality: ["fast", "everyday", "best"],
-    description: "Make a picture on your computer.",
+    description: "Make an image on your computer.",
   },
   video: {
     wire: "job",

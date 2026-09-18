@@ -47,7 +47,7 @@ function sumUnique(files: Array<{ size: number; key: string }>): number {
 function abilityFor(role: string): string {
   if (["chat", "coding", "judge", "router"].includes(role)) return "chat";
   if (["stt", "tts", "wakeword"].includes(role)) return "voice";
-  if (role === "image" || role === "vision") return "pictures";
+  if (role === "image" || role === "vision") return "images";
   if (role === "video") return "video";
   if (role === "music") return "music";
   return "other";
@@ -66,7 +66,7 @@ export function storageAccounting(root = dataDir): StorageReport {
   const ignored = new Set([...modelFiles, ...engines, ...logs, ...backups].map((file) => file.key));
   const other = filesUnder(categoryRoots.other, (path) => path === categoryRoots.models || path.startsWith(`${categoryRoots.models}/`) || path === categoryRoots.engines || path.startsWith(`${categoryRoots.engines}/`) || path === categoryRoots.logs || path.startsWith(`${categoryRoots.logs}/`) || path === categoryRoots.backups || path.startsWith(`${categoryRoots.backups}/`)).filter((file) => !ignored.has(file.key));
   const byCategory = { models: sumUnique(modelFiles), engines: sumUnique(engines), logs: sumUnique(logs), backups: sumUnique(backups), other: sumUnique(other) };
-  const byAbility: Record<string, number> = { chat: 0, voice: 0, pictures: 0, video: 0, music: 0, other: 0 };
+  const byAbility: Record<string, number> = { chat: 0, voice: 0, images: 0, video: 0, music: 0, other: 0 };
   let sharedBytes = 0;
   for (const manifest of listModelManifests(manifestRoot)) {
     const abilities = [...new Set(manifest.roles.map(abilityFor))];

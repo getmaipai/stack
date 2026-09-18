@@ -18,7 +18,7 @@ export interface ProfileTier {
 export const PROFILE_TIERS: ProfileTier[] = [
   {
     id: "p16",
-    label: "This computer can run chat and voice, with embeddings when needed. Pictures, video, and music are not available.",
+    label: "This computer can run chat and voice, with embeddings when needed. Images, video, and music are not available.",
     minUnifiedGb: 16,
     minVramGb: 8,
     resident: ["chat", "judge", "router", "stt", "tts"],
@@ -38,7 +38,7 @@ export const PROFILE_TIERS: ProfileTier[] = [
   },
   {
     id: "p64",
-    label: "This computer can run chat, voice, and embeddings, plus one picture job at a time. Video and music are not available.",
+    label: "This computer can run chat, voice, and embeddings, plus one image job at a time. Video and music are not available.",
     minUnifiedGb: 64,
     minVramGb: 24,
     resident: ["chat", "judge", "router", "embed", "rerank", "stt", "tts"],
@@ -48,7 +48,7 @@ export const PROFILE_TIERS: ProfileTier[] = [
   },
   {
     id: "p128",
-    label: "This computer can run chat, voice, embeddings, coding, and one picture, video, or music job at a time.",
+    label: "This computer can run chat, voice, embeddings, coding, and one image, video, or music job at a time.",
     minUnifiedGb: 128,
     minVramGb: 48,
     resident: ["chat", "judge", "router", "embed", "rerank", "stt", "tts"],

@@ -8,7 +8,7 @@ const originalFetch = globalThis.fetch;
 const originalEventSource = globalThis.EventSource;
 const hardware = { platform: "darwin", arch: "arm64", totalRamGb: 24, cpuCount: 10, isAppleSilicon: true, unifiedMemoryGb: 24, cudaDevices: [], freeDiskBytes: 153 * 1_073_741_824, osVersion: "24.6.0" };
 const tier = { id: "p16" as const, label: "This computer can run chat and voice.", minUnifiedGb: 16, minVramGb: 8, resident: ["chat", "stt", "tts"], onDemand: [], installedOnly: [], notAvailable: ["image", "video", "music"] };
-const roles = [{ id: "chat", wire: "chat", residency: "resident", description: "Talk locally.", state: "ready", reason: null }, { id: "stt", wire: "transcription", residency: "resident", description: "Listen locally.", state: "ready", reason: null }, { id: "tts", wire: "speech", residency: "resident", description: "Speak locally.", state: "ready", reason: null }, { id: "image", wire: "job", residency: "jit", description: "Make pictures.", state: "notInstalled", reason: null }];
+const roles = [{ id: "chat", wire: "chat", residency: "resident", description: "Talk locally.", state: "ready", reason: null }, { id: "stt", wire: "transcription", residency: "resident", description: "Listen locally.", state: "ready", reason: null }, { id: "tts", wire: "speech", residency: "resident", description: "Speak locally.", state: "ready", reason: null }, { id: "image", wire: "job", residency: "jit", description: "Make images.", state: "notInstalled", reason: null }];
 
 function responseFor(input: RequestInfo | URL): Response {
   const path = String(input);

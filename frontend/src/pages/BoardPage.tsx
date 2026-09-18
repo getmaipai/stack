@@ -12,11 +12,11 @@ import { Skeleton } from "@/kit/ui/skeleton";
 import { Toaster } from "@/kit/ui/sonner";
 import { ClientKeyDialog } from "@/pages/ClientKeyDialog";
 
-const ROLE_LABELS: Record<string, string> = { chat: "Chat", coding: "Coding", judge: "Judge", router: "Router", embed: "Embeddings", rerank: "Reranking", vision: "Vision", stt: "Voice in", tts: "Voice out", wakeword: "Wake word", image: "Pictures", video: "Video", music: "Music" };
+const ROLE_LABELS: Record<string, string> = { chat: "Chat", coding: "Coding", judge: "Judge", router: "Router", embed: "Embeddings", rerank: "Reranking", vision: "Vision", stt: "Voice in", tts: "Voice out", wakeword: "Wake word", image: "Images", video: "Video", music: "Music" };
 const ABILITIES: Array<{ id: string; label: string; roles: string[]; size: string; models: string }> = [
   { id: "chat", label: "Chat", roles: ["chat"], size: "700 MB", models: "A local chat model" },
   { id: "voice", label: "Voice", roles: ["stt", "tts"], size: "230 MB", models: "A voice-in model and a voice-out model" },
-  { id: "image", label: "Pictures", roles: ["image"], size: "1.8 GB", models: "An on-demand picture model" },
+  { id: "image", label: "Images", roles: ["image"], size: "1.8 GB", models: "An on-demand image model" },
   { id: "video", label: "Video", roles: ["video"], size: "3.4 GB", models: "An on-demand video model" },
   { id: "music", label: "Music", roles: ["music"], size: "2.1 GB", models: "An on-demand music model" },
 ];
@@ -49,7 +49,7 @@ function AddAbilities({ tier, onInstall, saving }: { tier: ProfileTier | null; o
 function StatusStrip({ roles, budget }: { roles: RoleRecord[]; budget?: BudgetResponse }) {
   const byId = new Map(roles.map((role) => [role.id, role]));
   const memoryText = budget ? `${formatBytes(Math.max(0, budget.capBytes - budget.freeMemoryBytes))} in use, ${formatBytes(budget.freeMemoryBytes)} free for jobs` : "Memory status is not available yet";
-  const entries: Array<{ label: string; role?: RoleRecord; text: string }> = [{ label: "Chat", role: byId.get("chat"), text: roleState(byId.get("chat")) }, { label: "Voice", role: byId.get("stt") ?? byId.get("tts"), text: byId.get("stt")?.state === "ready" && byId.get("tts")?.state === "ready" ? "Ready" : roleState(byId.get("stt") ?? byId.get("tts")) }, { label: "Pictures", role: byId.get("image"), text: roleState(byId.get("image")) }, { label: "Video", role: byId.get("video"), text: roleState(byId.get("video")) }, { label: "Music", role: byId.get("music"), text: roleState(byId.get("music")) }, { label: "Memory", text: memoryText }];
+  const entries: Array<{ label: string; role?: RoleRecord; text: string }> = [{ label: "Chat", role: byId.get("chat"), text: roleState(byId.get("chat")) }, { label: "Voice", role: byId.get("stt") ?? byId.get("tts"), text: byId.get("stt")?.state === "ready" && byId.get("tts")?.state === "ready" ? "Ready" : roleState(byId.get("stt") ?? byId.get("tts")) }, { label: "Images", role: byId.get("image"), text: roleState(byId.get("image")) }, { label: "Video", role: byId.get("video"), text: roleState(byId.get("video")) }, { label: "Music", role: byId.get("music"), text: roleState(byId.get("music")) }, { label: "Memory", text: memoryText }];
   return <div className="grid grid-cols-1 divide-y divide-border overflow-hidden rounded-2xl border border-border sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-3">{entries.map((entry) => <div className="flex min-h-28 items-start justify-between gap-3 bg-card p-5" key={entry.label}><div><p className="font-medium">{entry.label}</p><p className="mt-2 text-base text-muted-foreground">{entry.text}</p></div>{entry.role && <Badge variant={stateTone(entry.role.state)}>{entry.role.state === "ready" ? "Ready" : entry.role.state}</Badge>}</div>)}</div>;
 }
 
