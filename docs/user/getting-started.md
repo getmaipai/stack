@@ -33,4 +33,4 @@ The sidebar is in this order: **Home**, **Engines**, **Models**, **Try it**, and
 
 You will know it worked when the board shows your plan and **Try it** returns an answer.
 
-Still need help? Open fix-a-problem and look for your situation.
+Still need help? Open **Help** from the profile menu to read these guides in the app, even when you are offline. You can also open fix-a-problem and look for your situation.

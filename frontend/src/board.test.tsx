@@ -88,4 +88,5 @@ test("the board renders health items with one action each", async () => {
     : Promise.resolve(responseFor(input))) as unknown as typeof fetch;
   render(<MemoryRouter><BoardPage /></MemoryRouter>);
   await waitFor(() => { expect(document.body.textContent).toContain("Engine crashed"); expect(document.body.textContent).toContain("Disk space is low"); expect(document.body.textContent).toContain("Restart engine"); expect(document.body.textContent).toContain("Learn more"); });
+  expect(document.querySelector('a[href="/help/fix-a-problem"]')).toBeTruthy();
 });

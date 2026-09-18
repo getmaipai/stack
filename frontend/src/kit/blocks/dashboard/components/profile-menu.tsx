@@ -10,6 +10,7 @@ import { Button } from "@/kit/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/kit/ui/dropdown-menu";
 
 const ExternalLink = getIcon("ExternalLink");
+const FileText = getIcon("FileText");
 const KeyRound = getIcon("KeyRound");
 const LogOut = getIcon("LogOut");
 const Lock = getIcon("Lock");
@@ -34,6 +35,7 @@ export function ProfileMenu({ onSignedIn, onSignedOut }: { onSignedIn?: () => vo
       <DropdownMenuItem asChild><Link to="/access"><KeyRound />Clients</Link></DropdownMenuItem>
       <DropdownMenuLabel>Help</DropdownMenuLabel>
       <DropdownMenuItem asChild><a href="https://getmaipai.github.io/stack/" target="_blank" rel="noreferrer"><ExternalLink />Docs site</a></DropdownMenuItem>
+      <DropdownMenuItem asChild><Link to="/help"><FileText />Help</Link></DropdownMenuItem>
       <DropdownMenuItem asChild><a href="/api/docs" target="_blank" rel="noreferrer"><ExternalLink />API docs</a></DropdownMenuItem>
       <DropdownMenuItem asChild><Link to="/library"><ExternalLink />Library</Link></DropdownMenuItem>
     </DropdownMenuContent>

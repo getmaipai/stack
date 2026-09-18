@@ -921,7 +921,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   Files: `desktop/src-tauri/src/main.rs, backend/src/events.ts, frontend/src/pages/SettingsPage.tsx`.
   Mirror: the durable event templates and alert channels.
   Out of scope: new person records or Home-side features.
-- [ ] **STACK-69 (S): Help in the app.** dev.md item 5. Acceptance: the
+- [x] **STACK-69 (S): Help in the app.** dev.md item 5. Acceptance: the
   Help page lists every user doc from the shipped index and renders
   one (test); "Learn more" on a health item lands on it offline (test).
   Exit: `scripts/check.sh`.
