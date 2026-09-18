@@ -58,12 +58,12 @@ field, so every claim points at something built or designed here.
 | Alternative | What it gives you | What it does not, and the Stack does |
 |---|---|---|
 | Doing it yourself (Ollama plus LM Studio plus ComfyUI plus a speech server) | Each piece is good at its job | Five ports and configs; no one governs memory across them; no shared health, alerts or updates; every tool you use is bound to a specific engine |
-| Ollama | The best single-model chat server, one-command install | Chat only (no voice, images, video, music); a guessed memory estimate; no health or update page; a vendor updater that sends a device id |
-| LM Studio | A polished desktop app, model discovery, headless mode | Closed source; update checks and model searches leave the machine with no named opt-out; one person's app, not a service others build on; loads refused that would have fit |
-| LocalAI | One OpenAI-compatible engine over many backends, model gallery | No memory governor across backends, no health list, no updates with rollback, OCI packaging on a Mac service; its speech and image backends are not the strongest ones |
-| Harbor | A one-command Docker playground for fifty services | Docker first, a developer's tool; no supervisor, governor, notifications or updates |
-| Jan, Open WebUI, LibreChat, LobeChat | A chat app with users and history | An app, not a foundation: their own people and storage, licence terms in two cases; nothing a household hub can sit on |
-| oMLX, mlx-serve | Excellent single-purpose Apple silicon servers | No provenance, no management, no health, no updates; the Stack runs them as engines |
+| Ollama | A local API, model downloads, a desktop app, vision, embeddings and experimental image generation on macOS | It does not provide the Stack's role-scoped client contract, one measured admission budget across independent engines, or the Home hand-off; verify these distinctions against each release |
+| LM Studio | A polished desktop app, model discovery, headless service, JIT loads and idle eviction | It overlaps much of the standalone experience; the Stack must prove a better shared operating layer across engines and clients, rather than claim that service operation is unique |
+| LocalAI | One OpenAI-compatible API, a model gallery and backends for text, speech, images, video and music | It overlaps the modality list; the Stack's proposed difference is measured machine-wide admission, verifiable provenance and tested recovery across independently managed engines |
+| Harbor | A prewired Docker playground for many AI services | Useful for exploration; Stack must prove a stable role API and measured native Mac operation to earn a different job |
+| Jan, Open WebUI, LibreChat, LobeChat | Chat and agent frontends with their own workflows | Better places for a conversation workspace; Stack offers a local service beneath clients and leaves people and history to Home |
+| oMLX, mlx-serve | Apple silicon servers with strong model management; mlx-serve also covers several media roles | Strong engine candidates; Stack must prove machine-wide admission and recovery across independent hosts rather than claim more modalities |
 
 The Stack's claim is the operating layer: one address by role, one
 measured memory budget, provenance before selection, health with a
@@ -146,11 +146,12 @@ they never weaken one.
 ## How others do it, and what we take
 
 Surveyed 2026-09-17 while deciding whether to adopt one of these instead
-of building. None covers the role table with the operating promises above
-on Apple silicon, and the MaiPai-specific parts (provenance before
-selection, the governor's admission decision, the operator-only safety
-posture, the Home hand-off) are exactly what a generic host would never
-own. Each one still taught something.
+of building. Product capabilities in this table change quickly; the
+2026-09-18 field check and source links are in
+[`plans/stack-product-review-2026-09-18.md`](plans/stack-product-review-2026-09-18.md).
+The proposed Stack difference is the measured admission decision across
+independent engines, verifiable provenance, recovery and the Home
+client contract. Each still needs release evidence.
 
 | Project | What it is | What we take | Why not adopt |
 |---|---|---|---|
@@ -902,10 +903,11 @@ the architecture.
    Desktop: the shell reuses the daemon's console, and a Chromium
    process sitting in the menu bar all day beside a 70 GB model is the
    wrong tool; Rust joins the toolchain for this one small app.
-4. **Install**, when released, is one command hosted by us that downloads
-   only our own binary from our own release, registers the service and opens
-   the board (`ux.md`, "Install and first open"); the app bundle with
-   the tray is the second path and runs the same steps.
+4. **Install**, when released, has one native app path for a person using
+   a Mac and one command for a headless machine or developer. Both
+   install the same daemon, register its service and open the console
+   (`ux.md`, "Install and first open"). The app adds the tray and
+   native pickers.
 
 The Tauri shell lives in `desktop/`. It loads the daemon's console in its
 main window, keeps the daemon under the OS service manager, and owns only
@@ -995,8 +997,12 @@ program, in landing order, each an item with its brief in the queue:
    the compiled daemon and the app bundle (`.dmg` for macOS, notarized
    later), writes `SHA256SUMS`, the three update manifests and the
    changelog section from commits since the last tag; the release skill
-   cuts the tag and the GitHub Release with the notes being the
-   changelog and one quoted line of links; the org site hosts
+   cuts the tag and the GitHub Release. The release notes open with
+   install instructions for each shipped platform (the `.dmg` and the
+   one-line command for macOS), followed by **What changed** from the
+   changelog. This owner instruction differs from the org's current
+   one-line-links preamble rule; the coordinator updates that org rule.
+   The org site hosts
    `install.sh` (SITE-STACK-01). Cutting a release stays the owner's
    word, in the moment.
 

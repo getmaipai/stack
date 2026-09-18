@@ -26,12 +26,12 @@ the Studio milestone proves the hub's profile before Home migrates.
 
 | Milestone | Items, in order | Why here |
 |---|---|---|
-| v0.1.0: app and release | STACK-66, STACK-76, STACK-67, STACK-68 | Make the existing Tauri shell install and authenticate its console, then finish the tray and native alerts. |
-| v0.1.0: help and trust | STACK-55, STACK-37, STACK-69, STACK-70, STACK-28, STACK-29, STACK-71, STACK-72, STACK-77, STACK-78, STACK-73 | Make Ask and offline help truthful; close settings, privacy, licensing and diagnostics gaps before inviting a new operator. |
-| v0.1.0: distribution | RELEASE-STACK-01, SITE-STACK-01 | Build and verify release artifacts before publishing the one-line path; the owner authorizes the tag. |
+| v0.1.0: app and release | STACK-66, STACK-76, STACK-67, STACK-68, STACK-79, STACK-82 | Make the existing Tauri shell install and authenticate its console, then prove the first-run path and visible actions. |
+| v0.1.0: help and trust | STACK-55, STACK-37, STACK-69, STACK-70, STACK-28, STACK-29, STACK-71, STACK-72, STACK-77, STACK-78, STACK-73, STACK-80 | Make Ask and offline help truthful; close discovery, settings, privacy, licensing and diagnostics gaps before inviting a new operator. |
+| v0.1.0: distribution | STACK-83, RELEASE-STACK-01, SITE-STACK-01 | Prove a clean install before building and verifying release artifacts; the owner authorizes the tag. |
 | Studio proof | STACK-13, STACK-74, STACK-14, STACK-61 | Complete generator jobs and the bench protocol, then measure the Studio and coding context against its real profile. |
 | Home migration | STACK-75, STACK-16 | Pin and test the Stack/Home wire, then migrate Home with rollback after the Studio proof. |
-| Later Mac operations | STACK-04d, STACK-21, STACK-22, STACK-23, STACK-24, STACK-25, STACK-27, STACK-30, STACK-31, STACK-50, STACK-60 | Improve the store, maintenance, data layout and coding-tool setup without holding the first release. |
+| Later Mac operations | STACK-04d, STACK-21, STACK-22, STACK-23, STACK-24, STACK-25, STACK-27, STACK-30, STACK-31, STACK-50, STACK-60, STACK-81, STACK-84, STACK-85 | Improve the store, maintenance, data layout, search and coding-tool setup without holding the first release. |
 | Optional interfaces | STACK-58, STACK-59, STACK-62, STACK-63 | Each needs the stated owner choice or usage evidence before it becomes a release dependency. |
 | Other platforms and kit | KIT-01, STACK-17 | Extract the shared UI kit and prove the Linux robot profile after the Mac service is stable. |
 
@@ -1053,3 +1053,118 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   a corrupt archive aborts before a tag can be cut. Out of scope:
   copying model or engine binaries. Exit: `bash scripts/check.sh` and
   the release dry-run command.
+
+## Product review follow-ups (2026-09-18)
+
+The reasoning and field evidence are in
+[`plans/stack-product-review-2026-09-18.md`](plans/stack-product-review-2026-09-18.md).
+These items add release proof and correct first-run gaps. They do not
+move the Stack across its client boundary.
+
+- [ ] **STACK-79 (M): a first useful answer from a fresh Mac install.**
+  Put a small proven starter setup ahead of the management Overview:
+  measured machine fit, model and disk size, the role it enables,
+  download progress, a first Tester response, then the return
+  dashboard. Files: `frontend/src/pages/BoardPage.tsx`,
+  `frontend/src/pages/OverviewPage.tsx`,
+  `backend/src/routes/setupPlan.ts`, `backend/src/lib/modelCatalog.ts`,
+  `docs/ux.md`, `docs/user/install.md`. Mirror: the existing setup
+  plan and STACK-74 measurement protocol. Acceptance: from a clean
+  data directory on the smallest supported Mac, the operator can
+  choose the curated chat setup, see its licence and disk cost,
+  install, get one local answer, and recover from an offline or
+  insufficient-space result without entering an engine setting.
+  Out of scope: a conversation history, person record or an
+  unmeasured all-modality plan. Exit: `bash scripts/check.sh` and a
+  recorded clean-install walk.
+- [ ] **STACK-80 (M): truthful model discovery and install metadata.**
+  Separate opt-in Hugging Face search from update checks; resolve a
+  selected repository to an immutable revision, actual files,
+  licence and size before offering Install; prove the proposed role
+  from model metadata or a supported format, and refuse unknown
+  ability or gated terms until the operator chooses. Files:
+  `backend/src/routes/catalog.ts`, `backend/src/lib/hf.ts`,
+  `frontend/src/kit/blocks/add-sheet/AddSheet.tsx`,
+  `docs/user/privacy.md`. Mirror: STACK-04 provenance, STACK-73
+  licence gate and the official `@huggingface/hub` metadata API.
+  Acceptance: a scripted HF response for a chat GGUF, an image
+  repository, a gated model and an unsupported repository yields
+  distinct honest results; no row says it fits without a supported
+  size calculation; search sends no request when its own switch is
+  off. Out of scope: adding an outbound host or fetching all search
+  results. Exit: `bash scripts/check.sh`.
+- [ ] **STACK-81 (M): choose a maintained Hugging Face cache path.**
+  Compare the current downloader and cache writer with official
+  `@huggingface/hub` cache downloads under Bun, including pinned
+  revisions, resume, progress, independent SHA-256 verification,
+  symlink behavior and a read-only import of another tool's file.
+  Adopt the library where those checks pass and keep Stack's
+  provenance record separate from a Hub blob name. Files:
+  `backend/src/lib/download.ts`, `backend/src/lib/modelStore.ts`,
+  `backend/src/lib/store/hfCache.ts`, `backend/package.json`,
+  `docs/dev.md`. Mirror: STACK-04b store rules and the official Hub
+  cache layout. Acceptance: one offline fixture and one pinned live
+  pull yield the same files and revision; interrupted and tampered
+  pulls never become selectable; document any feature the library
+  cannot supply before retaining custom code. Out of scope:
+  weakening checksums or changing engine downloads. Exit:
+  `bash scripts/check.sh` and the pinned pull command.
+- [ ] **STACK-82 (M): make the console's visible actions and status
+  usable.** Put repair actions and ready abilities ahead of charts
+  on return Overview; show detected hosts away from installed models;
+  label panel actions; wire phone Add, Search and Group; ensure the
+  tab bar never covers content. Files:
+  `frontend/src/pages/OverviewPage.tsx`,
+  `frontend/src/pages/ModelsPage.tsx`,
+  `frontend/src/pages/DashboardShell.tsx`, `frontend/src/panels/`,
+  `frontend/src/kit/blocks/phone/`, `docs/ux.md`,
+  `docs/assets/screens/`. Mirror: the one action list in
+  `frontend/src/lib/actions.ts`, UniFi's drill-down pattern in
+  `docs/ux.md`, and the review's capture findings. Acceptance:
+  keyboard and phone users can reach every named action in two
+  steps from its row; no visible control has a no-op handler; a
+  fresh capture set shows one consistent nav and no content behind
+  the tab bar. Out of scope: a new chart or a second phone API.
+  Exit: `bash scripts/check.sh` and
+  `bun scripts/screenshot.ts --showroom`.
+- [ ] **STACK-83 (M): test the product promise on clean installs.**
+  Run the built app and daemon on a clean Mac profile, the smallest
+  supported Mac profile and a developer's existing Ollama install;
+  record time and actions to first answer, disk and memory cost,
+  whether an adopted host is left untouched, a failed download,
+  one repair, restart and restore. Have three people who did not
+  build Stack try the starter path without coaching. Files:
+  `docs/plans/stack-product-review-2026-09-18.md`,
+  `docs/user/install.md`, `scripts/build-release.sh`.
+  Mirror: STACK-79, STACK-74 and STACK-78 checks. Acceptance: each
+  run records sanitized steps, observed outcomes, failures and fixes;
+  the release promise names only capabilities that passed. Out of
+  scope: analytics, telemetry or personal test data. Exit:
+  `bash scripts/check.sh --docs` and the recorded build and walk
+  commands.
+- [ ] **STACK-84 (M): prove app and daemon update compatibility.**
+  Evaluate Tauri's signed updater against the Stack app manifest;
+  publish one compatibility range for the app, daemon and role API;
+  rehearse a failed app update and an engine rollback on a clean Mac.
+  Files: `desktop/src-tauri/`, `backend/src/updates/`,
+  `scripts/build-release.sh`, `docs/dev.md`,
+  `docs/user/update.md`. Mirror: RELEASE-STACK-01 and STACK-75
+  contract fixtures. Acceptance: a bad or mismatched update leaves
+  the previous app and daemon usable and gives an exact repair
+  action; the signature and checksum checks both fail closed.
+  Out of scope: automatic model revision changes. Exit:
+  `bash scripts/check.sh` and a release dry run.
+- [ ] **STACK-85 (S): one local search path for Help and Library.**
+  Compare the shipped Pagefind index, the fetched Library index and
+  the substring search route under the compiled daemon; use the
+  maintained Pagefind API where it can serve both sets offline,
+  with citations and exact links. Keep Ask's deterministic commands
+  finite and count their use, without adding a phrase list. Files:
+  `backend/src/lib/library.ts`, `frontend/src/pages/DashboardShell.tsx`,
+  `frontend/src/pages/LibraryPage.tsx`, `docs/ux.md`.
+  Mirror: STACK-33, STACK-55 and STACK-37. Acceptance: a shipped
+  help page and a fetched model page are both found offline with
+  source links; a missing page says why; an unsupported Ask query
+  gives search results instead of an invented repair. Out of
+  scope: a dedicated helper model or outbound search. Exit:
+  `bash scripts/check.sh`.
