@@ -623,6 +623,26 @@ the previous release is kept for rollback. The weekly model watch stores
 the Hub `sha` and `x-linked-etag` at install, uses a conditional GET, and
 only reports a newer revision. It never auto-applies a model update.
 
+## Engine management (STACK-19, 2026-09-17)
+
+Engine version state is a derived fact, never a stored status. The daemon
+combines the running build, the engine store's `current` tag, and the newest
+pinned build selected for this machine. It returns `current: true` with
+`notCurrent: false` when they agree, or `notCurrent: true` with a reason of
+`newer installed` or `newer available` when they do not; `needsRestart` is
+true whenever pending configuration differs from the in-effect values.
+
+Each engine kind declares its settings once. `llama-server` declares
+`contextLength` (number, default 4096, advanced, restart), `slots` (number,
+default 1, advanced, restart), `threads` (number, default 0, developer,
+restart), `cacheRamMb` (number, default 0, developer, restart), and
+`flashAttention` (boolean, default true, advanced, restart). Managed engines
+declare `hostUrl` (text, default empty, basic, restart) and `expectedVersion`
+(text, default empty, advanced, restart). Every declaration carries its type,
+default, disclosure level, and restart requirement. The configuration API
+shows both in-effect and pending values until the next start, when pending
+values become in effect.
+
 ### Hardware sizing
 
 The probe reports CPU, GPU class, unified or discrete memory, free disk,
