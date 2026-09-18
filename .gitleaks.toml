@@ -1,0 +1,23 @@
+title = "MaiPai Stack gitleaks config"
+
+# Extends gitleaks' own default rule set (no rules redefined here); this
+# file exists only to skip paths that can never reach a commit, never to
+# weaken detection. `gitleaks dir` scans the filesystem, not git, so it
+# would rescan every gitignored byte: the first downloaded model (1.7 GB,
+# 2026-09-17) turned a seconds-long docs gate into minutes. Every entry
+# mirrors .gitignore; a new .gitignore entry needs a line here too.
+# Patterns are anchored to a real path segment, never a bare substring
+# (the hub's review note, 2026-09-04).
+[extend]
+useDefault = true
+
+[allowlist]
+paths = [
+  '''(^|/)node_modules(/|$)''',
+  '''(^|/)data(/|$)''',
+  '''(^|/)data-[^/]+(/|$)''',
+  '''(^|/)frontend/dist(/|$)''',
+  '''(^|/)docs/site/dist(/|$)''',
+  '''(^|/)docs/site/\.astro(/|$)''',
+  '''(^|/)dist(/|$)''',
+]

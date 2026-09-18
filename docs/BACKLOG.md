@@ -299,6 +299,93 @@ each item's design section lands in `dev.md` before its code.
   `install.sh` does. Exit: `bash scripts/check.sh` plus the tray
   package's own `cargo test`.
 
+## Milestone 0c: self-managing (2026-09-17, from the owner's review)
+
+The features a person would not think to do, or would find tedious,
+that let the Stack set itself up, keep itself healthy, keep itself
+current and keep the person informed. Each is built on the operating
+layer above; none adds a person or leaves the machine.
+
+- [ ] **STACK-20 (M): Check my Stack.** One click (and nightly in the
+  maintenance window, quietly) runs a real smoke test per ready role:
+  a completion, a transcription of a bundled two-second clip, a speech
+  render, a small image tile; each pass or fail with the health item
+  and its fix; the last result on the Overview health card
+  ("Checked 2 hours ago, all good"). Acceptance: a scripted failing
+  role yields a health item with a fix; the nightly run is skipped
+  while the person is active.
+- [ ] **STACK-21 (M): What's new for your computer.** When the
+  Catalog's model index changes (a conditional GET, opt-in with the
+  update check), tell the person which new models would run well on
+  this machine and what they would gain, in one sentence each, with
+  Install; never auto-install, never a telemetry call. Acceptance: a
+  scripted index with three models yields one recommendation that
+  fits the tier and two that are hidden for not fitting.
+- [ ] **STACK-22 (M): the maintenance window.** Quiet hours the person
+  sets once (default 2 to 5 in the morning): downloads, update checks,
+  smoke tests, storage sweeps and benchmarks run then; heavy work
+  pauses when the person is active (input in the last five minutes),
+  on battery, or under memory pressure; a bandwidth cap for
+  downloads; "Run maintenance now" on Settings. Acceptance: a scripted
+  clock runs the window's jobs inside it and defers them outside;
+  activity pauses a scripted download.
+- [ ] **STACK-23 (M): ready when you sit down.** Models unload after an
+  idle time the person sets; on battery they unload sooner; the chat
+  model warms up before the hour the person usually uses it, learned
+  from the Stack's own usage records on this machine (never sent
+  anywhere, shown on the Monitoring page as "you usually chat around
+  7 pm"). Acceptance: scripted usage records produce the warm-up
+  hour; a battery event unloads a JIT model.
+- [ ] **STACK-24 (M): storage hygiene.** Find models unused for thirty
+  days, duplicate files across tools, orphan blobs, old engine builds
+  and stale logs; show what each would free; one click to clean; a
+  warning three days before the disk fills at the current download
+  rate. Acceptance: a scripted store yields the exact list and sizes;
+  the clean removes only what was listed; the disk warning fires on a
+  scripted trend.
+- [ ] **STACK-25 (M): move to a new computer.** Export "my setup"
+  (plan, abilities, groups and nicknames, settings, alert channels
+  minus their secrets, the client list minus keys) as one file; on a
+  new machine, import it and the Stack re-downloads what fits the new
+  hardware, re-sizes what does not, and says what changed. Part of
+  Backups, per the org standard. Acceptance: export then import on a
+  scripted smaller machine drops the abilities that do not fit and
+  says so.
+- [ ] **STACK-26 (S): the speed test.** "How fast is my Mac" on
+  Monitoring: first-token time and tokens per second per loaded model,
+  time to load, compared with the tier's expected range, stored
+  history so a regression after an update is visible. Acceptance: a
+  scripted engine yields the numbers; a second run shows the delta.
+- [ ] **STACK-27 (S): the weekly digest.** One passive notification a
+  week: what was used and how much, what updated, what is tight, what
+  could be cleaned, in five plain sentences; off by default on the
+  Alerts page. Acceptance: a scripted week yields the five sentences.
+- [ ] **STACK-28 (S): licences in plain words.** Every model's licence
+  shown as one sentence a parent understands ("free for personal use;
+  not for a business") from a small map of the common licences, with
+  the full text a click away; a gated or non-commercial licence flagged
+  before download. Acceptance: the map covers Apache-2.0, MIT, Llama
+  community, Gemma terms, Qwen research, CC-BY-NC; an unknown licence
+  says "read it before you rely on it".
+- [ ] **STACK-29 (S): guided fixes and a diagnostics bundle.** Every
+  health item's "Learn more" opens a page with the exact steps in the
+  user docs; "Save a diagnostics file" writes a redacted bundle
+  (versions, hardware, health, the last hundred log lines with secrets
+  removed) the person can keep or send to whoever helps them. Nothing
+  is sent by the Stack. Acceptance: the redaction test from the
+  logging standard covers the bundle.
+- [ ] **STACK-30 (M): abilities by intent.** On the Abilities page,
+  "What do you want to do?" (a chat assistant; help with homework;
+  dictation; make pictures; code) picks the abilities and models for
+  this machine and explains the choice in one sentence; the tier list
+  stays behind "Change". Acceptance: each intent maps to a set that
+  fits each tier (test per intent per tier).
+- [ ] **STACK-31 (S): engines kept current, safely.** An opt-in switch
+  on Updates: apply engine updates in the maintenance window with the
+  automatic rollback of STACK-10 if the post-swap check fails, and a
+  notification either way; model updates are never automatic.
+  Acceptance: a scripted failing update rolls back and notifies.
+
 ## Milestone 1: the robot
 
 - [ ] **STACK-17 (L): the Linux ARM profile.** `llama-server` on the Pi
