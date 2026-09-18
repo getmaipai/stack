@@ -597,6 +597,32 @@ role, and the old build is kept for one-click rollback until the next
 update. Model updates are a new revision beside the old with the same
 rule. `getmaipai/.github/docs/UPDATES.md` is the standard.
 
+## Updates (STACK-10, 2026-09-17)
+
+The Stack reads three static manifests published as GitHub release assets
+by the release skill: `app.json`, `engines.json`, and `models.json`. Each
+has `version`, `notes`, `pub_date`, and `platforms[<target>]` entries with
+`url`, `sha256`, `size`, and an inline minisign `signature`. The URLs are
+declared in `backend/src/updates/manifests.ts`; RELEASE-STACK-01 will
+generate and publish them.
+
+Update checks are offered once on the second launch and stay off until the
+operator accepts. Accepted checks run daily by default, never more often
+than hourly. The request is exactly a `GET` with `If-None-Match` and
+`User-Agent: maipai-stack/<version> (<os>-<arch>)`, with no query string,
+profile or identifier. ETags are stored locally. Engine pins remain on
+`bNNNN`, resolved from a semver tag's `nightly-tag.txt`; the recorded SHA is
+cross-checked with GitHub's asset digest.
+
+An engine update stages beside the current tag, marks the role draining,
+routes no new requests, waits up to 60 seconds for in-flight work, sends
+SIGTERM and SIGKILL after 10 seconds, then starts the new tag. `/health`
+and the post-load completion must pass before routing flips. A failed swap
+automatically relinks the previous tag and raises a critical health item;
+the previous release is kept for rollback. The weekly model watch stores
+the Hub `sha` and `x-linked-etag` at install, uses a conditional GET, and
+only reports a newer revision. It never auto-applies a model update.
+
 ### Hardware sizing
 
 The probe reports CPU, GPU class, unified or discrete memory, free disk,

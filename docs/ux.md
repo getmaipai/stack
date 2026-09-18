@@ -312,6 +312,12 @@ day it installs, with its roles already chosen.
 
 ## Updates
 
+The Updates page keeps installed and available versions side by side. It
+starts with checking off, offers the choice on the second launch, and shows
+the last check, release notes, size, and a Skip action. Engine updates drain
+before swapping and keep the previous tag for rollback. Model revision
+changes are reported weekly and never installed automatically.
+
 Three sections: the Stack, engines, models. Each shows the installed
 version and, if checking is on, what is available with release notes.
 "Update" drains the role, swaps, and keeps the old build; "Roll back" is

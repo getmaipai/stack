@@ -13,7 +13,7 @@ Two things can go out to the internet, and only when you turn them on.
 
 | What | When it happens | What it carries | Who receives it |
 |---|---|---|---|
-| Checking for updates | Only if you switch it on in Settings, then about once a day | The version numbers you have installed, nothing else | The MaiPai release page on GitHub |
+| Checking for updates | Only if you switch it on in Settings, then about once a day | A `GET` with exactly `If-None-Match` and `User-Agent: maipai-stack/<version> (<os>-<arch>)`, no query string or identifier | The `app.json`, `engines.json`, and `models.json` release assets on GitHub |
 | Downloading a model or an engine | Only when you pick one to install, or accept an update | The name of the file you asked for | The site that publishes it (for example Hugging Face or GitHub), straight from your computer |
 | Installing the Stack | Only when you run the one-line installer | The installer script | `https://getmaipai.github.io/stack/install.sh` |
 | Downloading the installer release | Only when you run the one-line installer | The Stack binary and its checksum file | `https://github.com/getmaipai/stack/releases/latest/download/maipai-stack-darwin-arm64` and `https://github.com/getmaipai/stack/releases/latest/download/SHA256SUMS` |

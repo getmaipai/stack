@@ -9,6 +9,9 @@ the product passes its battle-tested checklist in `docs/dev.md`.
 
 ### Added
 
+- STACK-10 update manifests, opt-in conditional checks, engine tag swap and
+  rollback controls, and the weekly model revision watch.
+
 - The STACK-09b daemon-owned health list with idempotent health changes,
   resolve and ignore actions, Repairs compatibility, producer codes, and
   board cards with one Fix or Learn more action.

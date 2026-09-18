@@ -99,12 +99,9 @@ never copied. No item migrates the hub until STACK-16.
 - [x] **STACK-09b (M): one daemon-owned health list.** Idempotent health
   items with severity, cause, Fix or Learn more, resolve and ignore routes,
   producer codes, and the Repairs compatibility alias. Verified at f866376.
-- [ ] **STACK-10 (M): updates.** Superseded by the survey's shape in milestone 0b below. Opt-in check, download beside the
-  current build, drain under the guard, swap, keep the old build, one-click
-  rollback; for the Stack, engines and models. Per
-  `getmaipai/.github/docs/UPDATES.md`. Acceptance: an update and a
-  rollback of a scripted engine build with no request cut (test); the
-  privacy page lists the check.
+- [x] **STACK-10 (M): updates.** Opt-in check, conditional manifests,
+  engine swap and rollback, and a non-applying model revision watch.
+  Verified at 8ee0683; release manifest generation remains RELEASE-STACK-01.
 - [x] **STACK-11 (M): the admin UI, first run and the board.** committed:
   first run steps 1 to 3 and 5, login, the board; the downloading step
   and Try it are STACK-12. The five
@@ -191,6 +188,13 @@ each item's design section lands in `dev.md` before its code.
   `HF_HUB_CACHE` is imported by link and served; a blob shared by two
   manifests survives one remove; the tests from STACK-03 and -04
   still pass. Exit: `bash scripts/check.sh`.
+- [ ] **STACK-04d (S): the store writes through `@huggingface/hub`.**
+  Replace `store/hfCache.ts`'s hand-written layout writer with the
+  official client's `downloadFileToCacheDir` behind `lib/hf.ts` (the
+  dependency rule: one adapter, the format's owner writes the format),
+  keeping the read side and the tests; verify in the installed source
+  that it produces `models--<org>--<repo>/{blobs,refs,snapshots}` and
+  cite the line. Acceptance: the store tests still pass; a NOTICE line.
 - [ ] **STACK-09b (M): one health list.** Health items (code, severity,
   title, text, since, cause, one fix, learn-more), keyed and
   idempotent, `GET /stack/v1/health`, `health.changed` on the feed;
@@ -205,8 +209,8 @@ each item's design section lands in `dev.md` before its code.
   warning item, a privacy-page row per channel type. Acceptance: a
   scripted provider receives the test and the verified stamp lands;
   the privacy page lists both. Exit: `bash scripts/check.sh`.
-- [ ] **STACK-10 (M): updates** (moved here from milestone 0 with the
-  survey's shape): three hosted manifests, opt-in check offered once
+- [x] **STACK-10 (M): updates** (moved here from milestone 0 with the
+  survey's shape; verified at 8ee0683, landed as c90af29's successor): three hosted manifests, opt-in check offered once
   on the second launch with only `If-None-Match` and a user agent
   sent, engines pinned by `bNNNN` resolved through `nightly-tag.txt`
   and cross-checked against GitHub's asset digest, drain and swap

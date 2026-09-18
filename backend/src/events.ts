@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const EventLevelSchema = z.enum(["immediate", "time_sensitive", "passive"]);
 export type EventLevel = z.infer<typeof EventLevelSchema>;
-export const EventIdSchema = z.enum(["role.state", "engine.state", "pressure", "job.progress", "job.done", "model.installed", "update.available", "update.applied", "repair", "health.changed"]);
+export const EventIdSchema = z.enum(["role.state", "engine.state", "pressure", "job.progress", "job.done", "model.installed", "update.available", "update.applied", "update.failed", "repair", "health.changed"]);
 export type EventId = z.infer<typeof EventIdSchema>;
 
 export const EVENTS = {
@@ -14,6 +14,7 @@ export const EVENTS = {
   "model.installed": { id: "model.installed", level: "passive", audience: "operator", template: "Model {model} is installed." },
   "update.available": { id: "update.available", level: "passive", audience: "operator", template: "An update is available." },
   "update.applied": { id: "update.applied", level: "passive", audience: "operator", template: "An update was applied." },
+  "update.failed": { id: "update.failed", level: "immediate", audience: "operator", template: "An update failed." },
   repair: { id: "repair", level: "passive", audience: "operator", template: "Repair needed: {title}.", actions: ["restart_engine", "reinstall_engine", "free_memory", "check_host"] },
   "health.changed": { id: "health.changed", level: "passive", audience: "operator", template: "Health item {code} changed." },
 } as const;

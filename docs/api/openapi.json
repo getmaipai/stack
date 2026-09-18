@@ -3477,6 +3477,544 @@
         }
       }
     },
+    "/stack/v1/updates": {
+      "get": {
+        "tags": [
+          "Updates"
+        ],
+        "summary": "Update status",
+        "responses": {
+          "200": {
+            "description": "Installed and available updates.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "app": {
+                      "type": "object",
+                      "properties": {
+                        "installed": {
+                          "type": "string"
+                        },
+                        "available": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "notes": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "size": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "lastChecked": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "checksEnabled": {
+                          "type": "boolean"
+                        },
+                        "skipped": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "installed",
+                        "available",
+                        "notes",
+                        "size",
+                        "lastChecked",
+                        "checksEnabled",
+                        "skipped"
+                      ]
+                    },
+                    "engines": {
+                      "type": "object",
+                      "properties": {
+                        "installed": {
+                          "type": "string"
+                        },
+                        "available": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "notes": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "size": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "lastChecked": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "checksEnabled": {
+                          "type": "boolean"
+                        },
+                        "skipped": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "installed",
+                        "available",
+                        "notes",
+                        "size",
+                        "lastChecked",
+                        "checksEnabled",
+                        "skipped"
+                      ]
+                    },
+                    "models": {
+                      "type": "object",
+                      "properties": {
+                        "installed": {
+                          "type": "string"
+                        },
+                        "available": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "notes": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "size": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "lastChecked": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "checksEnabled": {
+                          "type": "boolean"
+                        },
+                        "skipped": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "installed",
+                        "available",
+                        "notes",
+                        "size",
+                        "lastChecked",
+                        "checksEnabled",
+                        "skipped"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "app",
+                    "engines",
+                    "models"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/updates/check": {
+      "post": {
+        "tags": [
+          "Updates"
+        ],
+        "summary": "Check for updates",
+        "responses": {
+          "200": {
+            "description": "Latest update status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "app": {
+                      "type": "object",
+                      "properties": {
+                        "installed": {
+                          "type": "string"
+                        },
+                        "available": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "notes": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "size": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "lastChecked": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "checksEnabled": {
+                          "type": "boolean"
+                        },
+                        "skipped": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "installed",
+                        "available",
+                        "notes",
+                        "size",
+                        "lastChecked",
+                        "checksEnabled",
+                        "skipped"
+                      ]
+                    },
+                    "engines": {
+                      "type": "object",
+                      "properties": {
+                        "installed": {
+                          "type": "string"
+                        },
+                        "available": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "notes": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "size": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "lastChecked": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "checksEnabled": {
+                          "type": "boolean"
+                        },
+                        "skipped": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "installed",
+                        "available",
+                        "notes",
+                        "size",
+                        "lastChecked",
+                        "checksEnabled",
+                        "skipped"
+                      ]
+                    },
+                    "models": {
+                      "type": "object",
+                      "properties": {
+                        "installed": {
+                          "type": "string"
+                        },
+                        "available": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "notes": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "size": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "lastChecked": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "checksEnabled": {
+                          "type": "boolean"
+                        },
+                        "skipped": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "installed",
+                        "available",
+                        "notes",
+                        "size",
+                        "lastChecked",
+                        "checksEnabled",
+                        "skipped"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "app",
+                    "engines",
+                    "models"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/updates/settings": {
+      "post": {
+        "tags": [
+          "Updates"
+        ],
+        "summary": "Set update checking",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "enabled"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Update checking setting.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "enabled"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/updates/skip": {
+      "post": {
+        "tags": [
+          "Updates"
+        ],
+        "summary": "Skip an update",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "app",
+                      "engines",
+                      "models"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Update skipped.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/updates/engines/{name}/apply": {
+      "post": {
+        "tags": [
+          "Updates"
+        ],
+        "summary": "apply an engine update",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "name",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "tag",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tag": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "tag"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Engine update applied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Engine update failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/updates/engines/{name}/rollback": {
+      "post": {
+        "tags": [
+          "Updates"
+        ],
+        "summary": "rollback an engine update",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "name",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "tag",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tag": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "tag"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Engine update applied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Engine update failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/chat/completions": {
       "post": {
         "tags": [

@@ -15,6 +15,7 @@ import { setupPlanRoutes } from "@/routes/setupPlan";
 import { modelsRoutes } from "@/routes/models";
 import { storageRoutes } from "@/routes/storage";
 import { jobsRoutes } from "@/routes/jobs";
+import { updatesRoutes } from "@/routes/updates";
 import { migrateLegacyStore } from "@/lib/store/migration";
 import { budgetRoutes } from "@/routes/budget";
 import { eventsRoutes } from "@/routes/events";
@@ -64,6 +65,7 @@ app.route("/stack/v1/setup/plan", setupPlanRoutes);
 app.route("/stack/v1/models", modelsRoutes);
 app.route("/stack/v1/storage", storageRoutes);
 app.route("/stack/v1/jobs", jobsRoutes);
+app.route("/stack/v1/updates", updatesRoutes);
 app.route("/v1", inferenceRoutes);
 
 migrateLegacyStore();
