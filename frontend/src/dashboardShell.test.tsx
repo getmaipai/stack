@@ -142,7 +142,7 @@ test("the sidebar shows quiet indicators for engines, updates, alerts, and detec
     "/stack/v1/detected": { detected: [{ id: "d1", name: "Local store", path: "/models", version: "1.0", couldHold: ["chat"], forgotten: false, adopted: false, target: null }] },
   });
   render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
-  await waitFor(() => expect(document.body.textContent).toContain("All good"));
+  await waitFor(() => expect(document.body.textContent).toContain("1 thing needs attention"));
   const sidebar = document.querySelector('[data-sidebar="content"]');
   expect(sidebar).toBeTruthy();
   // Engines: one not-current + one unadopted detected = 2, badge shows the number
@@ -157,4 +157,24 @@ test("the sidebar shows quiet indicators for engines, updates, alerts, and detec
   const dot = alertsLink?.querySelector("span[aria-hidden]");
   expect(dot?.className).toContain("bg-red-500");
   expect(alertsLink?.textContent).not.toContain("1");
+});
+
+test("the top bar names this computer and toggles the persisted theme", async () => {
+  localStorage.removeItem("maipai-stack-theme");
+  stubStackFetch({
+    ...boardExtras,
+    "/stack/v1/repairs": { repairs: [{ id: "r1", title: "Needs attention", detail: "A repair is open.", action: "Review", level: "passive", resolvedAt: null }] },
+    "/stack/v1/roles": { roles: [] },
+    "/stack/v1/operator": { state: "signedOut", required: false },
+  });
+  render(<MemoryRouter initialEntries={["/updates"]}><DashboardShell /></MemoryRouter>);
+  await waitFor(() => expect(document.querySelector("[data-header-health-dot]")?.getAttribute("aria-label")).toBe("1 thing needs attention"));
+  expect(document.body.textContent).toContain("This computer");
+  const toggle = document.querySelector('button[aria-label="Use dark mode"]');
+  expect(toggle).toBeTruthy();
+  fireEvent.click(toggle as HTMLElement);
+  expect(document.documentElement.classList.contains("dark")).toBe(true);
+  expect(localStorage.getItem("maipai-stack-theme")).toBe("dark");
+  fireEvent.click(document.querySelector('button[aria-label="Use light mode"]') as HTMLElement);
+  expect(document.documentElement.classList.contains("dark")).toBe(false);
 });

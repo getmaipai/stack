@@ -1,9 +1,9 @@
 // The icon registry is the single permitted boundary for the lucide package.
 // eslint-disable-next-line no-restricted-imports
-import { Activity, ArrowDown, ArrowUp, Bell, Bot, Box, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Cpu, Download, ExternalLink, FileKey2, FileText, Filter, Gauge, History, Info, KeyRound, LayoutDashboard, LayoutList, LoaderCircle, Lock, LogOut, MessageSquare, Mic, Play, RefreshCw, Search, Send, Server, Settings, Settings2, ShieldCheck, SlidersHorizontal, Square, UploadCloud, Volume2 } from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, Bell, Bot, Box, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Cpu, Download, ExternalLink, FileKey2, FileText, Filter, Gauge, History, Info, KeyRound, LayoutDashboard, LayoutList, LoaderCircle, Lock, LogOut, MessageSquare, Mic, Moon, Play, RefreshCw, Search, Send, Server, Settings, Settings2, ShieldCheck, SlidersHorizontal, Square, Sun, UploadCloud, Volume2 } from "lucide-react";
 // eslint-disable-next-line no-restricted-imports
 import type { LucideIcon } from "lucide-react";
 export type Icon = LucideIcon;
 export type IconName = keyof typeof icons;
-export const icons = { Activity, ArrowDown, ArrowUp, Bell, Bot, Box, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Cpu, Download, ExternalLink, FileKey2, FileText, Filter, Gauge, History, Info, KeyRound, LayoutDashboard, LayoutList, LoaderCircle, Lock, LogOut, MessageSquare, Mic, Play, RefreshCw, Search, Send, Server, Settings, Settings2, ShieldCheck, SlidersHorizontal, Square, UploadCloud, Volume2 } as const;
+export const icons = { Activity, ArrowDown, ArrowUp, Bell, Bot, Box, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Cpu, Download, ExternalLink, FileKey2, FileText, Filter, Gauge, History, Info, KeyRound, LayoutDashboard, LayoutList, LoaderCircle, Lock, LogOut, MessageSquare, Mic, Moon, Play, RefreshCw, Search, Send, Server, Settings, Settings2, ShieldCheck, SlidersHorizontal, Square, Sun, UploadCloud, Volume2 } as const;
 export function getIcon(name: keyof typeof icons): LucideIcon { return icons[name]; }

@@ -31,7 +31,6 @@ export function ProfileMenu({ onSignedIn, onSignedOut }: { onSignedIn?: () => vo
       {state === "signedIn" && <DropdownMenuItem onSelect={() => void signOut()}><LogOut />Sign out</DropdownMenuItem>}
       <DropdownMenuItem asChild><Link to="/access"><KeyRound />Access</Link></DropdownMenuItem>
       <DropdownMenuItem asChild><a href="/api/docs" target="_blank" rel="noreferrer"><ExternalLink />API docs</a></DropdownMenuItem>
-      <DropdownMenuItem disabled>Theme: system</DropdownMenuItem>
     </DropdownMenuContent>
   </DropdownMenu><ClientKeyDialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen} onCreated={() => void operator.refetch()} /></>;
 }

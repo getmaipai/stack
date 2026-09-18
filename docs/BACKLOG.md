@@ -644,7 +644,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   wide viewport and the button below it (the `--breakpoint-lg` width in
   `kit/tokens.css`);
   showroom captures opened and judged. Exit: `scripts/check.sh`.
-- [ ] **STACK-44 (S): one pill.** The `Button` `default` variant is a
+- [x] **STACK-44 (S): one pill.** The `Button` `default` variant is a
   fully rounded pill; every screen keeps one filled button at most (the
   page's main action), everything else `outline`, `ghost` or a text
   link. An audit of `frontend/src/pages` and `panels` lists each filled
@@ -667,7 +667,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   Check my Stack routes (or show the "coming with STACK-26/20" state
   until those land); showroom `overview-console-*.png` opened and
   judged at desktop and phone. Exit: `scripts/check.sh`.
-- [ ] **STACK-46 (S): the top bar.** The instance on the left with its
+- [x] **STACK-46 (S): the top bar.** The instance on the left with its
   status dot and name ("This computer", the dot in the worst health
   severity, green when the list is empty), the search field in the
   middle, the theme toggle and the bell on the right. Files:
