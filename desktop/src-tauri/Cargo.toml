@@ -6,7 +6,7 @@ authors = ["MaiPai"]
 edition = "2021"
 
 [build-dependencies]
-tauri-build = "=2.4.1"
+tauri-build = { version = "=2.4.1", features = [] }
 
 [dependencies]
 serde = { version = "=1.0.228", features = ["derive"] }
