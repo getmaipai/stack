@@ -492,7 +492,7 @@ layer above; none adds a person or leaves the machine.
   notification either way; model updates are never automatic.
   Acceptance: a scripted failing update rolls back and notifies.
 
-- [ ] **STACK-32 (M): the Library.** Local documentation for what is
+- [x] **STACK-32 (M): the Library.** Local documentation for what is
   installed. When a model or engine is selected, its source page and
   docs links are registered on the record (STACK-04b); the Library
   fetches, on the person's say-so and in the maintenance window, the

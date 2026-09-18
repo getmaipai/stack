@@ -67,6 +67,7 @@ export interface DownloadModelOptions {
 export interface CatalogModelLike {
   id: string;
   role: RoleId;
+  repo?: string;
   license?: string;
   revision?: string;
   engine?: string;
@@ -217,11 +218,13 @@ export function upsertModel(input: ModelRecordInput, now = new Date().toISOStrin
 export function registerCatalogModel(model: CatalogModelLike, now = new Date().toISOString()): ModelRecord {
   if (!model.revision && !model.download?.url) throw new Error(`Catalog model ${model.id} has no revision`);
   const revision = model.revision ?? new URL(model.download!.url).pathname.match(/\/resolve\/([^/]+)/)?.[1] ?? "catalog";
+  const provenance: Record<string, unknown> = { package: `model:${model.id}`, catalogId: model.id };
+  if (model.repo) provenance.repo = model.repo;
   return upsertModel({
     id: model.id,
     roles: [model.role],
     source: "catalog",
-    provenance: { package: `model:${model.id}`, catalogId: model.id },
+    provenance,
     revision,
     sha256: model.download?.sha256 ?? null,
     sizeBytes: model.download?.approx_bytes ?? null,

@@ -88,6 +88,18 @@ export interface ChannelRecord {
   configPresent: true;
 }
 
+export interface LibraryRecord {
+  id: string;
+  kind: "model" | "engine";
+  title: string;
+  source: string;
+  licence: string;
+  fetchedAt: string;
+  revision: string;
+  size: number;
+  etag: string | null;
+}
+
 export interface RepairRecord {
   id: string;
   title: string;

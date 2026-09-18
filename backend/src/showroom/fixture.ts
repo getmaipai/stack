@@ -63,6 +63,10 @@ export const showroomChannels = [
   { id: "showroom-telegram", type: "telegram" as const, name: "Family Telegram", verifiedAt: new Date(now.getTime() - 2 * 86400000).toISOString(), createdAt: new Date(now.getTime() - 15 * 86400000).toISOString(), lastError: null, lastSentAt: new Date(now.getTime() - 3600000).toISOString(), status: "verified" as const, configPresent: true as const },
   { id: "showroom-ntfy", type: "ntfy" as const, name: "Phone alerts", serverUrl: "https://ntfy.sh", topic: "maipai-home-demo", verifiedAt: null, createdAt: new Date(now.getTime() - 3 * 86400000).toISOString(), lastError: null, lastSentAt: null, status: "unverified" as const, configPresent: true as const },
 ];
+export const showroomLibrary = [
+  { id: "model-qwen3-8b-instruct", kind: "model" as const, title: "Family chat", source: "https://huggingface.co/Qwen/Qwen3-8B", licence: "Apache-2.0", fetchedAt: new Date(now.getTime() - 2 * 86400000).toISOString(), revision: "main", size: 18_200, etag: null, markdown: "# Qwen3 8B\n\nA local family chat model.", files: ["README.md", "meta.json"], numbers: { footprintBytes: 6_800_000_000, speedTokensPerSecond: 52, lastUsedAt: new Date(now.getTime() - 3600000).toISOString() } },
+  { id: "engine-llama-server-b10797-macos-arm64", kind: "engine" as const, title: "llama-server build b10797", source: "https://github.com/ggml-org/llama.cpp/tree/b10797/docs", licence: "MIT", fetchedAt: new Date(now.getTime() - 86400000).toISOString(), revision: "b10797", size: 9_400, etag: null, markdown: "# llama-server\n\nThe local chat engine documentation.", files: ["README.md", "meta.json"], numbers: { footprintBytes: null, speedTokensPerSecond: 113, lastUsedAt: null } },
+];
 export const showroomCheck = { at: new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString(), ok: true, results: ["chat", "coding", "judge", "image", "stt", "tts"].map((role, index) => ({ role, ok: true, ms: 28 + index * 9, reason: null, loadMs: null })), fitTogether: { ok: true, reason: null }, reason: null };
 
 export function showroomSeries(range: "hour" | "day" | "week") {

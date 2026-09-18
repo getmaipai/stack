@@ -5,6 +5,7 @@ import type { CatalogModelLike } from "@/lib/modelStore";
 export const STACK_CHAT_MODEL: CatalogModelLike = {
   id: "qwen3-1.7b-q8-0",
   role: "chat",
+  repo: "Qwen/Qwen3-1.7B-GGUF",
   license: "Apache-2.0",
   revision: "main",
   engine: "llama-server",

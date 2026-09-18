@@ -14,5 +14,9 @@
   },
   "devDependencies": {
     "playwright": "^1.48.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "pagefind": "^1.5.2"
   }
 }

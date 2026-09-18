@@ -20,6 +20,7 @@ Only explicitly enabled features can go out to the internet.
 | Downloading the installer release | Only when you run the one-line installer | The Stack binary and its checksum file | `https://github.com/getmaipai/stack/releases/latest/download/maipai-stack-darwin-arm64` and `https://github.com/getmaipai/stack/releases/latest/download/SHA256SUMS` |
 | Telegram alert channel | Only after you configure and verify a Telegram channel | The alert sentence and the configured chat ID | Telegram's Bot API |
 | ntfy alert channel | Only after you configure and verify an ntfy channel | The alert sentence and the configured topic | The ntfy server URL you chose |
+| Fetching Library docs | Only when the update switch is on and you choose Fetch the docs | The model or engine docs URL, with `If-None-Match` and the Stack user agent | The model host or engine documentation host |
 
 Everything else stays on your computer. The Stack listens only to
 programs on the same machine unless you choose to open it to your home

@@ -27,6 +27,7 @@ changelog note.
 | Clients | `/stack/v1/clients` (operator only) | the operator; Home's installer registers Home once | built |
 | Notifications | `GET /stack/v1/notifications`, `POST /stack/v1/notifications/clear`, `POST /stack/v1/notifications/{id}/read`, `POST /stack/v1/notifications/{id}/dismiss` | the operator and Home's notification bridge | built |
 | Alert channels | `GET /stack/v1/channels`, create, update, delete, and `POST /stack/v1/channels/{id}/test` | the operator; Telegram or ntfy after explicit verification | built |
+| Library MCP | `bun run mcp:library` over stdio, `list_installed`, `get_doc`, `search` | Home's assistant and coding tools | built |
 | Repairs | `GET /stack/v1/repairs`, `POST /stack/v1/repairs/{id}/resolve` | the operator and Home's Admin | built |
 | Logs | `GET /stack/v1/logs/{name}` | the operator and Home's Admin | built |
 | Updates | `/stack/v1/updates` (check, apply, roll back) | the operator; Home shows availability through events | planned |

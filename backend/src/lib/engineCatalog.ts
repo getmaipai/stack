@@ -15,6 +15,7 @@ export interface EngineBinaryPin {
   arch: "arm64" | "x64";
   requiresNvidia: boolean;
   label: string;
+  docsUrl?: string;
   archive: EngineArchive;
   extraArchives?: EngineArchive[];
   verified: boolean;
@@ -27,6 +28,7 @@ export const ENGINE_BINARIES: EngineBinaryPin[] = [
     arch: "arm64",
     requiresNvidia: false,
     label: "llama-server (macOS, Apple Silicon, Metal), build b10797",
+    docsUrl: "https://github.com/ggml-org/llama.cpp/tree/b10797/docs",
     archive: {
       label: "llama-server (macOS arm64)",
       url: "https://github.com/ggml-org/llama.cpp/releases/download/b10797/llama-b10797-bin-macos-arm64.tar.gz",
@@ -41,6 +43,7 @@ export const ENGINE_BINARIES: EngineBinaryPin[] = [
     arch: "x64",
     requiresNvidia: true,
     label: "llama-server (Windows, NVIDIA CUDA 12.4, x64), build b10797",
+    docsUrl: "https://github.com/ggml-org/llama.cpp/tree/b10797/docs",
     archive: {
       label: "llama-server (Windows CUDA x64)",
       url: "https://github.com/ggml-org/llama.cpp/releases/download/b10797/llama-b10797-bin-win-cuda-12.4-x64.zip",

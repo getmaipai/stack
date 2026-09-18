@@ -746,6 +746,16 @@ The update check and model or engine downloads are also opt-in, each
 straight from the machine to the upstream host, never through a MaiPai
 service. No analytics, no telemetry, no crash reports, no identifiers.
 
+### The Library
+
+The Library keeps fetched model cards and pinned engine documentation under
+`data/library/`, with one Markdown page and a small metadata file per
+installed thing. Its local Pagefind index is rebuilt after a fetch and the
+read-only `stack-library` MCP server exposes the same pages over stdio.
+Fetching is allowed only with the existing Updates switch enabled and only
+after the operator chooses Fetch the docs; requests carry only the
+conditional ETag and the Stack user agent.
+
 ### Data layout
 
 ```
