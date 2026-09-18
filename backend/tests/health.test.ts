@@ -1,5 +1,9 @@
-import { describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { app } from "@/app";
+import { __resetEventsForTests, eventsAfter } from "@/lib/events";
+import { __resetHealthForTests, list, raise, resolve } from "@/lib/health";
+
+beforeEach(() => { __resetHealthForTests(); __resetEventsForTests(); });
 
 describe("GET /healthz", () => {
   test("returns a healthy semver response", async () => {
@@ -10,4 +14,25 @@ describe("GET /healthz", () => {
     expect(body.version).toMatch(/^\d+\.\d+\.\d+$/);
     expect(body.uptimeSeconds).toBeGreaterThanOrEqual(0);
   });
+});
+
+test("raising the same code updates one item and emits only on change", () => {
+  const item = { code: "engine.crashed", severity: "error" as const, title: "Engine crashed", text: "The engine stopped.", cause: "exit", fix: { label: "Restart", action: "restart_engine" } };
+  raise(item); raise(item);
+  expect(list()).toHaveLength(1);
+  expect(eventsAfter(0).filter((event) => event.id === "health.changed")).toHaveLength(1);
+});
+
+test("resolve removes an item from the active list", () => {
+  raise({ code: "disk-under-reserve", severity: "warning", title: "Disk low", text: "Free space is low.", cause: "probe" });
+  expect(resolve("disk-under-reserve")).toBe(true);
+  expect(list()).toEqual([]);
+  expect(resolve("disk-under-reserve")).toBe(false);
+});
+
+test("producer codes are stable and actionable", () => {
+  for (const code of ["engine.crashed", "crash-loop", "post-load-check-failed", "managed-host-offline", "memory-pressure-warn", "memory-pressure-critical", "admission-refused-repeatedly", "stored-blob-checksum-mismatch", "disk-under-reserve", "failed-swap", "unverified-channel"]) {
+    raise({ code, severity: "warning", title: code, text: "scripted condition", cause: "scripted input", fix: { label: "Fix", action: "test" } });
+  }
+  expect(list().map((item) => item.code)).toEqual(expect.arrayContaining(["engine.crashed", "failed-swap", "unverified-channel"]));
 });

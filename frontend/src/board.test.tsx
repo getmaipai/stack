@@ -18,6 +18,7 @@ function responseFor(input: RequestInfo | URL): Response {
   if (path.endsWith("/budget")) return Response.json({ capBytes: 24 * 1_073_741_824, freeMemoryBytes: 12 * 1_073_741_824, pressure: false, loaded: [], queue: [] });
   if (path.endsWith("/notifications")) return Response.json({ notifications: [] });
   if (path.endsWith("/repairs")) return Response.json({ repairs: [] });
+  if (path.endsWith("/health")) return Response.json({ health: [] });
   if (path.endsWith("/setup/plan")) return Response.json({ plan: null, downloads: [], health: null });
   throw new Error("unstubbed fetch: " + path);
 }
@@ -49,4 +50,16 @@ test("the sizer's Install button calls the setup plan route", async () => {
   expect(install).toBeDefined();
   fireEvent.click(install!);
   await waitFor(() => expect(calls.some((call) => call.includes("/stack/v1/setup/plan POST"))).toBe(true));
+});
+
+test("the board renders health items with one action each", async () => {
+  globalThis.EventSource = undefined as unknown as typeof EventSource;
+  globalThis.fetch = mock((input: RequestInfo | URL) => String(input).endsWith("/health")
+    ? Promise.resolve(Response.json({ health: [
+      { code: "engine.crashed", severity: "error", title: "Engine crashed", text: "The engine stopped.", since: new Date().toISOString(), cause: "exit", fix: { label: "Restart engine", action: "restart_engine" } },
+      { code: "disk-under-reserve", severity: "warning", title: "Disk space is low", text: "Free space is below the reserve.", since: new Date().toISOString(), cause: "disk", learnMore: "https://example.test/storage" },
+    ] }))
+    : Promise.resolve(responseFor(input))) as unknown as typeof fetch;
+  render(<MemoryRouter><BoardPage /></MemoryRouter>);
+  await waitFor(() => { expect(document.body.textContent).toContain("Engine crashed"); expect(document.body.textContent).toContain("Disk space is low"); expect(document.body.textContent).toContain("Restart engine"); expect(document.body.textContent).toContain("Learn more"); });
 });

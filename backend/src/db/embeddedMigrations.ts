@@ -3,6 +3,7 @@ import migration0001 from "./migrations/0001_loose_unus.sql" with { type: "file"
 import migration0002 from "./migrations/0002_normal_jetstream.sql" with { type: "file" };
 import migration0003 from "./migrations/0003_glorious_prima.sql" with { type: "file" };
 import migration0004 from "./migrations/0004_fresh_la_nuit.sql" with { type: "file" };
+import migration0005 from "./migrations/0005_health_list.sql" with { type: "file" };
 import snapshot0000 from "./migrations/meta/0000_snapshot.json" with { type: "file" };
 import snapshot0001 from "./migrations/meta/0001_snapshot.json" with { type: "file" };
 import snapshot0002 from "./migrations/meta/0002_snapshot.json" with { type: "file" };
@@ -16,6 +17,7 @@ export const migrationAssets: ReadonlyArray<readonly [string, string]> = [
   ["0002_normal_jetstream.sql", migration0002],
   ["0003_glorious_prima.sql", migration0003],
   ["0004_fresh_la_nuit.sql", migration0004],
+  ["0005_health_list.sql", migration0005],
   ["meta/0000_snapshot.json", snapshot0000 as unknown as string],
   ["meta/0001_snapshot.json", snapshot0001 as unknown as string],
   ["meta/0002_snapshot.json", snapshot0002 as unknown as string],

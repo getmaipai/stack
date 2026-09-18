@@ -67,12 +67,18 @@ export const notifications = sqliteTable("notifications", {
   dismissedAt: text("dismissed_at"),
 });
 
-export const repairs = sqliteTable("repairs", {
-  id: text("id").primaryKey(),
+export const health = sqliteTable("health", {
+  code: text("code").primaryKey(),
+  severity: text("severity").notNull(),
   title: text("title").notNull(),
-  detail: text("detail").notNull(),
-  action: text("action").notNull(),
-  level: text("level").notNull().default("passive"),
-  openedAt: text("opened_at").notNull(),
+  text: text("text").notNull(),
+  since: text("since").notNull(),
+  cause: text("cause").notNull(),
+  fix: text("fix"),
+  learnMore: text("learn_more"),
   resolvedAt: text("resolved_at"),
+  ignoredAt: text("ignored_at"),
 });
+
+// Compatibility name for the old repair adapter and its route alias.
+export const repairs = health;

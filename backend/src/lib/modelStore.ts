@@ -10,6 +10,7 @@ import { z } from "zod";
 import { emit } from "@/lib/events";
 import { removeModelManifest, writeModelManifest } from "@/lib/store/manifests";
 import { writeHfFile } from "@/lib/store/hfCache";
+import { raise } from "@/lib/health";
 
 export const ModelSourceSchema = z.enum(["catalog", "huggingface"]);
 
@@ -267,6 +268,7 @@ async function installRegisteredModel(
   const actual = await sha256OfFile(destination);
   if (actual !== verifiedDownload.sha256.toLowerCase()) {
     rmSync(destination, { force: true });
+    raise({ code: "stored-blob-checksum-mismatch", severity: "error", title: "A model checksum did not match", text: `The downloaded bytes for ${record.id} failed verification.`, cause: "The file digest differed from its recorded SHA-256.", fix: { label: "Download again", action: "retry_download" } });
     throw new DownloadVerificationError(`Model failed checksum verification`);
   }
   const now = options.now?.() ?? new Date().toISOString();

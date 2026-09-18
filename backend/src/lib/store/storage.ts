@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { dataDir } from "@/lib/paths";
 import { modelManifestRoot } from "@/lib/store/layout";
 import { listModelManifests } from "@/lib/store/manifests";
+import { raise, resolve as resolveHealth } from "@/lib/health";
 
 export interface StorageReport {
   totalBytes: number;
@@ -76,6 +77,7 @@ export function storageAccounting(root = dataDir): StorageReport {
     }
   }
   const freeDiskBytes = (() => { try { const stat = statfsSync(root); return stat.bavail * stat.bsize; } catch { return 0; } })();
+  if (freeDiskBytes > 0 && freeDiskBytes < 10 * 1_073_741_824) raise({ code: "disk-under-reserve", severity: "warning", title: "Disk space is running low", text: "The Stack is below its 10 GB free-space reserve.", cause: "The filesystem reported less than the Stack's reserve.", fix: { label: "Remove stored data", action: "free_disk" } }); else resolveHealth("disk-under-reserve");
   const report = { totalBytes: Object.values(byCategory).reduce((sum, value) => sum + value, 0), byCategory, models: { byAbility, sharedBytes }, freeDiskBytes, updatedAt: new Date().toISOString() };
   cached = { root, expiresAt: Date.now() + 30_000, report };
   return report;

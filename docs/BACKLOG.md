@@ -96,6 +96,9 @@ never copied. No item migrates the hub until STACK-16.
   typed events in `dev.md`; the Notifications page; the Repairs list.
   Acceptance: an engine crash produces `engine.state` and a Repairs row
   with one action (test); Home's bridge shape documented in the API. Verified at dd781aa (the tick and the changelog line were added at landing; the lane's commit omitted them).
+- [x] **STACK-09b (M): one daemon-owned health list.** Idempotent health
+  items with severity, cause, Fix or Learn more, resolve and ignore routes,
+  producer codes, and the Repairs compatibility alias. Verified at f866376.
 - [ ] **STACK-10 (M): updates.** Superseded by the survey's shape in milestone 0b below. Opt-in check, download beside the
   current build, drain under the guard, swap, keep the old build, one-click
   rollback; for the Stack, engines and models. Per

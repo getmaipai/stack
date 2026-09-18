@@ -154,10 +154,12 @@ each a status and one line:
 | Pictures / Video / Music | "Ready when asked" (on-demand) | "Working, 40%" | "Not installed" | |
 | Memory | "78 of 128 GB in use, 30 GB free for jobs" | "Tight: a picture job will wait" | | "Over: something was unloaded" |
 
-Under the tiles: the last five notifications, and a "Repairs" list if the
-Stack noticed anything (a model whose checksum no longer matches, an
-engine that crashed twice, a managed host that vanished), each with the
-one action that fixes it.
+Under the tiles: the last five notifications, and a "Repairs" list backed
+by the daemon's health items if the Stack noticed anything (a model whose
+checksum no longer matches, an engine that crashed twice, a managed host
+that vanished). The header carries the active count. Each card shows the
+title and why, severity only as color, and exactly one Fix or Learn more
+action, plus Ignore.
 
 ## Try it
 

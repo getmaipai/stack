@@ -564,6 +564,28 @@ The declarations and in-memory ring are in `backend/src/events.ts` and
 Repairs are in `backend/src/lib/repairs.ts`, and redacted daemon and engine
 logs are in `backend/src/lib/log.ts`.
 
+### The daemon-owned health list (STACK-09b, 2026-09-17)
+
+Health is one keyed, durable list shared by the daemon, board, tray and
+future CLI. An item has `code`, `severity` (`critical | error | warning`),
+`title`, `text`, `since`, `cause`, an optional `fix` with `label` and
+`action`, and an optional `learnMore` link. Raising a code updates the
+existing item rather than creating a duplicate. Resolving or ignoring it
+removes it from the active list while keeping the resolved timestamp for
+history, and every change emits `health.changed` on the event feed.
+
+Severity controls presentation only: critical may badge the tray and post a
+native notification, error badges the tray, and warning stays on the Health
+page. Producers are explicit. The supervisor raises engine-crashed,
+crash-loop, post-load-failed and managed-host-offline items. The governor
+raises memory-pressure warn and critical items and repeated-admission-
+refused items. The store raises stored-blob-checksum-mismatch and
+disk-under-reserve items. Updates raise failed-swap, and alert channels
+raise unverified-channel. Each producer resolves its code when the
+condition clears. Repairs is now the compatibility name for health items
+that have a fix, so the existing route remains an alias rather than a
+second source of truth.
+
 ### Updates
 
 Three things update, each on its own schedule, each opt-in: the Stack

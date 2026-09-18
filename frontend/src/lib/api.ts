@@ -67,6 +67,17 @@ export interface RepairRecord {
   resolvedAt: string | null;
 }
 
+export interface HealthItem {
+  code: string;
+  severity: "critical" | "error" | "warning";
+  title: string;
+  text: string;
+  since: string;
+  cause: string;
+  fix?: { label: string; action: string };
+  learnMore?: string;
+}
+
 export type SetupTier = "p16" | "p32" | "p64" | "p128";
 export type SetupMode = "small" | "full";
 export type DownloadStatus = "queued" | "downloading" | "paused" | "installed" | "failed";

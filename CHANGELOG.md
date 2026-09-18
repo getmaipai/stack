@@ -9,6 +9,10 @@ the product passes its battle-tested checklist in `docs/dev.md`.
 
 ### Added
 
+- The STACK-09b daemon-owned health list with idempotent health changes,
+  resolve and ignore actions, Repairs compatibility, producer codes, and
+  board cards with one Fix or Learn more action.
+
 - The STACK-04b content-addressed store: Hugging Face cache layout, engine
   manifests, import scanning, ranged downloads with resume, storage
   accounting, migration, and reference-counted model and engine removal.

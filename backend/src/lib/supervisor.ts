@@ -9,7 +9,7 @@ import { isModelSelectable, listModels, recordMeasuredFootprint, type ModelRecor
 import { withTimeout } from "@/lib/withTimeout";
 import { admit, release, startGovernor, type GovernorHandle } from "@/lib/governor";
 import { emit } from "@/lib/events";
-import { raiseRepair } from "@/lib/repairs";
+import { raise, resolve as resolveHealth } from "@/lib/health";
 import type { RoleState } from "@/roles";
 import { getMemoryReader } from "@/lib/memory";
 import { readGgufFacts } from "@/lib/gguf";
@@ -311,7 +311,7 @@ async function startUrlBackend(kind: EngineKind, url: string): Promise<ChatBacke
   if (!identity.healthy) {
     const reason = `The ${kind} engine is offline.`;
     emit({ id: "engine.state", data: { engine: "chat", state: "offline", reason } });
-    raiseRepair("Chat engine is offline", reason, "check_host");
+    raise({ code: "managed-host-offline", severity: "error", title: "Chat engine is offline", text: reason, cause: reason, fix: { label: "Check host", action: "check_host" } });
     throw new EngineUnavailableError(reason);
   }
   return { client, kind, identity, pid: null, activeRequests: 0, retired: false, stop: async () => {} };
@@ -354,6 +354,8 @@ async function startSpawnedBackend(): Promise<ChatBackend> {
     const check = await postLoadCheck(client, processHandle.pid, contextLength);
     if (check.actualBytes !== null) recordMeasuredFootprint(model.id, check.actualBytes, contextLength);
     state.status.postLoadCheck = check;
+    resolveHealth("engine.crashed");
+    resolveHealth("post-load-check-failed");
     const backend: ChatBackend = {
       client,
       kind: "spawned",
@@ -372,6 +374,7 @@ async function startSpawnedBackend(): Promise<ChatBackend> {
       if (!backend.retired && state.backend === backend) {
         state.backend = null;
         state.status = { kind: "spawned", state: "offline", reason: "The spawned engine exited unexpectedly.", identity, postLoadCheck: check };
+        raise({ code: "engine.crashed", severity: "error", title: "The chat engine crashed", text: "The spawned engine exited unexpectedly.", cause: "The engine process exited.", fix: { label: "Restart engine", action: "restart_engine" } });
         state.startingPromise = null;
       }
     });
@@ -379,7 +382,8 @@ async function startSpawnedBackend(): Promise<ChatBackend> {
   } catch (error) {
     processHandle.kill();
     emit({ id: "engine.state", data: { engine: "chat", state: "offline", reason: (error as Error).message } });
-    raiseRepair("Chat engine failed to start", (error as Error).message, "restart_engine");
+    const message = (error as Error).message;
+    raise({ code: exited ? "engine.crashed" : "post-load-check-failed", severity: "error", title: "Chat engine failed to start", text: message, cause: message, fix: { label: "Restart engine", action: "restart_engine" } });
     release(admission);
     throw error;
   }
@@ -459,7 +463,8 @@ export function reportChatEngineExited(reason = "The spawned engine exited unexp
   state.startingPromise = null;
   state.status = { ...state.status, state: "offline", reason };
   emit({ id: "engine.state", data: { engine: "chat", state: "offline", reason } });
-  raiseRepair("Chat engine is offline", reason, "restart_engine");
+  raise({ code: "managed-host-offline", severity: "error", title: "Chat engine is offline", text: reason, cause: reason, fix: { label: "Restart engine", action: "restart_engine" } });
+  emit({ id: "repair", data: { id: "managed-host-offline", title: "Chat engine is offline", detail: reason, action: "restart_engine", level: "immediate" } });
   if (previous) {
     previous.retired = true;
     void previous.stop();

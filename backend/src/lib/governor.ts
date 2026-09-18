@@ -1,6 +1,7 @@
 import { measureProcessMemoryBytes } from "@/lib/supervisor";
 import { emit } from "@/lib/events";
 import { getMemoryReader, type MemoryPressure, type MemoryReader } from "@/lib/memory";
+import { raise, resolve as resolveHealth } from "@/lib/health";
 
 const GB = 1_073_741_824;
 
@@ -93,6 +94,7 @@ let pressure: MemoryPressure = "normal";
 let pressurePolls = 0;
 const loaded = new Map<string, LoadedInternal>();
 const queue: Array<GovernorRequest> = [];
+const refusalCounts = new Map<string, number>();
 
 const initialMemory = getMemoryReader().read();
 totalMemoryBytes = initialMemory.totalBytes;
@@ -130,12 +132,17 @@ function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
 export async function admit(request: GovernorRequest): Promise<GovernorHandle | { queued: true; position: number } | { refused: true; reason: string }> {
   const peak = peakFor(request);
   if (!canAdmit(request, peak.bytes)) {
+    const refusals = (refusalCounts.get(request.id) ?? 0) + 1;
+    refusalCounts.set(request.id, refusals);
+    if (refusals >= 3) raise({ code: "admission-refused-repeatedly", severity: "warning", title: "Work is waiting for memory", text: `The governor has deferred ${request.id} repeatedly.`, cause: "The current memory budget cannot admit the request.", fix: { label: "Free memory", action: "free_memory" } });
     if (queue.length >= tuning.queueMax) return { refused: true, reason: "The governor queue is full." };
     const existing = queue.findIndex((item) => item.id === request.id);
     if (existing >= 0) return { queued: true, position: existing + 1 };
     queue.push(request);
     return { queued: true, position: queue.length };
   }
+  refusalCounts.delete(request.id);
+  resolveHealth("admission-refused-repeatedly");
   const item: LoadedInternal = {
     id: request.id,
     kind: request.kind,
@@ -216,6 +223,16 @@ export function startGovernor(options: StartGovernorOptions): () => void {
     pressurePolls = systemBreaches;
     const arithmeticPressure: MemoryPressure = systemBreaches >= tuning.systemSustainedPolls ? "warn" : "normal";
     pressure = kernelPressure === "critical" ? "critical" : kernelPressure === "warn" || arithmeticPressure === "warn" ? "warn" : "normal";
+    if (pressure === "critical") {
+      raise({ code: "memory-pressure-critical", severity: "critical", title: "Memory pressure is critical", text: "The governor is stopping work to protect this computer.", cause: "The kernel reported critical memory pressure.", fix: { label: "Free memory", action: "free_memory" } });
+      resolveHealth("memory-pressure-warn");
+    } else if (pressure === "warn") {
+      raise({ code: "memory-pressure-warn", severity: "warning", title: "Memory pressure is tight", text: "New work may wait while the Stack frees memory.", cause: "The kernel or the governor watermark is under pressure.", fix: { label: "Free memory", action: "free_memory" } });
+      resolveHealth("memory-pressure-critical");
+    } else {
+      resolveHealth("memory-pressure-warn");
+      resolveHealth("memory-pressure-critical");
+    }
     if (pressure !== "normal" && (systemBreaches === tuning.systemSustainedPolls || kernelPressure !== "normal")) emit({ id: "pressure", data: { freeMemoryBytes, floorBytes: floor, pressure, availablePercent } });
     const processReader = options.processMemory ?? ((pid: number) => Promise.resolve(memoryReader.processFootprint(pid)));
     const now = options.now?.() ?? Date.now();
@@ -260,6 +277,7 @@ export function __setGovernorTuningForTestsOnly(overrides: Partial<GovernorTunin
 export function __resetGovernorForTests(): void {
   loaded.clear();
   queue.length = 0;
+  refusalCounts.clear();
   tuning = {
     pollMs: GovernorRules.pollMs,
     idleTtlSeconds: GovernorRules.idleTtlSeconds,
