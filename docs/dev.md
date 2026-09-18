@@ -21,7 +21,8 @@ It uses the copied chat primitives in
 and the stateless SSE client in `frontend/src/lib/useStackChat.ts`.
 The copied kit also includes reusable `property-panel` and `things-table`
 blocks for detail panels and console tables, with `KeyValueList` for compact
-panel metadata.
+panel metadata, plus `FilterColumn` and `ThingsPage` for searchable things
+tables with responsive filters.
 Chat uses the operator session, sends the `chat` role through the stable
 OpenAI-shaped route, and shows engine identity plus first-token and
 throughput measurements. Speak and Listen stay offline until their roles

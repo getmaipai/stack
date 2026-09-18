@@ -124,6 +124,9 @@ never copied. No item migrates the hub until STACK-16.
   overview/insights/settings tabs, quick facts, paired primary actions, and
   copyable key-value metadata across engines, models, groups, detected stores,
   clients and channels. Verified at 530e0b0.
+- [x] **STACK-43 (M): the filter column.** A reusable search and collapsible
+  checkbox filter column with live counts, clear behavior, and a responsive
+  sheet on Engines, Models, and Access. Verified at eb41d14.
 - [x] **STACK-36 (M): Overview console.** Range-aware usage, memory, and speed
   series backed by durable samples, with seven widgets, status rings, and
   showroom captures. Verified at ed67582.

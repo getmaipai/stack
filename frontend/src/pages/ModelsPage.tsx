@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/kit/ui/button";
 import { Badge } from "@/kit/ui/badge";
 import { ThingsTable, linkCell, type ThingsTableGroup, type ThingStatus } from "@/kit/blocks/things-table/ThingsTable";
+import { applyFilters, countFilterOptions, type FilterGroup } from "@/kit/blocks/filter-column/FilterColumn";
+import { ThingsPage } from "@/kit/blocks/things-page/ThingsPage";
 import { api } from "@/lib/api";
 import { useApiResource } from "@/lib/useApiResource";
 import type { SectionFrameComponent } from "@/pages/DashboardShell";
@@ -30,6 +32,8 @@ export function ModelsPage({ Frame }: { Frame: SectionFrameComponent }) {
   const [selected, setSelected] = useState<{ kind: "group" | "model" | "detected"; id: string } | null>(null);
   const [renames, setRenames] = useState<Record<string, string>>({});
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
+  const [filterSearch, setFilterSearch] = useState("");
+  const [filterSelections, setFilterSelections] = useState<Record<string, ReadonlySet<string>>>({});
   const groupRows = useMemo(() => groups.data?.groups ?? [], [groups.data?.groups]);
   const modelRows = useMemo(() => models.data?.models ?? [], [models.data?.models]);
   const detectedRows = useMemo(() => detectedStores.data?.detected ?? [], [detectedStores.data?.detected]);
@@ -46,28 +50,47 @@ export function ModelsPage({ Frame }: { Frame: SectionFrameComponent }) {
   async function moveModel(model: Model, groupId: string) { await fetch(`/stack/v1/models/${model.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ groupId: groupId || null }) }); await models.refetch(); await groups.refetch(); }
   async function createGroup(parentId: string | null) { const name = window.prompt(parentId ? "New subgroup name" : "New group name"); if (!name?.trim()) return; await api.post("/stack/v1/groups", { name: name.trim(), parentId }); await groups.refetch(); }
 
+  const allRows = useMemo<ModelRow[]>(() => [...detectedRows.map((store) => ({ kind: "detected" as const, store })), ...modelRows.map((model) => ({ kind: "model" as const, model }))], [detectedRows, modelRows]);
+  const filterAccessors = useMemo(() => ({
+    status: (row: ModelRow) => row.kind === "detected" ? "Detected" : row.model.runtimeState ?? row.model.state,
+    role: (row: ModelRow) => row.kind === "detected" ? row.store.couldHold ?? row.store.roles ?? [] : row.model.roles,
+    group: (row: ModelRow) => row.kind === "detected" ? "Detected" : groupRows.find((group) => group.id === row.model.groupId)?.name ?? "Ungrouped",
+    source: (row: ModelRow) => row.kind === "detected" ? row.store.kind : row.model.source,
+    search: (row: ModelRow) => row.kind === "detected" ? [row.store.name, row.store.version, row.store.path ?? row.store.where ?? ""] : [row.model.id, row.model.nickname ?? "", row.model.roles.join(" ")],
+  }), [groupRows]);
+  const filteredAllRows = useMemo(() => applyFilters(allRows, filterSearch, filterSelections, filterAccessors), [allRows, filterAccessors, filterSearch, filterSelections]);
+  const filterGroups = useMemo<FilterGroup[]>(() => {
+    const group = (id: "status" | "role" | "group" | "source", title: string): FilterGroup => ({ id, title, options: countFilterOptions(allRows, filterAccessors[id]), selected: filterSelections[id] ?? new Set<string>(), onChange: (selected) => setFilterSelections((current) => ({ ...current, [id]: selected })) });
+    return [group("status", "Status"), group("role", "Role"), group("group", "Group"), group("source", "Source")];
+  }, [allRows, filterAccessors, filterSelections]);
+  const filteredModelRows = filteredAllRows.filter((row): row is { kind: "model"; model: Model } => row.kind === "model");
   const groupTree = useMemo<ThingsTableGroup<ModelRow>[]>(() => {
     const childrenOf = (parentId: string | null): Group[] => groupRows.filter((group) => group.parentId === parentId);
-    const makeGroup = (group: Group): ThingsTableGroup<ModelRow> => ({
+    const makeGroup = (group: Group): ThingsTableGroup<ModelRow> | null => {
+      const childGroups = childrenOf(group.id).map(makeGroup).filter((child): child is ThingsTableGroup<ModelRow> => child !== null);
+      const childRows = filteredModelRows.filter((model) => model.model.groupId === group.id);
+      if (childRows.length === 0 && childGroups.length === 0) return null;
+      return {
       key: group.id,
       ariaLabel: group.name,
       label: <div><p><input aria-label={`Rename ${group.id}`} className="w-48 max-w-full bg-transparent font-medium outline-none" value={renames[group.id] ?? group.name} onChange={(event) => setRenames((current) => ({ ...current, [group.id]: event.target.value }))} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === "Enter") void rename(group); }} onBlur={() => void rename(group)} /><span className="sr-only">{group.name}</span></p><p className="text-xs text-muted-foreground">{group.modelCount} models · {Math.round(group.bytesOnDisk / 1_000_000_000 * 10) / 10} GB · {group.usage.requests} requests</p></div>,
-      rows: modelRows.filter((model) => model.groupId === group.id).map((model) => ({ kind: "model" as const, model })),
-      groups: childrenOf(group.id).map(makeGroup),
+      rows: childRows,
+      groups: childGroups,
       summary: <><span>{group.status.loaded} loaded · {group.status.ready} ready · {group.status.onDemand} on demand</span><span className="ml-4">{group.memoryBytes ? `${Math.round(group.memoryBytes / 1_000_000_000 * 10) / 10} GB in use` : "Not loaded"}</span></>,
       status: group.worstHealth ? "attention" : "ready",
       onClick: () => setSelected({ kind: "group", id: group.id }),
-    });
-    return childrenOf(null).map(makeGroup);
-  }, [groupRows, modelRows, renames, rename]);
+    };
+    };
+    return childrenOf(null).map(makeGroup).filter((group): group is ThingsTableGroup<ModelRow> => group !== null);
+  }, [filteredModelRows, groupRows, renames, rename]);
 
-  const rows = useMemo<ModelRow[]>(() => [...detectedRows.map((store) => ({ kind: "detected" as const, store })), ...modelRows.filter((model) => !model.groupId).map((model) => ({ kind: "model" as const, model }))], [detectedRows, modelRows]);
+  const rows = filteredAllRows.filter((row) => row.kind === "detected" || !row.model.groupId);
   const groupPanelData = selectedGroup ? groupPanel(selectedGroup.name, selectedGroup.modelCount, (action) => void groupAction(selectedGroup, action)) : null;
   const modelPanelData = selectedModel ? modelPanel({ id: selectedModel.id, nickname: selectedModel.nickname ?? undefined, group: modelGroup?.name, source: selectedModel.source, licence: typeof selectedModel.provenance.licence === "string" ? selectedModel.provenance.licence : undefined, measuredFootprintBytes: selectedModel.measuredFootprintBytes }, () => {}) : null;
   const detectedPanelData = selectedDetected ? detectedPanel(`${selectedDetected.name} · ${selectedDetected.path ?? selectedDetected.where ?? "local"}`, (action) => { if (action.startsWith("adopt")) void adopt(selectedDetected, action.split(":")[1]?.split(",").filter(Boolean)); }, selectedDetected.couldHold ?? selectedDetected.roles) : null;
 
   if (noModels) return <Frame title="Models" description="Grouped models, measured footprints, nicknames, and utilization."><PageEmptyState title="No models are installed yet" detail="Choose an ability to bring the first local model to this computer." action={<Button asChild><a href="/abilities">Add abilities</a></Button>} /></Frame>;
-  return <Frame title="Models" description="Grouped models, measured footprints, nicknames, and utilization."><div className={selected ? "pr-0 lg:pr-[29rem]" : ""}><ThingsTable<ModelRow>
+  return <Frame title="Models" description="Grouped models, measured footprints, nicknames, and utilization."><ThingsPage filter={{ search: { value: filterSearch, onChange: setFilterSearch, placeholder: "Search models" }, groups: filterGroups, onClear: () => { setFilterSearch(""); setFilterSelections({}); } }} table={<ThingsTable<ModelRow>
     columns={[
       { key: "name", header: "Name", width: "38%", render: (row) => row.kind === "detected" ? <div><p className="font-medium">Detected, not adopted · {row.store.name}</p><p className="text-xs text-muted-foreground">{row.store.version} · {row.store.path ?? row.store.where}</p></div> : <div className="min-w-0"><input aria-label={`Nickname ${row.model.id}`} className="block w-44 max-w-full truncate bg-transparent font-medium outline-none" defaultValue={row.model.nickname ?? ""} placeholder={row.model.id} onBlur={(event) => void renameModel(row.model, event.target.value)} onClick={(event) => event.stopPropagation()} /><span className="block truncate text-xs text-muted-foreground">{row.model.id}</span></div> },
       { key: "roles", header: "Roles", render: (row) => row.kind === "detected" ? linkCell("/abilities", row.store.couldHold?.join(", ") ?? row.store.roles?.join(", ") ?? "Unassigned") : linkCell("/abilities", row.model.roles.join(", ")) },
@@ -87,5 +110,5 @@ export function ModelsPage({ Frame }: { Frame: SectionFrameComponent }) {
     onRowClick={(row) => setSelected(row.kind === "detected" ? { kind: "detected", id: row.store.id } : { kind: "model", id: row.model.id })}
     actions={[{ label: "New group", onClick: () => void createGroup(null) }, ...(selected?.kind === "group" ? [{ label: "New subgroup", onClick: () => void createGroup(selected.id) }] : []), ...(selectedModels.length > 0 ? [{ label: `Remove ${selectedModels.length}`, onClick: () => void Promise.all(selectedModels.map((id) => api.delete(`/stack/v1/models/${id}`))).then(() => models.refetch()) }] : [])]}
     empty="No models or detected stores are available."
-  />{selectedGroup && groupPanelData && <PropertyPanel kind="Group" item={{ name: selectedGroup.name }} status={selectedGroup.worstHealth ? "Needs attention" : "Ready"} actions={groupPanelData.actions} facts={groupPanelData.facts} primaryActions={groupPanelData.primaryActions} tabs={{ overview: groupPanelData.overview }} open onClose={() => setSelected(null)} />}{selectedModel && modelPanelData && <PropertyPanel kind="Model" item={{ name: selectedModel.nickname ?? selectedModel.id }} status={selectedModel.state} actions={modelPanelData.actions} facts={modelPanelData.facts} primaryActions={modelPanelData.primaryActions} tabs={{ overview: modelPanelData.overview, insights: modelPanelData.insights }} open onClose={() => setSelected(null)} />}{selectedDetected && detectedPanelData && <PropertyPanel kind="Detected" item={{ name: selectedDetected.name }} status="Detected" actions={detectedPanelData.actions} facts={detectedPanelData.facts} primaryActions={detectedPanelData.primaryActions} tabs={{ overview: detectedPanelData.overview }} open onClose={() => setSelected(null)} />}</div></Frame>;
+  />} panel={selected ? <>{selectedGroup && groupPanelData && <PropertyPanel kind="Group" item={{ name: selectedGroup.name }} status={selectedGroup.worstHealth ? "Needs attention" : "Ready"} actions={groupPanelData.actions} facts={groupPanelData.facts} primaryActions={groupPanelData.primaryActions} tabs={{ overview: groupPanelData.overview }} open onClose={() => setSelected(null)} />}{selectedModel && modelPanelData && <PropertyPanel kind="Model" item={{ name: selectedModel.nickname ?? selectedModel.id }} status={selectedModel.state} actions={modelPanelData.actions} facts={modelPanelData.facts} primaryActions={modelPanelData.primaryActions} tabs={{ overview: modelPanelData.overview, insights: modelPanelData.insights }} open onClose={() => setSelected(null)} />}{selectedDetected && detectedPanelData && <PropertyPanel kind="Detected" item={{ name: selectedDetected.name }} status="Detected" actions={detectedPanelData.actions} facts={detectedPanelData.facts} primaryActions={detectedPanelData.primaryActions} tabs={{ overview: detectedPanelData.overview }} open onClose={() => setSelected(null)} />}</> : null} /></Frame>;
 }
