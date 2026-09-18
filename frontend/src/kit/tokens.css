@@ -39,6 +39,10 @@
 }
 
 :root {
+  --surface-page: hsl(240 6% 97%);
+  --surface-card: hsl(0 0% 100%);
+  --surface-pane: hsl(240 6% 95%);
+  --surface-sidebar: hsl(240 6% 95%);
   --background: hsl(0 0% 100%);
   --foreground: hsl(240 10% 4%);
   --card: hsl(0 0% 100%);
@@ -101,6 +105,10 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not(.light) {
+    --surface-page: hsl(0 0% 0%);
+    --surface-card: hsl(240 6% 7%);
+    --surface-pane: hsl(240 6% 4%);
+    --surface-sidebar: hsl(240 6% 4%);
     --background: hsl(240 10% 6%);
     --foreground: hsl(0 0% 96%);
     --card: hsl(240 8% 9%);
@@ -141,6 +149,10 @@
 }
 
 .dark {
+  --surface-page: hsl(0 0% 0%);
+  --surface-card: hsl(240 6% 7%);
+  --surface-pane: hsl(240 6% 4%);
+  --surface-sidebar: hsl(240 6% 4%);
   --background: hsl(0 0% 0%);
   --foreground: hsl(0 0% 96%);
   --card: hsl(240 6% 5%);

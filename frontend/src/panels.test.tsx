@@ -61,3 +61,20 @@ test("property panel becomes a full-height phone sheet", async () => {
   expect(document.querySelector('[data-slot="sheet-content"]')?.getAttribute("style")).toContain("width");
   Object.defineProperty(window, "innerWidth", { configurable: true, value: originalWidth });
 });
+
+test("desktop panel floats over its page without moving the table", () => {
+  const originalWidth = window.innerWidth;
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+  let closed = 0;
+  render(<PropertyPanel kind="Engine" item={{ name: "A deliberately long engine name that may wrap in the panel header" }} status="Ready" actions={[]} tabs={{ overview: <p>Configuration value</p> }} open onClose={() => { closed += 1; }} />);
+  const overlay = document.querySelector('[data-testid="property-panel-overlay"]') as HTMLElement;
+  const panel = document.querySelector('[data-testid="property-panel"]') as HTMLElement;
+  expect(overlay.className).toContain("fixed");
+  expect(overlay.querySelector("aside")?.className).toContain("w-[420px]");
+  expect(panel.textContent).toContain("Configuration");
+  expect(panel.querySelector("h2")?.className).toContain("line-clamp-2");
+  fireEvent.click(overlay.querySelector('button[aria-label="Close panel by clicking outside"]')!);
+  fireEvent.keyDown(window, { key: "Escape" });
+  expect(closed).toBe(2);
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: originalWidth });
+});
