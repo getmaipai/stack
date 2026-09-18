@@ -36,6 +36,33 @@ test("the Stack shell lists every section in order", () => {
   expect(text).toContain("Settings");
 });
 
+test("the root waits for its plan before choosing the overview instead of mounting the board", async () => {
+  globalThis.EventSource = undefined as unknown as typeof EventSource;
+  let resolvePlan: ((response: Response) => void) | undefined;
+  globalThis.fetch = mock((input: RequestInfo | URL) => {
+    const path = new URL(typeof input === "string" ? input : input.toString(), "http://local").pathname;
+    if (path.endsWith("/setup/plan")) return new Promise<Response>((resolve) => { resolvePlan = resolve; });
+    if (path.endsWith("/budget")) return Promise.resolve(Response.json(budgetResponse));
+    if (path.endsWith("/roles")) return Promise.resolve(Response.json({ roles: [] }));
+    if (path.endsWith("/health")) return Promise.resolve(Response.json({ health: [] }));
+    if (path.endsWith("/engines")) return Promise.resolve(Response.json({ engines: [] }));
+    if (path.endsWith("/models")) return Promise.resolve(Response.json({ models: [] }));
+    if (path.endsWith("/clients")) return Promise.resolve(Response.json({ clients: [] }));
+    return Promise.resolve(new Response(JSON.stringify({}), { status: 200, headers: { "content-type": "application/json" } }));
+  }) as unknown as typeof fetch;
+
+  render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
+  expect(document.querySelector('[data-slot="skeleton"]')).toBeTruthy();
+  expect(document.body.textContent).not.toContain("Add abilities");
+  expect(document.body.textContent).not.toContain("Start small");
+  expect(document.body.textContent).not.toContain("Full plan");
+
+  await waitFor(() => expect(resolvePlan).toBeDefined());
+  resolvePlan?.(Response.json({ plan: { tier: "p16", mode: "small", createdAt: "2026-09-18T00:00:00.000Z", health: null }, downloads: [], health: null }));
+  await waitFor(() => expect(document.querySelector('[data-widget]')).toBeTruthy());
+  expect(document.body.textContent).not.toContain("Add abilities");
+});
+
 test("Monitoring renders governor decision sentences", async () => {
   stubStackFetch({ ...boardExtras, "/stack/v1/groups": { groups: [] }, "/stack/v1/budget/decisions": { decisions: [{ at: new Date().toISOString(), decision: "Refused", model: "image", reason: "Memory was tight." }] } });
   render(<MemoryRouter initialEntries={["/monitoring"]}><DashboardShell /></MemoryRouter>);
@@ -118,7 +145,7 @@ test("the header bell opens the notification popover and shows the unread count"
   render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
   const trigger = document.querySelector("[data-notifications-trigger]");
   expect(trigger).toBeTruthy();
-  expect(document.body.textContent).toContain("1");
+  await waitFor(() => expect(document.body.textContent).toContain("1"));
   fireEvent.pointerDown(trigger as HTMLElement);
   await waitFor(() => expect(document.body.textContent).toContain("The chat engine is stopped."));
 });

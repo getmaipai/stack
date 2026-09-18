@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { getIcon } from "@/kit/icons";
-import { type BudgetResponse, type EngineRecord, type HardwareResponse, type HealthItem, type RepairRecord, type RoleRecord } from "@/lib/api";
+import { type BudgetResponse, type EngineRecord, type HardwareResponse, type HealthItem, type RepairRecord, type RoleRecord, type SetupPlanResponse } from "@/lib/api";
 import { BoardPage } from "@/pages/BoardPage";
 import { TryItPage } from "@/pages/TryItPage";
 import { OverviewPage } from "@/pages/OverviewPage";
@@ -29,6 +29,7 @@ import { ActionList } from "@/kit/blocks/phone/ActionList";
 import { actionsFor, type ThingKind } from "@/lib/actions";
 import { isDesktop, notify } from "@/kit/host";
 import { RelativeTime } from "@/kit/ui/relative-time";
+import { Skeleton } from "@/kit/ui/skeleton";
 
 const Copy = getIcon("Copy"); const ExternalLink = getIcon("ExternalLink"); const Gauge = getIcon("Gauge"); const Search = getIcon("Search"); const RefreshCw = getIcon("RefreshCw"); const UploadCloud = getIcon("UploadCloud"); const SlidersHorizontal = getIcon("SlidersHorizontal");
 
@@ -116,5 +117,13 @@ export function DashboardShell() {
   return <SidebarProvider><AppSidebar repairs={repairRows} roles={roleRows} health={health.data?.health ?? []} engineCount={engineCount} updateCount={updateCount} alertSeverity={alertSeverity} engineTooltip={engineTooltip} updateTooltip={updateTooltip} alertTooltip={alertTooltip} hardware={hardware.data?.hardware} budget={budget.data} runState={runState.data?.state} /><SidebarInset className="h-svh overflow-hidden bg-[var(--surface-page)]"><SiteHeader title={title} onSearch={() => setPaletteOpen(true)} runState={runState.data?.state ?? "running"} onRunStateChange={() => void runState.refetch()} /><div className="flex-1 overflow-y-auto">{routes}</div></SidebarInset><CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} /></SidebarProvider>;
 }
 
-function BoardPageProxy() { const roles = useApiResource<{ roles: RoleRecord[] }>("/stack/v1/roles"); const hasPlan = roles.data?.roles.some((role) => role.state !== "notInstalled"); return hasPlan ? <OverviewPage /> : <BoardPage embedded />; }
+function BoardPageProxy() {
+  const setup = useApiResource<SetupPlanResponse>("/stack/v1/setup/plan");
+  const [destination, setDestination] = useState<"board" | "overview">();
+  useEffect(() => {
+    if (!setup.loading && !destination) setDestination(setup.data?.plan ? "overview" : "board");
+  }, [destination, setup.data?.plan, setup.loading]);
+  if (!destination) return <main className="p-6"><Skeleton className="h-64 w-full" /></main>;
+  return destination === "overview" ? <OverviewPage /> : <BoardPage embedded />;
+}
 function AbilitiesProxy() { return <BoardPage embedded showAbilities />; }

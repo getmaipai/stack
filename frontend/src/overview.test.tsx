@@ -13,6 +13,7 @@ test("Overview requests the selected series range and renders scripted widgets",
   const startedAt = new Date().toISOString();
   globalThis.fetch = mock((input: RequestInfo | URL) => {
     const path = String(input); calls.push(path);
+    if (path.endsWith("/setup/plan")) return Promise.resolve(Response.json({ plan: { tier: "p16", mode: "small", createdAt: "2026-09-18T00:00:00.000Z", health: null }, downloads: [], health: null }));
     if (path.endsWith("/roles")) return Promise.resolve(Response.json({ roles: [{ id: "chat", state: "ready", description: "Chat", model: null }] }));
     if (path.endsWith("/budget")) return Promise.resolve(Response.json({ capBytes: 128 * 1_073_741_824, freeMemoryBytes: 74 * 1_073_741_824, availablePercent: 58, pressure: "normal", loaded: [], queue: [] }));
     if (path.endsWith("/hardware")) return Promise.resolve(Response.json({ hardware: { platform: "darwin", arch: "arm64", totalRamGb: 128, cpuCount: 16, isAppleSilicon: true, unifiedMemoryGb: 128, cudaDevices: [], freeDiskBytes: 2_400_000_000_000, osVersion: "15.6" }, proposed: null, tiers: [] }));
@@ -50,6 +51,7 @@ test("Overview changes its grid layout at desktop, tablet, and phone widths", as
   const originalWidth = window.innerWidth;
   globalThis.fetch = mock((input: RequestInfo | URL) => {
     const path = String(input);
+    if (path.endsWith("/setup/plan")) return Promise.resolve(Response.json({ plan: { tier: "p16", mode: "small", createdAt: "2026-09-18T00:00:00.000Z", health: null }, downloads: [], health: null }));
     if (path.endsWith("/roles")) return Promise.resolve(Response.json({ roles: [{ id: "chat", state: "ready", description: "Chat", model: null }] }));
     if (path.includes("/series")) return Promise.resolve(Response.json({ range: "day", usage: [], memory: [], speed: [] }));
     if (path.endsWith("/budget")) return Promise.resolve(Response.json({ capBytes: 1, freeMemoryBytes: 1, availablePercent: 100, pressure: "normal", loaded: [], queue: [] }));
