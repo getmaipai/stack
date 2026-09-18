@@ -65,5 +65,5 @@ export function PropertyPanel(props: PropertyPanelProps) {
   useEffect(() => { const update = () => setMobile(window.innerWidth < 1024); update(); window.addEventListener("resize", update); return () => window.removeEventListener("resize", update); }, []);
   if (!props.open) return null;
   if (mobile) return <Sheet open={props.open} onOpenChange={(open) => { if (!open) props.onClose(); }}><SheetContent side="right" className="max-w-none p-0" style={{ width: "calc(100vw - 1rem)", maxWidth: "none" }}><SheetHeader className="sr-only"><SheetTitle>{panelTitle(props.item)}</SheetTitle><SheetDescription>{props.kind} details</SheetDescription></SheetHeader><PanelBody {...props} /></SheetContent></Sheet>;
-  return <aside className="fixed inset-y-0 right-0 z-40 w-[28rem] border-l bg-background shadow-xl"><PanelBody {...props} /></aside>;
+  return <aside className="fixed inset-y-0 right-0 z-40 w-[28rem] border-l bg-background"><PanelBody {...props} /></aside>;
 }

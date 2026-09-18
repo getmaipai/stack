@@ -1,4 +1,4 @@
-/* Copied from home's kit until KIT-01 extracts `@maipai/ui`; do not edit here. */
+/* Copied from home's kit until KIT-01 extracts `@maipai/ui`; do not edit here. Dark is black, per ux.md's references. */
 /* The kit's token set (docs/UI.md > Themes): one set of tokens, light and
  * dark, no raw colors in app code. Stack's accent is orange (brand/README.md's
  * per-product accent table); everything else here is a reasonable neutral
@@ -133,16 +133,16 @@
 }
 
 .dark {
-  --background: hsl(240 10% 6%);
+  --background: hsl(0 0% 0%);
   --foreground: hsl(0 0% 96%);
-  --card: hsl(240 8% 9%);
+  --card: hsl(240 6% 5%);
   --card-foreground: hsl(0 0% 96%);
-  --popover: hsl(240 8% 9%);
+  --popover: hsl(240 6% 5%);
   --popover-foreground: hsl(0 0% 96%);
-  --border: hsl(240 6% 18%);
-  --input: hsl(240 6% 18%);
-  --muted: hsl(240 6% 14%);
-  --muted-foreground: hsl(240 5% 65%);
+  --border: hsl(240 5% 16%);
+  --input: hsl(240 5% 16%);
+  --muted: hsl(240 5% 9%);
+  --muted-foreground: hsl(240 4% 62%);
   --secondary: hsl(240 6% 14%);
   --secondary-foreground: hsl(0 0% 96%);
   --accent: hsl(240 6% 14%);

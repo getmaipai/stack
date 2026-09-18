@@ -590,7 +590,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   list (the list shows both). Mirror: X's "3m" timestamps. Acceptance:
   `relativeTime.test.ts` covers the boundaries; `overview.test.tsx`
   finds a `<time>` element with a `dateTime`. Exit: `scripts/check.sh`.
-- [ ] **STACK-40 (S): dark is black, light is flat.** `frontend/src/kit/
+- [x] **STACK-40 (S): dark is black, light is flat.** (6723dee) `frontend/src/kit/
   tokens.css` `.dark` block: `--background` and `--card` to a near-black
   neutral, `--border` a hairline grey, no shadow tokens in use; light
   mode drops the card drop shadows (`shadow-*` classes on `Card` and the
