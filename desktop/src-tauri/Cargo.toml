@@ -5,10 +5,6 @@ description = "MaiPai Stack desktop shell"
 authors = ["MaiPai"]
 edition = "2021"
 
-[lib]
-name = "maipai_stack_desktop_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
-
 [build-dependencies]
 tauri-build = "=2.4.1"
 
