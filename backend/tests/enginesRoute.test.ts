@@ -1,0 +1,36 @@
+import { afterEach, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { app } from "@/app";
+import { __resetOperatorForTests, __resetOperatorThrottleForTests } from "@/lib/operator";
+import { engineTagRoot } from "@/lib/store/layout";
+
+let dataDir: string | null = null;
+afterEach(() => { __resetOperatorForTests(); __resetOperatorThrottleForTests(); if (dataDir) rmSync(dataDir, { recursive: true, force: true }); dataDir = null; delete process.env.STACK_SCRIPTED_ENGINES; delete process.env.STACK_MANAGED_ENGINE_URL; });
+
+async function operatorCookie(): Promise<string> {
+  const response = await app.request("/stack/v1/operator/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "test password" }) });
+  return response.headers.get("set-cookie")?.split(";")[0] ?? "";
+}
+
+test("operator engine controls start, stop, restart, probe, swap, and protect current removal", async () => {
+  dataDir = mkdtempSync(join(process.env.TMPDIR ?? "/tmp", "maipai-engines-route-")); process.env.STACK_DATA_DIR = dataDir; process.env.STACK_SCRIPTED_ENGINES = "1";
+  const cookie = await operatorCookie(); const headers = { cookie, "content-type": "application/json" };
+  for (const action of ["start", "stop", "restart"]) {
+    const response = await app.request(`/stack/v1/engines/llama-server/${action}`, { method: "POST", headers });
+    expect(response.status).toBe(200);
+  }
+  const probe = Bun.serve({ port: 0, fetch: (request) => new URL(request.url).pathname === "/health" ? Response.json({ status: "ok" }) : Response.json({ build_info: "b-test" }) });
+  try {
+    process.env.STACK_MANAGED_ENGINE_URL = String(probe.url).replace(/\/$/, "");
+    const response = await app.request("/stack/v1/engines/managed/probe", { method: "POST", headers });
+    expect(response.status).toBe(200); expect((await response.json() as { healthy: boolean }).healthy).toBe(true);
+  } finally { probe.stop(true); }
+  mkdirSync(engineTagRoot("llama-server", "b-test"), { recursive: true });
+  const current = await app.request("/stack/v1/engines/llama-server/current", { method: "POST", headers, body: JSON.stringify({ tag: "b-test" }) });
+  expect(current.status).toBe(200);
+  const remove = await app.request("/stack/v1/engines/llama-server/builds/b-test", { method: "DELETE", headers });
+  expect(remove.status).toBe(400); expect((await remove.json() as { error: string }).error).toContain("current");
+  const invalidInstall = await app.request("/stack/v1/engines/llama-server/install", { method: "POST", headers, body: JSON.stringify({ tag: "b-nope" }) });
+  expect(invalidInstall.status).toBe(400);
+});

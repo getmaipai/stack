@@ -108,6 +108,36 @@ export interface SetupPlanResponse {
   health: string | null;
 }
 
+export interface EngineSetting {
+  key: string;
+  type: "number" | "boolean" | "text";
+  default: string | number | boolean;
+  label: string;
+  help: string;
+  disclosure: "basic" | "advanced" | "developer";
+  needsRestart: boolean;
+  inEffect: string | number | boolean;
+  pending: string | number | boolean | null;
+}
+
+export interface EngineRecord {
+  id: string;
+  label: string;
+  platform: string;
+  arch: string;
+  verified: boolean;
+  installed: boolean;
+  matchesThisMachine: boolean;
+  running: string | null;
+  currentTag: string | null;
+  newestTag: string | null;
+  current: boolean;
+  notCurrent: boolean;
+  needsRestart: boolean;
+  state: "current" | "notCurrent";
+  stateReason: "newer installed" | "newer available" | "needs restart" | null;
+}
+
 export class ApiError extends Error {
   constructor(message: string, readonly status: number, readonly body: Record<string, unknown>) {
     super(message);
@@ -134,4 +164,6 @@ export const api = {
     headers: { "content-type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   }),
+  put: <T>(path: string, body: unknown) => request<T>(path, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+  delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };

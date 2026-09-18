@@ -5,6 +5,7 @@ import { extractArchive } from "@/lib/archive";
 import { downloadUrl } from "@/lib/download";
 import { engineCurrentPath, engineTagRoot } from "@/lib/store/layout";
 import { readEngineManifest, removeEngineManifest, writeEngineManifest } from "@/lib/store/manifests";
+import { listModels } from "@/lib/modelStore";
 
 function engineNameTag(id: string): { name: string; tag: string } {
   const marker = id.indexOf("-b");
@@ -61,4 +62,8 @@ export function removeEngine(name: string, tag: string): boolean {
     if (resolve(current, "..", readlinkSync(current)) === resolve(destination)) rmSync(current, { force: true });
   } catch { /* Best effort for a concurrently removed link. */ }
   return true;
+}
+
+export function engineIsBound(name: string, _tag: string): boolean {
+  return listModels().some((model) => model.engineRequirements.engine === name);
 }

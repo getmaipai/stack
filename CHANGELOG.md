@@ -9,6 +9,10 @@ the product passes its battle-tested checklist in `docs/dev.md`.
 
 ### Added
 
+- STACK-19 engine management: operator controls, declarative engine
+  configuration with restart state, derived version status, install progress,
+  protected build removal, and the Engines page with Configure sheet.
+
 - STACK-10 update manifests, opt-in conditional checks, engine tag swap and
   rollback controls, and the weekly model revision watch.
 

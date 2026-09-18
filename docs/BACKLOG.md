@@ -102,6 +102,10 @@ never copied. No item migrates the hub until STACK-16.
 - [x] **STACK-10 (M): updates.** Opt-in check, conditional manifests,
   engine swap and rollback, and a non-applying model revision watch.
   Verified at 8ee0683; release manifest generation remains RELEASE-STACK-01.
+- [x] **STACK-19 (M): engine management.** Operator controls, declared
+  per-engine configuration with pending restart values, derived version
+  state, install progress, protected removal, and the Engines page. Verified
+  at cd7303b.
 - [x] **STACK-11 (M): the admin UI, first run and the board.** committed:
   first run steps 1 to 3 and 5, login, the board; the downloading step
   and Try it are STACK-12. The five

@@ -440,6 +440,43 @@
                           },
                           "matchesThisMachine": {
                             "type": "boolean"
+                          },
+                          "running": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "currentTag": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "newestTag": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "current": {
+                            "type": "boolean"
+                          },
+                          "notCurrent": {
+                            "type": "boolean"
+                          },
+                          "needsRestart": {
+                            "type": "boolean"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "current",
+                              "notCurrent"
+                            ]
+                          },
+                          "stateReason": {
+                            "type": "string",
+                            "nullable": true,
+                            "enum": [
+                              "newer installed",
+                              "newer available",
+                              null
+                            ]
                           }
                         },
                         "required": [
@@ -449,7 +486,15 @@
                           "arch",
                           "verified",
                           "installed",
-                          "matchesThisMachine"
+                          "matchesThisMachine",
+                          "running",
+                          "currentTag",
+                          "newestTag",
+                          "current",
+                          "notCurrent",
+                          "needsRestart",
+                          "state",
+                          "stateReason"
                         ]
                       }
                     }
@@ -464,7 +509,544 @@
         }
       }
     },
-    "/stack/v1/engines/{name}/{tag}": {
+    "/stack/v1/engines/{name}/config": {
+      "get": {
+        "tags": [
+          "Engines"
+        ],
+        "summary": "Read engine configuration",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "name",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Declared and effective engine settings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "settings": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "number",
+                              "boolean",
+                              "text"
+                            ]
+                          },
+                          "default": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              }
+                            ]
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "help": {
+                            "type": "string"
+                          },
+                          "disclosure": {
+                            "type": "string",
+                            "enum": [
+                              "basic",
+                              "advanced",
+                              "developer"
+                            ]
+                          },
+                          "needsRestart": {
+                            "type": "boolean"
+                          },
+                          "inEffect": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              }
+                            ]
+                          },
+                          "pending": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "nullable": true
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "type",
+                          "default",
+                          "label",
+                          "help",
+                          "disclosure",
+                          "needsRestart",
+                          "inEffect",
+                          "pending"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "settings"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Engines"
+        ],
+        "summary": "Update engine configuration",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "name",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": {
+                  "nullable": true
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Pending engine configuration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "settings": {
+                      "type": "array",
+                      "items": {
+                        "nullable": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "settings"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid engine configuration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/engines/{name}/start": {
+      "post": {
+        "tags": [
+          "Engines"
+        ],
+        "summary": "start engine",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "name",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Engine control completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "healthy": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Engine control failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/engines/{name}/stop": {
+      "post": {
+        "tags": [
+          "Engines"
+        ],
+        "summary": "stop engine",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "name",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Engine control completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "healthy": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Engine control failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/engines/{name}/restart": {
+      "post": {
+        "tags": [
+          "Engines"
+        ],
+        "summary": "restart engine",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "name",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Engine control completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "healthy": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Engine control failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/engines/{name}/probe": {
+      "post": {
+        "tags": [
+          "Engines"
+        ],
+        "summary": "probe engine",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "name",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Engine control completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "healthy": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Engine control failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/engines/{name}/install": {
+      "post": {
+        "tags": [
+          "Engines"
+        ],
+        "summary": "Install an engine build",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "name",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tag": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "tag"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Engine installed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Engine install failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/engines/{name}/current": {
+      "post": {
+        "tags": [
+          "Engines"
+        ],
+        "summary": "Make an installed engine current",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "name",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tag": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "tag"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Engine made current.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Engine swap failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/engines/{name}/builds/{tag}": {
       "delete": {
         "tags": [
           "Engines"
@@ -506,6 +1088,16 @@
                   "required": [
                     "ok"
                   ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The build is current or bound.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }

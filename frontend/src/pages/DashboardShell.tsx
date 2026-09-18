@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Link, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { getIcon } from "@/kit/icons";
-import { api, type BudgetResponse, type NotificationRecord, type RepairRecord, type RoleRecord } from "@/lib/api";
+import { api, type BudgetResponse, type EngineRecord, type EngineSetting, type NotificationRecord, type RepairRecord, type RoleRecord } from "@/lib/api";
 import { BoardPage } from "@/pages/BoardPage";
 import { TryItPage } from "@/pages/TryItPage";
 import { useApiResource } from "@/lib/useApiResource";
@@ -15,6 +15,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/kit
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/kit/ui/command";
 import { Separator } from "@/kit/ui/separator";
 import { SidebarInset, SidebarProvider } from "@/kit/ui/sidebar";
+import { GenericForm } from "@/kit/settings/GenericForm";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/kit/ui/sheet";
 
 const Check = getIcon("Check"); const Copy = getIcon("Copy"); const ExternalLink = getIcon("ExternalLink"); const FileKey2 = getIcon("FileKey2"); const Gauge = getIcon("Gauge"); const LoaderCircle = getIcon("LoaderCircle"); const Search = getIcon("Search"); const Server = getIcon("Server"); const ShieldCheck = getIcon("ShieldCheck");
 
@@ -38,8 +40,22 @@ function ModelsPage() {
 }
 
 function EnginesPage() {
-  const engines = useApiResource<{ engines: Array<{ id: string; label: string; verified: boolean; installed: boolean; matchesThisMachine: boolean }> }>("/stack/v1/engines");
-  return <SectionFrame title="Engines" description="Pinned, verified runtimes selected for this computer.">{engines.loading && <LoaderCircle className="animate-spin" />}{!engines.loading && engines.data?.engines.length === 0 && <EmptyState title="No engine builds are available" detail="The Stack will show verified local engine builds here when the store has them." />}{engines.data && engines.data.engines.length > 0 && <Table>{engines.data.engines.map((engine) => <tr className="border-b last:border-0" key={engine.id}><td className="p-4 font-medium">{engine.label}</td><td className="p-4 text-muted-foreground">{engine.id}</td><td className="p-4 text-right"><Badge variant={engine.installed ? "default" : "outline"}>{engine.installed ? "Installed" : engine.matchesThisMachine ? "Selected" : "Available"}</Badge>{engine.verified && <span className="ml-2 text-xs text-muted-foreground">Verified</span>}</td></tr>)}</Table>}</SectionFrame>;
+  const engines = useApiResource<{ engines: EngineRecord[] }>("/stack/v1/engines");
+  const [confirm, setConfirm] = useState<{ action: "stop" | "remove"; engine: EngineRecord } | null>(null);
+  const [configuredName, setConfiguredName] = useState<string | null>(null);
+  const config = useApiResource<{ settings: EngineSetting[] }>(configuredName ? `/stack/v1/engines/${configuredName}/config` : null);
+  const [draft, setDraft] = useState<Record<string, string | number | boolean>>({});
+  useEffect(() => { if (config.data) setDraft(Object.fromEntries(config.data.settings.map((setting) => [setting.key, setting.pending ?? setting.inEffect]))); }, [config.data]);
+  async function control(path: string, body?: unknown) { await api.post(path, body); await engines.refetch(); }
+  async function saveConfig() { if (!configuredName) return; await api.put(`/stack/v1/engines/${configuredName}/config`, draft); await config.refetch(); await engines.refetch(); }
+  function engineName(engine: EngineRecord): string { const marker = engine.id.indexOf("-b"); return marker > 0 ? engine.id.slice(0, marker) : engine.id; }
+  function engineTag(engine: EngineRecord): string { const marker = engine.id.indexOf("-b"); return marker > 0 ? engine.id.slice(marker + 1).split("-")[0] ?? engine.id : engine.id; }
+  return <SectionFrame title="Engines" description="Builds, health, controls, and the settings that shape each runtime.">
+    {engines.loading && <LoaderCircle className="animate-spin" />}
+    {!engines.loading && engines.data?.engines.length === 0 && <EmptyState title="No engine builds are available" detail="The Stack will show verified local engine builds here when the store has them." />}
+    {engines.data && engines.data.engines.length > 0 && <div className="space-y-4"><Table><tr className="border-b text-xs uppercase tracking-wide text-muted-foreground"><th className="p-4 text-left font-medium">Build</th><th className="p-4 text-left font-medium">Platform</th><th className="p-4 text-left font-medium">Version state</th><th className="p-4 text-right font-medium">Controls</th></tr>{engines.data.engines.map((engine) => { const name = engineName(engine); const tag = engineTag(engine); return <tr className="border-b last:border-0" key={engine.id} data-testid={`engine-row-${engine.id}`}><td className="p-4"><p className="font-medium">{engine.label}</p><p className="text-xs text-muted-foreground">{engine.id}</p></td><td className="p-4 text-muted-foreground">{engine.platform} · {engine.arch}</td><td className="p-4"><Badge variant={engine.notCurrent ? "secondary" : "default"}>{engine.state === "current" ? "Current" : "Not current"}</Badge><p className="mt-1 text-xs text-muted-foreground">{engine.stateReason ?? "Ready"}{engine.currentTag && ` · ${engine.currentTag}`}</p>{engine.needsRestart && <p className="mt-1 text-xs font-medium text-primary">Needs restart</p>}</td><td className="p-4"><div className="flex flex-wrap justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setConfiguredName(name)}>Configure</Button>{engine.installed ? <><Button size="sm" variant="outline" onClick={() => setConfirm({ action: "stop", engine })}>Stop</Button><Button size="sm" variant="outline" onClick={() => void control(`/stack/v1/engines/${name}/restart`)}>Restart</Button><Button size="sm" onClick={() => void control(`/stack/v1/engines/${name}/current`, { tag })}>Make current</Button></> : <Button size="sm" onClick={() => void control(`/stack/v1/engines/${name}/install`, { tag })}>Install</Button>}{engine.installed && !engine.current && <Button size="sm" variant="destructive" onClick={() => setConfirm({ action: "remove", engine })}>Remove</Button>}</div></td></tr>; })}</Table>{confirm && <Card className="border-primary"><CardHeader><CardTitle>{confirm.action === "stop" ? "Stop this engine?" : "Remove this build?"}</CardTitle><CardDescription>{confirm.action === "stop" ? "In-flight work will finish before the engine stops." : "The build stays available from the update manifest and can be installed again."}</CardDescription></CardHeader><CardContent className="flex justify-end gap-2"><Button variant="outline" onClick={() => setConfirm(null)}>Cancel</Button><Button variant="destructive" onClick={async () => { const name = engineName(confirm.engine); const tag = engineTag(confirm.engine); if (confirm.action === "stop") await control(`/stack/v1/engines/${name}/stop`); else await api.delete(`/stack/v1/engines/${name}/builds/${tag}`); setConfirm(null); await engines.refetch(); }}>Confirm {confirm.action}</Button></CardContent></Card>}</div>}
+    <Sheet open={configuredName !== null} onOpenChange={(open) => { if (!open) setConfiguredName(null); }}><SheetContent><SheetHeader><SheetTitle>Configure {configuredName}</SheetTitle><SheetDescription>Changes marked restart stay pending until the next engine start.</SheetDescription></SheetHeader><div className="overflow-y-auto px-4 pb-6">{config.loading && <LoaderCircle className="animate-spin" />}{config.data && <><GenericForm settings={config.data.settings} values={draft} onChange={(key, value) => setDraft((current) => ({ ...current, [key]: value }))} /><Button className="mt-6 w-full" onClick={() => void saveConfig()}>Save configuration</Button></>}</div></SheetContent></Sheet>
+  </SectionFrame>;
 }
 
 function MonitoringPage() {

@@ -14,6 +14,7 @@ import type { RoleState } from "@/roles";
 import { getMemoryReader } from "@/lib/memory";
 import { readGgufFacts } from "@/lib/gguf";
 import { hfHubRoot } from "@/lib/store/layout";
+import { activateEngineConfig, settingValues } from "@/settings/engineKeys";
 
 export type EngineKind = "spawned" | "managed" | "url";
 
@@ -306,7 +307,9 @@ function selectedChatModel(): ModelRecord | null {
 }
 
 async function startUrlBackend(kind: EngineKind, url: string): Promise<ChatBackend> {
-  const client = new OpenAIEngineClient(url);
+  activateEngineConfig("managed", "managed");
+  const managed = settingValues("managed", "managed");
+  const client = new OpenAIEngineClient(typeof managed.hostUrl === "string" && managed.hostUrl ? managed.hostUrl : url);
   const identity = await readEngineIdentity(url);
   if (!identity.healthy) {
     const reason = `The ${kind} engine is offline.`;
@@ -317,7 +320,20 @@ async function startUrlBackend(kind: EngineKind, url: string): Promise<ChatBacke
   return { client, kind, identity, pid: null, activeRequests: 0, retired: false, stop: async () => {} };
 }
 
+export function engineCommandArgs(config: Record<string, number | boolean | string>, modelPath: string, port: number): string[] {
+  const args = ["--model", modelPath, "--port", String(port)];
+  if (typeof config.contextLength === "number") args.push("--ctx-size", String(config.contextLength));
+  if (typeof config.slots === "number") args.push("--parallel", String(config.slots));
+  if (typeof config.threads === "number" && config.threads > 0) args.push("--threads", String(config.threads));
+  if (typeof config.cacheRamMb === "number" && config.cacheRamMb > 0) args.push("--cache-ram-mb", String(config.cacheRamMb));
+  if (config.flashAttention === true) args.push("--flash-attn");
+  if (config.flashAttention === false) args.push("--no-flash-attn");
+  return args;
+}
+
 async function startSpawnedBackend(): Promise<ChatBackend> {
+  activateEngineConfig("llama-server", "llama-server");
+  const config = settingValues("llama-server", "llama-server");
   const pin = ENGINE_BINARIES.find((entry) => entry.platform === process.platform && entry.arch === process.arch && !entry.requiresNvidia);
   const model = selectedChatModel();
   if (!pin || !existsSync(join(engineDir(pin.id), ENGINE_READY_MARKER))) {
@@ -330,7 +346,7 @@ async function startSpawnedBackend(): Promise<ChatBackend> {
   if ("refused" in admission) throw new EngineUnavailableError(admission.reason);
 
   const port = await findFreePort();
-  const processHandle = Bun.spawn([engineBinaryPath(pin), "--model", model.modelPath, "--port", String(port)], {
+  const processHandle = Bun.spawn([engineBinaryPath(pin), ...engineCommandArgs(config, model.modelPath, port)], {
     stdout: "ignore",
     stderr: "pipe",
     env: { ...process.env, HF_HUB_CACHE: hfHubRoot },
@@ -390,6 +406,7 @@ async function startSpawnedBackend(): Promise<ChatBackend> {
 }
 
 async function startBackend(): Promise<ChatBackend> {
+  activateEngineConfig("llama-server", "llama-server");
   if (scriptedEnginesEnabled()) return scriptedBackend();
   if (testBackendFactory) return testBackendFactory();
   const configured = configuredUrl();
