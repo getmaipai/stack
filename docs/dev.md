@@ -643,6 +643,17 @@ default, disclosure level, and restart requirement. The configuration API
 shows both in-effect and pending values until the next start, when pending
 values become in effect.
 
+## The showroom
+
+`STACK_SHOWROOM=1` is a development-only mode that feeds the normal routes a
+believable 128 GB household fixture: engines, model groups, clients, health,
+notifications, updates, usage, memory pressure, and storage. It is in-memory,
+never enabled by default, and is refused when `NODE_ENV=production`. The
+switch exists to let the UI be judged before downloads and external engines
+are present; it is not a demo dataset shipped to users. Run it with
+`bun run showroom`, or use `bun run scripts/screenshot.ts --showroom` for the
+full-page captures.
+
 ### Hardware sizing
 
 The probe reports CPU, GPU class, unified or discrete memory, free disk,
