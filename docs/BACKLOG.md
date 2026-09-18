@@ -115,7 +115,7 @@ never copied. No item migrates the hub until STACK-16.
   measures the computer, lets the operator choose abilities, and keeps an
   honest download bar visible while the deferred password stays deferred.
 - [x] **STACK-11c (M): the dashboard shell.** The branded Stack sidebar,
-  search and command palette, all eleven sections, real monitoring and
+  search and command palette, all twelve sections, real monitoring and
   alert actions, and honest empty states for the work still to come.
 - [ ] **STACK-12 (M): Try it.** The stateless tabs per role with the
   adult acknowledgment once and the AI-outputs disclaimer at first run.
@@ -219,7 +219,7 @@ each item's design section lands in `dev.md` before its code.
   survives a pause; creating a key prompts for the password once;
   screenshots re-taken and judged.
 - [ ] **STACK-11c (M): the dashboard shell.** The sidebar with the
-  eleven sections in `ux.md` "The shell", the top bar with the
+  twelve sections in `ux.md` "The shell", the top bar with the
   machine in plain words, the search-and-command palette (slash or
   Command-K over pages, models, engines, settings and actions), the
   health badge, the hand-off card; every section route exists with
@@ -385,6 +385,31 @@ layer above; none adds a person or leaves the machine.
   automatic rollback of STACK-10 if the post-swap check fails, and a
   notification either way; model updates are never automatic.
   Acceptance: a scripted failing update rolls back and notifies.
+
+- [ ] **STACK-32 (M): the Library.** Local documentation for what is
+  installed. When a model or engine is selected, its source page and
+  docs links are registered on the record (STACK-04b); the Library
+  fetches, on the person's say-so and in the maintenance window, the
+  model card (the repo README at the pinned revision) and the engine's
+  documentation into `data/library/<id>/`, indexes them locally
+  (the docs site's Pagefind index, the same one the user docs use),
+  shows them in a Library section with one page per installed thing
+  (source, licence in plain words, the card, the file list, our own
+  measured numbers for it), and puts them in the Stack's search and
+  command palette. An MCP server (`stack-library`, the org's standard
+  MCP over stdio) exposes `list_installed`, `get_doc` and `search`
+  so Home's assistant and a coding tool can answer from the docs the
+  person actually has. Fetches are listed on the privacy page; nothing
+  is fetched without the switch on; a page that changes upstream is
+  refetched only with the revision. Acceptance: two scripted installs
+  produce two Library pages found by the palette; the MCP `search`
+  returns the right page for a query (test); the privacy row exists.
+- [ ] **STACK-33 (S): the Library in the docs site's search.** The
+  published docs site's search also covers the Library pages of this
+  Stack when opened from the Stack (the site's Pagefind index merged
+  with the local one at request time), so one search box answers both
+  "how do I" and "what did I install". Acceptance: a query that matches
+  only a Library page returns it from the site's search box.
 
 ## Milestone 1: the robot
 

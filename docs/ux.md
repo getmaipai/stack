@@ -126,11 +126,13 @@ Phone width collapses the sidebar into a sheet.
    engines are `exclude`, rebuildable from their provenance records,
    said so on the page), a local or SMB target, the schedule and
    retention, restore, and the emergency kit shown once.
-9. **Access** (the Stack has no people, so not "Accounts"): the
+9. **Library**: one page per installed model and engine, searchable,
+    served over MCP.
+10. **Access** (the Stack has no people, so not "Accounts"): the
    operator password (set when first needed), client keys with roles
    and counters and revoke, LAN access with its warning, sessions.
-10. **Try it**: the tabs per role.
-11. **Settings**: the few declared settings, rendered by the generic
+11. **Try it**: the tabs per role.
+12. **Settings**: the few declared settings, rendered by the generic
     renderer.
 
 **Empty and first states are designed, not blank**: a fresh install
@@ -211,7 +213,21 @@ naming the count ("Unload 4 models?"): load, unload, pin, unpin, check
 for updates, move, remove. Drag to move a model or a group; batch
 select works across groups.
 
+## Library
+
+One page per installed model and engine: where it came from, its
+licence in plain words, the model card or the engine's documentation
+kept locally, the file list at its revision, and our own measured
+numbers for it (footprint, speed, last used). The Library is what the
+search box and the command palette search, alongside the pages; and it
+is what the `stack-library` MCP server serves, so the household's
+assistant and a coding tool answer from the docs the person actually
+has, never from a guess. Fetching a page is a download the person
+switched on, listed on the privacy page.
+
 ## Engines
+
+One row per engine:## Engines
 
 One row per engine: name, kind (spawned, managed, url), the roles it
 holds, health, the running build, and a version state that is a real
