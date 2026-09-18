@@ -187,6 +187,12 @@ Hugging Face" option for the operator, which fills the provenance record
 before the model turns on. Multi-select with remove and clear-all, per the
 org's batch rule.
 
+**Docs on every model.** A model's detail carries quick links derived
+from its provenance, never typed: the model card, the licence, the
+file list at its revision, the engine's own documentation, and the
+tool and path it was imported from. A link the record lacks is not
+shown.
+
 **Nicknames and groups.** A model can be given a nickname (shown
 everywhere a person reads; the API keeps the model id and the role
 ids, so a nickname never changes what a client sends). Models live in
