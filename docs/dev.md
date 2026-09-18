@@ -1052,6 +1052,11 @@ administrator authority, which conflicts with the client-key rule.
 
 ## Scope by what is reliable, capability by capability (decided 2026-09-18, 10:45)
 
+The brand sentence in the org's copy stays the ambition; the release copy
+(README and release notes) for each version states what that version's
+capability matrix says it does, and nothing more (2026-09-18 11:00).
+
+
 The achievability review recommended a chat-only v0.1.0. The owner's
 answer: the MVP delivers what is reliable, but reliability is judged per
 capability, not per modality, and nothing is excluded wholesale. If
