@@ -14,14 +14,14 @@ const items = [
   ["Try it", "/try", "Bot"], ["Settings", "/settings", "Settings"],
 ] as const;
 
-export function AppSidebar({ repairs, roles, engineCount = 0, updateCount = 0, alertCount = 0, detectedCount = 0, ...props }: React.ComponentProps<typeof Sidebar> & { repairs: RepairRecord[]; roles: RoleRecord[]; engineCount?: number; updateCount?: number; alertCount?: number; detectedCount?: number }) {
+export function AppSidebar({ repairs, roles, engineCount = 0, updateCount = 0, alertSeverity = null, engineTooltip = "Engines", updateTooltip = "Updates", alertTooltip = "Alerts", ...props }: React.ComponentProps<typeof Sidebar> & { repairs: RepairRecord[]; roles: RoleRecord[]; engineCount?: number; updateCount?: number; alertSeverity?: "critical" | "error" | "warning" | null; engineTooltip?: string; updateTooltip?: string; alertTooltip?: string }) {
   const location = useLocation();
-  const badges: Record<string, number> = { Engines: engineCount, Updates: updateCount, Alerts: alertCount, Models: detectedCount };
+  const badges: Record<string, number> = { Engines: engineCount, Updates: updateCount };
   return <Sidebar collapsible="icon" {...props}>
     <SidebarHeader><SidebarMenu><SidebarMenuItem><SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:p-1.5!">
       <Link to="/"><img className="size-7" src="/brand/maipai-stack-icon-light.png" alt="" /><span className="text-base font-semibold">MaiPai Stack</span></Link>
     </SidebarMenuButton></SidebarMenuItem></SidebarMenu></SidebarHeader>
-    <SidebarContent><NavMain items={items.map(([title, url, icon]) => ({ title, url, icon: getIcon(icon), isActive: location.pathname === url, badge: badges[title] ?? 0 }))} /></SidebarContent>
+    <SidebarContent><NavMain items={items.map(([title, url, icon]) => ({ title, url, icon: getIcon(icon), isActive: location.pathname === url, badge: badges[title] ?? 0, dot: title === "Alerts" ? alertSeverity : null, tooltip: title === "Engines" ? engineTooltip : title === "Updates" ? updateTooltip : title === "Alerts" ? alertTooltip : undefined }))} /></SidebarContent>
     <SidebarFooter><NavHealth repairs={repairs} roles={roles} /></SidebarFooter>
   </Sidebar>;
 }

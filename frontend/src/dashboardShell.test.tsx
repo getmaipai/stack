@@ -133,15 +133,28 @@ test("the sidebar shows quiet indicators for engines, updates, alerts, and detec
     "/stack/v1/repairs": { repairs: [] },
     "/stack/v1/roles": { roles: [] },
     "/stack/v1/operator": { state: "signedOut", required: false },
-    "/stack/v1/engines": { engines: [{ id: "llama-0.4.5-darwin-arm64-b1", label: "Llama", platform: "darwin", arch: "arm64", verified: true, installed: true, matchesThisMachine: true, running: "0.4.5", currentTag: "0.4.5", newestTag: "0.4.5", current: true, notCurrent: false, needsRestart: false, state: "current", stateReason: null }] },
+    "/stack/v1/engines": { engines: [
+      { id: "llama-0.4.5-darwin-arm64-b1", label: "Llama", platform: "darwin", arch: "arm64", verified: true, installed: true, matchesThisMachine: true, running: "0.4.5", currentTag: "0.4.5", newestTag: "0.4.5", current: true, notCurrent: false, needsRestart: false, state: "current", stateReason: null },
+      { id: "mistral-0.5.0-darwin-arm64-b1", label: "Mistral", platform: "darwin", arch: "arm64", verified: true, installed: true, matchesThisMachine: true, running: "0.5.0", currentTag: "0.5.0", newestTag: "0.5.1", current: false, notCurrent: true, needsRestart: false, state: "notCurrent", stateReason: "newer available" },
+    ] },
     "/stack/v1/updates": { app: { available: "1.2.3" }, engines: { available: null }, models: { available: null } },
-    "/stack/v1/health": { health: [{ code: "engine-stopped", severity: "error", title: "Chat engine stopped", text: "The chat engine is stopped.", since: "2026-01-01", cause: "stop" }] },
-    "/stack/v1/detected": { detected: [{ id: "d1", name: "Local store", path: "/models", version: "1.0", couldHold: ["chat"], roles: [] }] },
+    "/stack/v1/health": { health: [{ code: "engine-stopped", severity: "critical", title: "Chat engine stopped", text: "The chat engine is stopped.", since: "2026-01-01", cause: "stop" }] },
+    "/stack/v1/detected": { detected: [{ id: "d1", name: "Local store", path: "/models", version: "1.0", couldHold: ["chat"], forgotten: false, adopted: false, target: null }] },
   });
   render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
   await waitFor(() => expect(document.body.textContent).toContain("All good"));
   const sidebar = document.querySelector('[data-sidebar="content"]');
   expect(sidebar).toBeTruthy();
-  const text = document.body.textContent ?? "";
-  expect(text).toContain("1");
+  // Engines: one not-current + one unadopted detected = 2, badge shows the number
+  const enginesLink = document.querySelector('a[href="/engines"]');
+  expect(enginesLink?.textContent).toContain("2");
+  // Updates badge
+  const updatesLink = document.querySelector('a[href="/updates"]');
+  expect(updatesLink?.textContent).toContain("1");
+  // Alerts: severity dot, no count badge
+  const alertsLink = document.querySelector('a[href="/alerts"]');
+  expect(alertsLink).toBeTruthy();
+  const dot = alertsLink?.querySelector("span[aria-hidden]");
+  expect(dot?.className).toContain("bg-red-500");
+  expect(alertsLink?.textContent).not.toContain("1");
 });
