@@ -23,7 +23,7 @@ test("Overview requests the selected series range and renders scripted widgets",
     if (path.endsWith("/check/latest")) return Promise.resolve(Response.json(null));
     if (path.endsWith("/check")) return Promise.resolve(Response.json({ at: new Date().toISOString(), ok: true, results: [{ role: "chat", ok: true, ms: 42, reason: null }], fitTogether: { ok: true, reason: null } }));
     if (path.endsWith("/health")) return Promise.resolve(Response.json({ health: [] }));
-    if (path.endsWith("/notifications")) return Promise.resolve(Response.json({ notifications: [] }));
+    if (path.includes("/notifications")) return Promise.resolve(Response.json({ notifications: [{ id: "n1", title: "Model installed", level: "passive", at: "2026-09-18T00:00:00.000Z", data: "{}", readAt: null, dismissedAt: null }] }));
     if (path.endsWith("/speed-test")) return Promise.resolve(Response.json({ result: { at: new Date().toISOString(), ability: "chat", modelId: "qwen3-1.7b", engine: "b10797", firstTokenMs: 180, loadMs: 1420, measuredFootprintBytes: 1_800_000_000, promptTps: 112, tokensPerSecond: 42, contextLength: 4096 } }));
     if (path.includes("/series")) return Promise.resolve(Response.json({ range: path.includes("range=week") ? "week" : "day", usage: [{ at: new Date().toISOString(), requests: 4, tokensIn: 3, tokensOut: 5 }], memory: [{ at: new Date().toISOString(), freeBytes: 74 * 1_073_741_824 }], speed: [{ at: new Date().toISOString(), tokensPerSecond: 42 }] }));
     return Promise.resolve(Response.json({}));
@@ -34,6 +34,7 @@ test("Overview requests the selected series range and renders scripted widgets",
   expect(document.body.textContent).toContain("macOS 15");
   expect(document.body.textContent).toContain("1d 1h");
   expect(document.body.textContent).toContain("Show more");
+  expect(document.querySelector('time[dateTime="2026-09-18T00:00:00.000Z"]')).toBeTruthy();
   fireEvent.click(document.querySelector('button[aria-label="1W"]')!);
   await waitFor(() => expect(calls.some((call) => call.includes("/series?range=week") && call.includes("window=week"))).toBe(true));
   fireEvent.click(Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "Speed test")!);

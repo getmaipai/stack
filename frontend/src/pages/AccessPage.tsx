@@ -9,20 +9,10 @@ import { ThingsPage } from "@/kit/blocks/things-page/ThingsPage";
 import type { SectionFrameComponent } from "@/pages/DashboardShell";
 import { clientPanel } from "@/panels/client";
 import { PropertyPanel } from "@/kit/blocks/property-panel/PropertyPanel";
+import { RelativeTime } from "@/kit/ui/relative-time";
 
 type Client = { id: string; name: string; keyPrefix: string; allowedRoles: string[]; requests?: number; tokensIn?: number; tokensOut?: number; createdAt?: string; lastSeenAt?: string | null };
 const FileKey2 = getIcon("FileKey2"); const ShieldCheck = getIcon("ShieldCheck");
-
-function relativeTime(value?: string | null): string {
-  if (!value) return "Never";
-  const elapsed = Math.max(0, Date.now() - new Date(value).getTime());
-  const minutes = Math.round(elapsed / 60_000);
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
-}
 
 export function AccessPage({ Frame }: { Frame: SectionFrameComponent }) {
   const clients = useApiResource<{ clients: Client[] }>("/stack/v1/clients");
@@ -44,7 +34,7 @@ export function AccessPage({ Frame }: { Frame: SectionFrameComponent }) {
       { key: "client", header: "Client", width: "34%", render: (row) => <div><p className="font-medium">{row.name}</p><p className="text-xs text-muted-foreground">{row.keyPrefix}</p></div> },
       { key: "roles", header: "Allowed roles", render: (row) => row.allowedRoles.join(", ") },
       { key: "requests", header: "Requests", align: "right", render: (row) => row.requests ?? 0 },
-      { key: "lastSeen", header: "Last seen", align: "right", render: (row) => row.lastSeenAt ? relativeTime(row.lastSeenAt) : "Never" },
+      { key: "lastSeen", header: "Last seen", align: "right", render: (row) => row.lastSeenAt ? <RelativeTime at={row.lastSeenAt} /> : "Never" },
       { key: "key", header: "Key", align: "right", render: (row) => linkCell(`#client-${row.id}`, "Open key") },
     ]}
     rows={filteredRows}

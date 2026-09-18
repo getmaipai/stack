@@ -580,7 +580,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   class assertion is enough in happy-dom); showroom captures of
   Overview, Models and Engines opened and judged. Out of scope: the top
   bar's instance dot (STACK-46). Exit: `scripts/check.sh`.
-- [ ] **STACK-39 (S): relative times.** `frontend/src/lib/relativeTime.ts`
+- [x] **STACK-39 (S): relative times.** `frontend/src/lib/relativeTime.ts`
   (`formatRelative(iso, now)`: "now" under a minute, "3m", "2h",
   "Yesterday", then the short date; unit tests for each boundary) and a
   `RelativeTime` component in `frontend/src/kit/ui/` that renders the

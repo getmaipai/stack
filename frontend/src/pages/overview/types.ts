@@ -7,7 +7,7 @@ export type UpdatesResponse = { app: { installed: string; available: string | nu
 export type StorageResponse = { freeDiskBytes: number; byCategory: Record<string, number> };
 export type Counts = { engines: number; models: number; clients: number };
 export type Status = { label: string; value?: number; href: string; tone: "default" | "secondary" | "destructive" | "outline" };
-export type ActivityItem = { id: string; primary: string; meta: string };
+export type ActivityItem = { id: string; primary: string; meta?: string; at?: string };
 
 export type FactsProps = {
   hardware?: HardwareResponse["hardware"];

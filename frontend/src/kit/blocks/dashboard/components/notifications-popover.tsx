@@ -7,19 +7,9 @@ import { useApiResource } from "@/lib/useApiResource";
 import { Badge } from "@/kit/ui/badge";
 import { Button } from "@/kit/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/kit/ui/popover";
+import { RelativeTime } from "@/kit/ui/relative-time";
 
 const Bell = getIcon("Bell");
-
-function relativeTime(value: string): string {
-  const diff = Date.now() - new Date(value).getTime();
-  const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return minutes === 1 ? "1 minute ago" : `${minutes} minutes ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return hours === 1 ? "1 hour ago" : `${hours} hours ago`;
-  const days = Math.floor(hours / 24);
-  return days === 1 ? "yesterday" : `${days} days ago`;
-}
 
 export function NotificationsBell() {
   const notifications = useApiResource<{ notifications: NotificationRecord[] }>("/stack/v1/notifications");
@@ -61,7 +51,7 @@ export function NotificationsBell() {
     </PopoverTrigger>
     <PopoverContent align="end" className="w-80 p-0">
       <div className="divide-y">
-        {openRows.map((item) => <div className="flex items-start gap-2 p-4" key={item.id}><div className="min-w-0 flex-1"><p className={item.readAt === null ? "text-sm font-medium" : "text-sm text-muted-foreground"}>{item.title}</p><p className="mt-0.5 text-xs text-muted-foreground">{relativeTime(item.at)}</p></div><Button aria-label={`Dismiss ${item.title}`} size="icon-xs" variant="ghost" onClick={() => void dismissItem(item.id)}>x</Button></div>)}
+        {openRows.map((item) => <div className="flex items-start gap-2 p-4" key={item.id}><div className="min-w-0 flex-1"><p className={item.readAt === null ? "text-sm font-medium" : "text-sm text-muted-foreground"}>{item.title}</p><div className="mt-0.5 text-xs text-muted-foreground"><RelativeTime at={item.at} /></div></div><Button aria-label={`Dismiss ${item.title}`} size="icon-xs" variant="ghost" onClick={() => void dismissItem(item.id)}>x</Button></div>)}
         {openRows.length === 0 && <p className="p-6 text-sm text-muted-foreground">Nothing to show. The Stack will tell you here when something needs you.</p>}
       </div>
       <div className="flex items-center justify-between gap-2 border-t p-3">
