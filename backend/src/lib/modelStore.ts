@@ -305,6 +305,7 @@ async function installRegisteredModel(
     createdAt: installed.installedAt ?? now,
   });
   emit({ id: "model.installed", data: { model: installed.id, path: installed.modelPath } });
+  void import("@/lib/speedTest").then(({ scheduleSpeedTest }) => scheduleSpeedTest());
   return installed;
 }
 

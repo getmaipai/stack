@@ -24,6 +24,7 @@ import { seriesRoutes } from "@/routes/series";
 import { groupsRoutes } from "@/routes/groups";
 import { detectedRoutes } from "@/routes/detected";
 import { settingsRoutes } from "@/routes/settings";
+import { speedTestRoutes } from "@/routes/speedTest";
 import packageJson from "../../package.json";
 import { assertShowroomAllowed } from "@/showroom/fixture";
 
@@ -77,6 +78,7 @@ app.route("/stack/v1/storage", storageRoutes);
 app.route("/stack/v1/jobs", jobsRoutes);
 app.route("/stack/v1/updates", updatesRoutes);
 app.route("/stack/v1/settings", settingsRoutes);
+app.route("/stack/v1/speed-test", speedTestRoutes);
 app.route("/v1", inferenceRoutes);
 
 migrateLegacyStore();

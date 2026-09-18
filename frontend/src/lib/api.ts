@@ -31,12 +31,26 @@ export interface ProfileTier {
   onDemand: string[];
   installedOnly: string[];
   notAvailable: string[];
+  speedRange: { min: number; max: number };
 }
 
 export interface HardwareResponse {
   hardware: HardwareInfo;
   proposed: ProfileTier | null;
   tiers: ProfileTier[];
+}
+
+export interface SpeedResult {
+  at: string;
+  ability: string | null;
+  modelId: string | null;
+  engine: string | null;
+  firstTokenMs: number | null;
+  loadMs: number | null;
+  measuredFootprintBytes: number | null;
+  promptTps: number | null;
+  tokensPerSecond: number | null;
+  contextLength: number | null;
 }
 
 export interface BudgetResponse {

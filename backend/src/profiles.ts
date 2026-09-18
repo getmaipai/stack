@@ -13,6 +13,7 @@ export interface ProfileTier {
   onDemand: RoleId[];
   installedOnly: RoleId[];
   notAvailable: RoleId[];
+  speedRange: { min: number; max: number };
 }
 
 export const PROFILE_TIERS: ProfileTier[] = [
@@ -25,6 +26,7 @@ export const PROFILE_TIERS: ProfileTier[] = [
     onDemand: ["embed"],
     installedOnly: ["wakeword"],
     notAvailable: ["coding", "rerank", "vision", "image", "video", "music"],
+    speedRange: { min: 15, max: 80 },
   },
   {
     id: "p32",
@@ -35,6 +37,7 @@ export const PROFILE_TIERS: ProfileTier[] = [
     onDemand: ["rerank"],
     installedOnly: ["wakeword"],
     notAvailable: ["coding", "vision", "image", "video", "music"],
+    speedRange: { min: 25, max: 140 },
   },
   {
     id: "p64",
@@ -45,6 +48,7 @@ export const PROFILE_TIERS: ProfileTier[] = [
     onDemand: ["image"],
     installedOnly: ["wakeword"],
     notAvailable: ["coding", "vision", "video", "music"],
+    speedRange: { min: 35, max: 220 },
   },
   {
     id: "p128",
@@ -55,6 +59,7 @@ export const PROFILE_TIERS: ProfileTier[] = [
     onDemand: ["coding", "vision", "image", "video", "music"],
     installedOnly: ["wakeword"],
     notAvailable: [],
+    speedRange: { min: 45, max: 320 },
   },
 ];
 

@@ -33,6 +33,7 @@ const ProfileTierSchema = z.object({
   onDemand: z.array(RoleIdSchema),
   installedOnly: z.array(RoleIdSchema),
   notAvailable: z.array(RoleIdSchema),
+  speedRange: z.object({ min: z.number(), max: z.number() }),
 });
 
 const hardwareRoute = createRoute({

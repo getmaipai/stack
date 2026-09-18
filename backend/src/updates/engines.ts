@@ -22,6 +22,7 @@ export async function swapEngine(name: string, tag: string, options: EngineSwapO
     symlinkSync(tag, current);
     if (options.postLoadCheck && !await options.postLoadCheck()) throw new Error("The replacement engine failed its post-load check.");
     emit({ id: "update.applied", data: { kind: "engine", name, tag } });
+    if (name === "llama-server") void import("@/lib/speedTest").then(({ scheduleSpeedTest }) => scheduleSpeedTest());
   } catch (error) {
     if (previous) {
       try { unlinkSync(current); } catch { /* Restore is best effort. */ }

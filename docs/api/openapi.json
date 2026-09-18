@@ -247,6 +247,21 @@
                               "music"
                             ]
                           }
+                        },
+                        "speedRange": {
+                          "type": "object",
+                          "properties": {
+                            "min": {
+                              "type": "number"
+                            },
+                            "max": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max"
+                          ]
                         }
                       },
                       "required": [
@@ -257,7 +272,8 @@
                         "resident",
                         "onDemand",
                         "installedOnly",
-                        "notAvailable"
+                        "notAvailable",
+                        "speedRange"
                       ]
                     },
                     "tiers": {
@@ -366,6 +382,21 @@
                                 "music"
                               ]
                             }
+                          },
+                          "speedRange": {
+                            "type": "object",
+                            "properties": {
+                              "min": {
+                                "type": "number"
+                              },
+                              "max": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "min",
+                              "max"
+                            ]
                           }
                         },
                         "required": [
@@ -376,7 +407,8 @@
                           "resident",
                           "onDemand",
                           "installedOnly",
-                          "notAvailable"
+                          "notAvailable",
+                          "speedRange"
                         ]
                       }
                     }
@@ -6441,6 +6473,97 @@
           },
           "400": {
             "description": "Invalid Stack setting.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/speed-test": {
+      "post": {
+        "tags": [
+          "Overview"
+        ],
+        "summary": "Run the local chat speed test",
+        "responses": {
+          "200": {
+            "description": "The recorded speed test result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "at": {
+                          "type": "string"
+                        },
+                        "ability": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "modelId": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "engine": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "firstTokenMs": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "loadMs": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "measuredFootprintBytes": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "promptTps": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "tokensPerSecond": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "contextLength": {
+                          "type": "integer",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "at",
+                        "ability",
+                        "modelId",
+                        "engine",
+                        "firstTokenMs",
+                        "loadMs",
+                        "measuredFootprintBytes",
+                        "promptTps",
+                        "tokensPerSecond",
+                        "contextLength"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No resident chat model is available.",
             "content": {
               "application/json": {
                 "schema": {

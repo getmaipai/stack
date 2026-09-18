@@ -142,7 +142,11 @@ export const speedResults = sqliteTable("speed_results", {
   modelId: text("model_id"),
   engine: text("engine"),
   firstTokenMs: integer("first_token_ms"),
+  loadMs: integer("load_ms"),
+  measuredFootprintBytes: integer("measured_footprint_bytes"),
+  promptTps: integer("prompt_tps"),
   tokensPerSecond: integer("tokens_per_second"),
+  contextLength: integer("context_length"),
 });
 
 // Compatibility name for the old repair adapter and its route alias.

@@ -21,6 +21,7 @@ test("Overview requests the selected series range and renders scripted widgets",
     if (path.endsWith("/storage")) return Promise.resolve(Response.json({ freeDiskBytes: 2_400_000_000_000, byCategory: { models: 10, engines: 5, logs: 1, backups: 0 } }));
     if (path.endsWith("/health")) return Promise.resolve(Response.json({ health: [] }));
     if (path.endsWith("/notifications")) return Promise.resolve(Response.json({ notifications: [] }));
+    if (path.endsWith("/speed-test")) return Promise.resolve(Response.json({ result: { at: new Date().toISOString(), ability: "chat", modelId: "qwen3-1.7b", engine: "b10797", firstTokenMs: 180, loadMs: 1420, measuredFootprintBytes: 1_800_000_000, promptTps: 112, tokensPerSecond: 42, contextLength: 4096 } }));
     if (path.includes("/series")) return Promise.resolve(Response.json({ range: path.includes("range=week") ? "week" : "day", usage: [{ at: new Date().toISOString(), requests: 4, tokensIn: 3, tokensOut: 5 }], memory: [{ at: new Date().toISOString(), freeBytes: 74 * 1_073_741_824 }], speed: [{ at: new Date().toISOString(), tokensPerSecond: 42 }] }));
     return Promise.resolve(Response.json({}));
   }) as unknown as typeof fetch;
@@ -33,7 +34,7 @@ test("Overview requests the selected series range and renders scripted widgets",
   fireEvent.click(document.querySelector('button[aria-label="1W"]')!);
   await waitFor(() => expect(calls.some((call) => call.includes("/series?range=week") && call.includes("window=week"))).toBe(true));
   fireEvent.click(Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "Speed test")!);
-  await waitFor(() => expect(document.body.textContent).toContain("Coming with the speed test item."));
+  await waitFor(() => expect(calls.some((call) => call.endsWith("/speed-test"))).toBe(true));
 });
 
 test("Overview changes its grid layout at desktop, tablet, and phone widths", async () => {

@@ -1059,6 +1059,18 @@ page as what it is, "the helper, 1.8 GB, loads only when asked".
 
 ## What moves out of Home, later
 
+## Speed test
+
+The Stack runs the pinned archive's `llama-bench` for the resident chat
+model with 512 prompt tokens, 128 generated tokens, and three repetitions.
+It records prompt and generation throughput, the model footprint, the
+context length, and the supervisor's load and first-token timers. A run is
+available on Overview, and model installs and engine updates can use the
+same local runner during maintenance. A generation result more than ten
+percent below the previous result for the same model and context raises a
+warning that names the engine update and offers Go back. No benchmark data
+leaves the machine.
+
 Nothing migrates until the Stack's first milestone runs on the Studio
 beside the hub. When it does, these are the hub files whose jobs become
 the Stack's, so the list is fixed now:

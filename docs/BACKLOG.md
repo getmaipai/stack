@@ -461,7 +461,7 @@ layer above; none adds a person or leaves the machine.
   Backups, per the org standard. Acceptance: export then import on a
   scripted smaller machine drops the abilities that do not fit and
   says so.
-- [ ] **STACK-26 (M): the speed test, on `llama-bench`.** After a
+- [x] **STACK-26 (M): the speed test, on `llama-bench`.** After a
   model installs and after any engine update, in the maintenance
   window, run llama.cpp's own `llama-bench` from the pinned archive
   for that model (prompt processing and generation tokens per second

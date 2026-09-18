@@ -34,6 +34,8 @@ export interface PostLoadCheck {
   replyOk: boolean;
   actualBytes: number | null;
   estimatedBytes: number | null;
+  loadMs?: number;
+  firstTokenMs?: number;
 }
 
 export function scriptedEnginesEnabled(): boolean {
@@ -298,6 +300,7 @@ export async function waitHealthy(client: EngineClient, timeoutMs = LOAD_FLOOR_M
 export async function postLoadCheck(client: EngineClient, pid: number | null, contextLength = 4096): Promise<PostLoadCheck> {
   // `enable_thinking: false` asks the template to answer in content; a
   // thinking model that answers in reasoning_content is still alive.
+  const startedAt = performance.now();
   const result = await withTimeout(
     client.complete({ model: "chat", messages: [{ role: "user", content: "Reply with just the word OK." }], max_tokens: 32, chat_template_kwargs: { enable_thinking: false } }),
     timeoutOverrides.postLoadMs ?? DEFAULT_POST_LOAD_TIMEOUT_MS,
@@ -309,7 +312,7 @@ export async function postLoadCheck(client: EngineClient, pid: number | null, co
   if (result.status < 200 || result.status >= 300 || !(content && content.trim()) && !(reasoning && reasoning.trim())) {
     throw new EngineUnavailableError("Post-load check did not receive a usable completion.");
   }
-  return { replyOk: true, actualBytes: await measureProcessMemoryBytes(pid), estimatedBytes: null };
+  return { replyOk: true, actualBytes: await measureProcessMemoryBytes(pid), estimatedBytes: null, firstTokenMs: Math.round(performance.now() - startedAt) };
 }
 
 function selectedChatModel(): ModelRecord | null {
@@ -364,9 +367,11 @@ async function startSpawnedBackend(): Promise<ChatBackend> {
       throw new EngineUnavailableError(`Engine exited before becoming healthy (code ${code})${lines ? `: ${lines}` : "."}`);
     });
     void exitFailure.catch(() => {});
+    const loadStartedAt = performance.now();
     await Promise.race([waitHealthy(client, loadTimeoutForModel(model.sizeBytes), () => !exited), exitFailure]);
     const identity = await readEngineIdentity(client.baseUrl);
     const check = await postLoadCheck(client, processHandle.pid, contextLength);
+    check.loadMs = Math.round(performance.now() - loadStartedAt);
     if (check.actualBytes !== null) { recordMeasuredFootprint(model.id, check.actualBytes, contextLength); recordModelFootprint(model.id, check.actualBytes); }
     state.status.postLoadCheck = check;
     resolveHealth("engine.crashed");

@@ -7,6 +7,7 @@ import migration0005 from "./migrations/0005_health_list.sql" with { type: "file
 import migration0006 from "./migrations/0006_console_series.sql" with { type: "file" };
 import migration0007 from "./migrations/0007_model_groups.sql" with { type: "file" };
 import migration0008 from "./migrations/0008_detected.sql" with { type: "file" };
+import migration0009 from "./migrations/0009_speed_result_details.sql" with { type: "file" };
 import snapshot0000 from "./migrations/meta/0000_snapshot.json" with { type: "file" };
 import snapshot0001 from "./migrations/meta/0001_snapshot.json" with { type: "file" };
 import snapshot0002 from "./migrations/meta/0002_snapshot.json" with { type: "file" };
@@ -24,6 +25,7 @@ export const migrationAssets: ReadonlyArray<readonly [string, string]> = [
   ["0006_console_series.sql", migration0006],
   ["0007_model_groups.sql", migration0007],
   ["0008_detected.sql", migration0008],
+  ["0009_speed_result_details.sql", migration0009],
   ["meta/0000_snapshot.json", snapshot0000 as unknown as string],
   ["meta/0001_snapshot.json", snapshot0001 as unknown as string],
   ["meta/0002_snapshot.json", snapshot0002 as unknown as string],
