@@ -215,6 +215,12 @@ with `RunAtLoad`, `KeepAlive { SuccessfulExit: false }`,
 Linux `systemd --user` and Windows service support remain named TODOs with
 the same restart-on-failure design.
 
+Releases are built from a clean clone with `scripts/build-release.sh`, which
+writes the daemon, desktop bundle, checksums, update manifests, and installer.
+The changelog section is reviewed, then the owner tags the commit and creates
+the GitHub Release with those assets; the site's `install.sh` is updated to
+the pinned checksums. Cutting a release remains the owner's word.
+
 The Stack's `frontend/` is built into `frontend/dist/` and served by this
 same daemon on its API port, with Vite proxying the API paths in development.
 Asset names carry content hashes served `immutable` while `index.html` is
