@@ -8,14 +8,18 @@ export type HealthSeverity = typeof HEALTH_SEVERITIES[number];
 export interface HealthFix { label: string; action: string; }
 export interface HealthItem { code: string; severity: HealthSeverity; title: string; text: string; since: string; cause: string; fix?: HealthFix; learnMore?: string; }
 export type HealthInput = Omit<HealthItem, "since"> & { since?: string };
+export const docsPath: Record<string, string> = {
+  "managed-host-offline": "https://getmaipai.github.io/stack/user/engines/", "memory-pressure": "https://getmaipai.github.io/stack/user/memory/", "memory-pressure-critical": "https://getmaipai.github.io/stack/user/memory/", "memory-pressure-warn": "https://getmaipai.github.io/stack/user/memory/", "engine.crashed": "https://getmaipai.github.io/stack/user/engines/", "failed-swap": "https://getmaipai.github.io/stack/user/updates/", "stored-blob-checksum-mismatch": "https://getmaipai.github.io/stack/user/models/", "disk-under-reserve": "https://getmaipai.github.io/stack/user/storage/", "admission-refused-repeatedly": "https://getmaipai.github.io/stack/user/memory/", "check-fit-together": "https://getmaipai.github.io/stack/user/troubleshooting/", "host.belowTestedVersion": "https://getmaipai.github.io/stack/user/engines/",
+};
 
 function parseFix(value: string | null): HealthFix | undefined { try { const parsed = value ? JSON.parse(value) as HealthFix : undefined; return parsed?.label && parsed.action ? parsed : undefined; } catch { return undefined; } }
-function toItem(row: typeof health.$inferSelect): HealthItem { const fix = parseFix(row.fix); return { code: row.code, severity: row.severity as HealthSeverity, title: row.title, text: row.text, since: row.since, cause: row.cause, ...(fix ? { fix } : {}), ...(row.learnMore ? { learnMore: row.learnMore } : {}) }; }
+function docsFor(code: string): string { return docsPath[code] ?? `https://getmaipai.github.io/stack/user/health/#${encodeURIComponent(code)}`; }
+function toItem(row: typeof health.$inferSelect): HealthItem { const fix = parseFix(row.fix); return { code: row.code, severity: row.severity as HealthSeverity, title: row.title, text: row.text, since: row.since, cause: row.cause, ...(fix ? { fix } : {}), learnMore: row.learnMore ?? docsFor(row.code) }; }
 function changed(code: string): void { const row = db.select({ code: health.code, severity: health.severity, title: health.title }).from(health).where(eq(health.code, code)).get(); emit({ id: "health.changed", data: { code, title: row?.title ?? code, severity: row?.severity ?? "warning" } }); }
 
 export function raise(item: HealthInput, now = new Date()): HealthItem {
   const existing = db.select().from(health).where(eq(health.code, item.code)).get();
-  const values = { code: item.code, severity: item.severity, title: item.title, text: item.text, since: existing?.since ?? item.since ?? now.toISOString(), cause: item.cause, fix: item.fix ? JSON.stringify(item.fix) : null, learnMore: item.learnMore ?? null, resolvedAt: null, ignoredAt: null };
+  const values = { code: item.code, severity: item.severity, title: item.title, text: item.text, since: existing?.since ?? item.since ?? now.toISOString(), cause: item.cause, fix: item.fix ? JSON.stringify(item.fix) : null, learnMore: item.learnMore ?? docsFor(item.code), resolvedAt: null, ignoredAt: null };
   const didChange = !existing || existing.severity !== values.severity || existing.title !== values.title || existing.text !== values.text || existing.cause !== values.cause || existing.fix !== values.fix || existing.learnMore !== values.learnMore || existing.resolvedAt !== null || existing.ignoredAt !== null;
   if (existing) db.update(health).set(values).where(eq(health.code, item.code)).run(); else db.insert(health).values(values).run();
   if (didChange) changed(item.code); return { ...item, since: values.since };

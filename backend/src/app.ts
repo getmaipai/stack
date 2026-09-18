@@ -31,6 +31,8 @@ import { runStateRoutes } from "@/routes/runState";
 import { channelsRoutes } from "@/routes/channels";
 import { catalogRoutes } from "@/routes/catalog";
 import { libraryRoutes } from "@/routes/library";
+import { helperRoutes } from "@/routes/helper";
+import { docsRoutes } from "@/routes/docs";
 import packageJson from "../../package.json";
 import { assertShowroomAllowed } from "@/showroom/fixture";
 
@@ -73,6 +75,8 @@ app.route("/stack/v1/budget", budgetRoutes);
 app.route("/stack/v1", eventsRoutes);
 app.route("/stack/v1", channelsRoutes);
 app.route("/stack/v1/library", libraryRoutes);
+app.route("/stack/v1/helper", helperRoutes);
+app.route("/stack/v1/docs", docsRoutes);
 app.route("/stack/v1/logs", logsRoutes);
 app.route("/stack/v1/series", seriesRoutes);
 app.route("/stack/v1/groups", groupsRoutes);

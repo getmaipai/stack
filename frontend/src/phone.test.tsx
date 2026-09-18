@@ -20,7 +20,7 @@ test("the 400px phone surface exposes five tabs and 44px touch targets", () => {
   </>);
 
   expect(document.querySelector("[data-phone-shell]")?.getAttribute("style")).toContain("width: 400px");
-  expect(Array.from(document.querySelectorAll('[aria-label="Phone navigation"] button')).map((button) => button.textContent?.trim())).toEqual(["Overview", "Things", "Tester", "Alerts", "Settings"]);
+  expect(Array.from(document.querySelectorAll('[aria-label="Phone navigation"] button')).map((button) => button.textContent?.trim())).toEqual(["Overview", "Things", "Ask", "Alerts", "Settings"]);
   const interactive = Array.from(document.querySelectorAll("[data-phone-shell] button, [data-phone-shell] a, [data-phone-shell] input"));
   expect(interactive.length).toBeGreaterThanOrEqual(7);
   expect(interactive.every((element) => element.className.toString().includes("min-h-11") || element.className.toString().includes("min-h-14") || Number.parseInt((element as HTMLElement).style.minHeight, 10) >= 44)).toBe(true);

@@ -35,7 +35,7 @@ function SettingsSection({ section, children }: { section: StackSettingSection; 
 function DisabledRows({ section }: { section: StackSettingSection }) {
   const reason = section.itemId ? `${section.title} arrives with ${section.itemId}.` : "This section is not configured yet.";
   const row = placeholder(`${section.id}-placeholder`, section.title, reason, section.id);
-  return <><GenericForm settings={[row]} values={{ [row.key]: "Not available" }} onChange={() => undefined} disabled testId="generic-settings-form" /><p className="mt-4 text-sm text-muted-foreground">{reason}</p></>;
+  return <><GenericForm settings={[row]} values={{ [row.key]: "Not available" }} onChange={() => undefined} disabled testId="generic-settings-form" /><p className="mt-4 text-sm text-muted-foreground">{reason} <a className="underline" href={`https://getmaipai.github.io/stack/user/settings/#${section.id}`} target="_blank" rel="noreferrer">Learn more</a></p></>;
 }
 
 function selectedDrives(value: SettingValue | undefined): string[] {

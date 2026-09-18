@@ -1387,6 +1387,8 @@ phrase templates. Each deterministic text rule needs a hit counter and a
 corpus row; a third phrasing in a week is a classifier candidate under
 the org rule, not another matching rule.
 
+**Built (STACK-55 and STACK-37 tiers 1 and 2).** Ask is the sparkles door in the shell and the middle phone tab. Its palette answers the declared live intents, searches the local Library and the shipped knowledge index, and opens a stateless helper panel for open questions. The helper endpoint uses only the read-only registry in `backend/src/lib/helperTools.ts`; it does not download or select a model. Remote docs-index search is gated by the existing update switch and named on the privacy page.
+
 ## What moves out of Home, later
 
 The migration inventory below is a boundary, not a removal order.

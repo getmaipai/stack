@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "bun ../scripts/build-knowledge-index.ts && tsc --noEmit && vite build",
     "test": "bun test",
     "lint": "tsc --noEmit && eslint ."
   },

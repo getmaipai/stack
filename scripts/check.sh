@@ -33,6 +33,10 @@ if [ "${1:-}" != "--docs" ]; then
   (cd frontend && bun test)
   echo "== frontend: build"
   (cd frontend && bun run build)
+  if [ ! -f frontend/dist/knowledge/pagefind/pagefind-entry.json ]; then
+    echo "frontend/dist/knowledge/pagefind/pagefind-entry.json is missing after 'bun run build'."
+    exit 1
+  fi
 
   if command -v cargo >/dev/null 2>&1; then
     if [ ! -f desktop/src-tauri/binaries/maipai-stack-aarch64-apple-darwin ]; then

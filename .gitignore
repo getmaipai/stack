@@ -23,3 +23,6 @@ docs/site/.astro/
 docs/site/public/
 docs/site/src/content/docs/guide/
 docs/site/src/content/docs/dev/
+
+# Generated knowledge index (built by scripts/build-knowledge-index.ts into frontend/dist/).
+frontend/public/knowledge/

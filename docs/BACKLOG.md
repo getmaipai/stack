@@ -441,19 +441,32 @@ layer above; none adds a person or leaves the machine.
   with the local one at request time), so one search box answers both
   "how do I" and "what did I install". Acceptance: a query that matches
   only a Library page returns it from the site's search box. Verified on main at 953eda0.
-- [ ] **STACK-37 (M): a local answer helper.** Ask answers live
-  machine facts and shipped docs without a model. A separately enabled
-  path may use the already loaded chat model with read-only tools and
-  proposal cards. It downloads no helper model, declares no helper
-  role, stores no conversation history, and works in model-free mode
-  when chat is offline. Acceptance: scripted facts and docs answer
-  with no engine running; every tool is read-only; with the switch off
-  no model request occurs; a short question corpus reports correct
-  answer links and rule hit counts. Out of scope: an agent loop,
-  bundled model and automatic action.
-  Files: `frontend/src/pages/DashboardShell.tsx, backend/src/routes/library.ts, docs/site/`.
-  Mirror: the current palette and local Library search.
-  Exit: `bash scripts/check.sh`.
+- [x] **STACK-37 (M): the helper.** (Priority raised 2026-09-18; the door is Ask, ux.md "Docs and the helper".) The in-console
+  assistant of dev.md "The helper" (2026-09-17), built in three tiers
+  so most questions never reach a model. Tier 1: an intent table in
+  the command palette that answers the enumerable questions from the
+  API ("how many engines", "are my models up to date", "how much disk
+  do models use") with the number in the row and a jump to the page,
+  each intent with a hit counter. Tier 2: the Library search
+  (STACK-32/33). Tier 3: the `helper` role, a read-only tool set over
+  `/stack/v1` (`health`, `engines`, `models`, `updates`, `storage`,
+  `series`, Library `search`) declared once and also served by the
+  `stack-library` MCP server, run on the loaded `chat` engine when it
+  supports tool calls, else on the Stack's pinned `qwen3-1.7b-q8-0`
+  in its own low-priority llama-server that unloads after idle; the
+  reply renders in the property panel, with "Ask about this" on every
+  health row and alert; any action is a proposal card, never a tool.
+  Mirror `lib/router.ts` for the role and `routes/library` for the
+  tools. Acceptance: the two named questions are answered with no
+  engine running (test on the intent table); a scripted engine
+  (`STACK_SCRIPTED_ENGINES=1`) proves the tool loop answers "why is
+  chat offline" from the health list; the tool set contains no
+  mutating tool (test enumerates the registry); with every person
+  engine stopped the helper still loads on its own process (scripted
+  test); with memory below the watermark the palette shows the
+  "needs 2 GB free" state instead of loading. Out of scope: quality
+  benchmarks, a chat bubble, any write tool. Exit: `scripts/check.sh`.
+
 ## Console area (2026-09-17 and 2026-09-18)
 
 The design record is ux.md "Look and feel references: UniFi's
@@ -743,18 +756,23 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   `model-detail-phone.png`, `settings-phone.png` opened and judged.
   Exit: `scripts/check.sh`.
   Verified on main at eeb390e.
-- [ ] **STACK-55 (S): Ask and the doors to local docs.** The header
-  opens Ask with pages, things, live facts and shipped docs results;
-  Help links to the in-app pages, API explorer and Library. An outbound
-  site search is a separate opt-in with a privacy row. Acceptance:
-  Ask answers a count from a stubbed route, a health item opens its
-  shipped help page while offline, and no search keystroke makes a
-  network request by default. Out of scope: the optional model tier
-  in STACK-37.
-  Files: `frontend/src/kit/blocks/dashboard/components/site-header.tsx, frontend/src/pages/DashboardShell.tsx`.
-  Mirror: the current palette and local Library result.
-  Exit: `bash scripts/check.sh`.
-- [x] **STACK-56 (S): the seams, written down and guarded.** (landed 2026-09-18 at 26f8b6a.) dev.md "The
+- [x] **STACK-55 (S): Ask and the doors to the docs.** ux.md "Docs and
+  the helper" decisions 1 and 3: the header glyph becomes sparkles
+  "Ask" opening the palette with "Search or ask", groups for pages and
+  things, the intent table (STACK-37 tier 1), "From the docs" (the docs
+  site's Pagefind index fetched from the site when the outbound switch
+  is on, else the local Library only), and "Ask the helper" (opens the
+  helper panel, STACK-37 tier 3, or its "coming" state until built);
+  "Help" in the profile menu with the docs site, the API explorer and
+  the Library; "Learn more" on health items and unbuilt sections. Files:
+  `site-header.tsx`, `profile-menu.tsx`, the palette in
+  `DashboardShell.tsx`, `backend/src/lib/health.ts` (a `docsPath` per
+  item code, one map). Acceptance: the palette answers "how many
+  engines" with the count from a stubbed route (test); a health item
+  renders its Learn more link (test); Help lists the three doors
+  (test); captures `palette.png` opened and judged. Exit:
+  `scripts/check.sh`.
+- [x] **STACK-56 (S): the seams, written down and guarded.** (Landed 2026-09-18, c-48.) dev.md "The
   seams" is the record; this item adds the two ux.md sentences (the
   Add sheet's fourth tab "A server you run" in "Things pages, second
   pass" item 1; the Sources row in "Settings" item 3) and the

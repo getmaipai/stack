@@ -116,7 +116,7 @@ const localPlugin = { rules: { "hover-needs-focus": hoverNeedsFocus, "type-floor
 
 export default tseslint.config(
   {
-    ignores: ["dist/**", "node_modules/**", "public/ort/**"],
+    ignores: ["dist/**", "node_modules/**", "public/ort/**", "public/knowledge/**"],
   },
   ...tseslint.configs.recommended,
   {

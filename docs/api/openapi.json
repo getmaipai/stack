@@ -2557,6 +2557,122 @@
         }
       }
     },
+    "/stack/v1/helper": {
+      "post": {
+        "tags": [
+          "Helper"
+        ],
+        "summary": "Ask the local helper",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "question": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "question"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A local helper answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "answer": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "health",
+                        "helper"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "answer",
+                    "source"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/docs/search": {
+      "get": {
+        "tags": [
+          "Docs"
+        ],
+        "summary": "Search the Stack user docs",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "default": ""
+            },
+            "required": false,
+            "name": "q",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Search results from the local or remote docs index.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "title": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "excerpt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "title",
+                          "url",
+                          "excerpt"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "results"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/logs/{name}": {
       "get": {
         "tags": [

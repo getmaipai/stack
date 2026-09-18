@@ -5,7 +5,7 @@ export interface PhoneTab { label: string; path: string; icon: IconName; }
 const tabs: PhoneTab[] = [
   { label: "Overview", path: "/", icon: "LayoutDashboard" },
   { label: "Things", path: "/models", icon: "Box" },
-  { label: "Tester", path: "/try", icon: "Bot" },
+  { label: "Ask", path: "/try", icon: "Sparkles" },
   { label: "Alerts", path: "/alerts", icon: "Bell" },
   { label: "Settings", path: "/settings", icon: "Settings" },
 ];

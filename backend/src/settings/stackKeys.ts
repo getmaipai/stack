@@ -7,7 +7,7 @@ import { setUpdatesEnabled, updatesEnabled } from "@/updates/check";
 import { defaultModelBudgetBytes, setGovernorMemorySettings } from "@/lib/governor";
 import type { EngineSettingDeclaration, EngineSettingValue } from "@/settings/engineKeys";
 
-export type StackSectionId = "general" | "memory" | "updates" | "backups" | "network" | "channels" | "alerts" | "storage" | "maintenance" | "engines" | "hardware" | "diagnostics" | "reset";
+export type StackSectionId = "general" | "memory" | "updates" | "backups" | "network" | "channels" | "alerts" | "storage" | "maintenance" | "engines" | "hardware" | "diagnostics" | "reset" | "helper";
 export interface StackSection { id: StackSectionId; title: string; icon: string; order: number; itemId?: string; computer?: boolean; }
 export interface StackSettingDeclaration extends EngineSettingDeclaration { section: StackSectionId; order: number; }
 
@@ -25,6 +25,7 @@ export const STACK_SETTING_SECTIONS: StackSection[] = [
   { id: "hardware", title: "Hardware", icon: "Monitor", order: 90, computer: true },
   { id: "diagnostics", title: "Diagnostics", icon: "FileText", order: 100, computer: true },
   { id: "reset", title: "Reset", icon: "RotateCcw", order: 110, computer: true },
+  { id: "helper", title: "Helper", icon: "MessageCircle", order: 120 },
 ];
 
 export const STACK_SETTINGS: StackSettingDeclaration[] = [
@@ -36,6 +37,7 @@ export const STACK_SETTINGS: StackSettingDeclaration[] = [
   { key: "theme", type: "enum", default: "system", label: "Theme", help: "Choose light, dark, or follow this computer.", group: "Appearance", disclosure: "basic", needsRestart: false, options: [{ value: "system", label: "System" }, { value: "light", label: "Light" }, { value: "dark", label: "Dark" }], section: "general", order: 20 },
   { key: "updatesEnabled", type: "boolean", default: false, label: "Check for updates", help: "Allow the Stack to check its release manifests when you ask it to.", group: "Update checks", disclosure: "basic", needsRestart: false, section: "updates", order: 10 },
   { key: "huggingFaceSearchEnabled", type: "boolean", default: false, label: "Search Hugging Face", help: "Allow the Add sheet to send the search text and selected repository name to Hugging Face. This is separate from update checks.", group: "Model discovery", disclosure: "basic", needsRestart: false, section: "updates", order: 20 },
+  { key: "helperUseChatModel", type: "boolean", default: false, label: "Let the helper use my chat model for open questions", help: "When enabled, the helper may ask the already loaded chat model open questions. It never downloads a model.", group: "Helper", disclosure: "basic", needsRestart: false, section: "helper", order: 10 },
   { key: "alertModel", type: "boolean", default: true, label: "Tell me when a model finishes installing", help: "Show a native notification when a model is ready.", group: "Notifications", disclosure: "basic", needsRestart: false, section: "alerts", order: 10 },
   { key: "alertUpdate", type: "boolean", default: true, label: "Tell me when an update is ready", help: "Show a native notification for an update.", group: "Notifications", disclosure: "basic", needsRestart: false, section: "alerts", order: 20 },
   { key: "alertCheck", type: "boolean", default: true, label: "Tell me when a check fails", help: "Show a native notification when a check needs attention.", group: "Notifications", disclosure: "basic", needsRestart: false, section: "alerts", order: 30 },

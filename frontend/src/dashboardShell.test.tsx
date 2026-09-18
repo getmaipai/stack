@@ -97,11 +97,11 @@ test("command palette opens from both shortcuts and jumps to Models", async () =
   stubStackFetch({ ...boardExtras, "/stack/v1/repairs": { repairs: [] }, "/stack/v1/roles": { roles: [] }, "/stack/v1/operator": { state: "signedOut", required: false } });
   render(<MemoryRouter initialEntries={["/updates"]}><DashboardShell /></MemoryRouter>);
   fireEvent.keyDown(window, { key: "k", metaKey: true });
-  expect(document.querySelector('input[placeholder="Search sections and actions..."]')).toBeTruthy();
+  expect(document.querySelector('input[placeholder="Search or ask"]')).toBeTruthy();
   fireEvent.click(Array.from(document.querySelectorAll('[cmdk-item]')).find((item) => item.textContent?.trim() === "Models")!);
   await waitFor(() => expect(document.body.textContent).toContain("No models are installed yet"));
   fireEvent.keyDown(window, { key: "/" });
-  expect(document.querySelector('input[placeholder="Search sections and actions..."]')).toBeTruthy();
+  expect(document.querySelector('input[placeholder="Search or ask"]')).toBeTruthy();
 });
 
 test("the sidebar footer shows the Stack health and links to alerts", async () => {
@@ -243,14 +243,14 @@ test("the responsive header keeps three phone actions and no text input", async 
   stubStackFetch({ ...boardExtras, "/stack/v1/settings": { settings: [] }, "/stack/v1/repairs": { repairs: [] }, "/stack/v1/roles": { roles: [] }, "/stack/v1/operator": { state: "signedOut", required: false } });
   Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 400 });
   render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
-  await waitFor(() => expect(document.querySelector('button[aria-label="Search Stack"]')).toBeTruthy());
+  await waitFor(() => expect(document.querySelector('button[aria-label="Ask"]')).toBeTruthy());
   expect(document.querySelector("header input")).toBeNull();
   expect(document.querySelector("[data-notifications-trigger]")).toBeTruthy();
   expect(document.querySelector("[data-profile-trigger]")).toBeTruthy();
   cleanup();
   Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 1440 });
   render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
-  await waitFor(() => expect(document.querySelector("header")?.textContent).toContain("Search Stack"));
+  await waitFor(() => expect(document.querySelector("header")?.textContent).toContain("Ask"));
 });
 
 test("the shell pins admin below the common group and exposes resources", async () => {
