@@ -833,6 +833,13 @@ kit by its registry); llama.cpp's own fit dry run and `llama-server`;
 6. A managed host the person installed (Ollama, ComfyUI) is probed for
    its version and flagged below the one we tested against.
 7. Never a submodule, never a vendored tree, never a fork we maintain.
+8. The backend suite runs under a temp `STACK_DATA_DIR` set by
+   `backend/tests/preload.ts` and refuses a real one, and
+   `clearModelsForTests` refuses a data dir outside the OS temp
+   directory: a checkout's `data/` is never read or written by a gate
+   (2026-09-17 21:40: a gate from the main checkout emptied the
+   operator's models table, plan, and left test clients, a test
+   operator password and fixture update notices in the live database).
    A copied snippet carries its licence, a NOTICE entry, a source
    comment and a reason here.
 
