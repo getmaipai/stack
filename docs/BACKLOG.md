@@ -1262,6 +1262,30 @@ test is necessary but does not replace the named clean-account walk.
   a tampered or incompatible revision rolls back to the working model.
   Out of scope: automatic revision changes or a claim for every Hub repo.
   Exit: `bash scripts/check.sh` and the recorded C4 walk.
+- [ ] **STACK-93 (M): live samples, per process and per GPU.** ux.md "Live".
+  `backend/src/lib/live.ts`: a sampler every five seconds that reads each
+  running engine's pid (`supervisor.ts`) for footprint and CPU share
+  (`ps -o %cpu=,rss= -p`), every GPU by name with memory used of total and
+  utilization (`nvidia-smi` via `hardware.ts` `detectCudaDevices`; on a
+  Mac the name from `system_profiler SPDisplaysDataType -json`
+  `sppci_model` and utilization from `ioreg -r -d 1 -c IOAccelerator`
+  "Device Utilization %"; anything absent is `null`, never 0), the
+  computer's CPU load and the data dir's disk used of total, and the
+  clients seen in the last five minutes with their request counts and
+  in-flight count (`clients.ts` lastSeenAt, `router.ts` activeRequests).
+  Served at `GET /stack/v1/live` and emitted as one `live` event on the
+  stream each sample. Acceptance: a test with scripted readers proves a
+  Mac shape (one GPU, null utilization when ioreg is absent), a two-GPU
+  NVIDIA shape, and a client seen 4 minutes ago listed while one seen 6
+  minutes ago is not. Out of scope: any UI. Exit: `bash scripts/check.sh`.
+- [ ] **STACK-94 (M): the Live section on Overview and the phone.** ux.md
+  "Live" 1 and 2. Files: `frontend/src/pages/overview/*`, `frontend/src/
+  kit/blocks/phone/*`, `frontend/src/lib/api.ts`. Engine rows, one card
+  per GPU by name, a CPU and disk line, the clients-now list, fed by the
+  `live` event and seeded by one GET. Acceptance: the scripted host with
+  the two-GPU shape renders two named cards; "not measured" for a null;
+  a capture at desktop and phone widths opened and judged. Out of
+  scope: controls (STACK-91). Exit: `bash scripts/check.sh`.
 - [ ] **STACK-91 (M): monitor owned engines and detected hosts honestly.**
   Show identity, provenance, state and observed-at time for llama-server,
   mlx-serve, ComfyUI and detected local hosts where actually present.

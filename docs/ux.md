@@ -317,6 +317,40 @@ Networks page with its panel open. Differences, each a decision:
    `hsl(240 6% 95%)`; dark: page black, card `hsl(240 6% 7%)`, pane
    `hsl(240 6% 4%)`.
 
+## Live: what is running right now (decided 2026-09-18, 19:15, the owner's priority)
+
+The owner's order for what the console must do, above everything else in
+the backlog: first show what is happening on this computer right now,
+then let him start and stop it, then let him browse, install and remove
+things. Everything else waits behind these three.
+
+1. **Live is real and per device.** A Live section at the top of Overview
+   (and the first tab on the phone) shows, sampled every five seconds
+   and pushed over the existing event stream, never polled by the page:
+   each running engine as a row (engine and build, the model it holds,
+   its port, memory footprint, CPU share, up since), one card per GPU
+   with the GPU's own name (the chipset model on a Mac, the board name
+   from the driver elsewhere), its memory used of total and its
+   utilization when the platform exposes it, and a CPU and disk line for
+   the whole computer. A machine can have several GPUs; the cards are a
+   list, never a single number. A value the platform does not expose
+   says "not measured", never zero.
+2. **Who is connected is a list of clients, now.** Under the engine rows:
+   every client that made a request in the last five minutes, with its
+   name, the roles it used, its request count in that window and the
+   time of its last request, plus the count of requests in flight. This
+   is the Clients page's "now" view and the same rows.
+3. **Control is on the row.** Each engine row carries Stop when it is
+   running and Start when it is installed and not running; a restart is
+   stop then start. Only a Stack-owned process gets these controls
+   (STACK-91); a detected external host shows its state and a link to
+   what owns it. The header pill remains the whole-Stack pause.
+4. **Browse, install, remove come after.** The Add sheet (catalog and
+   Hugging Face search) and the row menu's Remove are the surfaces;
+   STACK-80 makes their metadata truthful. They are third in order
+   because a person cannot judge an install without seeing what it did
+   to the machine, which is what Live is for.
+
 ## Look and feel references: UniFi's structure, X's modernism (decided 2026-09-17, night)
 
 The owner's direction, with screens in hand: every page and feature of
