@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import type { ReactNode } from "react";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { PropertyPanel } from "@/kit/blocks/property-panel/PropertyPanel";
+import { KeyValueList } from "@/kit/blocks/property-panel/KeyValueList";
 import { channelPanel } from "@/panels/channel";
 import { clientPanel } from "@/panels/client";
 import { detectedPanel } from "@/panels/detected";
@@ -31,7 +32,24 @@ test("every property-panel adapter exposes actions that call its route handler",
     }
     cleanup();
   }
-  expect(calls).toEqual(["model:load", "model:unload", "model:pin", "model:update", "model:remove", "group:load", "group:unload", "group:pin", "group:unpin", "group:checkUpdates", "group:move", "group:remove", "client:revoke", "channel:test", "channel:remove", "detected:adopt", "detected:forget"]);
+  expect(calls).toEqual(["model:load", "model:unload", "model:pin", "model:update", "model:remove", "group:load", "group:unload", "group:pin", "group:unpin", "group:checkUpdates", "group:move", "group:remove", "client:revoke", "channel:test", "channel:edit", "detected:adopt", "detected:forget"]);
+});
+
+test("the refined panel exposes icon tabs, quick facts, primary actions, and copyable metadata", async () => {
+  const copied: string[] = [];
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (value: string) => { copied.push(value); } } });
+  render(<PropertyPanel kind="Model" item={{ name: "Family chat" }} status="Ready" actions={[{ label: "Load", icon: "Download", onClick: () => {} }]} facts={[{ label: "State", value: "Ready" }]} primaryActions={[{ label: "Load", onClick: () => {} }, { label: "Pin", onClick: () => {} }]} tabs={{ overview: <KeyValueList items={[{ label: "Path", value: "/models/qwen", copy: true }]} />, insights: <p>Usage insight</p>, settings: <p>Settings content</p> }} open onClose={() => {}} />);
+  expect(document.querySelector('button[aria-label="Load"]')).toBeTruthy();
+  expect(document.body.textContent).toContain("Ready");
+  expect(document.body.textContent).toContain("Pin");
+  fireEvent.click(document.querySelector('button[aria-label="Copy Path"]')!);
+  await waitFor(() => expect(copied).toEqual(["/models/qwen"]));
+  const insightsTab = document.querySelector('[role="tab"][aria-label="Insights"]')!;
+  fireEvent.mouseDown(insightsTab);
+  fireEvent.mouseUp(insightsTab);
+  fireEvent.pointerDown(insightsTab);
+  fireEvent.click(insightsTab);
+  await waitFor(() => expect(document.body.textContent).toContain("Usage insight"));
 });
 
 test("property panel becomes a full-height phone sheet", async () => {

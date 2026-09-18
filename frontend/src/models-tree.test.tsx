@@ -21,10 +21,8 @@ test("Models renders group rollups, routes group actions, renames, and adopts de
   await waitFor(() => expect(document.body.textContent).toContain("12 requests"));
   fireEvent.click([...document.querySelectorAll("p")].find((node) => node.textContent === "Family chat")!.closest("tr")!);
   fireEvent.click(document.querySelector('button[aria-label="Expand Family chat"]')!);
-  await waitFor(() => expect(document.querySelector('button[aria-label="Load"]')).toBeTruthy());
-  fireEvent.click(document.querySelector('button[aria-label="Load"]')!);
-  await waitFor(() => expect([...document.querySelectorAll("button")].find((button) => button.textContent === "Confirm")).toBeTruthy());
-  fireEvent.click([...document.querySelectorAll("button")].find((button) => button.textContent === "Confirm")!);
+  await waitFor(() => expect(document.querySelector('button[aria-label="Load all"]')).toBeTruthy());
+  fireEvent.click(document.querySelector('button[aria-label="Load all"]')!);
   await waitFor(() => expect(calls.some((call) => call.method === "POST" && call.path.includes("/groups/group-family/actions"))).toBe(true));
   const input = document.querySelector('input[aria-label="Nickname qwen"]')!;
   fireEvent.change(input, { target: { value: "Household" } }); fireEvent.blur(input);

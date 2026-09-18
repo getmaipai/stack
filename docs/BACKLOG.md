@@ -120,6 +120,10 @@ never copied. No item migrates the hub until STACK-16.
 - [x] **STACK-41 (M): the things table.** One reusable real-table block for
   Engines, Models, Access and Alerts with status dots, groups, selection,
   sorting, links and quiet action rows. Verified at 036b70e.
+- [x] **STACK-42 (M): the property panel, refined.** Icon quick actions,
+  overview/insights/settings tabs, quick facts, paired primary actions, and
+  copyable key-value metadata across engines, models, groups, detected stores,
+  clients and channels. Verified at 530e0b0.
 - [x] **STACK-36 (M): Overview console.** Range-aware usage, memory, and speed
   series backed by durable samples, with seven widgets, status rings, and
   showroom captures. Verified at ed67582.

@@ -41,5 +41,5 @@ export function AccessPage({ Frame }: { Frame: SectionFrameComponent }) {
     onRowClick={(row) => setSelected(row.id)}
     onLink={(target) => { if (target.startsWith("#client-")) setSelected(target.slice("#client-".length)); }}
     empty="No client keys yet."
-  />{client && panel && <PropertyPanel kind="Client" item={{ name: client.name }} status="Active" actions={panel.actions} tabs={{ overview: panel.overview }} open onClose={() => setSelected(null)} />}</div></div></Frame>;
+  />{client && panel && <PropertyPanel kind="Client" item={{ name: client.name }} status="Active" actions={panel.actions} facts={panel.facts} primaryActions={panel.primaryActions} tabs={{ overview: panel.overview }} open onClose={() => setSelected(null)} />}</div></div></Frame>;
 }
