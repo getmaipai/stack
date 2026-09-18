@@ -566,7 +566,7 @@ showroom (`bun run showroom`, captures under `docs/assets/screens/`).
 Order matters: the shell items (38 to 40) first, the kit blocks (41,
 42) next, then the pages that use them.
 
-- [ ] **STACK-38 (S): the page header is the title.** The top bar's
+- [x] **STACK-38 (S): the page header is the title** `7894513`. The top bar's
   title is sticky and is the page's title; the eyebrow ("MaiPai
   Stack"), the large heading and the subtitle at the top of every page
   body go. A page keeps at most one muted sentence under the header

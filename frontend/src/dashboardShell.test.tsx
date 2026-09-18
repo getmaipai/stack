@@ -174,6 +174,14 @@ test("the sidebar shows quiet indicators for engines, updates, alerts, and detec
   expect(alertsLink?.textContent).not.toContain("1");
 });
 
+test("the page title appears once, in the header", async () => {
+  stubStackFetch({ ...boardExtras, "/stack/v1/repairs": { repairs: [] }, "/stack/v1/roles": { roles: [] }, "/stack/v1/operator": { state: "signedOut", required: false }, "/stack/v1/models": { models: [] } });
+  render(<MemoryRouter initialEntries={["/models"]}><DashboardShell /></MemoryRouter>);
+  await waitFor(() => expect(document.querySelector("h1")?.textContent).toBe("Models"));
+  expect(document.querySelectorAll("h1").length).toBe(1);
+  for (const heading of document.querySelectorAll("h2")) expect(heading.textContent).not.toContain("Models");
+});
+
 test("the top bar names this computer and toggles the persisted theme", async () => {
   localStorage.removeItem("maipai-stack-theme");
   stubStackFetch({

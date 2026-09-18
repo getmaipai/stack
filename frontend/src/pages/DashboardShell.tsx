@@ -31,8 +31,8 @@ function EmptyState({ title, detail, action }: { title: string; detail: string; 
 
 export type SectionFrameComponent = ({ title, description, children }: { title: string; description: string; children: ReactNode }) => ReactNode;
 
-export function SectionFrame({ title, description, children }: { title: string; description: string; children: ReactNode }) {
-  return <main className="mx-auto w-full max-w-7xl space-y-7 px-4 py-7 sm:px-8 lg:px-10 lg:py-10"><div><p className="text-sm font-medium text-primary">MaiPai Stack</p><h2 className="mt-1 text-3xl font-semibold tracking-tight">{title}</h2><p className="mt-2 text-base text-muted-foreground">{description}</p></div>{children}</main>;
+export function SectionFrame({ title: _title, description, children }: { title: string; description: string; children: ReactNode }) {
+  return <main className="mx-auto w-full max-w-7xl space-y-5 px-4 py-5 sm:px-8 lg:px-10 lg:py-6">{description ? <p className="text-sm text-muted-foreground">{description}</p> : null}{children}</main>;
 }
 
 function MonitoringPage() {
