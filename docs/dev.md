@@ -1298,6 +1298,15 @@ including empty buckets, so a quiet Stack keeps its time axis honest. Recent
 activity requests durable notifications only; progress events stay in the
 live event stream and do not become history.
 
+## Things pages and the catalog sheet
+
+Things pages keep one declared action list per kind in `frontend/src/lib/actions.ts`.
+The property panel and each row menu consume that list, so a destructive action
+has one confirmation path and the same wording in both places. The Add sheet
+uses three sources: the signed local catalog, an opt-in Hugging Face search, and
+local imports or an upload staged for provenance assignment. Hugging Face search
+is gated by the existing outbound switch and is recorded in the privacy page.
+
 ## Open questions for the owner
 
 1. **Name.** Decided 2026-09-17: `stack`, "MaiPai Stack". The public

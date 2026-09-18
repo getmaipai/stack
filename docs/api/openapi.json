@@ -5255,6 +5255,69 @@
         }
       }
     },
+    "/stack/v1/models/upload": {
+      "post": {
+        "tags": [
+          "Models"
+        ],
+        "summary": "Upload a model from another device",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Upload accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accepted": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "accepted",
+                    "id",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No model file was uploaded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/models/{id}": {
       "delete": {
         "tags": [
@@ -5546,6 +5609,162 @@
           },
           "404": {
             "description": "Unknown model.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/catalog/search": {
+      "get": {
+        "tags": [
+          "Catalog"
+        ],
+        "summary": "Search the local catalog or Hugging Face",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "q",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "model",
+                "engine",
+                "huggingface"
+              ]
+            },
+            "required": false,
+            "name": "kind",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Catalog entries or Hugging Face results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "model",
+                              "engine"
+                            ]
+                          },
+                          "roles": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "licence": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "sizeBytes": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "revision": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "url": {
+                            "type": "string",
+                            "nullable": true,
+                            "format": "uri"
+                          },
+                          "sha256": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "repo": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "runsOnThisComputer": {
+                            "type": "boolean"
+                          },
+                          "files": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "sizeBytes": {
+                                  "type": "integer",
+                                  "nullable": true
+                                },
+                                "url": {
+                                  "type": "string",
+                                  "format": "uri"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "sizeBytes",
+                                "url"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "kind",
+                          "licence",
+                          "sizeBytes",
+                          "source",
+                          "revision",
+                          "url",
+                          "sha256",
+                          "repo"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "results"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid catalog search.",
             "content": {
               "application/json": {
                 "schema": {

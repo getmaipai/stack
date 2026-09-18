@@ -28,6 +28,7 @@ import { speedTestRoutes } from "@/routes/speedTest";
 import { checkRoutes } from "@/routes/check";
 import { runStateRoutes } from "@/routes/runState";
 import { channelsRoutes } from "@/routes/channels";
+import { catalogRoutes } from "@/routes/catalog";
 import packageJson from "../../package.json";
 import { assertShowroomAllowed } from "@/showroom/fixture";
 
@@ -78,6 +79,7 @@ app.route("/stack/v1/operator", operatorRoutes);
 app.route("/stack/v1/clients", clientsRoutes);
 app.route("/stack/v1/setup/plan", setupPlanRoutes);
 app.route("/stack/v1/models", modelsRoutes);
+app.route("/stack/v1/catalog", catalogRoutes);
 app.route("/stack/v1/storage", storageRoutes);
 app.route("/stack/v1/jobs", jobsRoutes);
 app.route("/stack/v1/updates", updatesRoutes);

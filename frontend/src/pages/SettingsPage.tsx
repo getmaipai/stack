@@ -11,12 +11,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/kit
 import { Input } from "@/kit/ui/input";
 import { ThingsTable } from "@/kit/blocks/things-table/ThingsTable";
 import type { SectionFrameComponent } from "@/pages/DashboardShell";
+import { GroupsSection } from "@/pages/settings/GroupsSection";
 
 type SettingValue = string | number | boolean;
 type IndexResponse = { sections: StackSettingSection[]; settings: Array<{ key: string; label: string; help: string; level: string; section: string; order: number; path: string }> };
 
 const fallbackSections: StackSettingSection[] = [
-  { id: "general", title: "General", icon: "Settings", order: 10 }, { id: "updates", title: "Updates", icon: "RefreshCw", order: 20 }, { id: "backups", title: "Backups", icon: "UploadCloud", order: 30, itemId: "STACK-11" }, { id: "network", title: "Network and access", icon: "ShieldCheck", order: 40 }, { id: "channels", title: "Alert channels", icon: "Bell", order: 50 }, { id: "storage", title: "Storage", icon: "Database", order: 60 }, { id: "maintenance", title: "Maintenance", icon: "Wrench", order: 70, itemId: "STACK-22" }, { id: "engines", title: "Engines", icon: "Cpu", order: 80 }, { id: "hardware", title: "Hardware", icon: "Monitor", order: 90, computer: true }, { id: "diagnostics", title: "Diagnostics", icon: "FileText", order: 100, computer: true }, { id: "reset", title: "Reset", icon: "RotateCcw", order: 110, computer: true },
+  { id: "general", title: "General", icon: "Settings", order: 10 }, { id: "updates", title: "Updates", icon: "RefreshCw", order: 20 }, { id: "backups", title: "Backups", icon: "UploadCloud", order: 30, itemId: "STACK-11" }, { id: "network", title: "Network and access", icon: "ShieldCheck", order: 40 }, { id: "channels", title: "Alert channels", icon: "Bell", order: 50 }, { id: "storage", title: "Storage", icon: "Database", order: 60 }, { id: "groups", title: "Groups", icon: "Folder", order: 65 }, { id: "maintenance", title: "Maintenance", icon: "Wrench", order: 70, itemId: "STACK-22" }, { id: "engines", title: "Engines", icon: "Cpu", order: 80 }, { id: "hardware", title: "Hardware", icon: "Monitor", order: 90, computer: true }, { id: "diagnostics", title: "Diagnostics", icon: "FileText", order: 100, computer: true }, { id: "reset", title: "Reset", icon: "RotateCcw", order: 110, computer: true },
 ];
 
 const placeholder = (key: string, label: string, help: string, section: string): EngineSetting => ({ key, type: "text", default: "", label, help, disclosure: "basic", needsRestart: false, inEffect: "", pending: null, section });
@@ -47,7 +48,8 @@ export function SettingsPage({ Frame }: { Frame: SectionFrameComponent }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { section: routeSection } = useParams<{ section?: string }>();
-  const sections = (index.data?.sections ?? fallbackSections).slice().sort((left, right) => left.order - right.order);
+  const declaredSections = index.data?.sections ?? fallbackSections;
+  const sections = [...declaredSections, ...(declaredSections.some((section) => section.id === "groups") ? [] : [fallbackSections.find((section) => section.id === "groups")!])].slice().sort((left, right) => left.order - right.order);
   const hashSection = location.hash.replace(/^#/, "");
   const active = routeSection && sections.some((section) => section.id === routeSection) ? routeSection : sections.some((section) => section.id === hashSection) ? hashSection : "overview";
 
@@ -64,6 +66,7 @@ export function SettingsPage({ Frame }: { Frame: SectionFrameComponent }) {
 
   function sectionBody(section: StackSettingSection): ReactNode {
     const declared = visibleSettings.filter((setting) => setting.section === section.id);
+    if (section.id === "groups") return <GroupsSection />;
     if (["general", "network", "updates", "diagnostics", "storage"].includes(section.id)) return <><GenericForm settings={declared} values={draft} onChange={(key, value) => void changeSetting(key, value)} testId={section.id === "general" ? "generic-engine-form" : "generic-settings-form"} />{section.id === "network" && <p className="mt-4 text-sm text-muted-foreground"><Link className="underline" to="/access">Manage operator access and client keys</Link>.</p>}{section.id === "updates" && <p className="mt-4 text-sm text-muted-foreground">Installed builds stay in control of this computer. The update check runs only when requested.</p>}</>;
     if (section.id === "channels") return <><ThingsTable rows={channels.data?.channels ?? []} getKey={(row) => row.id} columns={[{ key: "name", header: "Channel", render: (row) => row.name }, { key: "type", header: "Type", render: (row) => row.type }, { key: "status", header: "Status", align: "right", render: (row) => row.status }]} actions={[{ label: "Add a channel", onClick: () => navigate("/alerts") }]} empty="No alert channels configured." /><p className="mt-3 text-sm text-muted-foreground"><Link className="underline" to="/alerts">Manage alert channels</Link>.</p></>;
     if (section.id === "engines") return <div className="space-y-3">{(engines.data?.engines ?? []).map((engine) => <Link className="flex items-center justify-between rounded-lg border p-3 text-sm hover:bg-muted" to={`/engines?engine=${encodeURIComponent(engine.id)}`} key={engine.id}><span>{engine.label}</span><span className="text-muted-foreground">{engine.current ? "Current" : engine.stateReason ?? "Settings"}</span></Link>)}{(engines.data?.engines ?? []).length === 0 && <p className="text-sm text-muted-foreground">No engines are installed yet.</p>}</div>;

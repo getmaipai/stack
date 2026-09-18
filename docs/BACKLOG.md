@@ -770,7 +770,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   declared section renders a card (test walks the declaration);
   captures `settings.png`, `settings-updates.png`, `settings-phone.png`
   opened and judged. Exit: `scripts/check.sh`.
-- [ ] **STACK-53 (M): things pages, second pass.** ux.md "Things pages,
+- [x] **STACK-53 (M): things pages, second pass.** ux.md "Things pages,
   second pass" (2026-09-18): one Add pill per page opening the sheet
   with Catalog, Hugging Face and Import tabs (import by link, and a
   streamed upload from another device); a three-dots menu on every row
