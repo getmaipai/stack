@@ -904,6 +904,15 @@ the architecture.
    the board (`ux.md`, "Install and first open"); the app bundle with
    the tray is the second path and runs the same steps.
 
+The Tauri shell lives in `desktop/`. It loads the daemon's console in its
+main window, keeps the daemon under the OS service manager, and owns only
+the tray, native notifications, native pickers and the down-state Start
+screen. Run `bun run desktop:dev` for the local shell and
+`bun run desktop:build` for a release bundle. The web browser remains a
+complete client, with typed paths and no native notification dependency.
+The app has no Tauri updater and no telemetry; updates stay in the Stack's
+own update flow, and the privacy page is unchanged.
+
 ## The desktop app is Tauri around the console; the daemon stays the hands (decided 2026-09-18, 05:30)
 
 The owner, going to bed: "we probably need this entire thing as Tauri

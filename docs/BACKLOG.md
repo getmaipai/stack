@@ -376,7 +376,7 @@ each item's design section lands in `dev.md` before its code.
   (test); a forgotten row stays hidden until its version changes
   (test); nothing is probed outside 127.0.0.1 (test asserts the
   address list); screenshot judged.
-- [ ] **STACK-18 (M): the desktop app on Tauri 2** (grown from the tray app, dev.md "The desktop app is Tauri around the console"): a `desktop/` package whose main window loads the daemon's console URL, plus everything below;
+- [x] **STACK-18 (M): the desktop app on Tauri 2** (grown from the tray app, dev.md "The desktop app is Tauri around the console"): a `desktop/` package whose main window loads the daemon's console URL, plus everything below;
   the Stack icon as the tray or menu-bar item colored by the worst
   health severity, a menu with each role's one line, Open (the web UI
   in a Tauri window), Pause everything, Resume, Quit; native
@@ -384,8 +384,9 @@ each item's design section lands in `dev.md` before its code.
   `update.available` and `model.installed`, posted under the app's
   bundle id; an independent poll of `/healthz` that shows "The Stack
   is not running" with Start when the daemon is down; the daemon as a
-  Tauri sidecar in the app bundle so the bundle is the second install
-  path; the Tauri updater plugin against `app.json`. Acceptance: on
+  service-managed process so the app is only its front; STACK-66 adds the
+  bundled sidecar install path; updates continue through the Stack's own
+  update flow, with no Tauri updater or telemetry. Acceptance: on
   this Mac the bundled app shows the icon, a scripted critical health
   item posts a native notification (screenshot), Pause drains and
   Resume restores; the bundle installs the service the same way

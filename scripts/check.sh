@@ -33,6 +33,13 @@ if [ "${1:-}" != "--docs" ]; then
   (cd frontend && bun test)
   echo "== frontend: build"
   (cd frontend && bun run build)
+
+  if command -v cargo >/dev/null 2>&1; then
+    echo "== desktop: cargo check"
+    (cd desktop/src-tauri && cargo check)
+  else
+    echo "== desktop: cargo check skipped (cargo is not installed)"
+  fi
 fi
 
 bash "$STANDARDS_DIR/standards/bin/check-core.sh" .
