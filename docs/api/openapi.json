@@ -1216,6 +1216,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "totalMemoryBytes": {
+                      "type": "integer"
+                    },
                     "capBytes": {
                       "type": "integer"
                     },
@@ -1310,6 +1313,7 @@
                     }
                   },
                   "required": [
+                    "totalMemoryBytes",
                     "capBytes",
                     "freeMemoryBytes",
                     "availablePercent",

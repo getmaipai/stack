@@ -36,6 +36,12 @@ test("the Stack shell lists every section in order", () => {
   expect(text).toContain("Settings");
 });
 
+test("Monitoring renders governor decision sentences", async () => {
+  stubStackFetch({ ...boardExtras, "/stack/v1/groups": { groups: [] }, "/stack/v1/budget/decisions": { decisions: [{ at: new Date().toISOString(), decision: "Refused", model: "image", reason: "Memory was tight." }] } });
+  render(<MemoryRouter initialEntries={["/monitoring"]}><DashboardShell /></MemoryRouter>);
+  await waitFor(() => expect(document.body.textContent).toContain("Refused image: Memory was tight."));
+});
+
 test("the collapsed rail keeps every section and carries a tooltip on each button", () => {
   stubStackFetch({ ...boardExtras, "/stack/v1/repairs": { repairs: [] }, "/stack/v1/roles": { roles: [] }, "/stack/v1/operator": { state: "signedOut", required: false } });
   render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
@@ -223,7 +229,7 @@ test("the shell pins admin below the common group and exposes resources", async 
   render(<MemoryRouter initialEntries={["/settings"]}><DashboardShell /></MemoryRouter>);
   await waitFor(() => expect(document.querySelector('[data-nav-mode="pinned"]')).toBeTruthy());
   expect(document.body.textContent).toContain("Memory");
-  expect(document.body.textContent).toContain("7.5 GB of 14.9 GB used");
+  expect(document.body.textContent).toContain("7.5 GB used of 14.9 GB · 14.9 GB budget for models");
   expect(document.body.textContent).toContain("466 GB free");
   const nav = document.querySelector('[data-sidebar="content"]')!;
   expect(nav.textContent?.indexOf("Overview")).toBeLessThan(nav.textContent?.indexOf("Settings") ?? 0);

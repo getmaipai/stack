@@ -4,14 +4,16 @@ import { db } from "@/db";
 import { meta } from "@/db/schema";
 import { hasOperator } from "@/lib/operator";
 import { setUpdatesEnabled, updatesEnabled } from "@/updates/check";
+import { defaultModelBudgetBytes, setGovernorMemorySettings } from "@/lib/governor";
 import type { EngineSettingDeclaration, EngineSettingValue } from "@/settings/engineKeys";
 
-export type StackSectionId = "general" | "updates" | "backups" | "network" | "channels" | "alerts" | "storage" | "maintenance" | "engines" | "hardware" | "diagnostics" | "reset";
+export type StackSectionId = "general" | "memory" | "updates" | "backups" | "network" | "channels" | "alerts" | "storage" | "maintenance" | "engines" | "hardware" | "diagnostics" | "reset";
 export interface StackSection { id: StackSectionId; title: string; icon: string; order: number; itemId?: string; computer?: boolean; }
 export interface StackSettingDeclaration extends EngineSettingDeclaration { section: StackSectionId; order: number; }
 
 export const STACK_SETTING_SECTIONS: StackSection[] = [
   { id: "general", title: "General", icon: "Settings", order: 10 },
+  { id: "memory", title: "Memory", icon: "Gauge", order: 15 },
   { id: "updates", title: "Updates", icon: "RefreshCw", order: 20 },
   { id: "backups", title: "Backups", icon: "UploadCloud", order: 30, itemId: "STACK-11" },
   { id: "network", title: "Network and access", icon: "ShieldCheck", order: 40 },
@@ -26,6 +28,10 @@ export const STACK_SETTING_SECTIONS: StackSection[] = [
 ];
 
 export const STACK_SETTINGS: StackSettingDeclaration[] = [
+  { key: "modelBudgetBytes", type: "number", default: defaultModelBudgetBytes(), label: "Memory for models", help: "The maximum memory the Stack may use for loaded models. The rest stays available for your Mac.", group: "Model budget", disclosure: "basic", needsRestart: false, range: { min: 0, max: defaultModelBudgetBytes() + 8 * 1_073_741_824 }, section: "memory", order: 10 },
+  { key: "systemLowWaterPct", type: "number", default: 10, label: "Low memory percentage", help: "Warn when available memory falls below this percentage.", group: "Pressure watermarks", disclosure: "advanced", needsRestart: false, range: { min: 1, max: 99 }, section: "memory", order: 20 },
+  { key: "systemLowWaterFloorBytes", type: "number", default: 1_073_741_824, label: "Low memory floor", help: "Warn when available memory falls below this many bytes.", group: "Pressure watermarks", disclosure: "advanced", needsRestart: false, range: { min: 0, max: defaultModelBudgetBytes() }, section: "memory", order: 30 },
+  { key: "systemSustainedPolls", type: "number", default: 2, label: "Pressure confirmation polls", help: "How many low readings confirm memory pressure.", group: "Pressure watermarks", disclosure: "advanced", needsRestart: false, range: { min: 1, max: 10 }, section: "memory", order: 40 },
   { key: "stackName", type: "text", default: "MaiPai Stack", label: "Name of this Stack", help: "The name shown in the Stack header and to local clients.", group: "Identity", disclosure: "basic", needsRestart: false, section: "general", order: 10 },
   { key: "theme", type: "enum", default: "system", label: "Theme", help: "Choose light, dark, or follow this computer.", group: "Appearance", disclosure: "basic", needsRestart: false, options: [{ value: "system", label: "System" }, { value: "light", label: "Light" }, { value: "dark", label: "Dark" }], section: "general", order: 20 },
   { key: "updatesEnabled", type: "boolean", default: false, label: "Check for updates", help: "Allow the Stack to check its release manifests when you ask it to.", group: "Update checks", disclosure: "basic", needsRestart: false, section: "updates", order: 10 },
@@ -75,7 +81,9 @@ export function updateStackConfig(values: Record<string, unknown>): EngineSettin
       else write(metaKey(declaration.key, "pending"), value);
     } else write(metaKey(declaration.key, "inEffect"), value);
   }
-  return readStackConfig();
+  const settings = readStackConfig();
+  setGovernorMemorySettings(Object.fromEntries(settings.filter((setting) => ["modelBudgetBytes", "systemLowWaterPct", "systemLowWaterFloorBytes", "systemSustainedPolls"].includes(setting.key)).map((setting) => [setting.key, setting.key === "systemLowWaterPct" ? Number(setting.inEffect) / 100 : Number(setting.inEffect)])));
+  return settings;
 }
 
 export function activateStackConfig(): void {
@@ -93,4 +101,5 @@ export function stackSettingValues(): Record<string, number | boolean | string> 
 
 export function __resetStackSettingsForTests(): void {
   for (const declaration of STACK_SETTINGS) { clear(metaKey(declaration.key, "inEffect")); clear(metaKey(declaration.key, "pending")); }
+  setGovernorMemorySettings({ modelBudgetBytes: defaultModelBudgetBytes(), systemLowWaterPct: 0.1, systemLowWaterFloorBytes: 1_073_741_824, systemSustainedPolls: 2 });
 }

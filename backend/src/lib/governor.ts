@@ -60,6 +60,7 @@ export interface GovernorLoadedModel {
 }
 
 export interface GovernorStatus {
+  totalMemoryBytes: number;
   capBytes: number;
   freeMemoryBytes: number;
   availablePercent: number;
@@ -67,6 +68,8 @@ export interface GovernorStatus {
   loaded: GovernorLoadedModel[];
   queue: Array<{ id: string; position: number; kind: GovernorKind }>;
 }
+
+export interface GovernorDecision { at: string; decision: string; reason: string; model: string; }
 
 interface LoadedInternal extends GovernorLoadedModel {
   peakBaselineBytes: number | null;
@@ -98,6 +101,7 @@ let runState: RunState = "running";
 const loaded = new Map<string, LoadedInternal>();
 const queue: Array<GovernorRequest> = [];
 const refusalCounts = new Map<string, number>();
+const decisions: GovernorDecision[] = [];
 
 const initialMemory = getMemoryReader().read();
 totalMemoryBytes = initialMemory.totalBytes;
@@ -108,6 +112,20 @@ pressure = initialMemory.pressure;
 function nowIso(): string {
   return new Date().toISOString();
 }
+
+function decide(decision: string, reason: string, model: string): void {
+  decisions.unshift({ at: nowIso(), decision, reason, model });
+  if (decisions.length > 200) decisions.length = 200;
+}
+
+export function defaultModelBudgetBytes(): number { return Math.max(0, totalMemoryBytes - GovernorRules.osMarginBytes); }
+export function setGovernorMemorySettings(values: { modelBudgetBytes?: number; systemLowWaterPct?: number; systemLowWaterFloorBytes?: number; systemSustainedPolls?: number }): void {
+  if (values.modelBudgetBytes !== undefined) tuning.osMarginBytes = Math.max(0, totalMemoryBytes - values.modelBudgetBytes);
+  if (values.systemLowWaterPct !== undefined) tuning.systemLowWaterPct = values.systemLowWaterPct;
+  if (values.systemLowWaterFloorBytes !== undefined) tuning.systemLowWaterFloorBytes = values.systemLowWaterFloorBytes;
+  if (values.systemSustainedPolls !== undefined) tuning.systemSustainedPolls = values.systemSustainedPolls;
+}
+export function getGovernorDecisions(): GovernorDecision[] { return [...decisions]; }
 
 function peakFor(request: GovernorRequest): { bytes: number; measured: boolean } {
   if (request.measuredPeakBytes && request.measuredPeakBytes > 0) return { bytes: request.measuredPeakBytes, measured: true };
@@ -133,16 +151,17 @@ function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
 }
 
 export async function admit(request: GovernorRequest): Promise<GovernorHandle | { queued: true; position: number } | { refused: true; reason: string }> {
-  if (runState !== "running") return { refused: true, reason: "The Stack is paused." };
+  if (runState !== "running") { decide("Refused", "The Stack is paused.", request.id); return { refused: true, reason: "The Stack is paused." }; }
   const peak = peakFor(request);
   if (!canAdmit(request, peak.bytes)) {
     const refusals = (refusalCounts.get(request.id) ?? 0) + 1;
     refusalCounts.set(request.id, refusals);
     if (refusals >= 3) raise({ code: "admission-refused-repeatedly", severity: "warning", title: "Work is waiting for memory", text: `The governor has deferred ${request.id} repeatedly.`, cause: "The current memory budget cannot admit the request.", fix: { label: "Free memory", action: "free_memory" } });
-    if (queue.length >= tuning.queueMax) return { refused: true, reason: "The governor queue is full." };
+    if (queue.length >= tuning.queueMax) { decide("Refused", "The governor queue is full.", request.id); return { refused: true, reason: "The governor queue is full." }; }
     const existing = queue.findIndex((item) => item.id === request.id);
     if (existing >= 0) return { queued: true, position: existing + 1 };
     queue.push(request);
+    decide("Queued", pressure !== "normal" ? `Memory pressure is ${pressure}.` : "The current memory budget cannot admit the request.", request.id);
     return { queued: true, position: queue.length };
   }
   refusalCounts.delete(request.id);
@@ -161,6 +180,7 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
     keepAliveSeconds: request.kind === "generator" ? 0 : request.keepAliveSeconds ?? 0,
   };
   loaded.set(request.id, item);
+  decide("Admitted", "The current memory budget has room.", request.id);
   return { id: request.id, kind: request.kind, requestedBytes: peak.bytes };
 }
 
@@ -194,6 +214,7 @@ export function queuePosition(id: string): number | null {
 
 export function getGovernorStatus(): GovernorStatus {
   return {
+    totalMemoryBytes,
     capBytes: Math.max(0, totalMemoryBytes - tuning.osMarginBytes),
     freeMemoryBytes,
     availablePercent,
@@ -277,7 +298,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
         emit({ id: "pressure", data: { reason: "critical kernel memory pressure aborted a generator", id: item.id, pressure } });
       }
       if (item.kind === "jit" && !item.pinned && (idle || pressure !== "normal")) {
-        await options.unload?.(item.id);
+        await options.unload?.(item.id); decide("Unloaded", pressure !== "normal" ? `Memory pressure is ${pressure}.` : "The model was idle.", item.id);
         loaded.delete(item.id);
       }
     }
@@ -300,6 +321,7 @@ export function __resetGovernorForTests(): void {
   loaded.clear();
   queue.length = 0;
   refusalCounts.clear();
+  decisions.length = 0;
   tuning = {
     pollMs: GovernorRules.pollMs,
     idleTtlSeconds: GovernorRules.idleTtlSeconds,

@@ -4,6 +4,8 @@ import {
   __setGovernorTuningForTestsOnly,
   admit,
   getGovernorStatus,
+  getGovernorDecisions,
+  setGovernorMemorySettings,
   release,
   startGovernor,
   type GovernorHandle,
@@ -82,6 +84,14 @@ test("rule 4 exposes a cap and refuses an admission over it", async () => {
   expect("id" in admitted).toBe(true);
   expect(getGovernorStatus().capBytes).toBe(8 * GB);
   expect(await admit({ id: "too-large", kind: "resident", requestedBytes: 2 * GB })).toMatchObject({ queued: true });
+});
+
+test("a live model budget setting changes admission and records refusal", async () => {
+  setGovernorMemorySettings({ modelBudgetBytes: 2 * GB });
+  expect(await admit({ id: "too-large", kind: "resident", requestedBytes: 3 * GB })).toMatchObject({ queued: true });
+  for (let index = 0; index < 4; index++) await admit({ id: `queued-${index}`, kind: "resident", requestedBytes: 3 * GB });
+  expect(await admit({ id: "refused", kind: "resident", requestedBytes: 3 * GB })).toMatchObject({ refused: true });
+  expect(getGovernorDecisions().some((item) => item.decision === "Refused" && item.model === "refused")).toBe(true);
 });
 
 test("rule 5 extends JIT idle time but never a generator", async () => {

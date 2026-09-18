@@ -13,3 +13,9 @@ test("GET /stack/v1/budget returns governor status for a client", async () => {
   expect(Array.isArray(body.loaded)).toBe(true);
   expect(Array.isArray(body.queue)).toBe(true);
 });
+
+test("GET /stack/v1/budget/decisions returns the governor ledger", async () => {
+  const response = await app.request("/stack/v1/budget/decisions", { headers: testClientHeaders });
+  expect(response.status).toBe(200);
+  expect(Array.isArray((await response.json() as { decisions: unknown[] }).decisions)).toBe(true);
+});

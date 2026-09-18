@@ -1,10 +1,11 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@/lib/openapi";
 import { requireClientOrOperator } from "@/lib/clients";
-import { getGovernorStatus } from "@/lib/governor";
+import { getGovernorDecisions, getGovernorStatus } from "@/lib/governor";
 import { showroom, showroomBudget } from "@/showroom/fixture";
 
 const BudgetSchema = z.object({
+  totalMemoryBytes: z.number().int(),
   capBytes: z.number().int(),
   freeMemoryBytes: z.number().int(),
   availablePercent: z.number(),
@@ -33,3 +34,4 @@ const budgetRoute = createRoute({
 
 export const budgetRoutes = apiRouter();
 budgetRoutes.openapi(budgetRoute, (c) => c.json(showroom() ? showroomBudget : getGovernorStatus(), 200));
+budgetRoutes.get("/decisions", requireClientOrOperator, (c) => c.json({ decisions: getGovernorDecisions() }));

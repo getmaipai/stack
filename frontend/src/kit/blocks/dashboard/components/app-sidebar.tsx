@@ -27,6 +27,6 @@ export function AppSidebar({ repairs, roles, health = [], engineCount = 0, updat
   return <Sidebar collapsible="icon" className="p-3 pb-4" {...props}>
     <SidebarHeader className="p-0"><SidebarMenu><SidebarMenuItem><SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:p-1.5!"><Link to="/"><img className="size-7" src="/brand/maipai-stack-icon-light.png" alt="" /><span className="text-base font-semibold">MaiPai Stack</span></Link></SidebarMenuButton></SidebarMenuItem></SidebarMenu><div className="px-3 pt-2"><p className="flex items-center gap-2 text-xs text-muted-foreground"><span aria-hidden className={`size-2 rounded-full ${DOT[tone]}`} />{hardware?.computerName ?? "This computer"}</p><p className="sr-only" title={sentence}>{sentence}</p></div></SidebarHeader>
     <SidebarContent className="flex flex-col"><NavMain groups={groups} categorized={categorized} /></SidebarContent>
-    <SidebarFooter className="p-0"><NavResources capBytes={budget?.capBytes} freeMemoryBytes={budget?.freeMemoryBytes} freeDiskBytes={hardware?.freeDiskBytes} pressure={budget?.pressure} runState={runState} /></SidebarFooter>
+    <SidebarFooter className="p-0"><NavResources capBytes={budget?.capBytes} totalMemoryBytes={budget?.totalMemoryBytes} freeMemoryBytes={budget?.freeMemoryBytes} freeDiskBytes={hardware?.freeDiskBytes} pressure={budget?.pressure} runState={runState} /></SidebarFooter>
   </Sidebar>;
 }

@@ -119,7 +119,7 @@ RELEASE-STACK-01.
   and dry-run model sizing. Verified; the Windows reader is a
   named stub because it could not be tested on this Mac.
   Verified on main at a52c7bf.
-- [ ] **STACK-113i (M): visible, configurable governor.** Declare the live
+- [x] **STACK-113i (M): visible, configurable governor.** Declare the live
   model-memory budget and advanced pressure watermarks; log the newest 200
   governor decisions; show the current budget, pressure, and decisions in
   Monitoring and the sidebar. Files: `backend/src/lib/governor.ts`,

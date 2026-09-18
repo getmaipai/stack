@@ -56,6 +56,7 @@ export interface SpeedResult {
 }
 
 export interface BudgetResponse {
+  totalMemoryBytes: number;
   capBytes: number;
   freeMemoryBytes: number;
   availablePercent: number;
