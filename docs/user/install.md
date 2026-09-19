@@ -5,10 +5,9 @@ description: Download the app or install Stack with one command.
 
 ## Download the app
 
-1. Download the Stack `.dmg` for your Mac.
-2. Open it and drag **MaiPai Stack** to Applications.
-3. Open **MaiPai Stack**. If your Mac asks, choose **Open**.
-4. Follow the first-time flow. Stack checks this computer, starts its local service, and opens the board.
+1. Download the Stack `.zip` for your Mac.
+2. Open the zip, then open **MaiPai Stack**. If your Mac asks, choose **Open**.
+3. Follow the first-time flow. Stack checks this computer, starts its local service, and opens the board.
 
 ## One line in Terminal
 
