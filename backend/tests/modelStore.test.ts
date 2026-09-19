@@ -75,6 +75,26 @@ test("Catalog ingestion retains its package provenance and verifies an install",
   expect(isModelSelectable(installed)).toBe(true);
 });
 
+test("catalog installation forwards download progress for the live feed", async () => {
+  const ggufHash = createHash("sha256").update("gguf").digest("hex");
+  const progress: Array<{ completedBytes: number; totalBytes: number; status: string }> = [];
+  await installCatalogModel({
+    id: "progress-chat",
+    role: "chat",
+    license: "Apache-2.0",
+    revision: "progress-rev",
+    download: { url: "https://catalog.test/progress.gguf", sha256: ggufHash, approx_bytes: 4 },
+  }, {
+    destination: join(fixtureDir, "progress.gguf"),
+    onProgress: (next) => progress.push(next),
+    download: async (_url, destination, options) => {
+      options.onProgress?.({ completedBytes: 2, totalBytes: 4, status: "downloading" });
+      writeFileSync(destination, "gguf");
+    },
+  });
+  expect(progress).toEqual([{ completedBytes: 2, totalBytes: 4, status: "downloading" }]);
+});
+
 test("Hugging Face installation records repo and revision", async () => {
   const ggufHash = createHash("sha256").update("gguf").digest("hex");
   const installed = await installHuggingFaceModel({

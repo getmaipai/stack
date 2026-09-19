@@ -62,6 +62,7 @@ export interface ModelRecordInput {
 export interface DownloadModelOptions {
   destination: string;
   download?: typeof downloadUrl;
+  onProgress?: DownloadOptions["onProgress"];
   now?: () => string;
 }
 
@@ -280,6 +281,7 @@ async function installRegisteredModel(
   }
   const downloadOptions: DownloadOptions = {
     expectedSha256: verifiedDownload.sha256,
+    onProgress: options.onProgress,
   };
   await downloader(verifiedDownload.url, destination, downloadOptions);
   const actual = await sha256OfFile(destination);

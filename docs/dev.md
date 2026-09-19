@@ -1428,6 +1428,12 @@ as the server's writable data directory.
 | Send a test to a channel | `POST /stack/v1/channels`, then `POST /stack/v1/channels/{id}/test` | A local scripted ntfy receiver returned 200; the channel became verified with a last-sent timestamp. | Pass |
 | Fetch the docs in Library | `PUT /stack/v1/settings` for updates, `POST /stack/v1/library/fetch`, then `GET /stack/v1/library` | Fetched one local engine page; the Library listed one page and search returned one result. | Pass |
 | Palette intents | `GET /stack/v1/library`, `/stack/v1/settings`, `/stack/v1/updates`, `/api/docs`, and Library search | Section routes, settings/update destinations, API docs, and Library search all returned HTTP 200. | Pass |
+| Browse the catalog | `GET /stack/v1/catalog/search?kind=engine`, then `?kind=model` | Listed the pinned native llama-server b10797 build and the qualified Qwen3 1.7B Q8 catalog model. | Pass (under 1 s) |
+| Install an engine | `POST /stack/v1/engines/llama-server/install` with `b10797` | Downloaded and verified the 11 MB native archive in 0.44 s; `/stack/v1/events` carried byte progress and the Engines row showed Current. | Pass |
+| Add a catalog model | `POST /stack/v1/models` with the Qwen3 1.7B catalog record | First walk returned 202 without downloading anything. Fixed the route to start the verified worker and emit live byte progress; the repaired walk downloaded 1,834,426,016 bytes, verified its checksum, and installed the model. | Pass (after fix, about 50 s) |
+| Chat after install | `POST /v1/chat/completions` | Returned HTTP 200 from the installed Qwen model; the response identified llama-server build b10797. | Pass (17 s) |
+| Remove the model | `DELETE /stack/v1/models/qwen3-1.7b-q8-0` | Returned `ok: true` and removed the installed record and local model file. | Pass |
+| Remove the current engine build | `DELETE /stack/v1/engines/llama-server/builds/b10797` | Returned HTTP 400, “The current engine build cannot be removed.” The refusal is intentional; selecting another installed build is required first. | Pass |
 
 The temporary server was killed by PID, port 8772 was verified free, and
 the temporary copy was moved to Trash after the walk.

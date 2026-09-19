@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { app } from "@/app";
+import { engineStorageTag } from "@/routes/engines";
 import { __resetOperatorForTests, __resetOperatorThrottleForTests } from "@/lib/operator";
 import { engineTagRoot } from "@/lib/store/layout";
 
@@ -49,4 +50,8 @@ test("an external host never receives Stack engine controls", async () => {
     }
     expect(calls).toEqual([]);
   } finally { host.stop(true); }
+});
+
+test("the engine API maps a visible catalog build tag to its platform-specific store tag", () => {
+  expect(engineStorageTag("llama-server", "b10797")).toBe("b10797-macos-arm64");
 });

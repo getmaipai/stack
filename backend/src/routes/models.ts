@@ -4,13 +4,15 @@ import { join } from "node:path";
 import { apiRouter, ErrorSchema, idParamSchema } from "@/lib/openapi";
 import { requireClientOrOperator } from "@/lib/clients";
 import { requireOperator } from "@/lib/operator";
-import { listModels, removeModel } from "@/lib/modelStore";
+import { installCatalogModel, installHuggingFaceModel, listModels, removeModel } from "@/lib/modelStore";
 import { getModelUsage, modelRuntimeState, performModelAction, updateModelPlacement } from "@/lib/modelGroups";
 import { importCandidate, importPath, scanImports, type ImportCandidate } from "@/lib/store/importScan";
 import { readModelManifest } from "@/lib/store/manifests";
 import { invalidateStorageAccounting } from "@/lib/store/storage";
 import { showroom, showroomModels } from "@/showroom/fixture";
 import { modelsDir } from "@/lib/paths";
+import { STACK_CHAT_MODEL } from "@/lib/modelCatalog";
+import { emit } from "@/lib/events";
 import { licenceInfo } from "@/lib/licences";
 
 const ModelSchema = z.object({
@@ -39,6 +41,19 @@ modelsRoutes.openapi(listRoute, (c) => c.json({ models: showroom() ? showroomMod
 modelsRoutes.openapi(pullRoute, (c) => {
   const body = c.req.valid("json");
   if (!body.url || !body.sha256 || !body.licence || !body.revision) return c.json({ error: "pull requires url, sha256, licence, and revision before download" }, 400);
+  const job = `model-install:${body.id}`;
+  const onProgress = ({ completedBytes, totalBytes, status }: { completedBytes: number; totalBytes: number; status: string }) => emit({ id: "job.progress", data: { job, model: body.id, completedBytes, totalBytes, percent: totalBytes ? Math.round(completedBytes / totalBytes * 100) : 0, status } });
+  void (async () => {
+    try {
+      if (body.source === "catalog" && body.id === STACK_CHAT_MODEL.id) {
+        await installCatalogModel(STACK_CHAT_MODEL, { destination: join(modelsDir, `${body.id}.gguf`), onProgress });
+      } else {
+        await installHuggingFaceModel({ id: body.id, roles: body.roles as never, repo: body.url!, revision: body.revision!, url: body.url, sha256: body.sha256, licence: body.licence }, { destination: join(modelsDir, `${body.id}.gguf`), onProgress });
+      }
+    } catch (error) {
+      emit({ id: "repair", data: { title: "Model install failed", detail: error instanceof Error ? error.message : `Unable to install ${body.id}.` } });
+    }
+  })();
   return c.json({ accepted: true as const, id: body.id, message: "Pull is recorded as a resumable job by the download worker." }, 202);
 });
 modelsRoutes.openapi(importRoute, async (c) => {

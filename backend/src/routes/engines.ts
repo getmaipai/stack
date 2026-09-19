@@ -58,7 +58,8 @@ enginesRoutes.openapi(enginesRoute, async (c) => {
       const marker = pin.id.indexOf("-b");
       const name = marker > 0 ? pin.id.slice(0, marker) : pin.id;
       const newestTag = marker > 0 ? pin.id.slice(marker + 1).split("-")[0] ?? null : null;
-      const currentTag = currentEngine(name);
+      const storedCurrentTag = currentEngine(name);
+      const currentTag = storedCurrentTag?.split("-")[0] ?? null;
       const running = status.kind === "spawned" ? status.identity?.build ?? null : null;
       const needsRestart = readEngineConfig(name).some((setting) => setting.pending !== null);
       return deriveEngineVersionState({ running, currentTag, newestTag, needsRestart });
@@ -77,6 +78,10 @@ enginesRoutes.openapi(enginesRoute, async (c) => {
 const nameParam = z.object({ name: z.string().openapi({ param: { name: "name", in: "path" } }) });
 export const EXTERNAL_ENGINE_CONTROL_MESSAGE = "Managed outside the Stack.";
 const tagBody = { body: { content: { "application/json": { schema: z.object({ tag: z.string() }) } } } };
+export function engineStorageTag(name: string, tag: string): string {
+  const pin = ENGINE_BINARIES.find((entry) => entry.id.startsWith(`${name}-${tag}-`) && entry.platform === process.platform && entry.arch === process.arch);
+  return pin ? pin.id.slice(pin.id.indexOf("-b") + 1) : tag;
+}
 const settingSchema = z.object({
   key: z.string(), type: z.enum(["number", "boolean", "text", "enum"]), default: z.union([z.string(), z.number(), z.boolean()]), group: z.string().optional(), options: z.array(z.object({ value: z.string(), label: z.string() })).optional(),
   label: z.string(), help: z.string(), disclosure: z.enum(["basic", "advanced", "developer"]), needsRestart: z.boolean(),
@@ -121,7 +126,7 @@ enginesRoutes.openapi(installRoute, async (c) => {
 });
 
 const currentRoute = createRoute({ method: "post", path: "/{name}/current", tags: ["Engines"], summary: "Make an installed engine current", middleware: [requireOperator] as const, request: { params: nameParam, ...tagBody }, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.literal(true) }) } }, description: "Engine made current." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "Engine swap failed." } } });
-enginesRoutes.openapi(currentRoute, async (c) => { const { name } = c.req.valid("param"); const { tag } = c.req.valid("json"); await swapEngine(name, tag, { drain: () => stopChatEngine(), postLoadCheck: async () => { await restartChatEngine(); return true; } }); return c.json({ ok: true as const }, 200); });
+enginesRoutes.openapi(currentRoute, async (c) => { const { name } = c.req.valid("param"); const { tag } = c.req.valid("json"); await swapEngine(name, engineStorageTag(name, tag), { drain: () => stopChatEngine(), postLoadCheck: async () => { await restartChatEngine(); return true; } }); return c.json({ ok: true as const }, 200); });
 
 const removeEngineRoute = createRoute({
   method: "delete",
@@ -136,4 +141,4 @@ const removeEngineRoute = createRoute({
     404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown engine tag." },
   },
 });
-enginesRoutes.openapi(removeEngineRoute, (c) => { const { name, tag } = c.req.valid("param"); if (currentEngine(name) === tag) return c.json({ error: "The current engine build cannot be removed." }, 400); if (engineIsBound(name, tag)) return c.json({ error: "This engine build is bound to an installed model." }, 400); if (!removeEngine(name, tag)) return c.json({ error: "Unknown engine tag" }, 404); return c.json({ ok: true as const }, 200); });
+enginesRoutes.openapi(removeEngineRoute, (c) => { const { name, tag } = c.req.valid("param"); const storedTag = engineStorageTag(name, tag); if (currentEngine(name) === storedTag) return c.json({ error: "The current engine build cannot be removed." }, 400); if (engineIsBound(name, storedTag)) return c.json({ error: "This engine build is bound to an installed model." }, 400); if (!removeEngine(name, storedTag)) return c.json({ error: "Unknown engine tag" }, 404); return c.json({ ok: true as const }, 200); });
