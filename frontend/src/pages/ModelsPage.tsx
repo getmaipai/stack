@@ -5,7 +5,7 @@ import { Badge } from "@/kit/ui/badge";
 import { ThingsTable, linkCell, type ThingsTableGroup, type ThingStatus } from "@/kit/blocks/things-table/ThingsTable";
 import { applyFilters, countFilterOptions, type FilterGroup } from "@/kit/blocks/filter-column/FilterColumn";
 import { ThingsPage } from "@/kit/blocks/things-page/ThingsPage";
-import { api, type RoleRecord } from "@/lib/api";
+import { api, type HardwareResponse, type RoleRecord } from "@/lib/api";
 import { useApiResource } from "@/lib/useApiResource";
 import type { SectionFrameComponent } from "@/pages/DashboardShell";
 import { PageEmptyState } from "@/pages/PageEmptyState";
@@ -36,6 +36,7 @@ export function ModelsPage({ Frame }: { Frame: SectionFrameComponent }) {
   const models = useApiResource<{ models: Model[] }>("/stack/v1/models");
   const detectedStores = useApiResource<{ detected: DetectedStore[]; foundFiles?: DetectedStore[] }>("/stack/v1/detected");
   const roles = useApiResource<{ roles: RoleRecord[] }>("/stack/v1/roles");
+  const hardware = useApiResource<HardwareResponse>("/stack/v1/hardware");
   const refetchDetected = detectedStores.refetch;
   const refetchGroups = groups.refetch;
   useEffect(() => { if (typeof EventSource === "undefined") return; const stream = new EventSource("/stack/v1/events"); stream.onmessage = (event) => { try { if ((JSON.parse(event.data) as { id?: string }).id === "detected.changed") void refetchDetected(); } catch { /* ignore malformed feed data */ } }; return () => stream.close(); }, [refetchDetected]);
@@ -107,7 +108,7 @@ export function ModelsPage({ Frame }: { Frame: SectionFrameComponent }) {
 
   const rows = filteredAllRows.filter((row) => row.kind === "detected" || !row.model.groupId);
   const groupPanelData = selectedGroup ? groupPanel(selectedGroup.name, selectedGroup.modelCount, (action) => void groupAction(selectedGroup, action)) : null;
-  const modelPanelData = selectedModel ? modelPanel({ id: selectedModel.id, nickname: selectedModel.nickname ?? undefined, group: modelGroup?.name, source: selectedModel.source, licence: typeof selectedModel.provenance.licence === "string" ? selectedModel.provenance.licence : undefined, licenceSentence: selectedModel.licenceSentence, licenceUrl: selectedModel.licenceUrl, modelPath: selectedModel.modelPath, sizeBytes: selectedModel.sizeBytes, measuredFootprintBytes: selectedModel.measuredFootprintBytes, runtimeState: selectedModel.runtimeState }, (action) => { if (action === "rename") setRenames((current) => ({ ...current, [selectedModel.id]: selectedModel.nickname ?? displayName(selectedModel.id) })); else void modelAction(selectedModel, action === "update" ? "checkUpdates" : action); }) : null;
+  const modelPanelData = selectedModel ? modelPanel({ id: selectedModel.id, nickname: selectedModel.nickname ?? undefined, group: modelGroup?.name, source: selectedModel.source, licence: typeof selectedModel.provenance.licence === "string" ? selectedModel.provenance.licence : undefined, licenceSentence: selectedModel.licenceSentence, licenceUrl: selectedModel.licenceUrl, modelPath: selectedModel.modelPath, sizeBytes: selectedModel.sizeBytes, measuredFootprintBytes: selectedModel.measuredFootprintBytes, runtimeState: selectedModel.runtimeState, drives: hardware.data?.hardware?.drives }, (action) => { if (action === "rename") setRenames((current) => ({ ...current, [selectedModel.id]: selectedModel.nickname ?? displayName(selectedModel.id) })); else void modelAction(selectedModel, action === "update" ? "checkUpdates" : action); }) : null;
   const detectedPanelData = selectedDetected ? detectedPanel(`${selectedDetected.name} · ${selectedDetected.path ?? selectedDetected.where ?? "local"}`, (action) => { if (action.startsWith("adopt")) void adopt(selectedDetected, action.split(":")[1]?.split(",").filter(Boolean)); }, selectedDetected.couldHold ?? selectedDetected.roles) : null;
 
   if (noModels) return <Frame title="Models" description="Grouped models, measured footprints, nicknames, and utilization."><ScanStatus scan={scanResult} /><PageEmptyState title="No models are installed yet" detail="Choose an ability to bring the first local model to this computer." action={<div className="flex flex-wrap justify-center gap-3"><Button asChild><a href="/abilities">Add abilities</a></Button><Button variant="outline" onClick={() => void scanNow()} disabled={scanBusy}>{scanBusy ? "Scanning..." : "Scan this computer"}</Button></div>} /></Frame>;

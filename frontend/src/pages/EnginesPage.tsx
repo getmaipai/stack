@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getIcon } from "@/kit/icons";
-import type { EngineRecord, EngineSetting, RoleRecord } from "@/lib/api";
+import type { EngineRecord, EngineSetting, HardwareResponse, RoleRecord } from "@/lib/api";
 import { api } from "@/lib/api";
 import { useApiResource } from "@/lib/useApiResource";
 import { Badge } from "@/kit/ui/badge";
@@ -35,6 +35,7 @@ export function EnginesPage({ Frame }: { Frame: SectionFrameComponent }) {
   const engines = useApiResource<{ engines: EngineRecord[] }>("/stack/v1/engines");
   const detectedStores = useApiResource<{ detected: DetectedStore[] }>("/stack/v1/detected");
   const roles = useApiResource<{ roles: RoleRecord[] }>("/stack/v1/roles");
+  const hardware = useApiResource<HardwareResponse>("/stack/v1/hardware");
   const [selected, setSelected] = useState(0);
   const [panelOpen, setPanelOpen] = useState(false);
   const [detectedOpen, setDetectedOpen] = useState(false);
@@ -92,5 +93,5 @@ export function EnginesPage({ Frame }: { Frame: SectionFrameComponent }) {
     phoneRow={(row) => row.kind === "detected" ? { name: detectedName(row.store), subtitle: `Managed outside the Stack · ${(row.store.couldHold ?? row.store.roles ?? []).map(roleLabel).join(", ") || "Unassigned"}`, status: row.store.state === "offline" ? "Offline" : "Ready", tone: row.store.state === "offline" ? "offline" : "detected" } : { name: row.engine.label, subtitle: `${row.engine.platform} · ${row.engine.arch}`, status: row.engine.state === "current" ? "Current" : "Not current", tone: engineStatus(row.engine) }}
     getRowProps={(row) => row.kind === "engine" ? { "data-testid": `engine-row-${row.engine.id}`, tabIndex: 0, onKeyDown: (event) => { if (event.key === "ArrowDown") { event.preventDefault(); selectAt(selected + 1); } if (event.key === "ArrowUp") { event.preventDefault(); selectAt(selected - 1); } } } : { className: "bg-muted/30" }}
     empty="No engine builds are available."
-  />} panel={panelOpen || detectedOpen ? <>{selectedEngine && <EnginePanel engine={selectedEngine} open={panelOpen} settings={config.data?.settings} draft={draft} onClose={() => setPanelOpen(false)} onAction={panelAction} onConfigChange={(key, value) => setDraft((current) => ({ ...current, [key]: value }))} onSave={saveConfig} />}{detected && detectedData && <PropertyPanel kind="Detected" item={{ name: detected.name }} status="Detected" actions={detectedData.actions} facts={detectedData.facts} primaryActions={detectedData.primaryActions} tabs={{ overview: detectedData.overview }} open={detectedOpen} onClose={() => setDetectedOpen(false)} />}</> : null} /><AddSheet kind="engine" open={addOpen} onOpenChange={setAddOpen} onAdded={() => void engines.refetch()} /></Frame>;
+  />} panel={panelOpen || detectedOpen ? <>{selectedEngine && <EnginePanel engine={selectedEngine} open={panelOpen} settings={config.data?.settings} draft={draft} onClose={() => setPanelOpen(false)} onAction={panelAction} onConfigChange={(key, value) => setDraft((current) => ({ ...current, [key]: value }))} onSave={saveConfig} drives={hardware.data?.hardware?.drives} />}{detected && detectedData && <PropertyPanel kind="Detected" item={{ name: detected.name }} status="Detected" actions={detectedData.actions} facts={detectedData.facts} primaryActions={detectedData.primaryActions} tabs={{ overview: detectedData.overview }} open={detectedOpen} onClose={() => setDetectedOpen(false)} />}</> : null} /><AddSheet kind="engine" open={addOpen} onOpenChange={setAddOpen} onAdded={() => void engines.refetch()} /></Frame>;
 }

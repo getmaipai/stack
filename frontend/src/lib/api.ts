@@ -23,6 +23,7 @@ export interface HardwareInfo {
   freeDiskBytes: number;
   totalDiskBytes?: number;
   osVersion: string;
+  drives?: LiveDrive[];
 }
 
 export interface ProfileTier {
@@ -218,9 +219,10 @@ export interface EngineRecord {
 
 export interface LiveEngine { id: string; engine: string; build: string | null; model: string | null; port: number | null; footprintBytes: number | null; cpuPercent: number | null; startedAt: string; }
 export interface LiveGpu { name: string; memoryUsedBytes: number | null; memoryTotalBytes: number | null; utilizationPercent: number | null; }
+export interface LiveDrive { name: string; mount: string; totalBytes: number; usedBytes: number; mounted: boolean; }
 export interface LiveComputer { cpuPercent: number | null; diskUsedBytes: number | null; diskTotalBytes: number | null; }
 export interface LiveClient { id: string; name: string; roles: string[]; requests: number; lastRequestAt: string; inFlight: number; }
-export interface LiveResponse { sampledAt: string; engines: LiveEngine[]; gpus: LiveGpu[]; computer: LiveComputer; clients: LiveClient[]; }
+export interface LiveResponse { sampledAt: string; engines: LiveEngine[]; gpus: LiveGpu[]; drives: LiveDrive[]; computer: LiveComputer; clients: LiveClient[]; }
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number, readonly body: Record<string, unknown>) {
