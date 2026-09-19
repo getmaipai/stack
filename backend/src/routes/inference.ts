@@ -31,6 +31,10 @@ const NoEngineSchema = z.object({
 const RoleForbiddenSchema = z.object({ error: z.string(), role: z.string(), allowedRoles: z.array(z.string()) });
 const StreamingUnavailableSchema = z.object({ error: z.literal("Streaming is not available yet"), role: z.string() });
 const UnverifiedModelSchema = z.object({ error: z.string(), model: z.string(), reason: z.literal("unverified"), missing: z.array(z.string()) });
+const ModelsResponseSchema = z.object({
+  object: z.literal("list"),
+  data: z.array(z.object({ id: z.string(), object: z.literal("model"), created: z.number().int(), owned_by: z.literal("maipai-stack") })),
+});
 const inferenceResponses = {
   400: { content: { "application/json": { schema: z.union([UnknownModelSchema, StreamingUnavailableSchema]) } }, description: "Unknown role or unsupported streaming request." },
   401: { content: { "application/json": { schema: z.object({ error: z.string() }) } }, description: "A client key is required." },
@@ -146,6 +150,7 @@ function jsonReply<T extends Context>(c: T, body: unknown, status: 400 | 403 | 4
 }
 
 const clientMiddleware = [requireClientOrOperator];
+const modelsRoute = createRoute({ method: "get", path: "/models", tags: ["Inference"], middleware: clientMiddleware, responses: { 200: { content: { "application/json": { schema: ModelsResponseSchema } }, description: "Role names and installed model ids in OpenAI's model-list shape." }, 401: { content: { "application/json": { schema: z.object({ error: z.string() }) } }, description: "A client key or operator session is required." } } });
 const chatRoute = createRoute({ method: "post", path: "/chat/completions", tags: ["Inference"], middleware: clientMiddleware, request: { body: { content: { "application/json": { schema: ChatRequestSchema } } } }, responses: inferenceResponses });
 const embeddingsRoute = createRoute({ method: "post", path: "/embeddings", tags: ["Inference"], middleware: clientMiddleware, request: { body: { content: { "application/json": { schema: EmbeddingsRequestSchema } } } }, responses: inferenceResponses });
 const transcriptionsRoute = createRoute({ method: "post", path: "/audio/transcriptions", tags: ["Inference"], middleware: clientMiddleware, request: { body: { content: { "application/json": { schema: TranscriptionRequestSchema } } } }, responses: inferenceResponses });
@@ -153,6 +158,10 @@ const speechRoute = createRoute({ method: "post", path: "/audio/speech", tags: [
 const imagesRoute = createRoute({ method: "post", path: "/images/generations", tags: ["Inference"], middleware: clientMiddleware, request: { body: { content: { "application/json": { schema: ImageRequestSchema } } } }, responses: inferenceResponses });
 
 export const inferenceRoutes = apiRouter();
+inferenceRoutes.openapi(modelsRoute, (c) => c.json({
+  object: "list",
+  data: [...new Set([...ROLE_IDS, ...listModels().map((model) => model.id)])].map((id) => ({ id, object: "model" as const, created: 0, owned_by: "maipai-stack" as const })),
+}, 200));
 inferenceRoutes.openapi(chatRoute, (c) => inferenceReply(c, c.req.valid("json").model, c.req.valid("json"), true));
 inferenceRoutes.openapi(embeddingsRoute, (c) => inferenceReply(c, c.req.valid("json").model, c.req.valid("json")));
 inferenceRoutes.openapi(transcriptionsRoute, (c) => inferenceReply(c, c.req.valid("json").model, c.req.valid("json")));

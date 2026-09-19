@@ -803,9 +803,10 @@ within that cap and never for generators.
 ## Clients and keys
 
 A row per client: name, key prefix, allowed roles, counters, created,
-last seen, revoke. "New client" asks for a name and the roles, shows the
-key once, and offers a copy button. Home appears here as a client the
-day it installs, with its roles already chosen.
+last seen, revoke. "New key" asks what it is for. "A coding tool"
+selects chat, coding, and embeddings, then shows a Connect step with the
+address, key, and copyable blocks for OpenCode, Aider, and Continue. Home
+appears here as a client the day it installs, with its roles already chosen.
 
 ## Updates
 

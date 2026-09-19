@@ -15,6 +15,12 @@ To make a key:
 2. Choose which abilities it may use: chat, coding, voice, images, and so on.
 3. Copy the key when it is shown. It is shown once, and you cannot read it back after.
 
+For a coding tool, choose **A coding tool**. Stack selects Chat, Coding,
+and Embeddings and then shows its address, the key, and a copyable setup
+block. OpenCode, Aider, and Continue work with the OpenAI-compatible
+connection today. Claude Code and Codex CLI need a different wire and are
+coming later. Use `coding` as the model name.
+
 A key is limited to the roles it may use. That protects you: a tool that only needs chat cannot start a video job, and a tool that only needs images cannot read your messages. You choose what it can spend, and nothing else.
 
 To turn a key off, revoke it. The next time the tool asks for anything with that key, the Stack refuses it, and the tool sees the error it can act on. The key stays in your list, marked off, and you can make a new one whenever you want.

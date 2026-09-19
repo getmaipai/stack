@@ -812,7 +812,7 @@ Order matters: the shell items (38 to 40) first, the kit blocks (41,
   Files: `backend/src/routes/series.ts, backend/src/routes/hardware.ts`.
   Mirror: the existing read-only series route.
   Out of scope: new person records or Home-side features.
-- [ ] **STACK-60 (M): connect a coding tool.** dev.md "Agents and
+- [x] **STACK-60 (M): connect a coding tool.** dev.md "Agents and
   harnesses": the tool-capable wire becomes a tested contract and a
   harness gets a door. Files: `backend/src/routes/inference.ts` (add
   `GET /v1/models` listing role ids and installed model ids in OpenAI

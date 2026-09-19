@@ -26,7 +26,7 @@ const bodies: Record<string, Record<string, unknown>> = {
 
 test("every OpenAI route carries identity headers when no engine answers", async () => {
   const document = await (await app.request("/api/openapi.json")).json() as { paths: Record<string, { post?: unknown }> };
-  for (const path of Object.keys(document.paths).filter((candidate) => candidate.startsWith("/v1/"))) {
+  for (const path of Object.entries(document.paths).filter(([candidate, methods]) => candidate.startsWith("/v1/") && methods.post).map(([path]) => path)) {
     const response = await app.request(path, {
       method: "POST",
       headers: { ...testClientHeaders, "content-type": "application/json" },

@@ -9064,6 +9064,87 @@
         }
       }
     },
+    "/v1/models": {
+      "get": {
+        "tags": [
+          "Inference"
+        ],
+        "responses": {
+          "200": {
+            "description": "Role names and installed model ids in OpenAI's model-list shape.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "enum": [
+                        "list"
+                      ]
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "object": {
+                            "type": "string",
+                            "enum": [
+                              "model"
+                            ]
+                          },
+                          "created": {
+                            "type": "integer"
+                          },
+                          "owned_by": {
+                            "type": "string",
+                            "enum": [
+                              "maipai-stack"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "object",
+                          "created",
+                          "owned_by"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "object",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A client key or operator session is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/chat/completions": {
       "post": {
         "tags": [

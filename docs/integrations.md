@@ -33,7 +33,7 @@ changelog note.
 | Updates | `/stack/v1/updates` (check, apply, roll back) | the operator; Home shows availability through events | engine update and rollback built; app release assets pending |
 | Metrics | `GET /stack/v1/metrics` | a scraper the operator runs | planned (STACK-59) |
 | Identity headers | `x-maipai-engine`, `x-maipai-model`, `x-maipai-revision` on every reply | every client's identity check | built |
-| Model discovery | `GET /v1/models` | coding tools before their first request | planned (STACK-60) |
+| Model discovery | `GET /v1/models` | coding tools before their first request | built |
 
 The Status column is derived from `docs/api/openapi.json` and refreshed whenever a row's paths land; a row that says built has its paths in the generated document.
 
@@ -43,6 +43,10 @@ Authentication: the operator uses `/stack/v1/operator/setup`, `/login`,
 bearer token, and loopback needs one too, so a stray local process cannot
 spend the household's memory. The roles, hardware and engines reads accept
 either a client key or the operator session.
+
+Coding tools use the OpenAI-compatible address and a key scoped to `chat`,
+`coding`, and `embed`. The Clients page shows copyable setup blocks for
+OpenCode, Aider, and Continue after the key is created.
 
 ## MaiPai Home
 
