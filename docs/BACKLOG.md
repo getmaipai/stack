@@ -302,6 +302,7 @@ layer above; none adds a person or leaves the machine.
   fits the tier and two that are hidden for not fitting.
   Files: `backend/src/updates/models.ts, frontend/src/pages/OverviewPage.tsx`.
   Mirror: the current update watch and profile proposal.
+  Design: `dev.md`, "What's new for your computer (STACK-21, 2026-09-19)".
   Out of scope: new person records or Home-side features.
   Exit: `bash scripts/check.sh`.
 - [x] **STACK-22 (M): the maintenance window.** Quiet hours the person

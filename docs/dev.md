@@ -726,6 +726,29 @@ the previous release is kept for rollback. The weekly model watch stores
 the Hub `sha` and `x-linked-etag` at install, uses a conditional GET, and
 only reports a newer revision. It never auto-applies a model update.
 
+### What's new for your computer (STACK-21, 2026-09-19)
+
+The Catalog publishes its signed model index at
+`https://github.com/getmaipai/catalog/releases/latest/download/model-index.json`.
+It uses the same static-release shape as the update manifests: a versioned
+document fetched only by the existing opt-in update check, with its ETag kept
+locally. The request runs as the model-index part of the maintenance update
+check, and carries only the existing `If-None-Match` and `User-Agent` headers.
+
+Each index entry declares its role, minimum profile, quality band, provenance,
+and download details. The Stack compares the entry's minimum profile with the
+machine's proposed profile, then recommends only a fitting entry that adds a
+role not available on the machine or improves the quality band for an available
+role. It retains the full index only as the latest local response, never sends
+the profile or installed-model list to the Catalog, and never installs a model
+without an explicit Install action.
+
+Decision: reuse the update switch and conditional-fetch helper so the index has
+the same privacy boundary as app, engine, and model manifests. Rejected: a
+separate discovery switch, because it would duplicate the same Catalog update
+permission; and client-side filtering, because the Stack owns hardware tiers
+and model provenance while the console remains a renderer.
+
 ### Automatic engine updates (STACK-31, 2026-09-19)
 
 The operator may turn on `autoUpdateEngines` in Settings > Updates. It is
