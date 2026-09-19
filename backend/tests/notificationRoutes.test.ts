@@ -57,19 +57,9 @@ test("an engine crash lists one notification that is marked read, dismissed, or 
 });
 
 test("the notification routes require a session", async () => {
-  expect((await app.request("/stack/v1/notifications", { headers })).status).toBe(200);
-  for (const path of ["/stack/v1/notifications/unknown/read", "/stack/v1/notifications/unknown/dismiss"]) {
-    expect((await app.request(path, { method: "POST", headers })).status).toBe(404);
-  }
-  expect((await app.request("/stack/v1/notifications/clear", { method: "POST", headers })).status).toBe(200);
-
-  await app.request("/stack/v1/operator/setup", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ password: "correct horse battery staple" }),
-  });
   expect((await app.request("/stack/v1/notifications", { headers })).status).toBe(401);
-  for (const path of ["/stack/v1/notifications/unknown/read", "/stack/v1/notifications/unknown/dismiss", "/stack/v1/notifications/clear"]) {
+  for (const path of ["/stack/v1/notifications/unknown/read", "/stack/v1/notifications/unknown/dismiss"]) {
     expect((await app.request(path, { method: "POST", headers })).status).toBe(401);
   }
+  expect((await app.request("/stack/v1/notifications/clear", { method: "POST", headers })).status).toBe(401);
 });

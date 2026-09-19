@@ -9,7 +9,6 @@ import {
   isOperatorSignedIn,
   issueOperatorSession,
   operatorPasswordThrottle,
-  operatorRequired,
   recordOperatorPasswordFailure,
   requestIp,
   requireOperator,
@@ -18,7 +17,7 @@ import {
   verifyOperatorPassword,
 } from "@/lib/operator";
 
-const StateSchema = z.object({ state: z.enum(["setupRequired", "signedOut", "signedIn"]), required: z.boolean() });
+const StateSchema = z.object({ state: z.enum(["setupRequired", "signedOut", "signedIn"]), required: z.boolean(), loopback: z.boolean() });
 const PasswordSchema = z.object({ password: z.string().min(1) });
 const GeneratorAckSchema = z.object({ acknowledged: z.boolean() });
 
@@ -79,12 +78,12 @@ const generatorAckSetRoute = createRoute({
 });
 
 export const operatorRoutes = apiRouter();
-operatorRoutes.openapi(stateRoute, (c) => c.json({ state: !hasOperator() ? "setupRequired" : isOperatorSignedIn(c) ? "signedIn" : "signedOut", required: operatorRequired() || !isLoopbackRequest(c) }, 200));
+operatorRoutes.openapi(stateRoute, (c) => c.json({ state: !hasOperator() ? "setupRequired" : isOperatorSignedIn(c) ? "signedIn" : "signedOut", required: true, loopback: isLoopbackRequest(c) }, 200));
 operatorRoutes.openapi(setupRoute, async (c) => {
   if (hasOperator()) return c.json({ error: "Operator setup has already completed" }, 409);
   await setOperatorPassword(c.req.valid("json").password);
   issueOperatorSession(c);
-  return c.json({ state: "signedIn" as const, required: true }, 201);
+  return c.json({ state: "signedIn" as const, required: true, loopback: isLoopbackRequest(c) }, 201);
 });
 operatorRoutes.openapi(loginRoute, async (c) => {
   const ip = requestIp(c);
@@ -100,11 +99,11 @@ operatorRoutes.openapi(loginRoute, async (c) => {
   }
   resetOperatorPasswordThrottle(ip);
   issueOperatorSession(c);
-  return c.json({ state: "signedIn" as const, required: true }, 200);
+  return c.json({ state: "signedIn" as const, required: true, loopback: isLoopbackRequest(c) }, 200);
 });
 operatorRoutes.openapi(logoutRoute, (c) => {
   clearOperatorSession(c);
-  return c.json({ state: "signedOut", required: operatorRequired() }, 200);
+  return c.json({ state: "signedOut", required: true, loopback: isLoopbackRequest(c) }, 200);
 });
 operatorRoutes.openapi(generatorAckRoute, (c) => c.json({ acknowledged: generatorAcknowledged() }, 200));
 operatorRoutes.openapi(generatorAckSetRoute, (c) => { acknowledgeGenerator(); return c.json({ acknowledged: true }, 200); });

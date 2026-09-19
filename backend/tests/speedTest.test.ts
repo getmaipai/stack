@@ -9,8 +9,10 @@ import { installedEnginePin } from "@/lib/engineCatalog";
 import type { ModelRecord } from "@/lib/modelStore";
 import { __resetHealthForTests, list as listHealth, raise } from "@/lib/health";
 import { applySpeedRegression, llamaBenchArgs, parseLlamaBenchOutput, runSpeedTest } from "@/lib/speedTest";
+import { __resetOperatorForTests } from "@/lib/operator";
 
 afterEach(() => __resetHealthForTests());
+afterEach(() => __resetOperatorForTests());
 
 const originalShowroom = process.env.STACK_SHOWROOM;
 const originalNodeEnv = process.env.NODE_ENV;
@@ -91,7 +93,8 @@ test("the speed runner finds llama-bench in the pinned tag without a current lin
 test("the operator speed-test route returns the showroom record", async () => {
   process.env.STACK_SHOWROOM = "1";
   process.env.NODE_ENV = "development";
-  const response = await app.request("/stack/v1/speed-test", { method: "POST" });
+  const setup = await app.request("/stack/v1/operator/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "correct horse battery staple" }) });
+  const response = await app.request("/stack/v1/speed-test", { method: "POST", headers: { cookie: setup.headers.get("set-cookie")!.split(";", 1)[0]! } });
   const body = await response.json() as { result?: { promptTps?: number; tokensPerSecond?: number; measuredFootprintBytes?: number } };
   expect(response.status).toBe(200);
   expect(body.result?.promptTps).toBe(112);

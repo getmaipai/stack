@@ -132,7 +132,10 @@ export const requireClientOrOperator = createMiddleware<AppEnv>(async (c, next) 
     await next();
     return;
   }
-  const { isLoopbackRequest, isOperatorSignedIn, operatorRequired } = await import("@/lib/operator");
-  if (!isOperatorSignedIn(c) && (operatorRequired() || !isLoopbackRequest(c))) return unauthorized(c);
+  const { isOperatorSignedIn } = await import("@/lib/operator");
+  if (!isOperatorSignedIn(c)) {
+    for (const [name, value] of Object.entries(identityHeaders(null))) c.header(name, value);
+    return c.json({ error: "Operator authentication required" }, 401);
+  }
   await next();
 });

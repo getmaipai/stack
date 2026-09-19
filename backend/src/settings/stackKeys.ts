@@ -67,7 +67,7 @@ export function updateStackConfig(values: Record<string, unknown>): EngineSettin
     const value = valueSchema(declaration).parse(values[declaration.key]);
     if (declaration.key === "updatesEnabled") setUpdatesEnabled(value as boolean);
     else if (declaration.needsRestart) {
-      if (declaration.key === "lanAccess" && value === true && !hasOperator()) throw new Error("Set the operator password before opening the Stack to the LAN.");
+      if (declaration.key === "lanAccess" && value === true && !hasOperator()) throw new Error("Set the operator password on the computer that runs the Stack first.");
       if (value === inEffect(declaration)) clear(metaKey(declaration.key, "pending"));
       else write(metaKey(declaration.key, "pending"), value);
     } else write(metaKey(declaration.key, "inEffect"), value);

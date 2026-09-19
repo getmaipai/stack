@@ -7,6 +7,7 @@ import { clearDetectedForTests, detectAll, DETECTION_ADDRESSES, forgetDetected, 
 import { __resetHealthForTests, list as listHealth } from "@/lib/health";
 import { clearModelsForTests, listModels } from "@/lib/modelStore";
 import { resetSupervisorForTests, stopChatEngine } from "@/lib/supervisor";
+import { __resetOperatorForTests } from "@/lib/operator";
 
 const originalFetch = globalThis.fetch;
 const originalScripted = process.env.STACK_SCRIPTED_ENGINES;
@@ -22,15 +23,20 @@ function scriptedFetch(version: string, completion = false): typeof fetch {
   }) as typeof fetch;
 }
 
-beforeEach(() => { clearDetectedForTests(); clearModelsForTests(); __resetHealthForTests(); resetSupervisorForTests(); });
-afterEach(async () => { try { await stopChatEngine(); } catch { /* no running engine */ } globalThis.fetch = originalFetch; clearDetectedForTests(); clearModelsForTests(); __resetHealthForTests(); resetSupervisorForTests(); if (originalScripted === undefined) delete process.env.STACK_SCRIPTED_ENGINES; else process.env.STACK_SCRIPTED_ENGINES = originalScripted; });
+beforeEach(() => { clearDetectedForTests(); clearModelsForTests(); __resetHealthForTests(); resetSupervisorForTests(); __resetOperatorForTests(); });
+afterEach(async () => { try { await stopChatEngine(); } catch { /* no running engine */ } globalThis.fetch = originalFetch; clearDetectedForTests(); clearModelsForTests(); __resetHealthForTests(); resetSupervisorForTests(); __resetOperatorForTests(); if (originalScripted === undefined) delete process.env.STACK_SCRIPTED_ENGINES; else process.env.STACK_SCRIPTED_ENGINES = originalScripted; });
+
+async function operatorHeaders() {
+  const setup = await app.request("/stack/v1/operator/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "correct horse battery staple" }) });
+  return { cookie: setup.headers.get("set-cookie")!.split(";", 1)[0]! };
+}
 
 test("the localhost sweep detects Ollama, adoption binds it, and chat carries its identity", async () => {
   const scripted = scriptedFetch("0.6.0", true); await detectAll(scripted);
   const row = listDetected().find((item) => item.kind === "ollama"); expect(row?.where).toContain("127.0.0.1:11434");
   globalThis.fetch = scripted; await adoptDetected(row!.id, ["chat"]);
   process.env.STACK_SCRIPTED_ENGINES = "0";
-  const response = await app.request("/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: "chat", messages: [{ role: "user", content: "hi" }] }) });
+  const response = await app.request("/v1/chat/completions", { method: "POST", headers: { ...await operatorHeaders(), "content-type": "application/json" }, body: JSON.stringify({ model: "chat", messages: [{ role: "user", content: "hi" }] }) });
   expect(response.status).toBe(200); expect(response.headers.get("x-maipai-engine")).toBe("local"); expect(response.headers.get("x-maipai-model")).toBe("ollama.gguf");
 });
 
@@ -54,7 +60,7 @@ test("a detected external host becomes offline only after two missed sweeps", as
 test("the route exposes a scan and the address list is loopback only", async () => {
   expect(DETECTION_ADDRESSES).toEqual(["127.0.0.1", "::1"]);
   process.env.STACK_SHOWROOM = "1"; process.env.NODE_ENV = "development";
-  const response = await app.request("/stack/v1/detected/scan", { method: "POST" }); expect(response.status).toBe(200);
+  const response = await app.request("/stack/v1/detected/scan", { method: "POST", headers: await operatorHeaders() }); expect(response.status).toBe(200);
   const body = await response.json() as { detected: unknown[]; found: { tools: number; modelFiles: number }; scannedAt: string | null };
   expect(body.detected.length).toBeGreaterThan(0); expect(body.found).toEqual({ tools: 1, modelFiles: 3 }); expect(body.scannedAt).toBeString();
   delete process.env.STACK_SHOWROOM;

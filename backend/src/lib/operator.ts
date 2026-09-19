@@ -8,6 +8,7 @@ import { createMiddleware } from "hono/factory";
 import { db } from "@/db";
 import { meta, operator, sessions } from "@/db/schema";
 import { dataDir } from "@/lib/paths";
+import { identityHeaders } from "@/lib/identity";
 import { getClientIp } from "@/lib/secretThrottle";
 import type { AppEnv } from "@/types";
 
@@ -208,8 +209,8 @@ export function isLoopbackRequest(c: Context): boolean {
 }
 
 export const requireOperator = createMiddleware<AppEnv>(async (c, next) => {
-  pruneExpiredSessions();
-  if (!isOperatorSignedIn(c) && (operatorRequired() || !isLoopbackRequest(c))) {
+  if (!isOperatorSignedIn(c)) {
+    for (const [name, value] of Object.entries(identityHeaders(null))) c.header(name, value);
     return c.json({ error: "Operator authentication required" }, 401);
   }
   await next();

@@ -19,11 +19,11 @@ afterAll(() => {
   __resetOperatorThrottleForTests();
 });
 
-test("off-loopback operator state requires sign-in even before a password exists", async () => {
+test("off-loopback operator state reports setup required before a password exists", async () => {
   __resetOperatorForTests();
   const response = await app.request("http://192.168.1.20/stack/v1/operator");
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ state: "setupRequired", required: true });
+  expect(await response.json()).toEqual({ state: "setupRequired", required: true, loopback: false });
 });
 
 test("operator setup works once and establishes a session", async () => {
@@ -33,7 +33,7 @@ test("operator setup works once and establishes a session", async () => {
     body: JSON.stringify({ password: "correct horse battery staple" }),
   });
   expect(setup.status).toBe(201);
-  expect(await setup.json()).toEqual({ state: "signedIn", required: true });
+  expect(await setup.json()).toEqual({ state: "signedIn", required: true, loopback: true });
   expect(setup.headers.get("set-cookie")).toContain("stack_session=");
 
   const second = await app.request("/stack/v1/operator/setup", {

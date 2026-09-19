@@ -4261,11 +4261,15 @@
                     },
                     "required": {
                       "type": "boolean"
+                    },
+                    "loopback": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
                     "state",
-                    "required"
+                    "required",
+                    "loopback"
                   ]
                 }
               }
@@ -4316,11 +4320,15 @@
                     },
                     "required": {
                       "type": "boolean"
+                    },
+                    "loopback": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
                     "state",
-                    "required"
+                    "required",
+                    "loopback"
                   ]
                 }
               }
@@ -4381,11 +4389,15 @@
                     },
                     "required": {
                       "type": "boolean"
+                    },
+                    "loopback": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
                     "state",
-                    "required"
+                    "required",
+                    "loopback"
                   ]
                 }
               }
@@ -4438,11 +4450,15 @@
                     },
                     "required": {
                       "type": "boolean"
+                    },
+                    "loopback": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
                     "state",
-                    "required"
+                    "required",
+                    "loopback"
                   ]
                 }
               }
@@ -8035,28 +8051,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Operator password required before LAN access.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/Error"
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "setPasswordFirst": {
-                          "type": "boolean"
-                        }
-                      }
-                    }
-                  ]
                 }
               }
             }

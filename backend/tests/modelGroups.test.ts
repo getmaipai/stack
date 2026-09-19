@@ -11,6 +11,11 @@ function model(id: string, groupId: string | null, nickname = id) {
   return upsertModel({ id, nickname, groupId, roles: ["chat"], source: "catalog", provenance: { licence: "Apache-2.0" }, revision: "test", sha256: "a".repeat(64), sizeBytes: 100, licence: "Apache-2.0", verifiedAt: new Date().toISOString(), installedAt: new Date().toISOString() });
 }
 
+async function operatorHeaders() {
+  const setup = await app.request("/stack/v1/operator/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "correct horse battery staple" }) });
+  return { cookie: setup.headers.get("set-cookie")!.split(";", 1)[0]! };
+}
+
 beforeEach(() => { clearModelsForTests(); resetSupervisorForTests(); __resetOperatorForTests(); __resetOperatorThrottleForTests(); });
 afterEach(() => { clearModelsForTests(); resetSupervisorForTests(); __resetOperatorForTests(); __resetOperatorThrottleForTests(); if (originalScripted === undefined) delete process.env.STACK_SCRIPTED_ENGINES; else process.env.STACK_SCRIPTED_ENGINES = originalScripted; });
 
@@ -48,8 +53,9 @@ test("usage records on the model and loaded seconds accumulate", () => {
 test("a nickname is display-only while the model id remains accepted", async () => {
   process.env.STACK_SCRIPTED_ENGINES = "1";
   const entry = model("real-model", null, "Friendly name");
-  const nicknameResponse = await app.request("/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: "Friendly name", messages: [{ role: "user", content: "hi" }] }) });
+  const headers = { ...await operatorHeaders(), "content-type": "application/json" };
+  const nicknameResponse = await app.request("/v1/chat/completions", { method: "POST", headers, body: JSON.stringify({ model: "Friendly name", messages: [{ role: "user", content: "hi" }] }) });
   expect(nicknameResponse.status).toBe(400);
-  const idResponse = await app.request("/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: entry.id, messages: [{ role: "user", content: "hi" }] }) });
+  const idResponse = await app.request("/v1/chat/completions", { method: "POST", headers, body: JSON.stringify({ model: entry.id, messages: [{ role: "user", content: "hi" }] }) });
   expect(idResponse.status).toBe(200); expect(getModelUsage(entry.id).requests).toBe(1);
 });
