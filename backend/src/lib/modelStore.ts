@@ -5,7 +5,7 @@ import { downloadUrl, DownloadVerificationError, sha256OfFile, type DownloadOpti
 import { dataDir, modelsDir } from "@/lib/paths";
 import { hfUrl } from "@/lib/hf";
 import type { RoleId } from "@/roles";
-import { existsSync, mkdirSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { z } from "zod";
@@ -141,6 +141,19 @@ export function getModel(id: string): ModelRecord | null {
 
 export function listModels(): ModelRecord[] {
   return db.select().from(models).all().map(toRecord);
+}
+
+/** Reconcile old records that predate recorded file sizes without treating a
+ * missing file as a zero-byte model.  The value is persisted once. */
+export function reconcileModelSize(record: ModelRecord): ModelRecord {
+  if (record.sizeBytes !== null || !record.modelPath) return record;
+  try {
+    const sizeBytes = statSync(record.modelPath).size;
+    db.update(models).set({ sizeBytes }).where(eq(models.id, record.id)).run();
+    return { ...record, sizeBytes };
+  } catch {
+    return record;
+  }
 }
 
 export function recordMeasuredFootprint(id: string, footprintBytes: number, contextLength: number): void {

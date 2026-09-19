@@ -7,6 +7,11 @@ import { dataDir } from "@/lib/paths";
 
 const route = createRoute({ method: "get", path: "/{name}", tags: ["Logs"], middleware: [requireOperator] as const, request: { params: z.object({ name: z.string() }), query: z.object({ tail: z.coerce.number().int().positive().max(10_000).optional() }) }, responses: { 200: { content: { "text/plain": { schema: z.string() } }, description: "Tail of an operator log." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown log." } } });
 export const logsRoutes = apiRouter();
+logsRoutes.get("/", requireOperator, (c) => {
+  const path = join(dataDir, "logs", "stack.log");
+  if (!existsSync(path)) return c.json({ lines: [] });
+  return c.json({ lines: readFileSync(path, "utf8").split("\n").filter(Boolean).slice(-200) });
+});
 logsRoutes.openapi(route, (c) => {
   const name = c.req.valid("param").name;
   const path = join(dataDir, "logs", `${name}.log`);

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { apiRouter, ErrorSchema, idParamSchema } from "@/lib/openapi";
 import { requireClientOrOperator } from "@/lib/clients";
 import { requireOperator } from "@/lib/operator";
-import { installCatalogModel, installHuggingFaceModel, listModels, removeModel } from "@/lib/modelStore";
+import { installCatalogModel, installHuggingFaceModel, listModels, reconcileModelSize, removeModel, upsertModel } from "@/lib/modelStore";
 import { getModelUsage, modelRuntimeState, performModelAction, updateModelPlacement } from "@/lib/modelGroups";
 import { importCandidate, importPath, scanImports, type ImportCandidate } from "@/lib/store/importScan";
 import { readModelManifest } from "@/lib/store/manifests";
@@ -16,7 +16,7 @@ import { emit } from "@/lib/events";
 import { licenceInfo } from "@/lib/licences";
 
 const ModelSchema = z.object({
-  id: z.string(), nickname: z.string().nullable(), groupId: z.string().nullable(), roles: z.array(z.string()), state: z.enum(["notInstalled", "installed"]), runtimeState: z.enum(["loaded", "ready", "onDemand", "failed"]), sizeBytes: z.number().int().nullable(), measuredFootprintBytes: z.number().int().nullable(), estimated: z.boolean(), source: z.string(), licenceSentence: z.string(), licenceFlag: z.string(), licenceUrl: z.string().url().nullable(), provenance: z.record(z.string(), z.unknown()), modelPath: z.string().nullable(), usage: z.object({ modelId: z.string(), requests: z.number().int(), tokensIn: z.number().int(), tokensOut: z.number().int(), secondsLoaded: z.number().int(), peakMemoryBytes: z.number().int(), lastUsedAt: z.string().nullable() }),
+  id: z.string(), nickname: z.string().nullable(), groupId: z.string().nullable(), roles: z.array(z.string()), state: z.enum(["notInstalled", "installed"]), runtimeState: z.enum(["loaded", "ready", "onDemand", "failed"]), sizeBytes: z.number().int().nullable(), fileMissing: z.boolean(), measuredFootprintBytes: z.number().int().nullable(), estimated: z.boolean(), source: z.string(), licenceSentence: z.string(), licenceFlag: z.string(), licenceUrl: z.string().url().nullable(), provenance: z.record(z.string(), z.unknown()), modelPath: z.string().nullable(), usage: z.object({ modelId: z.string(), requests: z.number().int(), tokensIn: z.number().int(), tokensOut: z.number().int(), secondsLoaded: z.number().int(), peakMemoryBytes: z.number().int(), lastUsedAt: z.string().nullable() }),
 });
 const CandidateSchema = z.object({ source: z.string(), path: z.string(), digest: z.string(), sizeBytes: z.number().int(), name: z.string(), repo: z.string().optional(), revision: z.string().optional() });
 const listRoute = createRoute({ method: "get", path: "/", tags: ["Models"], summary: "List installed models", middleware: [requireClientOrOperator] as const, responses: { 200: { content: { "application/json": { schema: z.object({ models: z.array(ModelSchema) }) } }, description: "Installed and known model records." } } });
@@ -28,8 +28,10 @@ const updateRoute = createRoute({ method: "patch", path: "/{id}", tags: ["Models
 const actionRoute = createRoute({ method: "post", path: "/{id}/actions", tags: ["Models"], summary: "Apply a model action", middleware: [requireOperator] as const, request: { params: idParamSchema("id"), body: { content: { "application/json": { schema: z.object({ action: z.enum(["load", "unload", "pin", "unpin", "checkUpdates"]) }) } } } }, responses: { 200: { content: { "application/json": { schema: z.object({ modelId: z.string(), ok: z.boolean(), reason: z.string().optional() }) } }, description: "Model action result." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown model." } } });
 
 export function modelView(model: ReturnType<typeof listModels>[number]) {
+  model = reconcileModelSize(model);
   const info = licenceInfo(model.licence);
-  return { id: model.id, nickname: model.nickname, groupId: model.groupId, roles: model.roles, state: model.modelPath && existsSync(model.modelPath) && readModelManifest(model.id) ? "installed" as const : "notInstalled" as const, runtimeState: modelRuntimeState(model), sizeBytes: model.sizeBytes, measuredFootprintBytes: model.measuredFootprintBytes, estimated: model.measuredFootprintBytes === null, source: model.source, licenceSentence: info.sentence, licenceFlag: info.flag, licenceUrl: info.url, provenance: model.provenance, modelPath: model.modelPath, usage: getModelUsage(model.id) };
+  const fileMissing = model.modelPath !== null && !existsSync(model.modelPath);
+  return { id: model.id, nickname: model.nickname, groupId: model.groupId, roles: model.roles, state: model.modelPath && existsSync(model.modelPath) && readModelManifest(model.id) ? "installed" as const : "notInstalled" as const, runtimeState: modelRuntimeState(model), sizeBytes: model.sizeBytes, fileMissing, measuredFootprintBytes: model.measuredFootprintBytes, estimated: model.measuredFootprintBytes === null, source: model.source, licenceSentence: info.sentence, licenceFlag: info.flag, licenceUrl: info.url, provenance: model.provenance, modelPath: model.modelPath, usage: getModelUsage(model.id) };
 }
 
 function showroomModelView(model: typeof showroomModels[number]) {
@@ -63,6 +65,7 @@ modelsRoutes.openapi(importRoute, async (c) => {
   const candidates = scanImports();
   const found: ImportCandidate | undefined = candidates.find((candidate) => candidate.path === body.path);
   const manifest = found ? importCandidate(found, { id: body.id, roles: body.roles, licence: body.licence }) : importPath(body.path, { id: body.id, roles: body.roles, licence: body.licence });
+  upsertModel({ id: manifest.id, roles: manifest.roles as never, source: "huggingface", provenance: { source: manifest.source, path: manifest.sourcePath, ...(manifest.repo ? { repo: manifest.repo } : {}) }, revision: manifest.revision ?? "import", sha256: manifest.blobs[0]?.digest ?? null, sizeBytes: manifest.sizeBytes, licence: body.licence ?? "Imported local model", modelPath: manifest.blobs[0]?.path ?? null, installedAt: new Date().toISOString(), verifiedAt: new Date().toISOString() });
   invalidateStorageAccounting();
   const record = listModels().find((model) => model.id === body.id);
   return c.json({ candidates: [], model: record ? modelView(record) : { id: manifest.id, roles: manifest.roles, state: "installed" as const, sizeBytes: manifest.sizeBytes, measuredFootprintBytes: null, estimated: true, source: manifest.source, provenance: { path: manifest.sourcePath } } }, 200);

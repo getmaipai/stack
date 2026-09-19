@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { useApiResource } from "@/lib/useApiResource";
 import { Badge } from "@/kit/ui/badge";
 import { Button } from "@/kit/ui/button";
-import { ThingsTable, linkCell, type ThingStatus } from "@/kit/blocks/things-table/ThingsTable";
+import { ThingsTable, type ThingStatus } from "@/kit/blocks/things-table/ThingsTable";
 import { applyFilters, countFilterOptions, type FilterGroup } from "@/kit/blocks/filter-column/FilterColumn";
 import { ThingsPage } from "@/kit/blocks/things-page/ThingsPage";
 import type { SectionFrameComponent } from "@/pages/DashboardShell";
@@ -80,7 +80,7 @@ export function EnginesPage({ Frame }: { Frame: SectionFrameComponent }) {
       { key: "build", header: "Build", render: (row) => row.kind === "detected" ? <div><p className="font-medium">Managed outside the Stack · {row.store.name}</p><p className="text-xs text-muted-foreground">{row.store.version} · {row.store.path ?? row.store.where}</p></div> : <div><p className="font-medium">{row.engine.label}</p><p className="text-xs text-muted-foreground">{row.engine.id}</p></div> },
       { key: "platform", header: "Platform", width: "16%", render: (row) => row.kind === "detected" ? `${row.store.kind} · ${row.store.candidateModels ?? 0} candidates` : `${row.engine.platform} · ${row.engine.arch}` },
       { key: "storage", header: "Storage", width: "20%", render: (row) => <span className="block truncate" title={row.kind === "detected" ? row.store.path ?? row.store.where : row.engine.directory}>{row.kind === "detected" ? row.store.path ?? row.store.where ?? "Not measured" : row.engine.directory}</span> },
-      { key: "roles", header: "Roles", width: "18%", render: (row) => row.kind === "detected" ? (row.store.couldHold ?? row.store.roles ?? []).map(roleLabel).join(", ") || "Unassigned" : linkCell("/abilities", "View abilities") },
+      { key: "roles", header: "Roles", width: "18%", render: (row) => row.kind === "detected" ? (row.store.couldHold ?? row.store.roles ?? []).map(roleLabel).join(", ") || "Unassigned" : "Runtime" },
       { key: "state", header: "State", width: "18%", align: "right", render: (row) => row.kind === "detected" ? <Badge variant="outline">{row.store.state === "offline" ? "Offline" : "Ready"}</Badge> : <div><Badge variant={row.engine.notCurrent ? "secondary" : "default"}>{row.engine.state === "current" ? "Current" : "Not current"}</Badge><p className="mt-1 text-xs text-muted-foreground">{row.engine.stateReason ?? "Ready"}{row.engine.currentTag && ` · ${row.engine.currentTag}`}</p>{row.engine.needsRestart && <p className="mt-1 text-xs font-medium text-primary">Needs restart</p>}</div> },
     ]}
     rows={filteredRows}

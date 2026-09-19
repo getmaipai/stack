@@ -5433,6 +5433,9 @@
                             "type": "integer",
                             "nullable": true
                           },
+                          "fileMissing": {
+                            "type": "boolean"
+                          },
                           "measuredFootprintBytes": {
                             "type": "integer",
                             "nullable": true
@@ -5509,6 +5512,7 @@
                           "state",
                           "runtimeState",
                           "sizeBytes",
+                          "fileMissing",
                           "measuredFootprintBytes",
                           "estimated",
                           "source",
@@ -5745,6 +5749,9 @@
                           "type": "integer",
                           "nullable": true
                         },
+                        "fileMissing": {
+                          "type": "boolean"
+                        },
                         "measuredFootprintBytes": {
                           "type": "integer",
                           "nullable": true
@@ -5821,6 +5828,7 @@
                         "state",
                         "runtimeState",
                         "sizeBytes",
+                        "fileMissing",
                         "measuredFootprintBytes",
                         "estimated",
                         "source",
@@ -6045,6 +6053,9 @@
                       "type": "integer",
                       "nullable": true
                     },
+                    "fileMissing": {
+                      "type": "boolean"
+                    },
                     "measuredFootprintBytes": {
                       "type": "integer",
                       "nullable": true
@@ -6121,6 +6132,7 @@
                     "state",
                     "runtimeState",
                     "sizeBytes",
+                    "fileMissing",
                     "measuredFootprintBytes",
                     "estimated",
                     "source",
