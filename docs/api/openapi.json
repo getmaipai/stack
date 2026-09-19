@@ -1811,6 +1811,58 @@
         }
       }
     },
+    "/stack/v1/health/{code}/fix": {
+      "post": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Run a health item's repair",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "code",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The repair result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown health item.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/health/{code}/resolve": {
       "post": {
         "tags": [
@@ -2706,6 +2758,26 @@
                     "enabled",
                     "results"
                   ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/logs/diagnostics": {
+      "get": {
+        "tags": [
+          "Logs"
+        ],
+        "summary": "Download a redacted diagnostics bundle",
+        "responses": {
+          "200": {
+            "description": "A local diagnostics ZIP.",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }

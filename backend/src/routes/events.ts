@@ -2,7 +2,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter, ErrorSchema, idParamSchema } from "@/lib/openapi";
 import { requireClientOrOperator } from "@/lib/clients";
 import { clearAll, dismiss, emit, eventsAfter, listNotifications, markRead } from "@/lib/events";
-import { listRepairs, resolveRepair } from "@/lib/repairs";
+import { listRepairs, repairHealth, resolveRepair } from "@/lib/repairs";
 import { requireOperator } from "@/lib/operator";
 import { EventEnvelopeSchema } from "@/events";
 import { ignore, list as listHealth, resolve } from "@/lib/health";
@@ -18,6 +18,7 @@ const resolveRoute = createRoute({ method: "post", path: "/repairs/{id}/resolve"
 const healthItem = z.object({ code: z.string(), severity: z.enum(["critical", "error", "warning"]), title: z.string(), text: z.string(), since: z.string(), cause: z.string(), fix: z.object({ label: z.string(), action: z.string() }).optional(), learnMore: z.string().optional() });
 const healthRoute = createRoute({ method: "get", path: "/health", tags: ["Health"], summary: "List active health items", middleware: [requireClientOrOperator] as const, responses: { 200: { content: { "application/json": { schema: z.object({ health: z.array(healthItem) }) } }, description: "Active daemon health items." } } });
 const healthActionRoute = (action: "resolve" | "ignore") => createRoute({ method: "post", path: `/health/{code}/${action}`, tags: ["Health"], summary: `${action[0]!.toUpperCase()}${action.slice(1)} a health item`, middleware: [requireOperator] as const, request: { params: idParamSchema("code") }, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.literal(true) }) } }, description: `Health item ${action}d.` }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown health item." } } });
+const healthFixRoute = createRoute({ method: "post", path: "/health/{code}/fix", tags: ["Health"], summary: "Run a health item's repair", middleware: [requireOperator] as const, request: { params: idParamSchema("code") }, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.boolean(), result: z.string() }) } }, description: "The repair result." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown health item." } } });
 
 function sse(envelopes: unknown[]): Response {
   const body = envelopes.map((event) => `id: ${(event as { seq: number }).seq}\ndata: ${JSON.stringify(EventEnvelopeSchema.parse(event))}\n\n`).join("");
@@ -33,6 +34,7 @@ eventsRoutes.openapi(clearRoute, (c) => { if (showroom()) { showroomNotification
 eventsRoutes.openapi(repairsRoute, (c) => c.json({ repairs: listRepairs() }, 200));
 eventsRoutes.openapi(resolveRoute, (c) => resolveRepair(c.req.valid("param").id) ? c.json({ ok: true as const }, 200) : c.json({ error: "Unknown repair" }, 404));
 eventsRoutes.openapi(healthRoute, (c) => c.json({ health: showroom() ? showroomHealth : listHealth() }, 200));
+eventsRoutes.openapi(healthFixRoute, async (c) => { const result = await repairHealth(c.req.valid("param").code); return result.result === "This health item has no repair action." ? c.json({ error: "Unknown health item." }, 404) : c.json(result, 200); });
 for (const action of ["resolve", "ignore"] as const) eventsRoutes.openapi(healthActionRoute(action), (c) => { const code = c.req.valid("param").code; const changed = showroom() ? showroomResolveHealth(code) : action === "resolve" ? resolve(code) : ignore(code); return changed ? c.json({ ok: true as const }, 200) : c.json({ error: "Unknown health item" }, 404); });
 
 export { emit };

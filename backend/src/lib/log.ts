@@ -15,7 +15,7 @@ function logPath(name = "stack"): string {
 
 export function registerLogSecret(secret: string): void { if (secret) secrets.add(secret); }
 
-function redact(value: string): string {
+export function redactLogText(value: string): string {
   let result = value.replace(/mps_[A-Za-z0-9_-]{20,}/g, "[REDACTED]");
   for (const secret of secrets) result = result.replaceAll(secret, "[REDACTED]");
   return result;
@@ -36,7 +36,7 @@ export function appendLogLine(message: string, name = "stack"): void {
   try {
     const path = logPath(name);
     rotate(path);
-    appendFileSync(path, `${redact(message)}\n`, { mode: 0o600 });
+  appendFileSync(path, `${redactLogText(message)}\n`, { mode: 0o600 });
     chmodSync(path, 0o600);
     const cutoff = Date.now() - MAX_AGE_DAYS * 86_400_000;
     for (const entry of readdirSync(join(dataDir, "logs"))) {
