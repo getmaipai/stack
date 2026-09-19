@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const EventLevelSchema = z.enum(["immediate", "time_sensitive", "passive"]);
 export type EventLevel = z.infer<typeof EventLevelSchema>;
-export const EventIdSchema = z.enum(["role.state", "engine.state", "pressure", "job.progress", "job.done", "model.installed", "update.available", "update.applied", "update.failed", "repair", "health.changed", "detected.changed", "check.progress", "check.done", "run.state", "live"]);
+export const EventIdSchema = z.enum(["role.state", "engine.state", "pressure", "job.progress", "job.done", "model.installed", "update.available", "update.applied", "update.failed", "repair", "health.changed", "detected.changed", "check.progress", "check.done", "run.state", "live", "digest.week"]);
 export type EventId = z.infer<typeof EventIdSchema>;
 
 export const EVENTS = {
@@ -22,6 +22,7 @@ export const EVENTS = {
   "check.done": { id: "check.done", level: "passive", audience: "operator", durable: true, template: "Stack check finished." },
   "run.state": { id: "run.state", level: "passive", audience: "operator", durable: true, template: "Stack is {state}." },
   live: { id: "live", level: "time_sensitive", audience: "operator", durable: false, template: "Live sample taken." },
+  "digest.week": { id: "digest.week", level: "passive", audience: "operator", durable: true, template: "{message}" },
 } as const;
 
 export const EventEnvelopeSchema = z.object({

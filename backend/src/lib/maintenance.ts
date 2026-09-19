@@ -9,6 +9,7 @@ import { stackSettingValues } from "@/settings/stackKeys";
 import { check } from "@/updates/check";
 import { applyAvailableEngineUpdate, currentEngine } from "@/updates/engines";
 import { emit } from "@/lib/events";
+import { runWeeklyDigest } from "@/lib/digest";
 
 export type MaintenanceJobKind = "update.check" | "engine.update" | "smoke.test" | "storage.sweep" | "benchmark" | "library.fetch" | "digest";
 export const MAINTENANCE_JOB_KINDS: MaintenanceJobKind[] = ["update.check", "engine.update", "smoke.test", "storage.sweep", "benchmark", "library.fetch", "digest"];
@@ -48,6 +49,7 @@ export function registeredMaintenanceJobs(settings: () => Record<string, string 
     { kind: "storage.sweep", run: async () => { pruneUnreferenced(); } },
     { kind: "benchmark", due: () => residentChatModel() !== null, run: async () => { const model = residentChatModel(); if (model) await runSpeedTest(model); } },
     { kind: "library.fetch", run: async () => { await fetchLibrary(); } },
+    { kind: "digest", run: async () => { if (settings().alertWeeklyDigest === true) runWeeklyDigest(); } },
   ];
 }
 
