@@ -6238,6 +6238,10 @@
                                   "type": "integer",
                                   "nullable": true
                                 },
+                                "sha256": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
                                 "url": {
                                   "type": "string",
                                   "format": "uri"
@@ -6246,6 +6250,7 @@
                               "required": [
                                 "name",
                                 "sizeBytes",
+                                "sha256",
                                 "url"
                               ]
                             }
@@ -6279,6 +6284,162 @@
           },
           "400": {
             "description": "Invalid catalog search.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/catalog/huggingface/resolve": {
+      "get": {
+        "tags": [
+          "Catalog"
+        ],
+        "summary": "Resolve a Hugging Face repository before installation",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true,
+            "name": "repo",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resolved immutable model details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "model",
+                            "engine"
+                          ]
+                        },
+                        "roles": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "licence": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "licenceSentence": {
+                          "type": "string"
+                        },
+                        "licenceFlag": {
+                          "type": "string"
+                        },
+                        "licenceUrl": {
+                          "type": "string",
+                          "nullable": true,
+                          "format": "uri"
+                        },
+                        "sizeBytes": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "source": {
+                          "type": "string"
+                        },
+                        "revision": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "url": {
+                          "type": "string",
+                          "nullable": true,
+                          "format": "uri"
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "repo": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "runsOnThisComputer": {
+                          "type": "boolean"
+                        },
+                        "files": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "sizeBytes": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "sha256": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "url": {
+                                "type": "string",
+                                "format": "uri"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "sizeBytes",
+                              "sha256",
+                              "url"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "kind",
+                        "licence",
+                        "licenceSentence",
+                        "licenceFlag",
+                        "licenceUrl",
+                        "sizeBytes",
+                        "source",
+                        "revision",
+                        "url",
+                        "sha256",
+                        "repo"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The repository could not be resolved.",
             "content": {
               "application/json": {
                 "schema": {

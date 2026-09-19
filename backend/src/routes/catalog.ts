@@ -3,14 +3,14 @@ import { apiRouter, ErrorSchema } from "@/lib/openapi";
 import { requireOperator } from "@/lib/operator";
 import { STACK_CHAT_MODEL } from "@/lib/modelCatalog";
 import { ENGINE_BINARIES } from "@/lib/engineCatalog";
-import { updatesEnabled } from "@/updates/check";
 import { detectHardware } from "@/lib/hardware";
 import { proposeProfile } from "@/profiles";
-import { hfUrl } from "@/lib/hf";
+import { hfUrl, huggingFaceSearchEnabled, resolveHuggingFace, searchHuggingFace } from "@/lib/hf";
 import { licenceInfo } from "@/lib/licences";
 
-const EntrySchema = z.object({ id: z.string(), name: z.string(), kind: z.enum(["model", "engine"]), roles: z.array(z.string()).optional(), licence: z.string().nullable(), licenceSentence: z.string(), licenceFlag: z.string(), licenceUrl: z.string().url().nullable(), sizeBytes: z.number().int().nullable(), source: z.string(), revision: z.string().nullable(), url: z.string().url().nullable(), sha256: z.string().nullable(), repo: z.string().nullable(), runsOnThisComputer: z.boolean().optional(), files: z.array(z.object({ name: z.string(), sizeBytes: z.number().int().nullable(), url: z.string().url() })).optional() });
+const EntrySchema = z.object({ id: z.string(), name: z.string(), kind: z.enum(["model", "engine"]), roles: z.array(z.string()).optional(), licence: z.string().nullable(), licenceSentence: z.string(), licenceFlag: z.string(), licenceUrl: z.string().url().nullable(), sizeBytes: z.number().int().nullable(), source: z.string(), revision: z.string().nullable(), url: z.string().url().nullable(), sha256: z.string().nullable(), repo: z.string().nullable(), runsOnThisComputer: z.boolean().optional(), files: z.array(z.object({ name: z.string(), sizeBytes: z.number().int().nullable(), sha256: z.string().nullable(), url: z.string().url() })).optional() });
 const searchRoute = createRoute({ method: "get", path: "/search", tags: ["Catalog"], summary: "Search the local catalog or Hugging Face", middleware: [requireOperator] as const, request: { query: z.object({ q: z.string().optional(), kind: z.enum(["model", "engine", "huggingface"]).optional() }) }, responses: { 200: { content: { "application/json": { schema: z.object({ enabled: z.boolean(), results: z.array(EntrySchema) }) } }, description: "Catalog entries or Hugging Face results." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "Invalid catalog search." } } });
+const resolveRoute = createRoute({ method: "get", path: "/huggingface/resolve", tags: ["Catalog"], summary: "Resolve a Hugging Face repository before installation", middleware: [requireOperator] as const, request: { query: z.object({ repo: z.string().min(1) }) }, responses: { 200: { content: { "application/json": { schema: z.object({ result: EntrySchema }) } }, description: "Resolved immutable model details." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "The repository could not be resolved." } } });
 
 async function localResults(kind: "model" | "engine", query: string): Promise<z.infer<typeof EntrySchema>[]> {
   const needle = query.toLocaleLowerCase();
@@ -28,11 +28,21 @@ export const catalogRoutes = apiRouter();
 catalogRoutes.openapi(searchRoute, async (c) => {
   const query = c.req.valid("query");
   if (query.kind !== "huggingface") return c.json({ enabled: true, results: await localResults(query.kind ?? "model", query.q ?? "") }, 200);
-  if (!updatesEnabled()) return c.json({ enabled: false, results: [] }, 200);
+  if (!huggingFaceSearchEnabled()) return c.json({ enabled: false, results: [] }, 200);
   const q = query.q?.trim() ?? "";
   if (!q) return c.json({ enabled: true, results: [] }, 200);
-  const response = await fetch(hfUrl(`api/models?search=${encodeURIComponent(q)}&filter=gguf&limit=20`), { headers: { "if-none-match": "", "user-agent": "maipai-stack/0.1.0 (catalog-search)" } });
-  if (!response.ok) return c.json({ error: `Hugging Face search returned ${response.status}.` }, 400);
-  const entries = await response.json() as Array<{ id?: string; pipeline_tag?: string; tags?: string[] }>;
-  return c.json({ enabled: true, results: entries.filter((entry) => entry.id).map((entry) => ({ id: entry.id!, name: entry.id!, kind: "model" as const, roles: [entry.pipeline_tag === "text-to-image" ? "image" : "chat"], licence: null, licenceSentence: licenceInfo(null).sentence, licenceFlag: licenceInfo(null).flag, licenceUrl: null, sizeBytes: null, source: "Hugging Face", revision: "main", url: hfUrl(entry.id!), sha256: null, repo: entry.id!, files: [] })) }, 200);
+  try {
+    const entries = await searchHuggingFace(q);
+    return c.json({ enabled: true, results: entries.map((entry) => ({ id: entry.repo, name: entry.name, kind: "model" as const, roles: ["unknown"], licence: null, licenceSentence: licenceInfo(null).sentence, licenceFlag: licenceInfo(null).flag, licenceUrl: null, sizeBytes: null, source: "Hugging Face", revision: null, url: hfUrl(entry.repo), sha256: null, repo: entry.repo, files: [] })) }, 200);
+  } catch { return c.json({ error: "Hugging Face search could not be completed." }, 400); }
+});
+catalogRoutes.openapi(resolveRoute, async (c) => {
+  if (!huggingFaceSearchEnabled()) return c.json({ error: "Hugging Face search is off." }, 400);
+  try {
+    const result = await resolveHuggingFace(c.req.valid("query").repo);
+    const info = licenceInfo(result.licence);
+    const sizeBytes = result.files.length > 0 && result.files.every((file) => file.sizeBytes !== null) ? result.files.reduce((total, file) => total + (file.sizeBytes ?? 0), 0) : null;
+    const installFile = result.files.find((file) => file.name.toLowerCase().endsWith(".gguf")) ?? result.files[0];
+    return c.json({ result: { id: result.repo, name: result.name, kind: "model" as const, roles: [result.role], licence: result.licence, licenceSentence: info.sentence, licenceFlag: result.gated ? "gated" : info.flag, licenceUrl: info.url, sizeBytes, source: "Hugging Face", revision: result.revision, url: installFile?.url ?? null, sha256: installFile?.sha256 ?? null, repo: result.repo, files: result.files } }, 200);
+  } catch { return c.json({ error: "Hugging Face could not resolve that repository." }, 400); }
 });
