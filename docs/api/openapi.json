@@ -3679,54 +3679,6 @@
                         ]
                       }
                     },
-                    "foundFiles": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "kind": {
-                            "type": "string",
-                            "enum": [
-                              "file"
-                            ]
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "source": {
-                            "type": "string"
-                          },
-                          "path": {
-                            "type": "string"
-                          },
-                          "sizeBytes": {
-                            "type": "integer"
-                          },
-                          "digest": {
-                            "type": "string"
-                          },
-                          "couldHold": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "kind",
-                          "name",
-                          "source",
-                          "path",
-                          "sizeBytes",
-                          "digest",
-                          "couldHold"
-                        ]
-                      }
-                    },
                     "found": {
                       "type": "object",
                       "properties": {
@@ -3749,7 +3701,6 @@
                   },
                   "required": [
                     "detected",
-                    "foundFiles",
                     "found",
                     "scannedAt"
                   ]
@@ -3840,54 +3791,6 @@
                         ]
                       }
                     },
-                    "foundFiles": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "kind": {
-                            "type": "string",
-                            "enum": [
-                              "file"
-                            ]
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "source": {
-                            "type": "string"
-                          },
-                          "path": {
-                            "type": "string"
-                          },
-                          "sizeBytes": {
-                            "type": "integer"
-                          },
-                          "digest": {
-                            "type": "string"
-                          },
-                          "couldHold": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "kind",
-                          "name",
-                          "source",
-                          "path",
-                          "sizeBytes",
-                          "digest",
-                          "couldHold"
-                        ]
-                      }
-                    },
                     "found": {
                       "type": "object",
                       "properties": {
@@ -3910,7 +3813,6 @@
                   },
                   "required": [
                     "detected",
-                    "foundFiles",
                     "found",
                     "scannedAt"
                   ]

@@ -47,7 +47,7 @@ export function NotificationsBell() {
 
   return <Popover open={open} onOpenChange={setOpen}>
     <PopoverTrigger asChild data-notifications-trigger aria-label="Notifications">
-      <Button variant="ghost" size="icon-sm" className="relative"><Bell className="size-4" />{unreadCount > 0 && <Badge className="absolute -right-1.5 -top-1.5 size-4 min-w-4 rounded-full px-1 py-0 text-[10px]">{unreadCount}</Badge>}</Button>
+      <Button variant="ghost" size="icon-sm" className="relative overflow-visible"><Bell className="size-4" />{unreadCount > 0 && <Badge className="absolute right-0 top-0 size-4 min-w-4 rounded-full px-1 py-0 text-[10px]">{unreadCount}</Badge>}</Button>
     </PopoverTrigger>
     <PopoverContent align="end" className="w-80 p-0">
       <div className="divide-y">

@@ -34,7 +34,7 @@ export function ModelsPage({ Frame }: { Frame: SectionFrameComponent }) {
   const phone = usePhoneMode();
   const groups = useApiResource<{ groups: Group[] }>("/stack/v1/groups");
   const models = useApiResource<{ models: Model[] }>("/stack/v1/models");
-  const detectedStores = useApiResource<{ detected: DetectedStore[]; foundFiles?: DetectedStore[] }>("/stack/v1/detected");
+  const detectedStores = useApiResource<{ detected: DetectedStore[] }>("/stack/v1/detected");
   const roles = useApiResource<{ roles: RoleRecord[] }>("/stack/v1/roles");
   const hardware = useApiResource<HardwareResponse>("/stack/v1/hardware");
   const refetchDetected = detectedStores.refetch;
@@ -50,7 +50,7 @@ export function ModelsPage({ Frame }: { Frame: SectionFrameComponent }) {
   const [scanBusy, setScanBusy] = useState(false);
   const groupRows = useMemo(() => groups.data?.groups ?? [], [groups.data?.groups]);
   const modelRows = useMemo(() => models.data?.models ?? [], [models.data?.models]);
-  const detectedRows = useMemo(() => [...(detectedStores.data?.detected ?? []), ...(detectedStores.data?.foundFiles ?? []).map((file) => ({ ...file, kind: "file", version: "Not imported", roles: file.couldHold }))], [detectedStores.data?.detected, detectedStores.data?.foundFiles]);
+  const detectedRows = useMemo(() => detectedStores.data?.detected ?? [], [detectedStores.data?.detected]);
   const selectedGroup = selected?.kind === "group" ? groupRows.find((group) => group.id === selected.id) : null;
   const selectedModel = selected?.kind === "model" ? modelRows.find((model) => model.id === selected.id) : null;
   const selectedDetected = selected?.kind === "detected" ? detectedRows.find((item) => item.id === selected.id) : null;
@@ -116,7 +116,7 @@ export function ModelsPage({ Frame }: { Frame: SectionFrameComponent }) {
     columns={[
       { key: "name", header: "Name", width: "32%", render: (row) => row.kind === "detected" ? <div><p className="font-medium">{row.store.kind === "file" ? "Found on this computer" : "Detected, not adopted"} · {row.store.name}</p><p className="text-xs text-muted-foreground">{row.store.kind === "file" ? `${row.store.source} · ${Math.round((row.store.sizeBytes ?? 0) / 1_000_000)} MB` : `${row.store.version} · ${row.store.path ?? row.store.where}`}</p></div> : <div className="min-w-0"><input aria-label={`Nickname ${row.model.id}`} className="block w-44 max-w-full truncate bg-transparent font-medium outline-none" defaultValue={renames[row.model.id] ?? row.model.nickname ?? ""} placeholder={displayName(row.model.id)} onKeyDown={(event) => { if (event.key === "Escape") { event.currentTarget.value = row.model.nickname ?? ""; event.currentTarget.blur(); } if (event.key === "Enter") event.currentTarget.blur(); }} onBlur={(event) => void renameModel(row.model, event.target.value)} onClick={(event) => event.stopPropagation()} /><p className="truncate text-xs text-muted-foreground">{row.model.nickname && row.model.nickname !== displayName(row.model.id) ? row.model.id : displayName(row.model.id) !== row.model.id ? row.model.id : null}</p><p className="truncate text-xs text-muted-foreground xl:hidden">{groupRows.find((group) => group.id === row.model.groupId)?.name ?? "Ungrouped"}</p></div> },
       { key: "roles", header: "Roles", width: "17%", render: (row) => row.kind === "detected" ? linkCell("/abilities", (row.store.couldHold ?? row.store.roles ?? []).map(roleLabel).join(", ") || "Unassigned") : linkCell("/abilities", row.model.roles.map(roleLabel).join(", ")) },
-      { key: "size", header: "Storage", width: "21%", align: "right", render: (row) => row.kind === "detected" ? `${row.store.candidateModels ?? 0} candidates` : <><div>{row.model.sizeBytes ? `${formatBytes(row.model.sizeBytes)} on disk` : "Size unknown"}</div><div className="text-xs text-muted-foreground">{row.model.measuredFootprintBytes ? `${formatBytes(row.model.measuredFootprintBytes)} in memory (measured)` : "Not measured"}</div></> },
+      { key: "size", header: "Storage", width: "21%", align: "right", render: (row) => row.kind === "detected" ? `${row.store.candidateModels ?? 0} candidates` : <><div title={row.model.modelPath ?? undefined}>{row.model.sizeBytes ? `${formatBytes(row.model.sizeBytes)} on disk` : "Size unknown"}</div><div className="text-xs text-muted-foreground">{row.model.measuredFootprintBytes ? `${formatBytes(row.model.measuredFootprintBytes)} in memory (measured)` : "Not measured"}</div></> },
       { key: "group", header: "Group", width: "13%", compact: true, render: (row) => row.kind === "detected" ? <Badge variant="outline">Adopt</Badge> : <Badge variant="outline" className="max-w-full truncate">{groupRows.find((group) => group.id === row.model.groupId)?.name ?? "Ungrouped"}</Badge> },
       { key: "state", header: "State", width: "13%", align: "right", render: (row) => row.kind === "detected" ? "Not adopted" : <><Badge variant="secondary">{stateLabel(row.model.runtimeState ?? row.model.state)}</Badge>{row.model.estimated && <span className="ml-2 text-xs text-muted-foreground">estimated</span>}</> },
     ]}

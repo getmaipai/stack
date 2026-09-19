@@ -83,8 +83,7 @@ function recordScan(at: string): void { db.insert(meta).values({ key: LAST_SCAN_
 export function scanCounts(rows: DetectedRecord[] = listDetected()): { tools: number; modelFiles: number } {
   let installedTools = 0;
   try { installedTools = readdirSync(engineRoot, { withFileTypes: true }).filter((entry) => entry.isDirectory()).length; } catch { /* no installed engine directory yet */ }
-  const modelFiles = scanImports().length;
-  return { tools: rows.filter((row) => row.kind !== "folder").length + installedTools, modelFiles };
+  return { tools: rows.filter((row) => row.kind !== "folder").length + installedTools, modelFiles: 0 };
 }
 
 function fileRoles(name: string): RoleId[] {
