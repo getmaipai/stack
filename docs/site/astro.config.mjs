@@ -16,6 +16,7 @@ export default defineConfig({
     starlight({
       title: "MaiPai Stack",
       description: "Docs for MaiPai Stack, the easy way to run your own local AI.",
+      favicon: "/favicon.ico",
       social: [{ icon: "github", label: "GitHub", href: "https://github.com/getmaipai/stack" }],
       plugins: [
         starlightOpenAPI([

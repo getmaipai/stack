@@ -36,13 +36,24 @@ function yamlEscape(s) {
   return s.replace(/"/g, '\\"');
 }
 
+// The favicon lives in the site's own public/ and every page points at the
+// same file; the user-tier docs and the injected dev frontmatter both omit
+// it on purpose, so it is re-added here rather than pasted into every
+// source file.
+function addFavicon(text) {
+  if (text.includes("favicon:")) return text;
+  const close = text.indexOf("\n---\n");
+  if (close === -1) return text;
+  return text.slice(0, close + 1) + "favicon: /favicon.ico" + text.slice(close + 1);
+}
+
 function syncVerbatim(srcDir, destDir) {
   rmSync(destDir, { recursive: true, force: true });
   mkdirSync(destDir, { recursive: true });
   for (const name of readdirSync(srcDir)) {
     if (!name.endsWith(".md")) continue;
     const text = readFileSync(join(srcDir, name), "utf8");
-    writeFileSync(join(destDir, name), text);
+    writeFileSync(join(destDir, name), addFavicon(text));
   }
 }
 
@@ -57,7 +68,7 @@ function syncWithInjectedFrontmatter(files, destDir) {
     }
     const title = firstHeadingTitle(text, name.replace(/\.md$/, ""));
     const description = firstParagraph(text) || `MaiPai Stack developer notes: ${title}`;
-    const withFrontmatter = `---\ntitle: "${yamlEscape(title)}"\ndescription: "${yamlEscape(description)}"\n---\n\n${text}`;
+    const withFrontmatter = `---\ntitle: "${yamlEscape(title)}"\ndescription: "${yamlEscape(description)}"\nfavicon: /favicon.ico\n---\n\n${text}`;
     writeFileSync(join(destDir, name), withFrontmatter);
   }
 }

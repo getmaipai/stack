@@ -109,7 +109,15 @@ for (const asset of Bun.embeddedFiles ?? []) {
 }
 
 function contentType(path: string): string {
-  return path.endsWith(".html") ? "text/html; charset=utf-8" : path.endsWith(".js") ? "text/javascript; charset=utf-8" : path.endsWith(".css") ? "text/css; charset=utf-8" : path.endsWith(".json") ? "application/json" : path.endsWith(".svg") ? "image/svg+xml" : path.endsWith(".png") ? "image/png" : "application/octet-stream";
+  return path.endsWith(".html") ? "text/html; charset=utf-8" : path.endsWith(".js") ? "text/javascript; charset=utf-8" : path.endsWith(".css") ? "text/css; charset=utf-8" : path.endsWith(".json") ? "application/json" : path.endsWith(".svg") ? "image/svg+xml" : path.endsWith(".png") ? "image/png" : path.endsWith(".ico") ? "image/x-icon" : path.endsWith(".webmanifest") ? "application/manifest+json" : "application/octet-stream";
+}
+
+// A request for a file that is not there is a missing asset, not a route:
+// it answers 404 instead of the SPA shell.
+function hasFileExtension(path: string): boolean {
+  const name = path.split("/").pop() ?? "";
+  const dot = name.lastIndexOf(".");
+  return dot > 0 && dot < name.length - 1;
 }
 
 // Hashed asset names are immutable; index.html is revalidated on every load
@@ -140,6 +148,7 @@ app.use("/*", async (c, next) => {
 });
 app.get("*", async (c) => {
   if (c.req.path.startsWith("/api/") || c.req.path.startsWith("/stack/") || c.req.path.startsWith("/v1/")) return c.notFound();
+  if (hasFileExtension(c.req.path)) return c.notFound();
   const distDir = process.env.STACK_DIST_DIR ?? join(here, "..", "..", "frontend", "dist");
   const indexPath = join(distDir, "index.html");
   const embeddedIndex = embeddedAssets.get("/index.html");

@@ -41,16 +41,37 @@ test("GET / serves the built index and client routes fall back to it", async () 
   expect(await route.text()).toContain("Stack test");
 });
 
-test("assets are served with the right content type", async () => {
+test("missing assets answer 404, never the SPA shell", async () => {
   mkdirSync(distDir, { recursive: true });
   writeFileSync(indexPath, "<!doctype html><title>Stack test</title>");
   mkdirSync(assetsDir, { recursive: true });
   writeFileSync(assetsPath, "body { color: red; }");
 
+  const missingPng = await app.request("/nope.png");
+  expect(missingPng.status).toBe(404);
+  const missingIco = await app.request("/favicon.ico");
+  expect(missingIco.status).toBe(404);
+  const missingJs = await app.request("/assets/nope.js");
+  expect(missingJs.status).toBe(404);
+});
+
+test("assets are served with the right content type", async () => {
+  mkdirSync(distDir, { recursive: true });
+  writeFileSync(indexPath, "<!doctype html><title>Stack test</title>");
+  mkdirSync(assetsDir, { recursive: true });
+  writeFileSync(assetsPath, "body { color: red; }");
+  const iconPath = join(distDir, "favicon.ico");
+  writeFileSync(iconPath, "icon bytes");
+
   const asset = await app.request("/assets/style.css");
   expect(asset.status).toBe(200);
   expect(asset.headers.get("content-type")).toContain("text/css");
   expect(await asset.text()).toBe("body { color: red; }");
+
+  const icon = await app.request("/favicon.ico");
+  expect(icon.status).toBe(200);
+  expect(icon.headers.get("content-type")).toContain("image/x-icon");
+  expect(await icon.text()).toBe("icon bytes");
 });
 
 test("index is revalidated and assets are cached immutable", async () => {

@@ -18,6 +18,18 @@ export default defineConfig({
       "/stack": "http://127.0.0.1:8770",
       "/v1": "http://127.0.0.1:8770",
       "/healthz": "http://127.0.0.1:8770",
+      // Favicon and manifest paths are static files, not API routes, and the
+      // dev server serves them straight from public/ rather than proxying
+      // them to the daemon.
+      "/favicon.ico": false,
+      "/favicon-16.png": false,
+      "/favicon-32.png": false,
+      "/favicon-32-dark.png": false,
+      "/apple-touch-icon.png": false,
+      "/icon-192.png": false,
+      "/icon-512.png": false,
+      "/site.webmanifest": false,
+      "/brand": "http://127.0.0.1:8770",
     },
   },
 });
