@@ -407,7 +407,7 @@ layer above; none adds a person or leaves the machine.
   Mirror: the current ability proposal.
   Out of scope: new person records or Home-side features.
   Exit: `bash scripts/check.sh`.
-- [ ] **STACK-31 (S): engines kept current, safely.** An opt-in switch
+- [x] **STACK-31 (S): engines kept current, safely.** An opt-in switch
   on Updates: apply engine updates in the maintenance window with the
   automatic rollback of STACK-10 if the post-swap check fails, and a
   notification either way; model updates are never automatic.

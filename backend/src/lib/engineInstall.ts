@@ -39,6 +39,7 @@ async function downloadArchive(pin: EngineBinaryPin, archive: EngineArchive, onP
 export async function ensureEngine(
   pin: EngineBinaryPin,
   onProgress: (completed: number, total: number, label: string) => void = () => {},
+  options: { activate?: boolean } = {},
 ): Promise<void> {
   const destination = engineDir(pin.id);
   const readyMarker = join(destination, ENGINE_READY_MARKER);
@@ -49,11 +50,12 @@ export async function ensureEngine(
   if (pin.platform !== "win32") chmodSync(engineBinaryPath(pin), 0o755);
   writeFileSync(readyMarker, new Date().toISOString());
   const { name, tag } = engineNameTag(pin.id);
+  writeEngineManifest({ kind: "engine", name, tag, assetUrl: pin.archive.url, sizeBytes: pin.archive.approxBytes, githubDigest: pin.archive.sha256, sha256: pin.archive.sha256, extractedAt: new Date().toISOString(), blobs: [] });
+  if (options.activate === false) return;
   const current = engineCurrentPath(name);
   mkdirSync(resolve(current, ".."), { recursive: true, mode: 0o700 });
   try { unlinkSync(current); } catch { /* First install has no current link. */ }
   symlinkSync(tag, current);
-  writeEngineManifest({ kind: "engine", name, tag, assetUrl: pin.archive.url, sizeBytes: pin.archive.approxBytes, githubDigest: pin.archive.sha256, sha256: pin.archive.sha256, extractedAt: new Date().toISOString(), blobs: [] });
 }
 
 export function removeEngine(name: string, tag: string): boolean {

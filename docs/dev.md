@@ -726,6 +726,29 @@ the previous release is kept for rollback. The weekly model watch stores
 the Hub `sha` and `x-linked-etag` at install, uses a conditional GET, and
 only reports a newer revision. It never auto-applies a model update.
 
+### Automatic engine updates (STACK-31, 2026-09-19)
+
+The operator may turn on `autoUpdateEngines` in Settings > Updates. It is
+off by default. During an eligible maintenance window, after the normal
+engine manifest check has found a platform build, the Stack stages that
+verified archive beside the current build and uses the same drain, swap,
+restart, and post-load completion check as a deliberate engine change. A
+failed check restores the prior link before the window continues. The
+operator receives one durable result: either the chat engine moved to the
+new build, or the update was undone and the prior build remains current.
+Models are explicitly excluded from this setting and never update
+automatically.
+
+Decision: reuse the existing verified engine-update path so unattended work
+has the same checksum, drain, health-check, and rollback guarantees as an
+operator-initiated swap. The durable update events carry the precise outcome
+text so the notification feed can explain the overnight change without a
+second record type. Rejected: updating when a manifest is fetched, because
+it ignores the maintenance safety conditions; a separate automatic-model
+switch, because model revisions need an explicit choice; and a new update
+notification record, because the event feed already owns durable update
+outcomes.
+
 ## Engine management (STACK-19, 2026-09-17)
 
 Engine version state is a derived fact, never a stored status. The daemon

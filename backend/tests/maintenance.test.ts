@@ -1,9 +1,17 @@
-import { expect, test } from "bun:test";
-import { MaintenanceScheduler, MAINTENANCE_JOB_KINDS, withinMaintenanceWindow } from "@/lib/maintenance";
+import { afterEach, expect, test } from "bun:test";
+import { mkdirSync, rmSync, readlinkSync } from "node:fs";
+import { MaintenanceScheduler, MAINTENANCE_JOB_KINDS, registeredMaintenanceJobs, withinMaintenanceWindow } from "@/lib/maintenance";
+import { check, setUpdatesEnabled } from "@/updates/check";
+import { resetEngineUpdateRunnerForTests, setEngineUpdateRunnerForTests, swapEngine } from "@/updates/engines";
+import { engineCurrentPath, engineTagRoot } from "@/lib/store/layout";
+import { __resetEventsForTests, listNotifications } from "@/lib/events";
+import { __resetStackSettingsForTests } from "@/settings/stackKeys";
 
 const clock = (hour: number, minute = 0) => ({ now: () => new Date(2026, 8, 18, hour, minute) });
 const quiet = { secondsSinceInput: () => 301 };
 const normal = { onBattery: () => false };
+
+afterEach(() => { setUpdatesEnabled(false); resetEngineUpdateRunnerForTests(); __resetEventsForTests(); __resetStackSettingsForTests(); rmSync(engineTagRoot("llama-server", "b10797").split(`/llama-server/`)[0] + "/llama-server", { recursive: true, force: true }); });
 
 test("maintenance runs registered jobs in order inside its window and defers outside", async () => {
   const ran: string[] = [];
@@ -31,4 +39,30 @@ test("maintenance window supports an overnight range", () => {
 
 test("maintenance declares every scheduled kind in its fixed order", () => {
   expect(MAINTENANCE_JOB_KINDS).toEqual(["update.check", "engine.update", "smoke.test", "storage.sweep", "benchmark", "library.fetch", "digest"]);
+});
+
+async function stageAvailableEngine(): Promise<void> {
+  setUpdatesEnabled(true);
+  await check("engines", async () => new Response(JSON.stringify({ version: "b10820", notes: "engine", pub_date: "2026-09-18", platforms: { default: { url: "https://example.test/engine.tar.gz", sha256: "a".repeat(64), size: 12, signature: "sig" } } })));
+  mkdirSync(engineTagRoot("llama-server", "b10797"), { recursive: true });
+  await swapEngine("llama-server", "b10797");
+}
+
+test("automatic engine update failure rolls back and leaves the exact durable notice", async () => {
+  await stageAvailableEngine();
+  setEngineUpdateRunnerForTests(async () => { throw new Error("post-swap check failed"); });
+  await registeredMaintenanceJobs(() => ({ autoUpdateEngines: true })).find((job) => job.kind === "engine.update")!.run(new AbortController().signal);
+  expect(readlinkSync(engineCurrentPath("llama-server"))).toBe("b10797");
+  expect((listNotifications() as Array<{ title: string }>).find((item) => item.title.includes("update was undone"))?.title).toBe("The chat engine update was undone: the check failed. You are still on b10797.");
+});
+
+test("automatic engine update success notifies, while the switch off runs nothing", async () => {
+  await stageAvailableEngine();
+  let calls = 0;
+  setEngineUpdateRunnerForTests(async (_name, tag) => { calls++; mkdirSync(engineTagRoot("llama-server", tag), { recursive: true }); await swapEngine("llama-server", tag); });
+  await registeredMaintenanceJobs(() => ({ autoUpdateEngines: false })).find((job) => job.kind === "engine.update")!.run(new AbortController().signal);
+  expect(calls).toBe(0);
+  await registeredMaintenanceJobs(() => ({ autoUpdateEngines: true })).find((job) => job.kind === "engine.update")!.run(new AbortController().signal);
+  expect(calls).toBe(1);
+  expect((listNotifications() as Array<{ title: string }>).find((item) => item.title.includes("moved to build"))?.title).toBe("The chat engine moved to build b10820 overnight.");
 });

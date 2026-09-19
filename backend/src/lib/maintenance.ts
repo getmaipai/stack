@@ -7,6 +7,8 @@ import { pruneUnreferenced } from "@/lib/store/manifests";
 import { runCheck } from "@/lib/checkMyStack";
 import { stackSettingValues } from "@/settings/stackKeys";
 import { check } from "@/updates/check";
+import { applyAvailableEngineUpdate, currentEngine } from "@/updates/engines";
+import { emit } from "@/lib/events";
 
 export type MaintenanceJobKind = "update.check" | "engine.update" | "smoke.test" | "storage.sweep" | "benchmark" | "library.fetch" | "digest";
 export const MAINTENANCE_JOB_KINDS: MaintenanceJobKind[] = ["update.check", "engine.update", "smoke.test", "storage.sweep", "benchmark", "library.fetch", "digest"];
@@ -29,9 +31,19 @@ export function nextMaintenanceRun(now: Date, start: string): Date { const next 
 
 // These are the only maintenance jobs. Jobs which require a later feature
 // deliberately remain out of the registry until that feature has an owner.
-export function registeredMaintenanceJobs(): MaintenanceJob[] {
+export function registeredMaintenanceJobs(settings: () => Record<string, string | number | boolean | string[]> = stackSettingValues): MaintenanceJob[] {
   return [
     { kind: "update.check", run: async () => { await Promise.all([check("app"), check("engines"), check("models")]); } },
+    { kind: "engine.update", run: async () => {
+      if (settings().autoUpdateEngines !== true) return;
+      const previous = currentEngine("llama-server");
+      try {
+        const updated = await applyAvailableEngineUpdate();
+        if (updated) emit({ id: "update.applied", data: { kind: "engine", name: "chat", tag: updated.tag, message: `The chat engine moved to build ${updated.tag} overnight.` } });
+      } catch {
+        emit({ id: "update.failed", data: { kind: "engine", name: "chat", reason: "post-swap check failed", message: `The chat engine update was undone: the check failed. You are still on ${currentEngine("llama-server") ?? previous ?? "an older build"}.` } });
+      }
+    } },
     { kind: "smoke.test", run: async () => { await runCheck(); } },
     { kind: "storage.sweep", run: async () => { pruneUnreferenced(); } },
     { kind: "benchmark", due: () => residentChatModel() !== null, run: async () => { const model = residentChatModel(); if (model) await runSpeedTest(model); } },
@@ -41,7 +53,7 @@ export function registeredMaintenanceJobs(): MaintenanceJob[] {
 
 export class MaintenanceScheduler {
   private readonly options: Required<Pick<MaintenanceOptions, "clock" | "activity" | "battery" | "pressure" | "settings">> & Pick<MaintenanceOptions, "jobs">;
-  constructor(options: MaintenanceOptions = {}) { this.options = { clock: options.clock ?? systemClock, activity: options.activity ?? getActivityReader(), battery: options.battery ?? getBatteryReader(), pressure: options.pressure ?? (() => getGovernorStatus().pressure), settings: options.settings ?? stackSettingValues, jobs: options.jobs ?? registeredMaintenanceJobs() }; }
+  constructor(options: MaintenanceOptions = {}) { const settings = options.settings ?? stackSettingValues; this.options = { clock: options.clock ?? systemClock, activity: options.activity ?? getActivityReader(), battery: options.battery ?? getBatteryReader(), pressure: options.pressure ?? (() => getGovernorStatus().pressure), settings, jobs: options.jobs ?? registeredMaintenanceJobs(settings) }; }
   nextRunAt(): string { const values = this.options.settings(); return nextMaintenanceRun(this.options.clock.now(), String(values.maintenanceStart ?? "02:00")).toISOString(); }
   async run(force = false): Promise<MaintenanceResult> {
     const values = this.options.settings(); const now = this.options.clock.now(); const start = String(values.maintenanceStart ?? "02:00"); const end = String(values.maintenanceEnd ?? "05:00"); const nextRunAt = nextMaintenanceRun(now, start).toISOString();
