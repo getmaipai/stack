@@ -2,7 +2,7 @@ import { FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type OperatorState } from "@/lib/api";
 import { Button } from "@/kit/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/kit/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/kit/ui/card";
 import { Input } from "@/kit/ui/input";
 
 export function LoginPage({ state, onSignedIn }: { state: OperatorState; onSignedIn?: (state: OperatorState) => void }) {
@@ -28,21 +28,24 @@ export function LoginPage({ state, onSignedIn }: { state: OperatorState; onSigne
 
   return (
     <main className="flex min-h-screen items-center bg-background px-4 py-8 text-foreground sm:px-8">
-      <Card className="mx-auto w-full max-w-md">
-        <CardHeader>
-          <p className="text-lg font-semibold">MaiPai Stack</p>
+      <Card className="mx-auto w-full max-w-md gap-4">
+        <CardHeader className="justify-items-center px-6 text-center">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcSet="/brand/maipai-stack-icon-dark.png" />
+            <img className="size-12" src="/brand/maipai-stack-icon-light.png" alt="MaiPai Stack" />
+          </picture>
           <CardTitle className="text-3xl">{state.state === "setupRequired" ? "Set the operator password" : "Welcome back"}</CardTitle>
-          <CardDescription className="text-base">{state.state === "setupRequired" ? "MaiPai Stack runs AI on this computer. Nothing leaves it." : "Sign in to manage this Stack from another device."}</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-6 text-center">
           {state.state === "setupRequired" && !state.loopback ? <p className="text-base text-muted-foreground">Set the operator password on the computer that runs the Stack first.</p> : <form className="space-y-6" onSubmit={submit}>
             <label className="block space-y-2 text-base font-medium" htmlFor="login-password">
               Operator password
               <Input id="login-password" type="password" autoComplete={state.state === "setupRequired" ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} required />
             </label>
             {error && <p className="text-base text-destructive" role="alert">{error}</p>}
-            <Button type="submit" disabled={saving}>{saving ? (state.state === "setupRequired" ? "Setting password..." : "Signing in...") : (state.state === "setupRequired" ? "Set password" : "Sign in")}</Button>
+            <Button className="w-full" type="submit" disabled={saving}>{saving ? (state.state === "setupRequired" ? "Setting password..." : "Signing in...") : (state.state === "setupRequired" ? "Set password" : "Sign in")}</Button>
           </form>}
+          <p className="text-sm text-muted-foreground">MaiPai Stack runs AI on this computer. Nothing leaves it. The AI can be wrong, and it is never medical, legal, or professional advice.</p>
         </CardContent>
       </Card>
     </main>

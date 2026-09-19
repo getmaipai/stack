@@ -32,7 +32,7 @@ export function ProfileMenu({ onSignedIn, onSignedOut }: { onSignedIn?: () => vo
       <DropdownMenuItem onSelect={(event) => event.preventDefault()}><ThemeToggle always /><span>Theme</span></DropdownMenuItem>
       {!hasPassword && <DropdownMenuItem onSelect={() => setPasswordDialogOpen(true)}><Lock />Set a password</DropdownMenuItem>}
       {state === "signedIn" && <DropdownMenuItem onSelect={() => void signOut()}><LogOut />Sign out</DropdownMenuItem>}
-      <DropdownMenuItem asChild><Link to="/access"><KeyRound />Clients</Link></DropdownMenuItem>
+      <DropdownMenuItem asChild><Link to="/clients"><KeyRound />Clients</Link></DropdownMenuItem>
       <DropdownMenuLabel>Help</DropdownMenuLabel>
       <DropdownMenuItem asChild><a href="https://getmaipai.github.io/stack/" target="_blank" rel="noreferrer"><ExternalLink />Docs site</a></DropdownMenuItem>
       <DropdownMenuItem asChild><Link to="/help"><FileText />Help</Link></DropdownMenuItem>

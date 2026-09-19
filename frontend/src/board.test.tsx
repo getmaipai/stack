@@ -44,18 +44,20 @@ test("the gate shows setup alone and makes one state request before a password e
   expect(calls).toEqual(["/stack/v1/operator"]);
 });
 
-test("an off-laptop required session renders only the login page", async () => {
+test("an off-laptop required session renders only the branded login page", async () => {
   globalThis.fetch = mock((input: RequestInfo | URL) => String(input).endsWith("/operator") ? Promise.resolve(Response.json({ state: "signedOut", required: true })) : Promise.resolve(responseFor(input))) as unknown as typeof fetch;
   render(<MemoryRouter initialEntries={["/models"]}><App /></MemoryRouter>);
-  await waitFor(() => expect(document.body.textContent).toContain("Sign in to manage this Stack from another device."));
+  await waitFor(() => expect(document.body.textContent).toContain("MaiPai Stack runs AI on this computer. Nothing leaves it. The AI can be wrong, and it is never medical, legal, or professional advice."));
+  expect(document.querySelector('img[alt="MaiPai Stack"]')?.getAttribute("src")).toBe("/brand/maipai-stack-icon-light.png");
+  expect(document.querySelector('source[media="(prefers-color-scheme: dark)"]')?.getAttribute("srcset")).toBe("/brand/maipai-stack-icon-dark.png");
   expect(document.querySelector('[data-slot="sidebar"]')).toBeNull();
   expect(document.querySelector('[data-testid="property-panel"]')).toBeNull();
   expect(document.querySelector("header")).toBeNull();
 });
 
-test("the login copy distinguishes an existing operator, local setup, and phone setup", () => {
+test("the login card keeps its safety note for sign-in, local setup, and phone setup", () => {
   render(<MemoryRouter><LoginPage state={{ state: "signedOut", required: true }} /></MemoryRouter>);
-  expect(document.body.textContent).toContain("Sign in to manage this Stack from another device.");
+  expect(document.body.textContent).toContain("MaiPai Stack runs AI on this computer. Nothing leaves it. The AI can be wrong, and it is never medical, legal, or professional advice.");
   cleanup();
   render(<MemoryRouter><LoginPage state={{ state: "setupRequired", required: true, loopback: true }} /></MemoryRouter>);
   expect(document.body.textContent).toContain("Set the operator password");

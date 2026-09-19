@@ -1,6 +1,6 @@
 import { afterEach, expect, mock, test } from "bun:test";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { DashboardShell } from "@/pages/DashboardShell";
 
 const originalEventSource = globalThis.EventSource;
@@ -10,6 +10,8 @@ afterEach(() => { cleanup(); globalThis.EventSource = originalEventSource; });
 const hardwareResponse = { hardware: { platform: "darwin", arch: "arm64", totalRamGb: 32, cpuCount: 8, isAppleSilicon: true, unifiedMemoryGb: 32, cudaDevices: [], freeDiskBytes: 500_000_000_000, totalDiskBytes: 1_000_000_000_000, osVersion: "15.0" }, proposed: null, tiers: [] };
 const budgetResponse = { totalMemoryBytes: 24_000_000_000, capBytes: 16_000_000_000, freeMemoryBytes: 15_700_000_000, pressure: false, loaded: [], queue: [] };
 const storageResponse = { freeDiskBytes: 500_000_000_000, byCategory: { models: 120_000_000_000, engines: 40_000_000_000, logs: 1_000_000_000, backups: 5_000_000_000 } };
+
+function RoutePath() { return <output data-testid="route-path">{useLocation().pathname}</output>; }
 
 function stubStackFetch(responses: Record<string, unknown>): void {
   globalThis.EventSource = undefined as unknown as typeof EventSource;
@@ -35,6 +37,13 @@ test("the Stack shell lists every section in order", () => {
     previous = next;
   }
   expect(text).toContain("Settings");
+});
+
+test("/access redirects to the Clients route", async () => {
+  stubStackFetch({ ...boardExtras, "/stack/v1/repairs": { repairs: [] }, "/stack/v1/roles": { roles: [] }, "/stack/v1/operator": { state: "signedOut", required: false }, "/stack/v1/clients": { clients: [] } });
+  render(<MemoryRouter initialEntries={["/access"]}><DashboardShell /><RoutePath /></MemoryRouter>);
+  await waitFor(() => expect(document.querySelector('[data-testid="route-path"]')?.textContent).toBe("/clients"));
+  expect(document.querySelector('a[href="/clients"]')).toBeTruthy();
 });
 
 test("the root waits for its plan before choosing the overview instead of mounting the board", async () => {
