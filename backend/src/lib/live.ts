@@ -56,6 +56,7 @@ export interface LiveReaders {
   systemProfiler: () => Promise<ExecFileResult>;
   ioreg: () => Promise<ExecFileResult>;
   df: () => Promise<ExecFileResult>;
+  diskutil: (mount: string) => Promise<ExecFileResult>;
 }
 
 const execFileAsync = promisify(execFile);
@@ -65,6 +66,7 @@ const defaultReaders: LiveReaders = {
   systemProfiler: () => execFileAsync("system_profiler", ["SPDisplaysDataType", "-json"], { timeout: 5_000 }),
   ioreg: () => execFileAsync("ioreg", ["-r", "-d", "1", "-c", "IOAccelerator"], { timeout: 5_000 }),
   df: () => execFileAsync("df", ["-k", dataDir], { timeout: 2_000 }),
+  diskutil: (mount: string) => execFileAsync("diskutil", ["info", "-plist", mount], { timeout: 5_000 }),
 };
 
 let readers: LiveReaders = defaultReaders;
@@ -149,7 +151,6 @@ function parseMacGpu(systemProfilerOutput: string, ioregOutput: string): LiveGpu
 }
 
 function driveName(mount: string): string {
-  if (mount === "/") return "Macintosh HD";
   const segments = mount.replace(/^\//, "").split("/");
   const last = segments[segments.length - 1] ?? "";
   return last || mount;
@@ -164,13 +165,34 @@ function isUserVisibleVolume(mount: string): boolean {
   return false;
 }
 
-function parseDf(output: string): LiveDrive[] {
+function diskutilVolumeName(output: string): string | null {
+  const match = output.match(/<key>VolumeName<\/key>\s*<string>([^<]*)<\/string>/);
+  return match?.[1] ?? null;
+}
+
+function macFinderName(rawMount: string): Promise<{ name: string; mount: string }> {
+  if (rawMount !== "/System/Volumes/Data") {
+    return Promise.resolve({ name: driveName(rawMount), mount: rawMount });
+  }
+  return readers.diskutil("/System/Volumes/Data").then(
+    (result) => {
+      const volumeName = diskutilVolumeName(result.stdout);
+      return {
+        name: volumeName ? volumeName.replace(/ - Data$/, "") : "Macintosh HD",
+        mount: "/",
+      };
+    },
+    () => ({ name: "Macintosh HD", mount: "/" }),
+  );
+}
+
+function parseDf(output: string): Promise<LiveDrive[]> {
   const lines = output.trim().split("\n");
-  if (lines.length < 2) return [];
+  if (lines.length < 2) return Promise.resolve([]);
   const header = (lines[0] ?? "").split(/\s+/);
   const usedIdx = header.findIndex((h) => h === "Used");
   const totalIdx = header.findIndex((h) => h === "Avail" || h === "1024-blocks");
-  const drives: LiveDrive[] = [];
+  const entries: { used: number; total: number; rawMount: string }[] = [];
   for (const line of lines.slice(1)) {
     const fields = line.trim().split(/\s+/);
     if (fields.length === 0) continue;
@@ -178,9 +200,17 @@ function parseDf(output: string): LiveDrive[] {
     if (!isUserVisibleVolume(mount)) continue;
     const used = usedIdx >= 0 && fields[usedIdx] !== undefined ? Number(fields[usedIdx]) : 0;
     const total = totalIdx >= 0 && fields[totalIdx] !== undefined ? Number(fields[totalIdx]) : 0;
-    drives.push({ name: driveName(mount), mount, usedBytes: used * 1024, totalBytes: total * 1024, mounted: true });
+    entries.push({ used, total, rawMount: mount });
   }
-  return drives;
+  return Promise.all(entries.map((entry) => macFinderName(entry.rawMount))).then((named) =>
+    named.map((entry, index) => ({
+      name: entry.name,
+      mount: entry.mount,
+      usedBytes: entries[index]!.used * 1024,
+      totalBytes: entries[index]!.total * 1024,
+      mounted: true,
+    })),
+  );
 }
 
 function driveFilter(): "all" | string[] {
@@ -246,7 +276,7 @@ export async function collectSample(): Promise<LiveSample> {
 
   const dfResult = await readers.df().catch(() => null);
   const dfOutput = dfResult ? dfResult.stdout : "";
-  const drives = filterDrives(parseDf(dfOutput));
+  const drives = filterDrives(await parseDf(dfOutput));
 
   const now = new Date();
   const fiveMinutesAgoMs = now.getTime() - 5 * 60 * 1000;

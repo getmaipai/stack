@@ -6,7 +6,8 @@ import { getChatBackend, setSupervisorFactoryForTests } from "@/lib/supervisor";
 import { __resetStackSettingsForTests, updateStackConfig } from "@/settings/stackKeys";
 import { testClientHeaders } from "./authTest";
 
-function macReaders() {
+function macReaders(options: { volumeName?: string } = {}) {
+  const volumeName = options.volumeName ?? "Macintosh HD - Data";
   return {
     ps: async () => ({ stdout: "1234 5.2 9:01AM 12 Jan 2026 llama-server\n", stderr: "" }),
     nvidiaSmi: async () => ({ stdout: "", stderr: "" }),
@@ -19,6 +20,10 @@ function macReaders() {
       stderr: "",
     }),
     df: async () => ({ stdout: "Filesystem      1024-blocks      Used      Avail      Mounted on\n/dev/disk3s1    500000000  100000000  400000000 /System/Volumes/Data\n/dev/disk4     300000000   50000000  250000000 /Volumes/photo\n/dev/disk5     200000000   10000000  190000000 /Volumes/UTM\n/dev/disk6     400000000   20000000  380000000 /System/Volumes/VM\n", stderr: "" }),
+    diskutil: async () => ({
+      stdout: `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>VolumeName</key>\n\t<string>${volumeName}</string>\n</dict>\n</plist>\n`,
+      stderr: "",
+    }),
   };
 }
 
@@ -94,15 +99,33 @@ test("the sampler lists every user-visible mounted volume and drops system volum
   __setLiveReadersForTests(macReaders());
   const sample = await collectSample();
   const mounts = sample.drives.map((d) => d.mount).sort();
-  expect(mounts).toEqual(["/System/Volumes/Data", "/Volumes/UTM", "/Volumes/photo"]);
+  expect(mounts).toEqual(["/", "/Volumes/UTM", "/Volumes/photo"]);
   for (const drive of sample.drives) {
     expect(drive.mounted).toBe(true);
-    expect(drive.name).toBe(drive.mount.replace(/^\//, "").split("/").slice(-1)[0] ?? drive.mount);
   }
+  const startup = sample.drives.find((d) => d.mount === "/");
+  expect(startup?.name).toBe("Macintosh HD");
+  expect(startup?.usedBytes).toBe(100_000_000 * 1024);
+  expect(startup?.totalBytes).toBe(500_000_000 * 1024);
   const photo = sample.drives.find((d) => d.mount === "/Volumes/photo");
   expect(photo?.name).toBe("photo");
   expect(photo?.totalBytes).toBe(300_000_000 * 1024);
   expect(photo?.usedBytes).toBe(50_000_000 * 1024);
+});
+
+test("a renamed Mac startup disk takes its name from diskutil, not an assumption", async () => {
+  __setLiveReadersForTests(macReaders({ volumeName: "Studio - Data" }));
+  const sample = await collectSample();
+  const startup = sample.drives.find((d) => d.mount === "/");
+  expect(startup?.name).toBe("Studio");
+});
+
+test("the storageDrives setting chooses the startup disk by its Finder mount", async () => {
+  __setLiveReadersForTests(macReaders());
+  updateStackConfig({ storageDrives: "/" });
+  const sample = await collectSample();
+  expect(sample.drives.map((d) => d.mount)).toEqual(["/"]);
+  expect(sample.drives[0]?.name).toBe("Macintosh HD");
 });
 
 test("a storageDrives setting hides the drives it does not choose, everywhere the sampler reports", async () => {
@@ -111,7 +134,7 @@ test("a storageDrives setting hides the drives it does not choose, everywhere th
   const sample = await collectSample();
   const mounts = sample.drives.map((d) => d.mount).sort();
   expect(mounts).toEqual(["/Volumes/UTM", "/Volumes/photo"]);
-  expect(sample.drives.some((d) => d.mount === "/System/Volumes/Data")).toBe(false);
+  expect(sample.drives.some((d) => d.mount === "/")).toBe(false);
 });
 
 test("an unmounted chosen drive is returned with mounted false and zero sizes", async () => {
