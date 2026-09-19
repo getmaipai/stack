@@ -937,6 +937,14 @@ Everything else (Check my Stack, logs, uninstall, per-role detail) lives
 in the app, one click away through Open. The menu never shows a
 developer word.
 
+**The menu, third pass (2026-09-18, 23:55, after the owner's second
+run).** The status line is one word for the whole Stack, "Running",
+"Paused", "Starting", "Stopped" or "Sign in", never a list of roles and
+states; the roles live in the console. The menu gains "Reload", which
+reloads the console webview (the page, not the daemon) for the moments
+the page has stopped drawing; it sits under Open. Order: status line,
+Pause or Resume, Open, Reload, Quit.
+
 ## Copy rules for this repo
 
 The org's writing standards apply. In addition, on every Stack page:
