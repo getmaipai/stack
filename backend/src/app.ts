@@ -19,6 +19,7 @@ import { updatesRoutes } from "@/routes/updates";
 import { migrateLegacyStore } from "@/lib/store/migration";
 import { budgetRoutes } from "@/routes/budget";
 import { eventsRoutes } from "@/routes/events";
+import { liveRoutes } from "@/routes/live";
 import { logsRoutes } from "@/routes/logs";
 import { seriesRoutes } from "@/routes/series";
 import { groupsRoutes } from "@/routes/groups";
@@ -89,6 +90,7 @@ app.route("/stack/v1/settings", settingsRoutes);
 app.route("/stack/v1/speed-test", speedTestRoutes);
 app.route("/stack/v1/check", checkRoutes);
 app.route("/stack/v1/run-state", runStateRoutes);
+app.route("/stack/v1/live", liveRoutes);
 app.route("/v1", inferenceRoutes);
 
 migrateLegacyStore();

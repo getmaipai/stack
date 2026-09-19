@@ -776,6 +776,16 @@ with the model file and engine build beside each one. No number in the
 UI is a file size pretending to be a memory footprint.
 `backend/src/profiles.ts` is the single declaration for the four profile tiers and their role lists.
 
+The live sampler (`backend/src/lib/live.ts`) reads one external command
+per reader, so every command is scriptable in a test: `ps` for engine
+process CPU and start time, `system_profiler` for the Mac GPU model
+name, `ioreg` for Mac GPU utilization, `nvidia-smi` for discrete GPU
+memory and utilization on non-Mac hosts, and `df` for free disk. A
+value the platform does not expose is `null`, never 0 and never a
+guess: on a Mac the GPU memory line is `null` because the computer's
+unified memory carries it, and GPU utilization is `null` when `ioreg`
+reports no `Device Utilization %` key.
+
 ### Safety posture
 
 The Stack is operator-only, and the operator is an adult who accepts the

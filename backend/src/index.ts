@@ -3,6 +3,7 @@ import { installLaunchdService, launchdStatus, startLaunchdService, stopLaunchdS
 import { startDetection } from "@/lib/detect";
 import { startMaintenanceScheduler } from "@/lib/maintenance";
 import { activateStackConfig, stackSettingValues } from "@/settings/stackKeys";
+import { startLiveSampler, stopLiveSampler } from "@/lib/live";
 
 const port = Number(process.env.PORT ?? 8770);
 
@@ -21,10 +22,12 @@ async function serve(): Promise<void> {
   const server = Bun.serve(serveOptions());
   const stopDetection = startDetection();
   const stopMaintenance = startMaintenanceScheduler();
+  startLiveSampler();
   let stopping = false;
   const stop = async (exitCode: number): Promise<void> => {
     if (stopping) return;
     stopping = true;
+    stopLiveSampler();
     stopDetection();
     stopMaintenance();
     server.stop(true);

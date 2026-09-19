@@ -8329,6 +8329,186 @@
         }
       }
     },
+    "/stack/v1/live": {
+      "get": {
+        "tags": [
+          "Live"
+        ],
+        "summary": "Get the last live sample",
+        "responses": {
+          "200": {
+            "description": "The last live sample of processes, GPUs, drives, and clients.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "live": {
+                      "type": "object",
+                      "properties": {
+                        "processes": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "engine": {
+                                "type": "string"
+                              },
+                              "build": {
+                                "type": "string"
+                              },
+                              "model": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "port": {
+                                "type": "number",
+                                "nullable": true
+                              },
+                              "memoryFootprintBytes": {
+                                "type": "number",
+                                "nullable": true
+                              },
+                              "cpuPercent": {
+                                "type": "number",
+                                "nullable": true
+                              },
+                              "pid": {
+                                "type": "number"
+                              },
+                              "startedAt": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "engine",
+                              "build",
+                              "model",
+                              "port",
+                              "memoryFootprintBytes",
+                              "cpuPercent",
+                              "pid",
+                              "startedAt"
+                            ]
+                          }
+                        },
+                        "gpus": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "memoryUsedBytes": {
+                                "type": "number",
+                                "nullable": true
+                              },
+                              "memoryTotalBytes": {
+                                "type": "number",
+                                "nullable": true
+                              },
+                              "utilization": {
+                                "type": "number",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "memoryUsedBytes",
+                              "memoryTotalBytes",
+                              "utilization"
+                            ]
+                          }
+                        },
+                        "cpu": {
+                          "type": "object",
+                          "properties": {
+                            "percent": {
+                              "type": "number",
+                              "nullable": true
+                            }
+                          },
+                          "required": [
+                            "percent"
+                          ]
+                        },
+                        "drives": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "usedBytes": {
+                                "type": "number"
+                              },
+                              "totalBytes": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "usedBytes",
+                              "totalBytes"
+                            ]
+                          }
+                        },
+                        "clients": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "roles": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "requestCount": {
+                                "type": "number"
+                              },
+                              "lastRequestAt": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "roles",
+                              "requestCount",
+                              "lastRequestAt"
+                            ]
+                          }
+                        },
+                        "at": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "processes",
+                        "gpus",
+                        "cpu",
+                        "drives",
+                        "clients",
+                        "at"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "live"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/chat/completions": {
       "post": {
         "tags": [
