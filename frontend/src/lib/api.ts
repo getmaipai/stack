@@ -1,4 +1,4 @@
-export type OperatorState = { state: "setupRequired" | "signedOut" | "signedIn"; required: boolean };
+export type OperatorState = { state: "setupRequired" | "signedOut" | "signedIn"; required: boolean; loopback?: boolean };
 
 export interface RoleRecord {
   id: string;

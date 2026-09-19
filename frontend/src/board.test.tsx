@@ -13,7 +13,7 @@ const roles = [{ id: "chat", wire: "chat", residency: "resident", description: "
 
 function responseFor(input: RequestInfo | URL): Response {
   const path = String(input);
-  if (path.endsWith("/operator")) return Response.json({ state: "setupRequired", required: false });
+  if (path.endsWith("/operator")) return Response.json({ state: "setupRequired", required: true, loopback: true });
   if (path.endsWith("/hardware")) return Response.json({ hardware, proposed: tier, tiers: [tier] });
   if (path.endsWith("/roles")) return Response.json({ roles });
   if (path.endsWith("/budget")) return Response.json({ capBytes: 24 * 1_073_741_824, freeMemoryBytes: 12 * 1_073_741_824, pressure: false, loaded: [], queue: [] });
@@ -33,12 +33,15 @@ test("a fresh install opens on the board with plain hardware and Add abilities",
   await waitFor(() => { expect(document.body.textContent).toContain("Apple silicon Mac, 24 GB of memory, 153 GB free"); expect(document.body.textContent).toContain("Add abilities"); expect(document.body.textContent).toContain("Start small"); });
 });
 
-test("the gate keeps a fresh install on the board without a login", async () => {
+test("the gate shows setup alone and makes one state request before a password exists", async () => {
   globalThis.EventSource = undefined as unknown as typeof EventSource;
-  globalThis.fetch = mock((input: RequestInfo | URL) => Promise.resolve(responseFor(input))) as unknown as typeof fetch;
+  const calls: string[] = [];
+  globalThis.fetch = mock((input: RequestInfo | URL) => { calls.push(String(input)); return Promise.resolve(responseFor(input)); }) as unknown as typeof fetch;
   render(<MemoryRouter initialEntries={["/"]}><App /></MemoryRouter>);
-  await waitFor(() => expect(document.body.textContent).toContain("This computer can run chat and voice locally."));
-  expect(document.body.textContent).not.toContain("Welcome back");
+  await waitFor(() => expect(document.body.textContent).toContain("Set the operator password"));
+  expect(document.querySelector("input")).toBeTruthy();
+  expect(document.querySelector('[data-slot="sidebar"]')).toBeNull();
+  expect(calls).toEqual(["/stack/v1/operator"]);
 });
 
 test("an off-laptop required session renders only the login page", async () => {
@@ -50,11 +53,15 @@ test("an off-laptop required session renders only the login page", async () => {
   expect(document.querySelector("header")).toBeNull();
 });
 
-test("the login copy distinguishes an existing operator from first setup", () => {
+test("the login copy distinguishes an existing operator, local setup, and phone setup", () => {
   render(<MemoryRouter><LoginPage state={{ state: "signedOut", required: true }} /></MemoryRouter>);
   expect(document.body.textContent).toContain("Sign in to manage this Stack from another device.");
   cleanup();
-  render(<MemoryRouter><LoginPage state={{ state: "setupRequired", required: true }} /></MemoryRouter>);
+  render(<MemoryRouter><LoginPage state={{ state: "setupRequired", required: true, loopback: true }} /></MemoryRouter>);
+  expect(document.body.textContent).toContain("Set the operator password");
+  expect(document.querySelector("input")).toBeTruthy();
+  cleanup();
+  render(<MemoryRouter><LoginPage state={{ state: "setupRequired", required: true, loopback: false }} /></MemoryRouter>);
   expect(document.body.textContent).toContain("Set the operator password on the computer that runs the Stack first.");
   expect(document.querySelector("input")).toBeNull();
 });

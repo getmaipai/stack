@@ -87,6 +87,13 @@ fn get_json(path: &str) -> Option<Value> {
         .and_then(|body| serde_json::from_str(&body).ok())
 }
 
+fn operator_signed_in() -> bool {
+    get_json("/stack/v1/operator")
+        .and_then(|body| body.get("state").and_then(Value::as_str).map(str::to_owned))
+        .as_deref()
+        == Some("signedIn")
+}
+
 fn health_severity() -> String {
     if ureq::get(&format!("{DAEMON_URL}/healthz")).call().is_err() {
         return "offline".to_string();
@@ -127,6 +134,9 @@ fn set_tray_health(app: &AppHandle, severity: &str) {
 }
 
 fn status_text() -> (String, bool) {
+    if !operator_signed_in() {
+        return ("Sign in to see status".to_string(), false);
+    }
     let Some(run_state) = get_json("/stack/v1/run-state") else {
         return ("Not running".to_string(), false);
     };
@@ -168,6 +178,13 @@ fn poll_tray(app: AppHandle, status: MenuItem<tauri::Wry>, toggle: MenuItem<taur
     thread::spawn(move || {
         let mut previous = String::new();
         loop {
+            if !operator_signed_in() {
+                set_tray_health(&app, "offline");
+                let _ = status.set_text("Sign in to see status");
+                let _ = toggle.set_text("Pause");
+                thread::sleep(Duration::from_secs(5));
+                continue;
+            }
             let severity = health_severity();
             set_tray_health(&app, &severity);
             let (text, paused) = status_text();
@@ -191,6 +208,10 @@ fn watch_events(app: AppHandle) {
     thread::spawn(move || {
         let mut last_seq = 0;
         loop {
+            if !operator_signed_in() {
+                thread::sleep(Duration::from_secs(5));
+                continue;
+            }
             if let Ok(response) = ureq::get(&format!("{DAEMON_URL}/stack/v1/events")).call() {
                 if let Ok(body) = response.into_string() {
                     for event in body.split("\n\n") {
