@@ -59,20 +59,22 @@ RELEASE-STACK-01.
   on this computer. Nothing leaves it. The AI can be wrong, and it is
   never medical, legal, or professional advice."
 
-**No login until it matters.** On this computer, on loopback, the
-board opens without a password (Ollama has none either). The first
-time the person creates a client key for a tool, or switches on LAN
-access, the Stack asks them to set the operator password once, right
-there, and the admin routes require it from then on. The adult
-acknowledgment stays as one dialog before the first image or video,
-never a step.
-
-When the same page is opened from another device, the rule changes
-before any dashboard data loads: every route is the sign-in screen. If
-the host has no password yet, the phone says "Set the operator password
-on the computer that runs the Stack first." and shows no password
-field. LAN access cannot be opened into a pending restart until that
-password exists.
+**A password first, then everything (revised 2026-09-18, 23:40, the
+owner's call; this replaces "no login until it matters").** The first
+screen on a fresh install is one card: "Set the operator password", one
+field, one button, the one-line note about local AI beneath it. Nothing
+else renders and nothing else is fetched until it is set. From then on
+every route, on this computer or from another device, is the sign-in
+screen until the session exists; no dashboard data loads before it. The
+loopback exemption is gone: the console, the phone and the desktop app
+all sign in. Client keys are untouched: a tool's `/v1` calls carry its
+key, never the operator's session. The health probe stays open because
+service managers need it and it says nothing but "up". If the host has
+no password yet, a phone opening the page reads "Set the operator
+password on the computer that runs the Stack first." and shows no
+field; LAN access cannot be switched on until the password exists. The
+adult acknowledgment stays as one dialog before the first image or
+video, never a step.
 
 **Tester** appears on the board the moment the small set lands, so
 the first thing the person does with the Stack is talk to it.
