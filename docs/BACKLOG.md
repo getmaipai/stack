@@ -293,7 +293,7 @@ layer above; none adds a person or leaves the machine.
   role yields a health item with a fix; the nightly run is skipped
   while the person is active.
   Verified on main at 5c9b946.
-- [ ] **STACK-21 (M): What's new for your computer.** When the
+- [x] **STACK-21 (M): What's new for your computer.** When the
   Catalog's model index changes (a conditional GET, opt-in with the
   update check), tell the person which new models would run well on
   this machine and what they would gain, in one sentence each, with
@@ -305,6 +305,7 @@ layer above; none adds a person or leaves the machine.
   Design: `dev.md`, "What's new for your computer (STACK-21, 2026-09-19)".
   Out of scope: new person records or Home-side features.
   Exit: `bash scripts/check.sh`.
+  Verified on main after coordinator landing.
 - [x] **STACK-22 (M): the maintenance window.** Quiet hours the person
   sets once (default 2 to 5 in the morning): downloads, update checks,
   smoke tests, storage sweeps and benchmarks run then; heavy work

@@ -7600,12 +7600,85 @@
                         "checksEnabled",
                         "skipped"
                       ]
+                    },
+                    "recommendations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string"
+                          },
+                          "profile": {
+                            "type": "string",
+                            "enum": [
+                              "p16",
+                              "p32",
+                              "p64",
+                              "p128"
+                            ]
+                          },
+                          "quality": {
+                            "type": "integer"
+                          },
+                          "repo": {
+                            "type": "string"
+                          },
+                          "license": {
+                            "type": "string"
+                          },
+                          "revision": {
+                            "type": "string"
+                          },
+                          "engine": {
+                            "type": "string"
+                          },
+                          "download": {
+                            "type": "object",
+                            "properties": {
+                              "url": {
+                                "type": "string",
+                                "format": "uri"
+                              },
+                              "sha256": {
+                                "type": "string",
+                                "minLength": 64,
+                                "maxLength": 64
+                              },
+                              "approx_bytes": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "url",
+                              "sha256",
+                              "approx_bytes"
+                            ]
+                          },
+                          "sentence": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "role",
+                          "profile",
+                          "quality",
+                          "revision",
+                          "download",
+                          "sentence"
+                        ]
+                      }
                     }
                   },
                   "required": [
                     "app",
                     "engines",
-                    "models"
+                    "models",
+                    "recommendations"
                   ]
                 }
               }
@@ -7744,12 +7817,85 @@
                         "checksEnabled",
                         "skipped"
                       ]
+                    },
+                    "recommendations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string"
+                          },
+                          "profile": {
+                            "type": "string",
+                            "enum": [
+                              "p16",
+                              "p32",
+                              "p64",
+                              "p128"
+                            ]
+                          },
+                          "quality": {
+                            "type": "integer"
+                          },
+                          "repo": {
+                            "type": "string"
+                          },
+                          "license": {
+                            "type": "string"
+                          },
+                          "revision": {
+                            "type": "string"
+                          },
+                          "engine": {
+                            "type": "string"
+                          },
+                          "download": {
+                            "type": "object",
+                            "properties": {
+                              "url": {
+                                "type": "string",
+                                "format": "uri"
+                              },
+                              "sha256": {
+                                "type": "string",
+                                "minLength": 64,
+                                "maxLength": 64
+                              },
+                              "approx_bytes": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "url",
+                              "sha256",
+                              "approx_bytes"
+                            ]
+                          },
+                          "sentence": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "role",
+                          "profile",
+                          "quality",
+                          "revision",
+                          "download",
+                          "sentence"
+                        ]
+                      }
                     }
                   },
                   "required": [
                     "app",
                     "engines",
-                    "models"
+                    "models",
+                    "recommendations"
                   ]
                 }
               }

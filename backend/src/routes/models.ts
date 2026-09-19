@@ -12,6 +12,7 @@ import { invalidateStorageAccounting } from "@/lib/store/storage";
 import { showroom, showroomModels } from "@/showroom/fixture";
 import { modelsDir } from "@/lib/paths";
 import { STACK_CHAT_MODEL } from "@/lib/modelCatalog";
+import { catalogModelForId } from "@/updates/models";
 import { emit } from "@/lib/events";
 import { licenceInfo } from "@/lib/licences";
 
@@ -47,8 +48,9 @@ modelsRoutes.openapi(pullRoute, (c) => {
   const onProgress = ({ completedBytes, totalBytes, status }: { completedBytes: number; totalBytes: number; status: string }) => emit({ id: "job.progress", data: { job, model: body.id, completedBytes, totalBytes, percent: totalBytes ? Math.round(completedBytes / totalBytes * 100) : 0, status } });
   void (async () => {
     try {
-      if (body.source === "catalog" && body.id === STACK_CHAT_MODEL.id) {
-        await installCatalogModel(STACK_CHAT_MODEL, { destination: join(modelsDir, `${body.id}.gguf`), onProgress });
+      const catalogModel = body.id === STACK_CHAT_MODEL.id ? STACK_CHAT_MODEL : catalogModelForId(body.id);
+      if (body.source === "catalog" && catalogModel) {
+        await installCatalogModel(catalogModel, { destination: join(modelsDir, `${body.id}.gguf`), onProgress });
       } else {
         await installHuggingFaceModel({ id: body.id, roles: body.roles as never, repo: body.url!, revision: body.revision!, url: body.url, sha256: body.sha256, licence: body.licence }, { destination: join(modelsDir, `${body.id}.gguf`), onProgress });
       }

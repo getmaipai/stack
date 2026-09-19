@@ -13,9 +13,10 @@ export function setUpdatesEnabled(enabled: boolean): void { write("app", "enable
 export interface UpdateState { installed: string; available: string | null; notes: string | null; size: number | null; lastChecked: string | null; checksEnabled: boolean; skipped: boolean; }
 export function state(kind: UpdateClass): UpdateState { return { installed: read(kind, "installed") ?? version, available: read(kind, "available"), notes: read(kind, "notes"), size: read(kind, "size") ? Number(read(kind, "size")) : null, lastChecked: read(kind, "checked"), checksEnabled: updatesEnabled(), skipped: read(kind, "skipped") === "true" }; }
 export type UpdateFetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+export function conditionalHeaders(etag: string | null): Record<string, string> { return { "if-none-match": etag ?? "", "user-agent": `maipai-stack/${version} (${process.platform}-${process.arch})` }; }
 export async function check(kind: UpdateClass, fetcher: UpdateFetcher = fetch): Promise<UpdateState> {
   if (!updatesEnabled()) return state(kind);
-  const headers = { "if-none-match": read(kind, "etag") ?? "", "user-agent": `maipai-stack/${version} (${process.platform}-${process.arch})` };
+  const headers = conditionalHeaders(read(kind, "etag"));
   const response = await fetcher(MANIFEST_URLS[kind], { headers });
   if (response.status === 304) { write(kind, "checked", new Date().toISOString()); return state(kind); }
   if (!response.ok) throw new Error(`Update check returned ${response.status}`);

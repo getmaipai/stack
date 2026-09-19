@@ -13,7 +13,7 @@ Only explicitly enabled features can go out to the internet.
 
 | What | When it happens | What it carries | Who receives it |
 |---|---|---|---|
-| Checking for updates | Only if you switch it on in Settings, then about once a day | A `GET` with exactly `If-None-Match` and `User-Agent: maipai-stack/<version> (<os>-<arch>)`, no query string or identifier | The `app.json`, `engines.json`, and `models.json` release assets on GitHub |
+| Checking for updates | Only if you switch it on in Settings, then about once a day | A `GET` with exactly `If-None-Match` and `User-Agent: maipai-stack/<version> (<os>-<arch>)`, no query string or identifier | The `app.json`, `engines.json`, and `models.json` release assets and the Catalog model index on GitHub |
 | Searching or inspecting Hugging Face from Add | Only when you switch on Search Hugging Face in Settings and choose Search or Choose in the Add sheet | A `GET` with the search text or selected repository name, then its immutable revision and file list | `huggingface.co`, for model discovery only |
 | Downloading a model or an engine | Only when you pick one to install, or accept an update | The name of the file you asked for | Hugging Face, or the mirror you chose in Settings, straight from your computer |
 | Installing the Stack | Only when you run the one-line installer | The installer script | `https://getmaipai.github.io/stack/install.sh` |

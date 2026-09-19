@@ -9,3 +9,5 @@ export const MANIFEST_URLS: Record<UpdateClass, string> = {
   engines: "https://github.com/getmaipai/stack/releases/latest/download/engines.json",
   models: "https://github.com/getmaipai/stack/releases/latest/download/models.json",
 };
+
+export const MODEL_INDEX_URL = "https://github.com/getmaipai/catalog/releases/latest/download/model-index.json";

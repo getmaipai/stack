@@ -153,6 +153,9 @@ unreachable), which owns identity and renders the UI schema. A future
 The Catalog's `model` packages are the Stack's preferred model source:
 signed, with source, revision, checksum, licence and role declared in the
 manifest, so a model arrives with its provenance record complete. The
+Catalog publishes its model index as
+`https://github.com/getmaipai/catalog/releases/latest/download/model-index.json`.
+The Stack checks that static index only through its opt-in update path.
 Stack installs `model` packages and, for `voice` and `wakeword` packages,
 installs the model half and hands the runtime half to the client that
 loads it (Home's voice sidecar, the robot's body). Engine pins are the

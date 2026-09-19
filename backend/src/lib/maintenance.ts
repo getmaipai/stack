@@ -7,6 +7,7 @@ import { pruneUnreferenced } from "@/lib/store/manifests";
 import { runCheck } from "@/lib/checkMyStack";
 import { stackSettingValues } from "@/settings/stackKeys";
 import { check } from "@/updates/check";
+import { watchModels } from "@/updates/models";
 import { applyAvailableEngineUpdate, currentEngine } from "@/updates/engines";
 import { emit } from "@/lib/events";
 import { runWeeklyDigest } from "@/lib/digest";
@@ -36,7 +37,7 @@ export function nextMaintenanceRun(now: Date, start: string): Date { const next 
 // deliberately remain out of the registry until that feature has an owner.
 export function registeredMaintenanceJobs(settings: () => Record<string, string | number | boolean | string[]> = stackSettingValues): MaintenanceJob[] {
   return [
-    { kind: "update.check", run: async () => { await Promise.all([check("app"), check("engines"), check("models")]); } },
+    { kind: "update.check", run: async () => { await Promise.all([check("app"), check("engines"), watchModels()]); } },
     { kind: "engine.update", run: async () => {
       if (settings().autoUpdateEngines !== true) return;
       const previous = currentEngine("llama-server");
