@@ -1354,3 +1354,14 @@ this team.
   `docs/ux.md` and `docs/dev.md` first (how an adapter is verified,
   sized in the memory ledger, and shown in Live), then chunked. Not
   before v0.1.0.
+- [ ] **STACK-97 (S, review): look at intelinside.ai for style and function.**
+  Noted 2026-09-18 by the owner: https://www.intelinside.ai/ ("Local LLM
+  Benchmarks on Intel Hardware"). Open it in a browser (the page is
+  script-rendered; a plain fetch returns only the title), and write a
+  short note in `docs/plans/field-audit-2026-09.md` (create it as the
+  field audit's home if absent): what it shows per hardware and model
+  (tokens per second, memory, which engine), how it lays out dense
+  benchmark tables and hardware cards, and which of those belong in the
+  Stack's Monitoring page, speed test results and the Live GPU cards.
+  Output is a verdict per idea (adopt, adapt, skip) with a one-line
+  reason, plus backlog items for anything adopted. No code.
