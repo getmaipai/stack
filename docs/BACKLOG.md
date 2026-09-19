@@ -318,7 +318,7 @@ layer above; none adds a person or leaves the machine.
   The design record is `dev.md` "Maintenance": one local scheduler owns the
   window, macOS power is behind an adapter, and the download seam owns the
   cap. Exit: `bash scripts/check.sh`.
-- [ ] **STACK-23 (M): ready when you sit down.** Models unload after an
+- [x] **STACK-23 (M): ready when you sit down.** Models unload after an
   idle time the person sets; on battery they unload sooner; the chat
   model warms up before the hour the person usually uses it, learned
   from the Stack's own usage records on this machine (never sent
@@ -327,7 +327,7 @@ layer above; none adds a person or leaves the machine.
   hour; a battery event unloads a JIT model.
   Files: `backend/src/lib/governor.ts, backend/src/lib/series.ts`.
   Mirror: the current idle eviction rule.
-  Out of scope: new person records or Home-side features.
+  Out of scope: new person records or Home-side features. Verified on main at pending.
   Exit: `bash scripts/check.sh`.
 - [x] **STACK-24 (M): storage hygiene.** Find models unused for thirty
   days, duplicate files across tools, orphan blobs, old engine builds

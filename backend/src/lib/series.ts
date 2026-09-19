@@ -15,6 +15,28 @@ export function recordUsageSample(sample: Omit<UsageDeltaSample, "at"> & { at?: 
   db.insert(usageSamples).values({ at: sample.at ?? new Date().toISOString(), ability: sample.ability, clientId: sample.clientId, modelId: sample.modelId, requests: sample.requests, tokensIn: sample.tokensIn, tokensOut: sample.tokensOut, jobs: sample.jobs }).run();
 }
 
+export interface UsualChatHour { hour: number; days: number; requests: number; }
+
+// Usage is intentionally read in the Stack's local timezone. The warm-up is a
+// convenience for the person using this computer, not a portable profile.
+export function usualChatHour(now = new Date()): UsualChatHour | null {
+  const since = new Date(now); since.setDate(since.getDate() - 28);
+  const rows = db.select().from(usageSamples).where(gte(usageSamples.at, since.toISOString())).all()
+    .filter((row) => row.ability === "chat" && row.requests > 0);
+  const hours = new Map<number, { dates: Set<string>; requests: number }>();
+  for (const row of rows) {
+    const at = new Date(row.at); const hour = at.getHours();
+    const day = `${at.getFullYear()}-${at.getMonth()}-${at.getDate()}`;
+    const bucket = hours.get(hour) ?? { dates: new Set<string>(), requests: 0 };
+    bucket.dates.add(day); bucket.requests += row.requests; hours.set(hour, bucket);
+  }
+  const candidates = [...hours.entries()]
+    .filter(([, value]) => value.dates.size >= 3)
+    .map(([hour, value]) => ({ hour, days: value.dates.size, requests: value.requests }))
+    .sort((left, right) => right.requests - left.requests || right.days - left.days || left.hour - right.hour);
+  return candidates[0] ?? null;
+}
+
 export function recordMemorySample(sample: Omit<MemorySample, "at"> & { at?: string }): void {
   db.insert(memorySamples).values({ at: sample.at ?? new Date().toISOString(), totalBytes: sample.totalBytes, freeBytes: sample.freeBytes, availablePercent: Math.round(sample.availablePercent), pressure: sample.pressure, loadedBytes: sample.loadedBytes }).run();
 }

@@ -1131,6 +1131,27 @@ but do not make resource pressure safe. Downloads receive the configured
 cap at the streaming seam through a token bucket, rather than callers trying
 to pace individual requests.
 
+### Ready when you sit down (STACK-23, decided 2026-09-19)
+
+Chat unloads after 30 quiet minutes, or 10 minutes on battery, with both
+limits declared as local settings. A supervisor tick owns the unload so it
+can wait for active requests to finish and leaves the next request free to
+load chat again. The Stack never interprets an idle unload as an operator
+stop.
+
+The same local scheduler reads the last four weeks of `usage_samples` and
+chooses the local hour with the most chat requests only when that hour has
+appeared on at least three separate local days. Ten minutes before that hour,
+while the Stack is awake and on power, it loads chat if the person leaves the
+switch enabled. Monitoring names the learned hour and the warm-up time; the
+records and the setting stay on this machine, and no privacy-page row changes.
+
+We rejected a fixed daily warm-up because it would waste memory for people
+whose use varies, and a cloud-learned schedule because a local Stack has no
+reason to export its household's usage rhythm. We also rejected count-only
+learning without the three-day floor because one unusually busy day should not
+turn into a persistent background load.
+
 ### Known advisory: glib 0.18 in the desktop lockfile (2026-09-18)
 
 Dependabot alert 3 flags `glib < 0.20` in `desktop/src-tauri/Cargo.lock`.

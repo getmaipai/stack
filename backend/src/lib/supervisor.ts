@@ -519,6 +519,21 @@ export async function stopChatEngine(): Promise<void> {
   if (previous) await retireBackend(previous);
 }
 
+export async function unloadIdleChatEngine(options: { now?: Date; onBattery: boolean; idleMinutes: number; batteryIdleMinutes: number }): Promise<boolean> {
+  const backend = state.backend;
+  const last = state.lastRealRequestAt;
+  const idleMinutes = options.onBattery ? options.batteryIdleMinutes : options.idleMinutes;
+  const now = options.now ?? new Date();
+  if (!backend || backend.activeRequests > 0 || last === null || now.getTime() - last < idleMinutes * 60_000) return false;
+  state.generation++;
+  state.backend = null;
+  state.startingPromise = null;
+  state.status = { ...state.status, state: "installed", reason: `Unloaded after ${idleMinutes} minutes without a request.` };
+  emit({ id: "engine.state", data: { engine: "chat", state: "installed" as const } });
+  await retireBackend(backend);
+  return true;
+}
+
 export function reportChatEngineExited(reason = "The spawned engine exited unexpectedly."): void {
   const previous = state.backend;
   state.backend = null;

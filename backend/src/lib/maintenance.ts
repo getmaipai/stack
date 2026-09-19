@@ -10,6 +10,8 @@ import { check } from "@/updates/check";
 import { applyAvailableEngineUpdate, currentEngine } from "@/updates/engines";
 import { emit } from "@/lib/events";
 import { runWeeklyDigest } from "@/lib/digest";
+import { getChatBackend, unloadIdleChatEngine } from "@/lib/supervisor";
+import { usualChatHour } from "@/lib/series";
 
 export type MaintenanceJobKind = "update.check" | "engine.update" | "smoke.test" | "storage.sweep" | "benchmark" | "library.fetch" | "digest";
 export const MAINTENANCE_JOB_KINDS: MaintenanceJobKind[] = ["update.check", "engine.update", "smoke.test", "storage.sweep", "benchmark", "library.fetch", "digest"];
@@ -57,6 +59,16 @@ export class MaintenanceScheduler {
   private readonly options: Required<Pick<MaintenanceOptions, "clock" | "activity" | "battery" | "pressure" | "settings">> & Pick<MaintenanceOptions, "jobs">;
   constructor(options: MaintenanceOptions = {}) { const settings = options.settings ?? stackSettingValues; this.options = { clock: options.clock ?? systemClock, activity: options.activity ?? getActivityReader(), battery: options.battery ?? getBatteryReader(), pressure: options.pressure ?? (() => getGovernorStatus().pressure), settings, jobs: options.jobs ?? registeredMaintenanceJobs(settings) }; }
   nextRunAt(): string { const values = this.options.settings(); return nextMaintenanceRun(this.options.clock.now(), String(values.maintenanceStart ?? "02:00")).toISOString(); }
+  async tick(): Promise<void> {
+    const values = this.options.settings(); const now = this.options.clock.now();
+    await unloadIdleChatEngine({ now, onBattery: this.options.battery.onBattery(), idleMinutes: Number(values.idleUnloadMinutes ?? 30), batteryIdleMinutes: Number(values.idleUnloadOnBatteryMinutes ?? 10) });
+    if (values.chatWarmupEnabled !== true || this.options.battery.onBattery()) return;
+    const usual = usualChatHour(now);
+    if (!usual) return;
+    const warmupMinute = (usual.hour * 60 - 10 + 24 * 60) % (24 * 60);
+    if (now.getHours() * 60 + now.getMinutes() !== warmupMinute) return;
+    await getChatBackend();
+  }
   async run(force = false): Promise<MaintenanceResult> {
     const values = this.options.settings(); const now = this.options.clock.now(); const start = String(values.maintenanceStart ?? "02:00"); const end = String(values.maintenanceEnd ?? "05:00"); const nextRunAt = nextMaintenanceRun(now, start).toISOString();
     if (!force && !withinMaintenanceWindow(now, start, end)) return { state: "deferred", nextRunAt, ran: [], reason: "Outside the maintenance window." };
@@ -86,7 +98,7 @@ export function getMaintenanceScheduler(): MaintenanceScheduler { return schedul
 export function __setMaintenanceSchedulerForTests(value: MaintenanceScheduler): void { scheduler = value; }
 
 export function startMaintenanceScheduler(intervalMs = 60_000): () => void {
-  const timer = setInterval(() => { void scheduler.run().catch(() => {}); }, intervalMs);
+  const timer = setInterval(() => { void scheduler.tick().catch(() => {}); void scheduler.run().catch(() => {}); }, intervalMs);
   (timer as unknown as { unref?: () => void }).unref?.();
   return () => clearInterval(timer);
 }

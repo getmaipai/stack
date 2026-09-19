@@ -7,6 +7,7 @@ import {
   resetSupervisorForTests,
   restartChatEngine,
   setSupervisorFactoryForTests,
+  unloadIdleChatEngine,
   type ChatBackend,
   type EngineClient,
 } from "@/lib/supervisor";
@@ -194,6 +195,15 @@ test("a living engine's 500 is returned without retirement", async () => {
   expect((await completeChat("chat", {})).status).toBe(500);
   expect((await completeChat("chat", {})).status).toBe(200);
   expect(stopCalls).toBe(0);
+});
+
+test("battery idle policy unloads a just-in-time chat model sooner", async () => {
+  let stopped = 0;
+  const client: EngineClient = { baseUrl: "http://scripted", complete: async () => ({ status: 200, body: { ok: true } }), health: async () => true };
+  setSupervisorFactoryForTests(async () => backend(client, "spawned", async () => { stopped++; }));
+  await getChatBackend();
+  expect(await unloadIdleChatEngine({ now: new Date(Date.now() + 11 * 60_000), onBattery: true, idleMinutes: 30, batteryIdleMinutes: 10 })).toBe(true);
+  expect(stopped).toBe(1);
 });
 
 test("an aborted completion is a cancellation and does not retire the engine", async () => {

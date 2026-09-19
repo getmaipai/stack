@@ -6,12 +6,16 @@ import { resetEngineUpdateRunnerForTests, setEngineUpdateRunnerForTests, swapEng
 import { engineCurrentPath, engineTagRoot } from "@/lib/store/layout";
 import { __resetEventsForTests, listNotifications } from "@/lib/events";
 import { __resetStackSettingsForTests } from "@/settings/stackKeys";
+import { db } from "@/db";
+import { usageSamples } from "@/db/schema";
+import { recordUsageSample } from "@/lib/series";
+import { getChatBackend, resetSupervisorForTests, setSupervisorFactoryForTests, type ChatBackend } from "@/lib/supervisor";
 
 const clock = (hour: number, minute = 0) => ({ now: () => new Date(2026, 8, 18, hour, minute) });
 const quiet = { secondsSinceInput: () => 301 };
 const normal = { onBattery: () => false };
 
-afterEach(() => { setUpdatesEnabled(false); resetEngineUpdateRunnerForTests(); __resetEventsForTests(); __resetStackSettingsForTests(); rmSync(engineTagRoot("llama-server", "b10797").split(`/llama-server/`)[0] + "/llama-server", { recursive: true, force: true }); });
+afterEach(() => { setUpdatesEnabled(false); resetEngineUpdateRunnerForTests(); __resetEventsForTests(); __resetStackSettingsForTests(); resetSupervisorForTests(); setSupervisorFactoryForTests(null); db.delete(usageSamples).run(); rmSync(engineTagRoot("llama-server", "b10797").split(`/llama-server/`)[0] + "/llama-server", { recursive: true, force: true }); });
 
 test("maintenance runs registered jobs in order inside its window and defers outside", async () => {
   const ran: string[] = [];
@@ -39,6 +43,17 @@ test("maintenance window supports an overnight range", () => {
 
 test("maintenance declares every scheduled kind in its fixed order", () => {
   expect(MAINTENANCE_JOB_KINDS).toEqual(["update.check", "engine.update", "smoke.test", "storage.sweep", "benchmark", "library.fetch", "digest"]);
+});
+
+test("the local scheduler warms chat ten minutes before the learned hour", async () => {
+  for (const day of [1, 5, 12]) recordUsageSample({ at: new Date(2026, 8, day, 19).toISOString(), ability: "chat", clientId: null, modelId: "chat", requests: 1, tokensIn: 0, tokensOut: 0, jobs: 0 });
+  let loads = 0;
+  const backend: ChatBackend = { client: { baseUrl: "http://test", complete: async () => ({ status: 200, body: {} }), health: async () => true }, kind: "spawned", identity: { host: "local", build: "test", model: "chat", healthy: true }, pid: null, activeRequests: 0, retired: false, stop: async () => {} };
+  setSupervisorFactoryForTests(async () => { loads++; return backend; });
+  const scheduler = new MaintenanceScheduler({ clock: clock(18, 50), activity: quiet, battery: normal, pressure: () => "normal", settings: () => ({ chatWarmupEnabled: true, idleUnloadMinutes: 30, idleUnloadOnBatteryMinutes: 10 }) });
+  await scheduler.tick();
+  expect(loads).toBe(1);
+  await getChatBackend(); expect(loads).toBe(1);
 });
 
 async function stageAvailableEngine(): Promise<void> {

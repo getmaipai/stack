@@ -3103,6 +3103,55 @@
         }
       }
     },
+    "/stack/v1/ready": {
+      "get": {
+        "tags": [
+          "Monitoring"
+        ],
+        "summary": "Local chat readiness schedule",
+        "responses": {
+          "200": {
+            "description": "The optional local warm-up inferred from this Stack's usage records.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "warmup": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "hour": {
+                          "type": "integer"
+                        },
+                        "minute": {
+                          "type": "integer"
+                        },
+                        "days": {
+                          "type": "integer"
+                        },
+                        "requests": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "hour",
+                        "minute",
+                        "days",
+                        "requests"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "warmup"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/groups": {
       "get": {
         "tags": [
