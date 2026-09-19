@@ -18,7 +18,7 @@ its named check. Hard-won logic is copied from the hub's engine files
 (named per item) and re-read, never re-invented; feature scope and UI are
 never copied. No item migrates the hub until STACK-16.
 
-## Milestones in execution order (reviewed 2026-09-18)
+## Milestones in execution order (reviewed 2026-09-18, ticked 2026-09-19)
 
 The area lists below remain the dashboard's item records. Each open item
 has one destination here. The release milestone ships a usable Mac app;
@@ -1109,7 +1109,7 @@ move the Stack across its client boundary.
   Out of scope: a conversation history, person record or an
   unmeasured all-modality plan. Exit: `bash scripts/check.sh` and a
   recorded clean-install walk.
-- [ ] **STACK-80 (M): truthful model discovery and install metadata.**
+- [x] **STACK-80 (M): truthful model discovery and install metadata.**
   Separate opt-in Hugging Face search from update checks; resolve a
   selected repository to an immutable revision, actual files,
   licence and size before offering Install; prove the proposed role
@@ -1200,7 +1200,7 @@ move the Stack across its client boundary.
   gives search results instead of an invented repair. Out of
   scope: a dedicated helper model or outbound search. Exit:
   `bash scripts/check.sh`.
-- [ ] **STACK-86 (M): qualify the first Mac chat pin.** Resolve the
+- [x] **STACK-86 (M): qualify the first Mac chat pin.** Resolve the
   curated Qwen GGUF to an immutable Hub commit and exact file SHA-256;
   record licence, file and disk bytes, supported llama-server build,
   conservative memory estimate and a measured first-load result on the
@@ -1216,7 +1216,7 @@ move the Stack across its client boundary.
   pinned live pull and load. Reason: the first install needs an immutable,
   measured promise before the wider discovery work in STACK-80 and
   STACK-81.
-- [ ] **STACK-87 (M): make ready and current claims time-bound.** Tie
+- [x] **STACK-87 (M): make ready and current claims time-bound.** Tie
   the overview and tray's ready state to a recent authenticated request
   through the public chat role and expected engine/model identity; mark
   the result stale after a pin, model, engine or settings change. Distinguish
@@ -1282,7 +1282,7 @@ test is necessary but does not replace the named clean-account walk.
   a tampered or incompatible revision rolls back to the working model.
   Out of scope: automatic revision changes or a claim for every Hub repo.
   Exit: `bash scripts/check.sh` and the recorded C4 walk.
-- [ ] **STACK-93 (M): live samples, per process and per GPU.** ux.md "Live".
+- [x] **STACK-93 (M): live samples, per process and per GPU.** ux.md "Live".
   `backend/src/lib/live.ts`: a sampler every five seconds that reads each
   running engine's pid (`supervisor.ts`) for footprint and CPU share
   (`ps -o %cpu=,rss= -p`), every GPU by name with memory used of total and
@@ -1298,7 +1298,7 @@ test is necessary but does not replace the named clean-account walk.
   Mac shape (one GPU, null utilization when ioreg is absent), a two-GPU
   NVIDIA shape, and a client seen 4 minutes ago listed while one seen 6
   minutes ago is not. Out of scope: any UI. Exit: `bash scripts/check.sh`.
-- [ ] **STACK-94 (M): the Live section on Overview and the phone.** ux.md
+- [x] **STACK-94 (M): the Live section on Overview and the phone.** ux.md
   "Live" 1 and 2. Files: `frontend/src/pages/overview/*`, `frontend/src/
   kit/blocks/phone/*`, `frontend/src/lib/api.ts`. Engine rows, one card
   per GPU by name, a CPU and disk line, the clients-now list, fed by the
@@ -1306,7 +1306,7 @@ test is necessary but does not replace the named clean-account walk.
   the two-GPU shape renders two named cards; "not measured" for a null;
   a capture at desktop and phone widths opened and judged. Out of
   scope: controls (STACK-91). Exit: `bash scripts/check.sh`.
-- [ ] **STACK-95 (S): storage is every drive, filtered by a setting.**
+- [x] **STACK-95 (S): storage is every drive, filtered by a setting.**
   ux.md "Live" 4. Backend: `live.ts` (STACK-93) lists every user-visible
   mounted volume (`df -kP` behind the readers double; drop devfs, autofs,
   `/System/Volumes/*`, `/dev`, `/proc`, `/sys`, `/run`, snapshots) as
@@ -1320,7 +1320,7 @@ test is necessary but does not replace the named clean-account walk.
   three volumes and one system volume yields three drives; choosing two
   hides the third everywhere; an unmounted chosen drive shows "not
   mounted". Exit: `bash scripts/check.sh`.
-- [ ] **STACK-91 (M): monitor owned engines and detected hosts honestly.**
+- [x] **STACK-91 (M): monitor owned engines and detected hosts honestly.**
   Show identity, provenance, state and observed-at time for llama-server,
   mlx-serve, ComfyUI and detected local hosts where actually present.
   Enable start, stop and restart only for a Stack-owned llama process;
@@ -1335,7 +1335,7 @@ test is necessary but does not replace the named clean-account walk.
   without an attempted control call or false ready badge.
   Out of scope: installing, updating or controlling external processes.
   Exit: `bash scripts/check.sh` and the recorded C5 walk.
-- [ ] **STACK-92 (S): make every unavailable control honest.** Apply the
+- [x] **STACK-92 (S): make every unavailable control honest.** Apply the
   matrix's disabled-control inventory to the real console and phone;
   remove the media Tester placeholder action, cache-clearing no-op and
   actions that appear available without a qualified host. Files:
