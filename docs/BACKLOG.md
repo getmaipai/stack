@@ -1340,3 +1340,17 @@ update must fail safely before v0.1.0 promises updates. No item for
 universal control of third-party memory or automatic installs of every
 modality is opened: those promises have no bounded acceptance test for
 this team.
+
+## Future features (noted, not scheduled)
+
+- [ ] **STACK-96 (L, future): LoRA adapters for language models.** Noted
+  2026-09-18 by the owner: a person attaches a LoRA adapter to an
+  installed chat or coding model and the role serves it. Likely its own
+  section in the console (Adapters), an entry in the Add sheet (catalog
+  and Hugging Face, with the base model it fits stated), the row menu's
+  attach and detach, and the engine flags llama-server already takes
+  (`--lora`, `--lora-scaled`) behind the one arg builder
+  (`backend/src/lib/engineArgs.ts`). Needs its own design pass in
+  `docs/ux.md` and `docs/dev.md` first (how an adapter is verified,
+  sized in the memory ledger, and shown in Live), then chunked. Not
+  before v0.1.0.
