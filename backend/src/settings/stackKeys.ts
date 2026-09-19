@@ -6,27 +6,10 @@ import { hasOperator } from "@/lib/operator";
 import { setUpdatesEnabled, updatesEnabled } from "@/updates/check";
 import { defaultModelBudgetBytes, setGovernorMemorySettings } from "@/lib/governor";
 import type { EngineSettingDeclaration, EngineSettingValue } from "@/settings/engineKeys";
+export { STACK_SETTING_SECTIONS } from "@/settings/sections";
+import { STACK_SETTING_SECTIONS, type StackSectionId } from "@/settings/sections";
 
-export type StackSectionId = "general" | "memory" | "updates" | "backups" | "network" | "channels" | "alerts" | "storage" | "maintenance" | "engines" | "hardware" | "diagnostics" | "reset" | "helper";
-export interface StackSection { id: StackSectionId; title: string; icon: string; order: number; itemId?: string; computer?: boolean; }
 export interface StackSettingDeclaration extends EngineSettingDeclaration { section: StackSectionId; order: number; }
-
-export const STACK_SETTING_SECTIONS: StackSection[] = [
-  { id: "general", title: "General", icon: "Settings", order: 10 },
-  { id: "memory", title: "Memory", icon: "Gauge", order: 15 },
-  { id: "updates", title: "Updates", icon: "RefreshCw", order: 20 },
-  { id: "backups", title: "Backups", icon: "UploadCloud", order: 30, itemId: "STACK-11" },
-  { id: "network", title: "Network and access", icon: "ShieldCheck", order: 40 },
-  { id: "channels", title: "Alert channels", icon: "Bell", order: 50 },
-  { id: "alerts", title: "Alerts", icon: "BellRing", order: 55 },
-  { id: "storage", title: "Storage", icon: "Database", order: 60 },
-  { id: "maintenance", title: "Maintenance", icon: "Wrench", order: 70, itemId: "STACK-22" },
-  { id: "engines", title: "Engines", icon: "Cpu", order: 80 },
-  { id: "hardware", title: "Hardware", icon: "Monitor", order: 90, computer: true },
-  { id: "diagnostics", title: "Diagnostics", icon: "FileText", order: 100, computer: true },
-  { id: "reset", title: "Reset", icon: "RotateCcw", order: 110, computer: true },
-  { id: "helper", title: "Helper", icon: "MessageCircle", order: 120 },
-];
 
 export const STACK_SETTINGS: StackSettingDeclaration[] = [
   { key: "modelBudgetBytes", type: "number", default: defaultModelBudgetBytes(), label: "Memory for models", help: "The maximum memory the Stack may use for loaded models. The rest stays available for your Mac.", group: "Model budget", disclosure: "basic", needsRestart: false, range: { min: 0, max: defaultModelBudgetBytes() + 8 * 1_073_741_824 }, section: "memory", order: 10 },

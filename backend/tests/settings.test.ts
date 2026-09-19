@@ -4,8 +4,14 @@ import { setUpdatesEnabled } from "@/updates/check";
 import { __resetStackSettingsForTests } from "@/settings/stackKeys";
 import { getGovernorStatus } from "@/lib/governor";
 import { __resetOperatorForTests } from "@/lib/operator";
+import { STACK_SETTING_SECTIONS } from "@/settings/stackKeys";
+import { iconNames } from "../../frontend/src/kit/icons";
 
 afterEach(() => { setUpdatesEnabled(false); __resetStackSettingsForTests(); __resetOperatorForTests(); });
+
+test("every declared settings section icon is available to the frontend", () => {
+  expect(STACK_SETTING_SECTIONS.map((section) => section.icon).every((icon) => iconNames.includes(icon as typeof iconNames[number]))).toBe(true);
+});
 
 test("Stack settings route serves grouped declarations and keeps LAN access pending until restart", async () => {
   const response = await app.request("/stack/v1/settings");

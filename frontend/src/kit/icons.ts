@@ -1,0 +1,7 @@
+import { Activity, ArrowDown, ArrowUp, Bell, BellRing, Bot, Box, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Cpu, Database, Download, ExternalLink, FileKey2, FileText, Filter, Folder, Gauge, History, Info, KeyRound, LayoutDashboard, LayoutList, LoaderCircle, Lock, LogOut, MessageCircle, MessageSquare, Mic, Monitor, Moon, MoreHorizontal, Pencil, Play, Plus, RefreshCw, RotateCcw, Search, Send, Server, Settings, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, Square, Sun, UploadCloud, Volume2, Wrench } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+export type Icon = LucideIcon;
+export type IconName = keyof typeof icons;
+export const icons = { Activity, ArrowDown, ArrowUp, Bell, BellRing, Bot, Box, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Cpu, Database, Download, ExternalLink, FileKey2, FileText, Filter, Folder, Gauge, History, Info, KeyRound, LayoutDashboard, LayoutList, LoaderCircle, Lock, LogOut, MessageCircle, MessageSquare, Mic, Monitor, Moon, MoreHorizontal, Pencil, Play, Plus, RefreshCw, RotateCcw, Search, Send, Server, Settings, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, Square, Sun, UploadCloud, Volume2, Wrench } as const;
+export const iconNames = Object.keys(icons) as IconName[];
+export function getIcon(name: string): LucideIcon { const icon = icons[name as IconName]; if (!icon) console.warn(`Unknown icon: ${name}`); return icon ?? Box; }

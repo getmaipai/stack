@@ -14,12 +14,14 @@ import type { SectionFrameComponent } from "@/pages/DashboardShell";
 import { GroupsSection } from "@/pages/settings/GroupsSection";
 import { isDesktop, launchAtLoginEnabled, setLaunchAtLogin } from "@/kit/host";
 import { sentenceFor } from "@/lib/unavailable";
+import { STACK_SETTING_SECTIONS } from "../../../backend/src/settings/sections";
 
 type SettingValue = string | number | boolean | string[];
 type IndexResponse = { sections: StackSettingSection[]; settings: Array<{ key: string; label: string; help: string; level: string; section: string; order: number; path: string }> };
 
 const fallbackSections: StackSettingSection[] = [
-  { id: "general", title: "General", icon: "Settings", order: 10 }, { id: "updates", title: "Updates", icon: "RefreshCw", order: 20 }, { id: "backups", title: "Backups", icon: "UploadCloud", order: 30, itemId: "STACK-11" }, { id: "network", title: "Network and access", icon: "ShieldCheck", order: 40 }, { id: "channels", title: "Alert channels", icon: "Bell", order: 50 }, { id: "storage", title: "Storage", icon: "Database", order: 60 }, { id: "groups", title: "Groups", icon: "Folder", order: 65 }, { id: "maintenance", title: "Maintenance", icon: "Wrench", order: 70, itemId: "STACK-22" }, { id: "engines", title: "Engines", icon: "Cpu", order: 80 }, { id: "hardware", title: "Hardware", icon: "Monitor", order: 90, computer: true }, { id: "diagnostics", title: "Diagnostics", icon: "FileText", order: 100, computer: true }, { id: "reset", title: "Reset", icon: "RotateCcw", order: 110, computer: true },
+  ...STACK_SETTING_SECTIONS,
+  { id: "groups", title: "Groups", icon: "Folder", order: 65 },
 ];
 
 const placeholder = (key: string, label: string, help: string, section: string): EngineSetting => ({ key, type: "text", default: "", label, help, disclosure: "basic", needsRestart: false, inEffect: "", pending: null, section });
