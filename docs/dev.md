@@ -1108,6 +1108,16 @@ but do not make resource pressure safe. Downloads receive the configured
 cap at the streaming seam through a token bucket, rather than callers trying
 to pace individual requests.
 
+### Known advisory: glib 0.18 in the desktop lockfile (2026-09-18)
+
+Dependabot alert 3 flags `glib < 0.20` in `desktop/src-tauri/Cargo.lock`.
+`cargo tree -i glib` shows it is pulled only by `gtk 0.18`, which Tauri
+2.11 pins (`glib ^0.18`); `cargo update -p glib --precise 0.20.0` cannot
+select it. The crate compiles only for Linux targets, the Mac build never
+touches it, and the first release ships for the Mac. The alert is
+dismissed as tolerable risk with this note; the monthly dependency sweep
+covers `Cargo.lock` and re-checks it on every Tauri bump.
+
 ## Native console authentication (decided 2026-09-18 review)
 
 The Tauri process is a local observer, not a second privileged API
