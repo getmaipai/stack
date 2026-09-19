@@ -49,13 +49,14 @@ export const STACK_SETTINGS: StackSettingDeclaration[] = [
   { key: "downloadCapMbps", type: "number", default: 0, label: "Download cap", help: "Maximum download speed in Mbps. Zero means no cap.", group: "Maintenance window", disclosure: "basic", needsRestart: false, range: { min: 0, max: 10000 }, section: "maintenance", order: 30 },
   { key: "logLevel", type: "enum", default: "info", label: "Log level", help: "How much diagnostic detail to keep in local logs.", group: "Diagnostics", disclosure: "basic", needsRestart: false, options: [{ value: "error", label: "Errors" }, { value: "warn", label: "Warnings" }, { value: "info", label: "Info" }, { value: "debug", label: "Debug" }], section: "diagnostics", order: 10 },
   { key: "huggingFaceEndpoint", type: "text", default: "https://huggingface.co", label: "Hugging Face endpoint", help: "Where Hugging Face model downloads come from. Point it at a mirror you run or trust to keep model traffic off the public internet.", group: "Storage", disclosure: "advanced", needsRestart: false, section: "storage", order: 20 },
+  { key: "storageDrives", type: "text", default: "all", label: "Drives shown", help: "Which mounted drives the Stack shows. Set to all, or a comma-separated list of mount paths.", group: "Storage", disclosure: "basic", needsRestart: false, section: "storage", order: 30 },
 ];
 
 function metaKey(key: string, state: "inEffect" | "pending"): string { return `settings.stack.${key}.${state}`; }
 function read(key: string): string | null { return db.select({ value: meta.value }).from(meta).where(eq(meta.key, key)).get()?.value ?? null; }
 function write(key: string, value: unknown): void { db.insert(meta).values({ key, value: JSON.stringify(value) }).onConflictDoUpdate({ target: meta.key, set: { value: JSON.stringify(value) } }).run(); }
 function clear(key: string): void { db.delete(meta).where(eq(meta.key, key)).run(); }
-function decode(value: string | null, declaration: EngineSettingDeclaration): number | boolean | string { if (value === null) return declaration.default; try { return JSON.parse(value) as number | boolean | string; } catch { return declaration.default; } }
+function decode(value: string | null, declaration: EngineSettingDeclaration): number | boolean | string | string[] { if (value === null) return declaration.default; let parsed: unknown; try { parsed = JSON.parse(value); } catch { parsed = value; } if (declaration.key === "storageDrives") { if (parsed === "all") return "all"; if (typeof parsed === "string") { const parts = parsed.split(",").map((item) => item.trim()).filter(Boolean); return parts.length > 0 ? parts : "all"; } if (Array.isArray(parsed)) { const parts = parsed.filter((item): item is string => typeof item === "string"); return parts.length > 0 ? parts : "all"; } return "all"; } return (typeof parsed === "number" || typeof parsed === "boolean" || typeof parsed === "string") ? parsed : declaration.default; }
 function valueSchema(declaration: EngineSettingDeclaration): z.ZodTypeAny {
   if (declaration.type === "boolean") return z.boolean();
   if (declaration.type === "number") return z.number().int().min(declaration.range?.min ?? Number.MIN_SAFE_INTEGER).max(declaration.range?.max ?? Number.MAX_SAFE_INTEGER);
@@ -63,7 +64,7 @@ function valueSchema(declaration: EngineSettingDeclaration): z.ZodTypeAny {
   return z.string();
 }
 
-function inEffect(declaration: EngineSettingDeclaration): number | boolean | string {
+function inEffect(declaration: EngineSettingDeclaration): number | boolean | string | string[] {
   if (declaration.key === "updatesEnabled") return updatesEnabled();
   return decode(read(metaKey(declaration.key, "inEffect")), declaration);
 }
@@ -99,7 +100,7 @@ export function activateStackConfig(): void {
   }
 }
 
-export function stackSettingValues(): Record<string, number | boolean | string> {
+export function stackSettingValues(): Record<string, number | boolean | string | string[]> {
   return Object.fromEntries(readStackConfig().map((setting) => [setting.key, setting.inEffect]));
 }
 

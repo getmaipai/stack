@@ -152,6 +152,36 @@
                         },
                         "osVersion": {
                           "type": "string"
+                        },
+                        "drives": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "mount": {
+                                "type": "string"
+                              },
+                              "usedBytes": {
+                                "type": "number"
+                              },
+                              "totalBytes": {
+                                "type": "number"
+                              },
+                              "mounted": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "mount",
+                              "usedBytes",
+                              "totalBytes",
+                              "mounted"
+                            ]
+                          }
                         }
                       },
                       "required": [
@@ -165,7 +195,8 @@
                         "cudaDevices",
                         "freeDiskBytes",
                         "totalDiskBytes",
-                        "osVersion"
+                        "osVersion",
+                        "drives"
                       ]
                     },
                     "proposed": {
@@ -684,6 +715,12 @@
                               },
                               {
                                 "type": "boolean"
+                              },
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
                               }
                             ]
                           },
@@ -697,6 +734,12 @@
                               },
                               {
                                 "type": "boolean"
+                              },
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
                               },
                               {
                                 "nullable": true
@@ -7698,6 +7741,12 @@
                               },
                               {
                                 "type": "boolean"
+                              },
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
                               }
                             ]
                           },
@@ -7711,6 +7760,12 @@
                               },
                               {
                                 "type": "boolean"
+                              },
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
                               },
                               {
                                 "nullable": true
@@ -7863,6 +7918,12 @@
                               },
                               {
                                 "type": "boolean"
+                              },
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
                               }
                             ]
                           },
@@ -7876,6 +7937,12 @@
                               },
                               {
                                 "type": "boolean"
+                              },
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
                               },
                               {
                                 "nullable": true
@@ -8088,6 +8155,12 @@
                               },
                               {
                                 "type": "boolean"
+                              },
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
                               }
                             ]
                           },
@@ -8101,6 +8174,12 @@
                               },
                               {
                                 "type": "boolean"
+                              },
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
                               },
                               {
                                 "nullable": true
@@ -8603,17 +8682,25 @@
                               "name": {
                                 "type": "string"
                               },
+                              "mount": {
+                                "type": "string"
+                              },
                               "usedBytes": {
                                 "type": "number"
                               },
                               "totalBytes": {
                                 "type": "number"
+                              },
+                              "mounted": {
+                                "type": "boolean"
                               }
                             },
                             "required": [
                               "name",
+                              "mount",
                               "usedBytes",
-                              "totalBytes"
+                              "totalBytes",
+                              "mounted"
                             ]
                           }
                         },

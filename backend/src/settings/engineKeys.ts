@@ -49,7 +49,7 @@ function read(key: string): string | null { return db.select({ value: meta.value
 function write(key: string, value: unknown): void { db.insert(meta).values({ key, value: JSON.stringify(value) }).onConflictDoUpdate({ target: meta.key, set: { value: JSON.stringify(value) } }).run(); }
 function decode(value: string | null, declaration: EngineSettingDeclaration): unknown { if (value === null) return declaration.default; try { return JSON.parse(value); } catch { return declaration.default; } }
 
-export interface EngineSettingValue extends EngineSettingDeclaration { inEffect: number | boolean | string; pending: number | boolean | string | null; }
+export interface EngineSettingValue extends EngineSettingDeclaration { inEffect: number | boolean | string | string[]; pending: number | boolean | string | string[] | null; }
 
 export function declarationsFor(name: string, kind: EngineKind = name === "llama-server" ? "llama-server" : "managed"): EngineSettingDeclaration[] {
   return ENGINE_SETTINGS[kind].map((entry) => ({ ...entry, key: entry.key }));
@@ -96,7 +96,7 @@ export function activateEngineConfig(name: string, kind?: EngineKind): EngineSet
   return readEngineConfig(name, kind);
 }
 
-export function settingValues(name: string, kind?: EngineKind): Record<string, number | boolean | string> {
+export function settingValues(name: string, kind?: EngineKind): Record<string, number | boolean | string | string[]> {
   return Object.fromEntries(readEngineConfig(name, kind).map((entry) => [entry.key, entry.inEffect]));
 }
 

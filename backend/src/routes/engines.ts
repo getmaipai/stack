@@ -85,7 +85,7 @@ export function engineStorageTag(name: string, tag: string): string {
 const settingSchema = z.object({
   key: z.string(), type: z.enum(["number", "boolean", "text", "enum"]), default: z.union([z.string(), z.number(), z.boolean()]), group: z.string().optional(), options: z.array(z.object({ value: z.string(), label: z.string() })).optional(),
   label: z.string(), help: z.string(), disclosure: z.enum(["basic", "advanced", "developer"]), needsRestart: z.boolean(),
-  range: z.object({ min: z.number().optional(), max: z.number().optional() }).optional(), inEffect: z.union([z.string(), z.number(), z.boolean()]), pending: z.union([z.string(), z.number(), z.boolean()]).nullable(),
+  range: z.object({ min: z.number().optional(), max: z.number().optional() }).optional(), inEffect: z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]), pending: z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]).nullable(),
 });
 const configRoute = createRoute({
   method: "get", path: "/{name}/config", tags: ["Engines"], summary: "Read engine configuration", middleware: [requireOperator] as const,

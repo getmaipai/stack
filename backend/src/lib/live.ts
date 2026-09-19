@@ -4,6 +4,7 @@ import { getChatEngineStatus, getChatBackend, measureProcessMemoryBytes } from "
 import { listClients } from "@/lib/clients";
 import { emit } from "@/lib/events";
 import { dataDir } from "@/lib/paths";
+import { stackSettingValues } from "@/settings/stackKeys";
 
 export interface LiveGpu {
   name: string;
@@ -25,8 +26,10 @@ export interface LiveProcess {
 
 export interface LiveDrive {
   name: string;
+  mount: string;
   usedBytes: number;
   totalBytes: number;
+  mounted: boolean;
 }
 
 export interface LiveClient {
@@ -145,19 +148,58 @@ function parseMacGpu(systemProfilerOutput: string, ioregOutput: string): LiveGpu
   return { name: name ?? "", memoryUsedBytes: null, memoryTotalBytes: null, utilization };
 }
 
+function driveName(mount: string): string {
+  if (mount === "/") return "Macintosh HD";
+  const segments = mount.replace(/^\//, "").split("/");
+  const last = segments[segments.length - 1] ?? "";
+  return last || mount;
+}
+
+function isUserVisibleVolume(mount: string): boolean {
+  if (!mount) return false;
+  if (mount === "/") return true;
+  if (mount.startsWith("/dev/") || mount.startsWith("/proc/") || mount.startsWith("/sys/") || mount.startsWith("/run/")) return false;
+  if (mount.startsWith("/System/Volumes/VM")) return false;
+  if (mount.startsWith("/Volumes/") || mount.startsWith("/System/Volumes/")) return true;
+  return false;
+}
+
 function parseDf(output: string): LiveDrive[] {
   const lines = output.trim().split("\n");
   if (lines.length < 2) return [];
   const header = (lines[0] ?? "").split(/\s+/);
-  const dataLine = lines[1] ?? "";
-  const fields = dataLine.split(/\s+/);
   const usedIdx = header.findIndex((h) => h === "Used");
   const totalIdx = header.findIndex((h) => h === "Avail" || h === "1024-blocks");
-  const used = usedIdx >= 0 && fields[usedIdx] !== undefined ? Number(fields[usedIdx]) : 0;
-  const total = totalIdx >= 0 && fields[totalIdx] !== undefined ? Number(fields[totalIdx]) : 0;
-  const name = (fields[0] ?? "").replace(/^\//, "");
-  if (!name || name === "Filesystem" || name.startsWith("/dev/")) return [];
-  return [{ name, usedBytes: used * 1024, totalBytes: total * 1024 }];
+  const drives: LiveDrive[] = [];
+  for (const line of lines.slice(1)) {
+    const fields = line.trim().split(/\s+/);
+    if (fields.length === 0) continue;
+    const mount = fields[fields.length - 1] ?? "";
+    if (!isUserVisibleVolume(mount)) continue;
+    const used = usedIdx >= 0 && fields[usedIdx] !== undefined ? Number(fields[usedIdx]) : 0;
+    const total = totalIdx >= 0 && fields[totalIdx] !== undefined ? Number(fields[totalIdx]) : 0;
+    drives.push({ name: driveName(mount), mount, usedBytes: used * 1024, totalBytes: total * 1024, mounted: true });
+  }
+  return drives;
+}
+
+function driveFilter(): "all" | string[] {
+  const raw = stackSettingValues().storageDrives;
+  if (typeof raw === "string" && raw === "all") return "all";
+  if (typeof raw === "string") return [raw];
+  if (Array.isArray(raw)) return raw;
+  return "all";
+}
+
+function filterDrives(drives: LiveDrive[]): LiveDrive[] {
+  const filter = driveFilter();
+  const mountedMounts = new Set(drives.map((d) => d.mount));
+  const chosen = filter === "all"
+    ? drives
+    : drives.filter((d) => filter.includes(d.mount));
+  const chosenSet = new Set(chosen.map((d) => d.mount));
+  const unmounted = filter === "all" ? [] : filter.filter((m) => !mountedMounts.has(m)).map((m) => ({ name: driveName(m), mount: m, usedBytes: 0, totalBytes: 0, mounted: false }));
+  return [...chosen, ...unmounted.filter((u) => !chosenSet.has(u.mount))];
 }
 
 export async function collectSample(): Promise<LiveSample> {
@@ -204,7 +246,7 @@ export async function collectSample(): Promise<LiveSample> {
 
   const dfResult = await readers.df().catch(() => null);
   const dfOutput = dfResult ? dfResult.stdout : "";
-  const drives = parseDf(dfOutput);
+  const drives = filterDrives(parseDf(dfOutput));
 
   const now = new Date();
   const fiveMinutesAgoMs = now.getTime() - 5 * 60 * 1000;

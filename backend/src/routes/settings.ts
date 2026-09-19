@@ -7,7 +7,7 @@ import { getMaintenanceScheduler } from "@/lib/maintenance";
 const settingSchema = z.object({
   key: z.string(), type: z.enum(["number", "boolean", "text", "secret", "password", "enum"]), default: z.union([z.string(), z.number(), z.boolean()]), group: z.string().optional(), options: z.array(z.object({ value: z.string(), label: z.string() })).optional(), section: z.string().optional(), order: z.number().optional(),
   label: z.string(), help: z.string(), disclosure: z.enum(["basic", "advanced", "developer"]), needsRestart: z.boolean(), range: z.object({ min: z.number().optional(), max: z.number().optional() }).optional(),
-  inEffect: z.union([z.string(), z.number(), z.boolean()]), pending: z.union([z.string(), z.number(), z.boolean()]).nullable(),
+  inEffect: z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]), pending: z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]).nullable(),
 });
 
 const readRoute = createRoute({ method: "get", path: "/", tags: ["Settings"], summary: "Read Stack settings", middleware: [requireOperator] as const, responses: { 200: { content: { "application/json": { schema: z.object({ settings: z.array(settingSchema) }) } }, description: "Declared and effective Stack settings." } } });

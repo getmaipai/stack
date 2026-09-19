@@ -3,6 +3,7 @@ import { app } from "@/app";
 import { __resetLiveForTests, __setLiveReadersForTests, collectSample, getLastLiveSample, startLiveSampler, stopLiveSampler } from "@/lib/live";
 import { __resetEventsForTests, eventsAfter } from "@/lib/events";
 import { getChatBackend, setSupervisorFactoryForTests } from "@/lib/supervisor";
+import { __resetStackSettingsForTests, updateStackConfig } from "@/settings/stackKeys";
 import { testClientHeaders } from "./authTest";
 
 function macReaders() {
@@ -17,7 +18,7 @@ function macReaders() {
       stdout: "+- Root | IOAccelerator\n  | \"Device Utilization %\" = 42\n",
       stderr: "",
     }),
-    df: async () => ({ stdout: "Filesystem      1024-blocks      Used      Avail\n/dev/disk3s1     500000000  100000000  400000000\n", stderr: "" }),
+    df: async () => ({ stdout: "Filesystem      1024-blocks      Used      Avail      Mounted on\n/dev/disk3s1    500000000  100000000  400000000 /System/Volumes/Data\n/dev/disk4     300000000   50000000  250000000 /Volumes/photo\n/dev/disk5     200000000   10000000  190000000 /Volumes/UTM\n/dev/disk6     400000000   20000000  380000000 /System/Volumes/VM\n", stderr: "" }),
   };
 }
 
@@ -25,6 +26,7 @@ beforeEach(() => {
   __resetLiveForTests();
   __resetEventsForTests();
   setSupervisorFactoryForTests(null);
+  __resetStackSettingsForTests();
 });
 
 test("a running process uses the supervisor port and an ISO start time", async () => {
@@ -86,4 +88,40 @@ test("GET /stack/v1/live returns an empty sample before the first tick", async (
   const body = await response.json() as { live: { processes: unknown[]; gpus: unknown[] } };
   expect(body.live.processes).toEqual([]);
   expect(body.live.gpus).toEqual([]);
+});
+
+test("the sampler lists every user-visible mounted volume and drops system volumes", async () => {
+  __setLiveReadersForTests(macReaders());
+  const sample = await collectSample();
+  const mounts = sample.drives.map((d) => d.mount).sort();
+  expect(mounts).toEqual(["/System/Volumes/Data", "/Volumes/UTM", "/Volumes/photo"]);
+  for (const drive of sample.drives) {
+    expect(drive.mounted).toBe(true);
+    expect(drive.name).toBe(drive.mount.replace(/^\//, "").split("/").slice(-1)[0] ?? drive.mount);
+  }
+  const photo = sample.drives.find((d) => d.mount === "/Volumes/photo");
+  expect(photo?.name).toBe("photo");
+  expect(photo?.totalBytes).toBe(300_000_000 * 1024);
+  expect(photo?.usedBytes).toBe(50_000_000 * 1024);
+});
+
+test("a storageDrives setting hides the drives it does not choose, everywhere the sampler reports", async () => {
+  __setLiveReadersForTests(macReaders());
+  updateStackConfig({ storageDrives: "/Volumes/photo,/Volumes/UTM" });
+  const sample = await collectSample();
+  const mounts = sample.drives.map((d) => d.mount).sort();
+  expect(mounts).toEqual(["/Volumes/UTM", "/Volumes/photo"]);
+  expect(sample.drives.some((d) => d.mount === "/System/Volumes/Data")).toBe(false);
+});
+
+test("an unmounted chosen drive is returned with mounted false and zero sizes", async () => {
+  __setLiveReadersForTests(macReaders());
+  updateStackConfig({ storageDrives: "/Volumes/photo,/Volumes/UTM,/Volumes/gone" });
+  const sample = await collectSample();
+  const gone = sample.drives.find((d) => d.mount === "/Volumes/gone");
+  expect(gone).not.toBe(undefined);
+  expect(gone?.mounted).toBe(false);
+  expect(gone?.usedBytes).toBe(0);
+  expect(gone?.totalBytes).toBe(0);
+  expect(gone?.name).toBe("gone");
 });

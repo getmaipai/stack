@@ -14,7 +14,7 @@ export interface MaintenanceJob { kind: MaintenanceJobKind; run(signal: AbortSig
 export interface Clock { now(): Date; }
 export interface BatteryReader { onBattery(): boolean; }
 export interface MaintenanceResult { state: "ran" | "deferred" | "paused"; nextRunAt: string; ran: MaintenanceJobKind[]; reason?: string; }
-export interface MaintenanceOptions { clock?: Clock; activity?: ActivityReader; battery?: BatteryReader; pressure?: () => "normal" | "warn" | "critical"; settings?: () => Record<string, string | number | boolean>; jobs?: MaintenanceJob[]; }
+export interface MaintenanceOptions { clock?: Clock; activity?: ActivityReader; battery?: BatteryReader; pressure?: () => "normal" | "warn" | "critical"; settings?: () => Record<string, string | number | boolean | string[]>; jobs?: MaintenanceJob[]; }
 
 const systemClock: Clock = { now: () => new Date() };
 export function getBatteryReader(): BatteryReader {

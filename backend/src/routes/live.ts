@@ -24,8 +24,10 @@ const liveProcessSchema = z.object({
 
 const liveDriveSchema = z.object({
   name: z.string(),
+  mount: z.string(),
   usedBytes: z.number(),
   totalBytes: z.number(),
+  mounted: z.boolean(),
 });
 
 const liveClientSchema = z.object({

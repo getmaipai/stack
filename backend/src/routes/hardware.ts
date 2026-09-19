@@ -4,6 +4,7 @@ import { requireClientOrOperator } from "@/lib/clients";
 import { detectHardware } from "@/lib/hardware";
 import { PROFILE_TIERS, proposeProfile, type ProfileTier, type RoleId } from "@/profiles";
 import { showroom, showroomHardware, showroomProfile } from "@/showroom/fixture";
+import { getLastLiveSample } from "@/lib/live";
 
 const RoleIdSchema = z.enum(["chat", "coding", "judge", "router", "embed", "rerank", "vision", "stt", "tts", "wakeword", "image", "video", "music"]);
 const CudaDeviceSchema = z.object({
@@ -25,6 +26,7 @@ const HardwareInfoSchema = z.object({
   freeDiskBytes: z.number(),
   totalDiskBytes: z.number(),
   osVersion: z.string(),
+  drives: z.array(z.object({ name: z.string(), mount: z.string(), usedBytes: z.number(), totalBytes: z.number(), mounted: z.boolean() })),
 });
 const ProfileTierSchema = z.object({
   id: z.enum(["p16", "p32", "p64", "p128"]),
@@ -64,7 +66,9 @@ export const hardwareRoutes = apiRouter();
 hardwareRoutes.openapi(hardwareRoute, async (c) => {
   if (showroom()) return c.json({ hardware: showroomHardware, proposed: showroomProfile, tiers: PROFILE_TIERS } as never, 200);
   const hardware = await detectHardware();
-  return c.json({ hardware: { ...hardware, computerName: hardware.computerName ?? "This computer", totalDiskBytes: hardware.totalDiskBytes ?? 0 }, proposed: proposeProfile(hardware), tiers: PROFILE_TIERS }, 200);
+  const sample = getLastLiveSample();
+  const drives = sample?.drives ?? [];
+  return c.json({ hardware: { ...hardware, computerName: hardware.computerName ?? "This computer", totalDiskBytes: hardware.totalDiskBytes ?? 0, drives }, proposed: proposeProfile(hardware), tiers: PROFILE_TIERS }, 200);
 });
 
 export type { ProfileTier, RoleId };

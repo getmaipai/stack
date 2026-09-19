@@ -7,7 +7,7 @@ export interface LlamaServerArgsOptions {
   modelPath: string;
   port: number;
   /** The declared engine settings: what settingValues returns. */
-  config: Record<string, number | boolean | string>;
+  config: Record<string, number | boolean | string | string[]>;
   /** The context length the spawn and the post-load check both use. */
   contextLength: number;
   /** KV cache quantization, on by default on Apple silicon. */
