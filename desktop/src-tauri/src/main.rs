@@ -2,19 +2,32 @@
 
 use std::{path::PathBuf, thread, time::Duration};
 
-use serde_json::Value;
+use serde::Deserialize;
 use tauri::{
     image::Image,
     menu::{MenuBuilder, MenuItem, MenuItemBuilder},
     webview::WebviewWindowBuilder,
-    AppHandle, Manager, Url, WebviewUrl,
+    AppHandle, Emitter, Manager, Url, WebviewUrl,
 };
 use tauri_plugin_autostart::MacosLauncher;
-use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_shell::ShellExt;
 
 const DAEMON_URL: &str = "http://127.0.0.1:8770";
 const SERVICE_LABEL: &str = "com.maipai.stack";
+
+#[derive(Clone)]
+struct TrayControls {
+    status: MenuItem<tauri::Wry>,
+    action: MenuItem<tauri::Wry>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TraySnapshot {
+    signed_in: bool,
+    status: Option<String>,
+    severity: Option<String>,
+}
 
 #[tauri::command]
 fn launch_agent_path() -> PathBuf {
@@ -36,6 +49,23 @@ fn run_sidecar(app: &AppHandle, args: &[&str]) -> Result<(), String> {
 #[tauri::command]
 fn start_daemon(app: AppHandle) -> Result<(), String> {
     run_sidecar(&app, &["start-service"])
+}
+
+#[tauri::command]
+fn set_tray_state(app: AppHandle, snapshot: TraySnapshot) {
+    let controls = app.state::<TrayControls>();
+    if !snapshot.signed_in {
+        let _ = controls.status.set_text("Sign in");
+        let _ = controls.action.set_text("Sign in");
+        let _ = controls.action.set_enabled(true);
+        set_tray_health(&app, "offline");
+        return;
+    }
+    let status = snapshot.status.as_deref().unwrap_or("Starting");
+    let _ = controls.status.set_text(status);
+    let _ = controls.action.set_text(if status == "Paused" { "Resume" } else { "Pause" });
+    let _ = controls.action.set_enabled(matches!(status, "Running" | "Paused"));
+    set_tray_health(&app, snapshot.severity.as_deref().unwrap_or("ok"));
 }
 
 fn ensure_daemon(app: AppHandle) {
@@ -72,48 +102,6 @@ fn open_console(app: &AppHandle) {
     }
 }
 
-fn post_run_state(state: &str) {
-    let _ = ureq::post(&format!("{DAEMON_URL}/stack/v1/run-state"))
-        .set("content-type", "application/json")
-        .send_string(&format!(r#"{{"state":"{state}"}}"#));
-}
-
-fn get_json(path: &str) -> Option<Value> {
-    ureq::get(&format!("{DAEMON_URL}{path}"))
-        .call()
-        .ok()?
-        .into_string()
-        .ok()
-        .and_then(|body| serde_json::from_str(&body).ok())
-}
-
-fn operator_signed_in() -> bool {
-    get_json("/stack/v1/operator")
-        .and_then(|body| body.get("state").and_then(Value::as_str).map(str::to_owned))
-        .as_deref()
-        == Some("signedIn")
-}
-
-fn health_severity() -> String {
-    if ureq::get(&format!("{DAEMON_URL}/healthz")).call().is_err() {
-        return "offline".to_string();
-    }
-    let rank = |severity: &str| match severity {
-        "critical" => 3,
-        "error" => 2,
-        "warning" => 1,
-        _ => 0,
-    };
-    get_json("/stack/v1/health")
-        .and_then(|body| body.get("health").and_then(Value::as_array).cloned())
-        .unwrap_or_default()
-        .iter()
-        .filter_map(|item| item.get("severity").and_then(Value::as_str))
-        .max_by_key(|severity| rank(severity))
-        .unwrap_or("ok")
-        .to_string()
-}
-
 fn icon_bytes(severity: &str) -> &'static [u8] {
     match severity {
         "critical" => include_bytes!("../icons/tray-critical.png"),
@@ -133,124 +121,14 @@ fn set_tray_health(app: &AppHandle, severity: &str) {
     }
 }
 
-fn status_text() -> (String, bool) {
-    if !operator_signed_in() {
-        return ("Sign in to see status".to_string(), false);
-    }
-    let Some(run_state) = get_json("/stack/v1/run-state") else {
-        return ("Not running".to_string(), false);
-    };
-    if run_state.get("state").and_then(Value::as_str) == Some("paused") {
-        return ("Paused".to_string(), true);
-    }
-    let body = get_json("/stack/v1/roles").unwrap_or(Value::Null);
-    let labels = body
-        .get("roles")
-        .and_then(Value::as_array)
-        .map(|roles| {
-            roles
-                .iter()
-                .filter_map(|role| {
-                    let state = role
-                        .get("state")
-                        .and_then(Value::as_str)
-                        .unwrap_or_default();
-                    if matches!(state, "notInstalled" | "not installed" | "offline") {
-                        return None;
-                    }
-                    let label = role.get("label").and_then(Value::as_str).unwrap_or("Role");
-                    let word = if matches!(state, "ready" | "running") {
-                        "ready"
-                    } else if state == "paused" {
-                        "paused"
-                    } else {
-                        "not ready"
-                    };
-                    Some(format!("{label} {word}"))
-                })
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    (format!("Running · {}", labels.join(", ")), false)
-}
-
-fn poll_tray(app: AppHandle, status: MenuItem<tauri::Wry>, toggle: MenuItem<tauri::Wry>) {
+fn poll_tray(app: AppHandle) {
     thread::spawn(move || {
-        let mut previous = String::new();
         loop {
-            if !operator_signed_in() {
+            if ureq::get(&format!("{DAEMON_URL}/healthz")).call().is_err() {
+                let controls = app.state::<TrayControls>();
+                let _ = controls.status.set_text("Stopped");
+                let _ = controls.action.set_enabled(false);
                 set_tray_health(&app, "offline");
-                let _ = status.set_text("Sign in to see status");
-                let _ = toggle.set_text("Pause");
-                thread::sleep(Duration::from_secs(5));
-                continue;
-            }
-            let severity = health_severity();
-            set_tray_health(&app, &severity);
-            let (text, paused) = status_text();
-            let _ = status.set_text(&text);
-            let _ = toggle.set_text(if paused { "Resume" } else { "Pause" });
-            if (severity == "critical" || severity == "error") && severity != previous {
-                let _ = app
-                    .notification()
-                    .builder()
-                    .title("MaiPai Stack health")
-                    .body(format!("The Stack has a {severity} health item."))
-                    .show();
-            }
-            previous = severity;
-            thread::sleep(Duration::from_secs(5));
-        }
-    });
-}
-
-fn watch_events(app: AppHandle) {
-    thread::spawn(move || {
-        let mut last_seq = 0;
-        loop {
-            if !operator_signed_in() {
-                thread::sleep(Duration::from_secs(5));
-                continue;
-            }
-            if let Ok(response) = ureq::get(&format!("{DAEMON_URL}/stack/v1/events")).call() {
-                if let Ok(body) = response.into_string() {
-                    for event in body.split("\n\n") {
-                        let Some(data) = event
-                            .lines()
-                            .find(|line| line.starts_with("data: "))
-                            .map(|line| &line[6..])
-                        else {
-                            continue;
-                        };
-                        let Ok(value) = serde_json::from_str::<Value>(data) else {
-                            continue;
-                        };
-                        let sequence = value.get("seq").and_then(Value::as_i64).unwrap_or(0);
-                        if sequence <= last_seq {
-                            continue;
-                        }
-                        last_seq = sequence;
-                        match value.get("id").and_then(Value::as_str) {
-                            Some("update.available") => {
-                                let _ = app
-                                    .notification()
-                                    .builder()
-                                    .title("MaiPai Stack update")
-                                    .body("An update is available.")
-                                    .show();
-                            }
-                            Some("model.installed") => {
-                                let _ = app
-                                    .notification()
-                                    .builder()
-                                    .title("MaiPai Stack model")
-                                    .body("A model was installed.")
-                                    .show();
-                            }
-                            _ => {}
-                        }
-                    }
-                }
             }
             thread::sleep(Duration::from_secs(5));
         }
@@ -269,35 +147,35 @@ fn main() {
             MacosLauncher::LaunchAgent,
             None,
         ))
-        .invoke_handler(tauri::generate_handler![start_daemon])
+        .invoke_handler(tauri::generate_handler![start_daemon, set_tray_state])
         .setup(|app| {
-            let status = MenuItemBuilder::with_id("status", "Running · Chat ready")
+            let status = MenuItemBuilder::with_id("status", "Starting")
                 .enabled(false)
                 .build(app)?;
             let open = MenuItemBuilder::with_id("open", "Open the Stack").build(app)?;
-            let toggle = MenuItemBuilder::with_id("toggle", "Pause").build(app)?;
-            let (_, paused) = status_text();
-            toggle.set_text(if paused { "Resume" } else { "Pause" })?;
-            let quit = MenuItemBuilder::with_id("quit", "Quit the app (the Stack keeps running)")
-                .build(app)?;
+            let action = MenuItemBuilder::with_id("action", "Pause").enabled(false).build(app)?;
+            let reload = MenuItemBuilder::with_id("reload", "Reload").build(app)?;
+            let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
             let menu = MenuBuilder::new(app)
                 .item(&status)
-                .item(&toggle)
+                .item(&action)
                 .item(&open)
-                .separator()
+                .item(&reload)
                 .item(&quit)
                 .build()?;
+            app.manage(TrayControls { status: status.clone(), action: action.clone() });
             let tray_icon = Image::from_bytes(icon_bytes("ok"))?;
             tauri::tray::TrayIconBuilder::with_id("main")
                 .icon(tray_icon)
                 .menu(&menu)
                 .tooltip("MaiPai Stack · ok")
-                .on_menu_event(|app, event| match event.id().as_ref() {
+                .on_menu_event(move |app, event| match event.id().as_ref() {
                     "open" => open_console(app),
-                    "toggle" => {
-                        let (_, paused) = status_text();
-                        post_run_state(if paused { "running" } else { "paused" });
+                    "action" => {
+                        if action.text().ok().as_deref() == Some("Sign in") { open_console(app); }
+                        else { let _ = app.emit_to("main", "tray-action", "toggle"); }
                     }
+                    "reload" => { if let Some(window) = app.get_webview_window("main") { let _ = window.eval("window.location.reload()"); } }
                     "quit" => app.exit(0),
                     _ => {}
                 })
@@ -310,8 +188,7 @@ fn main() {
                 .min_inner_size(900.0, 620.0)
                 .visible(false)
                 .build()?;
-            poll_tray(app.handle().clone(), status, toggle);
-            watch_events(app.handle().clone());
+            poll_tray(app.handle().clone());
             ensure_daemon(app.handle().clone());
             Ok(())
         })

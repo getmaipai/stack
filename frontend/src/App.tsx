@@ -4,6 +4,7 @@ import { api, type OperatorState } from "@/lib/api";
 import { DashboardShell } from "@/pages/DashboardShell";
 import { LoginPage } from "@/pages/LoginPage";
 import { Skeleton } from "@/kit/ui/skeleton";
+import { setTraySnapshot } from "@/kit/host";
 
 function LoadingPage() {
   return (
@@ -21,10 +22,16 @@ function Gate() {
     let active = true;
     api.get<OperatorState>("/stack/v1/operator")
       .then((result) => {
-        if (active) setState(result);
+        if (active) {
+          setState(result);
+          void setTraySnapshot({ signedIn: result.state === "signedIn" });
+        }
       })
       .catch(() => {
-        if (active) setState({ state: "signedOut", required: true });
+        if (active) {
+          setState({ state: "signedOut", required: true });
+          void setTraySnapshot({ signedIn: false });
+        }
       });
     return () => {
       active = false;

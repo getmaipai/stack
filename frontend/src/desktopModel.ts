@@ -12,13 +12,14 @@ export function roleLines(roles: RoleLine[]): string[] {
   return roles.filter((role) => !["notInstalled", "not installed", "offline"].includes(role.state)).map((role) => `${role.label} ${role.state === "ready" || role.state === "running" ? "ready" : role.state === "paused" ? "paused" : "not ready"}`);
 }
 
-export function trayMenuModel(state: "running" | "paused", roles: RoleLine[]): string[] {
-  return [state === "paused" ? "Paused" : `Running · ${roleLines(roles).join(", ")}`, state === "paused" ? "Resume" : "Pause", "Open", "—", "Quit"];
+export function trayMenuModel(state: "running" | "paused" | "signedOut", _roles: RoleLine[]): string[] {
+  if (state === "signedOut") return ["Sign in", "Sign in", "Open", "Reload", "Quit"];
+  return [state === "paused" ? "Paused" : "Running", state === "paused" ? "Resume" : "Pause", "Open", "Reload", "Quit"];
 }
 
 export function trayMenu(snapshot: TraySnapshot): string[] {
-  if (snapshot.daemon === "down") return ["Not running", "Open", "—", "Quit"];
-  return [snapshot.state === "paused" ? "Paused" : `Running · ${roleLines(snapshot.roles).join(", ")}`, snapshot.state === "paused" ? "Resume" : "Pause", "Open", "—", "Quit"];
+  if (snapshot.daemon === "down") return ["Stopped", "Open", "Reload", "Quit"];
+  return [snapshot.state === "paused" ? "Paused" : "Running", snapshot.state === "paused" ? "Resume" : "Pause", "Open", "Reload", "Quit"];
 }
 
 export type DesktopEvent = { id: string; durable: boolean; data?: Record<string, unknown> };

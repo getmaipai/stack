@@ -1,7 +1,15 @@
 type DialogApi = { open(options?: { directory?: boolean; multiple?: boolean; title?: string }): Promise<string | string[] | null> };
 type NotificationApi = { sendNotification(options: { title: string; body?: string }): Promise<void> | void };
 type AutostartApi = { enable(): Promise<void>; disable(): Promise<void>; isEnabled(): Promise<boolean> };
-type TauriGlobals = { dialog?: DialogApi; notification?: NotificationApi; autostart?: AutostartApi };
+type TraySnapshot = { signedIn: boolean; status?: "Running" | "Paused" | "Starting" | "Stopped"; severity?: "critical" | "error" | "warning" | "ok" };
+type TauriEvent<T> = { payload: T };
+type TauriGlobals = {
+  dialog?: DialogApi;
+  notification?: NotificationApi;
+  autostart?: AutostartApi;
+  core?: { invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> };
+  event?: { listen<T>(event: string, handler: (event: TauriEvent<T>) => void): Promise<() => void> };
+};
 
 function tauri(): TauriGlobals | null {
   const value = (globalThis as typeof globalThis & { __TAURI__?: TauriGlobals }).__TAURI__;
@@ -33,4 +41,14 @@ export async function setLaunchAtLogin(enabled: boolean): Promise<void> {
   if (!autostart) return;
   if (enabled) await autostart.enable();
   else await autostart.disable();
+}
+
+export async function setTraySnapshot(snapshot: TraySnapshot): Promise<void> {
+  await tauri()?.core?.invoke("set_tray_state", { snapshot });
+}
+
+export async function listenForTrayAction(handler: (action: "toggle") => void): Promise<() => void> {
+  const events = tauri()?.event;
+  if (!events) return () => undefined;
+  return events.listen<"toggle">("tray-action", (event) => handler(event.payload));
 }

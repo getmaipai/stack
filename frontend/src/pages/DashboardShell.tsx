@@ -27,7 +27,8 @@ import { TabBar } from "@/kit/blocks/phone/TabBar";
 import { DetailCard } from "@/kit/blocks/phone/DetailCard";
 import { ActionList } from "@/kit/blocks/phone/ActionList";
 import { actionsFor, type ThingKind } from "@/lib/actions";
-import { isDesktop, notify } from "@/kit/host";
+import { isDesktop, listenForTrayAction, notify, setTraySnapshot } from "@/kit/host";
+import { api } from "@/lib/api";
 import { RelativeTime } from "@/kit/ui/relative-time";
 import { Skeleton } from "@/kit/ui/skeleton";
 import { HelperPanel } from "@/kit/blocks/helper/HelperPanel";
@@ -110,7 +111,7 @@ export function DashboardShell() {
   const hardware = useApiResource<HardwareResponse>("/stack/v1/hardware");
   const budget = useApiResource<BudgetResponse>("/stack/v1/budget");
   const runState = useApiResource<{ state: "running" | "pausing" | "paused" }>("/stack/v1/run-state");
-  const refetchRepairs = repairs.refetch; const refetchRoles = roles.refetch; const refetchEngines = engines.refetch; const refetchUpdates = updates.refetch; const refetchHealth = health.refetch; const refetchDetected = detected.refetch; const refetchBudget = budget.refetch; const refetchRunState = runState.refetch;
+  const refetchRepairs = repairs.refetch; const refetchRoles = roles.refetch; const refetchEngines = engines.refetch; const refetchUpdates = updates.refetch; const refetchHealth = health.refetch; const refetchDetected = detected.refetch; const refetchBudget = budget.refetch; const refetchRunState = runState.refetch; const currentRunState = runState.data?.state;
   useEffect(() => { if (typeof EventSource === "undefined") return; const stream = new EventSource("/stack/v1/events"); stream.onmessage = (event) => { try { const envelope = JSON.parse(event.data) as { id?: string; data?: { severity?: string } }; if (envelope.id === "repair") void refetchRepairs(); if (envelope.id === "role.state") void refetchRoles(); if (envelope.id === "health.changed") { void refetchHealth(); if (isDesktop && (envelope.data?.severity === "critical" || envelope.data?.severity === "error")) void notify("MaiPai Stack health", "The Stack has a serious health item."); } if (envelope.id === "engine.state") void refetchEngines(); if (envelope.id === "update.available") { void refetchUpdates(); if (isDesktop) void notify("MaiPai Stack update", "An update is available."); } if (envelope.id === "model.installed" && isDesktop) void notify("MaiPai Stack model", "A model was installed."); if (envelope.id === "detected.changed") void refetchDetected(); if (envelope.id === "pressure" || envelope.id === "budget.changed") void refetchBudget(); if (envelope.id === "run.state") void refetchRunState(); } catch { /* An invalid event cannot take down the shell. */ } }; return () => stream.close(); }, [refetchRepairs, refetchRoles, refetchEngines, refetchUpdates, refetchHealth, refetchDetected, refetchBudget, refetchRunState]);
   useEffect(() => { const onKey = (event: KeyboardEvent) => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setPaletteOpen(true); } if (event.key === "/" && !["INPUT", "TEXTAREA"].includes((event.target as HTMLElement)?.tagName)) { event.preventDefault(); setPaletteOpen(true); } }; window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey); }, []);
   useEffect(() => { const update = () => setPhone(window.innerWidth < 640); update(); window.addEventListener("resize", update); return () => window.removeEventListener("resize", update); }, []);
@@ -126,6 +127,18 @@ export function DashboardShell() {
   const engineTooltip = engineCount === 0 ? "Engines" : `${engineCount} ${engineCount === 1 ? "engine needs" : "engines need"} attention`;
   const updateTooltip = updateCount === 0 ? "Updates" : `${updateCount} update${updateCount === 1 ? "" : "s"} available`;
   const alertTooltip = alertCount === 0 ? "Alerts" : `Alerts: ${alertSeverity === "critical" ? "1 critical" : alertSeverity === "error" ? `${alertCount} error${alertCount === 1 ? "" : "s"}` : `${alertCount} warning${alertCount === 1 ? "" : "s"}`}`;
+  useEffect(() => {
+    const status = currentRunState === "paused" ? "Paused" : currentRunState === "running" ? "Running" : currentRunState === "pausing" ? "Starting" : "Stopped";
+    void setTraySnapshot({ signedIn: true, status, severity: alertSeverity ?? "ok" });
+  }, [alertSeverity, currentRunState]);
+  useEffect(() => {
+    let remove: () => void = () => undefined;
+    void listenForTrayAction(() => {
+      const next = currentRunState === "paused" ? "running" : "paused";
+      void api.post("/stack/v1/run-state", { state: next }).then(() => refetchRunState()).catch(() => navigate("/login"));
+    }).then((unlisten) => { remove = unlisten; });
+    return () => remove();
+  }, [currentRunState, navigate, refetchRunState]);
   const routes = <Routes><Route path="/" element={<BoardPageProxy />} /><Route path="/abilities" element={<AbilitiesProxy />} /><Route path="/models/:id" element={<PhoneModelRoute />} /><Route path="/engines/:id" element={<PhoneEngineRoute />} /><Route path="/models" element={<ModelsPage Frame={SectionFrame} />} /><Route path="/engines" element={<EnginesPage Frame={SectionFrame} />} /><Route path="/monitoring" element={<MonitoringPage />} /><Route path="/library" element={<LibraryPage Frame={SectionFrame} />} /><Route path="/alerts" element={<AlertsPage Frame={SectionFrame} />} /><Route path="/logs" element={<LogsPage />} /><Route path="/access" element={<AccessPage Frame={SectionFrame} />} /><Route path="/try" element={<TryItPage />} /><Route path="/updates" element={<Navigate to="/settings/updates" replace />} /><Route path="/backups" element={<Navigate to="/settings/backups" replace />} /><Route path="/settings/*" element={<SettingsPage Frame={SectionFrame} />} /><Route path="*" element={<BoardPageProxy />} /></Routes>;
   if (phone) return <PhoneModeContext.Provider value={true}><PhoneShell locationPath={location.pathname} onNavigate={navigate} health={health.data?.health?.[0]?.text ?? "This computer is healthy."} helperFacts={helperFacts}>{routes}</PhoneShell></PhoneModeContext.Provider>;
   return <SidebarProvider><AppSidebar repairs={repairRows} roles={roleRows} health={health.data?.health ?? []} engineCount={engineCount} updateCount={updateCount} alertSeverity={alertSeverity} engineTooltip={engineTooltip} updateTooltip={updateTooltip} alertTooltip={alertTooltip} hardware={hardware.data?.hardware} budget={budget.data} runState={runState.data?.state} /><SidebarInset className="h-svh overflow-hidden bg-[var(--surface-page)]"><SiteHeader title={title} onSearch={() => setPaletteOpen(true)} runState={runState.data?.state ?? "running"} onRunStateChange={() => void runState.refetch()} /><div className="flex-1 overflow-y-auto">{routes}</div></SidebarInset><CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} /></SidebarProvider>;
