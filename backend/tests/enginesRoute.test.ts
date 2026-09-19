@@ -37,19 +37,26 @@ test("operator engine controls start, stop, restart, probe, swap, and protect cu
   expect(invalidInstall.status).toBe(400);
 });
 
-test("an external host never receives Stack engine controls", async () => {
+test("an externally managed engine refuses its stop with 409", async () => {
   dataDir = mkdtempSync(join(process.env.TMPDIR ?? "/tmp", "maipai-engines-route-")); process.env.STACK_DATA_DIR = dataDir;
   const cookie = await operatorCookie(); const headers = { cookie, "content-type": "application/json" };
   const calls: string[] = [];
   const host = Bun.serve({ port: 0, fetch: (request) => { calls.push(new URL(request.url).pathname); return Response.json({ status: "ok" }); } });
   try {
     process.env.STACK_MANAGED_ENGINE_URL = String(host.url).replace(/\/$/, "");
-    for (const action of ["start", "stop", "restart"]) {
-      const response = await app.request(`/stack/v1/engines/managed/${action}`, { method: "POST", headers });
-      expect(response.status).toBe(409); expect((await response.json() as { error: string }).error).toBe("Managed outside the Stack.");
-    }
+    const response = await app.request(`/stack/v1/engines/llama-server/stop`, { method: "POST", headers });
+    expect(response.status).toBe(409); expect((await response.json() as { error: string }).error).toBe("Managed outside the Stack.");
     expect(calls).toEqual([]);
   } finally { host.stop(true); }
+});
+
+test("an unknown engine name is a 404, not an external-management 409", async () => {
+  dataDir = mkdtempSync(join(process.env.TMPDIR ?? "/tmp", "maipai-engines-route-")); process.env.STACK_DATA_DIR = dataDir;
+  const cookie = await operatorCookie(); const headers = { cookie, "content-type": "application/json" };
+  for (const action of ["start", "stop", "restart"] as const) {
+    const response = await app.request(`/stack/v1/engines/nope/${action}`, { method: "POST", headers });
+    expect(response.status).toBe(404); expect((await response.json() as { error: string }).error).toBe("Unknown engine.");
+  }
 });
 
 test("the engine API maps a visible catalog build tag to its platform-specific store tag", () => {

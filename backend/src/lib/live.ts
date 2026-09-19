@@ -77,6 +77,32 @@ export function __setLiveReadersForTests(next: Partial<LiveReaders>): void {
 
 let lastSample: LiveSample | null = null;
 let samplerHandle: ReturnType<typeof setInterval> | null = null;
+let clock: () => number = () => Date.now();
+let macGpuName: string | null = null;
+let macGpuNameLoading: Promise<string | null> | null = null;
+
+function macGpuNameOnce(): Promise<string | null> {
+  if (macGpuName !== null) return Promise.resolve(macGpuName);
+  if (macGpuNameLoading) return macGpuNameLoading;
+  macGpuNameLoading = readers.systemProfiler().then((result) => {
+    let name: string | null = null;
+    try {
+      const data = JSON.parse(result.stdout) as Record<string, Record<string, { sppci_model?: string }>>;
+      const display = data["SPDisplaysDataType"];
+      if (display) {
+        const entries = Object.values(display);
+        const first = entries[0];
+        if (first && typeof first.sppci_model === "string" && first.sppci_model.trim()) {
+          name = first.sppci_model.trim();
+        }
+      }
+    } catch {}
+    macGpuName = name;
+    macGpuNameLoading = null;
+    return name;
+  }, () => { macGpuName = null; macGpuNameLoading = null; return null; });
+  return macGpuNameLoading;
+}
 
 export function __resetLiveForTests(): void {
   lastSample = null;
@@ -84,9 +110,14 @@ export function __resetLiveForTests(): void {
     clearInterval(samplerHandle);
     samplerHandle = null;
   }
+  clock = () => Date.now();
+  macGpuName = null;
+  macGpuNameLoading = null;
 }
 
-export function __setLiveClockForTests(_clock: unknown): void {}
+export function __setLiveClockForTests(next: () => number): void {
+  clock = next;
+}
 
 function parsePsCpu(output: string, pid: number): number | null {
   const lines = output.trim().split("\n");
@@ -128,26 +159,14 @@ function parseNvidiaSmi(output: string): LiveGpu[] {
   });
 }
 
-function parseMacGpu(systemProfilerOutput: string, ioregOutput: string): LiveGpu {
-  let name: string | null = null;
+function parseMacGpu(name: string, ioregOutput: string): LiveGpu {
   let utilization: number | null = null;
-  try {
-    const data = JSON.parse(systemProfilerOutput) as Record<string, Record<string, { sppci_model?: string }>>;
-    const display = data["SPDisplaysDataType"];
-    if (display) {
-      const entries = Object.values(display);
-      const first = entries[0];
-      if (first && typeof first.sppci_model === "string" && first.sppci_model.trim()) {
-        name = first.sppci_model.trim();
-      }
-    }
-  } catch {}
   const match = ioregOutput.match(/"Device Utilization %"\s*=\s*(\d+(?:\.\d+)?)/);
   if (match) {
     const value = Number(match[1]);
     utilization = Number.isFinite(value) ? value : null;
   }
-  return { name: name ?? "", memoryUsedBytes: null, memoryTotalBytes: null, utilization };
+  return { name, memoryUsedBytes: null, memoryTotalBytes: null, utilization };
 }
 
 function driveName(mount: string): string {
@@ -261,13 +280,12 @@ export async function collectSample(): Promise<LiveSample> {
 
   let gpus: LiveGpu[];
   if (process.platform === "darwin") {
-    const [profilerResult, ioregResult] = await Promise.all([
-      readers.systemProfiler().catch(() => null),
+    const [name, ioregResult] = await Promise.all([
+      macGpuNameOnce(),
       readers.ioreg().catch(() => null),
     ]);
-    const profilerOutput = profilerResult ? profilerResult.stdout : "";
     const ioregOutput = ioregResult ? ioregResult.stdout : "";
-    gpus = [parseMacGpu(profilerOutput, ioregOutput)];
+    gpus = [parseMacGpu(name ?? "", ioregOutput)];
   } else {
     const cudaResult = await readers.nvidiaSmi().catch(() => null);
     const cudaOutput = cudaResult ? cudaResult.stdout : "";
@@ -278,7 +296,7 @@ export async function collectSample(): Promise<LiveSample> {
   const dfOutput = dfResult ? dfResult.stdout : "";
   const drives = filterDrives(await parseDf(dfOutput));
 
-  const now = new Date();
+  const now = new Date(clock());
   const fiveMinutesAgoMs = now.getTime() - 5 * 60 * 1000;
   const clients = listClients()
     .filter((client) => client.lastSeenAt !== null && new Date(client.lastSeenAt).getTime() >= fiveMinutesAgoMs)

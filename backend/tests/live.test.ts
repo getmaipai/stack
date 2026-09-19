@@ -1,6 +1,6 @@
 import { beforeEach, expect, test } from "bun:test";
 import { app } from "@/app";
-import { __resetLiveForTests, __setLiveReadersForTests, collectSample, getLastLiveSample, startLiveSampler, stopLiveSampler } from "@/lib/live";
+import { __resetLiveForTests, __setLiveClockForTests, __setLiveReadersForTests, collectSample, getLastLiveSample, startLiveSampler, stopLiveSampler } from "@/lib/live";
 import { __resetEventsForTests, eventsAfter } from "@/lib/events";
 import { getChatBackend, setSupervisorFactoryForTests } from "@/lib/supervisor";
 import { __resetStackSettingsForTests, updateStackConfig } from "@/settings/stackKeys";
@@ -86,13 +86,42 @@ test("GET /stack/v1/live returns the last sample", async () => {
   expect(body.live.at).not.toBe("");
 });
 
-test("GET /stack/v1/live returns an empty sample before the first tick", async () => {
-  __setLiveReadersForTests(macReaders());
-  const response = await app.request("/stack/v1/live", { headers: testClientHeaders });
-  expect(response.status).toBe(200);
-  const body = await response.json() as { live: { processes: unknown[]; gpus: unknown[] } };
-  expect(body.live.processes).toEqual([]);
-  expect(body.live.gpus).toEqual([]);
+function waitForSample(at: string | null): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const timer = setInterval(() => {
+      const sample = getLastLiveSample();
+      if (at === null ? sample !== null : sample !== null && sample.at === at) {
+        clearInterval(timer);
+        resolve();
+      }
+    }, 10);
+  });
+}
+
+test("a sample exists before the first tick, and the Mac GPU name is read once", async () => {
+  let now = 0;
+  __setLiveClockForTests(() => now);
+  let profilerCalls = 0;
+  const readers = macReaders();
+  __setLiveReadersForTests({
+    ...readers,
+    systemProfiler: async () => { profilerCalls += 1; return readers.systemProfiler(); },
+  });
+  startLiveSampler();
+  // The immediate sample is taken on start, before the first interval tick.
+  await waitForSample(null);
+  expect(getLastLiveSample()).not.toBeNull();
+  expect(getLastLiveSample()?.at).toBe(new Date(0).toISOString());
+  // Subsequent collectSample calls (what the interval would produce) reuse the GPU name.
+  now = 5000;
+  const s2 = await collectSample();
+  expect(s2.at).toBe(new Date(5000).toISOString());
+  now = 10000;
+  const s3 = await collectSample();
+  expect(s3.at).toBe(new Date(10000).toISOString());
+  stopLiveSampler();
+  expect(profilerCalls).toBe(1);
+  expect(s3.gpus[0]?.name).toBe("Apple M4");
 });
 
 test("the sampler lists every user-visible mounted volume and drops system volumes", async () => {

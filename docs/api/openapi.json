@@ -883,6 +883,16 @@
               }
             }
           },
+          "404": {
+            "description": "Unknown engine.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "409": {
             "description": "The process is managed outside the Stack.",
             "content": {
@@ -939,6 +949,16 @@
           },
           "400": {
             "description": "Engine control failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown engine.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1011,6 +1031,16 @@
               }
             }
           },
+          "404": {
+            "description": "Unknown engine.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "409": {
             "description": "The process is managed outside the Stack.",
             "content": {
@@ -1067,6 +1097,16 @@
           },
           "400": {
             "description": "Engine control failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown engine.",
             "content": {
               "application/json": {
                 "schema": {
