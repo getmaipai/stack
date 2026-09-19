@@ -6,6 +6,7 @@ import { downloadUrl } from "@/lib/download";
 import { engineCurrentPath, engineTagRoot } from "@/lib/store/layout";
 import { readEngineManifest, removeEngineManifest, writeEngineManifest } from "@/lib/store/manifests";
 import { listModels } from "@/lib/modelStore";
+import { recordDownloadHistory } from "@/lib/hygiene";
 
 function engineNameTag(id: string): { name: string; tag: string } {
   const marker = id.indexOf("-b");
@@ -32,6 +33,7 @@ async function downloadArchive(pin: EngineBinaryPin, archive: EngineArchive, onP
     expectedBytes: archive.approxBytes,
     onProgress: (progress) => onProgress(progress.completedBytes, progress.totalBytes, archive.label),
   });
+  recordDownloadHistory(archive.approxBytes);
   await extractArchive(destination, engineDir(pin.id));
   rmSync(destination, { force: true });
 }

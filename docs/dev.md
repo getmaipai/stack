@@ -1594,6 +1594,27 @@ detail cards and a phone Overview, but it does not create a second data path.
 The phone renderer stays in the shared kit blocks so desktop and phone keep the
 same action labels, statuses and route ownership.
 
+## Storage hygiene (STACK-24, decided 2026-09-19)
+
+Storage accounting says where bytes are now. Hygiene answers a narrower and
+safer question: which specific bytes can be removed without guessing. Its
+report is calculated locally from model usage, file digests, manifest
+references, kept engine builds and the configured log retention. Each entry
+has a stable report id, its size and its reason. Cleanup accepts only ids from
+the freshly calculated report, so a stale or invented request cannot remove a
+path that was not offered to the operator.
+
+The Settings Storage table uses that report as its one selection source and
+asks inline before deletion. Overview links its reclaimable total to the same
+table. Download completion is recorded as a local byte history; a seven-day
+positive trend that exhausts free disk within three days raises a warning with
+the Storage cleanup action. A flat or insufficient history does not predict a
+full disk.
+
+We rejected automatic deletion, age-only cleanup and a general path deletion
+endpoint. Automatic cleanup surprises the operator, age alone cannot establish
+ownership, and paths supplied by a client would broaden deletion authority.
+
 ## Open questions for the owner
 
 1. **Name.** Decided 2026-09-17: `stack`, "MaiPai Stack". The public

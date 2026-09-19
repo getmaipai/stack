@@ -4,6 +4,7 @@ import { dataDir } from "@/lib/paths";
 import { modelManifestRoot } from "@/lib/store/layout";
 import { listModelManifests } from "@/lib/store/manifests";
 import { raise, resolve as resolveHealth } from "@/lib/health";
+import { diskFillsSoon, downloadHistory } from "@/lib/hygiene";
 
 export interface StorageReport {
   totalBytes: number;
@@ -78,6 +79,7 @@ export function storageAccounting(root = dataDir): StorageReport {
   }
   const freeDiskBytes = (() => { try { const stat = statfsSync(root); return stat.bavail * stat.bsize; } catch { return 0; } })();
   if (freeDiskBytes > 0 && freeDiskBytes < 10 * 1_073_741_824) raise({ code: "disk-under-reserve", severity: "warning", title: "Disk space is running low", text: "The Stack is below its 10 GB free-space reserve.", cause: "The filesystem reported less than the Stack's reserve.", fix: { label: "Remove stored data", action: "free_disk" } }); else resolveHealth("disk-under-reserve");
+  if (diskFillsSoon({ freeDiskBytes, downloads: downloadHistory(root) })) raise({ code: "disk-fills-soon", severity: "warning", title: "Disk space will fill soon", text: "Current download activity will fill this disk within three days.", cause: "Recent download history projects less than three days of free space.", fix: { label: "Clean up", action: "storage_hygiene" } }); else resolveHealth("disk-fills-soon");
   const report = { totalBytes: Object.values(byCategory).reduce((sum, value) => sum + value, 0), byCategory, models: { byAbility, sharedBytes }, freeDiskBytes, updatedAt: new Date().toISOString() };
   cached = { root, expiresAt: Date.now() + 30_000, report };
   return report;

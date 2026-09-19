@@ -6663,6 +6663,177 @@
         }
       }
     },
+    "/stack/v1/storage/hygiene": {
+      "get": {
+        "tags": [
+          "Storage"
+        ],
+        "summary": "Storage cleanup report",
+        "responses": {
+          "200": {
+            "description": "Items that can be safely removed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "unused-model",
+                              "duplicate-file",
+                              "orphan-blob",
+                              "old-engine-build",
+                              "stale-log"
+                            ]
+                          },
+                          "what": {
+                            "type": "string"
+                          },
+                          "why": {
+                            "type": "string"
+                          },
+                          "sizeBytes": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "what",
+                          "why",
+                          "sizeBytes"
+                        ]
+                      }
+                    },
+                    "reclaimableBytes": {
+                      "type": "integer"
+                    },
+                    "generatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "reclaimableBytes",
+                    "generatedAt"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/storage/hygiene/clean": {
+      "post": {
+        "tags": [
+          "Storage"
+        ],
+        "summary": "Clean listed storage items",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1
+                  }
+                },
+                "required": [
+                  "ids"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Only current report items were removed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "removed": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "unused-model",
+                              "duplicate-file",
+                              "orphan-blob",
+                              "old-engine-build",
+                              "stale-log"
+                            ]
+                          },
+                          "what": {
+                            "type": "string"
+                          },
+                          "why": {
+                            "type": "string"
+                          },
+                          "sizeBytes": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "what",
+                          "why",
+                          "sizeBytes"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "removed"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "An item was not in the current report.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/jobs": {
       "post": {
         "tags": [

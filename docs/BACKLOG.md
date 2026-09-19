@@ -329,7 +329,7 @@ layer above; none adds a person or leaves the machine.
   Mirror: the current idle eviction rule.
   Out of scope: new person records or Home-side features.
   Exit: `bash scripts/check.sh`.
-- [ ] **STACK-24 (M): storage hygiene.** Find models unused for thirty
+- [x] **STACK-24 (M): storage hygiene.** Find models unused for thirty
   days, duplicate files across tools, orphan blobs, old engine builds
   and stale logs; show what each would free; one click to clean; a
   warning three days before the disk fills at the current download
