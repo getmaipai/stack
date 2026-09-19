@@ -96,11 +96,22 @@ export interface ChatBackend {
   kind: EngineKind;
   identity: EngineIdentity;
   pid: number | null;
+  /** The listener is assigned by the supervisor for spawned engines. */
+  port?: number | null;
   stop(): Promise<void>;
   activeRequests: number;
   retired: boolean;
   governorHandle?: GovernorHandle;
   stopGovernor?: () => void;
+}
+
+function extractPort(url: string): number | null {
+  try {
+    const port = new URL(url).port;
+    return port ? Number(port) : null;
+  } catch {
+    return null;
+  }
 }
 
 export class EngineUnavailableError extends Error {
@@ -287,6 +298,7 @@ function scriptedBackend(): ChatBackend {
     kind: "url",
     identity: { host: "stub", build: "scripted", model: "scripted-chat", healthy: true },
     pid: null,
+    port: null,
     activeRequests: 0,
     retired: false,
     stop: async () => {},
@@ -336,7 +348,7 @@ async function startUrlBackend(kind: EngineKind, url: string): Promise<ChatBacke
     raise({ code: "managed-host-offline", severity: "error", title: "Chat engine is offline", text: reason, cause: reason, fix: { label: "Check host", action: "check_host" } });
     throw new EngineUnavailableError(reason);
   }
-  return { client, kind, identity, pid: null, activeRequests: 0, retired: false, stop: async () => {} };
+  return { client, kind, identity, pid: null, port: extractPort(client.baseUrl), activeRequests: 0, retired: false, stop: async () => {} };
 }
 
 async function startSpawnedBackend(): Promise<ChatBackend> {
@@ -387,6 +399,7 @@ async function startSpawnedBackend(): Promise<ChatBackend> {
       kind: "spawned",
       identity,
       pid: processHandle.pid,
+      port,
       activeRequests: 0,
       retired: false,
       governorHandle: admission,

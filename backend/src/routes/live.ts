@@ -2,6 +2,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@/lib/openapi";
 import { requireClientOrOperator } from "@/lib/clients";
 import { getLastLiveSample } from "@/lib/live";
+import { showroom, showroomLive } from "@/showroom/fixture";
 
 const liveGpuSchema = z.object({
   name: z.string(),
@@ -59,6 +60,7 @@ const liveRoute = createRoute({
 
 export const liveRoutes = apiRouter();
 liveRoutes.openapi(liveRoute, (c) => {
+  if (showroom()) return c.json({ live: showroomLive } as never, 200);
   const sample = getLastLiveSample();
   if (!sample) {
     const empty = {

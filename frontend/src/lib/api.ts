@@ -217,12 +217,11 @@ export interface EngineRecord {
   directory?: string;
 }
 
-export interface LiveEngine { id: string; engine: string; build: string | null; model: string | null; port: number | null; footprintBytes: number | null; cpuPercent: number | null; startedAt: string; }
-export interface LiveGpu { name: string; memoryUsedBytes: number | null; memoryTotalBytes: number | null; utilizationPercent: number | null; }
-export interface LiveDrive { name: string; mount: string; totalBytes: number; usedBytes: number; mounted: boolean; }
-export interface LiveComputer { cpuPercent: number | null; diskUsedBytes: number | null; diskTotalBytes: number | null; }
-export interface LiveClient { id: string; name: string; roles: string[]; requests: number; lastRequestAt: string; inFlight: number; }
-export interface LiveResponse { sampledAt: string; engines: LiveEngine[]; gpus: LiveGpu[]; drives: LiveDrive[]; computer: LiveComputer; clients: LiveClient[]; }
+export interface LiveProcess { engine: string; build: string; model: string | null; port: number | null; memoryFootprintBytes: number | null; cpuPercent: number | null; pid: number; startedAt: string | null; }
+export interface LiveGpu { name: string; memoryUsedBytes: number | null; memoryTotalBytes: number | null; utilization: number | null; }
+export interface LiveDrive { name: string; totalBytes: number; usedBytes: number; mount: string; mounted?: boolean; }
+export interface LiveClient { name: string; roles: string[]; requestCount: number; lastRequestAt: string; }
+export interface LiveResponse { live: { processes: LiveProcess[]; gpus: LiveGpu[]; cpu: { percent: number | null }; drives: LiveDrive[]; clients: LiveClient[]; at: string; }; }
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number, readonly body: Record<string, unknown>) {

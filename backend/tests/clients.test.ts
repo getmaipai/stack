@@ -109,7 +109,7 @@ test("a successful scripted completion increments client counters", async () => 
     complete: async () => ({ status: 200, body: { choices: [{ message: { content: "ok" } }], usage: { prompt_tokens: 3, completion_tokens: 2 } } }),
     health: async () => true,
   };
-  const backend: ChatBackend = { client, kind: "spawned", identity: { host: "local", build: "test", model: "chat.gguf", healthy: true }, pid: null, stop: async () => {}, activeRequests: 0, retired: false };
+  const backend: ChatBackend = { client, kind: "spawned", identity: { host: "local", build: "test", model: "chat.gguf", healthy: true }, pid: null, port: null, stop: async () => {}, activeRequests: 0, retired: false };
   setSupervisorFactoryForTests(async () => backend);
   const response = await app.request("/v1/chat/completions", {
     method: "POST",

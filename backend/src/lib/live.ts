@@ -100,8 +100,8 @@ function parsePsStart(output: string, pid: number): string | null {
   for (const line of lines) {
     const fields = line.trim().split(/\s+/);
     if (fields[0] === String(pid)) {
-      const startFields = fields.slice(2, 6);
-      return startFields.join(" ") || null;
+      const startedAt = new Date(fields.slice(2, 7).join(" "));
+      return Number.isNaN(startedAt.getTime()) ? null : startedAt.toISOString();
     }
   }
   return null;
@@ -145,11 +145,6 @@ function parseMacGpu(systemProfilerOutput: string, ioregOutput: string): LiveGpu
   return { name: name ?? "", memoryUsedBytes: null, memoryTotalBytes: null, utilization };
 }
 
-function extractPort(host: string): number | null {
-  const match = host.match(/:(\d+)/);
-  return match ? Number(match[1]) : null;
-}
-
 function parseDf(output: string): LiveDrive[] {
   const lines = output.trim().split("\n");
   if (lines.length < 2) return [];
@@ -176,7 +171,7 @@ export async function collectSample(): Promise<LiveSample> {
   const startedAt = pid !== null ? parsePsStart(psOutput, pid) : null;
   const memoryFootprint = pid !== null ? await measureProcessMemoryBytes(pid) : null;
 
-  const port: number | null = backend?.kind === "url" && backend.identity?.host ? extractPort(backend.identity.host) : null;
+  const port = backend?.port ?? null;
 
   const processes: LiveProcess[] = [];
   if (status.state === "ready" || status.state === "busy" || status.state === "loading") {

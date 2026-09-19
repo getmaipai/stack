@@ -2,6 +2,7 @@ import { beforeEach, expect, test } from "bun:test";
 import { app } from "@/app";
 import { __resetLiveForTests, __setLiveReadersForTests, collectSample, getLastLiveSample, startLiveSampler, stopLiveSampler } from "@/lib/live";
 import { __resetEventsForTests, eventsAfter } from "@/lib/events";
+import { getChatBackend, setSupervisorFactoryForTests } from "@/lib/supervisor";
 import { testClientHeaders } from "./authTest";
 
 function macReaders() {
@@ -23,6 +24,23 @@ function macReaders() {
 beforeEach(() => {
   __resetLiveForTests();
   __resetEventsForTests();
+  setSupervisorFactoryForTests(null);
+});
+
+test("a running process uses the supervisor port and an ISO start time", async () => {
+  __setLiveReadersForTests({
+    ...macReaders(),
+    ps: async () => ({ stdout: "1234 5.2 Fri Sep 18 20:15:57 2026 llama-server\n", stderr: "" }),
+  });
+  setSupervisorFactoryForTests(async () => ({
+    client: { baseUrl: "http://127.0.0.1:8142", complete: async () => ({ status: 200, body: {} }), health: async () => true },
+    kind: "spawned", identity: { host: "local", build: "test", model: "chat.gguf", healthy: true }, pid: 1234, port: 8142, activeRequests: 0, retired: false, stop: async () => {},
+  }));
+  await getChatBackend();
+  const sample = await collectSample();
+  expect(sample.processes).toHaveLength(1);
+  expect(sample.processes[0]?.port).toBe(8142);
+  expect(sample.processes[0]?.startedAt).toBe(new Date("Fri Sep 18 20:15:57 2026").toISOString());
 });
 
 test("a Mac live sample has the GPU name from system_profiler, null memory, and utilization from ioreg", async () => {

@@ -86,8 +86,8 @@ test("Live renders every GPU, preserves unknown measurements, and lists connecte
   class LiveEventSource { static instances: LiveEventSource[] = []; onmessage: ((event: MessageEvent) => void) | null = null; constructor(_url: string) { LiveEventSource.instances.push(this); } close() {} }
   globalThis.EventSource = LiveEventSource as unknown as typeof EventSource;
   let liveRequests = 0;
-  const drives = [{ name: "Macintosh HD", mount: "/", totalBytes: 1_000_000_000_000, usedBytes: 600_000_000_000, mounted: true }, { name: "Models", mount: "/Volumes/Models", totalBytes: 2_000_000_000_000, usedBytes: 400_000_000_000, mounted: true }, { name: "Archive", mount: "/Volumes/Archive", totalBytes: 3_000_000_000_000, usedBytes: 0, mounted: false }];
-  const live = { sampledAt: new Date().toISOString(), engines: [{ id: "llama", engine: "llama-server", build: "b11026", model: "qwen3-27b", port: 8080, footprintBytes: 21_600_000_000, cpuPercent: 42, startedAt: new Date(Date.now() - 3_600_000).toISOString() }], gpus: [{ name: "NVIDIA RTX 5090", memoryUsedBytes: 12_000_000_000, memoryTotalBytes: 32_000_000_000, utilizationPercent: 73 }, { name: "NVIDIA RTX 4000", memoryUsedBytes: null, memoryTotalBytes: null, utilizationPercent: null }], drives, computer: { cpuPercent: 31, diskUsedBytes: 600_000_000_000, diskTotalBytes: 1_000_000_000_000 }, clients: [{ id: "cli", name: "atlas", roles: ["chat", "coding"], requests: 12, lastRequestAt: new Date(Date.now() - 120_000).toISOString(), inFlight: 1 }] };
+  const drives = [{ name: "Macintosh HD", mount: "/", totalBytes: 1_000_000_000_000, usedBytes: 600_000_000_000 }, { name: "Models", mount: "/Volumes/Models", totalBytes: 2_000_000_000_000, usedBytes: 400_000_000_000 }, { name: "Archive", mount: "/Volumes/Archive", totalBytes: 3_000_000_000_000, usedBytes: 0, mounted: false }];
+  const live = { live: { at: new Date().toISOString(), processes: [{ engine: "llama-server", build: "b11026", model: "qwen3-27b", port: 8080, memoryFootprintBytes: 21_600_000_000, cpuPercent: 42, pid: 42, startedAt: new Date(Date.now() - 3_600_000).toISOString() }], gpus: [{ name: "NVIDIA RTX 5090", memoryUsedBytes: 12_000_000_000, memoryTotalBytes: 32_000_000_000, utilization: 73 }, { name: "NVIDIA RTX 4000", memoryUsedBytes: null, memoryTotalBytes: null, utilization: null }], drives, cpu: { percent: 31 }, clients: [{ name: "atlas", roles: ["chat", "coding"], requestCount: 12, lastRequestAt: new Date(Date.now() - 120_000).toISOString() }] } };
   globalThis.fetch = mock((input: RequestInfo | URL) => {
     const path = String(input);
     if (path.endsWith("/setup/plan")) return Promise.resolve(Response.json({ plan: { tier: "p16", mode: "small", createdAt: "2026-09-18T00:00:00.000Z", health: null }, downloads: [], health: null }));
@@ -112,7 +112,7 @@ test("Live renders every GPU, preserves unknown measurements, and lists connecte
   expect(document.body.textContent).toContain("Archive");
   expect(document.body.textContent).toContain("not mounted");
   expect(liveRequests).toBe(1);
-  await act(async () => { LiveEventSource.instances.at(-1)?.onmessage?.({ data: JSON.stringify({ id: "live", data: { ...live, engines: [] } }) } as MessageEvent); });
+  await act(async () => { LiveEventSource.instances.at(-1)?.onmessage?.({ data: JSON.stringify({ id: "live", data: { ...live.live, processes: [] } }) } as MessageEvent); });
   await waitFor(() => expect(document.body.textContent).toContain("No engine is running"));
   expect(liveRequests).toBe(1);
   cleanup();
