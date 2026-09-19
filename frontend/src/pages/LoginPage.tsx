@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type OperatorState } from "@/lib/api";
+import { isDesktop } from "@/kit/host";
 import { Button } from "@/kit/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/kit/ui/card";
 import { Input } from "@/kit/ui/input";
@@ -37,7 +38,7 @@ export function LoginPage({ state, onSignedIn }: { state: OperatorState; onSigne
           <CardTitle className="text-3xl">{state.state === "setupRequired" ? "Set the operator password" : "Welcome back"}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6 text-center">
-          {state.state === "setupRequired" && !state.loopback ? <p className="text-base text-muted-foreground">Set the operator password on the computer that runs the Stack first.</p> : <form className="space-y-6" onSubmit={submit}>
+          {state.state === "setupRequired" && !state.loopback && !isDesktop() ? <p className="text-base text-muted-foreground">Set the operator password on the computer that runs the Stack first.</p> : <form className="space-y-6" onSubmit={submit}>
             <label className="block space-y-2 text-base font-medium" htmlFor="login-password">
               Operator password
               <Input id="login-password" type="password" autoComplete={state.state === "setupRequired" ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} required />

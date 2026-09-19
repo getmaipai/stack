@@ -16,7 +16,9 @@ function tauri(): TauriGlobals | null {
   return value ?? null;
 }
 
-export const isDesktop = typeof window !== "undefined" && tauri() !== null;
+export function isDesktop(): boolean {
+  return typeof window !== "undefined" && tauri() !== null;
+}
 
 async function pick(options: { directory?: boolean; title?: string }): Promise<string | null> {
   const dialog = tauri()?.dialog;
