@@ -23,8 +23,13 @@ fix (issue #1). The live daemon on 8770 serves this build.
   checkout's working tree (`git status` there shows the edits). A
   resuming session in that checkout reads `docs/dev/session-a.md`
   "Stopped mid UI-12b", re-runs the gate, commits by file name as
-  "Console (UI-12): Models against the reference", pushes. One open
-  finding documented (selectedIds mixes model and detected row ids).
+  "Console (UI-12): Models against the reference", pushes. Four review findings to fix before or with that commit:
+  selectedIds mixes model and detected row ids; ModelsPage's
+  ModelListRow and DetectedStore types duplicate EnginesPage's (share
+  them from lib/); gguf.ts's new cached reader and components.ts's
+  uncached read are two paths over the same file with different
+  extension guards (one reader, one guard); sortModels and the merged
+  row lists are not memoized.
 - **UI-15 (Settings workspace)**: on branch `b/ui-data` at 0975cd5 in
   the worktree `stack-b`: Codex's page (56acc0b), the fix for the
   full-suite segfault (2a12c3c: it was two global ⌘K and "/"
