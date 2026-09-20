@@ -756,6 +756,16 @@ through the public routes, runs every row, judges it against the
 previous report under `data-bench/`, and writes `report.md` and
 `report.json` there; `DRY_RUN=1` prints the plan.
 
+Each prove script (`scripts/prove-stt.sh`, `scripts/prove-tts.sh`,
+`scripts/prove-pin-rollback.sh`) and the bench script
+(`scripts/bench/studio-bench.sh`) shares the same daemon start-and-stop
+block: source `scripts/lib/daemon.sh` and call `daemon_port_free`,
+`daemon_base`, `daemon_start <port> <data_dir> <log>` (the setsid
+launch, sets `DAEMON_PID`, prints the pid line, waits on `/healthz`
+up to 10 s and fails loudly with the log's tail), and `daemon_stop`
+(kill, wait, group kill, port check line; the script owns its scratch).
+One definition, one implementation, instead of four hand-copied blocks.
+
 Rehearsed twice on the laptop on 2026-09-20 (Apple M4 Pro, 24 GB,
 tier `p16`), `qwen3-1.7b-q8-0` at context 4096, build
 `b10797-832fd6f17`, the model file cached by the OS. The first run

@@ -20,9 +20,10 @@
 #   DRY_RUN=1 bash scripts/bench/studio-bench.sh          # print the plan, run nothing
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+. "$(dirname "$0")/../lib/daemon.sh"
 
 PORT="${PORT:-8771}"
-BASE="http://127.0.0.1:$PORT"
+BASE="$(daemon_base "$PORT")"
 DATA="$PWD/data-scratch"
 REPORTS="$PWD/data-bench"
 CONTEXTS="${CONTEXTS:-4096 16384}"
@@ -40,9 +41,6 @@ hardware_line() {
     printf '%s, %s GB' "$(uname -m)" "$(( $(grep MemTotal /proc/meminfo | awk '{print $2}') / 1048576 ))"
   fi
 }
-port_free() { python3 -c "import socket,sys;s=socket.socket();s.settimeout(0.2)
-try: s.bind(('127.0.0.1',int(sys.argv[1]))); s.close(); sys.exit(0)
-except OSError: sys.exit(1)" "$1"; }
 
 if [ "${DRY_RUN:-0}" = "1" ]; then
   echo "Studio bench plan (dry run, nothing started)"
@@ -56,33 +54,18 @@ if [ "${DRY_RUN:-0}" = "1" ]; then
   exit 0
 fi
 
-port_free "$PORT" || { echo "port $PORT is in use; pick another with PORT="; exit 1; }
+daemon_port_free "$PORT" || { echo "port $PORT is in use; pick another with PORT="; exit 1; }
 rm -rf "$DATA"; mkdir -p "$DATA" "$OUT"
 LOG="$OUT/daemon.log"
 
-# The daemon leads its own process group, so the SIGKILL fallback takes a
-# spawned engine with it instead of orphaning it on its port and memory.
-STACK_DATA_DIR="$DATA" PORT="$PORT" python3 -c 'import os,sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' bun run backend/src/index.ts serve >"$LOG" 2>&1 &
-PID=$!
+daemon_start "$PORT" "$DATA" "$LOG"
 SAMPLER=""
-stop_daemon() {
-  # SIGTERM to the daemon alone (it drains and stops its engines); after
-  # 10 s the whole group is killed, engine included.
-  kill "$PID" 2>/dev/null || true
-  for _ in $(seq 1 20); do kill -0 "$PID" 2>/dev/null || break; sleep 0.5; done
-  kill -9 -- "-$PID" 2>/dev/null || true
-}
 cleanup() {
   if [ -n "$SAMPLER" ]; then kill "$SAMPLER" 2>/dev/null || true; wait "$SAMPLER" 2>/dev/null || true; fi
-  stop_daemon
-  if port_free "$PORT"; then echo "port $PORT free after stop"; else echo "port $PORT still held after stop"; fi
+  daemon_stop
   rm -rf "$DATA"; echo "scratch data removed; report: $OUT/report.md"
 }
 trap cleanup EXIT
-echo "daemon pid $PID on port $PORT, scratch data $DATA, report $OUT"
-
-for _ in $(seq 1 40); do curl -sf "$BASE/healthz" >/dev/null 2>&1 && break; sleep 0.25; done
-curl -sf "$BASE/healthz" >/dev/null || { echo "daemon did not answer"; tail -20 "$LOG"; exit 1; }
 
 now() { python3 -c 'import time;print(time.time())'; }
 ms_since() { python3 -c "import time;print(int((time.time()-$1)*1000))"; }
@@ -233,8 +216,8 @@ if [ "$REHEARSAL" = "1" ]; then
   echo "== rollback rehearsal"
   # The rehearsal needs the port and the memory: the daemon and any
   # engine it spawned are gone before it starts.
-  stop_daemon
-  port_free "$PORT" || { echo "port $PORT still held after the daemon stopped; the rehearsal cannot start"; exit 1; }
+  daemon_stop
+  daemon_port_free "$PORT" || { echo "port $PORT still held after the daemon stopped; the rehearsal cannot start"; exit 1; }
   REHEARSAL_LOG="$OUT/rehearsal.log"
   # Its own scratch directory (it removes it), never this run's report.
   if DATA_DIR="$DATA/rehearsal" PORT="$PORT" bash scripts/prove-pin-rollback.sh >"$REHEARSAL_LOG" 2>&1; then REHEARSAL_OUT="passed"; else REHEARSAL_OUT="FAILED"; fi

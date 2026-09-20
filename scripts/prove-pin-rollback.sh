@@ -12,34 +12,20 @@
 #   PORT=8790 bash scripts/prove-pin-rollback.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. "$(dirname "$0")/lib/daemon.sh"
 
 PORT="${PORT:-8771}"
-BASE="http://127.0.0.1:$PORT"
+BASE="$(daemon_base "$PORT")"
 DATA="${DATA_DIR:-$PWD/data-scratch}"
 LOG="$DATA/daemon.log"
 KEEP_DATA="${KEEP_DATA:-0}"
 
-port_free() { python3 -c "import socket,sys;s=socket.socket();s.settimeout(0.2)
-try: s.bind(('127.0.0.1',int(sys.argv[1]))); s.close(); sys.exit(0)
-except OSError: sys.exit(1)" "$1"; }
-port_free "$PORT" || { echo "port $PORT is in use; pick another with PORT="; exit 1; }
+daemon_port_free "$PORT" || { echo "port $PORT is in use; pick another with PORT="; exit 1; }
 rm -rf "$DATA"; mkdir -p "$DATA"
 
-# The daemon leads its own process group, so the SIGKILL fallback takes a
-# spawned engine with it instead of orphaning it on its port and memory.
-STACK_DATA_DIR="$DATA" PORT="$PORT" python3 -c 'import os,sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' bun run backend/src/index.ts serve >"$LOG" 2>&1 &
-PID=$!
-echo "daemon pid $PID on port $PORT, data $DATA"
-stop_daemon() {
-  # SIGTERM to the daemon alone (it drains and stops its engines); after
-  # 10 s the whole group is killed, engine included.
-  kill "$PID" 2>/dev/null || true
-  for _ in $(seq 1 20); do kill -0 "$PID" 2>/dev/null || break; sleep 0.5; done
-  kill -9 -- "-$PID" 2>/dev/null || true
-}
+daemon_start "$PORT" "$DATA" "$LOG"
 cleanup() {
-  stop_daemon
-  if port_free "$PORT"; then echo "port $PORT free after stop"; else echo "port $PORT still held after stop"; fi
+  daemon_stop
   if [ "$KEEP_DATA" != "1" ]; then rm -rf "$DATA"; echo "scratch data removed"; fi
 }
 trap cleanup EXIT
