@@ -21,6 +21,7 @@ import { budgetRoutes } from "@/routes/budget";
 import { eventsRoutes } from "@/routes/events";
 import { liveRoutes } from "@/routes/live";
 import { networkRoutes } from "@/routes/network";
+import { componentsRoutes } from "@/routes/components";
 import { logsRoutes } from "@/routes/logs";
 import { seriesRoutes } from "@/routes/series";
 import { readyRoutes } from "@/routes/ready";
@@ -99,6 +100,7 @@ app.route("/stack/v1/check", checkRoutes);
 app.route("/stack/v1/run-state", runStateRoutes);
 app.route("/stack/v1/live", liveRoutes);
 app.route("/stack/v1/network", networkRoutes);
+app.route("/stack/v1/components", componentsRoutes);
 app.route("/v1", inferenceRoutes);
 
 migrateLegacyStore();

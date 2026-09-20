@@ -1,14 +1,15 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter, ErrorSchema, idParamSchema } from "@/lib/openapi";
 import { requireClientOrOperator } from "@/lib/clients";
-import { clearAll, dismiss, emit, eventsAfter, listNotifications, markRead } from "@/lib/events";
+import { ACTIVITY_EVENT_IDS, clearAll, dismiss, emit, eventsAfter, listActivity, listNotifications, markRead } from "@/lib/events";
 import { listRepairs, repairHealth, resolveRepair } from "@/lib/repairs";
 import { requireOperator } from "@/lib/operator";
-import { EventEnvelopeSchema } from "@/events";
+import { EventEnvelopeSchema, type EventId } from "@/events";
 import { ignore, list as listHealth, resolve } from "@/lib/health";
 import { showroom, showroomHealth, showroomNotifications, showroomResolveHealth } from "@/showroom/fixture";
 
 const eventsRoute = createRoute({ method: "get", path: "/events", tags: ["Events"], summary: "Stream Stack events", middleware: [requireClientOrOperator] as const, responses: { 200: { content: { "text/event-stream": { schema: z.string() } }, description: "Event envelopes, replayable by sequence." } } });
+const activityRoute = createRoute({ method: "get", path: "/activity", tags: ["Events"], summary: "Durable history: installs, engine state, updates, checks, health", middleware: [requireClientOrOperator] as const, responses: { 200: { content: { "application/json": { schema: z.object({ activity: z.array(z.unknown()) }) } }, description: "The last 200 durable activity events." } } });
 const notificationsRoute = createRoute({ method: "get", path: "/notifications", tags: ["Notifications"], middleware: [requireClientOrOperator] as const, request: { query: z.object({ durable: z.string().optional() }) }, responses: { 200: { content: { "application/json": { schema: z.object({ notifications: z.array(z.unknown()) }) } }, description: "Recent operator notifications." } } });
 const readRoute = createRoute({ method: "post", path: "/notifications/{id}/read", tags: ["Notifications"], middleware: [requireClientOrOperator] as const, request: { params: idParamSchema("id") }, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.literal(true) }) } }, description: "Notification marked read." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown notification." } } });
 const dismissRoute = createRoute({ method: "post", path: "/notifications/{id}/dismiss", tags: ["Notifications"], middleware: [requireClientOrOperator] as const, request: { params: idParamSchema("id") }, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.literal(true) }) } }, description: "Notification dismissed." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown notification." } } });
@@ -27,6 +28,10 @@ function sse(envelopes: unknown[]): Response {
 
 export const eventsRoutes = apiRouter();
 eventsRoutes.openapi(eventsRoute, (c) => sse(eventsAfter(Number(c.req.header("last-event-id") ?? 0))));
+eventsRoutes.openapi(activityRoute, (c) => {
+  const rows = showroom() ? showroomNotifications.filter((item) => ACTIVITY_EVENT_IDS.has(item.eventId as EventId)) : listActivity();
+  return c.json({ activity: rows }, 200);
+});
 eventsRoutes.openapi(notificationsRoute, (c) => { const durable = c.req.valid("query").durable === "1"; const rows = showroom() ? showroomNotifications.filter((item) => !durable || item.durable !== false) : listNotifications(durable); return c.json({ notifications: rows }, 200); });
 eventsRoutes.openapi(readRoute, (c) => markRead(c.req.valid("param").id) ? c.json({ ok: true as const }, 200) : c.json({ error: "Unknown notification" }, 404));
 eventsRoutes.openapi(dismissRoute, (c) => dismiss(c.req.valid("param").id) ? c.json({ ok: true as const }, 200) : c.json({ error: "Unknown notification" }, 404));

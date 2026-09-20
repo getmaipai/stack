@@ -1,6 +1,6 @@
 import { beforeEach, expect, test } from "bun:test";
 import { app } from "@/app";
-import { __resetEventsForTests, clearAll, emit, listNotifications } from "@/lib/events";
+import { __resetEventsForTests, clearAll, dismiss, emit, listActivity, listNotifications } from "@/lib/events";
 import { __resetHealthForTests, raise } from "@/lib/health";
 import { __resetRepairsForTests } from "@/lib/repairs";
 import { reportChatEngineExited } from "@/lib/supervisor";
@@ -30,6 +30,12 @@ test("the SSE route replays events after Last-Event-ID", async () => {
   const body = await response.text();
   expect(body).not.toContain(`"seq":${first.seq}`);
   expect(body).toContain(`"seq":${second.seq}`);
+});
+
+test("the live event (fired every 5s indefinitely by live.ts) never persists a notification row", () => {
+  emit({ id: "live", data: { at: new Date().toISOString() } });
+  emit({ id: "live", data: { at: new Date().toISOString() } });
+  expect(listNotifications()).toHaveLength(0);
 });
 
 test("clearAll empties the durable notification center", () => {
@@ -86,4 +92,39 @@ test("every event template renders as a plain sentence with no identifier tokens
     expect(title).not.toContain("{");
     expect(title).not.toMatch(/[a-z]+\-[a-z]/);
   }
+});
+
+test("activity is a filtered read of the durable log: installs, engine state, updates, checks, health, nothing else", () => {
+  emit({ id: "model.installed", data: { model: "Llama" } });
+  emit({ id: "engine.state", data: { engine: "chat", state: "stopped" } });
+  emit({ id: "update.available", data: { kind: "app", version: "0.2.0" } });
+  emit({ id: "check.done", data: {} });
+  raise({ code: "disk-under-reserve", severity: "warning", title: "Disk space is running low", text: "low", cause: "low" });
+  emit({ id: "pressure", data: { freeMemoryBytes: 1 } });
+  emit({ id: "detected.changed", data: { count: 1 } });
+  const activity = listActivity() as Array<{ eventId: string }>;
+  const ids = activity.map((item) => item.eventId);
+  expect(ids).toContain("model.installed");
+  expect(ids).toContain("engine.state");
+  expect(ids).toContain("update.available");
+  expect(ids).toContain("check.done");
+  expect(ids).toContain("health.changed");
+  expect(ids).not.toContain("pressure");
+  expect(ids).not.toContain("detected.changed");
+});
+
+test("dismissing or reading a notification does not remove it from activity: activity is history, not an inbox", () => {
+  const envelope = emit({ id: "model.installed", data: { model: "Llama" } });
+  const notification = (listNotifications() as Array<{ id: string; eventId: string }>).find((item) => item.eventId === envelope.id)!;
+  dismiss(notification.id);
+  expect(listNotifications().some((item) => (item as { id: string }).id === notification.id)).toBe(false);
+  expect(listActivity().some((item) => (item as { id: string }).id === notification.id)).toBe(true);
+});
+
+test("GET /stack/v1/activity returns the same rows over HTTP", async () => {
+  emit({ id: "model.installed", data: { model: "Llama" } });
+  const response = await app.request("/stack/v1/activity", { headers: testClientHeaders });
+  expect(response.status).toBe(200);
+  const body = await response.json() as { activity: Array<{ eventId: string }> };
+  expect(body.activity.some((item) => item.eventId === "model.installed")).toBe(true);
 });

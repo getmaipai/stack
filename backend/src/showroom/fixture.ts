@@ -110,3 +110,43 @@ export function showroomResourceSeries(range: "hour" | "day" | "week" | "month")
 }
 
 export function showroomResolveHealth(code: string): boolean { const item = showroomHealth.find((entry) => entry.code === code); if (!item) return false; showroomHealth.splice(showroomHealth.indexOf(item), 1); return true; }
+
+type ShowroomComponentRow = { id: string; category: "models" | "runtimes" | "apps" | "extensions" | "system" | "adapters" | "workflows" | "training"; subtype: string | null; name: string; identifier: string | null; version: string | null; sizeBytes: number | null; status: "running" | "stopped" | "detected" | "update" | "warning" | "error" | "ready"; statusText: string | null; runtime: string | null; resources: { memoryBytes: number | null; gpuPercent: number | null; cpuPercent: number | null }; uptimeSeconds: number | null; lastUsedAt: string | null; notes: string | null };
+
+const showroomComponentRows: ShowroomComponentRow[] = [
+  { id: "model:qwen3-27b-instruct", category: "models", subtype: "LLMs", name: "Family chat", identifier: "qwen3-27b-instruct", version: "main", sizeBytes: 17_200_000_000, status: "running", statusText: "Loaded and serving requests", runtime: "llama-server", resources: { memoryBytes: 21_600_000_000, gpuPercent: null, cpuPercent: null }, uptimeSeconds: 3_600, lastUsedAt: new Date(now.getTime() - 120_000).toISOString(), notes: "Q4_K_M" },
+  { id: "model:qwen3-4b-kids", category: "models", subtype: "LLMs", name: "Kids", identifier: "qwen3-4b-kids", version: "main", sizeBytes: 2_600_000_000, status: "stopped", statusText: "Installed, not loaded", runtime: null, resources: { memoryBytes: null, gpuPercent: null, cpuPercent: null }, uptimeSeconds: null, lastUsedAt: new Date(now.getTime() - 6 * 3_600_000).toISOString(), notes: "Q4_K_M" },
+  { id: "model:flux2-klein", category: "models", subtype: "Image", name: "Images", identifier: "flux2-klein", version: "main", sizeBytes: 12_800_000_000, status: "stopped", statusText: "Installed, not loaded", runtime: null, resources: { memoryBytes: null, gpuPercent: null, cpuPercent: null }, uptimeSeconds: null, lastUsedAt: null, notes: null },
+  { id: "runtime:llama-server-b10797", category: "runtimes", subtype: "Engines", name: "llama-server · Family chat", identifier: "llama-server-b10797", version: "b10797", sizeBytes: 380_000_000, status: "update", statusText: "A newer build is newer available.", runtime: null, resources: { memoryBytes: null, gpuPercent: null, cpuPercent: null }, uptimeSeconds: null, lastUsedAt: null, notes: null },
+  { id: "runtime:mlx-serve-managed", category: "runtimes", subtype: "Engines", name: "mlx-serve · Images", identifier: "mlx-serve-managed", version: "0.8.4", sizeBytes: 210_000_000, status: "running", statusText: "Running", runtime: null, resources: { memoryBytes: null, gpuPercent: null, cpuPercent: null }, uptimeSeconds: 5_400, lastUsedAt: null, notes: null },
+  { id: "runtime:detected:ollama", category: "runtimes", subtype: "Detected", name: "Ollama", identifier: "http://127.0.0.1:11434", version: "0.6.1", sizeBytes: null, status: "detected", statusText: "Detected at http://127.0.0.1:11434, not adopted.", runtime: null, resources: { memoryBytes: null, gpuPercent: null, cpuPercent: null }, uptimeSeconds: null, lastUsedAt: new Date(now.getTime() - 3_600_000).toISOString(), notes: "Minimum supported version: 0.5.0." },
+  { id: "app:client-coding", category: "apps", subtype: "Coding", name: "Coding tool", identifier: "client-coding", version: null, sizeBytes: null, status: "running", statusText: "421 requests", runtime: null, resources: { memoryBytes: null, gpuPercent: null, cpuPercent: null }, uptimeSeconds: null, lastUsedAt: new Date(now.getTime() - 50 * 60000).toISOString(), notes: null },
+  { id: "app:tester:chat", category: "apps", subtype: "Tester", name: "Chat", identifier: null, version: null, sizeBytes: null, status: "running", statusText: "Family chat serves this role.", runtime: null, resources: { memoryBytes: null, gpuPercent: null, cpuPercent: null }, uptimeSeconds: null, lastUsedAt: null, notes: null },
+  { id: "app:tester:image", category: "apps", subtype: "Tester", name: "Image", identifier: null, version: null, sizeBytes: null, status: "ready", statusText: "Images serves this role.", runtime: null, resources: { memoryBytes: null, gpuPercent: null, cpuPercent: null }, uptimeSeconds: null, lastUsedAt: null, notes: null },
+  { id: "app:library", category: "apps", subtype: "Knowledge", name: "Library", identifier: null, version: null, sizeBytes: null, status: "ready", statusText: null, runtime: null, resources: { memoryBytes: null, gpuPercent: null, cpuPercent: null }, uptimeSeconds: null, lastUsedAt: null, notes: null },
+  { id: "extension:channel:showroom-telegram", category: "extensions", subtype: "Integrations", name: "Family Telegram", identifier: "telegram", version: null, sizeBytes: null, status: "ready", statusText: null, runtime: null, resources: { memoryBytes: null, gpuPercent: null, cpuPercent: null }, uptimeSeconds: null, lastUsedAt: new Date(now.getTime() - 3600000).toISOString(), notes: null },
+  { id: "extension:channel:showroom-ntfy", category: "extensions", subtype: "Integrations", name: "Phone alerts", identifier: "ntfy", version: null, sizeBytes: null, status: "warning", statusText: "Not yet verified.", runtime: null, resources: { memoryBytes: null, gpuPercent: null, cpuPercent: null }, uptimeSeconds: null, lastUsedAt: null, notes: null },
+  { id: "extension:hf-mirror", category: "extensions", subtype: "Integrations", name: "Hugging Face mirror", identifier: "https://huggingface.co", version: null, sizeBytes: null, status: "ready", statusText: "Using the default Hugging Face endpoint.", runtime: null, resources: { memoryBytes: null, gpuPercent: null, cpuPercent: null }, uptimeSeconds: null, lastUsedAt: null, notes: null },
+  { id: "system:accelerator:apple", category: "system", subtype: "Accelerators", name: "Apple silicon GPU", identifier: null, version: null, sizeBytes: null, status: "ready", statusText: null, runtime: null, resources: { memoryBytes: null, gpuPercent: null, cpuPercent: null }, uptimeSeconds: null, lastUsedAt: null, notes: null },
+  { id: "system:driver:metal", category: "system", subtype: "Drivers", name: "Metal", identifier: null, version: null, sizeBytes: null, status: "ready", statusText: null, runtime: null, resources: { memoryBytes: null, gpuPercent: null, cpuPercent: null }, uptimeSeconds: null, lastUsedAt: null, notes: null },
+  { id: "system:dependency:llama-server-b10797", category: "system", subtype: "Dependencies", name: "llama-server (macOS, Apple Silicon, Metal), build b10797", identifier: "llama-server-b10797", version: null, sizeBytes: 380_000_000, status: "ready", statusText: null, runtime: null, resources: { memoryBytes: null, gpuPercent: null, cpuPercent: null }, uptimeSeconds: null, lastUsedAt: null, notes: null },
+];
+
+const showroomManaged = { models: true, runtimes: true, apps: true, extensions: true, system: true, adapters: false, workflows: false, training: false } as const;
+
+export function showroomComponents(): { components: ShowroomComponentRow[]; managed: typeof showroomManaged } {
+  return { components: showroomComponentRows, managed: showroomManaged };
+}
+
+export function showroomComponentsSummary() {
+  const dayAgo = now.getTime() - 24 * 60 * 60_000;
+  const recentClients = showroomClients.filter((client) => new Date(client.lastSeenAt).getTime() >= dayAgo);
+  const perCategory = Object.fromEntries((Object.keys(showroomManaged) as (keyof typeof showroomManaged)[]).map((category) => [category, showroomComponentRows.filter((row) => row.category === category).length])) as Record<keyof typeof showroomManaged, number>;
+  return {
+    installed: showroomComponentRows.filter((row) => row.status !== "detected").length,
+    running: showroomComponentRows.filter((row) => row.status === "running").length,
+    clientsConnected: { local: recentClients.length, remote: 0 },
+    updatesAvailable: showroomComponentRows.filter((row) => row.status === "update").length,
+    perCategory,
+  };
+}

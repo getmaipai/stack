@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { memorySamples, resourceSamples, speedResults, usageSamples } from "@/db/schema";
 import { collectSample, getLastLiveSample } from "@/lib/live";
 import { getMemoryReader } from "@/lib/memory";
+import { hostCpuPercent } from "@/lib/hostCpu";
 
 export type SeriesRange = "hour" | "day" | "week" | "month";
 const durations: Record<SeriesRange, number> = { hour: 60 * 60_000, day: 24 * 60 * 60_000, week: 7 * 24 * 60 * 60_000, month: 30 * 24 * 60 * 60_000 };
@@ -123,16 +124,24 @@ export function pruneResourceSamples(now = Date.now()): void {
 // does. It runs unconditionally from process start (lib/live.ts's
 // sampler is the same), unlike the governor's memory sampler, which
 // only runs while the chat engine is loaded and so cannot be this
-// panel's source.
+// panel's source. CPU is the one exception: live.ts's cpu.percent is
+// the chat engine's own process CPU (its "CPU 18%" process row), not
+// the computer's, so this panel's cpu reading comes from hostCpu.ts's
+// own os.cpus() snapshot delta instead (getmaipai/stack#2).
 export async function sampleResourcesOnce(): Promise<void> {
   // startLiveSampler()'s own first sample resolves asynchronously, so the
   // very first call here (right after it, at process boot) would otherwise
-  // record cpu/gpus/drives as empty even on real hardware; collect one
-  // directly rather than wait for the interval to catch up.
+  // record gpus/drives as empty even on real hardware; collect one
+  // directly rather than wait for the interval to catch up. CPU has no
+  // equivalent fix: hostCpuPercent() is a delta between two snapshots in
+  // time, so the very first reading of the process (here or anywhere
+  // else that calls it) is always null, whatever else this function does
+  // — there is no earlier snapshot to diff against yet. It self-heals on
+  // the next 60s tick, same as any other momentarily-missing sample.
   const live = getLastLiveSample() ?? (await collectSample().catch(() => null));
   const memory = getMemoryReader().read();
   recordResourcesSample({
-    cpuPercent: live?.cpu.percent ?? null,
+    cpuPercent: hostCpuPercent(),
     memoryUsedBytes: memory.totalBytes - memory.freeBytes,
     memoryTotalBytes: memory.totalBytes,
     gpus: (live?.gpus ?? []).map((gpu, index) => ({ index, name: gpu.name, utilization: gpu.utilization, memoryUsedBytes: gpu.memoryUsedBytes, memoryTotalBytes: gpu.memoryTotalBytes })),

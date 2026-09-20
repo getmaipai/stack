@@ -1479,6 +1479,37 @@
         }
       }
     },
+    "/stack/v1/activity": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Durable history: installs, engine state, updates, checks, health",
+        "responses": {
+          "200": {
+            "description": "The last 200 durable activity events.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "activity": {
+                      "type": "array",
+                      "items": {
+                        "nullable": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "activity"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/notifications": {
       "get": {
         "tags": [
@@ -9530,6 +9561,293 @@
                     "linkMbps",
                     "gatewayMs",
                     "measuredAt"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/components": {
+      "get": {
+        "tags": [
+          "Components"
+        ],
+        "summary": "Every installed component in one list",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "models",
+                "runtimes",
+                "apps",
+                "extensions",
+                "system",
+                "adapters",
+                "workflows",
+                "training"
+              ]
+            },
+            "required": false,
+            "name": "category",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "running",
+                "stopped",
+                "detected",
+                "update",
+                "warning",
+                "error",
+                "ready"
+              ]
+            },
+            "required": false,
+            "name": "status",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Models, runtimes, apps, extensions, and system rows, plus which categories are managed yet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "components": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "category": {
+                            "type": "string",
+                            "enum": [
+                              "models",
+                              "runtimes",
+                              "apps",
+                              "extensions",
+                              "system",
+                              "adapters",
+                              "workflows",
+                              "training"
+                            ]
+                          },
+                          "subtype": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "identifier": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "version": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "sizeBytes": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "running",
+                              "stopped",
+                              "detected",
+                              "update",
+                              "warning",
+                              "error",
+                              "ready"
+                            ]
+                          },
+                          "statusText": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "runtime": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "resources": {
+                            "type": "object",
+                            "properties": {
+                              "memoryBytes": {
+                                "type": "number",
+                                "nullable": true
+                              },
+                              "gpuPercent": {
+                                "type": "number",
+                                "nullable": true
+                              },
+                              "cpuPercent": {
+                                "type": "number",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "memoryBytes",
+                              "gpuPercent",
+                              "cpuPercent"
+                            ]
+                          },
+                          "uptimeSeconds": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "lastUsedAt": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "notes": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "category",
+                          "subtype",
+                          "name",
+                          "identifier",
+                          "version",
+                          "sizeBytes",
+                          "status",
+                          "statusText",
+                          "runtime",
+                          "resources",
+                          "uptimeSeconds",
+                          "lastUsedAt",
+                          "notes"
+                        ]
+                      }
+                    },
+                    "managed": {
+                      "type": "object",
+                      "properties": {
+                        "models": {
+                          "type": "boolean"
+                        },
+                        "runtimes": {
+                          "type": "boolean"
+                        },
+                        "apps": {
+                          "type": "boolean"
+                        },
+                        "extensions": {
+                          "type": "boolean"
+                        },
+                        "system": {
+                          "type": "boolean"
+                        },
+                        "adapters": {
+                          "type": "boolean"
+                        },
+                        "workflows": {
+                          "type": "boolean"
+                        },
+                        "training": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "components",
+                    "managed"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/components/summary": {
+      "get": {
+        "tags": [
+          "Components"
+        ],
+        "summary": "Component counts for the Overview cards",
+        "responses": {
+          "200": {
+            "description": "Counts derived from the same component list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "installed": {
+                      "type": "number"
+                    },
+                    "running": {
+                      "type": "number"
+                    },
+                    "clientsConnected": {
+                      "type": "object",
+                      "properties": {
+                        "local": {
+                          "type": "number"
+                        },
+                        "remote": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "local",
+                        "remote"
+                      ]
+                    },
+                    "updatesAvailable": {
+                      "type": "number"
+                    },
+                    "perCategory": {
+                      "type": "object",
+                      "properties": {
+                        "models": {
+                          "type": "number"
+                        },
+                        "runtimes": {
+                          "type": "number"
+                        },
+                        "apps": {
+                          "type": "number"
+                        },
+                        "extensions": {
+                          "type": "number"
+                        },
+                        "system": {
+                          "type": "number"
+                        },
+                        "adapters": {
+                          "type": "number"
+                        },
+                        "workflows": {
+                          "type": "number"
+                        },
+                        "training": {
+                          "type": "number"
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "installed",
+                    "running",
+                    "clientsConnected",
+                    "updatesAvailable",
+                    "perCategory"
                   ]
                 }
               }

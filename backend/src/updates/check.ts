@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { meta } from "@/db/schema";
+import { emit } from "@/lib/events";
 import { MANIFEST_URLS, UpdateManifestSchema, type UpdateClass } from "@/updates/manifests";
 
 const version = "0.1.0";
@@ -16,6 +17,7 @@ export type UpdateFetcher = (input: string | URL | Request, init?: RequestInit) 
 export function conditionalHeaders(etag: string | null): Record<string, string> { return { "if-none-match": etag ?? "", "user-agent": `maipai-stack/${version} (${process.platform}-${process.arch})` }; }
 export async function check(kind: UpdateClass, fetcher: UpdateFetcher = fetch): Promise<UpdateState> {
   if (!updatesEnabled()) return state(kind);
+  const previouslyAvailable = read(kind, "available");
   const headers = conditionalHeaders(read(kind, "etag"));
   const response = await fetcher(MANIFEST_URLS[kind], { headers });
   if (response.status === 304) { write(kind, "checked", new Date().toISOString()); return state(kind); }
@@ -24,6 +26,16 @@ export async function check(kind: UpdateClass, fetcher: UpdateFetcher = fetch): 
   const target = manifest.platforms[`${process.platform}-${process.arch}`] ?? manifest.platforms.default;
   write(kind, "available", manifest.version); write(kind, "notes", manifest.notes); write(kind, "checked", new Date().toISOString()); if (target) { write(kind, "size", String(target.size)); if (kind === "engines") { write(kind, "target.url", target.url); write(kind, "target.sha256", target.sha256); write(kind, "target.size", String(target.size)); } }
   const etag = response.headers.get("etag"); if (etag) write(kind, "etag", etag);
+  // Only a genuinely new update: not the same version already announced
+  // by an earlier check, so a nightly re-check of a known-available
+  // update doesn't renotify every time. There is no reliable "installed"
+  // value to compare against here (updates.<kind>.installed is never
+  // written by anything today), so the first check ever always
+  // announces whatever the manifest reports, same as opening the
+  // Updates page for the first time would.
+  if (manifest.version !== previouslyAvailable) {
+    emit({ id: "update.available", data: { kind, version: manifest.version } });
+  }
   return state(kind);
 }
 export function skip(kind: UpdateClass, skipped = true): void { write(kind, "skipped", String(skipped)); }

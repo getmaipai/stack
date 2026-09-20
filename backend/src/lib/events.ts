@@ -13,7 +13,12 @@ export function emit(event: { id: EventId; data: Record<string, unknown> }): Eve
   ring.push(envelope);
   if (ring.length > RING_SIZE) ring.shift();
   const definition = EVENTS[event.id];
-  if (definition.id !== "job.progress" && definition.id !== "role.state") {
+  // job.progress and role.state are excluded as too frequent to be a
+  // "notification" (they fire repeatedly during one download or role
+  // change); "live" is the same shape of problem, worse, since it fires
+  // every 5s indefinitely from live.ts's sampler rather than during one
+  // finite operation, and would otherwise flood this table forever.
+  if (definition.id !== "job.progress" && definition.id !== "role.state" && definition.id !== "live") {
     const title = typeof event.data.message === "string" && (event.id === "update.applied" || event.id === "update.failed") ? event.data.message : definition.template.replace(/\{(\w+)\}/g, (_match, key: string) => {
       const value = event.data[key];
       return value === undefined ? `{${key}}` : String(value);
@@ -45,6 +50,23 @@ export function listNotifications(durableOnly = false): unknown[] {
   db.delete(notifications).where(lt(notifications.at, cutoff)).run();
   const rows = db.select().from(notifications).where(isNull(notifications.dismissedAt)).orderBy(desc(notifications.at)).all();
   return durableOnly ? rows.filter((row) => EVENTS[row.eventId as EventId]?.durable === true) : rows;
+}
+
+// UI-08's activity log: a filtered read of the same durable event log the
+// notification bell uses, not a second table. Model installs, engine
+// starts/stops, available updates, finished checks, and health items
+// raised or cleared, oldest-dismissed-and-read state notwithstanding
+// (activity is history, not an actionable inbox, so dismissing or
+// reading a notification must not erase it from here).
+export const ACTIVITY_EVENT_IDS = new Set<EventId>(["model.installed", "engine.state", "update.available", "check.done", "health.changed"]);
+const ACTIVITY_LIMIT = 200;
+
+export function listActivity(): unknown[] {
+  const cutoff = new Date(Date.now() - THIRTY_DAYS_MS).toISOString();
+  db.delete(notifications).where(lt(notifications.at, cutoff)).run();
+  return db.select().from(notifications).orderBy(desc(notifications.at)).all()
+    .filter((row) => ACTIVITY_EVENT_IDS.has(row.eventId as EventId))
+    .slice(0, ACTIVITY_LIMIT);
 }
 
 export function markRead(id: string): boolean {

@@ -2,6 +2,7 @@ import { beforeEach, expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { resourceSamples } from "@/db/schema";
+import { __resetHostCpuForTests, __setHostCpuReaderForTests, hostCpuPercent } from "@/lib/hostCpu";
 import { __resetLiveForTests, __setLiveReadersForTests, startLiveSampler, stopLiveSampler } from "@/lib/live";
 import { __setMemoryReaderForTests } from "@/lib/memory";
 import { scriptedMemoryReader } from "@/lib/memory/scripted";
@@ -26,6 +27,7 @@ async function clearResourceSamples(): Promise<void> {
 
 beforeEach(async () => {
   __resetLiveForTests();
+  __resetHostCpuForTests();
   __setMemoryReaderForTests(scriptedMemoryReader([GOVERNOR_MEMORY_DEFAULT]));
   setSupervisorFactoryForTests(null);
   await clearResourceSamples();
@@ -33,6 +35,9 @@ beforeEach(async () => {
 
 test("a scripted live sample records one row per resource kind", async () => {
   __setLiveReadersForTests(macReaders());
+  __setHostCpuReaderForTests(() => ({ idle: 8000, total: 10000 }));
+  hostCpuPercent(); // seed the baseline snapshot
+  __setHostCpuReaderForTests(() => ({ idle: 8500, total: 11000 })); // next tick: 50% busy
   setSupervisorFactoryForTests(async () => ({
     client: { baseUrl: "http://127.0.0.1:8142", complete: async () => ({ status: 200, body: {} }), health: async () => true },
     kind: "spawned", identity: { host: "local", build: "test", model: "chat.gguf", healthy: true }, pid: 1234, port: 8142, activeRequests: 0, retired: false, stop: async () => {},
@@ -48,7 +53,7 @@ test("a scripted live sample records one row per resource kind", async () => {
   const memory = rows.find((row) => row.kind === "memory");
   const gpu = rows.find((row) => row.kind === "gpu");
   const storage = rows.find((row) => row.kind === "storage");
-  expect(cpu?.percent).toBe(5);
+  expect(cpu?.percent).toBe(50);
   expect(memory?.usedBytes).toBe(GOVERNOR_MEMORY_DEFAULT.totalBytes - GOVERNOR_MEMORY_DEFAULT.freeBytes);
   expect(memory?.totalBytes).toBe(GOVERNOR_MEMORY_DEFAULT.totalBytes);
   expect(gpu?.percent).toBe(37);
