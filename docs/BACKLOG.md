@@ -98,11 +98,14 @@ are never copied. Nothing migrates Home until STACK-16.
   `backend/src/spec/ts/`; the backend's imports change from
   `@/spec/ts/<name>` to `@maipai/spec`; `scripts/check.sh` pins the
   `spec-v` tag beside `core-v`. Exit: `bash scripts/check.sh`.
-- [ ] **RF-06 (S): the Home hand-off.** `docs/plans/home-adoption-2026-09-xx.md`:
-  what Home's backlog gains (the Engines page, the Updates and Repairs
-  wiring, installing the Stack inside Home's installer, the Studio
-  bench as a Home bench, the `spec` move if 0c has not run) and the
-  order. Exit: `bash scripts/check.sh --docs`.
+- [x] **RF-06 (S): the Home hand-off.**
+  [plans/home-adoption-2026-09-20.md](plans/home-adoption-2026-09-20.md):
+  nine Home items in order (install inside Home's installer, the Stack
+  client and role wire, the event bridge, the Engines page with every
+  person-facing verb mapped to its route, Updates and Repairs wiring,
+  first-run sizing, the Studio bench as a Home bench, the `spec` move
+  if 0c has not run, STACK-16's dual-run), each in the org template.
+  Landed on `main` with this line.
 
 ## Roles and the router
 
