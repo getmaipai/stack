@@ -222,7 +222,7 @@ function AppearanceControl() {
 export function SiteHeader() {
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center border-b bg-[var(--surface-sidebar)] px-3 sm:px-4 lg:px-6">
-      <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-3 lg:grid-cols-[1fr_minmax(420px,640px)_1fr]">
+      <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-3 lg:grid-cols-[minmax(360px,1fr)_minmax(420px,640px)_1fr]">
         <div className="flex min-w-0 items-center gap-2">
           {/* The rail's own double-chevron (app-sidebar.tsx's RailToggle) is the
               one desktop toggle the reference shows; it lives inside the rail

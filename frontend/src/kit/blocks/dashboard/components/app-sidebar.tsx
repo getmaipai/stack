@@ -12,8 +12,8 @@ const ChevronsRight = getIcon("ChevronsRight");
 function RailToggle(): React.ReactElement {
   const { state, toggleSidebar } = useSidebar();
   const expanded = state === "expanded";
-  return <button type="button" onClick={toggleSidebar} aria-expanded={expanded} aria-label={expanded ? "Collapse navigation" : "Expand navigation"} className="flex size-9 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
-    {expanded ? <ChevronsLeft className="size-5" /> : <ChevronsRight className="size-5" />}
+  return <button type="button" onClick={toggleSidebar} aria-expanded={expanded} aria-label={expanded ? "Collapse navigation" : "Expand navigation"} className="flex size-8 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
+    {expanded ? <ChevronsLeft className="size-4" /> : <ChevronsRight className="size-4" />}
   </button>;
 }
 
@@ -34,7 +34,7 @@ export function AppSidebar({ engineCount = 0, updateCount = 0, alertSeverity = n
       tooltip: tooltips[destination.id],
     })),
   }));
-  return <Sidebar collapsible="icon" className="bg-[var(--surface-sidebar)] p-2 pb-3" {...props}>
+  return <Sidebar collapsible="icon" className="bg-[var(--surface-sidebar)] p-1.5 pb-2" {...props}>
     <SidebarHeader className="p-0">
       <SidebarMenu><SidebarMenuItem>
         <div className="flex items-center justify-between gap-2 px-1.5 py-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-2">
@@ -44,6 +44,6 @@ export function AppSidebar({ engineCount = 0, updateCount = 0, alertSeverity = n
       </SidebarMenuItem></SidebarMenu>
     </SidebarHeader>
     <SidebarContent className="flex flex-col"><NavMain groups={groups} /></SidebarContent>
-    <SidebarFooter className="p-0 pb-1"><SystemPulse /></SidebarFooter>
+    <SidebarFooter className="p-0"><SystemPulse /></SidebarFooter>
   </Sidebar>;
 }

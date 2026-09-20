@@ -10,15 +10,17 @@ export function NavMain({ groups }: { groups: NavGroup[] }) {
   // The rail's own overflow-auto scroller (kit/ui/sidebar.tsx's
   // SidebarContent) sits one level up; this list just needs to be able to
   // shrink below its content size (min-h-0) so that scroller, not the
-  // whole rail, is what scrolls. Group padding and label height are kept
-  // tight so all 17 destinations plus their 4 group labels fit inside an
-  // 900px-tall viewport without needing to scroll at all.
+  // whole rail, is what scrolls. Group padding is kept tight and rows stay
+  // at their 40px spec height; the 16px/8px space around each group label
+  // (owner's retest, 2026-09-20) means a very short viewport (~900px) can
+  // still need a small scroll to reach the last destination, but nothing
+  // is unreachable or hidden the way it was before this scroller existed.
   return (
-    <div data-nav-mode="pinned" className="flex min-h-0 flex-1 flex-col gap-1">
+    <div data-nav-mode="pinned" className="flex min-h-0 flex-1 flex-col">
       {groups.map((group) => (
         <SidebarGroup key={group.label} className="group/nav p-0">
-          <SidebarGroupLabel className="h-4 px-2 text-xs font-semibold tracking-wide text-sidebar-foreground/60 uppercase group-data-[collapsible=icon]:hidden">{group.label}</SidebarGroupLabel>
-          <SidebarMenu className="gap-0.5">
+          <SidebarGroupLabel className="mt-4 mb-2 h-4 px-2 text-xs font-semibold tracking-wide text-sidebar-foreground/60 uppercase group-data-[collapsible=icon]:hidden">{group.label}</SidebarGroupLabel>
+          <SidebarMenu className="gap-0">
             {group.items.map((item) => (
               <SidebarMenuItem key={item.title}>
                 <SidebarMenuButton asChild isActive={item.isActive} tooltip={item.tooltip ?? item.title} className="h-10 px-3 text-[15px] [&>svg]:size-[18px]! data-[active=true]:bg-[var(--hue-violet)] data-[active=true]:text-white data-[active=true]:hover:bg-[var(--hue-violet)] data-[active=true]:hover:text-white">
