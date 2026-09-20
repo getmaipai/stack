@@ -74,6 +74,26 @@ process. Home's own `/v1` is never a raw pass-through: the Stack's
 person); Home's answers as the household's assistant through the turn
 engine. A client that wants the model is Home's business to authorize.
 
+## Three calls, worked
+
+```bash
+curl -s http://127.0.0.1:8770/stack/v1/roles | jq '.roles[] | {id, state}'
+```
+
+The `state` values are `notInstalled`, `installed`, `loaded`, `ready`, and `offline`, describing how available each role is.
+
+```bash
+curl -si http://127.0.0.1:8770/v1/chat/completions -H 'content-type: application/json' -d '{"model":"chat","messages":[{"role":"user","content":"Say OK."}]}'
+```
+
+The three identity headers come back on every reply, and a 503 carries `offline_reason` when the role is not ready.
+
+```bash
+curl -s http://127.0.0.1:8770/stack/v1/health | jq '.items[] | {code, severity, fix}'
+```
+
+Each item has one fix action that Home renders as a button.
+
 ## The control API (`/stack/v1/*`)
 
 | Surface | Path | What Home does with it |
