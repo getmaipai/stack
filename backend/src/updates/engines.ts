@@ -3,6 +3,8 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { meta } from "@/db/schema";
 import { resolve } from "node:path";
+import { join } from "node:path";
+import { ENGINE_READY_MARKER } from "@/lib/engineCatalog";
 import { engineCurrentPath, engineTagRoot } from "@/lib/store/layout";
 import { raise } from "@/lib/health";
 import { emit } from "@/lib/events";
@@ -20,7 +22,9 @@ export interface EngineSwapOptions {
 
 export async function swapEngine(name: string, tag: string, options: EngineSwapOptions = {}): Promise<void> {
   const target = engineTagRoot(name, tag);
-  if (!existsSync(target)) throw new Error(`Engine tag is not installed: ${tag}`);
+  // The directory exists from the moment a download starts; only the
+  // ready marker means the build finished installing and verified.
+  if (!existsSync(join(target, ENGINE_READY_MARKER))) throw new Error(`Engine tag is not installed: ${tag}`);
   const current = engineCurrentPath(name);
   const previous = (() => { try { return readlinkSync(current); } catch { return null; } })();
   if (previous && previous !== tag) rememberPrevious(name, previous);
@@ -57,11 +61,13 @@ export function failedSwap(reason: string): void {
 }
 
 export type EngineUpdateRunner = (name: string, tag: string, target: { url: string; sha256: string; size: number }) => Promise<void>;
-function updatePin(name: string, tag: string, target: { url: string; sha256: string; size: number }): EngineBinaryPin {
+/** A pin for a build named by url, checksum and tag: what the Catalog
+ * index describes, or what Home stages beside the current build. */
+export function stagingPin(name: string, tag: string, target: { url: string; sha256: string; size: number }): EngineBinaryPin {
   return { id: `${name}-${tag}`, platform: process.platform as "darwin" | "win32", arch: process.arch as "arm64" | "x64", requiresNvidia: false, label: `${name} ${tag}`, archive: { label: `${name} ${tag}`, url: target.url, sha256: target.sha256, approxBytes: target.size }, verified: true };
 }
 async function stageAndSwap(name: string, tag: string, target: { url: string; sha256: string; size: number }): Promise<void> {
-  await ensureEngine(updatePin(name, tag, target), undefined, { activate: false });
+  await ensureEngine(stagingPin(name, tag, target), undefined, { activate: false });
   await swapEngine(name, tag, { drain: () => stopRole("chat", "Draining for an engine update."), postLoadCheck: async () => { await restartRole("chat"); await getProcess("chat"); return true; }, emitEvents: false });
 }
 let engineUpdateRunner: EngineUpdateRunner = stageAndSwap;

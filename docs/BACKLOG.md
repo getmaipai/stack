@@ -36,7 +36,7 @@ are never copied. Nothing migrates Home until STACK-16.
 | Studio proof | STACK-13, STACK-74, STACK-14, STACK-93 | Complete generator jobs and the bench protocol, measure the Studio with the full resident set, prove the governor across two engines. |
 | Home adoption | STACK-75, STACK-16 | Pin and test the Stack/Home wire, then move Home onto the Stack with rollback after the Studio proof. |
 | Speech and the robot | STACK-94, STACK-95, STACK-17 | The speech roles on the Mac, then the Linux service and the robot profile. |
-| Operations | STACK-96, STACK-97, STACK-87 | Pin and rollback proven live, the Catalog engine index, health honesty kept through the rewrite. |
+| Operations | STACK-96, STACK-96b, STACK-97, STACK-87 | Pin and rollback proven live, the Catalog engine index, health honesty kept through the rewrite. |
 
 ## The refocus (2026-09-20)
 
@@ -182,19 +182,26 @@ are never copied. Nothing migrates Home until STACK-16.
   read-only import by link. Kept.
 - [x] **STACK-86: qualification.** The chat and engine pins held to
   their declarations offline. Kept.
-- [ ] **STACK-96 (M): pin and rollback proven live.** On a clean data
-  directory: install the pinned engine, install the pinned model, stage
-  a second engine tag, swap with drain and post-load check, roll back,
-  and prove the previous build answered afterward, all through the
-  public routes with identity headers checked at each step; then the
-  same with a deliberately corrupted archive to prove `failed-swap`
-  relinks. Acceptance: the transcript in `dev.md` with timings; a
-  regression test for each refusal. Files: `backend/src/updates/`,
-  `backend/src/lib/engineInstall.ts`, `backend/tests/engineSwap.test.ts`,
-  `docs/dev.md`. Mirror: the 2026-09-18 walk. Out of scope: model
-  updates (a new revision beside the old follows the same rule and is
-  STACK-97's data). Exit: `bash scripts/check.sh` and the live
-  transcript.
+- [x] **STACK-96 (M): pin and rollback proven live.** Committed at the
+  commit that carries this line; live proof outstanding: run 1 proved
+  the downloads, the checksum refusal and the first answer and exposed
+  two real bugs (the supervisor never launched the `current` link's
+  build; the header mapping), both fixed with regression tests; run 2
+  with the fixes was blocked by 5.5 GB free on a 24 GB laptop (the
+  governor's `p16` margin, not loosened). `scripts/prove-pin-rollback.sh`
+  is the driver; the transcript and the analysis are in `dev.md`, "Pin
+  and rollback, proven live". Rerun `bash scripts/prove-pin-rollback.sh`
+  when 1.5 GB more is free or on the Studio: STACK-96b.
+- [ ] **STACK-96b (S): the live pass of the pin and rollback proof.**
+  Rerun `bash scripts/prove-pin-rollback.sh` on a machine with at least
+  1.5 GB more free than this laptop had (or on the Studio) and record
+  run 3 in `dev.md` beside runs 1 and 2: steps 4 to 8 must show chat
+  HTTP 200 after the swap and after the rollback, the broken swap
+  refused with `current` relinked and `failed-swap` raised, the health
+  fix restoring chat, and delete-current refused. Files: `docs/dev.md`.
+  Mirror: run 1's table. Out of scope: any code change; if the script
+  finds one, it is its own item. Exit: `bash scripts/check.sh --docs`
+  and the run-3 table in `dev.md`.
 
 ## Health, readiness and updates
 

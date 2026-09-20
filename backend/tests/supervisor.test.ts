@@ -34,11 +34,13 @@ test("roles that share chat's model run on chat's process", async () => {
 test("a request carries the identity headers and the reply of the engine", async () => {
   const reply = await requestRole("chat", "/v1/chat/completions", { model: "chat", messages: [{ role: "user", content: "hi" }] });
   expect(reply.status).toBe(200);
-  expect(reply.headers).toEqual({ "x-maipai-engine": "stub", "x-maipai-model": "scripted-chat", "x-maipai-revision": "scripted" });
+  expect(reply.headers).toEqual({ "x-maipai-engine": "stub scripted", "x-maipai-model": "scripted-chat", "x-maipai-revision": "scripted" });
   expect((reply.body as { choices: Array<{ message: { content: string } }> }).choices[0]!.message.content).toBe("Scripted Stack reply.");
   const embed = await requestRole("embed", "/v1/embeddings", { model: "embed", input: "OK" });
   expect(probeReplyOk("embed", embed)).toBe(true);
   expect(started).toEqual(["chat", "embed"]);
+  setSupervisorFactoryForTests(async (role) => scriptedProcess(role, { modelRevision: "90862c4b" }));
+  expect((await requestRole("chat", "/v1/chat/completions", { model: "chat", messages: [] })).headers["x-maipai-revision"]).toBe("90862c4b");
 });
 
 test("streaming passes the engine's bytes through and finishes the request when the stream ends", async () => {

@@ -21,7 +21,7 @@ test("the daemon binds loopback only", () => {
 test("a chat completion by role answers with the engine's reply and the identity headers", async () => {
   const response = await app.request("/v1/chat/completions", json({ model: "chat", messages: [{ role: "user", content: "hello" }] }));
   expect(response.status).toBe(200);
-  expect(response.headers.get("x-maipai-engine")).toBe("stub");
+  expect(response.headers.get("x-maipai-engine")).toBe("stub scripted");
   expect(response.headers.get("x-maipai-model")).toBe("scripted-chat");
   expect(response.headers.get("x-maipai-revision")).toBe("scripted");
   expect((await response.json() as { choices: Array<{ message: { content: string } }> }).choices[0]!.message.content).toBe("Scripted Stack reply.");
@@ -91,6 +91,26 @@ test("the engine routes start, stop and restart the chat role", async () => {
   expect((await (await app.request("/stack/v1/engines/llama-server/start", { method: "POST" })).json())).toMatchObject({ ok: true, reason: "Already running." });
   expect((await (await app.request("/stack/v1/engines/llama-server/stop", { method: "POST" })).json())).toMatchObject({ ok: true });
   expect((await app.request("/stack/v1/engines/nope/start", { method: "POST" })).status).toBe(404);
+});
+
+test("the current build cannot be removed; a rollback to a tag that is not installed is refused; a staged build needs a full pin", async () => {
+  const { mkdirSync, rmSync } = await import("node:fs");
+  const { engineTagRoot } = await import("@/lib/store/layout");
+  const { swapEngine } = await import("@/updates/engines");
+  const root = engineTagRoot("llama-server", "b1").replace(/\/b1$/, "");
+  try {
+    mkdirSync(engineTagRoot("llama-server", "b1"), { recursive: true });
+    const { writeFileSync } = await import("node:fs"); const { join } = await import("node:path");
+    writeFileSync(join(engineTagRoot("llama-server", "b1"), ".engine-ready"), "now");
+    await swapEngine("llama-server", "b1");
+    expect((await app.request("/stack/v1/engines/llama-server/builds/b1", { method: "DELETE" })).status).toBe(400);
+    expect((await app.request("/stack/v1/updates/engines/llama-server/rollback", json({ tag: "b9" }))).status).toBe(400);
+    expect((await app.request("/stack/v1/engines/llama-server/install", json({ tag: "b2", url: "https://github.com/x/y.tar.gz" }))).status).toBe(400);
+    // A tag already on disk with another checksum is never re-described.
+    const { writeEngineManifest } = await import("@/lib/store/manifests");
+    writeEngineManifest({ kind: "engine", name: "llama-server", tag: "b1", assetUrl: "https://github.com/x/b1.tar.gz", sizeBytes: 1, sha256: "a".repeat(64), extractedAt: new Date().toISOString(), blobs: [] });
+    expect((await app.request("/stack/v1/engines/llama-server/install", json({ tag: "b1", url: "https://github.com/x/b1.tar.gz", sha256: "b".repeat(64), size: 1 }))).status).toBe(409);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test("the model routes refuse a pull without full provenance and list records with their state", async () => {

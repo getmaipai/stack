@@ -54,9 +54,9 @@ optional; everything else passes to the engine unchanged.
 
 | Header | Value |
 |---|---|
-| `x-maipai-engine` | the engine build that answered (`llama-server b10797`), or `none` |
-| `x-maipai-model` | the model file that answered, or `none` |
-| `x-maipai-revision` | the model's pinned revision, or `none` |
+| `x-maipai-engine` | the engine host and build that answered (`local b10797-832fd6f17`), or `none` |
+| `x-maipai-model` | the model file that answered (`Qwen3-1.7B-Q8_0.gguf`), or `none` |
+| `x-maipai-revision` | the model's pinned revision (`90862c4b…`) when the process knows its model record, the engine build otherwise, or `none` |
 
 **Failure shapes**, never a 404 for a known role:
 
@@ -79,7 +79,7 @@ engine. A client that wants the model is Home's business to authorize.
 | Surface | Path | What Home does with it |
 |---|---|---|
 | Roles | `GET /stack/v1/roles` | the Engines page: per role, its declaration, state (`notInstalled`, `installed`, `loaded`, `ready` with `checkedAt`, `offline` with `reason`), `since`, the bound model with its measured or estimated footprint |
-| Engines | `GET /stack/v1/engines`; `POST /stack/v1/engines/{name}/{install,start,stop,restart}`; `PUT /stack/v1/engines/{name}/current`; `DELETE /stack/v1/engines/{name}/builds/{tag}` | pinned builds and their install and version state (`current` / `notCurrent` with the reason, `needsRestart`); the actions behind Home's buttons |
+| Engines | `GET /stack/v1/engines`; `POST /stack/v1/engines/{name}/install` (no body: this machine's pin; `{ tag, url, sha256, size }`: stage a build beside the current one without activating it); `POST /stack/v1/engines/{name}/{start,stop,restart}`; `PUT /stack/v1/engines/{name}/current` (drain, relink, post-load check, relink back on failure); `DELETE /stack/v1/engines/{name}/builds/{tag}` (never the current one) | pinned builds and their install and version state (`current` / `notCurrent` with the reason, `needsRestart`); the actions behind Home's buttons |
 | Models | `GET /stack/v1/models`; `GET /stack/v1/models/catalog` (the pins this build ships); `POST /stack/v1/models` (pull by pin); `POST /stack/v1/models/import`; `DELETE /stack/v1/models/{id}`; `POST /stack/v1/models/{id}/actions` (`load`, `unload`, `pin`, `unpin`) | the model list with provenance, install state, runtime state and measured footprint; install from the Catalog index or import a verified local file |
 | Jobs | `POST /stack/v1/jobs`; `GET /stack/v1/jobs/{id}`; `DELETE /stack/v1/jobs/{id}`; result by id | Home's picture, video and music packages |
 | Health | `GET /stack/v1/health`; `POST /stack/v1/health/{code}/{fix,resolve,ignore}` | Home's Repairs list: the problem list as data, the fix button calls `fix` and shows the result |

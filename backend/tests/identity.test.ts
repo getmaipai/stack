@@ -2,12 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { hostLabel, identityHeaders, sanitizeEngineUrl, readEngineIdentity, formatEngineIdentity, modelFileName } from "@/lib/identity";
 
 describe("identity", () => {
-  test("headers use the engine host, model file, and build revision", () => {
-    expect(identityHeaders({ host: "local", model: "chat.gguf", build: "b10797", healthy: true })).toEqual({
-      "x-maipai-engine": "local",
+  test("headers name the engine host and build, the model file, and the model's pinned revision (the build when unknown)", () => {
+    expect(identityHeaders({ host: "local", model: "chat.gguf", build: "b10797", healthy: true }, "90862c4b")).toEqual({
+      "x-maipai-engine": "local b10797",
       "x-maipai-model": "chat.gguf",
-      "x-maipai-revision": "b10797",
+      "x-maipai-revision": "90862c4b",
     });
+    expect(identityHeaders({ host: "local", model: "chat.gguf", build: "b10797", healthy: true })["x-maipai-revision"]).toBe("b10797");
     expect(identityHeaders(null)).toEqual({ "x-maipai-engine": "none", "x-maipai-model": "none", "x-maipai-revision": "none" });
   });
 

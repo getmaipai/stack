@@ -61,3 +61,27 @@ test("a wrong checksum rejects and leaves no ready marker", async () => {
     server.stop(true);
   }
 });
+
+test("the binary that runs is the one the current link names, and only once that build finished installing", async () => {
+  const { mkdirSync, rmSync, symlinkSync, writeFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { currentEngineBinary, currentEngineBinaryPath } = await import("@/lib/engineInstall");
+  const { engineCurrentPath, engineTagRoot } = await import("@/lib/store/layout");
+  const name = `link-engine-${Date.now()}`;
+  try {
+    expect(currentEngineBinaryPath(name)).toBeNull();
+    mkdirSync(engineTagRoot(name, "b1"), { recursive: true });
+    mkdirSync(engineTagRoot(name, "b2"), { recursive: true });
+    writeFileSync(join(engineTagRoot(name, "b2"), ".engine-ready"), "now");
+    expect(currentEngineBinary(name)).toEqual({ state: "none" });
+    symlinkSync("b1", engineCurrentPath(name));
+    expect(currentEngineBinaryPath(name)).toBeNull();
+    // A link at an unready build is a refusal for the supervisor, never a fallback.
+    expect(currentEngineBinary(name)).toEqual({ state: "unready", tag: "b1" });
+    rmSync(engineCurrentPath(name));
+    symlinkSync("b2", engineCurrentPath(name));
+    expect(currentEngineBinaryPath(name)).toBe(join(engineTagRoot(name, "b2"), name));
+  } finally {
+    rmSync(engineTagRoot(name, "b1").replace(/\/b1$/, ""), { recursive: true, force: true });
+  }
+});

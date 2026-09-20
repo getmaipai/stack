@@ -1232,7 +1232,7 @@
         "tags": [
           "Engines"
         ],
-        "summary": "Install a pinned build (progress on the event feed)",
+        "summary": "Install this machine's pinned build, or stage a build by url and checksum (progress on the event feed)",
         "parameters": [
           {
             "schema": {
@@ -1248,12 +1248,41 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "tag": {
-                    "type": "string"
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "tag": {
+                        "type": "string",
+                        "pattern": "^b[0-9A-Za-z-]+$"
+                      },
+                      "url": {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "minLength": 64,
+                        "maxLength": 64
+                      },
+                      "size": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "required": [
+                      "tag",
+                      "url",
+                      "sha256",
+                      "size"
+                    ]
                   }
-                }
+                ]
               }
             }
           }
@@ -1271,11 +1300,15 @@
                     },
                     "engine": {
                       "type": "string"
+                    },
+                    "staged": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
                     "job",
-                    "engine"
+                    "engine",
+                    "staged"
                   ]
                 }
               }
@@ -1283,6 +1316,16 @@
           },
           "404": {
             "description": "No pin for that engine on this machine.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The tag is already installed with a different checksum.",
             "content": {
               "application/json": {
                 "schema": {

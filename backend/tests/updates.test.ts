@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { app } from "@/app";
 import { __resetEventsForTests, eventsAfter } from "@/lib/events";
 import { clearModelsForTests, upsertModel } from "@/lib/modelStore";
@@ -39,6 +40,7 @@ test("installed, available, last checked: a newer model revision in the index is
 test("an engine index names the available build against the current link", async () => {
   updateSettings({ "stack.updates.enabled": true });
   mkdirSync(engineTagRoot("llama-server", "b1"), { recursive: true });
+  writeFileSync(join(engineTagRoot("llama-server", "b1"), ".engine-ready"), "now");
   await swapEngine("llama-server", "b1");
   const index = { version: "1", engines: [{ name: "llama-server", tag: "b2", platform: process.platform, arch: process.arch, url: "https://github.com/ggml-org/llama.cpp/releases/download/b2/x.tar.gz", sha256: "c".repeat(64), size: 5, notes: "faster" }] };
   const state = await checkCatalog(async (input) => String(input) === ENGINE_INDEX_URL ? respond(index) : respond({ version: "1", models: [] }));

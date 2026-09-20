@@ -25,6 +25,23 @@ export function engineBinaryPath(pin: EngineBinaryPin): string {
   return engineToolPath(pin, "llama-server");
 }
 
+/** What the `current` link says should run: `none` before the first
+ * activation, `unready` when the link names a build that never finished
+ * installing (nothing may run in its place), or the binary path. */
+export function currentEngineBinary(name: string, tool = name): { state: "none" } | { state: "unready"; tag: string } | { state: "ready"; path: string } {
+  const current = engineCurrentPath(name);
+  let tag: string;
+  try { tag = readlinkSync(current); } catch { return { state: "none" }; }
+  const target = resolve(current, "..", tag);
+  if (!existsSync(join(target, ENGINE_READY_MARKER))) return { state: "unready", tag };
+  return { state: "ready", path: join(target, process.platform === "win32" ? `${tool}.exe` : tool) };
+}
+
+export function currentEngineBinaryPath(name: string, tool = name): string | null {
+  const current = currentEngineBinary(name, tool);
+  return current.state === "ready" ? current.path : null;
+}
+
 async function downloadArchive(pin: EngineBinaryPin, archive: EngineArchive, onProgress: (completed: number, total: number, label: string) => void, signal?: AbortSignal): Promise<void> {
   const destination = join(engineDir(pin.id), ".download.tmp");
   await downloadUrl(archive.url, destination, {

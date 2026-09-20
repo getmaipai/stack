@@ -3,11 +3,16 @@ import { join, resolve } from "node:path";
 import { ENGINE_BINARIES, ENGINE_READY_MARKER } from "@/lib/engineCatalog";
 import { dataDir } from "@/lib/paths";
 
-export function identityHeaders(identity: EngineIdentity | null): Record<string, string> {
+/** The three headers on every reply (spec RoleReplyHeaders): the engine
+ * host and build that answered, the model file, and the model's pinned
+ * revision when the process knows its model record (the engine build
+ * otherwise); `none` for each when nothing answered. */
+export function identityHeaders(identity: EngineIdentity | null, modelRevision: string | null = null): Record<string, string> {
+  if (!identity) return { "x-maipai-engine": "none", "x-maipai-model": "none", "x-maipai-revision": "none" };
   return {
-    "x-maipai-engine": identity?.host ?? "none",
-    "x-maipai-model": identity?.model ?? "none",
-    "x-maipai-revision": identity?.build ?? "none",
+    "x-maipai-engine": [identity.host, identity.build].filter((part): part is string => !!part).join(" ") || "none",
+    "x-maipai-model": identity.model ?? "none",
+    "x-maipai-revision": modelRevision ?? identity.build ?? "none",
   };
 }
 

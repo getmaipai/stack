@@ -520,6 +520,73 @@ temp `STACK_DATA_DIR` set by `backend/tests/preload.ts` and refuses a
 real one (2026-09-17 21:40: a gate from the main checkout emptied the
 owner's live models table).
 
+## Pin and rollback, proven live (STACK-96, 2026-09-20)
+
+`scripts/prove-pin-rollback.sh` drives the whole proof through the
+public routes on loopback with a clean `data-scratch/` directory (pid
+recorded, stopped by pid, port verified free, scratch removed): install
+the pinned engine and model with real downloads, get a chat answer,
+stage the same build under a second tag (no engine index exists
+upstream yet, so the staged archive is the pin's own; the swap
+mechanics are what is under proof), swap with the drain and the
+post-load check, roll back, break a staged build and prove the failed
+swap relinks and the health fix repairs it, refuse a wrong checksum,
+refuse removing the current build.
+
+Run 1, an Apple silicon laptop with 24 GB (tier `p16`), engine
+`llama-server` b10797 (macOS arm64, `b10797-832fd6f17` by its own
+`/props`), model `Qwen3-1.7B-Q8_0.gguf` at Hub commit
+`90862c4b9d2787eaed51d12237eafdfe7c5f6077`:
+
+| Step | Result | Time |
+|---|---|---|
+| Install the pinned engine (11 MB) | job done, `current` link `b10797-macos-arm64` | 1.15 s |
+| Install the pinned model (1,834,426,016 bytes) | job done, sha256 `061b54da…` verified, record `verifiedAt` set | 29.35 s |
+| First chat answer through `/v1/chat/completions` | HTTP 200, `x-maipai-model: Qwen3-1.7B-Q8_0.gguf`; role `ready` with `checkedAt`; measured footprint 417,450,288 bytes at context 4096 | 1.52 s including the load |
+| Stage the same archive as `b10797-proof` | job done, `current` unchanged | 0.59 s |
+| `PUT /engines/llama-server/current` to `b10797-proof` | ok, `current` relinked, chat HTTP 200 | 0.53 s |
+| Roll back to `b10797-macos-arm64` | ok, chat HTTP 200 | 0.07 s |
+| Stage `b10797-broken`, truncate its binary, swap to it | **wrong**: ok and chat still 200 | 0.63 s |
+| Stage `b10797-bad` with a zero checksum | refused: `sha256 474a788ec73d != expected 000000000000, the partial file was removed`; no ready marker | |
+| Remove the current build | **wrong**: HTTP 200 | |
+
+Run 1 exposed two real bugs, fixed in the same commit with regression
+tests. The supervisor launched the binary from the machine pin's own
+directory and never from the store's `current` link, so the swap and
+the rollback flipped a link nothing read, a broken build "worked"
+because the old one was still what ran, and delete-current removed the
+build that was not actually running; the supervisor now launches the
+build the link names (`currentEngineBinaryPath`), and only once that
+build finished installing. And the identity headers carried the host in
+`x-maipai-engine` and the engine build in `x-maipai-revision`; they now
+carry the host and build, the model file, and the model's pinned
+revision. The review of that fix found the next layer: a swap only
+checked that the tag's directory existed, which a failed or unfinished
+download also leaves behind, and the launcher fell back to the machine
+pin's binary when the link named an unready build, so `current` could
+name a build that was not what ran. A swap now requires the ready
+marker, a link at an unready build is a refusal to start rather than a
+fallback, a staged tag that already exists with a different checksum is
+refused (409), and a staged build emits no `engine.state`. The swap's
+failure path (`swapEngine` relinking the previous tag, `failed-swap`
+critical with the `rollback_update` fix, the previous tag remembered
+for the fix) and the refusals (a tag that is not installed or never
+finished installing, a wrong checksum, removing the current build,
+staging without a full pin, re-describing a staged tag) are each a
+regression test in `engineSwap.test.ts`, `engineInstall.test.ts` and
+`routes.test.ts`.
+
+Run 2, with the fixes, installed the engine (0.59 s) and the model
+(29.28 s) and then answered every chat request 503 "chat admission is
+queued at position 1": the laptop had 5.5 to 5.7 GB free with normal
+kernel pressure, the unmeasured model is estimated at 1.3 times its
+1.83 GB file (the run-1 measurement was wiped with the scratch
+directory), and free minus that estimate is under `p16`'s 4 GB working
+margin. That is the governor doing its job on a busy machine, not a
+defect, and the margin was not loosened for the proof; the live pass of
+steps 4 to 8 with the fixes in place is STACK-96b, to be rerun with
+1.5 GB more free or on the Studio.
+
 ## Measured so far
 
 On an Apple silicon Mac (2026-09-18, a temporary copy of the owner's

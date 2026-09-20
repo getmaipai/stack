@@ -8,9 +8,9 @@ import { existsSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { withTimeout } from "@maipai/core/src/withTimeout";
-import { ENGINE_READY_MARKER, installedEnginePin, selectEngineBinary } from "@/lib/engineCatalog";
+import { ENGINE_READY_MARKER, installedEnginePin, selectEngineBinary, type EngineBinaryPin } from "@/lib/engineCatalog";
 import { llamaServerArgs } from "@/lib/engineArgs";
-import { engineBinaryPath, engineDir } from "@/lib/engineInstall";
+import { currentEngineBinary, engineBinaryPath, engineDir } from "@/lib/engineInstall";
 import { detectHardware } from "@/lib/hardware";
 import { identityHeaders, readEngineIdentity, type EngineIdentity } from "@/lib/identity";
 import { isModelSelectable, listModels, recordMeasuredFootprint, type ModelRecord } from "@/lib/modelStore";
@@ -58,6 +58,8 @@ export interface RoleProcess {
   client: EngineClient;
   identity: EngineIdentity;
   modelId: string | null;
+  /** The pinned revision of the model the process serves, for the reply headers. */
+  modelRevision: string | null;
   pid: number | null;
   port: number | null;
   activeRequests: number;
@@ -246,9 +248,25 @@ type ProcessFactory = (role: RoleId) => Promise<RoleProcess>;
 let testFactory: ProcessFactory | null = null;
 const runtimes = new Map<RoleId, RoleRuntime>();
 
+// The build that runs is the one the store's `current` link names (the
+// swap and the rollback flip that link); before any swap it is the
+// machine's pin, which the first install activated.
 function engineInstalled(): boolean {
+  const current = currentEngineBinary("llama-server");
+  if (current.state === "ready") return true;
+  if (current.state === "unready") return false;
   const pin = installedEnginePin();
   return !!pin && existsSync(join(engineDir(pin.id), ENGINE_READY_MARKER));
+}
+
+// The binary to launch: the `current` link's build; the machine pin's own
+// directory only before any link exists. A link that names an unready
+// build is a refusal, never a silent fallback to another build.
+function launchBinary(pin: EngineBinaryPin): string {
+  const current = currentEngineBinary("llama-server");
+  if (current.state === "ready") return current.path;
+  if (current.state === "unready") throw new EngineUnavailableError(`The current engine link names ${current.tag}, which never finished installing.`);
+  return engineBinaryPath(pin);
 }
 
 function initialStatus(role: RoleId): RoleStatus {
@@ -300,7 +318,7 @@ async function startUrlProcess(role: RoleId, url: string): Promise<RoleProcess> 
     throw new EngineUnavailableError(reason);
   }
   resolveHealth(`managed-host-offline.${role}`);
-  return { role, kind: "url", client, identity, modelId: null, pid: null, port: Number(new URL(url).port) || null, activeRequests: 0, retired: false, stop: async () => {} };
+  return { role, kind: "url", client, identity, modelId: null, modelRevision: null, pid: null, port: Number(new URL(url).port) || null, activeRequests: 0, retired: false, stop: async () => {} };
 }
 
 async function startSpawnedProcess(role: RoleId): Promise<RoleProcess> {
@@ -318,7 +336,8 @@ async function startSpawnedProcess(role: RoleId): Promise<RoleProcess> {
 
   const port = await findFreePort();
   const contextLength = typeof config.contextLength === "number" ? config.contextLength : 4096;
-  const handle = Bun.spawn([engineBinaryPath(pin), ...llamaServerArgs({ modelPath: model.modelPath, port, config, contextLength, kvCacheQuantized: process.platform === "darwin", embeddings: role === "embed" })], {
+  const binary = launchBinary(pin);
+  const handle = Bun.spawn([binary, ...llamaServerArgs({ modelPath: model.modelPath, port, config, contextLength, kvCacheQuantized: process.platform === "darwin", embeddings: role === "embed" })], {
     stdout: "ignore",
     stderr: "pipe",
     env: { ...process.env, HF_HUB_CACHE: hfHubRoot },
@@ -344,7 +363,7 @@ async function startSpawnedProcess(role: RoleId): Promise<RoleProcess> {
     resolveHealth(`engine.crashed.${role}`);
     resolveHealth(`post-load-check-failed.${role}`);
     const processRecord: RoleProcess = {
-      role, kind: "spawned", client, identity, modelId: model.id, pid: handle.pid, port, activeRequests: 0, retired: false,
+      role, kind: "spawned", client, identity, modelId: model.id, modelRevision: model.revision, pid: handle.pid, port, activeRequests: 0, retired: false,
       governorHandle: admission,
       stopGovernor: startGovernor({ pid: handle.pid, restart: async () => { await restartRole(role); } }),
       stop: async () => { handle.kill(); await handle.exited; },
@@ -562,13 +581,13 @@ export async function requestRole(requested: RoleId, path: string, body: Record<
       throw new EngineUnavailableError(`Engine returned HTTP ${result.status} and is no longer healthy.`);
     }
     if (result.status >= 200 && result.status < 300) current.lastRealRequestAt = Date.now();
-    return { ...result, headers: identityHeaders(processRecord.identity) };
+    return { ...result, headers: identityHeaders(processRecord.identity, processRecord.modelRevision) };
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
-      return { status: 499, body: { error: "Request cancelled" }, headers: identityHeaders(processRecord.identity) };
+      return { status: 499, body: { error: "Request cancelled" }, headers: identityHeaders(processRecord.identity, processRecord.modelRevision) };
     }
     if (await processRecord.client.health()) {
-      return { status: error instanceof EngineUnavailableError ? 504 : 503, body: { error: (error as Error).message }, headers: identityHeaders(processRecord.identity) };
+      return { status: error instanceof EngineUnavailableError ? 504 : 503, body: { error: (error as Error).message }, headers: identityHeaders(processRecord.identity, processRecord.modelRevision) };
     }
     const unavailable = error instanceof EngineUnavailableError ? error : new EngineUnavailableError(`Engine request failed: ${(error as Error).message}`);
     current.process = null;
@@ -619,12 +638,12 @@ export async function streamRole(requested: RoleId, path: string, body: Record<s
     if (!processRecord.client.stream) throw new EngineUnavailableError("The engine does not support streaming.");
     const response = await processRecord.client.stream(path, { ...body, stream: true }, signal);
     if (response.status >= 500 && !await processRecord.client.health()) throw new EngineUnavailableError(`Engine returned HTTP ${response.status} and is no longer healthy.`);
-    if (!response.body) { finishStream(role, processRecord); return { status: response.status, body: null, headers: identityHeaders(processRecord.identity) }; }
-    return { status: response.status, body: trackedStream(role, processRecord, response.body), headers: identityHeaders(processRecord.identity) };
+    if (!response.body) { finishStream(role, processRecord); return { status: response.status, body: null, headers: identityHeaders(processRecord.identity, processRecord.modelRevision) }; }
+    return { status: response.status, body: trackedStream(role, processRecord, response.body), headers: identityHeaders(processRecord.identity, processRecord.modelRevision) };
   } catch (error) {
     finishStream(role, processRecord);
-    if ((error instanceof DOMException && error.name === "AbortError") || signal?.aborted) return { status: 499, body: null, headers: identityHeaders(processRecord.identity) };
-    if (await processRecord.client.health()) return { status: error instanceof EngineUnavailableError ? 504 : 503, body: null, headers: identityHeaders(processRecord.identity) };
+    if ((error instanceof DOMException && error.name === "AbortError") || signal?.aborted) return { status: 499, body: null, headers: identityHeaders(processRecord.identity, processRecord.modelRevision) };
+    if (await processRecord.client.health()) return { status: error instanceof EngineUnavailableError ? 504 : 503, body: null, headers: identityHeaders(processRecord.identity, processRecord.modelRevision) };
     const unavailable = error instanceof EngineUnavailableError ? error : new EngineUnavailableError(`Engine streaming request failed: ${(error as Error).message}`);
     current.process = null;
     current.starting = null;
@@ -683,7 +702,7 @@ export function scriptedProcess(role: RoleId, overrides: Partial<RoleProcess> = 
     },
     async health() { return true; },
   };
-  return { role, kind: "url", client, identity: { host: "stub", build: "scripted", model: `scripted-${role}`, healthy: true }, modelId: null, pid: null, port: null, activeRequests: 0, retired: false, stop: async () => {}, ...overrides };
+  return { role, kind: "url", client, identity: { host: "stub", build: "scripted", model: `scripted-${role}`, healthy: true }, modelId: null, modelRevision: null, pid: null, port: null, activeRequests: 0, retired: false, stop: async () => {}, ...overrides };
 }
 
 export { CHAT_WIRE_ROLES, SPAWNABLE_ROLES };
