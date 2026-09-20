@@ -23,6 +23,7 @@ Only explicitly enabled features can go out to the internet.
 | Fetching Library docs | Only when the update switch is on and you choose Fetch the docs | The model or engine docs URL, with `If-None-Match` and the Stack user agent | The model host or engine documentation host |
 | Searching the Stack docs index | Only when the update switch is on and you ask for a docs result | The search text, with `If-None-Match` and the Stack user agent | `getmaipai.github.io`, for the Stack docs index only |
 | Sending a diagnostics bundle | Only if you download it in Settings and choose to attach it to a message | Nothing is sent by the Stack. The redacted logs, health, hardware, settings, and versions stay in the file until you send it | Whoever you choose |
+| Measuring your network | Whenever the console asks, cached for 30 seconds | An empty connection attempt to measure the round trip, nothing else | Your own router, never past it |
 
 Everything else stays on your computer. The Stack listens only to
 programs on the same machine unless you choose to open it to your home

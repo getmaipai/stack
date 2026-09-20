@@ -9259,6 +9259,49 @@
         }
       }
     },
+    "/stack/v1/network": {
+      "get": {
+        "tags": [
+          "Monitoring"
+        ],
+        "summary": "Get the network signal to the default gateway",
+        "responses": {
+          "200": {
+            "description": "The default interface, its link speed, and the round trip to the gateway.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "interface": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "linkMbps": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "gatewayMs": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "measuredAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "interface",
+                    "linkMbps",
+                    "gatewayMs",
+                    "measuredAt"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/models": {
       "get": {
         "tags": [
