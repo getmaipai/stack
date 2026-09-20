@@ -19,3 +19,32 @@ export const STACK_CHAT_MODEL: CatalogModelLike = {
     approx_bytes: 1_834_426_016,
   },
 };
+
+// Every pinned model this build ships, by role. One entry today; the
+// Catalog's signed index replaces this list as the source at STACK-97.
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL];
+
+// Engines and models named in dev.md or the backlog for a role but not
+// pinned yet: the components inventory lists them as candidates, so a
+// role with no pin never reads as forgotten. Each names where it came from.
+export interface RoleCandidate { name: string; kind: "engine" | "model"; source: string; }
+export const ROLE_CANDIDATES: Partial<Record<string, RoleCandidate[]>> = {
+  chat: [
+    { name: "mlx-serve", kind: "engine", source: "dev.md, Engines and the supervisor; STACK-14, STACK-93" },
+    { name: "oMLX", kind: "engine", source: "dev.md, Engines and the supervisor; STACK-14, STACK-93" },
+  ],
+  stt: [
+    { name: "whisper.cpp", kind: "engine", source: "dev.md, Sizing and profiles; STACK-94" },
+    { name: "MLX Whisper", kind: "engine", source: "dev.md, Sizing and profiles; STACK-94" },
+    { name: "sherpa-onnx (Linux)", kind: "engine", source: "dev.md, Sizing and profiles; STACK-17" },
+  ],
+  tts: [
+    { name: "the chosen TTS runtime", kind: "engine", source: "dev.md, Sizing and profiles; STACK-94" },
+  ],
+  image: [
+    { name: "ComfyUI (managed)", kind: "engine", source: "dev.md, Jobs; STACK-13" },
+  ],
+  video: [
+    { name: "ComfyUI (managed)", kind: "engine", source: "dev.md, Jobs; STACK-13" },
+  ],
+};

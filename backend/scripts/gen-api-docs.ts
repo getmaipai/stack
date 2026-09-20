@@ -1,14 +1,16 @@
 // Generates docs/api/openapi.json from the live route registrations in
 // app.ts. Run with: bun run gen:api-docs (from backend/), then commit the
 // result - scripts/check.sh regenerates and diffs it.
-import { writeFileSync, mkdirSync, mkdtempSync } from "node:fs";
+import { writeFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 // Generating the document must never open a real data directory: the
 // app opens and migrates the database on import, so point it at a
 // throwaway one unless the caller chose otherwise.
-if (!process.env.STACK_DATA_DIR) process.env.STACK_DATA_DIR = mkdtempSync(join(tmpdir(), "maipai-stack-api-docs-"));
+let scratch: string | null = null;
+if (!process.env.STACK_DATA_DIR) { scratch = mkdtempSync(join(tmpdir(), "maipai-stack-api-docs-")); process.env.STACK_DATA_DIR = scratch; }
+process.on("exit", () => { if (scratch) rmSync(scratch, { recursive: true, force: true }); });
 const { app } = await import("../src/app");
 const packageJson = (await import("../../package.json")).default;
 

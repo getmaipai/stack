@@ -482,6 +482,22 @@ declares for Home's backup is `stack.db` and `data/keys/`; model and
 engine bytes are rebuildable from their pins and are declared
 `exclude`.
 
+## Components inventory
+
+[components.md](components.md) is the generated inventory of every
+engine build and model the Stack pins, per role and per machine
+profile: the engine per platform with its build tag and status, and for
+each profile the role's stance, the pinned model, its quantization,
+file size, the measured footprint and context once a bench (STACK-74)
+has recorded them on the pin itself with a sanitized hardware line,
+licence, source repo and revision, and whether it is pinned, a
+named candidate, or not yet. `bun run gen:components-doc` in `backend/`
+writes it from `roles.ts`, `engineCatalog.ts`, `profiles.ts` and
+`modelCatalog.ts` (the pins and the `ROLE_CANDIDATES` list), and
+`scripts/check.sh` regenerates and fails on drift the way it does for
+`docs/api/openapi.json`. The Catalog's signed index replaces the
+generator's source at STACK-97.
+
 ## Third-party pieces, and how an outside update never breaks us
 
 The org rule is "download, don't vendor" and "prebuilt over

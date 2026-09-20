@@ -292,6 +292,14 @@ are never copied. Nothing migrates Home until STACK-16.
 
 ## Docs
 
+- [x] **STACK-98 (S): the generated components inventory.**
+  `docs/components.md` from `backend/scripts/gen-components-doc.ts`
+  (`bun run gen:components-doc`): one section per role in `ROLE_IDS`
+  order with the engine pins per platform, then a row per profile with
+  the stance, the pinned model and its facts, and a status of pinned,
+  candidate (named) or not yet; drift-checked in `scripts/check.sh`
+  like the API document; `tests/componentsDoc.test.ts` renders a
+  scripted catalog. Landed on `main` with this line.
 - [x] **RF-02** covers `dev.md`, `integrations.md`, `AGENTS.md` and
   `README.md`. The user tier is gone; Home's docs describe what a person
   sees.

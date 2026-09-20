@@ -11,7 +11,8 @@
     "test": "bun test",
     "lint": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "gen:api-docs": "bun run scripts/gen-api-docs.ts"
+    "gen:api-docs": "bun run scripts/gen-api-docs.ts",
+    "gen:components-doc": "bun run scripts/gen-components-doc.ts"
   },
   "dependencies": {
     "@hono/zod-openapi": "^1.6.3",

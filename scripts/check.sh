@@ -42,6 +42,17 @@ if [ "${1:-}" != "--docs" ]; then
   fi
   rm -f "$before"
 
+  echo "== backend: components inventory, regenerate and check for drift"
+  before="$(mktemp)"
+  cp docs/components.md "$before"
+  (cd backend && bun run gen:components-doc >/dev/null)
+  if ! cmp -s "$before" docs/components.md; then
+    rm -f "$before"
+    echo "docs/components.md was out of date with roles.ts, engineCatalog.ts, profiles.ts and modelCatalog.ts; it has been regenerated. Review and commit it (bun run gen:components-doc in backend/)."
+    exit 1
+  fi
+  rm -f "$before"
+
   echo "== backend: tests"
   (cd backend && bun test)
 fi

@@ -72,6 +72,9 @@ export interface CatalogModelLike {
   engine?: string;
   sizing?: unknown;
   download?: { url: string; sha256: string; approx_bytes: number };
+  /** Recorded on the pin by a bench (STACK-74), with a sanitized hardware
+   * line, never a hostname: the inventory prints these, and only these. */
+  measured?: { footprintBytes: number; contextLength: number; hardware: string };
 }
 
 export interface HuggingFaceModelInput {
