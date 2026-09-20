@@ -22,7 +22,7 @@ const ModelSchema = z.object({
   sizeBytes: z.number().int().nullable(), fileMissing: z.boolean(), measuredFootprintBytes: z.number().int().nullable(), measuredContextLength: z.number().int().nullable(), estimated: z.boolean(),
   source: z.string(), licence: z.string().nullable(), revision: z.string(), sha256: z.string().nullable(), provenance: z.record(z.string(), z.unknown()), modelPath: z.string().nullable(), installedAt: z.string().nullable(), verifiedAt: z.string().nullable(),
 });
-const PullSchema = z.object({ id: z.string(), role: RoleIdSchema, repo: z.string().optional(), url: z.string().url(), sha256: z.string().length(64), approx_bytes: z.number().int().nonnegative().optional(), licence: z.string(), revision: z.string(), engine: z.string().optional(), archive: z.boolean().optional(), component: z.string().optional() });
+const PullSchema = z.object({ id: z.string(), role: RoleIdSchema, repo: z.string().optional(), url: z.string().url(), sha256: z.string().length(64), approx_bytes: z.number().int().nonnegative().optional(), licence: z.string(), revision: z.string(), engine: z.string().optional(), archive: z.boolean().optional(), hub_file: z.string().optional(), component: z.string().optional() });
 const ImportSchema = z.object({ id: z.string(), path: z.string(), roles: z.array(RoleIdSchema).min(1), licence: z.string(), revision: z.string().optional() });
 const ActionSchema = z.object({ action: z.enum(["load", "unload", "pin", "unpin"]) });
 
@@ -43,8 +43,12 @@ modelsRoutes.openapi(listRoute, (c) => c.json({ models: listModels().map(modelVi
 modelsRoutes.openapi(catalogRoute, (c) => c.json({ models: STACK_MODELS as unknown as Record<string, unknown>[] }, 200));
 modelsRoutes.openapi(pullRoute, (c) => {
   const body = c.req.valid("json");
-  const indexed = catalogModelForId(body.id);
-  const model = { id: body.id, role: body.role, repo: body.repo ?? indexed?.repo, license: body.licence, revision: body.revision, engine: body.engine ?? indexed?.engine, sizing: indexed?.sizing, component: body.component ?? indexed?.component, download: { url: body.url, sha256: body.sha256, approx_bytes: body.approx_bytes ?? indexed?.download?.approx_bytes ?? 0, archive: body.archive ?? indexed?.download?.archive } };
+  // What the body leaves out comes from the Catalog's index entry or the
+  // Stack's own shipped pin for that id (a package's archive flag, a hub
+  // file's placement, a component's kind), so an install by id lands the
+  // way the pin says.
+  const indexed = catalogModelForId(body.id) ?? STACK_MODELS.find((pin) => pin.id === body.id) ?? null;
+  const model = { id: body.id, role: body.role, repo: body.repo ?? indexed?.repo, license: body.licence, revision: body.revision, engine: body.engine ?? indexed?.engine, sizing: indexed?.sizing, component: body.component ?? indexed?.component, download: { url: body.url, sha256: body.sha256, approx_bytes: body.approx_bytes ?? indexed?.download?.approx_bytes ?? 0, archive: body.archive ?? indexed?.download?.archive, hub_file: body.hub_file ?? indexed?.download?.hub_file } };
   const job = createJob({ kind: "model.install", role: body.role, totalBytes: model.download.approx_bytes, status: "downloading", input: { model: body.id } });
   // One directory per model id: two pins whose URLs end in the same file
   // name never share a path.

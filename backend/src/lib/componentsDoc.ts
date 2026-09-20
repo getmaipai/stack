@@ -4,7 +4,7 @@
 // the real modules; `renderComponentsDoc` is pure so a test can feed it
 // a scripted catalog. Written by scripts/gen-components-doc.ts and
 // drift-checked by scripts/check.sh like docs/api/openapi.json.
-import { BUNDLED_RUNTIMES, ENGINE_BINARIES, type BundledRuntime, type EngineBinaryPin } from "@/lib/engineCatalog";
+import { BUNDLED_RUNTIMES, ENGINE_BINARIES, engineRole, MANAGED_RUNTIMES, type BundledRuntime, type EngineBinaryPin, type ManagedRuntime } from "@/lib/engineCatalog";
 import packageJson from "../../package.json";
 import { ROLE_CANDIDATES, STACK_MODELS, type RoleCandidate } from "@/lib/modelCatalog";
 import type { CatalogModelLike } from "@/lib/modelStore";
@@ -19,6 +19,7 @@ export interface ComponentsCatalog {
   models: CatalogModelLike[];
   candidates: Partial<Record<string, RoleCandidate[]>>;
   runtimes: Array<BundledRuntime & { version: string }>;
+  managed: ManagedRuntime[];
   shares?: Partial<Record<string, string>>;
 }
 
@@ -26,7 +27,7 @@ export function collectComponentsCatalog(): ComponentsCatalog {
   const shares = Object.fromEntries(ROLE_IDS.flatMap((role) => { const definition = ROLES[role] as { sharesModelWith?: string }; return definition.sharesModelWith ? [[role, definition.sharesModelWith]] : []; }));
   const dependencies = (packageJson as { dependencies?: Record<string, string> }).dependencies ?? {};
   const runtimes = BUNDLED_RUNTIMES.map((runtime) => ({ ...runtime, version: dependencies[runtime.name] ?? "not in package.json" }));
-  return { roles: [...ROLE_IDS], labels: Object.fromEntries(ROLE_IDS.map((role) => [role, ROLES[role].label])), engines: ENGINE_BINARIES, profiles: PROFILE_TIERS, models: STACK_MODELS, candidates: ROLE_CANDIDATES, runtimes, shares };
+  return { roles: [...ROLE_IDS], labels: Object.fromEntries(ROLE_IDS.map((role) => [role, ROLES[role].label])), engines: ENGINE_BINARIES, profiles: PROFILE_TIERS, models: STACK_MODELS, candidates: ROLE_CANDIDATES, runtimes, managed: MANAGED_RUNTIMES, shares };
 }
 
 const PROFILE_ORDER = ["p16", "p32", "p64", "p128"] as const;
@@ -76,14 +77,17 @@ export function renderComponentsDoc(catalog: ComponentsCatalog): string {
     lines.push("");
     lines.push("| Engine | Build | Platform | Status |");
     lines.push("|---|---|---|---|");
-    const pins = LLAMA_ROLES.has(role) ? catalog.engines : [];
-    for (const pin of pins) lines.push(`| \`${pin.id}\` | ${pin.tag} | ${pin.platform} ${pin.arch}${pin.requiresNvidia ? " (NVIDIA)" : ""} | ${pin.verified ? "pinned, verified" : "pinned, not yet verified"} |`);
+    // llama-server's pins serve the chat wire's roles; a tool pin (uv)
+    // serves the role its name maps to.
+    const pins = catalog.engines.filter((pin) => LLAMA_ROLES.has(role) ? engineRole(pin.name) === "chat" : engineRole(pin.name) === role);
+    for (const pin of pins) lines.push(`| \`${pin.id}\` | ${pin.tag} | ${pin.platform} ${pin.arch}${pin.requiresNvidia ? " (NVIDIA)" : ""} | ${pin.verified ? "pinned, verified" : "pinned, not yet verified"}${pin.tool && pin.tool !== "llama-server" ? ` (the tool that builds the ${role} environment)` : ""} |`);
     const modelRole = shares ?? role;
+    for (const runtime of catalog.managed.filter((candidate) => candidate.roles.includes(modelRole))) lines.push(`| \`${runtime.name}\` | ${runtime.version} | ${runtime.platforms} | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/); updates with the Stack's release |`);
     const runtimes = catalog.runtimes.filter((runtime) => runtime.roles.includes(modelRole));
     for (const runtime of runtimes) lines.push(`| \`${runtime.name}\` | ${runtime.version} | ${runtime.platforms} | bundled with the Stack (backend/package.json and the lockfile; updates with the Stack's release and the monthly dependency sweep, never the engine index) |`);
     const engineCandidates = (catalog.candidates[modelRole] ?? []).filter((candidate) => candidate.kind === "engine");
     for (const candidate of engineCandidates) lines.push(`| ${candidate.name} | | | candidate (${candidate.source}) |`);
-    if (pins.length === 0 && runtimes.length === 0 && engineCandidates.length === 0) lines.push("| | | | not yet |");
+    if (pins.length === 0 && runtimes.length === 0 && engineCandidates.length === 0 && !catalog.managed.some((candidate) => candidate.roles.includes(modelRole))) lines.push("| | | | not yet |");
     lines.push("");
     lines.push("| Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |");
     lines.push("|---|---|---|---|---|---|---|---|---|---|");

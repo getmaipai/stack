@@ -67,9 +67,70 @@ export const STACK_VAD_MODEL: CatalogModelLike = {
   },
 };
 
+// The `tts` pins (STACK-94c): Pocket TTS's own files at the revisions
+// its config names, the ungated repository (the gated twin is fetched
+// by the engine itself when a token is set). Each is placed in the
+// Stack's Hugging Face hub cache (`hub_file`), where the engine finds
+// it and fetches nothing at first start; the tokenizer and the default
+// voice embedding are components of the role. Licence: CC BY 4.0, from
+// the repositories' own cards.
+const POCKET_TTS_REPO = "kyutai/pocket-tts-without-voice-cloning";
+const POCKET_TTS_WEIGHTS_REVISION = "d29db7978e464fb90cb3359ee0c69a273b9142cc";
+const POCKET_TTS_VOICES_REVISION = "e81d79e8194ad4c7ce879c87a4258ef20cbf2487";
+export const STACK_TTS_MODEL: CatalogModelLike = {
+  id: "pocket-tts-english",
+  role: "tts",
+  repo: POCKET_TTS_REPO,
+  license: "CC-BY-4.0",
+  revision: POCKET_TTS_WEIGHTS_REVISION,
+  engine: "pocket-tts",
+  sizing: { profile: "p16", quantization: "fp32" },
+  download: {
+    url: hfUrl(`${POCKET_TTS_REPO}/resolve/${POCKET_TTS_WEIGHTS_REVISION}/languages/english/model.safetensors`),
+    sha256: "be9c6b4876d3f30740a8225dfcaa2e43dc4aeb753c15272735bee16bbb4abb0a",
+    approx_bytes: 219_029_196,
+    hub_file: "languages/english/model.safetensors",
+  },
+  // scripts/prove-tts.sh, 2026-09-20, the p16 laptop: the engine's
+  // resident set after the post-load check, torch and the model.
+  measured: { footprintBytes: 828_868_000, contextLength: 0, hardware: "Apple M4 Pro, 24 GB unified memory" },
+};
+export const STACK_TTS_TOKENIZER: CatalogModelLike = {
+  id: "pocket-tts-english-tokenizer",
+  role: "tts",
+  component: "tokenizer",
+  repo: POCKET_TTS_REPO,
+  license: "CC-BY-4.0",
+  revision: POCKET_TTS_WEIGHTS_REVISION,
+  engine: "pocket-tts",
+  sizing: { profile: "p16", quantization: "n/a" },
+  download: {
+    url: hfUrl(`${POCKET_TTS_REPO}/resolve/${POCKET_TTS_WEIGHTS_REVISION}/languages/english/tokenizer.model`),
+    sha256: "d461765ae179566678c93091c5fa6f2984c31bbe990bf1aa62d92c64d91bc3f6",
+    approx_bytes: 59_339,
+    hub_file: "languages/english/tokenizer.model",
+  },
+};
+export const STACK_TTS_VOICE: CatalogModelLike = {
+  id: "pocket-tts-voice-alba",
+  role: "tts",
+  component: "voice",
+  repo: POCKET_TTS_REPO,
+  license: "CC-BY-4.0",
+  revision: POCKET_TTS_VOICES_REVISION,
+  engine: "pocket-tts",
+  sizing: { profile: "p16", quantization: "n/a" },
+  download: {
+    url: hfUrl(`${POCKET_TTS_REPO}/resolve/${POCKET_TTS_VOICES_REVISION}/languages/english/embeddings/alba.safetensors`),
+    sha256: "69c32db63ca56843d994f81f343f62e0bf2d73f7e4c9bc73e44bb1110b1d8845",
+    approx_bytes: 6_194_424,
+    hub_file: "languages/english/embeddings/alba.safetensors",
+  },
+};
+
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a
@@ -84,8 +145,7 @@ export const ROLE_CANDIDATES: Partial<Record<string, RoleCandidate[]>> = {
     { name: "Whisper tiny.en or base.en on the same runtime, the named alternative", kind: "model", source: "dev.md, The speech roles" },
   ],
   tts: [
-    { name: "Pocket TTS 3.1.0 through a pinned uv 0.12.17, managed", kind: "engine", source: "dev.md, The speech roles; STACK-94c" },
-    { name: "Pocket TTS weights, repository and revision pinned at STACK-94c", kind: "model", source: "dev.md, The speech roles" },
+    { name: "Kokoro 82M through the stt worker's runtime, rejected by the owner's ear on 2026-09-04; the alternative if he reverses it", kind: "model", source: "dev.md, The speech roles" },
   ],
   image: [
     { name: "ComfyUI (managed)", kind: "engine", source: "dev.md, Jobs; STACK-13" },

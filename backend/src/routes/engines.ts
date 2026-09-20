@@ -7,7 +7,8 @@ import { join } from "node:path";
 import { apiRouter, ErrorSchema } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { detectHardware } from "@/lib/hardware";
-import { ENGINE_BINARIES, ENGINE_READY_MARKER, selectEngineBinary } from "@/lib/engineCatalog";
+import { ENGINE_BINARIES, ENGINE_READY_MARKER, engineRole, MANAGED_RUNTIMES, selectEngineBinary } from "@/lib/engineCatalog";
+import { ensurePocketTtsEnvironment, pocketTtsInstalled, pocketTtsRoot, POCKET_TTS_NAME } from "@/speech/pocketTts";
 import { engineDir, engineIsBound, ensureEngine, removeEngine } from "@/lib/engineInstall";
 import { readEngineManifest } from "@/lib/store/manifests";
 import { currentEngine, stagingPin, swapEngine } from "@/updates/engines";
@@ -37,20 +38,50 @@ const removeRoute = createRoute({ method: "delete", path: "/{name}/builds/{tag}"
 
 
 export const enginesRoutes = apiRouter<AppEnv>();
+/** The environment build in flight, so two installs never race on one venv. */
+let environmentJob: string | null = null;
 enginesRoutes.openapi(listRoute, async (c) => {
   const hardware = await detectHardware();
-  const selected = selectEngineBinary(hardware);
   const needsRestart = readSettings().some((setting) => setting.key.startsWith("stack.engines.llama_server.") && setting.pending !== null);
-  const status = getRoleStatus("chat");
-  return c.json({ engines: ENGINE_BINARIES.map((pin) => {
-    const version = deriveEngineVersionState({ running: status.identity?.build ?? null, currentTag: currentEngine(pin.name), newestTag: selected?.id === pin.id ? pin.tag : null, needsRestart });
+  const pins = ENGINE_BINARIES.map((pin) => {
+    // Each engine name has its own pin for this machine and its own role.
+    const selected = selectEngineBinary(hardware, pin.name);
+    const status = getRoleStatus(engineRole(pin.name));
+    // A tool pin (uv) never runs as the role's engine; only a server
+    // build's running identity is compared with its tag.
+    const running = pin.tool && pin.tool !== "llama-server" ? null : status.identity?.build ?? null;
+    const version = deriveEngineVersionState({ running, currentTag: currentEngine(pin.name), newestTag: selected?.id === pin.id ? pin.tag : null, needsRestart: pin.name === "llama-server" && needsRestart });
     return { id: pin.id, name: pin.name, label: pin.label, platform: pin.platform, arch: pin.arch, verified: pin.verified, installed: existsSync(join(engineDir(pin), ENGINE_READY_MARKER)), matchesThisMachine: selected?.id === pin.id, ...version, directory: engineDir(pin), roleState: status.state, roleReason: status.reason };
-  }) }, 200);
+  });
+  // The managed runtimes the Stack assembles (Pocket TTS): one row each,
+  // on every platform, installed when the environment is built.
+  const managed = MANAGED_RUNTIMES.map((runtime) => {
+    const status = getRoleStatus(engineRole(runtime.name));
+    const installed = runtime.name === POCKET_TTS_NAME ? pocketTtsInstalled() : false;
+    const version = deriveEngineVersionState({ running: status.identity?.build ?? null, currentTag: installed ? runtime.version : null, newestTag: runtime.version, needsRestart: false });
+    return { id: `${runtime.name}-${runtime.version}`, name: runtime.name, label: `${runtime.name} ${runtime.version}, an environment the Stack assembles through uv`, platform: process.platform, arch: process.arch, verified: true, installed, matchesThisMachine: true, ...version, directory: runtime.name === POCKET_TTS_NAME ? pocketTtsRoot() : "", roleState: status.state, roleReason: status.reason };
+  });
+  return c.json({ engines: [...pins, ...managed] }, 200);
 });
 enginesRoutes.openapi(installRoute, async (c) => {
   const { name } = c.req.valid("param");
   const body = c.req.valid("json");
   const staged = "tag" in body;
+  if (name === POCKET_TTS_NAME) {
+    // Not a download but a build: uv (a pinned build, fetched first if
+    // missing), a managed Python, the hashed requirements synced. One
+    // build at a time: a second request joins the job in flight.
+    if (environmentJob) return c.json({ job: environmentJob, engine: POCKET_TTS_NAME, staged: false }, 202);
+    const job = createJob({ kind: "engine.install", totalBytes: 0, status: "downloading", input: { engine: `${POCKET_TTS_NAME}-env` } });
+    // The status is the phase (uv, python, packages): uv reports no byte
+    // counts the job could show.
+    environmentJob = job.id;
+    void ensurePocketTtsEnvironment((phase) => updateJob(job.id, { status: `building ${phase}` }), { signal: jobSignal(job.id) })
+      .then(() => { finishJob(job.id, { ok: true, result: { engine: POCKET_TTS_NAME } }); emit({ id: "engine.state", data: { engine: POCKET_TTS_NAME, state: "installed" } }); })
+      .catch((error) => finishJob(job.id, { ok: false, reason: error instanceof Error ? error.message : String(error) }))
+      .finally(() => { environmentJob = null; });
+    return c.json({ job: job.id, engine: POCKET_TTS_NAME, staged: false }, 202);
+  }
   if (!ENGINE_BINARIES.some((candidate) => candidate.name === name)) return c.json({ error: `Unknown engine ${name}.` }, 404);
   const hardware = await detectHardware();
   const pin = staged
@@ -72,14 +103,15 @@ enginesRoutes.openapi(installRoute, async (c) => {
 });
 for (const action of ["start", "stop", "restart"] as const) enginesRoutes.openapi(controlRoute(action), async (c) => {
   const { name } = c.req.valid("param");
-  if (!ENGINE_BINARIES.some((pin) => pin.name === name)) return c.json({ error: "Unknown engine" }, 404);
+  if (!ENGINE_BINARIES.some((pin) => pin.name === name) && !MANAGED_RUNTIMES.some((runtime) => runtime.name === name)) return c.json({ error: "Unknown engine" }, 404);
+  const role = engineRole(name);
   try {
-    if (action === "stop") { await stopRole("chat"); return c.json({ ok: true }, 200); }
-    if (action === "restart") { await restartRole("chat"); await getProcess("chat"); return c.json({ ok: true }, 200); }
-    const status = getRoleStatus("chat");
+    if (action === "stop") { await stopRole(role); return c.json({ ok: true }, 200); }
+    if (action === "restart") { await restartRole(role); await getProcess(role); return c.json({ ok: true }, 200); }
+    const status = getRoleStatus(role);
     if (status.state === "ready" || status.state === "busy" || status.state === "loading") return c.json({ ok: true, reason: "Already running." }, 200);
-    if (!roleCanBeStartedByStack("chat") && status.state !== "stopped") return c.json({ ok: false, reason: "The chat role is bound to a server the Stack does not start." }, 200);
-    await restartRole("chat"); await getProcess("chat");
+    if (!roleCanBeStartedByStack(role) && status.state !== "stopped") return c.json({ ok: false, reason: `The ${role} role is bound to a server the Stack does not start.` }, 200);
+    await restartRole(role); await getProcess(role);
     return c.json({ ok: true }, 200);
   } catch (error) {
     return c.json({ ok: false, reason: error instanceof EngineUnavailableError ? error.reason : (error as Error).message }, 200);
@@ -88,7 +120,8 @@ for (const action of ["start", "stop", "restart"] as const) enginesRoutes.openap
 enginesRoutes.openapi(currentRoute, async (c) => {
   const { name } = c.req.valid("param"); const { tag } = c.req.valid("json");
   try {
-    await swapEngine(name, tag, { drain: () => stopRole("chat", "Draining for an engine change."), postLoadCheck: async () => { await restartRole("chat"); await getProcess("chat"); return true; } });
+    const role = engineRole(name);
+    await swapEngine(name, tag, { drain: () => stopRole(role, "Draining for an engine change."), postLoadCheck: async () => { await restartRole(role); await getProcess(role); return true; } });
     return c.json({ ok: true as const, tag }, 200);
   } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 400); }
 });

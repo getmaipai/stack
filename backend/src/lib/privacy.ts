@@ -42,4 +42,22 @@ export const PRIVACY_ROWS: PrivacyRow[] = [
     setting: null,
     hosts: ["huggingface.co"],
   },
+  {
+    id: "tts-environment",
+    what: "Building the voice engine's environment (the Python packages Pocket TTS runs on)",
+    when: "Only when Home installs the voice engine, and again when the Stack updates it",
+    carries: "The names of the pinned packages and their hashes; uv, the tool that fetches them, comes from GitHub and sends nothing else",
+    receiver: "The Python Package Index, straight from this computer, and GitHub for the uv build",
+    setting: null,
+    hosts: ["pypi.org", "files.pythonhosted.org", "github.com", "docs.astral.sh"],
+  },
+  {
+    id: "tts-voices",
+    what: "The voice engine asking Hugging Face for its weights and voices",
+    when: "Each time the voice engine starts (it asks for the voice-cloning weights, and reads the pinned copy on this computer when the ask is refused without a token), and when a person picks a voice the computer does not hold yet",
+    carries: "The file's name, and the Hugging Face token from settings when one is set, so the cloning weights can be read",
+    receiver: "Hugging Face, straight from this computer",
+    setting: "stack.engines.tts.hf_token",
+    hosts: ["huggingface.co"],
+  },
 ];

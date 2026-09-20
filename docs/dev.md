@@ -853,31 +853,43 @@ ungated repository at a third revision, which is why presets keep
 working with no token, or with a wrong one once the files are cached;
 a wrong token on a cold cache is a load failure the Stack reports,
 because the hub refuses invalid credentials on the ungated fetch
-too), and a community voice Home
-hands it as an `hf://kyutai/tts-voices/...` WAV is downloaded and
-encoded through the cloning path, which needs the gated weights and
-answers 500 when the fallback loaded instead; the engine keeps a
-small cache of encoded voices in memory on top of the hub cache. The
-Stack does not pre-download
-any of it and does not run the engine offline: the engine fetches
-into the Stack's `HF_HUB_CACHE` under `data/` at first start and on
-the first use of each voice, through the person's token when one is
-set. What the Stack does own is the record: `modelCatalog.ts` lists
-both weight repositories with every revision the package's config
-names (a repository can appear at more than one, the ungated one
-for weights and tokenizer at one revision and for voice embeddings
-at another), read from the installed config at 94c and never chosen
-apart from it, and
-after the post-load check the supervisor reads which snapshot the
-hub cache holds and records that repository and revision on the model
-record with the files' checksums, so `x-maipai-model` and
-`x-maipai-revision` name what loaded, not the config's first choice.
-A cache that later holds neither (a sweep, a person's deletion) makes
-the role `installed`, not `ready`, until the next start fetches
-again. The first start on a machine builds the environment (a job
-with progress, like an engine install) and then loads with the
-weights' download inside the load timeout, scaled to their size; the
-sweep keeps one previous environment.
+too), and a community voice Home hands it as an
+`hf://kyutai/tts-voices/...` WAV is downloaded and encoded through
+the cloning path, which needs the gated weights and answers 500 when
+the fallback loaded instead; the engine keeps a small cache of
+encoded voices in memory on top of the hub cache.
+
+**As landed at 94c:** the three ungated files the default English
+config needs (the weights at `d29db797…`, the tokenizer at the same
+revision, the `alba` embedding at `e81d79e8…`) are store pins in
+`modelCatalog.ts` with their sha256, licence (CC BY 4.0, from the
+repositories' own cards) and size, installed through the models
+route like any model and placed by the store in the Stack's hub cache
+at the pinned repository, revision and path (`download.hub_file`,
+moved into the cache and held once), so the engine reads them there
+and downloads nothing at first start; verified on 2026-09-20 with
+huggingface_hub 1.32, which resolves a commit-hash revision from that
+layout without a request. Stated exactly: the package tries the gated
+weights first at every start, so each start is one ask to Hugging Face
+for `kyutai/pocket-tts` (a HEAD with the token when one is set, refused
+without one, then the pinned ungated file from the cache; bounded to
+three seconds by `HF_HUB_ETAG_TIMEOUT` so a machine with no connection
+starts in that time, not ten); that ask is the privacy row. Running
+the engine offline would remove it but would also stop every preset
+but the pinned one and every community voice, so the engine is never
+run offline: with a token set it fetches the gated weights itself into
+the same cache, and it fetches any preset or community voice on first
+use. After the post-load check the supervisor reads which weights
+snapshot the cache holds (the gated repository first when a token is
+set) and the identity headers name that repository and revision, not
+the config's first choice; the pinned record's repository and its
+gated twin both satisfy the identity check, anything else does not.
+The tokenizer and the voice are components of the role, installed
+beside the weights and never selected. The first start on a machine
+builds the environment (`POST /stack/v1/engines/pocket-tts/install`,
+a job whose status is the phase: uv, python, packages) and the
+engine's own load is inside the load timeout; the sweep keeps one
+previous environment.
 
 To the supervisor it is a `managed` engine, the ComfyUI shape: the
 Stack starts it, waits for `GET /health` to say `healthy`, runs the
@@ -892,11 +904,13 @@ probe, because the supervisor's reads `llama-server`'s `/health`
 (`status: ok`) and `/props`, while Pocket TTS answers
 `{"status": "healthy"}` and exposes no version or model route at all
 (`/`, `/health`, `/tts`). 94c gives the identity reader a per-wire
-probe for `speech`, and the honest claim for such a binding is that
-its identity cannot be verified: it is `ready` on health alone, its
-reply headers say `build: unknown` and `model: unknown`, and a
-`stack.engines.tts.expected_version` declaration cannot be checked
-against it and is reported as such, never as a match.
+probe for `speech` (a `/health` that says `healthy` counts, as
+`ok` does), and the honest claim for such a binding is that its
+identity cannot be verified: it is `ready` on health alone, its reply
+headers carry the host alone (`x-maipai-engine: local`, model and
+revision `none`), and a `stack.engines.tts.expected_version`
+declaration is reported as unmet against an unknown build, never as
+a match.
 
 ### The wire, from the spec, never a second definition
 
@@ -999,8 +1013,11 @@ and identity-bound like every other (STACK-87).
 | `stt` | `sherpa-onnx-moonshine-tiny-en-int8.tar.bz2` | 107.6 MB | release tag `asr-models`, sha256 `d5fe6ec4334fef36255b2a4010412cad4c007e33103fec62fb5d17cad88086f2` | Moonshine tiny English, int8, MIT; Home's plan keeps this path; extracts to a directory the store keeps beside the archive |
 | `stt` | `silero_vad.onnx` | 0.6 MB | release tag `asr-models`, sha256 `9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6` | the voice activity detector the session and the endpointer use, MIT; a component of the role, never a model a person selects |
 | `stt`, alternative, named not pinned | `sherpa-onnx-whisper-tiny.en`, `base.en` | 118 MB, 209 MB | release tag `asr-models` | same runtime; pinned only if the Studio bench asks for it |
-| `tts` runtime | `uv-<platform>.tar.gz` | about 20 MB | astral-sh/uv release `0.12.17` | runs `pocket-tts==3.1.0 serve` with a managed Python 3.12 under `data/` |
-| `tts` | Pocket TTS weights, tokenizer, preset voice embeddings | recorded at 94c | Hugging Face hub, `kyutai/pocket-tts` (gated, with a token) or `kyutai/pocket-tts-without-voice-cloning`, at the revisions the package's config names (the embeddings at their own) | fetched by the engine into the Stack's `HF_HUB_CACHE`; what loaded is read back and recorded |
+| `tts` runtime | `uv-<platform>.tar.gz` | 16.9 MB (macOS arm64), 19.0 MB (Linux arm64), 19.8 MB (Linux x64) | astral-sh/uv release `0.12.17`, sha256 `85f00cbd…`, `d636d1b6…`, `fa82fd8d…` in `engineCatalog.ts` | builds the venv (a managed Python 3.12, the hashed requirements) under `data/engines/pocket-tts/3.1.0/` |
+| `tts` environment | `pocket-tts.darwin-arm64.requirements.txt` | 820 lines, 772 hashes | `backend/src/speech/` | pocket-tts 3.1.0, torch 2.11.0, numpy 2.5.3 and the rest by version and hash; the Linux files land with the first Linux `tts` run |
+| `tts` | `languages/english/model.safetensors` | 219.0 MB | `kyutai/pocket-tts-without-voice-cloning` @ `d29db797…`, sha256 `be9c6b48…` | the weights, placed in the hub cache; the gated twin is fetched by the engine when a token is set |
+| `tts`, component | `languages/english/tokenizer.model` | 59 KB | the same repository and revision, sha256 `d461765a…` | the tokenizer |
+| `tts`, component | `languages/english/embeddings/alba.safetensors` | 6.2 MB | the same repository @ `e81d79e8…`, sha256 `69c32db6…` | the default voice; other presets and community voices are fetched by the engine on first use |
 | `tts`, alternative, rejected by the owner's ear | `kokoro-en-v0_19.tar.bz2` | 319.6 MB | release tag `tts-models` | Kokoro 82M through the `stt` worker's runtime, if the owner ever reverses 2026-09-04 |
 | `tts`, robot, not the Stack's pin | Piper or Kokoro through sherpa-onnx | | release tag `tts-models` | the robot's body speech process under STACK-17 decides; `bot/docs/dev.md` names Piper today and Pocket TTS on the Pi as the measured candidate |
 
@@ -1040,10 +1057,17 @@ dev machine with `say` and `afconvert` as its README records, checked
 in, never household audio) transcribing in the suite through scripted
 engines and live on this laptop through the real worker; the
 readiness check probing `stt` with that clip.
-94c: the `uv` pin per platform; Pocket TTS as a managed engine with
-the weights pinned; the route forwarding the spec's form and
-streaming the body with cancel; one short sentence rendering live.
-Out of scope for all three: the wake word (installed, not served; its
+94c (landed 2026-09-20): the `uv` pins per platform with sha256 and
+the name-filtered selectors; the environment builder and its hashed
+requirements file; the three hub-file pins; the `hf_token` secret
+setting (encrypted at rest through `@maipai/core`'s secrets with a
+keystore under `data/keys`, redacted to `set` on the settings route,
+handed to the engine as `HF_TOKEN`); the managed launch with the
+per-wire probe and the identity read from the cache; `POST
+/v1/audio/speech` forwarding the spec's form and streaming the body
+with cancel; the readiness check rendering the probe sentence; the
+engines routes acting on each engine's own role. Out of scope for all
+three: the wake word (installed, not served; its
 own S item when a wake-word package exists in the Catalog), the
 robot's managed body process (STACK-17), Home's sentence scheduler
 and normalization (Home's), and speaker identification (the robot's
@@ -1071,6 +1095,32 @@ The first run of the script found the readiness check skipping the
 transcription wire (a "skipped" result the run counted as not green);
 the check now probes it with the clip like a completion, with a
 regression test.
+
+### `tts` proven live (94c, 2026-09-20)
+
+`scripts/prove-tts.sh` on the p16 laptop (Apple M4 Pro, 24 GB), a
+clean scratch data directory on port 8771, through the public routes:
+
+| Step | Result | Time |
+|---|---|---|
+| `POST /stack/v1/engines/pocket-tts/install` | job done: uv 0.12.17 downloaded and verified, a managed Python 3.12, the 772 hashed wheels synced (`engines/uv` 647 MB with its cache, `engines/pocket-tts` 535 MB) | 6.2 s |
+| Install the tokenizer, the `alba` voice and the weights (219 MB, real downloads) | jobs done, sha256 verified, each placed in `models/hub/models--kyutai--pocket-tts-without-voice-cloning/snapshots/<revision>/languages/english/...` | 0.60 s, 0.59 s, 3.27 s |
+| `tts` before the first request | `installed` | |
+| `POST /v1/audio/speech` with the probe sentence | HTTP 200, `audio/wav`, 24 kHz mono 16-bit, the placeholder data size 2,000,000,000 in the header and 105,600 bytes of audio (2.2 s), `x-maipai-engine: local pocket-tts-3.1.0`, `x-maipai-model: kyutai/pocket-tts-without-voice-cloning`, `x-maipai-revision: d29db797…` | first byte 11.9 to 14.3 s across three runs, the engine's start (torch and the model) inside it, total about 0.2 s more |
+| The same sentence with `voice_url=alba`, loaded | HTTP 200 | first byte 2 ms, total 183 ms |
+| `tts` after it | `ready`, identity ok (the pinned repository loaded), measured footprint 828,868,000 bytes | |
+| A render aborted by the client after 50 ms, then another | the abort a normal end; the next render HTTP 200 with first byte 2 ms; `tts` `ready` | |
+| An unknown voice | the engine's own 400 passed through (`voice_url must start with http://, https://, or hf://`) | |
+| `POST /stack/v1/check` | ok, `tts` ok (the probe sentence rendered), fit-together ok | 0.20 s |
+| A second `POST /stack/v1/engines/pocket-tts/install` | a job that finds the environment built and finishes at once (a request during a build joins the build's job; the suite covers the guard) | |
+| The engine | the Stack's own child, `pocket-tts serve` from the venv, 976,752 KB resident; its caches under `data/home/.cache` and `data/models/hub` | |
+| Stop | port free, scratch removed | |
+
+The first run of the script found the models route ignoring a shipped
+pin's `hub_file` placement when the body left it out, so the files
+landed in the plain store and the engine fetched its own copies (the
+first byte then 15.7 s); the route now completes a body from the
+Stack's own pin as it does from the Catalog's index, with a test.
 
 ## Measured so far
 

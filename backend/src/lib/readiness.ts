@@ -9,7 +9,7 @@ import { meta } from "@/db/schema";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { getMemoryReader } from "@/lib/memory";
 import type { MemoryReader } from "@/lib/memory/types";
-import { probeReplyOk, probeRequest, processRoleFor, requestRole, getRoleStatus, roleIsBound, SPAWNABLE_ROLES } from "@/lib/supervisor";
+import { probeReplyOk, probeRequest, processRoleFor, PROBE_SENTENCE, requestRole, getRoleStatus, roleIsBound, SPAWNABLE_ROLES, speakRole, speechForm } from "@/lib/supervisor";
 import { resolveRoleState } from "@/lib/router";
 import { ROLE_IDS, ROLES, type RoleId } from "@/roles";
 import { lastStackChange, stackGeneration } from "@/lib/stackGeneration";
@@ -34,7 +34,7 @@ let running: { startedAt: string } | null = null;
 
 function fixFor(role: RoleId, reason: string): HealthFix {
   if (reason.toLowerCase().includes("memory")) return { label: "Free memory", action: "free_memory" };
-  if (ROLES[role].wire === "chat" || ROLES[role].wire === "embeddings" || ROLES[role].wire === "transcription") return { label: "Restart engine", action: "restart_engine" };
+  if (["chat", "embeddings", "transcription", "speech"].includes(ROLES[role].wire)) return { label: "Restart engine", action: "restart_engine" };
   return { label: "Reinstall model", action: "reinstall_model" };
 }
 
@@ -52,10 +52,19 @@ async function checkRole(role: RoleId, options: CheckOptions): Promise<CheckRole
     }
     const wire = ROLES[role].wire;
     // The wires with a real probe: a completion, an embedding, the
-    // bundled clip's transcript. The rest are skipped, never green.
-    if (wire !== "chat" && wire !== "embeddings" && wire !== "transcription") {
+    // bundled clip's transcript, one sentence rendered. The rest are
+    // skipped, never green.
+    if ((wire !== "chat" && wire !== "embeddings" && wire !== "transcription" && wire !== "speech") || ROLES[role].endpoints.length === 0) {
       resolveHealth(`check-role.${role}`);
       return { role, ok: false, skipped: true, ms: Math.round(performance.now() - started), reason: `Skipped: no ${wire} engine is ready for ${role}.`, loadMs: null };
+    }
+    if (wire === "speech") {
+      // The form through the public path's own machinery, the audio drained.
+      const spoken = await speakRole(role, speechForm(PROBE_SENTENCE));
+      let bytes = 0;
+      if (spoken.body) for await (const chunk of spoken.body) bytes += chunk.byteLength;
+      const ok = spoken.status === 200 && (spoken.contentType ?? "").startsWith("audio/") && bytes > 44;
+      return record(ok, ok ? null : `${role} returned HTTP ${spoken.status} with ${bytes} bytes.`, getRoleStatus(role).postLoadCheck?.loadMs ?? null, "The role probe returned an error.");
     }
     const probe = probeRequest(role);
     const reply = await requestRole(role, probe.path, probe.body);

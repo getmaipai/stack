@@ -19,6 +19,7 @@ import { readFileSync } from "node:fs";
 // reads it there too, not only from a checkout.
 import bundledClipFile from "../speech/fixtures/clover-two-seconds.wav" with { type: "file" };
 import { TRANSCRIBE_PATH } from "@/speech/server";
+import { loadedWeightsRepo, pocketTtsCommand, pocketTtsEnv, pocketTtsInstalled, POCKET_TTS_ESTIMATED_FOOTPRINT, POCKET_TTS_VERSION } from "@/speech/pocketTts";
 import { admit, getRunState, release, setGovernorPid, startGovernor, type GovernorHandle } from "@/lib/governor";
 import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
@@ -55,6 +56,9 @@ export interface EngineClient {
   readonly baseUrl: string;
   request(path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<{ status: number; body: unknown }>;
   stream?(path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<Response>;
+  /** A request in the engine's own shape (a multipart form to Pocket
+   * TTS's /tts), the reply streamed back as is. */
+  raw?(path: string, init: { method: string; body: FormData | string | Uint8Array; headers?: Record<string, string> }, signal?: AbortSignal): Promise<Response>;
   health(): Promise<boolean>;
 }
 
@@ -87,10 +91,13 @@ export class EngineUnavailableError extends Error {
 // post-load check sends. Roles that share chat's model run on chat's
 // process; embed has its own model and its own launch flag.
 const CHAT_WIRE_ROLES: RoleId[] = ROLE_IDS.filter((role) => ROLES[role].wire === "chat");
-const SPAWNABLE_ROLES: RoleId[] = ["chat", "embed", "stt"];
+const SPAWNABLE_ROLES: RoleId[] = ["chat", "embed", "stt", "tts"];
 /** The roles the speech worker serves: their runtime ships with the
  * Stack (sherpa-onnx-node in package.json), never as an engine build. */
 const SPEECH_ROLES: RoleId[] = ["stt"];
+/** The roles a managed Python engine serves (Pocket TTS, STACK-94c). */
+const MANAGED_ROLES: RoleId[] = ["tts"];
+export const SPEECH_PATH = "/tts";
 
 /** The role whose process serves this role: `coding`, `judge`, `router`
  * and `vision` share chat's model and process unless bound elsewhere. */
@@ -123,6 +130,15 @@ class OpenAIEngineClient implements EngineClient {
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") throw error;
       throw new EngineUnavailableError(`Engine streaming request failed: ${(error as Error).message}`);
+    }
+  }
+
+  async raw(path: string, init: { method: string; body: FormData | string | Uint8Array; headers?: Record<string, string> }, signal?: AbortSignal): Promise<Response> {
+    try {
+      return await fetch(this.url(path), { method: init.method, headers: init.headers, body: init.body, signal });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") throw error;
+      throw new EngineUnavailableError(`Engine request failed: ${(error as Error).message}`);
     }
   }
 
@@ -183,6 +199,26 @@ export async function measureProcessMemoryBytes(pid: number | null): Promise<num
 /** The smallest real request for a role's wire: the post-load check and
  * the readiness check both send it, so "ready" always means the public
  * route's own shape answered. */
+/** The one short sentence the `tts` post-load check and readiness probe
+ * render (a persona-roster name, never household text). */
+export const PROBE_SENTENCE = "Clover, the kitchen light is on.";
+/** spec/voice's /tts form: `text`, and a voice only when named. */
+export function speechForm(text: string, voiceUrl?: string): FormData {
+  const form = new FormData();
+  form.append("text", text);
+  if (voiceUrl) form.append("voice_url", voiceUrl);
+  return form;
+}
+/** The speech wire's probe: the form through the engine's own shape, the
+ * reply drained; ok when the engine answered 200 with audio. */
+export async function probeSpeech(client: EngineClient, signal?: AbortSignal): Promise<{ status: number; body: unknown }> {
+  if (!client.raw) return { status: 501, body: { error: "The engine client cannot send a form." } };
+  const response = await client.raw(SPEECH_PATH, { method: "POST", body: speechForm(PROBE_SENTENCE) }, signal);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const type = response.headers.get("content-type") ?? "";
+  return { status: response.status, body: { bytes: bytes.byteLength, audio: type.startsWith("audio/") && bytes.byteLength > 44 } };
+}
+
 let bundledClip: string | null = null;
 /** The bundled two-second clip, base64, the `stt` probe's audio. */
 export function bundledClipBase64(): string {
@@ -193,6 +229,9 @@ export function bundledClipBase64(): string {
 export function probeRequest(role: RoleId): { path: string; body: Record<string, unknown> } {
   if (ROLES[role].wire === "embeddings") return { path: "/v1/embeddings", body: { model: role, input: "OK" } };
   if (ROLES[role].wire === "transcription") return { path: TRANSCRIBE_PATH, body: { model: role, audio_base64: bundledClipBase64() } };
+  // The speech wire's probe is a form, sent by `probeSpeech`; this shape
+  // is what a JSON caller would see and is never sent as JSON.
+  if (ROLES[role].wire === "speech") return { path: SPEECH_PATH, body: { model: role, text: PROBE_SENTENCE } };
   // `enable_thinking: false` asks the template to answer in content; a
   // thinking model that answers in reasoning_content is still alive.
   return { path: "/v1/chat/completions", body: { model: role, messages: [{ role: "user", content: "Reply with just the word OK." }], max_tokens: 32, chat_template_kwargs: { enable_thinking: false } } };
@@ -208,6 +247,7 @@ export function probeReplyOk(role: RoleId, result: { status: number; body: unkno
     const text = (result.body as { text?: unknown }).text;
     return typeof text === "string" && text.trim().length > 0;
   }
+  if (ROLES[role].wire === "speech") return (result.body as { audio?: unknown }).audio === true;
   const message = (result.body as { choices?: Array<{ message?: { content?: unknown; reasoning_content?: unknown } }> }).choices?.[0]?.message;
   const content = typeof message?.content === "string" ? message.content : null;
   const reasoning = typeof message?.reasoning_content === "string" ? message.reasoning_content : null;
@@ -218,7 +258,7 @@ export async function postLoadCheck(role: RoleId, client: EngineClient, pid: num
   const startedAt = performance.now();
   const probe = probeRequest(role);
   const result = await withTimeout(
-    client.request(probe.path, probe.body),
+    ROLES[role].wire === "speech" ? probeSpeech(client) : client.request(probe.path, probe.body),
     timeoutOverrides.postLoadMs ?? DEFAULT_POST_LOAD_TIMEOUT_MS,
     () => new EngineUnavailableError("The post-load check timed out."),
   );
@@ -298,6 +338,7 @@ function launchBinary(pin: EngineBinaryPin): string {
  * its detector component for the speech roles. */
 function engineInstalledFor(role: RoleId): boolean {
   if (SPEECH_ROLES.includes(role)) return componentModel(role, "vad") !== null;
+  if (MANAGED_ROLES.includes(role)) return pocketTtsInstalled() && componentModel(role, "tokenizer") !== null && componentModel(role, "voice") !== null;
   return engineInstalled();
 }
 
@@ -377,7 +418,7 @@ export function speechWorkerCommand(args: { role: RoleId; port: number; modelPat
   return [runtime.execPath, ...(viaBun ? [runtime.main] : []), "speech-worker", "--role", args.role, "--port", String(args.port), "--model", args.modelPath, "--vad", args.vadPath, "--threads", String(args.threads)];
 }
 
-interface LaunchPlan { command: string[]; engine: string; build: string; stdin: "pipe" | "ignore"; contextLength: number; }
+interface LaunchPlan { command: string[]; engine: string; build: string; stdin: "pipe" | "ignore"; contextLength: number; kind: "spawned" | "managed"; env?: Record<string, string>; }
 
 /** What to run for a role: llama-server from the `current` link for the
  * chat and embeddings wires, the speech worker for `stt`. */
@@ -387,7 +428,14 @@ function launchPlan(role: RoleId, model: ModelRecord, port: number): LaunchPlan 
     if (!vad?.modelPath) throw new EngineUnavailableError(`The ${role} voice activity detector is not installed.`);
     const declared = engineSettingValues("engines.llama_server");
     const threads = typeof declared.threads === "number" && declared.threads > 0 ? declared.threads : 2;
-    return { command: speechWorkerCommand({ role, port, modelPath: model.modelPath!, vadPath: vad.modelPath, threads }), engine: "sherpa-onnx-node", build: "bundled", stdin: "pipe", contextLength: 0 };
+    return { command: speechWorkerCommand({ role, port, modelPath: model.modelPath!, vadPath: vad.modelPath, threads }), engine: "sherpa-onnx-node", build: "bundled", stdin: "pipe", contextLength: 0, kind: "spawned" };
+  }
+  if (MANAGED_ROLES.includes(role)) {
+    if (!pocketTtsInstalled()) throw new EngineUnavailableError("The Pocket TTS environment is not built on this machine.");
+    // The person's token, if set, reaches exactly this environment.
+    const token = settingValues()["stack.engines.tts.hf_token"];
+    const env = pocketTtsEnv(typeof token === "string" && token.trim() ? { HF_TOKEN: token.trim() } : {});
+    return { command: pocketTtsCommand(port), engine: "pocket-tts", build: POCKET_TTS_VERSION, stdin: "ignore", contextLength: 0, kind: "managed", env };
   }
   const declared = engineSettingValues("engines.llama_server");
   const config = { contextLength: declared.context_length, slots: declared.slots, threads: declared.threads, cacheRamMb: declared.cache_ram_mb, flashAttention: declared.flash_attention } as Record<string, number | boolean | string | string[]>;
@@ -396,16 +444,32 @@ function launchPlan(role: RoleId, model: ModelRecord, port: number): LaunchPlan 
   const contextLength = typeof config.contextLength === "number" ? config.contextLength : 4096;
   const binary = launchBinary(pin);
   const args = llamaServerArgs({ modelPath: model.modelPath!, port, config, contextLength, kvCacheQuantized: process.platform === "darwin", embeddings: role === "embed" });
-  return { command: [binary, ...args], engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength };
+  return { command: [binary, ...args], engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength, kind: "spawned" };
 }
 
 async function startSpawnedProcess(role: RoleId): Promise<RoleProcess> {
   if (!SPAWNABLE_ROLES.includes(role)) throw new EngineUnavailableError(`No engine can be started for ${role} on this machine yet.`);
   const model = selectedModel(role);
-  if (!engineInstalledFor(role)) throw new EngineUnavailableError(SPEECH_ROLES.includes(role) ? `The ${role} voice activity detector is not installed.` : "No installed llama-server build is available for this machine.");
+  if (!engineInstalledFor(role)) {
+    const reason = SPEECH_ROLES.includes(role) ? `The ${role} voice activity detector is not installed.`
+      : MANAGED_ROLES.includes(role) ? (pocketTtsInstalled() ? `The ${role} tokenizer or default voice is not installed.` : "The Pocket TTS environment is not built on this machine.")
+      : "No installed llama-server build is available for this machine.";
+    throw new EngineUnavailableError(reason);
+  }
   if (!model?.modelPath) throw new EngineUnavailableError(`No verified and installed ${role} model is available.`);
 
-  const admission = await admit({ id: role, kind: "resident", requestedBytes: model.sizeBytes ?? 0, modelFileBytes: model.sizeBytes, measuredPeakBytes: model.measuredFootprintBytes, engine: SPEECH_ROLES.includes(role) ? "sherpa-onnx-node" : "llama-server", pinned: pinnedModels.has(model.id) });
+  // A managed engine's footprint is the runtime's (torch resident), not
+  // its weights file times a multiplier: until measured, the estimate
+  // stands in as the request.
+  const managed = MANAGED_ROLES.includes(role);
+  const admission = await admit({
+    id: role, kind: "resident",
+    requestedBytes: managed ? (model.measuredFootprintBytes ?? POCKET_TTS_ESTIMATED_FOOTPRINT) : model.sizeBytes ?? 0,
+    modelFileBytes: managed ? null : model.sizeBytes,
+    measuredPeakBytes: model.measuredFootprintBytes,
+    engine: managed ? "pocket-tts" : SPEECH_ROLES.includes(role) ? "sherpa-onnx-node" : "llama-server",
+    pinned: pinnedModels.has(model.id),
+  });
   if ("queued" in admission) throw new EngineUnavailableError(`${role} admission is queued at position ${admission.position}.`);
   if ("refused" in admission) throw new EngineUnavailableError(admission.reason);
 
@@ -415,7 +479,7 @@ async function startSpawnedProcess(role: RoleId): Promise<RoleProcess> {
   const contextLength = plan.contextLength;
   const spawnEngine = () => {
     try {
-      return Bun.spawn(plan.command, { stdout: "ignore", stderr: "pipe", stdin: plan.stdin, env: { ...process.env, HF_HUB_CACHE: hfHubRoot } });
+      return Bun.spawn(plan.command, { stdout: "ignore", stderr: "pipe", stdin: plan.stdin, env: plan.env ?? { ...process.env, HF_HUB_CACHE: hfHubRoot } });
     } catch (error) {
       // A binary that will not even start (a truncated or wrong-arch file)
       // is the same failure as a crash before health, said in one sentence.
@@ -441,15 +505,23 @@ async function startSpawnedProcess(role: RoleId): Promise<RoleProcess> {
     void exitFailure.catch(() => {});
     const loadStartedAt = performance.now();
     await Promise.race([waitHealthy(client, loadTimeoutForModel(model.sizeBytes), () => !exited), exitFailure]);
-    const identity = await readEngineIdentity(client.baseUrl);
+    let identity = await readEngineIdentity(client.baseUrl);
+    // A managed engine exposes no build or model of its own; the Stack
+    // knows both: the version it installed, the weights the hub cache
+    // holds, read after health and never assumed from the config.
+    if (plan.kind === "managed") {
+      const loaded = loadedWeightsRepo({ tokenSet: !!plan.env?.HF_TOKEN });
+      identity = { ...identity, build: `${plan.engine}-${plan.build}`, model: loaded?.repo ?? null };
+    }
     const check = await postLoadCheck(role, client, handle.pid);
     check.loadMs = Math.round(performance.now() - loadStartedAt);
     if (check.actualBytes !== null) recordMeasuredFootprint(model.id, check.actualBytes, contextLength);
     runtime(role).status.postLoadCheck = check;
     resolveHealth(`engine.crashed.${role}`);
     resolveHealth(`post-load-check-failed.${role}`);
+    const loadedRevision = plan.kind === "managed" ? loadedWeightsRepo({ tokenSet: !!plan.env?.HF_TOKEN })?.revision ?? null : null;
     const processRecord: RoleProcess = {
-      role, kind: "spawned", client, identity, modelId: model.id, modelRevision: model.revision, pid: handle.pid, port, activeRequests: 0, retired: false,
+      role, kind: plan.kind, client, identity, modelId: model.id, modelRevision: loadedRevision ?? model.revision, pid: handle.pid, port, activeRequests: 0, retired: false,
       governorHandle: admission,
       stopGovernor: startGovernor({ pid: handle.pid, restart: async () => { await restartRole(role); } }),
       stop: async () => { handle.kill(); await handle.exited; },
@@ -459,7 +531,7 @@ async function startSpawnedProcess(role: RoleId): Promise<RoleProcess> {
       if (!processRecord.retired && current.process === processRecord) {
         current.process = null;
         current.starting = null;
-        current.status = { kind: "spawned", state: "offline", reason: "The spawned engine exited unexpectedly.", identity, postLoadCheck: check };
+        current.status = { kind: plan.kind, state: "offline", reason: "The spawned engine exited unexpectedly.", identity, postLoadCheck: check };
         emit({ id: "engine.state", data: { engine: role, state: "offline", reason: "The spawned engine exited unexpectedly." } });
         raise({ code: `engine.crashed.${role}`, severity: "error", title: `The ${role} engine crashed`, text: "The spawned engine exited unexpectedly.", cause: "The engine process exited.", fix: { label: "Restart engine", action: "restart_engine" } });
         processRecord.stopGovernor?.();
@@ -542,12 +614,22 @@ export function identityCheck(requested: RoleId): { ok: boolean; expected: strin
   const role = processRoleFor(requested);
   const processRecord = runtime(role).process;
   if (!processRecord) return { ok: false, expected: null, actual: null, reason: "No process is running." };
-  if (processRecord.kind === "spawned") {
+  if (processRecord.kind === "spawned" || (processRecord.kind === "managed" && processRecord.pid !== null)) {
     const model = processRecord.modelId ? listModels().find((candidate) => candidate.id === processRecord.modelId) : null;
     const actual = processRecord.identity.model;
     // A spawned process serves one model record; if the store no longer
     // has it, what runs is not something the Stack vouches for.
     if (!model?.modelPath) return { ok: false, expected: null, actual, reason: `The engine runs ${processRecord.modelId ?? "an unknown model"}, which the store no longer has.` };
+    // A managed engine's identity names the weights repository it loaded
+    // (read from the hub cache); the record names the one pinned, and
+    // the gated twin of that repository serves the same voice.
+    if (processRecord.kind === "managed") {
+      const pinnedRepo = typeof model.provenance.repo === "string" ? model.provenance.repo : null;
+      const twins = pinnedRepo ? [pinnedRepo, pinnedRepo.replace(/-without-voice-cloning$/, "")] : [];
+      if (!actual) return { ok: false, expected: pinnedRepo, actual, reason: "The engine's weights could not be read from the hub cache." };
+      if (!twins.includes(actual)) return { ok: false, expected: pinnedRepo, actual, reason: `The engine loaded ${actual}; the pinned weights are ${pinnedRepo}.` };
+      return { ok: true, expected: pinnedRepo, actual, reason: null };
+    }
     const expected = modelFileName(model.modelPath);
     if (actual && expected !== actual) return { ok: false, expected, actual, reason: `The engine reports ${actual}; the selected model is ${expected}.` };
     return { ok: true, expected, actual, reason: null };
@@ -564,7 +646,7 @@ export function identityCheck(requested: RoleId): { ok: boolean; expected: strin
 /** A pid is the proof that this process was launched by this Stack. */
 export function roleIsStackOwned(requested: RoleId): boolean {
   const current = runtime(processRoleFor(requested));
-  return current.process?.kind === "spawned" && current.process.pid !== null;
+  return (current.process?.kind === "spawned" || current.process?.kind === "managed") && current.process.pid !== null;
 }
 
 export function roleCanBeStartedByStack(requested: RoleId): boolean {
@@ -680,7 +762,41 @@ export function loadedRoleForModel(id: string): RoleId | null {
 // ---- requests -------------------------------------------------------------
 
 export interface RoleReply { status: number; body: unknown; headers: Record<string, string>; }
-export interface RoleStreamReply { status: number; body: ReadableStream<Uint8Array> | null; headers: Record<string, string>; }
+export interface RoleStreamReply { status: number; body: ReadableStream<Uint8Array> | null; headers: Record<string, string>; contentType?: string; }
+
+/** The speech wire: spec/voice's form to the engine's /tts, the reply
+ * streamed back as it is generated (audio/wav with the placeholder data
+ * size the spec's consumer tolerates). A client abort closes our side
+ * and is a normal end; a 4xx from the engine (an unknown voice) is
+ * passed through with its body. */
+export async function speakRole(requested: RoleId, form: FormData, signal?: AbortSignal): Promise<RoleStreamReply> {
+  const role = processRoleFor(requested);
+  const processRecord = await getProcess(role);
+  const current = runtime(role);
+  processRecord.activeRequests++;
+  current.status = { ...current.status, state: "busy", kind: processRecord.kind, identity: processRecord.identity };
+  const headers = () => identityHeaders(processRecord.identity, processRecord.modelRevision);
+  try {
+    if (!processRecord.client.raw) throw new EngineUnavailableError("The engine does not take a form.");
+    const response = await processRecord.client.raw(SPEECH_PATH, { method: "POST", body: form }, signal);
+    if (response.status >= 500 && !await processRecord.client.health()) throw new EngineUnavailableError(`Engine returned HTTP ${response.status} and is no longer healthy.`);
+    const contentType = response.headers.get("content-type") ?? "application/octet-stream";
+    if (!response.body) { finishStream(role, processRecord); return { status: response.status, body: null, headers: headers(), contentType }; }
+    if (response.status >= 200 && response.status < 300) current.lastRealRequestAt = Date.now();
+    return { status: response.status, body: trackedStream(role, processRecord, response.body), headers: headers(), contentType };
+  } catch (error) {
+    finishStream(role, processRecord);
+    if ((error instanceof DOMException && error.name === "AbortError") || signal?.aborted) return { status: 499, body: null, headers: headers() };
+    if (await processRecord.client.health()) return { status: error instanceof EngineUnavailableError ? 504 : 503, body: null, headers: headers() };
+    const unavailable = error instanceof EngineUnavailableError ? error : new EngineUnavailableError(`Engine request failed: ${(error as Error).message}`);
+    current.process = null;
+    current.starting = null;
+    current.status = { ...current.status, state: "offline", reason: unavailable.reason };
+    emit({ id: "engine.state", data: { engine: role, state: "offline", reason: unavailable.reason } });
+    void retire(processRecord);
+    throw unavailable;
+  }
+}
 
 export async function requestRole(requested: RoleId, path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<RoleReply> {
   const role = processRoleFor(requested);
@@ -800,6 +916,30 @@ export function scriptedProcess(role: RoleId, overrides: Partial<RoleProcess> = 
       const last = messages.at(-1) as { content?: unknown } | undefined;
       const content = typeof last?.content === "string" && last.content.trim() ? "Scripted Stack reply." : "The scripted Stack engine is ready.";
       return { status: 200, body: { id: "scripted-completion", object: "chat.completion", choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }], usage: { prompt_tokens: 1, completion_tokens: 4, total_tokens: 5 } } };
+    },
+    async raw(path, init, signal) {
+      if (path !== SPEECH_PATH) return new Response(JSON.stringify({ error: "Not found." }), { status: 404, headers: { "content-type": "application/json" } });
+      const form = init.body instanceof FormData ? init.body : null;
+      const voice = form?.get("voice_url");
+      if (typeof voice === "string" && voice && voice !== "alba") return new Response(JSON.stringify({ detail: `Unknown voice ${voice}.` }), { status: 400, headers: { "content-type": "application/json" } });
+      // A 24 kHz mono 16-bit WAV in two chunks: the header with the
+      // placeholder data size Pocket TTS writes, then a beat of silence.
+      const header = new Uint8Array(44);
+      const view = new DataView(header.buffer);
+      const tag = (offset: number, text: string) => { for (let index = 0; index < 4; index += 1) header[offset + index] = text.charCodeAt(index); };
+      tag(0, "RIFF"); view.setUint32(4, 2_000_000_036, true); tag(8, "WAVE"); tag(12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+      view.setUint32(24, 24_000, true); view.setUint32(28, 48_000, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true); tag(36, "data"); view.setUint32(40, 2_000_000_000, true);
+      const chunks = [header, new Uint8Array(4_800)];
+      const body = new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          if (signal?.aborted) { controller.error(new DOMException("Aborted", "AbortError")); return; }
+          const next = chunks.shift();
+          if (!next) { controller.close(); return; }
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          controller.enqueue(next);
+        },
+      });
+      return new Response(body, { status: 200, headers: { "content-type": "audio/wav" } });
     },
     async stream(_path, _body, signal) {
       const encoder = new TextEncoder();

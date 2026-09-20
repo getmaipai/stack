@@ -155,14 +155,19 @@ Engines per platform:
 
 | Engine | Build | Platform | Status |
 |---|---|---|---|
-| Pocket TTS 3.1.0 through a pinned uv 0.12.17, managed | | | candidate (dev.md, The speech roles; STACK-94c) |
+| `uv-0.12.17-macos-arm64` | 0.12.17 | darwin arm64 | pinned, verified (the tool that builds the tts environment) |
+| `uv-0.12.17-linux-arm64` | 0.12.17 | linux arm64 | pinned, not yet verified (the tool that builds the tts environment) |
+| `uv-0.12.17-linux-x64` | 0.12.17 | linux x64 | pinned, not yet verified (the tool that builds the tts environment) |
+| `pocket-tts` | 3.1.0 | macOS arm64 (a hashed requirements file per platform; the Linux files land with the first Linux tts run) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/); updates with the Stack's release |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| p16 | resident |  |  |  |  |  |  |  | candidate (Pocket TTS weights, repository and revision pinned at STACK-94c) |
-| p32 | resident |  |  |  |  |  |  |  | candidate (Pocket TTS weights, repository and revision pinned at STACK-94c) |
-| p64 | resident |  |  |  |  |  |  |  | candidate (Pocket TTS weights, repository and revision pinned at STACK-94c) |
-| p128 | resident |  |  |  |  |  |  |  | candidate (Pocket TTS weights, repository and revision pinned at STACK-94c) |
+| p16 | resident | `pocket-tts-english` | fp32 | 0.20 GB | 0.77 GB (Apple M4 Pro, 24 GB unified memory) | n/a | CC-BY-4.0 | kyutai/pocket-tts-without-voice-cloning @ d29db7978e464fb90cb3359ee0c69a273b9142cc | pinned |
+| p32 | resident | `pocket-tts-english` | fp32 | 0.20 GB | 0.77 GB (Apple M4 Pro, 24 GB unified memory) | n/a | CC-BY-4.0 | kyutai/pocket-tts-without-voice-cloning @ d29db7978e464fb90cb3359ee0c69a273b9142cc | pinned |
+| p64 | resident | `pocket-tts-english` | fp32 | 0.20 GB | 0.77 GB (Apple M4 Pro, 24 GB unified memory) | n/a | CC-BY-4.0 | kyutai/pocket-tts-without-voice-cloning @ d29db7978e464fb90cb3359ee0c69a273b9142cc | pinned |
+| p128 | resident | `pocket-tts-english` | fp32 | 0.20 GB | 0.77 GB (Apple M4 Pro, 24 GB unified memory) | n/a | CC-BY-4.0 | kyutai/pocket-tts-without-voice-cloning @ d29db7978e464fb90cb3359ee0c69a273b9142cc | pinned |
+
+Installed beside the model, never selected on its own: `pocket-tts-english-tokenizer` (tokenizer, 0.1 MB, CC-BY-4.0, kyutai/pocket-tts-without-voice-cloning @ d29db7978e464fb90cb3359ee0c69a273b9142cc); `pocket-tts-voice-alba` (voice, 5.9 MB, CC-BY-4.0, kyutai/pocket-tts-without-voice-cloning @ e81d79e8194ad4c7ce879c87a4258ef20cbf2487).
 
 ## wakeword (Wake word)
 

@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ENGINE_BINARIES, ENGINE_READY_MARKER } from "@/lib/engineCatalog";
-import { dataDir } from "@/lib/paths";
+import { engineTagRoot } from "@/lib/store/layout";
 
 /** The three headers on every reply (spec RoleReplyHeaders): the engine
  * host and build that answered, the model file, and the model's pinned
@@ -52,8 +52,9 @@ export function modelFileName(path: string): string {
 export async function readEngineIdentity(url: string, timeoutMs = 3_000): Promise<EngineIdentity> {
   const base = url.replace(/\/$/, "");
   const [healthy, props] = await Promise.all([
+    // llama-server and the speech worker say `ok`; Pocket TTS says `healthy`.
     fetch(`${base}/health`, { signal: AbortSignal.timeout(timeoutMs) })
-      .then(async (res) => res.ok && ((await res.json()) as { status?: string }).status === "ok")
+      .then(async (res) => { if (!res.ok) return false; const status = ((await res.json()) as { status?: string }).status; return status === "ok" || status === "healthy"; })
       .catch(() => false),
     fetch(`${base}/props`, { signal: AbortSignal.timeout(timeoutMs) })
       .then(async (res) => (res.ok ? ((await res.json()) as Props) : {}))
@@ -73,7 +74,7 @@ export function identityIncomplete(identity: EngineIdentity): boolean {
   return identity.build === null && identity.model === null;
 }
 
-export function installedEngineForMachine(): boolean {
-  const pin = ENGINE_BINARIES.find((entry) => entry.platform === process.platform && entry.arch === process.arch && !entry.requiresNvidia);
-  return pin ? existsSync(join(resolve(process.env.STACK_DATA_DIR ?? dataDir), "engines", pin.id, ENGINE_READY_MARKER)) : false;
+export function installedEngineForMachine(name = "llama-server"): boolean {
+  const pin = ENGINE_BINARIES.find((entry) => entry.name === name && entry.platform === process.platform && entry.arch === process.arch && !entry.requiresNvidia);
+  return pin ? existsSync(join(engineTagRoot(pin.name, pin.tag), ENGINE_READY_MARKER)) : false;
 }

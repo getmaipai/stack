@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync, renameSync, rmSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { putBlob, sha256OfPath } from "@/lib/store/blobs";
 import { hfBlobsRoot, hfRefsRoot, hfRepoRoot, hfRepoName, hfSnapshotsRoot } from "@/lib/store/layout";
@@ -10,6 +10,9 @@ export interface HfFileInput {
   sourcePath?: string;
   bytes?: Uint8Array;
   digest?: string;
+  /** Move the source into the blob store instead of copying it, so a
+   * large download is held once (the source must be under data/). */
+  move?: boolean;
 }
 
 export interface HfCachedFile {
@@ -32,12 +35,14 @@ export function writeHfFile(input: HfFileInput): HfCachedFile {
   const blob = join(hfBlobsRoot(input.repo), digest);
   if (!existsSync(blob)) {
     if (input.sourcePath) {
-      const file = Bun.file(input.sourcePath);
       mkdirSync(dirname(blob), { recursive: true, mode: 0o700 });
-      const data = readFileSync(input.sourcePath);
-      writeBytes(blob, data);
-      void file;
+      if (input.move) renameSync(input.sourcePath, blob);
+      else writeBytes(blob, readFileSync(input.sourcePath));
     } else writeBytes(blob, input.bytes!);
+  } else if (input.move && input.sourcePath && existsSync(input.sourcePath)) {
+    // The blob is already held (a snapshot link was removed and the file
+    // fetched again): the source is the duplicate, never kept beside it.
+    rmSync(input.sourcePath, { force: true });
   }
   const snapshotPath = join(hfSnapshotsRoot(input.repo), input.revision, input.filePath);
   mkdirSync(dirname(snapshotPath), { recursive: true, mode: 0o700 });

@@ -13,6 +13,7 @@ import { defaultModelBudgetBytes, setGovernorMemorySettings } from "@/lib/govern
 import { setDownloadCapMbps } from "@/lib/download";
 import { StackSetting } from "@/spec/ts/stack-setting";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
+import { decryptSecret, encryptSecret } from "@/lib/secrets";
 
 export type SettingValue = number | boolean | string;
 
@@ -65,6 +66,9 @@ export const SETTINGS: SettingDeclaration[] = [
   ...urlBinding("embed", 10),
   ...urlBinding("stt", 10),
   ...urlBinding("tts", 10),
+  // Secret: encrypted at rest, never returned by the settings route, and
+  // handed to the tts engine's environment as HF_TOKEN (STACK-94c).
+  { ...stack, key: "stack.engines.tts.hf_token", selector: "text", default: "", label: "Hugging Face token", help: "Lets voice cloning use the gated Pocket TTS weights. Stored encrypted; the Stack never shows it again.", section: { id: "engines.tts", order: 30 }, level: "advanced", needs_restart: true, secret: true },
 ];
 
 const byKey = new Map(SETTINGS.map((declaration) => [declaration.key, declaration]));
@@ -101,12 +105,20 @@ migrateRenamedSettingKeys();
 function metaKey(key: string, state: "in_effect" | "pending"): string { return `settings.${key}.${state}`; }
 function read(key: string): string | null { return db.select({ value: meta.value }).from(meta).where(eq(meta.key, key)).get()?.value ?? null; }
 function write(key: string, value: unknown): void { db.insert(meta).values({ key, value: JSON.stringify(value) }).onConflictDoUpdate({ target: meta.key, set: { value: JSON.stringify(value) } }).run(); }
+/** What goes to disk: a secret's ciphertext, anything else as is. */
+function stored(declaration: SettingDeclaration, value: SettingValue): SettingValue { return declaration.secret && typeof value === "string" && value !== "" ? encryptSecret(value) : value; }
+/** What a reader outside the launch code sees of a secret: whether it is set. */
+export const SECRET_SET = "set";
+function redact(declaration: SettingDeclaration, value: SettingValue): SettingValue { return declaration.secret ? (typeof value === "string" && value !== "" ? SECRET_SET : "") : value; }
 function clear(key: string): void { db.delete(meta).where(eq(meta.key, key)).run(); }
 
 function decode(value: string | null, declaration: SettingDeclaration): SettingValue {
   if (value === null) return declaration.default as SettingValue;
   let parsed: unknown;
   try { parsed = JSON.parse(value); } catch { parsed = value; }
+  // A secret is stored encrypted; a blob that no longer decrypts (a
+  // changed key) reads as unset rather than as ciphertext.
+  if (declaration.secret && typeof parsed === "string" && parsed !== "") { try { parsed = decryptSecret(parsed); } catch { parsed = ""; } }
   return typeof parsed === "number" || typeof parsed === "boolean" || typeof parsed === "string" ? parsed : declaration.default as SettingValue;
 }
 
@@ -118,15 +130,20 @@ function valueSchema(declaration: SettingDeclaration): z.ZodTypeAny {
   return z.string();
 }
 
-export function readSettings(): StackSetting[] {
+/** The declarations with their values. A secret's value is redacted to
+ * `set` or empty unless `reveal` is asked for, which only the code that
+ * hands the value to an engine's environment does. */
+export function readSettings(options: { reveal?: boolean } = {}): StackSetting[] {
   return SETTINGS.map((declaration) => {
     const pending = read(metaKey(declaration.key, "pending"));
-    return StackSetting.parse({ ...declaration, in_effect: decode(read(metaKey(declaration.key, "in_effect")), declaration), pending: pending === null ? null : decode(pending, declaration) });
+    const inEffect = decode(read(metaKey(declaration.key, "in_effect")), declaration);
+    const pendingValue = pending === null ? null : decode(pending, declaration);
+    return StackSetting.parse({ ...declaration, in_effect: options.reveal ? inEffect : redact(declaration, inEffect), pending: pendingValue === null ? null : options.reveal ? pendingValue : redact(declaration, pendingValue) });
   });
 }
 
 export function settingValues(): Record<string, SettingValue> {
-  return Object.fromEntries(readSettings().map((setting) => [setting.key, setting.in_effect as SettingValue]));
+  return Object.fromEntries(readSettings({ reveal: true }).map((setting) => [setting.key, setting.in_effect as SettingValue]));
 }
 
 /** The values a spawned engine's launch reads: every key under its
@@ -134,7 +151,7 @@ export function settingValues(): Record<string, SettingValue> {
  * `stack.engines.llama_server.context_length`). */
 export function engineSettingValues(section: string): Record<string, SettingValue> {
   const prefix = `stack.${section}.`;
-  return Object.fromEntries(readSettings().filter((setting) => setting.key.startsWith(prefix)).map((setting) => [setting.key.slice(prefix.length), setting.in_effect as SettingValue]));
+  return Object.fromEntries(readSettings({ reveal: true }).filter((setting) => setting.key.startsWith(prefix)).map((setting) => [setting.key.slice(prefix.length), setting.in_effect as SettingValue]));
 }
 
 export function updateSettings(values: Record<string, unknown>): StackSetting[] {
@@ -144,12 +161,16 @@ export function updateSettings(values: Record<string, unknown>): StackSetting[] 
   const validated = Object.entries(values).map(([key, raw]) => { const declaration = byKey.get(key)!; return { key, declaration, value: valueSchema(declaration).parse(raw) as SettingValue }; });
   const changed: string[] = [];
   for (const { key, declaration, value } of validated) {
+    // A client that reads the settings and writes them all back sends a
+    // secret as its redaction, for the in-effect and the pending value
+    // alike; that is "unchanged" and touches neither row.
+    if (declaration.secret && value === SECRET_SET) continue;
     const inEffect = decode(read(metaKey(key, "in_effect")), declaration);
     if (declaration.needs_restart) {
       // Pending only: nothing running changed yet; applyPendingSettings bumps.
       if (value === inEffect) clear(metaKey(key, "pending"));
-      else write(metaKey(key, "pending"), value);
-    } else if (value !== inEffect) { write(metaKey(key, "in_effect"), value); changed.push(key); }
+      else write(metaKey(key, "pending"), stored(declaration, value));
+    } else if (value !== inEffect) { write(metaKey(key, "in_effect"), stored(declaration, value)); changed.push(key); }
   }
   if (changed.length > 0) bumpStackGeneration(`settings changed: ${changed.join(", ")}`);
   applySettingsToRuntime();
@@ -163,7 +184,8 @@ export function applyPendingSettings(): StackSetting[] {
   for (const declaration of SETTINGS) {
     const pending = read(metaKey(declaration.key, "pending"));
     if (pending === null) continue;
-    write(metaKey(declaration.key, "in_effect"), decode(pending, declaration));
+    // The pending row is already in its stored form; it moves as is.
+    write(metaKey(declaration.key, "in_effect"), JSON.parse(pending) as SettingValue);
     clear(metaKey(declaration.key, "pending"));
     applied++;
   }

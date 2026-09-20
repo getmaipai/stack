@@ -54,11 +54,12 @@ test("not checked, passed, failed and skipped are four different things on the r
   expect(roleCheck("chat")).toMatchObject({ state: "passed", stale: false });
   expect(roleCheck("tts")).toMatchObject({ state: "failed", reason: "no tts engine" });
   expect(roleCheck("embed").state).toBe("not checked");
-  const skipped = await runCheck({ roleIds: ["tts"] });
+  // The wake word is installed, never served: the one role with no probe.
+  const skipped = await runCheck({ roleIds: ["wakeword"] });
   expect(skipped.results[0]!.skipped).toBe(true);
-  expect(roleCheck("tts").state).toBe("skipped");
+  expect(roleCheck("wakeword").state).toBe("skipped");
   const roles = await (await app.request("/stack/v1/roles")).json() as { roles: Array<{ id: string; check: { state: string } }> };
-  expect(roles.roles.find((role) => role.id === "tts")!.check.state).toBe("skipped");
+  expect(roles.roles.find((role) => role.id === "wakeword")!.check.state).toBe("skipped");
   expect(roles.roles.find((role) => role.id === "chat")!.check.state).toBe("not checked");
 });
 

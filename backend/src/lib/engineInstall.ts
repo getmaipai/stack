@@ -17,7 +17,7 @@ export function engineToolPath(pin: EngineBinaryPin, name: string): string {
 }
 
 export function engineBinaryPath(pin: EngineBinaryPin): string {
-  return engineToolPath(pin, "llama-server");
+  return engineToolPath(pin, pin.tool ?? "llama-server");
 }
 
 /** What the `current` link says should run: `none` before the first

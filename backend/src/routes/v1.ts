@@ -8,7 +8,7 @@ import type { AppEnv } from "@/types";
 import { identityHeaders } from "@/lib/identity";
 import { noEngineResponse, resolveRole, UnknownRoleError, UnverifiedModelError } from "@/lib/router";
 import { ROLE_IDS, ROLES, type RoleId } from "@/roles";
-import { EngineUnavailableError, requestRole, streamRole } from "@/lib/supervisor";
+import { EngineUnavailableError, requestRole, speakRole, speechForm, streamRole } from "@/lib/supervisor";
 import { listModels } from "@/lib/modelStore";
 import { hasJobRunner, submitJob } from "@/lib/jobs";
 import { RoleRequest } from "@/spec/ts/role-request";
@@ -26,7 +26,15 @@ const TranscriptionFormSchema = z.object({
   timeout_ms: z.coerce.number().int().positive().optional(),
 });
 const TranscriptionResponseSchema = z.object({ text: z.string() });
-const SpeechRequestSchema = RoleRequest.extend({ input: z.string() });
+// The speech form is spec/voice's (`text`, an optional `voice_url`
+// naming a preset or a voice URL); `model` and `timeout_ms` ride as
+// text fields and `model` is optional because this path serves one role.
+const SpeechFormSchema = z.object({
+  text: z.string().min(1),
+  voice_url: z.string().min(1).optional(),
+  model: z.string().min(1).optional().openapi({ example: "tts" }),
+  timeout_ms: z.coerce.number().int().positive().optional(),
+});
 const ImageRequestSchema = RoleRequest.extend({ prompt: z.string() });
 
 const UnknownModelSchema = z.object({ error: z.string(), roles: z.array(z.string()) });
@@ -88,7 +96,7 @@ const modelsRoute = createRoute({ method: "get", path: "/models", tags: ["Roles"
 const chatRoute = createRoute({ method: "post", path: "/chat/completions", tags: ["Roles"], summary: "Chat completions by role", request: { body: { content: { "application/json": { schema: ChatRequestSchema } } } }, responses: inferenceResponses });
 const embeddingsRoute = createRoute({ method: "post", path: "/embeddings", tags: ["Roles"], summary: "Embeddings by role", request: { body: { content: { "application/json": { schema: EmbeddingsRequestSchema } } } }, responses: inferenceResponses });
 const transcriptionsRoute = createRoute({ method: "post", path: "/audio/transcriptions", tags: ["Roles"], summary: "Speech to text (one WAV file, spec/voice's transcribe form)", request: { body: { content: { "multipart/form-data": { schema: TranscriptionFormSchema } } } }, responses: { ...inferenceResponses, 200: { content: { "application/json": { schema: TranscriptionResponseSchema } }, description: "SttTranscribeResponse: the transcript, empty when the file holds no speech, with the identity headers." } } });
-const speechRoute = createRoute({ method: "post", path: "/audio/speech", tags: ["Roles"], summary: "Text to speech", request: { body: { content: { "application/json": { schema: SpeechRequestSchema } } } }, responses: inferenceResponses });
+const speechRoute = createRoute({ method: "post", path: "/audio/speech", tags: ["Roles"], summary: "Text to speech (spec/voice's form, the WAV streamed as it is generated)", request: { body: { content: { "multipart/form-data": { schema: SpeechFormSchema } } } }, responses: { ...inferenceResponses, 200: { content: { "audio/wav": { schema: z.string().openapi({ format: "binary" }) } }, description: "TtsSynthesizeResult: a chunked audio/wav body whose header carries the format and a placeholder data size, with the identity headers. Abort the request to cancel." } } });
 const imagesRoute = createRoute({ method: "post", path: "/images/generations", tags: ["Roles"], summary: "Image generation (the job API with a wait)", request: { body: { content: { "application/json": { schema: ImageRequestSchema } } } }, responses: inferenceResponses });
 
 export const v1Routes = apiRouter<AppEnv>();
@@ -100,5 +108,23 @@ v1Routes.openapi(transcriptionsRoute, async (c) => {
   const audio_base64 = Buffer.from(await form.file.arrayBuffer()).toString("base64");
   return reply(c, "transcription", { model: form.model ?? "stt", timeout_ms: form.timeout_ms, audio_base64 }) as never;
 });
-v1Routes.openapi(speechRoute, (c) => reply(c, "speech", c.req.valid("json")) as never);
+v1Routes.openapi(speechRoute, async (c) => {
+  const form = c.req.valid("form");
+  const modelField = form.model ?? "tts";
+  try {
+    const resolution = resolveRole(modelField);
+    if (ROLES[resolution.role].wire !== "speech") return jsonReply(c, { error: `Role '${resolution.role}' does not answer on this endpoint.`, roles: ROLE_IDS.filter((id) => ROLES[id].wire === "speech") }, 400, identityHeaders(null));
+    const controller = new AbortController();
+    c.req.raw.signal.addEventListener("abort", () => controller.abort(), { once: true });
+    if (form.timeout_ms) setTimeout(() => controller.abort(), form.timeout_ms);
+    const spoken = await speakRole(resolution.role, speechForm(form.text, form.voice_url), controller.signal);
+    for (const [name, value] of Object.entries(spoken.headers)) c.header(name, value);
+    if (!spoken.body) return new Response(JSON.stringify({ error: spoken.status === 499 ? "Request cancelled" : spoken.status === 504 ? "The engine timed out." : "The engine did not answer." }), { status: spoken.status, headers: { ...spoken.headers, "content-type": "application/json" } });
+    return new Response(spoken.body, { status: spoken.status, headers: { ...spoken.headers, "content-type": spoken.contentType ?? "audio/wav", "cache-control": "no-cache" } });
+  } catch (error) {
+    if (error instanceof EngineUnavailableError) { const result = noEngineResponse("tts", error.reason); return jsonReply(c, result.body, result.status, result.headers); }
+    if (error instanceof UnverifiedModelError) return jsonReply(c, { error: error.message, model: error.modelId, reason: "unverified", missing: error.missing }, 409, identityHeaders(null));
+    return jsonReply(c, { error: error instanceof UnknownRoleError ? error.message : "Unknown role or model.", roles: ROLE_IDS }, 400, identityHeaders(null));
+  }
+});
 v1Routes.openapi(imagesRoute, (c) => reply(c, "job", c.req.valid("json")) as never);

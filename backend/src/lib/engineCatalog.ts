@@ -1,5 +1,6 @@
-// MaiPai Stack's pinned llama-server builds.
-// Binaries arrive through verified downloads and never live in the repo.
+// MaiPai Stack's pinned engine builds: llama-server, and uv (the tool
+// that assembles Pocket TTS's environment, STACK-94c). Binaries arrive
+// through verified downloads and never live in the repo.
 import type { HardwareInfo } from "@/lib/hardware";
 
 export interface EngineArchive {
@@ -16,8 +17,11 @@ export interface EngineBinaryPin {
    * same tag, so installed and available compare directly. */
   name: string;
   tag: string;
-  platform: "darwin" | "win32";
+  platform: "darwin" | "linux" | "win32";
   arch: "arm64" | "x64";
+  /** The executable inside the extracted archive that proves the
+   * install and is launched; `llama-server` when not named. */
+  tool?: string;
   requiresNvidia: boolean;
   label: string;
   docsUrl?: string;
@@ -67,6 +71,57 @@ export const ENGINE_BINARIES: EngineBinaryPin[] = [
     }],
     verified: false,
   },
+  {
+    id: "uv-0.12.17-macos-arm64",
+    name: "uv",
+    tag: "0.12.17",
+    platform: "darwin",
+    arch: "arm64",
+    tool: "uv",
+    requiresNvidia: false,
+    label: "uv (macOS, Apple Silicon), 0.12.17",
+    docsUrl: "https://docs.astral.sh/uv/",
+    archive: { label: "uv (macOS arm64)", url: "https://github.com/astral-sh/uv/releases/download/0.12.17/uv-aarch64-apple-darwin.tar.gz", sha256: "85f00cbdc6dd3e97eba4c31b4d014375a9fdfe8f570023b84e5102fc3456896b", approxBytes: 16_929_004 },
+    verified: true,
+  },
+  {
+    id: "uv-0.12.17-linux-arm64",
+    name: "uv",
+    tag: "0.12.17",
+    platform: "linux",
+    arch: "arm64",
+    tool: "uv",
+    requiresNvidia: false,
+    label: "uv (Linux, ARM64), 0.12.17",
+    docsUrl: "https://docs.astral.sh/uv/",
+    archive: { label: "uv (Linux aarch64)", url: "https://github.com/astral-sh/uv/releases/download/0.12.17/uv-aarch64-unknown-linux-gnu.tar.gz", sha256: "d636d1b678e9e7f367ecb22b46bd1cabbed234d6bc3b4d96365d2b507f72f86c", approxBytes: 18_965_833 },
+    verified: false,
+  },
+  {
+    id: "uv-0.12.17-linux-x64",
+    name: "uv",
+    tag: "0.12.17",
+    platform: "linux",
+    arch: "x64",
+    tool: "uv",
+    requiresNvidia: false,
+    label: "uv (Linux, x64), 0.12.17",
+    docsUrl: "https://docs.astral.sh/uv/",
+    archive: { label: "uv (Linux x64)", url: "https://github.com/astral-sh/uv/releases/download/0.12.17/uv-x86_64-unknown-linux-gnu.tar.gz", sha256: "fa82fd8dde8e8eefdecada6aa0889666556cfceb690d06e0c3bca49eb3070a63", approxBytes: 19_755_224 },
+    verified: false,
+  },
+];
+
+/** The role each engine name serves, for the routes that act on "the
+ * engine's role" (start, stop, restart, the swap's drain). */
+export const ENGINE_ROLE: Record<string, "chat" | "tts"> = { "llama-server": "chat", uv: "tts", "pocket-tts": "tts" };
+export function engineRole(name: string): "chat" | "tts" { return ENGINE_ROLE[name] ?? "chat"; }
+
+/** Runtimes the Stack assembles from pinned wheels through uv, in an
+ * environment under data/engines/<name>/<version>/ (STACK-94c). */
+export interface ManagedRuntime { name: string; version: string; roles: string[]; platforms: string; }
+export const MANAGED_RUNTIMES: ManagedRuntime[] = [
+  { name: "pocket-tts", version: "3.1.0", roles: ["tts"], platforms: "macOS arm64 (a hashed requirements file per platform; the Linux files land with the first Linux tts run)" },
 ];
 
 export const ENGINE_READY_MARKER = ".engine-ready";
@@ -92,12 +147,14 @@ export function engineNameTag(id: string): { name: string; tag: string } {
 }
 export const DETECTED_ENGINE_VERSION_FLOORS: Record<string, string> = { ollama: "0.5.0", "lm-studio": "0.3.0", comfyui: "0.3.0", "mlx-serve": "0.1.0", omlx: "0.1.0", "llama-server": "b10797" };
 
-export function selectEngineBinary(hw: HardwareInfo): EngineBinaryPin | null {
+/** The pin of one engine for a machine; the name filter keeps a uv pin
+ * from ever being launched as llama-server. */
+export function selectEngineBinary(hw: HardwareInfo, name = "llama-server"): EngineBinaryPin | null {
   return ENGINE_BINARIES.find(
-    (pin) => pin.platform === hw.platform && pin.arch === hw.arch && (!pin.requiresNvidia || hw.cudaDevices.length > 0),
+    (pin) => pin.name === name && pin.platform === hw.platform && pin.arch === hw.arch && (!pin.requiresNvidia || hw.cudaDevices.length > 0),
   ) ?? null;
 }
 
-export function installedEnginePin(): EngineBinaryPin | null {
-  return ENGINE_BINARIES.find((pin) => pin.platform === process.platform && pin.arch === process.arch && !pin.requiresNvidia) ?? null;
+export function installedEnginePin(name = "llama-server"): EngineBinaryPin | null {
+  return ENGINE_BINARIES.find((pin) => pin.name === name && pin.platform === process.platform && pin.arch === process.arch && !pin.requiresNvidia) ?? null;
 }

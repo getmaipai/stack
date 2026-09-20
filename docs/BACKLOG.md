@@ -250,32 +250,15 @@ are never copied. Nothing migrates Home until STACK-16.
   through scripted engines and live on the dev machine
   (`scripts/prove-stt.sh`, the table in `dev.md` "stt proven live").
   Landed on `main` with this line.
-- [ ] **STACK-94c (M): `tts` as a managed engine.** The `uv` 0.12.17
-  pin per platform in `engineCatalog.ts` with its sha256; Pocket TTS
-  3.1.0 in its own venv under `data/engines/pocket-tts/<version>/`,
-  started as `<venv>/bin/pocket-tts serve`, with the managed Python,
-  `UV_CACHE_DIR` and `HF_HUB_CACHE` under `data/`; the weight
-  repositories and their revisions in `modelCatalog.ts`;
-  the environment pinned by a committed per-platform requirements
-  file with hashes (`uv venv` plus `uv pip sync --require-hashes`,
-  flags verified on uv 0.12.17); the two weight repositories recorded
-  at the package's own revisions and what loaded read back from the
-  hub cache after the post-load check; `HOME` and every cache under
-  `data/`; the per-wire health probe for a `url` binding with identity
-  reported unverifiable; the `stack.engines.tts.hf_token` setting
-  declared `secret: true` in `settings.ts` and passed to the child as
-  `HF_TOKEN`, the settings route redacting a secret's value; `POST /v1/audio/speech`
-  forwarding `spec/voice`'s `/tts` form and streaming the WAV body
-  back with identity headers, cancel on client abort; one short sentence rendering in the suite through a scripted
-  engine and live on the dev machine. Files: `backend/src/lib/engineCatalog.ts`,
-  `backend/src/lib/modelCatalog.ts`, `backend/src/lib/supervisor.ts`,
-  `backend/src/lib/identity.ts`, `backend/src/settings.ts`,
-  `backend/src/routes/settings.ts`, `backend/src/routes/v1.ts`,
-  `backend/src/speech/`. Mirror: Home's `ttsSupervisor.ts` and
-  `spec/voice/ts/client.ts`. Out of scope: Home's sentence scheduler
-  and `normalizeForSpeech` (Home's); an OpenAI-shaped request until the
-  spec carries it. Exit: `bash scripts/check.sh` and the live render in
-  `dev.md`.
+- [x] **STACK-94c (M): `tts` as a managed engine.** Pocket TTS 3.1.0
+  in a venv the Stack builds through pinned uv 0.12.17 from a hashed
+  requirements file; the weights, tokenizer and default voice as
+  hub-file pins with sha256; `stack.engines.tts.hf_token` encrypted at
+  rest and redacted; `POST /v1/audio/speech` forwarding `spec/voice`'s
+  form and streaming the WAV with identity headers and cancel on
+  client abort; the readiness probe rendering one sentence; proven
+  live on the dev machine (`scripts/prove-tts.sh`, the table in
+  `dev.md` "tts proven live"). Landed on `main` with this line.
 
 ## Service and platforms
 

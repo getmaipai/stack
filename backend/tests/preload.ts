@@ -12,6 +12,9 @@ import { GOVERNOR_MEMORY_DEFAULT } from "./governorMemoryDefault";
 
 const tmpRoot = realpathSync(tmpdir());
 
+// The keystore's file backend: a test run never touches a login keychain.
+process.env.MAIPAI_KEYSTORE_BACKEND ??= "file";
+
 if (!process.env.STACK_DATA_DIR) {
   process.env.STACK_DATA_DIR = mkdtempSync(join(tmpdir(), "maipai-stack-test-"));
 } else if (!realpathSync(process.env.STACK_DATA_DIR).startsWith(tmpRoot)) {

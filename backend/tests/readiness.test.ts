@@ -19,9 +19,10 @@ test("a ready chat role answers the smallest real request and the run is ok", as
 });
 
 test("a skipped role never makes the check green on its own, and a failed role becomes a health item with a fix", async () => {
-  const skippedOnly = await runCheck({ roleIds: ["tts"] });
+  // The wake word is installed, never served, so it has no probe.
+  const skippedOnly = await runCheck({ roleIds: ["wakeword"] });
   expect(skippedOnly.ok).toBe(false);
-  expect(skippedOnly.results[0]).toMatchObject({ role: "tts", skipped: true });
+  expect(skippedOnly.results[0]).toMatchObject({ role: "wakeword", skipped: true });
   const failed = await runCheck({ roleIds: ["chat"], requestRole: async () => ({ status: 503, reason: "The engine is out of memory." }) });
   expect(failed.ok).toBe(false);
   const item = listHealth().find((candidate) => candidate.code === "check-role.chat");

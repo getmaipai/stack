@@ -12,7 +12,7 @@ import { extractArchive } from "@maipai/core/src/archive";
 import { z } from "zod";
 import { emit } from "@/lib/events";
 import { readModelManifest, removeModelManifest, writeModelManifest } from "@/lib/store/manifests";
-import { writeHfFile } from "@/lib/store/hfCache";
+import { readHfFile, writeHfFile } from "@/lib/store/hfCache";
 import { raise } from "@/lib/health";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
 
@@ -77,8 +77,11 @@ export interface CatalogModelLike {
    * activity detector), never a model a person selects. */
   component?: string;
   /** `archive`: the download is a tar or zip package extracted next to
-   * itself; `modelPath` is the extracted directory. */
-  download?: { url: string; sha256: string; approx_bytes: number; archive?: boolean };
+   * itself; `modelPath` is the extracted directory. `hub_file`: the file
+   * is placed in the Stack's Hugging Face hub cache at the record's
+   * repo and revision under this path, where an engine that reads the
+   * hub finds it; `modelPath` is that snapshot path. */
+  download?: { url: string; sha256: string; approx_bytes: number; archive?: boolean; hub_file?: string };
   /** Recorded on the pin by a bench (STACK-74), with a sanitized hardware
    * line, never a hostname: the inventory prints these, and only these. */
   measured?: { footprintBytes: number; contextLength: number; hardware: string };
@@ -301,19 +304,27 @@ async function installRegisteredModel(
   if (missing.length > 0) throw new ProvenanceIncompleteError(missing);
   const verifiedDownload = download!;
   const destination = options.destination;
+  const hubRepo = typeof record.provenance.repo === "string" ? record.provenance.repo : null;
+  if (verifiedDownload.hub_file && !hubRepo) throw new Error(`Model ${record.id} names a hub file but no repository.`);
+  // A hub file already in the cache at the pinned digest is the install;
+  // nothing is fetched twice.
+  const cachedHubFile = verifiedDownload.hub_file && hubRepo ? readHfFile(hubRepo, record.revision, verifiedDownload.hub_file) : null;
+  const alreadyCached = cachedHubFile?.digest === verifiedDownload.sha256.toLowerCase();
   mkdirSync(join(destination, ".."), { recursive: true });
   const downloader = options.download ?? downloadUrl;
-  if (existsSync(destination)) {
-    const actual = await sha256OfFile(destination);
-    if (actual !== verifiedDownload.sha256.toLowerCase()) rmSync(destination, { force: true });
+  if (!alreadyCached) {
+    if (existsSync(destination)) {
+      const actual = await sha256OfFile(destination);
+      if (actual !== verifiedDownload.sha256.toLowerCase()) rmSync(destination, { force: true });
+    }
+    const downloadOptions: DownloadOptions = {
+      expectedSha256: verifiedDownload.sha256,
+      onProgress: options.onProgress,
+      signal: options.signal,
+    };
+    await downloader(verifiedDownload.url, destination, downloadOptions);
   }
-  const downloadOptions: DownloadOptions = {
-    expectedSha256: verifiedDownload.sha256,
-    onProgress: options.onProgress,
-    signal: options.signal,
-  };
-  await downloader(verifiedDownload.url, destination, downloadOptions);
-  const actual = await sha256OfFile(destination);
+  const actual = alreadyCached ? cachedHubFile!.digest : await sha256OfFile(destination);
   if (actual !== verifiedDownload.sha256.toLowerCase()) {
     rmSync(destination, { force: true });
     raise({ code: "stored-blob-checksum-mismatch", severity: "error", title: "A model checksum did not match", text: `The downloaded bytes for ${record.id} failed verification.`, cause: "The file digest differed from its recorded SHA-256.", fix: { label: "Download again", action: "retry_download" } });
@@ -326,6 +337,9 @@ async function installRegisteredModel(
     modelPath = join(dirname(destination), packageDirectoryName(destination));
     rmSync(modelPath, { recursive: true, force: true });
     await extractArchive(destination, modelPath);
+  } else if (verifiedDownload.hub_file) {
+    // Moved into the hub cache, held once; the snapshot path is the model path.
+    modelPath = alreadyCached ? cachedHubFile!.path : writeHfFile({ repo: hubRepo!, revision: record.revision, filePath: verifiedDownload.hub_file, sourcePath: destination, digest: actual, move: true }).path;
   }
   const now = options.now?.() ?? new Date().toISOString();
   const current = getModel(record.id) ?? record;
@@ -335,16 +349,20 @@ async function installRegisteredModel(
     verifiedAt: now,
     modelPath,
   }, now);
+  // The blob the manifest names is the file that is really there: the
+  // archive beside a package, the hub blob for a hub file.
+  const blobPath = verifiedDownload.hub_file ? modelPath : destination;
+  const blobSize = statSync(blobPath).size;
   writeModelManifest({
     kind: "model",
     id: installed.id,
     source: installed.source,
-    sourcePath: destination,
+    sourcePath: blobPath,
     repo: typeof installed.provenance.repo === "string" ? installed.provenance.repo : undefined,
     revision: installed.revision,
     roles: installed.roles,
-    blobs: [{ digest: installed.sha256 ?? actual, sizeBytes: (await Bun.file(destination).size), path: destination }],
-    sizeBytes: (await Bun.file(destination).size),
+    blobs: [{ digest: installed.sha256 ?? actual, sizeBytes: blobSize, path: blobPath }],
+    sizeBytes: blobSize,
     createdAt: installed.installedAt ?? now,
   });
   emit({ id: "model.installed", data: { model: installed.id, path: installed.modelPath } });

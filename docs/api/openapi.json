@@ -611,57 +611,47 @@
         "tags": [
           "Roles"
         ],
-        "summary": "Text to speech",
+        "summary": "Text to speech (spec/voice's form, the WAV streamed as it is generated)",
         "requestBody": {
           "content": {
-            "application/json": {
+            "multipart/form-data": {
               "schema": {
                 "type": "object",
                 "properties": {
-                  "model": {
+                  "text": {
                     "type": "string",
                     "minLength": 1
                   },
-                  "quality": {
+                  "voice_url": {
                     "type": "string",
-                    "enum": [
-                      "fast",
-                      "everyday",
-                      "best"
-                    ]
+                    "minLength": 1
                   },
-                  "stream": {
-                    "type": "boolean"
+                  "model": {
+                    "type": "string",
+                    "minLength": 1,
+                    "example": "tts"
                   },
                   "timeout_ms": {
                     "type": "integer",
-                    "minimum": 1
-                  },
-                  "input": {
-                    "type": "string"
+                    "minimum": 0,
+                    "exclusiveMinimum": true
                   }
                 },
                 "required": [
-                  "model",
-                  "input"
-                ],
-                "additionalProperties": {
-                  "nullable": true
-                }
+                  "text"
+                ]
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "The engine's OpenAI-shaped reply, with x-maipai-engine, x-maipai-model and x-maipai-revision headers.",
+            "description": "TtsSynthesizeResult: a chunked audio/wav body whose header carries the format and a placeholder data size, with the identity headers. Abort the request to cancel.",
             "content": {
-              "application/json": {
+              "audio/wav": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "nullable": true
-                  }
+                  "type": "string",
+                  "format": "binary"
                 }
               }
             }
@@ -1875,6 +1865,9 @@
                   },
                   "archive": {
                     "type": "boolean"
+                  },
+                  "hub_file": {
+                    "type": "string"
                   },
                   "component": {
                     "type": "string"
