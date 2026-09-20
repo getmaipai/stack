@@ -19,6 +19,7 @@ import { PreciousState } from "@/spec/ts/precious-state";
 import { SttWireEvent } from "@/spec/ts/stt-wire-event";
 import { SttTranscribeResponse } from "@/spec/ts/stt-transcribe-response";
 import { StackJob } from "@/spec/ts/stack-job";
+import { Voice } from "@/spec/ts/voice";
 
 const SPEC = join(import.meta.dir, "..", "src", "spec");
 const ajv = new Ajv2020({ strict: false, allErrors: true });
@@ -34,6 +35,7 @@ const SHAPES: Array<{ name: string; zod: ZodType }> = [
   { name: "stt-wire-event", zod: SttWireEvent },
   { name: "stt-transcribe-response", zod: SttTranscribeResponse },
   { name: "stack-job", zod: StackJob },
+  { name: "voice", zod: Voice },
 ];
 
 for (const shape of SHAPES) {
