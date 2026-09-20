@@ -19,6 +19,12 @@ import { eventsRoutes } from "@/routes/events";
 import { hardwareRoutes } from "@/routes/hardware";
 import { settingsRoutes } from "@/routes/settings";
 import { declarationRoutes } from "@/routes/declarations";
+import { speechRoutes, websocket } from "@/routes/speech";
+import { SESSION_PATH } from "@/speech/server";
+
+/** The websocket handler Bun.serve needs beside `app.fetch` for the
+ * speech session; index.ts passes it through. */
+export { websocket };
 
 export const version = packageJson.version;
 export const app = apiRouter<AppEnv>();
@@ -32,6 +38,9 @@ app.openapi(livenessRoute, (c) => c.json({ ok: true as const, version, uptimeSec
 app.doc("/api/openapi.json", { openapi: "3.0.0", info: { title: "MaiPai Stack API", version } });
 app.get("/api/docs", apiReference({ url: "/api/openapi.json" }));
 
+// The session route is mounted before the JSON role routes so the
+// upgrade is never read as a POST body.
+app.route(SESSION_PATH, speechRoutes);
 app.route("/v1", v1Routes);
 app.route("/stack/v1/roles", rolesRoutes);
 app.route("/stack/v1/engines", enginesRoutes);

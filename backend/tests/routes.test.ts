@@ -3,7 +3,7 @@
 // nothing needs a key because nothing but loopback is listening.
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { app } from "@/app";
-import { serveOptions } from "@/index";
+import { serveOptions } from "@/daemon";
 import { __resetHealthForTests, raise } from "@/lib/health";
 import { clearModelsForTests, upsertModel } from "@/lib/modelStore";
 import { getProcess, resetSupervisorForTests, scriptedProcess, setSupervisorFactoryForTests, EngineUnavailableError } from "@/lib/supervisor";

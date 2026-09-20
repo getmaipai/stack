@@ -138,14 +138,16 @@ Engines per platform:
 
 | Engine | Build | Platform | Status |
 |---|---|---|---|
-| sherpa-onnx 1.13.8 behind the speech worker | | | candidate (dev.md, The speech roles; STACK-94b) |
+| `sherpa-onnx-node` | 1.13.8 | macOS arm64 and x64, Linux arm64 and x64, Windows x64 (upstream's platform packages) | bundled with the Stack (backend/package.json and the lockfile; updates with the Stack's release and the monthly dependency sweep, never the engine index) |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| p16 | resident |  |  |  |  |  |  |  | candidate (Moonshine tiny-en int8 plus Silero VAD, pinned at STACK-94b; Whisper tiny.en or base.en the named alternative) |
-| p32 | resident |  |  |  |  |  |  |  | candidate (Moonshine tiny-en int8 plus Silero VAD, pinned at STACK-94b; Whisper tiny.en or base.en the named alternative) |
-| p64 | resident |  |  |  |  |  |  |  | candidate (Moonshine tiny-en int8 plus Silero VAD, pinned at STACK-94b; Whisper tiny.en or base.en the named alternative) |
-| p128 | resident |  |  |  |  |  |  |  | candidate (Moonshine tiny-en int8 plus Silero VAD, pinned at STACK-94b; Whisper tiny.en or base.en the named alternative) |
+| p16 | resident | `moonshine-tiny-en-int8` | int8 | 0.10 GB | 0.22 GB (Apple M4 Pro, 24 GB unified memory) | n/a | MIT | k2-fsa/sherpa-onnx @ d5fe6ec4334fef36255b2a4010412cad4c007e33103fec62fb5d17cad88086f2 | pinned |
+| p32 | resident | `moonshine-tiny-en-int8` | int8 | 0.10 GB | 0.22 GB (Apple M4 Pro, 24 GB unified memory) | n/a | MIT | k2-fsa/sherpa-onnx @ d5fe6ec4334fef36255b2a4010412cad4c007e33103fec62fb5d17cad88086f2 | pinned |
+| p64 | resident | `moonshine-tiny-en-int8` | int8 | 0.10 GB | 0.22 GB (Apple M4 Pro, 24 GB unified memory) | n/a | MIT | k2-fsa/sherpa-onnx @ d5fe6ec4334fef36255b2a4010412cad4c007e33103fec62fb5d17cad88086f2 | pinned |
+| p128 | resident | `moonshine-tiny-en-int8` | int8 | 0.10 GB | 0.22 GB (Apple M4 Pro, 24 GB unified memory) | n/a | MIT | k2-fsa/sherpa-onnx @ d5fe6ec4334fef36255b2a4010412cad4c007e33103fec62fb5d17cad88086f2 | pinned |
+
+Installed beside the model, never selected on its own: `silero-vad` (vad, 0.6 MB, MIT, k2-fsa/sherpa-onnx @ 9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6).
 
 ## tts (Voice out)
 

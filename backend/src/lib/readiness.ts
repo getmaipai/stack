@@ -34,7 +34,7 @@ let running: { startedAt: string } | null = null;
 
 function fixFor(role: RoleId, reason: string): HealthFix {
   if (reason.toLowerCase().includes("memory")) return { label: "Free memory", action: "free_memory" };
-  if (ROLES[role].wire === "chat" || ROLES[role].wire === "embeddings") return { label: "Restart engine", action: "restart_engine" };
+  if (ROLES[role].wire === "chat" || ROLES[role].wire === "embeddings" || ROLES[role].wire === "transcription") return { label: "Restart engine", action: "restart_engine" };
   return { label: "Reinstall model", action: "reinstall_model" };
 }
 
@@ -51,7 +51,9 @@ async function checkRole(role: RoleId, options: CheckOptions): Promise<CheckRole
       return record(response.status >= 200 && response.status < 300, response.reason ?? null, response.loadMs ?? null, response.reason ?? "The role probe failed.");
     }
     const wire = ROLES[role].wire;
-    if (wire !== "chat" && wire !== "embeddings") {
+    // The wires with a real probe: a completion, an embedding, the
+    // bundled clip's transcript. The rest are skipped, never green.
+    if (wire !== "chat" && wire !== "embeddings" && wire !== "transcription") {
       resolveHealth(`check-role.${role}`);
       return { role, ok: false, skipped: true, ms: Math.round(performance.now() - started), reason: `Skipped: no ${wire} engine is ready for ${role}.`, loadMs: null };
     }

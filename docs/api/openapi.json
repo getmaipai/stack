@@ -464,56 +464,50 @@
         "tags": [
           "Roles"
         ],
-        "summary": "Speech to text",
+        "summary": "Speech to text (one WAV file, spec/voice's transcribe form)",
         "requestBody": {
           "content": {
-            "application/json": {
+            "multipart/form-data": {
               "schema": {
                 "type": "object",
                 "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
                   "model": {
                     "type": "string",
-                    "minLength": 1
-                  },
-                  "quality": {
-                    "type": "string",
-                    "enum": [
-                      "fast",
-                      "everyday",
-                      "best"
-                    ]
-                  },
-                  "stream": {
-                    "type": "boolean"
+                    "minLength": 1,
+                    "example": "stt"
                   },
                   "timeout_ms": {
                     "type": "integer",
-                    "minimum": 1
-                  },
-                  "file": {
-                    "type": "string"
+                    "minimum": 0,
+                    "exclusiveMinimum": true
                   }
                 },
                 "required": [
-                  "model"
-                ],
-                "additionalProperties": {
-                  "nullable": true
-                }
+                  "file"
+                ]
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "The engine's OpenAI-shaped reply, with x-maipai-engine, x-maipai-model and x-maipai-revision headers.",
+            "description": "SttTranscribeResponse: the transcript, empty when the file holds no speech, with the identity headers.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": {
-                    "nullable": true
-                  }
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "text"
+                  ]
                 }
               }
             }
@@ -1877,6 +1871,12 @@
                     "type": "string"
                   },
                   "engine": {
+                    "type": "string"
+                  },
+                  "archive": {
+                    "type": "boolean"
+                  },
+                  "component": {
                     "type": "string"
                   }
                 },

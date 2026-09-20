@@ -7,10 +7,11 @@ import { hfUrl } from "@/lib/hf";
 import type { RoleId } from "@/roles";
 import { existsSync, mkdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
+import { extractArchive } from "@maipai/core/src/archive";
 import { z } from "zod";
 import { emit } from "@/lib/events";
-import { removeModelManifest, writeModelManifest } from "@/lib/store/manifests";
+import { readModelManifest, removeModelManifest, writeModelManifest } from "@/lib/store/manifests";
 import { writeHfFile } from "@/lib/store/hfCache";
 import { raise } from "@/lib/health";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
@@ -72,7 +73,12 @@ export interface CatalogModelLike {
   revision?: string;
   engine?: string;
   sizing?: unknown;
-  download?: { url: string; sha256: string; approx_bytes: number };
+  /** A piece the role's engine loads beside its model (the `stt` voice
+   * activity detector), never a model a person selects. */
+  component?: string;
+  /** `archive`: the download is a tar or zip package extracted next to
+   * itself; `modelPath` is the extracted directory. */
+  download?: { url: string; sha256: string; approx_bytes: number; archive?: boolean };
   /** Recorded on the pin by a bench (STACK-74), with a sanitized hardware
    * line, never a hostname: the inventory prints these, and only these. */
   measured?: { footprintBytes: number; contextLength: number; hardware: string };
@@ -237,8 +243,24 @@ export function registerCatalogModel(model: CatalogModelLike, now = new Date().t
     sha256: model.download?.sha256 ?? null,
     sizeBytes: model.download?.approx_bytes ?? null,
     licence: model.license ?? null,
-    engineRequirements: { engine: model.engine ?? null, sizing: model.sizing ?? null },
+    engineRequirements: { engine: model.engine ?? null, sizing: model.sizing ?? null, ...(model.component ? { component: model.component } : {}) },
   }, now);
+}
+
+/** `sherpa-onnx-moonshine-tiny-en-int8.tar.bz2` extracts to
+ * `sherpa-onnx-moonshine-tiny-en-int8/`, so the identity headers name
+ * the package the way upstream does. */
+export function packageDirectoryName(archivePath: string): string {
+  const name = basename(archivePath);
+  const stripped = name.replace(/\.(tar\.(gz|bz2|xz)|tgz|tar|zip)$/i, "");
+  // An archive whose name has no extension to strip still extracts
+  // beside itself, never over itself.
+  return stripped === name ? `${name}.extracted` : stripped;
+}
+
+/** A record that is a component of a role's engine, not a model. */
+export function isComponent(record: ModelRecord): boolean {
+  return typeof record.engineRequirements.component === "string";
 }
 
 export async function installCatalogModel(model: CatalogModelLike, options: DownloadModelOptions): Promise<ModelRecord> {
@@ -269,7 +291,7 @@ export async function installHuggingFaceModel(input: HuggingFaceModelInput, opti
 
 async function installRegisteredModel(
   record: ModelRecord,
-  download: { url: string; sha256: string; approx_bytes: number } | undefined,
+  download: NonNullable<CatalogModelLike["download"]> | undefined,
   options: DownloadModelOptions,
 ): Promise<ModelRecord> {
   const missing = [
@@ -297,13 +319,21 @@ async function installRegisteredModel(
     raise({ code: "stored-blob-checksum-mismatch", severity: "error", title: "A model checksum did not match", text: `The downloaded bytes for ${record.id} failed verification.`, cause: "The file digest differed from its recorded SHA-256.", fix: { label: "Download again", action: "retry_download" } });
     throw new DownloadVerificationError(`Model failed checksum verification`);
   }
+  // A package extracts beside its archive into a directory named after
+  // it; the archive stays so a re-install verifies instead of fetching.
+  let modelPath = destination;
+  if (verifiedDownload.archive) {
+    modelPath = join(dirname(destination), packageDirectoryName(destination));
+    rmSync(modelPath, { recursive: true, force: true });
+    await extractArchive(destination, modelPath);
+  }
   const now = options.now?.() ?? new Date().toISOString();
   const current = getModel(record.id) ?? record;
   const installed = upsertModel({
     ...current,
     installedAt: now,
     verifiedAt: now,
-    modelPath: destination,
+    modelPath,
   }, now);
   writeModelManifest({
     kind: "model",
@@ -325,8 +355,12 @@ async function installRegisteredModel(
 export function removeModel(id: string): boolean {
   const model = getModel(id);
   if (!model) return false;
+  // A package is a directory beside its archive; both go, the manifest
+  // last so a failure here leaves the record findable.
+  const archive = readModelManifest(id)?.blobs[0]?.path;
+  if (model.modelPath && model.modelPath.startsWith(modelsDir) && existsSync(model.modelPath)) rmSync(model.modelPath, { recursive: true, force: true });
+  if (archive && archive.startsWith(modelsDir) && archive !== model.modelPath && existsSync(archive)) rmSync(archive, { force: true });
   removeModelManifest(id);
-  if (model.modelPath && model.modelPath.startsWith(modelsDir) && existsSync(model.modelPath)) rmSync(model.modelPath, { force: true });
   db.delete(models).where(eq(models.id, id)).run();
   emit({ id: "model.installed", data: { model: id, removed: true } });
   bumpStackGeneration(`model ${id} removed`);

@@ -239,27 +239,17 @@ are never copied. Nothing migrates Home until STACK-16.
   managed engine through a pinned `uv`; the pins; the wire from
   `spec/voice`; whisper.cpp's server recorded as the rejected path
   with its cost. Landed on `main` with this line.
-- [ ] **STACK-94b (M): `stt` as a spawned engine.** The sherpa-onnx
-  runtime pin per platform in `engineCatalog.ts` with its sha256;
-  the `speech-worker` subcommand (`backend/src/speech/worker.ts`)
-  with `--role stt` over `bun:ffi`; Moonshine tiny-en int8 and Silero
-  VAD in the store as pinned packages; `POST /v1/audio/transcriptions`
-  and `WS /v1/audio/transcriptions/stream` with `spec/voice`'s
-  `SttWireEvent` mirrored under `backend/src/spec/`; identity headers
-  on every reply; the bundled clip
-  `backend/tests/fixtures/speech/clover-two-seconds.wav` transcribing
-  in the suite through a scripted engine and live on the dev machine
-  through the real worker (if admission refuses, recorded as with
-  STACK-96 and the live pass becomes 94b-live). Files:
-  `backend/src/lib/engineCatalog.ts`, `backend/src/lib/modelCatalog.ts`,
-  `backend/src/lib/supervisor.ts`, `backend/src/speech/`,
-  `backend/src/routes/v1.ts`, `backend/src/index.ts` (the subcommand;
-  the launch line differs under `bun run` and the compiled binary, both
-  tested); `engineCatalog.ts` selectors gain `linux` and a `name`
-  filter first. Mirror: the `llama-server` launch in `supervisor.ts`; Home's
-  `stt.ts` and `sttSession.ts` for the session's endpointing. Out of
-  scope: `tts`, the wake word, Home's `/api/stt/stream` pass-through.
-  Exit: `bash scripts/check.sh` and the live transcript in `dev.md`.
+- [x] **STACK-94b (M): `stt` as a spawned engine.** `sherpa-onnx-node`
+  1.13.8 pinned exactly in `backend/package.json` (the 94b amendment in
+  `dev.md`); the `speech-worker` subcommand over it; Moonshine tiny-en
+  int8 and Silero VAD as store pins with sha256 (a package archive
+  extracts to a directory); `POST /v1/audio/transcriptions` with
+  `spec/voice`'s form and `WS /v1/audio/transcriptions/stream` with its
+  `SttWireEvent` contract mirrored under `backend/src/spec/`; identity
+  headers on every reply; the bundled clip transcribing in the suite
+  through scripted engines and live on the dev machine
+  (`scripts/prove-stt.sh`, the table in `dev.md` "stt proven live").
+  Landed on `main` with this line.
 - [ ] **STACK-94c (M): `tts` as a managed engine.** The `uv` 0.12.17
   pin per platform in `engineCatalog.ts` with its sha256; Pocket TTS
   3.1.0 in its own venv under `data/engines/pocket-tts/<version>/`,

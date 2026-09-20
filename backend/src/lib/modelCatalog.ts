@@ -24,9 +24,52 @@ export const STACK_CHAT_MODEL: CatalogModelLike = {
   measured: { footprintBytes: 414_550_392, contextLength: 4096, hardware: "Apple M4 Pro, 24 GB unified memory" },
 };
 
-// Every pinned model this build ships, by role. One entry today; the
-// Catalog's signed index replaces this list as the source at STACK-97.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL];
+// The `stt` pins (STACK-94b): sherpa-onnx's Moonshine tiny English
+// package and the Silero voice activity detector, from k2-fsa's rolling
+// `asr-models` release. A rolling tag can replace an asset under the
+// same name, so the sha256 is the pin and the revision: a mismatch at
+// download is a refusal and a deliberate re-pin, never a quiet update.
+// The archive extracts to a directory of ONNX files; `modelPath` is
+// that directory. Silero is a component of the role, not a model a
+// person selects, so `selectedModel` skips it.
+export const STACK_STT_MODEL: CatalogModelLike = {
+  id: "moonshine-tiny-en-int8",
+  role: "stt",
+  repo: "k2-fsa/sherpa-onnx",
+  license: "MIT",
+  revision: "d5fe6ec4334fef36255b2a4010412cad4c007e33103fec62fb5d17cad88086f2",
+  engine: "sherpa-onnx-node",
+  sizing: { profile: "p16", quantization: "int8" },
+  download: {
+    url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-moonshine-tiny-en-int8.tar.bz2",
+    sha256: "d5fe6ec4334fef36255b2a4010412cad4c007e33103fec62fb5d17cad88086f2",
+    approx_bytes: 107_600_538,
+    archive: true,
+  },
+  // scripts/prove-stt.sh, 2026-09-20, the p16 laptop: the worker's
+  // resident set after the post-load check, bun plus onnxruntime plus
+  // the model; context is not a speech quantity.
+  measured: { footprintBytes: 239_387_872, contextLength: 0, hardware: "Apple M4 Pro, 24 GB unified memory" },
+};
+export const STACK_VAD_MODEL: CatalogModelLike = {
+  id: "silero-vad",
+  role: "stt",
+  component: "vad",
+  repo: "k2-fsa/sherpa-onnx",
+  license: "MIT",
+  revision: "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6",
+  engine: "sherpa-onnx-node",
+  sizing: { profile: "p16", quantization: "fp32" },
+  download: {
+    url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx",
+    sha256: "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6",
+    approx_bytes: 643_854,
+  },
+};
+
+// Every pinned model this build ships, by role. The Catalog's signed
+// index replaces this list as the source at STACK-97's model half.
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a
@@ -38,8 +81,7 @@ export const ROLE_CANDIDATES: Partial<Record<string, RoleCandidate[]>> = {
     { name: "oMLX", kind: "engine", source: "dev.md, Engines and the supervisor; STACK-14, STACK-93" },
   ],
   stt: [
-    { name: "sherpa-onnx 1.13.8 behind the speech worker", kind: "engine", source: "dev.md, The speech roles; STACK-94b" },
-    { name: "Moonshine tiny-en int8 plus Silero VAD, pinned at STACK-94b; Whisper tiny.en or base.en the named alternative", kind: "model", source: "dev.md, The speech roles" },
+    { name: "Whisper tiny.en or base.en on the same runtime, the named alternative", kind: "model", source: "dev.md, The speech roles" },
   ],
   tts: [
     { name: "Pocket TTS 3.1.0 through a pinned uv 0.12.17, managed", kind: "engine", source: "dev.md, The speech roles; STACK-94c" },

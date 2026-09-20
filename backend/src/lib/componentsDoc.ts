@@ -4,7 +4,8 @@
 // the real modules; `renderComponentsDoc` is pure so a test can feed it
 // a scripted catalog. Written by scripts/gen-components-doc.ts and
 // drift-checked by scripts/check.sh like docs/api/openapi.json.
-import { ENGINE_BINARIES, type EngineBinaryPin } from "@/lib/engineCatalog";
+import { BUNDLED_RUNTIMES, ENGINE_BINARIES, type BundledRuntime, type EngineBinaryPin } from "@/lib/engineCatalog";
+import packageJson from "../../package.json";
 import { ROLE_CANDIDATES, STACK_MODELS, type RoleCandidate } from "@/lib/modelCatalog";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import { PROFILE_TIERS, type ProfileTier } from "@/profiles";
@@ -17,18 +18,21 @@ export interface ComponentsCatalog {
   profiles: ProfileTier[];
   models: CatalogModelLike[];
   candidates: Partial<Record<string, RoleCandidate[]>>;
+  runtimes: Array<BundledRuntime & { version: string }>;
   shares?: Partial<Record<string, string>>;
 }
 
 export function collectComponentsCatalog(): ComponentsCatalog {
   const shares = Object.fromEntries(ROLE_IDS.flatMap((role) => { const definition = ROLES[role] as { sharesModelWith?: string }; return definition.sharesModelWith ? [[role, definition.sharesModelWith]] : []; }));
-  return { roles: [...ROLE_IDS], labels: Object.fromEntries(ROLE_IDS.map((role) => [role, ROLES[role].label])), engines: ENGINE_BINARIES, profiles: PROFILE_TIERS, models: STACK_MODELS, candidates: ROLE_CANDIDATES, shares };
+  const dependencies = (packageJson as { dependencies?: Record<string, string> }).dependencies ?? {};
+  const runtimes = BUNDLED_RUNTIMES.map((runtime) => ({ ...runtime, version: dependencies[runtime.name] ?? "not in package.json" }));
+  return { roles: [...ROLE_IDS], labels: Object.fromEntries(ROLE_IDS.map((role) => [role, ROLES[role].label])), engines: ENGINE_BINARIES, profiles: PROFILE_TIERS, models: STACK_MODELS, candidates: ROLE_CANDIDATES, runtimes, shares };
 }
 
 const PROFILE_ORDER = ["p16", "p32", "p64", "p128"] as const;
 const LLAMA_ROLES = new Set<string>(["chat", "coding", "judge", "router", "vision", "embed"]);
 
-function gb(bytes: number | undefined): string { return bytes ? `${(bytes / 1_073_741_824).toFixed(2)} GB` : "unknown"; }
+function gb(bytes: number | undefined): string { return !bytes ? "unknown" : bytes < 104_857_600 ? `${(bytes / 1_048_576).toFixed(1)} MB` : `${(bytes / 1_073_741_824).toFixed(2)} GB`; }
 function stance(profile: ProfileTier, role: RoleId): string {
   if (profile.resident.includes(role)) return "resident";
   if (profile.onDemand.includes(role)) return "on demand";
@@ -75,13 +79,16 @@ export function renderComponentsDoc(catalog: ComponentsCatalog): string {
     const pins = LLAMA_ROLES.has(role) ? catalog.engines : [];
     for (const pin of pins) lines.push(`| \`${pin.id}\` | ${pin.tag} | ${pin.platform} ${pin.arch}${pin.requiresNvidia ? " (NVIDIA)" : ""} | ${pin.verified ? "pinned, verified" : "pinned, not yet verified"} |`);
     const modelRole = shares ?? role;
+    const runtimes = catalog.runtimes.filter((runtime) => runtime.roles.includes(modelRole));
+    for (const runtime of runtimes) lines.push(`| \`${runtime.name}\` | ${runtime.version} | ${runtime.platforms} | bundled with the Stack (backend/package.json and the lockfile; updates with the Stack's release and the monthly dependency sweep, never the engine index) |`);
     const engineCandidates = (catalog.candidates[modelRole] ?? []).filter((candidate) => candidate.kind === "engine");
     for (const candidate of engineCandidates) lines.push(`| ${candidate.name} | | | candidate (${candidate.source}) |`);
-    if (pins.length === 0 && engineCandidates.length === 0) lines.push("| | | | not yet |");
+    if (pins.length === 0 && runtimes.length === 0 && engineCandidates.length === 0) lines.push("| | | | not yet |");
     lines.push("");
     lines.push("| Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |");
     lines.push("|---|---|---|---|---|---|---|---|---|---|");
-    const pinned = catalog.models.filter((model) => model.role === modelRole && model.download?.sha256);
+    const pinned = catalog.models.filter((model) => model.role === modelRole && model.download?.sha256 && !model.component);
+    const components = catalog.models.filter((model) => model.role === modelRole && model.download?.sha256 && model.component);
     const modelCandidates = (catalog.candidates[modelRole] ?? []).filter((candidate) => candidate.kind === "model");
     for (const profile of catalog.profiles) {
       const roleStance = stance(profile, role);
@@ -91,7 +98,11 @@ export function renderComponentsDoc(catalog: ComponentsCatalog): string {
       const model = largest(pinned.filter((candidate) => fits(candidate, profile)));
       const measured = model?.measured;
       const status = model ? "pinned" : modelCandidates.length > 0 ? `candidate (${modelCandidates.map((candidate) => candidate.name).join(", ")})` : "not yet";
-      lines.push(`| ${profile.id} | ${roleStance} | ${model ? `\`${model.id}\`` : ""} | ${model ? quantization(model) : ""} | ${model ? gb(model.download?.approx_bytes) : ""} | ${measured ? `${gb(measured.footprintBytes)} (${measured.hardware})` : model ? "not measured" : ""} | ${measured ? String(measured.contextLength) : model ? "not measured" : ""} | ${model?.license ?? ""} | ${model ? `${model.repo ?? "catalog"} @ ${model.revision ?? "unknown"}` : ""} | ${status} |`);
+      lines.push(`| ${profile.id} | ${roleStance} | ${model ? `\`${model.id}\`` : ""} | ${model ? quantization(model) : ""} | ${model ? gb(model.download?.approx_bytes) : ""} | ${measured ? `${gb(measured.footprintBytes)} (${measured.hardware})` : model ? "not measured" : ""} | ${measured ? (measured.contextLength > 0 ? String(measured.contextLength) : "n/a") : model ? "not measured" : ""} | ${model?.license ?? ""} | ${model ? `${model.repo ?? "catalog"} @ ${model.revision ?? "unknown"}` : ""} | ${status} |`);
+    }
+    if (components.length) {
+      lines.push("");
+      lines.push(`Installed beside the model, never selected on its own: ${components.map((component) => `\`${component.id}\` (${component.component}, ${gb(component.download?.approx_bytes)}, ${component.license ?? "licence unknown"}, ${component.repo ?? "catalog"} @ ${component.revision ?? "unknown"})`).join("; ")}.`);
     }
     lines.push("");
   }

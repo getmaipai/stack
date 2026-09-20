@@ -681,7 +681,11 @@ The design note the backlog item asked for, so 94b (`stt`) and 94c
 sherpa-onnx behind a thin worker of ours, spawned like `llama-server`;
 `tts` runs on Pocket TTS, the owner's live pick, as a managed engine
 through a pinned `uv`. Both keep every rule the other engines keep:
-pinned, checksummed, under `data/`, governed, identity-bound.
+pinned, checksummed, under `data/`, governed, identity-bound. 94b
+landed on 2026-09-20 with one amendment, marked below: the sherpa-onnx
+runtime arrives as upstream's own binding, `sherpa-onnx-node`, pinned
+exactly in `backend/package.json`, not as an engine archive over
+`bun:ffi`.
 
 ### `stt`: sherpa-onnx, and why
 
@@ -699,6 +703,26 @@ TTS for Kokoro and Piper voices, with a generate callback that stops
 early when it returns 0 (c-api.h, "Return 1 to continue generation.
 Return 0 to stop early."); that is what the robot's body speech may
 use under STACK-17, not the Stack's `tts` pin (below).
+
+**Amendment at 94b (2026-09-20): the runtime arrives as
+`sherpa-onnx-node` 1.13.8**, upstream's own Node-API binding of that
+same prebuilt library, pinned exactly in `backend/package.json` with
+the lockfile (the org's code-dependency rule; its platform package,
+`sherpa-onnx-darwin-arm64` here, `linux-arm64` and `linux-x64` on the
+robot and a Linux host, carries the identical `libsherpa-onnx-c-api`
+and `libonnxruntime`). Driving the C API over `bun:ffi` meant
+hand-packing `SherpaOnnxOfflineRecognizerConfig`, a dozen nested
+structs of pointers and integers whose layout moves with every
+upstream release and that nothing type-checks; the binding gives the
+same calls as typed configuration, it is the exact binding Home's
+`stt.ts` uses today, and it loads under Bun (the spike transcribed
+the bundled clip word for word in 17 ms before a line of the worker
+existed). Prebuilt over hand-built points the same way. What it
+changes: the runtime's version rides the Stack's own release and the
+monthly dependency sweep, never the engine index, so `engineCatalog.ts`
+carries no sherpa-onnx rows (its selector changes below are for the
+`uv` pins only) and the components inventory prints the version from
+`package.json`; `x-maipai-engine` reads `local sherpa-onnx-node-1.13.8`.
 
 The reasons, in the order they decided it: prebuilt over hand-built
 (an upstream release we download and checksum, no build pipeline of
@@ -727,7 +751,8 @@ whisper.cpp's server plus a Python runtime.
 ### The `stt` worker: a spawned engine in every respect
 
 `backend/src/speech/worker.ts`, a subcommand of the Stack's own
-executable, `speech-worker --role stt --port <free> --model <dir>`.
+executable, `speech-worker --role stt --port <free> --model <dir> --vad
+<file>`.
 The supervisor builds the command the way the daemon itself was
 started: under the installed service, where `launchd.ts` and
 `systemd.ts` register the compiled binary and no source tree exists,
@@ -737,19 +762,25 @@ subcommand, it is `process.execPath Bun.main speech-worker ...`. One
 helper in the supervisor decides, and the suite covers both branches,
 because the dev-machine live pass runs the checkout branch and the
 household runs the other. The worker loads the
-pinned library over `bun:ffi` (the pattern of the memory readers and
-`sd_notify`), loads the role's model package, and serves the role's
-wire on loopback. To the supervisor it is exactly `llama-server`: a
-pid and a port, the free-port probe, the liveness wait with the
-size-scaled load timeout, `GET /health` and a `GET /props`-shaped
-identity reply (`host: local`, `build: sherpa-onnx-1.13.8`, `model:
-<package name>`), the post-load check as a real request (the bundled
-clip), the measured footprint after load recorded on the model
-record, the process watch with restart on exit, a drain on stop, and
-the governor's admission before launch with the 1.3 times file-size
-estimate until measured. A crash in the worker takes one role's
-process and nothing else. A `url` binding still works when a person
-runs a server of their own that speaks the wire.
+runtime through `sherpa-onnx-node` (one adapter module,
+`backend/src/speech/sherpa.ts`, the only file that names it), loads
+the role's model package and the detector, and serves the role's wire
+on loopback. To the supervisor it is exactly `llama-server`: a pid and
+a port, the free-port probe, the liveness wait with the size-scaled
+load timeout, `GET /health` answering `status: ok` and `GET /props`
+with `build_info` and `model_path` (llama-server's own shape, so the
+one identity reader serves both engines: `host: local`, `build:
+sherpa-onnx-node-1.13.8`, `model: <package directory name>`), the
+post-load check as a real request (the bundled clip), the measured
+footprint after load recorded on the model record, the process watch
+with restart on exit, a drain on stop that waits for a live session
+too, and the governor's admission before launch with the 1.3 times
+file-size estimate until measured. The worker's stdin is a pipe the
+daemon holds; its end is the daemon gone, and the worker exits on it,
+so a daemon that dies never leaves a worker on its port. A crash in
+the worker takes one role's process and nothing else. A `url` binding
+still works when a person runs a server of their own that speaks the
+wire and the identity shape.
 
 The worker is the only code we write for speech, and it stays thin: no
 audio processing of its own beyond what the runtime provides. Two
@@ -964,9 +995,9 @@ and identity-bound like every other (STACK-87).
 
 | Role | Package | Size | Where | Notes |
 |---|---|---|---|---|
-| `stt` runtime | `sherpa-onnx-v1.13.8-<platform>-shared` | 20 to 28 MB | k2-fsa/sherpa-onnx release `v1.13.8` | one archive per platform, the C API library and `libonnxruntime` |
-| `stt` | `sherpa-onnx-moonshine-tiny-en-int8.tar.bz2` | 107.6 MB | release tag `asr-models` | Moonshine tiny English, int8; Home's plan keeps this path |
-| `stt` | `silero_vad.onnx` | 0.6 MB | release tag `asr-models` | the voice activity detector the session and the endpointer use |
+| `stt` runtime | `sherpa-onnx-node` 1.13.8 | 20 MB per platform package | `backend/package.json` and the lockfile | upstream's binding of the prebuilt library; rides the Stack's release and the monthly sweep (the 94b amendment) |
+| `stt` | `sherpa-onnx-moonshine-tiny-en-int8.tar.bz2` | 107.6 MB | release tag `asr-models`, sha256 `d5fe6ec4334fef36255b2a4010412cad4c007e33103fec62fb5d17cad88086f2` | Moonshine tiny English, int8, MIT; Home's plan keeps this path; extracts to a directory the store keeps beside the archive |
+| `stt` | `silero_vad.onnx` | 0.6 MB | release tag `asr-models`, sha256 `9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6` | the voice activity detector the session and the endpointer use, MIT; a component of the role, never a model a person selects |
 | `stt`, alternative, named not pinned | `sherpa-onnx-whisper-tiny.en`, `base.en` | 118 MB, 209 MB | release tag `asr-models` | same runtime; pinned only if the Studio bench asks for it |
 | `tts` runtime | `uv-<platform>.tar.gz` | about 20 MB | astral-sh/uv release `0.12.17` | runs `pocket-tts==3.1.0 serve` with a managed Python 3.12 under `data/` |
 | `tts` | Pocket TTS weights, tokenizer, preset voice embeddings | recorded at 94c | Hugging Face hub, `kyutai/pocket-tts` (gated, with a token) or `kyutai/pocket-tts-without-voice-cloning`, at the revisions the package's config names (the embeddings at their own) | fetched by the engine into the Stack's `HF_HUB_CACHE`; what loaded is read back and recorded |
@@ -980,28 +1011,35 @@ architecture with no name filter, and `platform` knows `darwin` and
 `win32` only. 94b adds `linux` and a `name` parameter to every
 selector before the first sherpa-onnx row, and 94c the `uv` rows
 after that, so a new pin can never be launched as `llama-server`.
-The sha256 of every archive is recorded in `engineCatalog.ts` and
-`modelCatalog.ts` at the commit that first downloads it (94b for the
-`stt` runtime and packages, 94c for `uv` and the weights), from the
+The sha256 of every archive is recorded in `modelCatalog.ts` (and
+`engineCatalog.ts` for `uv`) at the commit that first downloads it
+(94b for the `stt` packages, 94c for `uv` and the weights), from the
 bytes that commit verified, and each package's licence is read from
-the file the archive carries, never assumed from the project's.
-Memory: the estimates before the first measurement are 0.2 GB for
-Moonshine tiny with Silero (the 1.3 times rule on the extracted size)
-and 1 GB for Pocket TTS with torch resident, replaced by the measured
-footprints on the model records and in the components inventory.
-Both roles are `resident, small`, as the roles table says.
+the file the archive carries, never assumed from the project's (the
+Moonshine archive ships its MIT `LICENSE`). Memory: the estimate
+before the first measurement is the 1.3 times rule on the file size;
+the `stt` worker measured 239,387,872 bytes resident on the p16 laptop
+after its post-load check (bun, onnxruntime and the int8 model
+together; 300 MB before the entry point stopped loading the daemon's
+own modules into the worker), recorded on the pin and in the
+components inventory, and
+Pocket TTS is estimated at 1 GB with torch resident until 94c
+measures it. Both roles are `resident, small`, as the roles table
+says.
 
 ### The chunks
 
-94b: the sherpa-onnx pin per platform in `engineCatalog.ts`; the
-`speech-worker` subcommand with `--role stt`; the two `stt` packages
-in the store; the route and the streaming session; the bundled clip
-`backend/tests/fixtures/speech/clover-two-seconds.wav` (16 kHz, mono,
-16-bit, two seconds of one persona-roster sentence, synthesized on the
-dev machine and checked in, never household audio) transcribing in
-the suite through a scripted engine and live on this laptop through
-the real worker, memory permitting; if admission refuses, the refusal
-is recorded as with STACK-96 and the live pass becomes 94b-live.
+94b (landed 2026-09-20): `sherpa-onnx-node` pinned in `package.json`;
+the `speech-worker` subcommand with `--role stt`; the two `stt`
+packages in the store (a package archive extracts beside itself, its
+`modelPath` the directory); the route with the spec's form, the
+streaming session and the Stack's websocket pass-through; the bundled
+clip `backend/src/speech/fixtures/clover-two-seconds.wav` (16 kHz,
+mono, 16-bit, 2.13 s of one persona-roster sentence, synthesized on the
+dev machine with `say` and `afconvert` as its README records, checked
+in, never household audio) transcribing in the suite through scripted
+engines and live on this laptop through the real worker; the
+readiness check probing `stt` with that clip.
 94c: the `uv` pin per platform; Pocket TTS as a managed engine with
 the weights pinned; the route forwarding the spec's form and
 streaming the body with cancel; one short sentence rendering live.
@@ -1010,6 +1048,29 @@ own S item when a wake-word package exists in the Catalog), the
 robot's managed body process (STACK-17), Home's sentence scheduler
 and normalization (Home's), and speaker identification (the robot's
 body, `bot/docs/dev.md`).
+
+### `stt` proven live (94b, 2026-09-20)
+
+`scripts/prove-stt.sh` on the p16 laptop (Apple M4 Pro, 24 GB), a
+clean scratch data directory on port 8771, through the public routes:
+
+| Step | Result | Time |
+|---|---|---|
+| Install `silero-vad` | job done, sha256 verified | 0.60 s |
+| Install `moonshine-tiny-en-int8` (107.6 MB, real download) | job done, sha256 verified, extracted to `models/moonshine-tiny-en-int8/sherpa-onnx-moonshine-tiny-en-int8/` | 5.89 s |
+| `stt` before the first request | `installed` | |
+| `POST /v1/audio/transcriptions` with the bundled clip | HTTP 200 `{"text":"Clover, the kitchen light is on."}`, `x-maipai-engine: local sherpa-onnx-node-1.13.8`, `x-maipai-model: sherpa-onnx-moonshine-tiny-en-int8`, `x-maipai-revision: d5fe6ec4…` | 1.10 s including the worker's load on the first run of the day (0.49 s on a warm OS cache) |
+| The same request, loaded | HTTP 200, the same transcript | 0.04 s |
+| `stt` after it | `ready`, identity ok (expected and actual `sherpa-onnx-moonshine-tiny-en-int8`), measured footprint 239,387,872 bytes | |
+| `POST /stack/v1/check` | ok, `stt` ok (the clip's transcript), fit-together ok | 0.05 s |
+| `WS /v1/audio/transcriptions/stream`, 0.5 s of silence, the clip in 1024-sample frames, 1 s of silence | `ready` at 7 ms; `vad speaking` at 16 ms; `vad` off and `final` "Clover, the kitchen light is on." at 34 ms (an earlier run, with the frames paced by a slower decode, showed the partials "Clover.", "Clover, the kitchen lighting," and the full sentence on the way) | |
+| The worker | the Stack's own child, `speech-worker --role stt`, 308,128 KB resident | |
+| Stop | port free, scratch removed | |
+
+The first run of the script found the readiness check skipping the
+transcription wire (a "skipped" result the run counted as not green);
+the check now probes it with the clip like a completion, with a
+regression test.
 
 ## Measured so far
 

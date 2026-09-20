@@ -18,11 +18,12 @@
     "@hono/zod-openapi": "^1.6.3",
     "@huggingface/gguf": "^0.4.6",
     "@huggingface/hub": "^2.17.3",
+    "@maipai/core": "file:../../shared/core",
     "@scalar/hono-api-reference": "^0.12.0",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.10.7",
-    "zod": "^4.0.0",
-    "@maipai/core": "file:../../shared/core"
+    "sherpa-onnx-node": "1.13.8",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/bun": "^1.3.0",

@@ -13,7 +13,12 @@ import { llamaServerArgs } from "@/lib/engineArgs";
 import { currentEngineBinary, currentEngineTag, engineBinaryPath, engineDir } from "@/lib/engineInstall";
 import { detectHardware } from "@/lib/hardware";
 import { identityHeaders, modelFileName, readEngineIdentity, type EngineIdentity } from "@/lib/identity";
-import { isModelSelectable, listModels, recordMeasuredFootprint, type ModelRecord } from "@/lib/modelStore";
+import { isComponent, isModelSelectable, listModels, recordMeasuredFootprint, type ModelRecord } from "@/lib/modelStore";
+import { readFileSync } from "node:fs";
+// Imported as a file, so a compiled binary embeds the clip and the probe
+// reads it there too, not only from a checkout.
+import bundledClipFile from "../speech/fixtures/clover-two-seconds.wav" with { type: "file" };
+import { TRANSCRIBE_PATH } from "@/speech/server";
 import { admit, getRunState, release, setGovernorPid, startGovernor, type GovernorHandle } from "@/lib/governor";
 import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
@@ -65,6 +70,9 @@ export interface RoleProcess {
   port: number | null;
   activeRequests: number;
   retired: boolean;
+  /** Open live sessions on this process; a retire closes them first,
+   * so a drain never waits on a client that would talk forever. */
+  sessions?: Set<() => void>;
   governorHandle?: GovernorHandle;
   stopGovernor?: () => void;
   stop(): Promise<void>;
@@ -79,7 +87,10 @@ export class EngineUnavailableError extends Error {
 // post-load check sends. Roles that share chat's model run on chat's
 // process; embed has its own model and its own launch flag.
 const CHAT_WIRE_ROLES: RoleId[] = ROLE_IDS.filter((role) => ROLES[role].wire === "chat");
-const SPAWNABLE_ROLES: RoleId[] = ["chat", "embed"];
+const SPAWNABLE_ROLES: RoleId[] = ["chat", "embed", "stt"];
+/** The roles the speech worker serves: their runtime ships with the
+ * Stack (sherpa-onnx-node in package.json), never as an engine build. */
+const SPEECH_ROLES: RoleId[] = ["stt"];
 
 /** The role whose process serves this role: `coding`, `judge`, `router`
  * and `vision` share chat's model and process unless bound elsewhere. */
@@ -172,8 +183,16 @@ export async function measureProcessMemoryBytes(pid: number | null): Promise<num
 /** The smallest real request for a role's wire: the post-load check and
  * the readiness check both send it, so "ready" always means the public
  * route's own shape answered. */
+let bundledClip: string | null = null;
+/** The bundled two-second clip, base64, the `stt` probe's audio. */
+export function bundledClipBase64(): string {
+  bundledClip ??= readFileSync(bundledClipFile).toString("base64");
+  return bundledClip;
+}
+
 export function probeRequest(role: RoleId): { path: string; body: Record<string, unknown> } {
   if (ROLES[role].wire === "embeddings") return { path: "/v1/embeddings", body: { model: role, input: "OK" } };
+  if (ROLES[role].wire === "transcription") return { path: TRANSCRIBE_PATH, body: { model: role, audio_base64: bundledClipBase64() } };
   // `enable_thinking: false` asks the template to answer in content; a
   // thinking model that answers in reasoning_content is still alive.
   return { path: "/v1/chat/completions", body: { model: role, messages: [{ role: "user", content: "Reply with just the word OK." }], max_tokens: 32, chat_template_kwargs: { enable_thinking: false } } };
@@ -184,6 +203,10 @@ export function probeReplyOk(role: RoleId, result: { status: number; body: unkno
   if (ROLES[role].wire === "embeddings") {
     const data = (result.body as { data?: Array<{ embedding?: unknown }> }).data;
     return Array.isArray(data) && Array.isArray(data[0]?.embedding) && data[0].embedding.length > 0;
+  }
+  if (ROLES[role].wire === "transcription") {
+    const text = (result.body as { text?: unknown }).text;
+    return typeof text === "string" && text.trim().length > 0;
   }
   const message = (result.body as { choices?: Array<{ message?: { content?: unknown; reasoning_content?: unknown } }> }).choices?.[0]?.message;
   const content = typeof message?.content === "string" ? message.content : null;
@@ -270,8 +293,16 @@ function launchBinary(pin: EngineBinaryPin): string {
   return engineBinaryPath(pin);
 }
 
+/** Whether the role's engine is on this machine: the `current`
+ * llama-server build for the chat wire, the bundled speech runtime plus
+ * its detector component for the speech roles. */
+function engineInstalledFor(role: RoleId): boolean {
+  if (SPEECH_ROLES.includes(role)) return componentModel(role, "vad") !== null;
+  return engineInstalled();
+}
+
 function initialStatus(role: RoleId): RoleStatus {
-  const installed = SPAWNABLE_ROLES.includes(role) && engineInstalled() && selectedModel(role) !== null;
+  const installed = SPAWNABLE_ROLES.includes(role) && engineInstalledFor(role) && selectedModel(role) !== null;
   return { kind: null, state: installed ? "installed" : "notInstalled", reason: null, identity: null, postLoadCheck: null };
 }
 
@@ -311,8 +342,14 @@ export function roleIsBound(requested: RoleId): boolean {
   return urlBindingFor(role) !== null || (SPAWNABLE_ROLES.includes(role) && selectedModel(role) !== null);
 }
 
+/** A piece the role's engine loads beside its model (the `stt` voice
+ * activity detector), installed and verified like a model. */
+export function componentModel(role: RoleId, component: string): ModelRecord | null {
+  return listModels().find((model) => model.roles.includes(role) && model.engineRequirements.component === component && isModelSelectable(model) && model.modelPath) ?? null;
+}
+
 export function selectedModel(role: RoleId): ModelRecord | null {
-  const selectable = listModels().filter((model) => model.roles.includes(role) && isModelSelectable(model) && model.modelPath);
+  const selectable = listModels().filter((model) => model.roles.includes(role) && !isComponent(model) && isModelSelectable(model) && model.modelPath);
   const preferred = preferredModels.get(role);
   return selectable.find((model) => model.id === preferred) ?? selectable[0] ?? null;
 }
@@ -332,32 +369,59 @@ async function startUrlProcess(role: RoleId, url: string): Promise<RoleProcess> 
   return { role, kind: "url", client, identity, modelId: null, modelRevision: null, pid: null, port: Number(new URL(url).port) || null, activeRequests: 0, retired: false, stop: async () => {} };
 }
 
-async function startSpawnedProcess(role: RoleId): Promise<RoleProcess> {
-  if (!SPAWNABLE_ROLES.includes(role)) throw new EngineUnavailableError(`No engine can be started for ${role} on this machine yet.`);
+/** The speech worker's command line, built the way the daemon itself
+ * was started: the compiled binary knows the subcommand; under `bun
+ * run`, where execPath is bun itself, the entry file goes in between. */
+export function speechWorkerCommand(args: { role: RoleId; port: number; modelPath: string; vadPath: string; threads: number }, runtime: { execPath: string; main: string } = { execPath: process.execPath, main: Bun.main }): string[] {
+  const viaBun = /^bun(\.exe)?$/i.test(runtime.execPath.split(/[\\/]/).pop() ?? "");
+  return [runtime.execPath, ...(viaBun ? [runtime.main] : []), "speech-worker", "--role", args.role, "--port", String(args.port), "--model", args.modelPath, "--vad", args.vadPath, "--threads", String(args.threads)];
+}
+
+interface LaunchPlan { command: string[]; engine: string; build: string; stdin: "pipe" | "ignore"; contextLength: number; }
+
+/** What to run for a role: llama-server from the `current` link for the
+ * chat and embeddings wires, the speech worker for `stt`. */
+function launchPlan(role: RoleId, model: ModelRecord, port: number): LaunchPlan {
+  if (SPEECH_ROLES.includes(role)) {
+    const vad = componentModel(role, "vad");
+    if (!vad?.modelPath) throw new EngineUnavailableError(`The ${role} voice activity detector is not installed.`);
+    const declared = engineSettingValues("engines.llama_server");
+    const threads = typeof declared.threads === "number" && declared.threads > 0 ? declared.threads : 2;
+    return { command: speechWorkerCommand({ role, port, modelPath: model.modelPath!, vadPath: vad.modelPath, threads }), engine: "sherpa-onnx-node", build: "bundled", stdin: "pipe", contextLength: 0 };
+  }
   const declared = engineSettingValues("engines.llama_server");
   const config = { contextLength: declared.context_length, slots: declared.slots, threads: declared.threads, cacheRamMb: declared.cache_ram_mb, flashAttention: declared.flash_attention } as Record<string, number | boolean | string | string[]>;
   const pin = installedEnginePin();
-  const model = selectedModel(role);
   if (!pin || !engineInstalled()) throw new EngineUnavailableError("No installed llama-server build is available for this machine.");
+  const contextLength = typeof config.contextLength === "number" ? config.contextLength : 4096;
+  const binary = launchBinary(pin);
+  const args = llamaServerArgs({ modelPath: model.modelPath!, port, config, contextLength, kvCacheQuantized: process.platform === "darwin", embeddings: role === "embed" });
+  return { command: [binary, ...args], engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength };
+}
+
+async function startSpawnedProcess(role: RoleId): Promise<RoleProcess> {
+  if (!SPAWNABLE_ROLES.includes(role)) throw new EngineUnavailableError(`No engine can be started for ${role} on this machine yet.`);
+  const model = selectedModel(role);
+  if (!engineInstalledFor(role)) throw new EngineUnavailableError(SPEECH_ROLES.includes(role) ? `The ${role} voice activity detector is not installed.` : "No installed llama-server build is available for this machine.");
   if (!model?.modelPath) throw new EngineUnavailableError(`No verified and installed ${role} model is available.`);
 
-  const admission = await admit({ id: role, kind: "resident", requestedBytes: model.sizeBytes ?? 0, modelFileBytes: model.sizeBytes, measuredPeakBytes: model.measuredFootprintBytes, engine: "llama-server", pinned: pinnedModels.has(model.id) });
+  const admission = await admit({ id: role, kind: "resident", requestedBytes: model.sizeBytes ?? 0, modelFileBytes: model.sizeBytes, measuredPeakBytes: model.measuredFootprintBytes, engine: SPEECH_ROLES.includes(role) ? "sherpa-onnx-node" : "llama-server", pinned: pinnedModels.has(model.id) });
   if ("queued" in admission) throw new EngineUnavailableError(`${role} admission is queued at position ${admission.position}.`);
   if ("refused" in admission) throw new EngineUnavailableError(admission.reason);
 
   const port = await findFreePort();
-  const contextLength = typeof config.contextLength === "number" ? config.contextLength : 4096;
-  const binary = launchBinary(pin);
-  const args = llamaServerArgs({ modelPath: model.modelPath, port, config, contextLength, kvCacheQuantized: process.platform === "darwin", embeddings: role === "embed" });
+  let plan: LaunchPlan;
+  try { plan = launchPlan(role, model, port); } catch (error) { release(admission); throw error; }
+  const contextLength = plan.contextLength;
   const spawnEngine = () => {
     try {
-      return Bun.spawn([binary, ...args], { stdout: "ignore", stderr: "pipe", env: { ...process.env, HF_HUB_CACHE: hfHubRoot } });
+      return Bun.spawn(plan.command, { stdout: "ignore", stderr: "pipe", stdin: plan.stdin, env: { ...process.env, HF_HUB_CACHE: hfHubRoot } });
     } catch (error) {
       // A binary that will not even start (a truncated or wrong-arch file)
       // is the same failure as a crash before health, said in one sentence.
       release(admission);
       const code = (error as { code?: string }).code ?? (error as Error).name;
-      const reason = `The ${currentEngineTag("llama-server") ?? pin.tag} build of llama-server could not be started (${code}).`;
+      const reason = `The ${plan.build} build of ${plan.engine} could not be started (${code}).`;
       emit({ id: "engine.state", data: { engine: role, state: "offline", reason } });
       raise({ code: `engine.crashed.${role}`, severity: "error", title: `${ROLES[role].label} engine failed to start`, text: reason, cause: reason, fix: { label: "Restart engine", action: "restart_engine" } });
       throw new EngineUnavailableError(reason);
@@ -511,6 +575,7 @@ export function roleCanBeStartedByStack(requested: RoleId): boolean {
 async function retire(processRecord: RoleProcess): Promise<void> {
   processRecord.retired = true;
   processRecord.stopGovernor?.();
+  for (const close of processRecord.sessions ?? []) close();
   while (processRecord.activeRequests > 0) await new Promise((resolve) => setTimeout(resolve, 10));
   await processRecord.stop();
   if (processRecord.governorHandle) release(processRecord.governorHandle);
@@ -728,6 +793,9 @@ export function scriptedProcess(role: RoleId, overrides: Partial<RoleProcess> = 
     baseUrl: "in-process://scripted",
     async request(path, body) {
       if (path === "/v1/embeddings") return { status: 200, body: { object: "list", data: [{ object: "embedding", index: 0, embedding: [0.1, 0.2, 0.3] }], model: role, usage: { prompt_tokens: 1, total_tokens: 1 } } };
+      // The transcription wire: the bundled clip's sentence for any WAV
+      // with bytes in it, an empty transcript for an empty one.
+      if (path === TRANSCRIBE_PATH) return { status: 200, body: { text: typeof body.audio_base64 === "string" && body.audio_base64.length > 0 ? "Clover, the kitchen light is on." : "" } };
       const messages = Array.isArray(body.messages) ? body.messages : [];
       const last = messages.at(-1) as { content?: unknown } | undefined;
       const content = typeof last?.content === "string" && last.content.trim() ? "Scripted Stack reply." : "The scripted Stack engine is ready.";
@@ -759,3 +827,36 @@ export function scriptedProcess(role: RoleId, overrides: Partial<RoleProcess> = 
 }
 
 export { CHAT_WIRE_ROLES, SPAWNABLE_ROLES };
+
+/** A live session on a role's process (the speech session): the process
+ * counts it as an active request until `release`, so a drain waits for
+ * it, and its end is a real request for the `ready` claim, as a
+ * stream's end is. */
+export interface RoleSession { baseUrl: string; headers: Record<string, string>; release(): void; }
+
+/** `onRetire` runs when the process is stopped or restarted under the
+ * session (the daemon stopping, a "Restart engine" fix): the caller
+ * closes its client so the drain can finish. */
+export async function openRoleSession(requested: RoleId, onRetire: () => void = () => {}): Promise<RoleSession> {
+  const role = processRoleFor(requested);
+  const processRecord = await getProcess(role);
+  // A process retired while this session was being opened has already
+  // closed its sessions; one registered now would hold the drain.
+  if (processRecord.retired) throw new EngineUnavailableError(`The ${role} engine is restarting.`);
+  processRecord.activeRequests++;
+  processRecord.sessions ??= new Set();
+  let released = false;
+  const session: RoleSession = {
+    baseUrl: processRecord.client.baseUrl,
+    headers: identityHeaders(processRecord.identity, processRecord.modelRevision),
+    release() {
+      if (released) return;
+      released = true;
+      processRecord.sessions?.delete(close);
+      finishStream(role, processRecord);
+    },
+  };
+  const close = () => { onRetire(); session.release(); };
+  processRecord.sessions.add(close);
+  return session;
+}

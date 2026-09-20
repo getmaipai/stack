@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://getmaipai.github.io/shared/spec/schemas/stt-transcribe-response.schema.json",
+  "title": "SttTranscribeResponse",
+  "description": "The reply to a one-shot transcription of a complete WAV file (POST /v1/audio/transcriptions on the Stack, POST /api/stt/transcribe on Home, multipart form field `file`, 16-bit PCM WAV): the contract of spec/voice/ts/sttTypes.ts. An empty string is a file with no speech in it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["text"],
+  "properties": { "text": { "type": "string" } }
+}

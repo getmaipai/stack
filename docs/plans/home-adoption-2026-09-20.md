@@ -185,8 +185,8 @@ caller (principle 1: no second copy of identity).
 
 Nothing on this list is blocked on the Stack today except by scope
 already in the Stack's backlog: STACK-13 (generator jobs and the
-managed ComfyUI, which items 4 and 6 need for images), STACK-94b and
-94c (the speech roles, which item 2's voice path needs), STACK-95 (systemd, which
+managed ComfyUI, which items 4 and 6 need for images), STACK-94c (the
+`tts` role, which item 2's voice path needs; `stt` landed with 94b), STACK-95 (systemd, which
 item 1 needs on the robot), STACK-97 (the Catalog engine index, which
 item 5 needs for engines to show "available"). Each is filed in
 `stack/docs/BACKLOG.md` with its own acceptance.

@@ -71,6 +71,16 @@ export const ENGINE_BINARIES: EngineBinaryPin[] = [
 
 export const ENGINE_READY_MARKER = ".engine-ready";
 
+/** Runtimes that ship inside the Stack's own dependencies (package.json
+ * and the lockfile) rather than as a downloaded build: their version
+ * rides the Stack's release and the monthly dependency sweep, never the
+ * engine index. The components inventory reads the version from
+ * package.json so there is one definition. */
+export interface BundledRuntime { name: string; roles: string[]; platforms: string; }
+export const BUNDLED_RUNTIMES: BundledRuntime[] = [
+  { name: "sherpa-onnx-node", roles: ["stt"], platforms: "macOS arm64 and x64, Linux arm64 and x64, Windows x64 (upstream's platform packages)" },
+];
+
 /** One definition of how a pin id names its engine and tag: a shipped
  * pin says so itself; a staged pin (`<name>-<tag>`, the tag starting
  * with the upstream build number) is split at its first `-b<digits>`. */

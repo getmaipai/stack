@@ -11,6 +11,7 @@ const scripted: ComponentsCatalog = {
   // Declared biggest-first on purpose: the row must pick by profile and
   // size, never by array order.
   models: [{ id: "chat-big", role: "chat", repo: "org/big", license: "MIT", revision: "r2", sizing: { profile: "p64", quantization: "Q4_K_M" }, download: { url: "https://huggingface.co/y", sha256: "b".repeat(64), approx_bytes: 4 * 1_073_741_824 } }, { id: "chat-small", role: "chat", repo: "org/small", license: "MIT", revision: "r1", sizing: { profile: "p16", quantization: "Q8_0" }, download: { url: "https://huggingface.co/x", sha256: "a".repeat(64), approx_bytes: 1_073_741_824 }, measured: { footprintBytes: 2 * 1_073_741_824, contextLength: 4096, hardware: "an Apple silicon Mac, 16 GB" } }, { id: "chat-typo", role: "chat", license: "MIT", revision: "r3", sizing: { profile: "p-32" }, download: { url: "https://huggingface.co/z", sha256: "c".repeat(64), approx_bytes: 9 * 1_073_741_824 } }],
+  runtimes: [],
   candidates: { chat: [{ name: "mlx-serve", kind: "engine", source: "STACK-93" }], tts: [{ name: "the chosen TTS runtime", kind: "engine", source: "STACK-94" }], image: [{ name: "ComfyUI (managed)", kind: "engine", source: "STACK-13" }] },
 };
 
