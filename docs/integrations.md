@@ -112,6 +112,7 @@ Each item has one fix action that Home renders as a button.
 | Privacy | `GET /stack/v1/privacy` | the outbound endpoint rows for Home's privacy page, below |
 | Backup | `GET /stack/v1/backup` | the precious-state declaration for Home's backup, below |
 | Diagnostics | `GET /stack/v1/diagnostics` | a redacted zip (log tail, health, hardware without the computer name, settings, versions) Home hands to the person; nothing is sent anywhere |
+| Voices | `GET /stack/v1/voices` | every voice the `tts` role can render with its declared metadata (id, name, description, language, country, gender, source, `onDisk`, licence, revision); Home's voice picker reads it |
 | Liveness | `GET /healthz` | `{ ok, version, uptimeSeconds }`; Home checks its pinned minimum Stack version here at boot |
 
 Home calls every maintenance action; the Stack keeps no schedule of its

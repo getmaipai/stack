@@ -19,6 +19,7 @@ import { eventsRoutes } from "@/routes/events";
 import { hardwareRoutes } from "@/routes/hardware";
 import { settingsRoutes } from "@/routes/settings";
 import { declarationRoutes } from "@/routes/declarations";
+import { voicesRoutes } from "@/routes/voices";
 import { speechRoutes, websocket } from "@/routes/speech";
 import { registerGenerators } from "@/generators";
 import { SESSION_PATH } from "@/speech/server";
@@ -57,5 +58,6 @@ app.route("/stack/v1", eventsRoutes);
 app.route("/stack/v1/hardware", hardwareRoutes);
 app.route("/stack/v1/settings", settingsRoutes);
 app.route("/stack/v1", declarationRoutes);
+app.route("/stack/v1/voices", voicesRoutes);
 
 app.notFound((c) => c.json({ error: "Not found" }, 404));
