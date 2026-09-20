@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # MaiPai Stack pre-commit gate. Runs the backend checks, then the pinned
 # @maipai/standards core (gitleaks, PII wordlist, prose lint, licence check).
-# Needs two sibling checkouts: getmaipai/.github (the standards) and
-# getmaipai/commons (the @maipai/core the backend imports), each at the
-# pinned tag; a missing sibling or a wrong version fails here, loud.
+# Needs getmaipai/commons (the @maipai/core the backend imports) at the
+# pinned tag. The standards pin resolves its own immutable worktree.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-STANDARDS_DIR="${MAIPAI_STANDARDS_DIR:-../.github}"
-STANDARDS_DIR="$(cd "$STANDARDS_DIR" && pwd)"
+STANDARDS_REPO="${MAIPAI_STANDARDS_DIR:-../.github}"
+STD_TAG="std-v0.3.0"
+STANDARDS_DIR="$(bash "$STANDARDS_REPO/standards/bin/ensure-tag.sh" "$STD_TAG")"
 export MAIPAI_STANDARDS_DIR="$STANDARDS_DIR"
 
 # The @maipai/core pin (commons tag core-v0.1.0). Bump this line and the
@@ -57,4 +57,10 @@ if [ "${1:-}" != "--docs" ]; then
   (cd backend && bun test)
 fi
 
+if [ "$(cat "$STANDARDS_DIR/standards/VERSION")" != "${STD_TAG#std-v}" ]; then
+  echo "@maipai/standards at $STANDARDS_DIR is $(cat "$STANDARDS_DIR/standards/VERSION"), but the tag is $STD_TAG"
+  exit 1
+fi
+
+echo "== standards core ($STD_TAG)"
 bash "$STANDARDS_DIR/standards/bin/check-core.sh" .

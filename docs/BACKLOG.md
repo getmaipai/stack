@@ -17,6 +17,8 @@ history at `d4e088e`. Item ids that survive keep their numbers.
 Size tags: **S** (a session or less), **M** (a real slice, days), **L**
 (a platform-level capability, needs its own design pass first).
 
+- [x] the standards pin resolves through a per-tag worktree, std-v0.3.0 (verified at this commit)
+
 **Execution contract for every item:** read `dev.md` and
 `integrations.md` and the named files before editing. Bun, Hono with
 `@hono/zod-openapi`, Zod, SQLite through Drizzle; `@maipai/core` and
