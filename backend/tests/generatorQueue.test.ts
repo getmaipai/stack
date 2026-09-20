@@ -7,15 +7,18 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { app } from "@/app";
 import { eventsAfter } from "@/lib/events";
-import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, getGovernorStatus, release, type GovernorHandle } from "@/lib/governor";
+import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, getGovernorStatus, release, startGovernor, type GovernorHandle } from "@/lib/governor";
+import { scriptedMemoryReader } from "@/lib/memory/scripted";
+import type { MemorySnapshot } from "@/lib/memory/types";
 import { __resetHealthForTests } from "@/lib/health";
 import { __resetJobsForTests, cancelJob, getJob, registerJobRunner, submitJob, waitForJob, type Job } from "@/lib/jobs";
 import { clearModelsForTests, upsertModel } from "@/lib/modelStore";
 import { resetSupervisorForTests, scriptedProcess, setSupervisorFactoryForTests } from "@/lib/supervisor";
 
 const GB = 1_073_741_824;
+const stops: Array<() => void> = [];
 beforeEach(() => { __resetHealthForTests(); __resetJobsForTests(); __resetGovernorForTests(); __setGovernorTuningForTestsOnly({ totalMemoryBytes: 32 * GB, freeMemoryBytes: 24 * GB, tier: "p32" }); clearModelsForTests(); });
-afterEach(() => { __resetJobsForTests(); __resetGovernorForTests(); clearModelsForTests(); setSupervisorFactoryForTests(null); resetSupervisorForTests(); });
+afterEach(async () => { for (const stop of stops.splice(0)) stop(); await Bun.sleep(5); __resetJobsForTests(); __resetGovernorForTests(); clearModelsForTests(); setSupervisorFactoryForTests(null); resetSupervisorForTests(); });
 
 /** An image model on the store and a scripted engine, so the images
  * route sees a bound role with an engine and reaches the queue. */
@@ -175,15 +178,20 @@ test("cancelling a render that waits in the governor's queue frees the role at o
   expect(getGovernorStatus().queue.length).toBe(0);
 });
 
-test("a render queued for memory with nothing loaded runs once memory frees: the queue asks the governor to look again", async () => {
-  __resetJobsForTests({ kickMs: 100 });
+test("a render queued for memory with nothing loaded runs once memory frees: the governor's own poll re-admits", async () => {
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 32 * GB, freeMemoryBytes: 2 * GB, tier: "p32" });
   const sidecar = scriptedSidecar({ requestedBytes: 2 * GB });
+  const warn: MemorySnapshot = { totalBytes: 32 * GB, freeBytes: 2 * GB, availablePercent: 6, pressure: "warn", degraded: false };
+  const stop = startGovernor({ pid: 1, pollMs: 50, memoryReader: scriptedMemoryReader([
+    warn, warn, warn, warn, warn, warn, warn, warn, warn, warn,
+    { totalBytes: 32 * GB, freeBytes: 24 * GB, availablePercent: 75, pressure: "normal", degraded: false },
+  ]) });
+  stops.push(stop);
+  await Bun.sleep(10);
   const job = submit("when memory frees");
   await new Promise((resolve) => setTimeout(resolve, 300));
   expect(getJob(job.id)).toMatchObject({ state: "running", status: "waiting for memory (1 ahead)" });
   expect(sidecar.started).toEqual([]);
-  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 32 * GB, freeMemoryBytes: 24 * GB, tier: "p32" });
   const done = await waitForJob(job.id, 4_000);
   expect(done?.state).toBe("done");
   expect(getGovernorStatus().queue.length).toBe(0);
@@ -203,10 +211,16 @@ test("a queued render moving up is told on the feed", async () => {
   await waitForJob(third.id, 3_000);
 });
 
-test("a cancelled render's phantom at the governor's head is kicked away so the live render behind it runs when memory frees", async () => {
-  __resetJobsForTests({ kickMs: 100 });
+test("a cancelled render's phantom is withdrawn so the live render behind it runs when memory frees", async () => {
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 32 * GB, freeMemoryBytes: 2 * GB, tier: "p32" });
   const sidecar = scriptedSidecar({ requestedBytes: 2 * GB });
+  const warn: MemorySnapshot = { totalBytes: 32 * GB, freeBytes: 2 * GB, availablePercent: 6, pressure: "warn", degraded: false };
+  const stop = startGovernor({ pid: 1, pollMs: 50, memoryReader: scriptedMemoryReader([
+    warn, warn, warn, warn, warn, warn, warn, warn, warn, warn, warn, warn, warn, warn,
+    { totalBytes: 32 * GB, freeBytes: 24 * GB, availablePercent: 75, pressure: "normal", degraded: false },
+  ]) });
+  stops.push(stop);
+  await Bun.sleep(10);
   const cancelled = submit("cancelled while waiting");
   await new Promise((resolve) => setTimeout(resolve, 300));
   expect(getJob(cancelled.id)?.status).toMatch(/waiting for memory/);
@@ -214,7 +228,6 @@ test("a cancelled render's phantom at the governor's head is kicked away so the 
   const live = submit("the live one");
   await new Promise((resolve) => setTimeout(resolve, 300));
   expect(getJob(live.id)?.state).toBe("running");
-  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 32 * GB, freeMemoryBytes: 24 * GB, tier: "p32" });
   const done = await waitForJob(live.id, 5_000);
   expect(done?.state).toBe("done");
   expect(sidecar.started).toEqual([live.id]);
@@ -236,8 +249,7 @@ test("a pause while a render waits fails it with the pause as the reason", async
   release(other);
 });
 
-test("a cancelled wait alone never kicks the governor, so no warning is raised for a job nobody waits on", async () => {
-  __resetJobsForTests({ kickMs: 50 });
+test("a cancelled wait alone never raises a warning for a job nobody waits on", async () => {
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 32 * GB, freeMemoryBytes: 2 * GB, tier: "p32" });
   scriptedSidecar({ requestedBytes: 2 * GB });
   const job = submit("cancelled and alone");

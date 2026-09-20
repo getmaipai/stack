@@ -8,8 +8,7 @@
 // that module drives it. Until a runner is registered for a kind, a
 // submit for it is refused with a reason rather than left queued.
 import { emit } from "@/lib/events";
-import { release, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
-import { __setAdmissionTuningForTests, AdmissionRefusedError, waitForAdmission } from "@/lib/admission";
+import { admit, getGovernorStatus, getRunState, GovernorRules, release, withdraw, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
 import { StackJob, StackJobState } from "@/spec/ts/stack-job";
 
 export const JobStateSchema = StackJobState;
@@ -127,10 +126,9 @@ function renumber(role: string): void {
 }
 
 /** Runs the next queued job of a role when none is in flight: it asks
- * the governor for room, waits in the governor's queue when told to
- * (polling the loaded set for its admission, since the governor admits
- * a queued request on a release without a callback), fails the job
- * with the governor's reason when refused, and releases the admission
+ * the governor for room, waits on the governor's own promise when told
+ * to (its poll settles it when memory frees), fails the job with the
+ * governor's reason when refused or paused, and releases the admission
  * however the run ends. */
 async function pump(role: string): Promise<void> {
   if (inFlight.has(role)) return;
@@ -146,38 +144,73 @@ async function pump(role: string): Promise<void> {
   if (!runner?.options.generator) { finishJob(next.id, { ok: false, reason: `No generator runs ${next.kind} jobs.` }); settle(); return; }
   jobs.set(next.id, { ...jobs.get(next.id)!, position: null });
   touch(jobs.get(next.id)!, { state: "running", status: "waiting for memory" });
-  let handle: GovernorHandle | null;
+  let handle: GovernorHandle;
   try {
-    handle = await admitJob(next.id, { id: next.id, kind: "generator", ...runner.options.generator.memory(jobs.get(next.id)!) }, settle);
+    handle = await admitJob(next.id, { id: next.id, kind: "generator", ...runner.options.generator.memory(jobs.get(next.id)!) });
   } catch (error) {
     finishJob(next.id, { ok: false, reason: error instanceof Error ? error.message : String(error) });
     settle();
     return;
   }
-  if (!handle) return;
   const job = jobs.get(next.id);
   if (!job || job.state !== "running") { release(handle); settle(); return; }
   touch(job, { status: "starting" });
   run(job, runner, () => { release(handle!); settle(); });
 }
 
-/** The governor's answer for one job: the handle once admitted, null
- * when the job was cancelled while waiting (the role is settled at
- * once through `onCancelled`, and the admission, if it ever lands, is
- * released by the watcher `waitForAdmission` leaves behind), a thrown
- * reason when refused. */
-async function admitJob(jobId: string, request: GovernorRequest, onCancelled: () => void): Promise<GovernorHandle | null> {
+/** The peak the governor will compute for a request, mirrored from its
+ * `peakFor` so a refusal here agrees with an admission there. */
+function governorPeak(request: GovernorRequest): number {
+  if (request.measuredPeakBytes && request.measuredPeakBytes > 0) return request.measuredPeakBytes;
+  if (!request.modelFileBytes) return request.requestedBytes;
+  const multiplier = GovernorRules.engineMultipliers[request.engine as keyof typeof GovernorRules.engineMultipliers] ?? GovernorRules.engineMultipliers.default;
+  return Math.ceil(request.modelFileBytes * multiplier);
+}
+
+/** The governor's answer for one job: the handle once admitted, a
+ * thrown reason when refused, or a thrown reason when the job was
+ * cancelled or the Stack paused while waiting. The wait is a bare
+ * await on the governor's own promise, which its poll settles when
+ * memory frees; a cancel or a pause withdraws the request. */
+async function admitJob(jobId: string, request: GovernorRequest): Promise<GovernorHandle> {
+  // A peak the budget can never hold is refused now with the numbers,
+  // not queued for memory that will not come.
+  const status = getGovernorStatus();
+  const peak = governorPeak(request);
+  if (peak > status.capBytes) throw new Error(`The render needs about ${gb(peak)} GB; the memory budget for models is ${gb(status.capBytes)} GB.`);
+  const controller = controllers.get(jobId);
+  const answer = await admit(request);
+  if ("refused" in answer) throw new Error(answer.reason);
+  if (!("queued" in answer)) return answer;
+  updateJob(jobId, { status: `waiting for memory (${answer.position} ahead)` });
+  const signal = controller?.signal;
+  let pauseTimer: ReturnType<typeof setInterval> | null = null;
   try {
-    return await waitForAdmission(request, {
-      stillWanted: () => jobs.get(jobId)?.state === "running",
-      onGaveUp: onCancelled,
-      onPosition: (position) => { updateJob(jobId, { status: `waiting for memory (${position} ahead)` }); },
-    });
+    const settled = await Promise.race([
+      answer.admitted,
+      signal
+        ? new Promise<never>((_, reject) => {
+            if (signal.aborted) { reject(new Error("Cancelled by Home.")); return; }
+            signal.addEventListener("abort", () => reject(new Error("Cancelled by Home.")), { once: true });
+          })
+        : new Promise<never>(() => {}),
+      new Promise<never>((_, reject) => {
+        pauseTimer = setInterval(() => {
+          if (getRunState() !== "running") { if (pauseTimer) clearInterval(pauseTimer); reject(new Error("The Stack is paused.")); }
+        }, 100);
+      }),
+    ]);
+    if ("refused" in settled) throw new Error(settled.reason);
+    return settled;
   } catch (error) {
-    if (error instanceof AdmissionRefusedError) throw new Error(error.message.replace(/^job-[^ ]+ needs/, "The render needs"));
+    withdraw(request.id);
     throw error;
+  } finally {
+    if (pauseTimer) clearInterval(pauseTimer);
   }
 }
+
+function gb(bytes: number): string { return (bytes / 1_073_741_824).toFixed(1); }
 
 
 export function cancelJob(id: string): Job | null {
@@ -209,8 +242,7 @@ export async function waitForJob(id: string, timeoutMs: number): Promise<Job | n
   }
 }
 
-export function __resetJobsForTests(options: { kickMs?: number } = {}): void {
+export function __resetJobsForTests(): void {
   for (const controller of controllers.values()) controller.abort();
   controllers.clear(); jobs.clear(); runners.clear(); queues.clear(); inFlight.clear();
-  __setAdmissionTuningForTests(options);
 }

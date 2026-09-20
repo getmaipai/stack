@@ -209,7 +209,7 @@ are never copied. Nothing migrates Home until STACK-16.
   rules. Exit: `bash scripts/check.sh` with a test that a request
   queued under pressure runs when the reading clears without any
   release.
-- [ ] **STACK-06d (S): jobs.ts waits on admit's promise and drops the
+- [x] **STACK-06d (S): jobs.ts waits on admit's promise and drops the
   kick and the poll.** Files: backend/src/lib/jobs.ts,
   backend/tests/generatorQueue.test.ts. Exit: bash scripts/check.sh.
 - [x] **STACK-06: the governor.** Profiles, admission, one generator at
