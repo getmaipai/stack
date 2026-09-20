@@ -60,7 +60,15 @@ caller (principle 1: no second copy of identity).
   400 unknown, 499 cancelled, 504 timed out) to Home's own errors
   without guessing a different cause. The turn engine, the judge, the
   embedder and the voice path call through it; Home's `/v1` stays the
-  household assistant, never a raw pass-through. Files: Home's engine
+  household assistant, never a raw pass-through. The voice path keeps
+  `spec/voice`'s own shapes at the Stack's audio paths (the transcribe
+  form and `SttWireEvent` session for `stt`, the `/tts` form and the
+  streaming WAV for `tts`, `stack/docs/dev.md` "The speech roles"),
+  and the household's Hugging Face token for voice cloning moves from
+  Home's `HF_TOKEN` child environment to the Stack's secret-kind
+  setting `stack.engines.tts.hf_token` (a `needs_restart` change the
+  Stack applies); Home's `/api/voice/hf-token` becomes a write to it.
+  Files: Home's engine
   client, the turn engine's model calls, the voice path. Mirror: the
   request and reply schemas under `stack/backend/src/spec/`; the
   contract tests in `stack/backend/tests/routes.test.ts`. Acceptance:
@@ -177,8 +185,8 @@ caller (principle 1: no second copy of identity).
 
 Nothing on this list is blocked on the Stack today except by scope
 already in the Stack's backlog: STACK-13 (generator jobs and the
-managed ComfyUI, which items 4 and 6 need for images), STACK-94 (the
-speech roles, which item 2's voice path needs), STACK-95 (systemd, which
+managed ComfyUI, which items 4 and 6 need for images), STACK-94b and
+94c (the speech roles, which item 2's voice path needs), STACK-95 (systemd, which
 item 1 needs on the robot), STACK-97 (the Catalog engine index, which
 item 5 needs for engines to show "available"). Each is filed in
 `stack/docs/BACKLOG.md` with its own acceptance.

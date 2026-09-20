@@ -35,7 +35,7 @@ are never copied. Nothing migrates Home until STACK-16.
 | **The refocus (2026-09-20)** | RF-01, RF-02, RF-03, RF-04, RF-05, RF-05b, RF-06 | The repo becomes the daemon and nothing else, on the shared libraries, with the seam to Home explicit. |
 | Studio proof | STACK-13, STACK-74, STACK-14, STACK-93 | Complete generator jobs and the bench protocol, measure the Studio with the full resident set, prove the governor across two engines. |
 | Home adoption | STACK-75, STACK-16 | Pin and test the Stack/Home wire, then move Home onto the Stack with rollback after the Studio proof. |
-| Speech and the robot | STACK-94, STACK-95, STACK-17 | The speech roles on the Mac, then the Linux service and the robot profile. |
+| Speech and the robot | STACK-94a to 94c, STACK-95, STACK-17 | The speech roles on the Mac, then the Linux service and the robot profile. |
 | Operations | STACK-96, STACK-96b, STACK-97, STACK-87 | Pin and rollback proven live, the Catalog engine index, health honesty kept through the rewrite. |
 
 ## The refocus (2026-09-20)
@@ -79,7 +79,7 @@ are never copied. Nothing migrates Home until STACK-16.
   `scripts/check.sh`, `CHANGELOG.md`. Mirror: the kept modules; Home's
   legacy `llmSupervisor.ts`, `ttsSupervisor.ts`, `embedSupervisor.ts`
   for the per-role lifecycle. Out of scope: generator execution
-  (STACK-13), the speech engines (STACK-94), systemd (STACK-95). Exit:
+  (STACK-13), the speech engines (STACK-94b, 94c), systemd (STACK-95). Exit:
   `bash scripts/check.sh` and a `code-review` at medium on this
   checkout.
 - [x] **RF-05 (M): the seam, explicit.** The wire shapes (the role
@@ -232,20 +232,60 @@ are never copied. Nothing migrates Home until STACK-16.
 
 ## Speech roles
 
-- [ ] **STACK-94 (L): `stt` and `tts` on the Mac.** whisper.cpp or MLX
-  Whisper for `stt` and the chosen TTS runtime for `tts` as spawned
-  engines behind `/v1/audio/transcriptions` and `/v1/audio/speech`,
-  with the streaming session for live speech and phrase-level TTS with
-  cancel. Needs a design note in `dev.md` naming the runtimes, their
-  pins and their wire, then chunking. Acceptance: a bundled two-second
-  clip transcribes and a short sentence renders through the public
-  routes with identity headers, scripted in the suite and live on the
-  Studio. Files: `backend/src/lib/engineCatalog.ts`,
-  `backend/src/lib/supervisor.ts`, `backend/src/routes/v1.ts`. Mirror:
-  Home's legacy `stt.ts` engine half and `ttsSupervisor.ts`. Out of
-  scope: the robot's body speech (managed, STACK-17); wakeword
-  installation (S, filed when a wakeword package exists in the Catalog).
-  Exit: `bash scripts/check.sh` and the live check.
+- [x] **STACK-94a (S): the speech design note.** `dev.md`, "The
+  speech roles: `stt` and `tts`, designed": sherpa-onnx 1.13.8 for
+  `stt` behind our thin spawned worker; Pocket TTS for `tts` (the
+  owner's live pick of 2026-09-04, Kokoro rejected by his ear) as a
+  managed engine through a pinned `uv`; the pins; the wire from
+  `spec/voice`; whisper.cpp's server recorded as the rejected path
+  with its cost. Landed on `main` with this line.
+- [ ] **STACK-94b (M): `stt` as a spawned engine.** The sherpa-onnx
+  runtime pin per platform in `engineCatalog.ts` with its sha256;
+  the `speech-worker` subcommand (`backend/src/speech/worker.ts`)
+  with `--role stt` over `bun:ffi`; Moonshine tiny-en int8 and Silero
+  VAD in the store as pinned packages; `POST /v1/audio/transcriptions`
+  and `WS /v1/audio/transcriptions/stream` with `spec/voice`'s
+  `SttWireEvent` mirrored under `backend/src/spec/`; identity headers
+  on every reply; the bundled clip
+  `backend/tests/fixtures/speech/clover-two-seconds.wav` transcribing
+  in the suite through a scripted engine and live on the dev machine
+  through the real worker (if admission refuses, recorded as with
+  STACK-96 and the live pass becomes 94b-live). Files:
+  `backend/src/lib/engineCatalog.ts`, `backend/src/lib/modelCatalog.ts`,
+  `backend/src/lib/supervisor.ts`, `backend/src/speech/`,
+  `backend/src/routes/v1.ts`, `backend/src/index.ts` (the subcommand;
+  the launch line differs under `bun run` and the compiled binary, both
+  tested); `engineCatalog.ts` selectors gain `linux` and a `name`
+  filter first. Mirror: the `llama-server` launch in `supervisor.ts`; Home's
+  `stt.ts` and `sttSession.ts` for the session's endpointing. Out of
+  scope: `tts`, the wake word, Home's `/api/stt/stream` pass-through.
+  Exit: `bash scripts/check.sh` and the live transcript in `dev.md`.
+- [ ] **STACK-94c (M): `tts` as a managed engine.** The `uv` 0.12.17
+  pin per platform in `engineCatalog.ts` with its sha256; Pocket TTS
+  3.1.0 in its own venv under `data/engines/pocket-tts/<version>/`,
+  started as `<venv>/bin/pocket-tts serve`, with the managed Python,
+  `UV_CACHE_DIR` and `HF_HUB_CACHE` under `data/`; the weight
+  repositories and their revisions in `modelCatalog.ts`;
+  the environment pinned by a committed per-platform requirements
+  file with hashes (`uv venv` plus `uv pip sync --require-hashes`,
+  flags verified on uv 0.12.17); the two weight repositories recorded
+  at the package's own revisions and what loaded read back from the
+  hub cache after the post-load check; `HOME` and every cache under
+  `data/`; the per-wire health probe for a `url` binding with identity
+  reported unverifiable; the `stack.engines.tts.hf_token` setting
+  declared `secret: true` in `settings.ts` and passed to the child as
+  `HF_TOKEN`, the settings route redacting a secret's value; `POST /v1/audio/speech`
+  forwarding `spec/voice`'s `/tts` form and streaming the WAV body
+  back with identity headers, cancel on client abort; one short sentence rendering in the suite through a scripted
+  engine and live on the dev machine. Files: `backend/src/lib/engineCatalog.ts`,
+  `backend/src/lib/modelCatalog.ts`, `backend/src/lib/supervisor.ts`,
+  `backend/src/lib/identity.ts`, `backend/src/settings.ts`,
+  `backend/src/routes/settings.ts`, `backend/src/routes/v1.ts`,
+  `backend/src/speech/`. Mirror: Home's `ttsSupervisor.ts` and
+  `spec/voice/ts/client.ts`. Out of scope: Home's sentence scheduler
+  and `normalizeForSpeech` (Home's); an OpenAI-shaped request until the
+  spec carries it. Exit: `bash scripts/check.sh` and the live render in
+  `dev.md`.
 
 ## Service and platforms
 

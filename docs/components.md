@@ -138,16 +138,14 @@ Engines per platform:
 
 | Engine | Build | Platform | Status |
 |---|---|---|---|
-| whisper.cpp | | | candidate (dev.md, Sizing and profiles; STACK-94) |
-| MLX Whisper | | | candidate (dev.md, Sizing and profiles; STACK-94) |
-| sherpa-onnx (Linux) | | | candidate (dev.md, Sizing and profiles; STACK-17) |
+| sherpa-onnx 1.13.8 behind the speech worker | | | candidate (dev.md, The speech roles; STACK-94b) |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| p16 | resident |  |  |  |  |  |  |  | not yet |
-| p32 | resident |  |  |  |  |  |  |  | not yet |
-| p64 | resident |  |  |  |  |  |  |  | not yet |
-| p128 | resident |  |  |  |  |  |  |  | not yet |
+| p16 | resident |  |  |  |  |  |  |  | candidate (Moonshine tiny-en int8 plus Silero VAD, pinned at STACK-94b; Whisper tiny.en or base.en the named alternative) |
+| p32 | resident |  |  |  |  |  |  |  | candidate (Moonshine tiny-en int8 plus Silero VAD, pinned at STACK-94b; Whisper tiny.en or base.en the named alternative) |
+| p64 | resident |  |  |  |  |  |  |  | candidate (Moonshine tiny-en int8 plus Silero VAD, pinned at STACK-94b; Whisper tiny.en or base.en the named alternative) |
+| p128 | resident |  |  |  |  |  |  |  | candidate (Moonshine tiny-en int8 plus Silero VAD, pinned at STACK-94b; Whisper tiny.en or base.en the named alternative) |
 
 ## tts (Voice out)
 
@@ -155,14 +153,14 @@ Engines per platform:
 
 | Engine | Build | Platform | Status |
 |---|---|---|---|
-| the chosen TTS runtime | | | candidate (dev.md, Sizing and profiles; STACK-94) |
+| Pocket TTS 3.1.0 through a pinned uv 0.12.17, managed | | | candidate (dev.md, The speech roles; STACK-94c) |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| p16 | resident |  |  |  |  |  |  |  | not yet |
-| p32 | resident |  |  |  |  |  |  |  | not yet |
-| p64 | resident |  |  |  |  |  |  |  | not yet |
-| p128 | resident |  |  |  |  |  |  |  | not yet |
+| p16 | resident |  |  |  |  |  |  |  | candidate (Pocket TTS weights, repository and revision pinned at STACK-94c) |
+| p32 | resident |  |  |  |  |  |  |  | candidate (Pocket TTS weights, repository and revision pinned at STACK-94c) |
+| p64 | resident |  |  |  |  |  |  |  | candidate (Pocket TTS weights, repository and revision pinned at STACK-94c) |
+| p128 | resident |  |  |  |  |  |  |  | candidate (Pocket TTS weights, repository and revision pinned at STACK-94c) |
 
 ## wakeword (Wake word)
 

@@ -38,12 +38,12 @@ export const ROLE_CANDIDATES: Partial<Record<string, RoleCandidate[]>> = {
     { name: "oMLX", kind: "engine", source: "dev.md, Engines and the supervisor; STACK-14, STACK-93" },
   ],
   stt: [
-    { name: "whisper.cpp", kind: "engine", source: "dev.md, Sizing and profiles; STACK-94" },
-    { name: "MLX Whisper", kind: "engine", source: "dev.md, Sizing and profiles; STACK-94" },
-    { name: "sherpa-onnx (Linux)", kind: "engine", source: "dev.md, Sizing and profiles; STACK-17" },
+    { name: "sherpa-onnx 1.13.8 behind the speech worker", kind: "engine", source: "dev.md, The speech roles; STACK-94b" },
+    { name: "Moonshine tiny-en int8 plus Silero VAD, pinned at STACK-94b; Whisper tiny.en or base.en the named alternative", kind: "model", source: "dev.md, The speech roles" },
   ],
   tts: [
-    { name: "the chosen TTS runtime", kind: "engine", source: "dev.md, Sizing and profiles; STACK-94" },
+    { name: "Pocket TTS 3.1.0 through a pinned uv 0.12.17, managed", kind: "engine", source: "dev.md, The speech roles; STACK-94c" },
+    { name: "Pocket TTS weights, repository and revision pinned at STACK-94c", kind: "model", source: "dev.md, The speech roles" },
   ],
   image: [
     { name: "ComfyUI (managed)", kind: "engine", source: "dev.md, Jobs; STACK-13" },

@@ -98,7 +98,7 @@ These sit under the org platform principles in
    engine to model. Home never names a binary and never needs to know
    which engine answered, though every reply says so in a header.
 2. **Hosts are engines, never the platform.** llama-server, mlx-serve,
-   oMLX, ComfyUI, whisper.cpp and the rest are spawned or managed
+   oMLX, ComfyUI, sherpa-onnx, Pocket TTS and the rest are spawned or managed
    behind one stable contract. Swapping an engine never changes Home.
 3. **One caller, Home.** The Stack serves the Home process on the same
    machine and nothing else. Anything that needs to know who is asking
@@ -194,8 +194,8 @@ residency class, in one `ROLES` constant in `backend/src/roles.ts`:
 | `chat`, `coding`, `judge`, `router` | OpenAI chat completions, streaming, tools | `chat` resident; `judge` resident and small; `coding` and `router` share `chat`'s model unless sized otherwise |
 | `embed`, `rerank` | OpenAI embeddings; a rerank endpoint in the same style | resident, small |
 | `vision` | chat completions with image parts | resident when the chat model is multimodal, else JIT |
-| `stt` | OpenAI audio transcriptions, plus a streaming session for live speech | resident, small |
-| `tts` | OpenAI audio speech, plus phrase-level streaming and cancel | resident, small |
+| `stt` | `spec/voice`'s transcribe form at the OpenAI audio path, plus the `SttWireEvent` streaming session for live speech | resident, small |
+| `tts` | `spec/voice`'s speech form and streaming WAV at the OpenAI audio path, phrase by phrase with cancel; an OpenAI-shaped request only when the spec carries it | resident, small |
 | `wakeword` | not served over HTTP; a model the Stack installs for a body process to load in-process | installed, not loaded |
 | `image`, `video`, `music` | jobs, with a synchronous OpenAI-shaped wrapper for simple callers | JIT, one generator at a time |
 
@@ -241,10 +241,17 @@ An engine is one of three kinds:
 - **`spawned`**: the Stack downloads a pinned build (pinned version,
   pinned URL, a checksum recorded in this repo), extracts it under
   `data/engines/`, spawns it, watches it, restarts it and stops it.
-  `llama-server` is the baseline everywhere; `mlx-serve`, `oMLX` and
-  the speech runtimes are spawned candidates on the Mac.
+  `llama-server` is the baseline everywhere; `mlx-serve` and `oMLX`
+  are spawned candidates on the Mac; the `stt` worker over
+  sherpa-onnx is spawned on the Mac and on any Linux host that is
+  not the robot, where the robot's own design record puts speech in
+  the body's one process, which its Stack would hold as a `managed`
+  engine serving the roles (STACK-94b, STACK-17, open question 1).
 - **`managed`**: a sidecar the Stack starts and stops but does not
-  build (ComfyUI). Same lifecycle, its own process.
+  compile: a Python program in an environment the Stack assembles
+  from pinned wheels (Pocket TTS through a pinned `uv`, STACK-94c),
+  or a server it starts where it finds it (ComfyUI, whose install
+  STACK-13 decides). Same lifecycle, its own process.
 - **`url`**: a read-only binding to a server Home's person already
   runs, set as one URL per role in the settings declaration. The
   Stack probes its health and identity and reports `offline_reason`
@@ -490,7 +497,7 @@ Home words the tier for a person; the Stack reports the facts.
 
 | Platform | Engines | First customer |
 |---|---|---|
-| macOS, Apple silicon | `llama-server` Metal (baseline), `mlx-serve`, `oMLX`, ComfyUI (managed), whisper.cpp or MLX Whisper, the chosen TTS runtime | MaiPai Home on the Mac Studio |
+| macOS, Apple silicon | `llama-server` Metal (baseline), `mlx-serve`, `oMLX`, ComfyUI (managed), sherpa-onnx for `stt` and Pocket TTS for `tts` (STACK-94b, 94c) | MaiPai Home on the Mac Studio |
 | Linux, ARM and x64 | `llama-server` (CPU, CUDA, or the accelerator the robot carries), sherpa-onnx for speech, ComfyUI where a GPU exists | MaiPai Bot |
 
 ### State on disk
@@ -667,6 +674,343 @@ bytes, minimum free 5.42 GB, worst pressure normal: pass. The pin's
 `measured` block in `modelCatalog.ts` carries the second run's
 footprint, so the components inventory prints it.
 
+## The speech roles: `stt` and `tts`, designed (STACK-94a, 2026-09-20)
+
+The design note the backlog item asked for, so 94b (`stt`) and 94c
+(`tts`) build against decisions already made. `stt` runs on
+sherpa-onnx behind a thin worker of ours, spawned like `llama-server`;
+`tts` runs on Pocket TTS, the owner's live pick, as a managed engine
+through a pinned `uv`. Both keep every rule the other engines keep:
+pinned, checksummed, under `data/`, governed, identity-bound.
+
+### `stt`: sherpa-onnx, and why
+
+**sherpa-onnx v1.13.8** (k2-fsa, released 2026-09-10, Apache 2.0).
+One upstream release publishes prebuilt bundles for every machine the
+Stack runs on: `sherpa-onnx-v1.13.8-osx-arm64-shared.tar.bz2` (20.3 MB),
+`sherpa-onnx-v1.13.8-linux-aarch64-shared-cpu.tar.bz2` (28.1 MB) and
+`sherpa-onnx-v1.13.8-linux-x64-shared.tar.bz2` (28.2 MB), each with the
+same C API in `lib/libsherpa-onnx-c-api` (`.dylib`, `.so`) and its
+header `include/sherpa-onnx/c-api/c-api.h`, plus `libonnxruntime`.
+Verified in the macOS archive on 2026-09-20. The one library holds
+what `stt` needs: offline recognizers for Moonshine and Whisper
+models and the Silero voice activity detector. It also holds offline
+TTS for Kokoro and Piper voices, with a generate callback that stops
+early when it returns 0 (c-api.h, "Return 1 to continue generation.
+Return 0 to stop early."); that is what the robot's body speech may
+use under STACK-17, not the Stack's `tts` pin (below).
+
+The reasons, in the order they decided it: prebuilt over hand-built
+(an upstream release we download and checksum, no build pipeline of
+our own for a Mac binary); one upstream release pinned on both
+platforms, so the Mac and the robot run the same code at the same
+version; the runtime the robot already uses (`bot/docs/dev.md`:
+Moonshine tiny and Silero through sherpa-onnx, CAM++ speaker
+embedding) and the one Home's current `stt.ts` binds in-process
+through `sherpa-onnx-node`, so Home's adoption is a move, not a
+translation.
+
+**Rejected: whisper.cpp's server.** Its releases (build tag b5130,
+2026-09-11) ship `whisper-server` in Linux arm64 and x64 tarballs and
+Windows zips, and for Apple only an xcframework, a library with no
+server binary. Running it on the Studio means compiling it from the
+pinned tag and hosting the result as a Catalog release asset: a build
+and signing pipeline we would own for one platform, beside a different
+upstream artifact on the robot, and a second speech runtime next to
+the one the robot already has. Whisper the model is not lost by this:
+sherpa-onnx loads `sherpa-onnx-whisper-tiny.en` (118 MB) and
+`base.en` (209 MB) from the same release, and either is the named
+alternative for `stt` if the Studio bench shows Moonshine's English
+accuracy is not enough. MLX Whisper is out for the same reason as
+whisper.cpp's server plus a Python runtime.
+
+### The `stt` worker: a spawned engine in every respect
+
+`backend/src/speech/worker.ts`, a subcommand of the Stack's own
+executable, `speech-worker --role stt --port <free> --model <dir>`.
+The supervisor builds the command the way the daemon itself was
+started: under the installed service, where `launchd.ts` and
+`systemd.ts` register the compiled binary and no source tree exists,
+it is `process.execPath speech-worker ...`; from a checkout under
+`bun run`, where `process.execPath` is `bun` itself and knows no
+subcommand, it is `process.execPath Bun.main speech-worker ...`. One
+helper in the supervisor decides, and the suite covers both branches,
+because the dev-machine live pass runs the checkout branch and the
+household runs the other. The worker loads the
+pinned library over `bun:ffi` (the pattern of the memory readers and
+`sd_notify`), loads the role's model package, and serves the role's
+wire on loopback. To the supervisor it is exactly `llama-server`: a
+pid and a port, the free-port probe, the liveness wait with the
+size-scaled load timeout, `GET /health` and a `GET /props`-shaped
+identity reply (`host: local`, `build: sherpa-onnx-1.13.8`, `model:
+<package name>`), the post-load check as a real request (the bundled
+clip), the measured footprint after load recorded on the model
+record, the process watch with restart on exit, a drain on stop, and
+the governor's admission before launch with the 1.3 times file-size
+estimate until measured. A crash in the worker takes one role's
+process and nothing else. A `url` binding still works when a person
+runs a server of their own that speaks the wire.
+
+The worker is the only code we write for speech, and it stays thin: no
+audio processing of its own beyond what the runtime provides. Two
+facts from the earlier bench work are rules here. Moonshine tiny
+returns an empty transcript when the buffer it gets starts with
+roughly half a second of silence, so the worker keeps at most 0.3 s
+of pre-roll before the onset the detector reports and, on an empty
+result for a segment the detector called speech, retries once from
+the onset. The robot's microphone array does echo cancellation on
+chip and the Mac's browser capture does it in `getUserMedia`, so the
+worker never adds its own; a speaker-loop echo reaching it is a
+capture bug upstream, not something to mask here.
+
+### `tts`: Pocket TTS, the owner's pick, as a managed engine
+
+**Kyutai Pocket TTS** (`pocket-tts` 3.1.0 on PyPI, MIT, CPU only,
+Python 3.10 to 3.14, torch 2.5 or later) is Home's `tts` by the
+owner's own ear: `home/docs/dev.md`'s TTS model decision of
+2026-09-04 live-tested it against Kokoro-82M, Chatterbox Turbo and
+Nano, Dia-1.6B and CSM-1B, with Jesse judging the listening tests
+himself, and it won on speed and quality (real-time factor 0.09 to
+0.10 on the Mac's CPU against Kokoro's 0.57, and audio streaming from
+its `/tts` route before the utterance finishes). **Kokoro is rejected
+for the Stack's pin for the reason recorded there**, "no feel, doesn't
+sound lifelike" on the legacy hub's shipped voice, and a better
+benchmark score is not the question a person answers when they
+listen. A design note here does not reverse a call that was his; if
+he does, the pin is a one-line change and sherpa-onnx's Kokoro
+package (`kokoro-en-v0_19.tar.bz2`, 319.6 MB, Apache 2.0) is the
+alternative already loadable by the `stt` worker's runtime.
+
+Pocket TTS is a Python package, and the Stack's own runtime rules do
+not bend for it: no install outside `data/`, a pinned version, a
+checksum, an update we choose. The way through is the one
+`home/spec/voice/README.md` named for this design pass: **`uv` as a
+pinned engine build.** astral-sh/uv 0.12.17 publishes
+`uv-aarch64-apple-darwin.tar.gz`, `uv-aarch64-unknown-linux-gnu.tar.gz`
+and `uv-x86_64-unknown-linux-gnu.tar.gz`; the Stack downloads the
+machine's one into `data/engines/uv/<tag>` with its sha256 recorded in
+`engineCatalog.ts`, and builds the engine's environment once under
+`data/engines/pocket-tts/<version>/`: `uv venv --python 3.12`, then
+`uv pip sync --require-hashes` from a requirements file we commit,
+`backend/src/speech/pocket-tts.<platform>.requirements.txt`, compiled
+with `uv pip compile --generate-hashes` on that platform (the Mac's
+at 94c from the environment that passed the live check; a Linux
+host's the first time one runs `tts`, because torch resolves to
+different wheels and extra packages there and one file cannot serve
+both with hashes on). That file is the environment's pin: every
+dependency (torch is the bulk, a few hundred MB) by version and hash,
+so two households on a platform install the same set and a rebuild
+after the sweep cannot change behaviour; an update to it is a change
+we make and release. The exact flags are verified against uv 0.12.17
+by the commit that runs them, never copied from this note. The engine
+is then `<venv>/bin/pocket-tts serve --port <free>`.
+`UV_PYTHON_INSTALL_DIR`, `UV_CACHE_DIR`, `HF_HUB_CACHE` and `HOME` for
+the child all point under `data/` (the last because Pocket TTS caches
+any `http(s)://` voice it is handed under `~/.cache/pocket_tts`, which
+Home's cloned voices reach it as), so the managed Python, the wheels,
+the weights and the voice cache land in the data directory and
+nowhere else, and the sweep and the uninstall find them.
+
+The weights, and what the engine fetches on its own: the package pins
+its own files in its config, each `hf://` path at its own revision
+(`kyutai/pocket-tts` for the weights, gated behind a token, with an
+ungated twin `kyutai/pocket-tts-without-voice-cloning` at its own
+revision that it falls back to when the gated download fails; the
+tokenizer from the ungated repository at that same revision; every
+preset voice, `alba` and the rest, as a precomputed embedding in the
+ungated repository at a third revision, which is why presets keep
+working with no token, or with a wrong one once the files are cached;
+a wrong token on a cold cache is a load failure the Stack reports,
+because the hub refuses invalid credentials on the ungated fetch
+too), and a community voice Home
+hands it as an `hf://kyutai/tts-voices/...` WAV is downloaded and
+encoded through the cloning path, which needs the gated weights and
+answers 500 when the fallback loaded instead; the engine keeps a
+small cache of encoded voices in memory on top of the hub cache. The
+Stack does not pre-download
+any of it and does not run the engine offline: the engine fetches
+into the Stack's `HF_HUB_CACHE` under `data/` at first start and on
+the first use of each voice, through the person's token when one is
+set. What the Stack does own is the record: `modelCatalog.ts` lists
+both weight repositories with every revision the package's config
+names (a repository can appear at more than one, the ungated one
+for weights and tokenizer at one revision and for voice embeddings
+at another), read from the installed config at 94c and never chosen
+apart from it, and
+after the post-load check the supervisor reads which snapshot the
+hub cache holds and records that repository and revision on the model
+record with the files' checksums, so `x-maipai-model` and
+`x-maipai-revision` name what loaded, not the config's first choice.
+A cache that later holds neither (a sweep, a person's deletion) makes
+the role `installed`, not `ready`, until the next start fetches
+again. The first start on a machine builds the environment (a job
+with progress, like an engine install) and then loads with the
+weights' download inside the load timeout, scaled to their size; the
+sweep keeps one previous environment.
+
+To the supervisor it is a `managed` engine, the ComfyUI shape: the
+Stack starts it, waits for `GET /health` to say `healthy`, runs the
+post-load check (one short phrase through `/tts`, the first bytes
+back within the load timeout), records the measured footprint,
+watches the process and restarts it on exit, drains and stops it, and
+admits it through the governor first. Identity: `x-maipai-engine` is
+`local pocket-tts-3.1.0`, `x-maipai-model` the weights repository,
+`x-maipai-revision` the revision recorded from the cache. A `url`
+binding to a `pocket-tts serve` a person already runs needs its own
+probe, because the supervisor's reads `llama-server`'s `/health`
+(`status: ok`) and `/props`, while Pocket TTS answers
+`{"status": "healthy"}` and exposes no version or model route at all
+(`/`, `/health`, `/tts`). 94c gives the identity reader a per-wire
+probe for `speech`, and the honest claim for such a binding is that
+its identity cannot be verified: it is `ready` on health alone, its
+reply headers say `build: unknown` and `model: unknown`, and a
+`stack.engines.tts.expected_version` declaration cannot be checked
+against it and is reported as such, never as a match.
+
+### The wire, from the spec, never a second definition
+
+`stt` serves `POST /v1/audio/transcriptions`, the address the roles
+table gives the role, with the form `spec/voice`'s transcribe route
+takes (multipart `file`, nothing else), answering
+`SttTranscribeResponse` (`{ text }`) from `spec/voice/ts/sttTypes.ts`:
+16-bit mono PCM WAV in, resampled to 16 kHz by the worker when it is
+not already. The streaming session is `WS
+/v1/audio/transcriptions/stream` with that file's `SttWireEvent`
+contract unchanged: the client sends binary frames, each a
+little-endian `Float32Array` of 16 kHz mono samples with no envelope,
+and may send one text frame `{"t":"end"}` to flush the utterance in
+progress; the server sends only JSON events, `ready`, `vad` with
+`speaking` and `rms`, `partial`, `final`, `no_speech` and `error`.
+Home's `/api/stt/stream` becomes a pass-through to this session when
+Home adopts the Stack. The Stack's Zod mirror of the event union lives
+under `backend/src/spec/` with the other wire shapes until RF-05b
+moves them to `shared/spec`, and the fixtures round-trip it the same
+way.
+
+`tts` serves `POST /v1/audio/speech`, the address the roles table
+gives the role, with exactly the request and result `spec/voice`
+already defines: `TtsSynthesizeRequest` as Pocket TTS's own multipart
+form (`text`, optional `voice_url` naming a preset voice or a voice
+URL), and `TtsSynthesizeResult`, a chunked `audio/wav` body whose
+44-byte header carries the format (sample rate, channels, bits per
+sample) with a placeholder data size because the length is unknown at
+the first byte, then raw PCM until the stream ends. The Stack forwards
+the form to the engine's `/tts` and streams the body back with the
+identity headers added; no request shape is invented here, and an
+OpenAI-shaped `model`, `input`, `voice` request is offered only if
+the spec gains it first. `routes/v1.ts` today declares both audio
+routes with a JSON `RoleRequest` body (`model`, `quality`, `stream`,
+`timeout_ms`, plus `file` or `input`), a placeholder from the fresh
+backend that no caller uses (Home still runs its own speech); 94b and
+94c replace that declaration with the spec's forms before the first
+caller exists, so the additive rule is kept. The `RoleRequest`
+fields that mean something on these paths, `model` and `timeout_ms`,
+travel as text fields of the same multipart form, the way the spec's
+own form carries `voice_url` beside `text` and OpenAI's transcription
+form carries `model`; `model` is optional here because each audio
+path serves one role: `role-request.schema.json` requires it today
+and the Zod mirror has `min(1)`, so 94b scopes that requirement to
+the JSON wires in the schema, the mirror and the fixtures together,
+not in a description (`quality` has no meaning here; both roles
+declare none). Home's `PocketTtsClient` moves to the Stack by changing its
+paths and its health probe (`/tts` becomes `/v1/audio/speech`, the
+engine's `{ status: "healthy" }` becomes the Stack's role state), the
+form and the streaming reply unchanged, with one seam to name: voice
+cloning
+needs the household's Hugging Face token, which Home today passes as
+`HF_TOKEN` to the child it spawns and restarts on change. Once the
+Stack owns the process, the token is a secret-kind setting on the
+`tts` engine, `stack.engines.tts.hf_token`, encrypted at rest by
+`@maipai/core`'s secrets and never returned by the settings route, a
+`needs_restart` change the Stack applies with a restart; Home's
+`/api/voice/hf-token` becomes a write to it. That line goes in the
+adoption hand-off with the `SettingsKey` restriction. Home's
+`streamingWavPlayer.ts` reads nothing but the format from the header,
+so the first phrase is audible before the last is generated.
+Phrase-level streaming is Home's sentence scheduler sending each
+completed clause as its own request, with the text already through
+Home's `normalizeForSpeech` (the Stack never normalizes; one
+implementation, in Home). Cancel is the client aborting the request:
+the Stack closes its side to the engine and the reply ends as a
+normal end, never a retirement. Stated honestly: Pocket TTS does not
+stop generating when the connection drops, so the rest of that
+phrase's CPU is spent; on the Mac that is under a second per clause
+at its measured real-time factor. The next phrase starts at once
+(the server runs requests in parallel threads) but shares the CPU
+with the abandoned generation and is not isolated from it: the
+package documents its generator as not thread-safe on one model
+instance, and the server holds one. 94c measures whether a
+barge-in followed by the next clause stays under the first-audio
+budget on the Mac; if it does not, the route stops closing its side
+on abort and instead drains the abandoned reply to its end, dropping
+the bytes, and starts the next phrase after it, because the engine's
+wire (`/`, `/health`, `/tts`) offers no other signal that a
+generation finished; the cost is at most that same sub-second. A
+cancel that stops the runtime itself is the property sherpa-onnx's
+callback has and Pocket TTS does not, and it is recorded here as the
+one thing the owner's pick gives up.
+
+Every reply from both roles carries the identity headers of
+`spec/role-reply-headers`. For `stt`, `x-maipai-engine` is `local
+sherpa-onnx-1.13.8`, `x-maipai-model` the model package name,
+`x-maipai-revision` the package archive's sha256, because sherpa-onnx
+publishes its model archives on rolling release tags (`asr-models`)
+where an asset can be replaced under the same name: the checksum is
+the pin, and a mismatch at download is a refusal and a deliberate
+re-pin, never a quiet update. `ready` for these roles is time-bound
+and identity-bound like every other (STACK-87).
+
+### The pins
+
+| Role | Package | Size | Where | Notes |
+|---|---|---|---|---|
+| `stt` runtime | `sherpa-onnx-v1.13.8-<platform>-shared` | 20 to 28 MB | k2-fsa/sherpa-onnx release `v1.13.8` | one archive per platform, the C API library and `libonnxruntime` |
+| `stt` | `sherpa-onnx-moonshine-tiny-en-int8.tar.bz2` | 107.6 MB | release tag `asr-models` | Moonshine tiny English, int8; Home's plan keeps this path |
+| `stt` | `silero_vad.onnx` | 0.6 MB | release tag `asr-models` | the voice activity detector the session and the endpointer use |
+| `stt`, alternative, named not pinned | `sherpa-onnx-whisper-tiny.en`, `base.en` | 118 MB, 209 MB | release tag `asr-models` | same runtime; pinned only if the Studio bench asks for it |
+| `tts` runtime | `uv-<platform>.tar.gz` | about 20 MB | astral-sh/uv release `0.12.17` | runs `pocket-tts==3.1.0 serve` with a managed Python 3.12 under `data/` |
+| `tts` | Pocket TTS weights, tokenizer, preset voice embeddings | recorded at 94c | Hugging Face hub, `kyutai/pocket-tts` (gated, with a token) or `kyutai/pocket-tts-without-voice-cloning`, at the revisions the package's config names (the embeddings at their own) | fetched by the engine into the Stack's `HF_HUB_CACHE`; what loaded is read back and recorded |
+| `tts`, alternative, rejected by the owner's ear | `kokoro-en-v0_19.tar.bz2` | 319.6 MB | release tag `tts-models` | Kokoro 82M through the `stt` worker's runtime, if the owner ever reverses 2026-09-04 |
+| `tts`, robot, not the Stack's pin | Piper or Kokoro through sherpa-onnx | | release tag `tts-models` | the robot's body speech process under STACK-17 decides; `bot/docs/dev.md` names Piper today and Pocket TTS on the Pi as the measured candidate |
+
+`engineCatalog.ts` today holds one engine: its selectors
+(`selectEngineBinary`, `installedEnginePin`, identity's
+`installedEngineForMachine`) pick the first pin by platform and
+architecture with no name filter, and `platform` knows `darwin` and
+`win32` only. 94b adds `linux` and a `name` parameter to every
+selector before the first sherpa-onnx row, and 94c the `uv` rows
+after that, so a new pin can never be launched as `llama-server`.
+The sha256 of every archive is recorded in `engineCatalog.ts` and
+`modelCatalog.ts` at the commit that first downloads it (94b for the
+`stt` runtime and packages, 94c for `uv` and the weights), from the
+bytes that commit verified, and each package's licence is read from
+the file the archive carries, never assumed from the project's.
+Memory: the estimates before the first measurement are 0.2 GB for
+Moonshine tiny with Silero (the 1.3 times rule on the extracted size)
+and 1 GB for Pocket TTS with torch resident, replaced by the measured
+footprints on the model records and in the components inventory.
+Both roles are `resident, small`, as the roles table says.
+
+### The chunks
+
+94b: the sherpa-onnx pin per platform in `engineCatalog.ts`; the
+`speech-worker` subcommand with `--role stt`; the two `stt` packages
+in the store; the route and the streaming session; the bundled clip
+`backend/tests/fixtures/speech/clover-two-seconds.wav` (16 kHz, mono,
+16-bit, two seconds of one persona-roster sentence, synthesized on the
+dev machine and checked in, never household audio) transcribing in
+the suite through a scripted engine and live on this laptop through
+the real worker, memory permitting; if admission refuses, the refusal
+is recorded as with STACK-96 and the live pass becomes 94b-live.
+94c: the `uv` pin per platform; Pocket TTS as a managed engine with
+the weights pinned; the route forwarding the spec's form and
+streaming the body with cancel; one short sentence rendering live.
+Out of scope for all three: the wake word (installed, not served; its
+own S item when a wake-word package exists in the Catalog), the
+robot's managed body process (STACK-17), Home's sentence scheduler
+and normalization (Home's), and speaker identification (the robot's
+body, `bot/docs/dev.md`).
+
 ## Measured so far
 
 On an Apple silicon Mac (2026-09-18, a temporary copy of the owner's
@@ -686,8 +1030,11 @@ measurement and the first with the full resident set.
 1. **Bot's split.** Recommended: wake word and voice activity stay in
    the robot's body process (sensor processing, like the camera); STT,
    TTS, chat, judge and embed are Stack roles on the robot's own Linux
-   Stack. The robot design pass confirms or amends this in
-   `bot/docs/dev.md`.
+   Stack. `bot/docs/dev.md` today keeps STT and TTS in the body's one
+   sherpa-onnx process; the two agree if that process is the `managed`
+   engine serving the `stt` and `tts` roles, which is how the speech
+   design note (STACK-94a) reads it, and STACK-17 settles it. The
+   robot design pass confirms or amends this in `bot/docs/dev.md`.
 2. **The second engine.** `mlx-serve` and `oMLX` are the Mac
    candidates beside `llama-server`; the Studio bench decides which
    gets the second adapter.
