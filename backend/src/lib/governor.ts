@@ -64,6 +64,8 @@ export interface GovernorStatus {
   availablePercent: number;
   pressure: MemoryPressure;
   memoryReadingDegraded: boolean;
+  tier: GovernorTier;
+  marginBytes: number;
   loaded: GovernorLoadedModel[];
   queue: Array<{ id: string; position: number; kind: GovernorKind }>;
 }
@@ -263,6 +265,8 @@ export function getGovernorStatus(): GovernorStatus {
     availablePercent,
     pressure,
     memoryReadingDegraded,
+    tier: activeTier,
+    marginBytes: workingMargin(),
     loaded: [...loaded.values()].map(({ peakBaselineBytes: _baseline, processBreaches: _breaches, keepAliveSeconds: _keepAlive, ...item }) => item),
     queue: queue.map((entry, index) => ({ id: entry.request.id, position: index + 1, kind: entry.request.kind })),
   };

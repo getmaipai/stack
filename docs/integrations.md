@@ -106,7 +106,7 @@ Each item has one fix action that Home renders as a button.
 | Readiness | `POST /stack/v1/check`; `GET /stack/v1/check/latest` | the check Home schedules and the "Check now" button; the latest run carries `stale` and `staleReason` once a model, engine or setting changed after it ran |
 | Updates | `GET /stack/v1/updates`; `POST /stack/v1/updates/check`; `POST /stack/v1/updates/engines/{name}/{apply,rollback}` | the Updates page: installed, available, last checked, notes, go back |
 | Events | `GET /stack/v1/events` (SSE) | Home's notification bridge, below |
-| Hardware and budget | `GET /stack/v1/hardware`; `GET /stack/v1/hardware/budget`; `GET /stack/v1/hardware/budget/decisions` | the facts behind "what your computer can run", the memory picture, the governor's last 200 decisions |
+| Hardware and budget | `GET /stack/v1/hardware`; `GET /stack/v1/hardware/budget`; `GET /stack/v1/hardware/budget/decisions` | the facts behind "what your computer can run", the memory picture (with the active `tier`, the in-force `margin_bytes` and `reading_degraded`), the governor's last 200 decisions |
 | Settings | `GET /stack/v1/settings` (the declaration with values); `PUT /stack/v1/settings`; `POST /stack/v1/settings/apply` | Home's generic settings renderer, below |
 | Storage | `POST /stack/v1/storage/sweep` | the prune Home schedules (orphaned blobs past their grace period) |
 | Privacy | `GET /stack/v1/privacy` | the outbound endpoint rows for Home's privacy page, below |

@@ -7,9 +7,14 @@ import { serveOptions } from "@/daemon";
 import { __resetHealthForTests, raise } from "@/lib/health";
 import { clearModelsForTests, upsertModel } from "@/lib/modelStore";
 import { getProcess, resetSupervisorForTests, scriptedProcess, setSupervisorFactoryForTests, EngineUnavailableError } from "@/lib/supervisor";
+import { __resetGovernorForTests, __setGovernorTuningForTestsOnly } from "@/lib/governor";
+import { __setMemoryReaderForTests } from "@/lib/memory";
+import { scriptedMemoryReader } from "@/lib/memory/scripted";
 import { __resetSettingsForTests } from "@/settings";
 
-beforeEach(() => { __resetHealthForTests(); __resetSettingsForTests(); clearModelsForTests(); setSupervisorFactoryForTests(async (role) => scriptedProcess(role)); });
+const GB = 1_073_741_824;
+
+beforeEach(() => { __resetHealthForTests(); __resetSettingsForTests(); clearModelsForTests(); setSupervisorFactoryForTests(async (role) => scriptedProcess(role)); __resetGovernorForTests(); });
 afterEach(() => { setSupervisorFactoryForTests(null); resetSupervisorForTests(); clearModelsForTests(); });
 
 const json = (body: unknown) => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -128,13 +133,46 @@ test("hardware, budget, backup and the diagnostics bundle answer as data without
   const hardware = await (await app.request("/stack/v1/hardware")).json() as { hardware: Record<string, unknown>; tiers: unknown[] };
   expect(hardware.hardware.computerName).toBeUndefined();
   expect(hardware.tiers).toHaveLength(4);
-  const budget = await (await app.request("/stack/v1/hardware/budget")).json() as { capBytes: number; pressure: string };
+  const budget = await (await app.request("/stack/v1/hardware/budget")).json() as { capBytes: number; pressure: string; tier: string; margin_bytes: number; reading_degraded: boolean };
   expect(budget.capBytes).toBeGreaterThan(0);
+  expect(budget.tier).toBe("p16");
+  expect(budget.margin_bytes).toBe(4 * GB);
+  expect(budget.reading_degraded).toBe(false);
   const backup = await (await app.request("/stack/v1/backup")).json() as { data_dir: string; paths: Array<{ mode: string }> };
   expect(backup.paths.map((path) => path.mode)).toEqual(["include", "include", "exclude", "exclude"]);
   const bundle = await app.request("/stack/v1/diagnostics");
   expect(bundle.headers.get("content-type")).toBe("application/zip");
   expect((await bundle.arrayBuffer()).byteLength).toBeGreaterThan(100);
+});
+
+test("the budget route reports the active tier, its margin and a degraded reading", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 30 * GB, tier: "p128" });
+  const p128 = await (await app.request("/stack/v1/hardware/budget")).json() as { tier: string; margin_bytes: number; reading_degraded: boolean };
+  expect(p128.tier).toBe("p128");
+  expect(p128.margin_bytes).toBe(20 * GB);
+  expect(p128.reading_degraded).toBe(false);
+  __resetGovernorForTests();
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 16 * GB, freeMemoryBytes: 4 * GB, tier: "p16" });
+  const reader = scriptedMemoryReader([
+    { probeError: "The kernel's ledger was unreachable." },
+    { probeError: "The kernel's ledger was unreachable." },
+    { probeError: "The kernel's ledger was unreachable." },
+    { probeError: "The kernel's ledger was unreachable." },
+    { totalBytes: 16 * GB, freeBytes: 4 * GB, availablePercent: 25, pressure: "normal", degraded: false },
+  ]);
+  __setMemoryReaderForTests(reader);
+  const startGovernor = (await import("@/lib/governor")).startGovernor;
+  const stop = startGovernor({ pid: 1, pollMs: 1, memoryReader: reader });
+  try {
+    const degraded = await (await app.request("/stack/v1/hardware/budget")).json() as { tier: string; margin_bytes: number; reading_degraded: boolean };
+    expect(degraded.reading_degraded).toBe(true);
+    expect(degraded.tier).toBe("p16");
+    expect(degraded.margin_bytes).toBe(4 * GB);
+  } finally {
+    stop();
+    __setMemoryReaderForTests(scriptedMemoryReader([]));
+    __resetGovernorForTests();
+  }
 });
 
 test("an unknown path is a JSON 404 and there is no console to fall back to", async () => {

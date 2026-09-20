@@ -190,7 +190,8 @@ are never copied. Nothing migrates Home until STACK-16.
   (`watchProcessMemory`); a test holds a p128 machine to p128's 20 GB
   margin. `governor.ts` untouched (the governor lane holds it; the
   budget route reporting the tier joins STACK-06c's callback work).
-  Landed on `main` with this line.
+   Landed on `main` with this line.
+- [x] **The budget route reports the tier** (S); verified at this commit.
 - [x] **STACK-06c (S): the governor drains its queue on memory
   changes.** Governor half verified at this commit; jobs.ts drops its
   kick in a follow-up (STACK-06d, S). Today a queued request is re-admitted only inside

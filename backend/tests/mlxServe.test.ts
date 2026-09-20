@@ -238,7 +238,9 @@ test("the governor sizes the two chat engines by their own multipliers and holds
     expect("id" in gguf).toBe(true);
     expect(getGovernorStatus().loaded.find((item) => item.id === "chat:gguf")?.peakBytes).toBe(Math.ceil(1_834_426_016 * 1.3));
     // A third resident that would eat into the p16 margin (4 GB) waits: 6 GB more of the 9 GB free would leave 3 GB.
-    expect(await admit({ id: "embed:big", kind: "resident", requestedBytes: 6 * GB, engine: "llama-server" })).toEqual({ queued: true, position: 1 });
+    const embed = await admit({ id: "embed:big", kind: "resident", requestedBytes: 6 * GB, engine: "llama-server" });
+    expect(embed).toMatchObject({ queued: true, position: 1 });
+    expect("admitted" in embed && typeof (embed as { admitted: Promise<unknown> }).admitted).toBe("object");
     release(mlx as { id: string; kind: "resident"; requestedBytes: number });
     release(gguf as { id: string; kind: "resident"; requestedBytes: number });
   } finally {
