@@ -58,7 +58,10 @@
   /* The five named hues beyond electric blue (which is --primary), and
    * the eight category colors that use them (spec section 4). Each
    * points at --primary or a --hue-* var, never a repeated literal, so
-   * the two can't drift apart. */
+   * the two can't drift apart. --hue-blue is an alias for --primary so
+   * status.ts's generic `--hue-<hue>` formula never has to special-case
+   * blue. */
+  --hue-blue: var(--primary);
   --hue-violet: #a434ff;
   --hue-teal: #00e3ae;
   --hue-orange: #ff8a35;
