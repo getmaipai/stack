@@ -83,8 +83,9 @@ one, the Stack owns the engines. This table is that rule applied.
 ## Layout
 
 `backend/` (Bun, Hono with `@hono/zod-openapi`, Zod, Drizzle/SQLite;
-imports `@maipai/core` and `@maipai/spec` from a sibling
-`getmaipai/shared` checkout pinned by tag), `docs/` (dev tier only:
+imports `@maipai/core` from a sibling `getmaipai/shared` checkout
+pinned by tag, `core-v0.1.0` today, as a `file:` dependency in
+`backend/package.json`; `@maipai/spec` joins it at RF-05), `docs/` (dev tier only:
 `dev.md`, `integrations.md`, `BACKLOG.md`, `api/` generated, `plans/`
 history), `scripts/check.sh` (the gate: the backend's typecheck, API
 docs drift, tests, then the pinned `@maipai/standards` core, which

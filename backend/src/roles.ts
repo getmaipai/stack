@@ -43,7 +43,6 @@ export interface RoleDefinition {
   residency: Residency;
   endpoints: string[];
   quality: Quality[];
-  description: string;
   sharesModelWith?: RoleId;
 }
 
@@ -54,7 +53,6 @@ export const ROLES = {
     residency: "resident",
     endpoints: ["/v1/chat/completions"],
     quality: ["fast", "everyday", "best"],
-    description: "Talk with your local AI.",
   },
   coding: {
     label: "Coding",
@@ -62,7 +60,6 @@ export const ROLES = {
     residency: "resident",
     endpoints: ["/v1/chat/completions"],
     quality: ["fast", "everyday", "best"],
-    description: "Build and understand things with local AI.",
     sharesModelWith: "chat",
   },
   judge: {
@@ -71,7 +68,6 @@ export const ROLES = {
     residency: "resident",
     endpoints: ["/v1/chat/completions"],
     quality: [],
-    description: "Check a local AI answer before it is used.",
     sharesModelWith: "chat",
   },
   router: {
@@ -80,7 +76,6 @@ export const ROLES = {
     residency: "resident",
     endpoints: ["/v1/chat/completions"],
     quality: [],
-    description: "Choose the right local capability for a request.",
     sharesModelWith: "chat",
   },
   embed: {
@@ -89,7 +84,6 @@ export const ROLES = {
     residency: "resident",
     endpoints: ["/v1/embeddings"],
     quality: [],
-    description: "Find related things in your local data.",
   },
   rerank: {
     label: "Re-rank",
@@ -97,7 +91,6 @@ export const ROLES = {
     residency: "resident",
     endpoints: [],
     quality: [],
-    description: "Put the most useful local results first.",
   },
   vision: {
     label: "Vision",
@@ -105,7 +98,6 @@ export const ROLES = {
     residency: "jit",
     endpoints: ["/v1/chat/completions"],
     quality: ["fast", "everyday", "best"],
-    description: "Understand an image on your computer.",
     sharesModelWith: "chat",
   },
   stt: {
@@ -114,7 +106,6 @@ export const ROLES = {
     residency: "resident",
     endpoints: ["/v1/audio/transcriptions"],
     quality: [],
-    description: "Turn your voice into words locally.",
   },
   tts: {
     label: "Voice out",
@@ -122,7 +113,6 @@ export const ROLES = {
     residency: "resident",
     endpoints: ["/v1/audio/speech"],
     quality: [],
-    description: "Read words aloud on your computer.",
   },
   wakeword: {
     label: "Wake word",
@@ -130,7 +120,6 @@ export const ROLES = {
     residency: "installed",
     endpoints: [],
     quality: [],
-    description: "Listen for a wake word in a body process.",
   },
   image: {
     label: "Images",
@@ -138,7 +127,6 @@ export const ROLES = {
     residency: "jit",
     endpoints: ["/v1/images/generations"],
     quality: ["fast", "everyday", "best"],
-    description: "Make an image on your computer.",
   },
   video: {
     label: "Video",
@@ -146,7 +134,6 @@ export const ROLES = {
     residency: "jit",
     endpoints: [],
     quality: ["fast", "everyday", "best"],
-    description: "Make a video on your computer.",
   },
   music: {
     label: "Music",
@@ -154,7 +141,6 @@ export const ROLES = {
     residency: "jit",
     endpoints: [],
     quality: ["fast", "everyday", "best"],
-    description: "Make music on your computer.",
   },
 } satisfies Record<RoleId, RoleDefinition>;
 
@@ -164,7 +150,6 @@ export const RoleDefinitionSchema = z.object({
   residency: ResidencySchema,
   endpoints: z.array(z.string()),
   quality: z.array(QualitySchema),
-  description: z.string(),
   sharesModelWith: RoleIdSchema.optional(),
 });
 

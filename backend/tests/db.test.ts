@@ -15,7 +15,9 @@ afterEach(() => {
   rmSync(testDataDir, { recursive: true, force: true });
 });
 
-test("opens, migrates, and stamps the database", () => {
-  const rows = db.select().from(meta).all();
-  expect(rows).toContainEqual({ key: "schema_version", value: "1" });
+test("opens and migrates the three-table state database", () => {
+  const { sqlite } = require("@/db") as { sqlite: import("bun:sqlite").Database };
+  const tables = sqlite.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE '__drizzle%' ORDER BY name").all() as Array<{ name: string }>;
+  expect(tables.map((row) => row.name)).toEqual(["health", "meta", "models"]);
+  expect(db.select().from(meta).all()).toEqual([]);
 });

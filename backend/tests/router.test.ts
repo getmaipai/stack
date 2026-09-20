@@ -1,36 +1,36 @@
-import { expect, test } from "bun:test";
-import { app } from "@/app";
-import { resolveRole, UnknownRoleError } from "@/lib/router";
-import { testClientHeaders } from "./authTest";
+import { afterEach, beforeEach, expect, test } from "bun:test";
+import { clearModelsForTests, upsertModel } from "@/lib/modelStore";
+import { noEngineResponse, resolveRole, resolveRoleState, UnknownRoleError, UnverifiedModelError } from "@/lib/router";
+import { getProcess, resetSupervisorForTests, scriptedProcess, setSupervisorFactoryForTests } from "@/lib/supervisor";
+import { READY_TTL_MS } from "@/roles";
 
-test("a role name resolves without a binding", () => {
-  const result = resolveRole("chat");
-  expect(result.role).toBe("chat");
-  expect(result.binding).toBeNull();
-  expect(["notInstalled", "installed", "loading", "ready", "busy", "stopped", "offline"]).toContain(result.state);
+beforeEach(() => { clearModelsForTests(); setSupervisorFactoryForTests(async (role) => scriptedProcess(role)); });
+afterEach(() => { setSupervisorFactoryForTests(null); resetSupervisorForTests(); clearModelsForTests(); });
+
+test("a role id resolves to itself; an installed, verified model id resolves to its first role", () => {
+  expect(resolveRole("chat")).toEqual({ role: "chat", modelId: null });
+  upsertModel({ id: "m-verified", roles: ["embed"], source: "catalog", provenance: {}, revision: "r", sha256: "a".repeat(64), licence: "MIT", verifiedAt: new Date().toISOString() });
+  expect(resolveRole("m-verified")).toEqual({ role: "embed", modelId: "m-verified" });
 });
 
-test("an unknown role or model is rejected with the declared roles", async () => {
-  expect(() => resolveRole("made-up-model")).toThrow(UnknownRoleError);
-  const response = await app.request("/v1/chat/completions", {
-    method: "POST",
-    headers: { ...testClientHeaders, "content-type": "application/json" },
-    body: JSON.stringify({ model: "made-up-model", messages: [] }),
-  });
-  expect(response.status).toBe(400);
-  expect(response.headers.get("x-maipai-engine")).toBe("none");
-  expect((await response.json() as { roles: string[] }).roles).toContain("chat");
+test("an unknown id is a 400 with the role list; an unverified model is a 409 naming what is missing", () => {
+  expect(() => resolveRole("nope")).toThrow(UnknownRoleError);
+  upsertModel({ id: "m-unverified", roles: ["chat"], source: "huggingface", provenance: {}, revision: "r", sha256: null, licence: null });
+  try { resolveRole("m-unverified"); throw new Error("expected a throw"); }
+  catch (error) { expect(error).toBeInstanceOf(UnverifiedModelError); expect((error as UnverifiedModelError).missing).toEqual(["sha256", "licence", "verifiedAt"]); }
 });
 
-test("an unbound role is a 503 with a reason and empty identity headers", async () => {
-  const response = await app.request("/v1/chat/completions", {
-    method: "POST",
-    headers: { ...testClientHeaders, "content-type": "application/json" },
-    body: JSON.stringify({ model: "chat", messages: [] }),
-  });
+test("ready is time-bound: a stale last request degrades to loaded", async () => {
+  await getProcess("chat");
+  expect(resolveRoleState("chat").state).toBe("ready");
+  const realNow = Date.now;
+  Date.now = () => realNow() + READY_TTL_MS + 1;
+  try { expect(resolveRoleState("chat").state).toBe("loaded"); } finally { Date.now = realNow; }
+});
+
+test("no engine is never a 404: the 503 names the role, its state and the reason, with none identity", () => {
+  const response = noEngineResponse("tts", "No tts engine is installed on this machine.");
   expect(response.status).toBe(503);
-  expect((await response.json() as { offline_reason: string }).offline_reason).toBeTruthy();
-  expect(response.headers.get("x-maipai-engine")).toBe("none");
-  expect(response.headers.get("x-maipai-model")).toBe("none");
-  expect(response.headers.get("x-maipai-revision")).toBe("none");
+  expect(response.body).toMatchObject({ role: "tts", state: "notInstalled", offline_reason: "No tts engine is installed on this machine." });
+  expect(response.headers["x-maipai-engine"]).toBe("none");
 });

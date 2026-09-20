@@ -1,83 +1,79 @@
+// The model list with provenance, install and runtime state; install by
+// pin, import a verified local file, remove, and the load, unload, pin
+// and unpin actions. Nothing installs without url, sha256, licence and
+// revision (goal 4).
 import { createRoute, z } from "@hono/zod-openapi";
-import { existsSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
-import { apiRouter, ErrorSchema, idParamSchema } from "@/lib/openapi";
-import { requireClientOrOperator } from "@/lib/clients";
-import { requireOperator } from "@/lib/operator";
-import { installCatalogModel, installHuggingFaceModel, listModels, reconcileModelSize, removeModel, upsertModel } from "@/lib/modelStore";
-import { getModelUsage, modelRuntimeState, performModelAction, updateModelPlacement } from "@/lib/modelGroups";
-import { importCandidate, importPath, scanImports, type ImportCandidate } from "@/lib/store/importScan";
+import { existsSync } from "node:fs";
+import { basename, join } from "node:path";
+import { apiRouter, ErrorSchema, idParamSchema } from "@maipai/core/src/openapi";
+import type { AppEnv } from "@/types";
+import { installCatalogModel, listModels, removeModel, upsertModel, type ModelRecord } from "@/lib/modelStore";
 import { readModelManifest } from "@/lib/store/manifests";
-import { invalidateStorageAccounting } from "@/lib/store/storage";
-import { showroom, showroomModels } from "@/showroom/fixture";
+import { importPath } from "@/lib/store/importScan";
 import { modelsDir } from "@/lib/paths";
+import { RoleIdSchema } from "@/roles";
+import { createJob, finishJob, jobSignal, updateJob } from "@/lib/jobs";
+import { catalogModelForId } from "@/updates/catalog";
+import { getProcess, isModelPinned, loadedRoleForModel, pinModel, preferModel, restartRole, unloadRole, EngineUnavailableError } from "@/lib/supervisor";
 import { STACK_CHAT_MODEL } from "@/lib/modelCatalog";
-import { catalogModelForId } from "@/updates/models";
-import { emit } from "@/lib/events";
-import { licenceInfo } from "@/lib/licences";
 
 const ModelSchema = z.object({
-  id: z.string(), nickname: z.string().nullable(), groupId: z.string().nullable(), roles: z.array(z.string()), state: z.enum(["notInstalled", "installed"]), runtimeState: z.enum(["loaded", "ready", "onDemand", "failed"]), sizeBytes: z.number().int().nullable(), fileMissing: z.boolean(), measuredFootprintBytes: z.number().int().nullable(), estimated: z.boolean(), source: z.string(), licenceSentence: z.string(), licenceFlag: z.string(), licenceUrl: z.string().url().nullable(), provenance: z.record(z.string(), z.unknown()), modelPath: z.string().nullable(), usage: z.object({ modelId: z.string(), requests: z.number().int(), tokensIn: z.number().int(), tokensOut: z.number().int(), secondsLoaded: z.number().int(), peakMemoryBytes: z.number().int(), lastUsedAt: z.string().nullable() }),
+  id: z.string(), roles: z.array(z.string()), state: z.enum(["notInstalled", "installed"]), runtimeState: z.enum(["loaded", "ready"]), pinned: z.boolean(),
+  sizeBytes: z.number().int().nullable(), fileMissing: z.boolean(), measuredFootprintBytes: z.number().int().nullable(), measuredContextLength: z.number().int().nullable(), estimated: z.boolean(),
+  source: z.string(), licence: z.string().nullable(), revision: z.string(), sha256: z.string().nullable(), provenance: z.record(z.string(), z.unknown()), modelPath: z.string().nullable(), installedAt: z.string().nullable(), verifiedAt: z.string().nullable(),
 });
-const CandidateSchema = z.object({ source: z.string(), path: z.string(), digest: z.string(), sizeBytes: z.number().int(), name: z.string(), repo: z.string().optional(), revision: z.string().optional() });
-const listRoute = createRoute({ method: "get", path: "/", tags: ["Models"], summary: "List installed models", middleware: [requireClientOrOperator] as const, responses: { 200: { content: { "application/json": { schema: z.object({ models: z.array(ModelSchema) }) } }, description: "Installed and known model records." } } });
-const pullRoute = createRoute({ method: "post", path: "/", tags: ["Models"], summary: "Pull a model", middleware: [requireClientOrOperator] as const, request: { body: { content: { "application/json": { schema: z.object({ id: z.string(), source: z.enum(["catalog", "huggingface"]), roles: z.array(z.string()), url: z.string().url().optional(), sha256: z.string().length(64).optional(), licence: z.string().optional(), revision: z.string().optional() }) } } } }, responses: { 202: { content: { "application/json": { schema: z.object({ accepted: z.literal(true), id: z.string(), message: z.string() }) } }, description: "Model pull accepted." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "A source is missing required provenance." } } });
-const importRoute = createRoute({ method: "post", path: "/import", tags: ["Models"], summary: "Scan or import an existing model", middleware: [requireClientOrOperator] as const, request: { body: { content: { "application/json": { schema: z.object({ scan: z.boolean().optional(), path: z.string().optional(), id: z.string().optional(), roles: z.array(z.string()).optional(), licence: z.string().optional() }) } } } }, responses: { 200: { content: { "application/json": { schema: z.object({ candidates: z.array(CandidateSchema), model: ModelSchema.optional() }) } }, description: "Candidates or the imported model." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "Invalid import request." } } });
-const uploadRoute = createRoute({ method: "post", path: "/upload", tags: ["Models"], summary: "Upload a model from another device", middleware: [requireOperator] as const, request: { body: { content: { "multipart/form-data": { schema: z.object({ file: z.any() }) } } } }, responses: { 202: { content: { "application/json": { schema: z.object({ accepted: z.literal(true), id: z.string(), message: z.string() }) } }, description: "Upload accepted." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "No model file was uploaded." } } });
-const removeRoute = createRoute({ method: "delete", path: "/{id}", tags: ["Models"], summary: "Remove an installed model", middleware: [requireClientOrOperator] as const, request: { params: idParamSchema("id") }, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.literal(true) }) } }, description: "Model removed." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown model." } } });
-const updateRoute = createRoute({ method: "patch", path: "/{id}", tags: ["Models"], summary: "Rename or move a model", middleware: [requireOperator] as const, request: { params: idParamSchema("id"), body: { content: { "application/json": { schema: z.object({ nickname: z.string().nullable().optional(), groupId: z.string().nullable().optional() }) } } } }, responses: { 200: { content: { "application/json": { schema: ModelSchema } }, description: "Updated model." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "Invalid model placement." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown model." } } });
-const actionRoute = createRoute({ method: "post", path: "/{id}/actions", tags: ["Models"], summary: "Apply a model action", middleware: [requireOperator] as const, request: { params: idParamSchema("id"), body: { content: { "application/json": { schema: z.object({ action: z.enum(["load", "unload", "pin", "unpin", "checkUpdates"]) }) } } } }, responses: { 200: { content: { "application/json": { schema: z.object({ modelId: z.string(), ok: z.boolean(), reason: z.string().optional() }) } }, description: "Model action result." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown model." } } });
+const PullSchema = z.object({ id: z.string(), role: RoleIdSchema, repo: z.string().optional(), url: z.string().url(), sha256: z.string().length(64), approx_bytes: z.number().int().nonnegative().optional(), licence: z.string(), revision: z.string(), engine: z.string().optional() });
+const ImportSchema = z.object({ id: z.string(), path: z.string(), roles: z.array(RoleIdSchema).min(1), licence: z.string(), revision: z.string().optional() });
+const ActionSchema = z.object({ action: z.enum(["load", "unload", "pin", "unpin"]) });
 
-export function modelView(model: ReturnType<typeof listModels>[number]) {
-  model = reconcileModelSize(model);
-  const info = licenceInfo(model.licence);
+const listRoute = createRoute({ method: "get", path: "/", tags: ["Models"], summary: "Installed and known models", responses: { 200: { content: { "application/json": { schema: z.object({ models: z.array(ModelSchema) }) } }, description: "Every model record with its provenance and state." } } });
+const pullRoute = createRoute({ method: "post", path: "/", tags: ["Models"], summary: "Install a pinned model (progress on the event feed)", request: { body: { content: { "application/json": { schema: PullSchema } } } }, responses: { 202: { content: { "application/json": { schema: z.object({ job: z.string(), model: z.string() }) } }, description: "The download job." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "Provenance incomplete." } } });
+const importRoute = createRoute({ method: "post", path: "/import", tags: ["Models"], summary: "Import a local model file by verified link", request: { body: { content: { "application/json": { schema: ImportSchema } } } }, responses: { 200: { content: { "application/json": { schema: ModelSchema } }, description: "The imported model." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "The path is not a file." } } });
+const removeRoute = createRoute({ method: "delete", path: "/{id}", tags: ["Models"], summary: "Remove a model", request: { params: idParamSchema("id") }, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.literal(true) }) } }, description: "Removed." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown model." } } });
+const actionRoute = createRoute({ method: "post", path: "/{id}/actions", tags: ["Models"], summary: "Load, unload, pin or unpin a model", request: { params: idParamSchema("id"), body: { content: { "application/json": { schema: ActionSchema } } } }, responses: { 200: { content: { "application/json": { schema: z.object({ modelId: z.string(), ok: z.boolean(), reason: z.string().optional() }) } }, description: "The outcome." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown model." } } });
+const catalogRoute = createRoute({ method: "get", path: "/catalog", tags: ["Models"], summary: "The pinned models this build ships", responses: { 200: { content: { "application/json": { schema: z.object({ models: z.array(z.record(z.string(), z.unknown())) }) } }, description: "The Stack's own pins (the Catalog index adds more once fetched)." } } });
+
+export function modelView(model: ModelRecord) {
   const fileMissing = model.modelPath !== null && !existsSync(model.modelPath);
-  return { id: model.id, nickname: model.nickname, groupId: model.groupId, roles: model.roles, state: model.modelPath && existsSync(model.modelPath) && readModelManifest(model.id) ? "installed" as const : "notInstalled" as const, runtimeState: modelRuntimeState(model), sizeBytes: model.sizeBytes, fileMissing, measuredFootprintBytes: model.measuredFootprintBytes, estimated: model.measuredFootprintBytes === null, source: model.source, licenceSentence: info.sentence, licenceFlag: info.flag, licenceUrl: info.url, provenance: model.provenance, modelPath: model.modelPath, usage: getModelUsage(model.id) };
+  return { id: model.id, roles: model.roles, state: model.modelPath && !fileMissing && readModelManifest(model.id) ? "installed" as const : "notInstalled" as const, runtimeState: loadedRoleForModel(model.id) ? "loaded" as const : "ready" as const, pinned: isModelPinned(model.id), sizeBytes: model.sizeBytes, fileMissing, measuredFootprintBytes: model.measuredFootprintBytes, measuredContextLength: model.measuredContextLength, estimated: model.measuredFootprintBytes === null, source: model.source, licence: model.licence, revision: model.revision, sha256: model.sha256, provenance: model.provenance, modelPath: model.modelPath, installedAt: model.installedAt, verifiedAt: model.verifiedAt };
 }
 
-function showroomModelView(model: typeof showroomModels[number]) {
-  return { ...model, modelPath: model.modelPath ?? null, runtimeState: model.id === "qwen3-27b-instruct" || model.id === "qwen3-4b-kids" ? "loaded" as const : model.estimated ? "onDemand" as const : "ready" as const, usage: { modelId: model.id, requests: model.id.includes("qwen") ? 1842 : 16, tokensIn: 420, tokensOut: 690, secondsLoaded: model.id.includes("qwen") ? 18_420 : 3_600, peakMemoryBytes: model.measuredFootprintBytes ?? 0, lastUsedAt: new Date().toISOString() } };
-}
-
-export const modelsRoutes = apiRouter();
-modelsRoutes.openapi(listRoute, (c) => c.json({ models: showroom() ? showroomModels.map(showroomModelView) as never : listModels().map(modelView) }, 200));
+export const modelsRoutes = apiRouter<AppEnv>();
+modelsRoutes.openapi(listRoute, (c) => c.json({ models: listModels().map(modelView) }, 200));
+modelsRoutes.openapi(catalogRoute, (c) => c.json({ models: [STACK_CHAT_MODEL as unknown as Record<string, unknown>] }, 200));
 modelsRoutes.openapi(pullRoute, (c) => {
   const body = c.req.valid("json");
-  if (!body.url || !body.sha256 || !body.licence || !body.revision) return c.json({ error: "pull requires url, sha256, licence, and revision before download" }, 400);
-  const job = `model-install:${body.id}`;
-  const onProgress = ({ completedBytes, totalBytes, status }: { completedBytes: number; totalBytes: number; status: string }) => emit({ id: "job.progress", data: { job, model: body.id, completedBytes, totalBytes, percent: totalBytes ? Math.round(completedBytes / totalBytes * 100) : 0, status } });
-  void (async () => {
-    try {
-      const catalogModel = body.id === STACK_CHAT_MODEL.id ? STACK_CHAT_MODEL : catalogModelForId(body.id);
-      if (body.source === "catalog" && catalogModel) {
-        await installCatalogModel(catalogModel, { destination: join(modelsDir, `${body.id}.gguf`), onProgress });
-      } else {
-        await installHuggingFaceModel({ id: body.id, roles: body.roles as never, repo: body.url!, revision: body.revision!, url: body.url, sha256: body.sha256, licence: body.licence }, { destination: join(modelsDir, `${body.id}.gguf`), onProgress });
-      }
-    } catch (error) {
-      emit({ id: "repair", data: { title: "Model install failed", detail: error instanceof Error ? error.message : `Unable to install ${body.id}.` } });
-    }
-  })();
-  return c.json({ accepted: true as const, id: body.id, message: "Pull is recorded as a resumable job by the download worker." }, 202);
+  const indexed = catalogModelForId(body.id);
+  const model = { id: body.id, role: body.role, repo: body.repo ?? indexed?.repo, license: body.licence, revision: body.revision, engine: body.engine ?? indexed?.engine, sizing: indexed?.sizing, download: { url: body.url, sha256: body.sha256, approx_bytes: body.approx_bytes ?? indexed?.download?.approx_bytes ?? 0 } };
+  const job = createJob({ kind: "model.install", role: body.role, totalBytes: model.download.approx_bytes, status: "downloading", input: { model: body.id } });
+  // One directory per model id: two pins whose URLs end in the same file
+  // name never share a path.
+  const destination = join(modelsDir, body.id, basename(new URL(body.url).pathname) || `${body.id}.gguf`);
+  void installCatalogModel(model, { destination, signal: jobSignal(job.id), onProgress: (progress) => { updateJob(job.id, { completedBytes: progress.completedBytes, totalBytes: progress.totalBytes || model.download.approx_bytes, status: progress.status }); } })
+    .then((installed) => finishJob(job.id, { ok: true, result: { model: installed.id } }))
+    .catch((error) => finishJob(job.id, { ok: false, reason: error instanceof Error ? error.message : String(error) }));
+  return c.json({ job: job.id, model: body.id }, 202);
 });
-modelsRoutes.openapi(importRoute, async (c) => {
+modelsRoutes.openapi(importRoute, (c) => {
   const body = c.req.valid("json");
-  if (body.scan || !body.path) return c.json({ candidates: scanImports().map(({ source, path, digest, sizeBytes, name, repo, revision }) => ({ source, path, digest, sizeBytes, name, repo, revision })) }, 200);
-  if (!body.id || !body.roles?.length) return c.json({ error: "id and roles are required to import a model" }, 400);
-  const candidates = scanImports();
-  const found: ImportCandidate | undefined = candidates.find((candidate) => candidate.path === body.path);
-  const manifest = found ? importCandidate(found, { id: body.id, roles: body.roles, licence: body.licence }) : importPath(body.path, { id: body.id, roles: body.roles, licence: body.licence });
-  upsertModel({ id: manifest.id, roles: manifest.roles as never, source: "huggingface", provenance: { source: manifest.source, path: manifest.sourcePath, ...(manifest.repo ? { repo: manifest.repo } : {}) }, revision: manifest.revision ?? "import", sha256: manifest.blobs[0]?.digest ?? null, sizeBytes: manifest.sizeBytes, licence: body.licence ?? "Imported local model", modelPath: manifest.blobs[0]?.path ?? null, installedAt: new Date().toISOString(), verifiedAt: new Date().toISOString() });
-  invalidateStorageAccounting();
-  const record = listModels().find((model) => model.id === body.id);
-  return c.json({ candidates: [], model: record ? modelView(record) : { id: manifest.id, roles: manifest.roles, state: "installed" as const, sizeBytes: manifest.sizeBytes, measuredFootprintBytes: null, estimated: true, source: manifest.source, provenance: { path: manifest.sourcePath } } }, 200);
+  try {
+    const manifest = importPath(body.path, { id: body.id, roles: body.roles, licence: body.licence, revision: body.revision });
+    const now = new Date().toISOString();
+    const record = upsertModel({ id: manifest.id, roles: body.roles, source: "huggingface", provenance: { source: manifest.source, path: manifest.sourcePath }, revision: manifest.revision ?? "import", sha256: manifest.blobs[0]?.digest ?? null, sizeBytes: manifest.sizeBytes, licence: body.licence, modelPath: manifest.blobs[0]?.path ?? null, installedAt: now, verifiedAt: now });
+    return c.json(modelView(record), 200);
+  } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 400); }
 });
-modelsRoutes.openapi(uploadRoute, async (c) => {
-  const body = await c.req.parseBody(); const file = body.file;
-  if (!(file instanceof File)) return c.json({ error: "A model file is required." }, 400);
-  mkdirSync(modelsDir, { recursive: true }); const id = `upload-${crypto.randomUUID()}`; const destination = join(modelsDir, `${id}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "-")}`); await Bun.write(destination, await file.arrayBuffer());
-  return c.json({ accepted: true as const, id, message: "The upload was stored locally. Select it from Import to assign roles and provenance." }, 202);
+modelsRoutes.openapi(removeRoute, (c) => removeModel(c.req.valid("param").id) ? c.json({ ok: true as const }, 200) : c.json({ error: "Unknown model" }, 404));
+modelsRoutes.openapi(actionRoute, async (c) => {
+  const id = c.req.valid("param").id; const { action } = c.req.valid("json");
+  const model = listModels().find((entry) => entry.id === id);
+  if (!model) return c.json({ error: "Unknown model" }, 404);
+  const role = model.roles[0];
+  try {
+    if (action === "pin" || action === "unpin") { pinModel(id, action === "pin"); return c.json({ modelId: id, ok: true }, 200); }
+    if (!role) return c.json({ modelId: id, ok: false, reason: "The model declares no role." }, 200);
+    if (action === "load") { preferModel(role, id); await restartRole(role); const started = await getProcess(role); return c.json(started.modelId === id ? { modelId: id, ok: true } : { modelId: id, ok: false, reason: `The ${role} role loaded ${started.modelId ?? "another model"} instead.` }, 200); }
+    if (loadedRoleForModel(id) !== null) await unloadRole(role, "Unloaded by Home.");
+    return c.json({ modelId: id, ok: true }, 200);
+  } catch (error) { return c.json({ modelId: id, ok: false, reason: error instanceof EngineUnavailableError ? error.reason : (error as Error).message }, 200); }
 });
-modelsRoutes.openapi(removeRoute, (c) => { const id = c.req.valid("param").id; if (!removeModel(id)) return c.json({ error: "Unknown model" }, 404); invalidateStorageAccounting(); return c.json({ ok: true as const }, 200); });
-modelsRoutes.openapi(updateRoute, (c) => { try { const model = updateModelPlacement(c.req.valid("param").id, c.req.valid("json")); return c.json(modelView(model) as never, 200); } catch (error) { const message = error instanceof Error ? error.message : "Invalid model placement."; return c.json({ error: message }, message === "Unknown model." ? 404 : 400); } });
-modelsRoutes.openapi(actionRoute, async (c) => { const model = listModels().find((entry) => entry.id === c.req.valid("param").id); if (!model) return c.json({ error: "Unknown model" }, 404); return c.json(await performModelAction(model, c.req.valid("json").action) as never, 200); });

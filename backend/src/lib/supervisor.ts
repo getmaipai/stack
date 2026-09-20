@@ -1,30 +1,33 @@
+// The per-role supervisor: one process per role binding, three kinds
+// (spawned by the Stack, a managed sidecar, a read-only url the person
+// runs), one lifecycle. The pieces that were paid for in the chat-only
+// supervisor (the generation guard, the free-port probe, the size-scaled
+// liveness wait, the post-load completion, the measured footprint, the
+// exit watch, the drain) are the same here, keyed by role.
 import { existsSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
+import { withTimeout } from "@maipai/core/src/withTimeout";
 import { ENGINE_READY_MARKER, installedEnginePin, selectEngineBinary } from "@/lib/engineCatalog";
 import { llamaServerArgs } from "@/lib/engineArgs";
 import { engineBinaryPath, engineDir } from "@/lib/engineInstall";
 import { detectHardware } from "@/lib/hardware";
 import { identityHeaders, readEngineIdentity, type EngineIdentity } from "@/lib/identity";
 import { isModelSelectable, listModels, recordMeasuredFootprint, type ModelRecord } from "@/lib/modelStore";
-import { withTimeout } from "@/lib/withTimeout";
-import { admit, getRunState, release, startGovernor, type GovernorHandle } from "@/lib/governor";
+import { admit, getRunState, release, setGovernorPid, startGovernor, type GovernorHandle } from "@/lib/governor";
 import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
-import type { RoleState } from "@/roles";
+import { ROLES, ROLE_IDS, type RoleId, type RoleState } from "@/roles";
 import { getMemoryReader } from "@/lib/memory";
 import { readGgufFacts } from "@/lib/gguf";
+import { hfUrl } from "@/lib/hf";
 import { hfHubRoot } from "@/lib/store/layout";
-import { activateEngineConfig, settingValues } from "@/settings/engineKeys";
-import { recordSpeedResult } from "@/lib/series";
-import { recordModelFootprint, recordModelLoaded, recordModelUnloaded } from "@/lib/modelGroups";
-import { getManagedEngineUrl } from "@/lib/detect";
+import { engineSettingValues, settingValues } from "@/settings";
 
 export type EngineKind = "spawned" | "managed" | "url";
-
 export type EngineStatus = RoleState | "loading" | "busy" | "stopped";
 
-export interface ChatEngineStatus {
+export interface RoleStatus {
   kind: EngineKind | null;
   state: EngineStatus;
   reason: string | null;
@@ -40,102 +43,58 @@ export interface PostLoadCheck {
   firstTokenMs?: number;
 }
 
-export function scriptedEnginesEnabled(): boolean {
-  return process.env.STACK_SCRIPTED_ENGINES === "1" && process.env.NODE_ENV !== "production";
-}
-
-export async function measureProcessMemoryBytes(pid: number | null): Promise<number | null> {
-  if (pid === null) return null;
-  return getMemoryReader().processFootprint(pid);
-}
-
 export interface FootprintEstimate { bytes: number; estimated: boolean; contextLength: number; source: "dry-run" | "gguf"; }
-
-function parseFitBytes(output: string): number | null {
-  const matches = [...output.matchAll(/(?:memory|ram|footprint|requires?)[^\n]*?(\d+(?:\.\d+)?)\s*(GiB|MiB|GB|MB|bytes)/gi)];
-  const match = matches.at(-1);
-  if (!match) return null;
-  const value = Number(match[1]); const unit = match[2]?.toLowerCase();
-  return unit === "gib" || unit === "gb" ? Math.round(value * 1_073_741_824) : unit === "mib" || unit === "mb" ? Math.round(value * 1_048_576) : Math.round(value);
-}
-
-export async function dryRunFootprint(modelPath: string, contextLength: number): Promise<number | null> {
-  try {
-    const hardware = await detectHardware(); const pin = selectEngineBinary(hardware);
-    const fit = process.env.STACK_FIT_BINARY ?? (pin ? join(engineDir(pin.id), "llama-fit-params") : "");
-    if (!fit || !existsSync(fit)) return null;
-    const processHandle = Bun.spawn([fit, "--model", modelPath, "--ctx-size", String(contextLength), "--fit", "on", "--fit-print", "on"], { stdout: "pipe", stderr: "pipe" });
-    const output = `${await new Response(processHandle.stdout).text()}\n${processHandle.stderr ? await new Response(processHandle.stderr).text() : ""}`;
-    await processHandle.exited;
-    return parseFitBytes(output);
-  } catch { return null; }
-}
-
-import { hfUrl } from "@/lib/hf";
-
-export async function estimateFootprint(repo: string, file: string, contextLength: number): Promise<FootprintEstimate> {
-  const url = hfUrl(`${repo}/resolve/main/${file}`);
-  const facts = await readGgufFacts(url);
-  const head = await fetch(url, { method: "HEAD" });
-  const weights = Number(head.headers.get("content-length") ?? 0);
-  const quantization = facts.quantization.toLowerCase();
-  const bytesPerElement = quantization.includes("q4") || quantization === "2" || quantization === "3" ? 18 / 32 : quantization.includes("q8") || quantization === "7" || quantization === "8" ? 34 / 32 : 2;
-  const kvBytes = 2 * facts.layers * facts.kvHeads * facts.headDim * contextLength * bytesPerElement;
-  return { bytes: Math.ceil(weights + kvBytes + 256 * 1_048_576), estimated: true, contextLength, source: "gguf" };
-}
 
 export interface EngineClient {
   readonly baseUrl: string;
-  complete(body: Record<string, unknown>, signal?: AbortSignal): Promise<{ status: number; body: unknown }>;
-  stream?(body: Record<string, unknown>, signal?: AbortSignal): Promise<Response>;
+  request(path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<{ status: number; body: unknown }>;
+  stream?(path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<Response>;
   health(): Promise<boolean>;
 }
 
-export interface ChatBackend {
-  client: EngineClient;
+export interface RoleProcess {
+  role: RoleId;
   kind: EngineKind;
+  client: EngineClient;
   identity: EngineIdentity;
+  modelId: string | null;
   pid: number | null;
-  /** The listener is assigned by the supervisor for spawned engines. */
-  port?: number | null;
-  stop(): Promise<void>;
+  port: number | null;
   activeRequests: number;
   retired: boolean;
   governorHandle?: GovernorHandle;
   stopGovernor?: () => void;
-}
-
-function extractPort(url: string): number | null {
-  try {
-    const port = new URL(url).port;
-    return port ? Number(port) : null;
-  } catch {
-    return null;
-  }
+  stop(): Promise<void>;
 }
 
 export class EngineUnavailableError extends Error {
   readonly reason: string;
-
-  constructor(reason: string) {
-    super(reason);
-    this.name = "EngineUnavailableError";
-    this.reason = reason;
-  }
+  constructor(reason: string) { super(reason); this.name = "EngineUnavailableError"; this.reason = reason; }
 }
+
+// The roles a llama-server process serves and the request each one's
+// post-load check sends. Roles that share chat's model run on chat's
+// process; embed has its own model and its own launch flag.
+const CHAT_WIRE_ROLES: RoleId[] = ROLE_IDS.filter((role) => ROLES[role].wire === "chat");
+const SPAWNABLE_ROLES: RoleId[] = ["chat", "embed"];
+
+/** The role whose process serves this role: `coding`, `judge`, `router`
+ * and `vision` share chat's model and process unless bound elsewhere. */
+export function processRoleFor(role: RoleId): RoleId {
+  const definition = ROLES[role] as { sharesModelWith?: RoleId };
+  return definition.sharesModelWith ?? role;
+}
+
+// ---- the client -----------------------------------------------------------
 
 class OpenAIEngineClient implements EngineClient {
   constructor(readonly baseUrl: string) {}
+  private url(path: string): string { return `${this.baseUrl.replace(/\/$/, "")}${path}`; }
 
-  async complete(body: Record<string, unknown>, signal?: AbortSignal): Promise<{ status: number; body: unknown }> {
+  async request(path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<{ status: number; body: unknown }> {
     let response: Response;
     try {
-      response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/v1/chat/completions`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-        signal,
-      });
+      response = await fetch(this.url(path), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal });
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") throw error;
       throw new EngineUnavailableError(`Engine request failed: ${(error as Error).message}`);
@@ -144,29 +103,24 @@ class OpenAIEngineClient implements EngineClient {
     return { status: response.status, body: responseBody };
   }
 
-  async stream(body: Record<string, unknown>, signal?: AbortSignal): Promise<Response> {
+  async stream(path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<Response> {
     try {
-      return await fetch(this.baseUrl.replace(/\/$/, "") + "/v1/chat/completions", {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "text/event-stream" },
-        body: JSON.stringify({ ...body, stream: true }),
-        signal,
-      });
+      return await fetch(this.url(path), { method: "POST", headers: { "content-type": "application/json", accept: "text/event-stream" }, body: JSON.stringify({ ...body, stream: true }), signal });
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") throw error;
-      throw new EngineUnavailableError("Engine streaming request failed: " + (error as Error).message);
+      throw new EngineUnavailableError(`Engine streaming request failed: ${(error as Error).message}`);
     }
   }
 
   async health(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/health`, { signal: AbortSignal.timeout(2_000) });
+      const response = await fetch(this.url("/health"), { signal: AbortSignal.timeout(2_000) });
       return response.ok;
-    } catch {
-      return false;
-    }
+    } catch { return false; }
   }
 }
+
+// ---- timeouts and probes --------------------------------------------------
 
 const DEFAULT_POST_LOAD_TIMEOUT_MS = 120_000;
 const DEFAULT_COMPLETION_TIMEOUT_MS = 10 * 60_000;
@@ -197,114 +151,6 @@ export async function findFreePort(): Promise<number> {
   });
 }
 
-interface SupervisorState {
-  backend: ChatBackend | null;
-  startingPromise: Promise<ChatBackend> | null;
-  generation: number;
-  manuallyStopped: boolean;
-  status: ChatEngineStatus;
-  lastRealRequestAt: number | null;
-}
-
-type BackendFactory = () => Promise<ChatBackend>;
-let testBackendFactory: BackendFactory | null = null;
-
-function initialStatus(): ChatEngineStatus {
-  if (scriptedEnginesEnabled()) {
-    return {
-      kind: "url",
-      state: "ready",
-      reason: null,
-      identity: { host: "stub", build: "scripted", model: "scripted-chat", healthy: true },
-      postLoadCheck: { replyOk: true, actualBytes: null, estimatedBytes: null },
-    };
-  }
-  const pin = installedEnginePin();
-  const installed = !!pin && existsSync(join(engineDir(pin.id), ENGINE_READY_MARKER));
-  return { kind: null, state: installed ? "installed" : "notInstalled", reason: null, identity: null, postLoadCheck: null };
-}
-
-const state: SupervisorState = {
-  backend: null,
-  startingPromise: null,
-  generation: 0,
-  manuallyStopped: false,
-  status: initialStatus(),
-  lastRealRequestAt: null,
-};
-
-function configuredUrl(): { kind: EngineKind; url: string } | null {
-  const adopted = getManagedEngineUrl("chat");
-  if (adopted) return { kind: "managed", url: adopted };
-  const managed = process.env.STACK_MANAGED_ENGINE_URL;
-  if (managed) return { kind: "managed", url: managed };
-  const url = process.env.STACK_CHAT_ENGINE_URL ?? process.env.MAIPAI_LLAMA_SERVER_URL;
-  return url ? { kind: "url", url } : null;
-}
-
-class ScriptedEngineClient implements EngineClient {
-  readonly baseUrl = "in-process://scripted";
-
-  async complete(body: Record<string, unknown>): Promise<{ status: number; body: unknown }> {
-    const messages = Array.isArray(body.messages) ? body.messages : [];
-    const last = messages.at(-1) as { content?: unknown } | undefined;
-    const content = typeof last?.content === "string" && last.content.trim()
-      ? "Scripted Stack reply."
-      : "The scripted Stack engine is ready.";
-    return {
-      status: 200,
-      body: {
-        id: "scripted-completion",
-        object: "chat.completion",
-        choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }],
-        usage: { prompt_tokens: 1, completion_tokens: 4, total_tokens: 5 },
-      },
-    };
-  }
-
-  async stream(_body: Record<string, unknown>, signal?: AbortSignal): Promise<Response> {
-    const encoder = new TextEncoder();
-    const chunks = [
-      "data: " + JSON.stringify({ choices: [{ delta: { content: "Scripted" } }] }) + "\n\n",
-      "data: " + JSON.stringify({ choices: [{ delta: { content: " Stack" } }] }) + "\n\n",
-      "data: " + JSON.stringify({ usage: { prompt_tokens: 1, completion_tokens: 2 } }) + "\n\n",
-      "data: [DONE]\n\n",
-    ];
-    const body = new ReadableStream<Uint8Array>({
-      async start(controller) {
-        for (const chunk of chunks) {
-          if (signal?.aborted) {
-            controller.error(new DOMException("Cancelled", "AbortError"));
-            return;
-          }
-          controller.enqueue(encoder.encode(chunk));
-          await new Promise((resolve) => setTimeout(resolve, 5));
-        }
-        controller.close();
-      },
-      cancel() {},
-    });
-    return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
-  }
-
-  async health(): Promise<boolean> {
-    return true;
-  }
-}
-
-function scriptedBackend(): ChatBackend {
-  return {
-    client: new ScriptedEngineClient(),
-    kind: "url",
-    identity: { host: "stub", build: "scripted", model: "scripted-chat", healthy: true },
-    pid: null,
-    port: null,
-    activeRequests: 0,
-    retired: false,
-    stop: async () => {},
-  };
-}
-
 export async function waitHealthy(client: EngineClient, timeoutMs = LOAD_FLOOR_MS, isAlive: () => boolean = () => true): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -315,70 +161,172 @@ export async function waitHealthy(client: EngineClient, timeoutMs = LOAD_FLOOR_M
   throw new EngineUnavailableError(`Engine did not become healthy before the load timeout (${Math.ceil(timeoutMs / 1000)}s).`);
 }
 
-export async function postLoadCheck(client: EngineClient, pid: number | null, contextLength = 4096): Promise<PostLoadCheck> {
+export async function measureProcessMemoryBytes(pid: number | null): Promise<number | null> {
+  if (pid === null) return null;
+  return getMemoryReader().processFootprint(pid);
+}
+
+/** The smallest real request for a role's wire: the post-load check and
+ * the readiness check both send it, so "ready" always means the public
+ * route's own shape answered. */
+export function probeRequest(role: RoleId): { path: string; body: Record<string, unknown> } {
+  if (ROLES[role].wire === "embeddings") return { path: "/v1/embeddings", body: { model: role, input: "OK" } };
   // `enable_thinking: false` asks the template to answer in content; a
   // thinking model that answers in reasoning_content is still alive.
-  const startedAt = performance.now();
-  const result = await withTimeout(
-    client.complete({ model: "chat", messages: [{ role: "user", content: "Reply with just the word OK." }], max_tokens: 32, chat_template_kwargs: { enable_thinking: false } }),
-    timeoutOverrides.postLoadMs ?? DEFAULT_POST_LOAD_TIMEOUT_MS,
-    () => new EngineUnavailableError("The post-load check timed out."),
-  );
+  return { path: "/v1/chat/completions", body: { model: role, messages: [{ role: "user", content: "Reply with just the word OK." }], max_tokens: 32, chat_template_kwargs: { enable_thinking: false } } };
+}
+
+export function probeReplyOk(role: RoleId, result: { status: number; body: unknown }): boolean {
+  if (result.status < 200 || result.status >= 300) return false;
+  if (ROLES[role].wire === "embeddings") {
+    const data = (result.body as { data?: Array<{ embedding?: unknown }> }).data;
+    return Array.isArray(data) && Array.isArray(data[0]?.embedding) && data[0].embedding.length > 0;
+  }
   const message = (result.body as { choices?: Array<{ message?: { content?: unknown; reasoning_content?: unknown } }> }).choices?.[0]?.message;
   const content = typeof message?.content === "string" ? message.content : null;
   const reasoning = typeof message?.reasoning_content === "string" ? message.reasoning_content : null;
-  if (result.status < 200 || result.status >= 300 || !(content && content.trim()) && !(reasoning && reasoning.trim())) {
-    throw new EngineUnavailableError("Post-load check did not receive a usable completion.");
-  }
+  return Boolean((content && content.trim()) || (reasoning && reasoning.trim()));
+}
+
+export async function postLoadCheck(role: RoleId, client: EngineClient, pid: number | null): Promise<PostLoadCheck> {
+  const startedAt = performance.now();
+  const probe = probeRequest(role);
+  const result = await withTimeout(
+    client.request(probe.path, probe.body),
+    timeoutOverrides.postLoadMs ?? DEFAULT_POST_LOAD_TIMEOUT_MS,
+    () => new EngineUnavailableError("The post-load check timed out."),
+  );
+  if (!probeReplyOk(role, result)) throw new EngineUnavailableError("Post-load check did not receive a usable reply.");
   return { replyOk: true, actualBytes: await measureProcessMemoryBytes(pid), estimatedBytes: null, firstTokenMs: Math.round(performance.now() - startedAt) };
 }
 
-function selectedChatModel(): ModelRecord | null {
-  return listModels().find((model) => model.roles.includes("chat") && isModelSelectable(model) && model.modelPath) ?? null;
+function parseFitBytes(output: string): number | null {
+  const matches = [...output.matchAll(/(?:memory|ram|footprint|requires?)[^\n]*?(\d+(?:\.\d+)?)\s*(GiB|MiB|GB|MB|bytes)/gi)];
+  const match = matches.at(-1);
+  if (!match) return null;
+  const value = Number(match[1]); const unit = match[2]?.toLowerCase();
+  return unit === "gib" || unit === "gb" ? Math.round(value * 1_073_741_824) : unit === "mib" || unit === "mb" ? Math.round(value * 1_048_576) : Math.round(value);
 }
 
-async function startUrlBackend(kind: EngineKind, url: string): Promise<ChatBackend> {
-  activateEngineConfig("managed", "managed");
-  const managed = settingValues("managed", "managed");
-  const client = new OpenAIEngineClient(typeof managed.hostUrl === "string" && managed.hostUrl ? managed.hostUrl : url);
+export async function dryRunFootprint(modelPath: string, contextLength: number): Promise<number | null> {
+  try {
+    const hardware = await detectHardware(); const pin = selectEngineBinary(hardware);
+    const fit = process.env.STACK_FIT_BINARY ?? (pin ? join(engineDir(pin.id), "llama-fit-params") : "");
+    if (!fit || !existsSync(fit)) return null;
+    const processHandle = Bun.spawn([fit, "--model", modelPath, "--ctx-size", String(contextLength), "--fit", "on", "--fit-print", "on"], { stdout: "pipe", stderr: "pipe" });
+    const output = `${await new Response(processHandle.stdout).text()}\n${processHandle.stderr ? await new Response(processHandle.stderr).text() : ""}`;
+    await processHandle.exited;
+    return parseFitBytes(output);
+  } catch { return null; }
+}
+
+export async function estimateFootprint(repo: string, file: string, contextLength: number): Promise<FootprintEstimate> {
+  const url = hfUrl(`${repo}/resolve/main/${file}`);
+  const facts = await readGgufFacts(url);
+  const head = await fetch(url, { method: "HEAD" });
+  const weights = Number(head.headers.get("content-length") ?? 0);
+  const quantization = facts.quantization.toLowerCase();
+  const bytesPerElement = quantization.includes("q4") || quantization === "2" || quantization === "3" ? 18 / 32 : quantization.includes("q8") || quantization === "7" || quantization === "8" ? 34 / 32 : 2;
+  const kvBytes = 2 * facts.layers * facts.kvHeads * facts.headDim * contextLength * bytesPerElement;
+  return { bytes: Math.ceil(weights + kvBytes + 256 * 1_048_576), estimated: true, contextLength, source: "gguf" };
+}
+
+// ---- per-role state -------------------------------------------------------
+
+interface RoleRuntime {
+  process: RoleProcess | null;
+  starting: Promise<RoleProcess> | null;
+  generation: number;
+  manuallyStopped: boolean;
+  status: RoleStatus;
+  lastRealRequestAt: number | null;
+}
+
+type ProcessFactory = (role: RoleId) => Promise<RoleProcess>;
+let testFactory: ProcessFactory | null = null;
+const runtimes = new Map<RoleId, RoleRuntime>();
+
+function engineInstalled(): boolean {
+  const pin = installedEnginePin();
+  return !!pin && existsSync(join(engineDir(pin.id), ENGINE_READY_MARKER));
+}
+
+function initialStatus(role: RoleId): RoleStatus {
+  const installed = SPAWNABLE_ROLES.includes(role) && engineInstalled() && selectedModel(role) !== null;
+  return { kind: null, state: installed ? "installed" : "notInstalled", reason: null, identity: null, postLoadCheck: null };
+}
+
+function runtime(role: RoleId): RoleRuntime {
+  let current = runtimes.get(role);
+  if (!current) {
+    current = { process: null, starting: null, generation: 0, manuallyStopped: false, status: initialStatus(role), lastRealRequestAt: null };
+    runtimes.set(role, current);
+  }
+  return current;
+}
+
+function urlBindingFor(role: RoleId): { kind: EngineKind; url: string } | null {
+  const values = settingValues();
+  const configured = values[`engines.${role}.hostUrl`];
+  if (typeof configured === "string" && configured.trim()) return { kind: "url", url: configured.trim() };
+  const env = process.env[`STACK_${role.toUpperCase()}_ENGINE_URL`];
+  if (env) return { kind: "url", url: env };
+  return null;
+}
+
+const preferredModels = new Map<RoleId, string>();
+
+/** Home's "load this model": the next start of the role uses it if it
+ * is selectable; otherwise the first selectable model for the role. */
+export function preferModel(role: RoleId, modelId: string | null): void {
+  if (modelId) preferredModels.set(role, modelId); else preferredModels.delete(role);
+}
+
+export function selectedModel(role: RoleId): ModelRecord | null {
+  const selectable = listModels().filter((model) => model.roles.includes(role) && isModelSelectable(model) && model.modelPath);
+  const preferred = preferredModels.get(role);
+  return selectable.find((model) => model.id === preferred) ?? selectable[0] ?? null;
+}
+
+// ---- starting a process ---------------------------------------------------
+
+async function startUrlProcess(role: RoleId, url: string): Promise<RoleProcess> {
+  const client = new OpenAIEngineClient(url);
   const identity = await readEngineIdentity(url);
   if (!identity.healthy) {
-    const reason = `The ${kind} engine is offline.`;
-    emit({ id: "engine.state", data: { engine: "chat", state: "offline", reason } });
-    raise({ code: "managed-host-offline", severity: "error", title: "Chat engine is offline", text: reason, cause: reason, fix: { label: "Check host", action: "check_host" } });
+    const reason = `The ${role} server at the bound URL is offline.`;
+    emit({ id: "engine.state", data: { engine: role, state: "offline", reason } });
+    raise({ code: `managed-host-offline.${role}`, severity: "error", title: `${ROLES[role].label} server is offline`, text: reason, cause: reason });
     throw new EngineUnavailableError(reason);
   }
-  return { client, kind, identity, pid: null, port: extractPort(client.baseUrl), activeRequests: 0, retired: false, stop: async () => {} };
+  resolveHealth(`managed-host-offline.${role}`);
+  return { role, kind: "url", client, identity, modelId: null, pid: null, port: Number(new URL(url).port) || null, activeRequests: 0, retired: false, stop: async () => {} };
 }
 
-async function startSpawnedBackend(): Promise<ChatBackend> {
-  activateEngineConfig("llama-server", "llama-server");
-  const config = settingValues("llama-server", "llama-server");
+async function startSpawnedProcess(role: RoleId): Promise<RoleProcess> {
+  if (!SPAWNABLE_ROLES.includes(role)) throw new EngineUnavailableError(`No engine can be started for ${role} on this machine yet.`);
+  const config = engineSettingValues("engines.llama-server");
   const pin = installedEnginePin();
-  const model = selectedChatModel();
-  if (!pin || !existsSync(join(engineDir(pin.id), ENGINE_READY_MARKER))) {
-    throw new EngineUnavailableError("No installed llama-server build is available for this machine.");
-  }
-  if (!model?.modelPath) throw new EngineUnavailableError("No verified and installed chat model is available.");
+  const model = selectedModel(role);
+  if (!pin || !engineInstalled()) throw new EngineUnavailableError("No installed llama-server build is available for this machine.");
+  if (!model?.modelPath) throw new EngineUnavailableError(`No verified and installed ${role} model is available.`);
 
-  const admission = await admit({ id: "chat", kind: "resident", requestedBytes: model.sizeBytes ?? 0, modelFileBytes: model.sizeBytes, measuredPeakBytes: model.measuredFootprintBytes, engine: "llama-server" });
-  if ("queued" in admission) throw new EngineUnavailableError(`Chat admission is queued at position ${admission.position}.`);
+  const admission = await admit({ id: role, kind: "resident", requestedBytes: model.sizeBytes ?? 0, modelFileBytes: model.sizeBytes, measuredPeakBytes: model.measuredFootprintBytes, engine: "llama-server", pinned: pinnedModels.has(model.id) });
+  if ("queued" in admission) throw new EngineUnavailableError(`${role} admission is queued at position ${admission.position}.`);
   if ("refused" in admission) throw new EngineUnavailableError(admission.reason);
 
   const port = await findFreePort();
   const contextLength = typeof config.contextLength === "number" ? config.contextLength : 4096;
-  const processHandle = Bun.spawn([engineBinaryPath(pin), ...llamaServerArgs({ modelPath: model.modelPath, port, config, contextLength, kvCacheQuantized: process.platform === "darwin" })], {
+  const handle = Bun.spawn([engineBinaryPath(pin), ...llamaServerArgs({ modelPath: model.modelPath, port, config, contextLength, kvCacheQuantized: process.platform === "darwin", embeddings: role === "embed" })], {
     stdout: "ignore",
     stderr: "pipe",
     env: { ...process.env, HF_HUB_CACHE: hfHubRoot },
   });
+  setGovernorPid(role, handle.pid);
   const client = new OpenAIEngineClient(`http://127.0.0.1:${port}`);
-  const stderrText = processHandle.stderr ? new Response(processHandle.stderr).text() : Promise.resolve("");
+  const stderrText = handle.stderr ? new Response(handle.stderr).text() : Promise.resolve("");
   let exited = false;
-  const exitPromise = processHandle.exited.then((code) => {
-    exited = true;
-    return code;
-  });
+  const exitPromise = handle.exited.then((code) => { exited = true; return code; });
   try {
     const exitFailure = exitPromise.then(async (code) => {
       const lines = (await stderrText).trim().split("\n").slice(-5).join(" | ");
@@ -388,314 +336,353 @@ async function startSpawnedBackend(): Promise<ChatBackend> {
     const loadStartedAt = performance.now();
     await Promise.race([waitHealthy(client, loadTimeoutForModel(model.sizeBytes), () => !exited), exitFailure]);
     const identity = await readEngineIdentity(client.baseUrl);
-    const check = await postLoadCheck(client, processHandle.pid, contextLength);
+    const check = await postLoadCheck(role, client, handle.pid);
     check.loadMs = Math.round(performance.now() - loadStartedAt);
-    if (check.actualBytes !== null) { recordMeasuredFootprint(model.id, check.actualBytes, contextLength); recordModelFootprint(model.id, check.actualBytes); }
-    state.status.postLoadCheck = check;
-    resolveHealth("engine.crashed");
-    resolveHealth("post-load-check-failed");
-    const backend: ChatBackend = {
-      client,
-      kind: "spawned",
-      identity,
-      pid: processHandle.pid,
-      port,
-      activeRequests: 0,
-      retired: false,
+    if (check.actualBytes !== null) recordMeasuredFootprint(model.id, check.actualBytes, contextLength);
+    runtime(role).status.postLoadCheck = check;
+    resolveHealth(`engine.crashed.${role}`);
+    resolveHealth(`post-load-check-failed.${role}`);
+    const processRecord: RoleProcess = {
+      role, kind: "spawned", client, identity, modelId: model.id, pid: handle.pid, port, activeRequests: 0, retired: false,
       governorHandle: admission,
-      stopGovernor: startGovernor({ pid: processHandle.pid }),
-      stop: async () => {
-        processHandle.kill();
-        await processHandle.exited;
-      },
+      stopGovernor: startGovernor({ pid: handle.pid, restart: async () => { await restartRole(role); } }),
+      stop: async () => { handle.kill(); await handle.exited; },
     };
-    recordModelLoaded(model.id);
-    void processHandle.exited.then(() => {
-      if (!backend.retired && state.backend === backend) {
-        state.backend = null;
-        state.status = { kind: "spawned", state: "offline", reason: "The spawned engine exited unexpectedly.", identity, postLoadCheck: check };
-        raise({ code: "engine.crashed", severity: "error", title: "The chat engine crashed", text: "The spawned engine exited unexpectedly.", cause: "The engine process exited.", fix: { label: "Restart engine", action: "restart_engine" } });
-        state.startingPromise = null;
+    void handle.exited.then(() => {
+      const current = runtime(role);
+      if (!processRecord.retired && current.process === processRecord) {
+        current.process = null;
+        current.starting = null;
+        current.status = { kind: "spawned", state: "offline", reason: "The spawned engine exited unexpectedly.", identity, postLoadCheck: check };
+        emit({ id: "engine.state", data: { engine: role, state: "offline", reason: "The spawned engine exited unexpectedly." } });
+        raise({ code: `engine.crashed.${role}`, severity: "error", title: `The ${role} engine crashed`, text: "The spawned engine exited unexpectedly.", cause: "The engine process exited.", fix: { label: "Restart engine", action: "restart_engine" } });
+        processRecord.stopGovernor?.();
+        if (processRecord.governorHandle) release(processRecord.governorHandle);
       }
     });
-    return backend;
+    return processRecord;
   } catch (error) {
-    processHandle.kill();
-    emit({ id: "engine.state", data: { engine: "chat", state: "offline", reason: (error as Error).message } });
+    handle.kill();
     const message = (error as Error).message;
-    raise({ code: exited ? "engine.crashed" : "post-load-check-failed", severity: "error", title: "Chat engine failed to start", text: message, cause: message, fix: { label: "Restart engine", action: "restart_engine" } });
+    emit({ id: "engine.state", data: { engine: role, state: "offline", reason: message } });
+    raise({ code: exited ? `engine.crashed.${role}` : `post-load-check-failed.${role}`, severity: "error", title: `${ROLES[role].label} engine failed to start`, text: message, cause: message, fix: { label: "Restart engine", action: "restart_engine" } });
     release(admission);
     throw error;
   }
 }
 
-async function startBackend(): Promise<ChatBackend> {
-  activateEngineConfig("llama-server", "llama-server");
-  if (scriptedEnginesEnabled()) return scriptedBackend();
-  if (testBackendFactory) return testBackendFactory();
-  const configured = configuredUrl();
-  if (configured) return startUrlBackend(configured.kind, configured.url);
-  return startSpawnedBackend();
+async function startProcess(role: RoleId): Promise<RoleProcess> {
+  if (testFactory) return testFactory(role);
+  const bound = urlBindingFor(role);
+  if (bound) return startUrlProcess(role, bound.url);
+  return startSpawnedProcess(role);
 }
 
-export function getChatEngineStatus(): ChatEngineStatus {
-  if (state.backend && state.status.state !== "busy") state.status = { ...state.status, kind: state.backend.kind, state: "ready", identity: state.backend.identity, reason: null };
-  return { ...state.status };
-}
-
-/** A pid is the proof that this process was launched by this Stack. */
-export function chatEngineIsStackOwned(): boolean {
-  return (state.backend?.kind === "spawned" && state.backend.pid !== null) || (scriptedEnginesEnabled() && state.backend?.identity.host === "stub");
-}
-
-/** Starting is safe only when the configured backend is the Stack's spawned llama-server. */
-export function chatEngineCanBeStartedByStack(): boolean {
-  return !state.backend && !configuredUrl();
-}
-
-export async function getChatBackend(): Promise<ChatBackend> {
+/** The running process for a role, starting it under the generation
+ * guard when it is not. Roles that share another role's model resolve
+ * to that role's process. */
+export async function getProcess(requested: RoleId): Promise<RoleProcess> {
+  const role = processRoleFor(requested);
   if (getRunState() !== "running") throw new EngineUnavailableError("The Stack is paused.");
-  if (state.manuallyStopped) throw new EngineUnavailableError("The chat engine was stopped by the operator.");
-  if (state.backend) return state.backend;
-  if (!state.startingPromise) {
-    const generation = state.generation;
-    state.status = { ...state.status, state: "loading", reason: null };
-    state.startingPromise = startBackend().then(async (backend) => {
-      if (generation !== state.generation) {
-        backend.retired = true;
-        await backend.stop();
-        state.startingPromise = null;
-        return getChatBackend();
+  const current = runtime(role);
+  if (current.manuallyStopped) throw new EngineUnavailableError(`The ${role} engine was stopped.`);
+  if (current.process) return current.process;
+  if (!current.starting) {
+    const generation = current.generation;
+    current.status = { ...current.status, state: "loading", reason: null };
+    emit({ id: "role.state", data: { role, state: "loaded", since: new Date().toISOString() } });
+    current.starting = startProcess(role).then(async (started) => {
+      if (generation !== current.generation) {
+        started.retired = true;
+        await started.stop();
+        current.starting = null;
+        return getProcess(role);
       }
-      state.backend = backend;
-      if (backend.identity.model && getModelById(backend.identity.model)) recordModelLoaded(backend.identity.model);
-      state.lastRealRequestAt = Date.now();
-      state.status = { kind: backend.kind, state: "ready", reason: null, identity: backend.identity, postLoadCheck: state.status.postLoadCheck };
-      emit({ id: "engine.state", data: { engine: "chat", state: "ready" as const } });
-      return backend;
+      current.process = started;
+      current.starting = null;
+      current.lastRealRequestAt = Date.now();
+      current.status = { kind: started.kind, state: "ready", reason: null, identity: started.identity, postLoadCheck: current.status.postLoadCheck };
+      emit({ id: "engine.state", data: { engine: role, state: "ready" } });
+      emit({ id: "role.state", data: { role, state: "ready", since: new Date().toISOString() } });
+      return started;
     }).catch((error) => {
-      if (generation === state.generation) {
-        state.startingPromise = null;
-        state.status = { ...state.status, state: "offline", reason: (error as Error).message };
+      if (generation === current.generation) {
+        current.starting = null;
+        current.status = { ...current.status, state: "offline", reason: (error as Error).message };
+        emit({ id: "role.state", data: { role, state: "offline", since: new Date().toISOString(), reason: (error as Error).message } });
       }
       throw error;
     });
   }
-  return state.startingPromise;
+  return current.starting;
 }
 
-function getModelById(id: string | null): ModelRecord | null {
-  return id ? listModels().find((model) => model.id === id) ?? null : null;
+export function getRoleStatus(requested: RoleId): RoleStatus {
+  const role = processRoleFor(requested);
+  const current = runtime(role);
+  if (current.process && current.status.state !== "busy") current.status = { ...current.status, kind: current.process.kind, state: "ready", identity: current.process.identity, reason: null };
+  return { ...current.status };
 }
 
-async function retireBackend(backend: ChatBackend): Promise<void> {
-  backend.retired = true;
-  backend.stopGovernor?.();
-  while (backend.activeRequests > 0) await new Promise((resolve) => setTimeout(resolve, 10));
-  await backend.stop();
-  if (backend.identity.model) recordModelUnloaded(backend.identity.model);
-  if (backend.governorHandle) release(backend.governorHandle);
+export function lastRealRequestAt(requested: RoleId): number | null {
+  return runtime(processRoleFor(requested)).lastRealRequestAt;
 }
 
-export async function restartChatEngine(): Promise<void> {
-  state.generation++;
-  const previous = state.backend;
-  state.backend = null;
-  state.startingPromise = null;
-  state.manuallyStopped = false;
-  state.status = { ...state.status, state: "loading", reason: null };
-  emit({ id: "engine.state", data: { engine: "chat", state: "loading" as const } });
-  if (previous) await retireBackend(previous);
+/** A pid is the proof that this process was launched by this Stack. */
+export function roleIsStackOwned(requested: RoleId): boolean {
+  const current = runtime(processRoleFor(requested));
+  return current.process?.kind === "spawned" && current.process.pid !== null;
 }
 
-export async function stopChatEngine(): Promise<void> {
-  state.generation++;
-  state.manuallyStopped = true;
-  const previous = state.backend;
-  state.backend = null;
-  state.startingPromise = null;
-  state.status = { ...state.status, state: "stopped", reason: "Stopped by the operator." };
-  emit({ id: "engine.state", data: { engine: "chat", state: "stopped" as const } });
-  if (previous) await retireBackend(previous);
+export function roleCanBeStartedByStack(requested: RoleId): boolean {
+  const role = processRoleFor(requested);
+  return !runtime(role).process && !urlBindingFor(role) && SPAWNABLE_ROLES.includes(role);
 }
 
-export async function unloadIdleChatEngine(options: { now?: Date; onBattery: boolean; idleMinutes: number; batteryIdleMinutes: number }): Promise<boolean> {
-  const backend = state.backend;
-  const last = state.lastRealRequestAt;
-  const idleMinutes = options.onBattery ? options.batteryIdleMinutes : options.idleMinutes;
-  const now = options.now ?? new Date();
-  if (!backend || backend.activeRequests > 0 || last === null || now.getTime() - last < idleMinutes * 60_000) return false;
-  state.generation++;
-  state.backend = null;
-  state.startingPromise = null;
-  state.status = { ...state.status, state: "installed", reason: `Unloaded after ${idleMinutes} minutes without a request.` };
-  emit({ id: "engine.state", data: { engine: "chat", state: "installed" as const } });
-  await retireBackend(backend);
+async function retire(processRecord: RoleProcess): Promise<void> {
+  processRecord.retired = true;
+  processRecord.stopGovernor?.();
+  while (processRecord.activeRequests > 0) await new Promise((resolve) => setTimeout(resolve, 10));
+  await processRecord.stop();
+  if (processRecord.governorHandle) release(processRecord.governorHandle);
+}
+
+export async function restartRole(requested: RoleId): Promise<void> {
+  const role = processRoleFor(requested);
+  const current = runtime(role);
+  current.generation++;
+  const previous = current.process;
+  current.process = null;
+  current.starting = null;
+  current.manuallyStopped = false;
+  current.status = { ...current.status, state: "loading", reason: null };
+  emit({ id: "engine.state", data: { engine: role, state: "loading" } });
+  if (previous) await retire(previous);
+}
+
+export async function stopRole(requested: RoleId, reason = "Stopped by Home."): Promise<void> {
+  const role = processRoleFor(requested);
+  const current = runtime(role);
+  current.generation++;
+  current.manuallyStopped = true;
+  const previous = current.process;
+  current.process = null;
+  current.starting = null;
+  current.status = { ...current.status, state: "stopped", reason };
+  emit({ id: "engine.state", data: { engine: role, state: "stopped", reason } });
+  emit({ id: "role.state", data: { role, state: "installed", since: new Date().toISOString(), reason } });
+  if (previous) await retire(previous);
+}
+
+/** Drains and unloads a role now, without marking it stopped: the next
+ * request starts it again. This is what "free memory" and Home's
+ * unload mean; `stopRole` is the explicit stop that stays stopped. */
+export async function unloadRole(requested: RoleId, reason: string): Promise<boolean> {
+  const role = processRoleFor(requested);
+  const current = runtime(role);
+  const processRecord = current.process;
+  if (!processRecord && !current.starting) return false;
+  current.generation++;
+  current.process = null;
+  current.starting = null;
+  current.status = { ...current.status, state: "installed", reason };
+  emit({ id: "engine.state", data: { engine: role, state: "installed", reason } });
+  if (processRecord) await retire(processRecord);
   return true;
 }
 
-export function reportChatEngineExited(reason = "The spawned engine exited unexpectedly."): void {
-  const previous = state.backend;
-  state.backend = null;
-  state.startingPromise = null;
-  state.status = { ...state.status, state: "offline", reason };
-  emit({ id: "engine.state", data: { engine: "chat", state: "offline", reason } });
-  raise({ code: "managed-host-offline", severity: "error", title: "Chat engine is offline", text: reason, cause: reason, fix: { label: "Restart engine", action: "restart_engine" } });
-  emit({ id: "repair", data: { id: "managed-host-offline", title: "Chat engine is offline", detail: reason, action: "restart_engine", level: "immediate" } });
-  if (previous) {
-    previous.retired = true;
-    void previous.stop();
-  }
+export async function unloadAllRoles(reason: string): Promise<RoleId[]> {
+  const unloaded: RoleId[] = [];
+  for (const role of [...runtimes.keys()]) if (await unloadRole(role, reason)) unloaded.push(role);
+  return unloaded;
 }
 
-export async function completeChat(model: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<{ status: number; body: unknown; headers: Record<string, string> }> {
-  const backend = await getChatBackend();
-  backend.activeRequests++;
-  state.status = { ...state.status, state: "busy", kind: backend.kind, identity: backend.identity };
+/** Drains and unloads a role that has had no request for the declared
+ * idle time (shorter on battery); the process is started again by the
+ * next request. Returns true when something was unloaded. */
+export async function unloadIdleRole(requested: RoleId, options: { now?: Date; onBattery: boolean; idleMinutes: number; batteryIdleMinutes: number }): Promise<boolean> {
+  const role = processRoleFor(requested);
+  const current = runtime(role);
+  const processRecord = current.process;
+  const last = current.lastRealRequestAt;
+  const idleMinutes = options.onBattery ? options.batteryIdleMinutes : options.idleMinutes;
+  const now = options.now ?? new Date();
+  if (!processRecord || processRecord.activeRequests > 0 || last === null || now.getTime() - last < idleMinutes * 60_000) return false;
+  current.generation++;
+  current.process = null;
+  current.starting = null;
+  current.status = { ...current.status, state: "installed", reason: `Unloaded after ${idleMinutes} minutes without a request.` };
+  emit({ id: "engine.state", data: { engine: role, state: "installed", reason: `Unloaded after ${idleMinutes} minutes without a request.` } });
+  await retire(processRecord);
+  return true;
+}
+
+export async function unloadIdleRoles(options: { now?: Date; onBattery: boolean; idleMinutes: number; batteryIdleMinutes: number }): Promise<RoleId[]> {
+  const unloaded: RoleId[] = [];
+  for (const role of runtimes.keys()) if (await unloadIdleRole(role, options)) unloaded.push(role);
+  return unloaded;
+}
+
+export async function stopAllRoles(reason: string): Promise<void> {
+  for (const role of [...runtimes.keys()]) if (runtime(role).process || runtime(role).starting) await stopRole(role, reason);
+}
+
+// ---- pins -----------------------------------------------------------------
+
+const pinnedModels = new Set<string>();
+export function pinModel(id: string, pinned: boolean): void { if (pinned) pinnedModels.add(id); else pinnedModels.delete(id); }
+export function isModelPinned(id: string): boolean { return pinnedModels.has(id); }
+
+/** Which role runtime, if any, currently serves a model file. */
+export function loadedRoleForModel(id: string): RoleId | null {
+  for (const [role, current] of runtimes) if (current.process?.modelId === id) return role;
+  return null;
+}
+
+// ---- requests -------------------------------------------------------------
+
+export interface RoleReply { status: number; body: unknown; headers: Record<string, string>; }
+export interface RoleStreamReply { status: number; body: ReadableStream<Uint8Array> | null; headers: Record<string, string>; }
+
+export async function requestRole(requested: RoleId, path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<RoleReply> {
+  const role = processRoleFor(requested);
+  const processRecord = await getProcess(role);
+  const current = runtime(role);
+  processRecord.activeRequests++;
+  current.status = { ...current.status, state: "busy", kind: processRecord.kind, identity: processRecord.identity };
   try {
-    const startedAt = performance.now();
     const completionMs = typeof body.timeout_ms === "number" && body.timeout_ms > 0 ? body.timeout_ms : (timeoutOverrides.completionMs ?? DEFAULT_COMPLETION_TIMEOUT_MS);
     const result = await withTimeout(
-      backend.client.complete({ ...body, model }, signal),
+      processRecord.client.request(path, body, signal),
       completionMs,
-      () => new EngineUnavailableError(`Engine completion timed out after ${Math.ceil(completionMs / 1000)}s.`),
+      () => new EngineUnavailableError(`Engine request timed out after ${Math.ceil(completionMs / 1000)}s.`),
     );
-    if (result.status >= 500) {
-      if (!await backend.client.health()) {
-        throw new EngineUnavailableError(`Engine returned HTTP ${result.status} and is no longer healthy.`);
-      }
+    if (result.status >= 500 && !await processRecord.client.health()) {
+      throw new EngineUnavailableError(`Engine returned HTTP ${result.status} and is no longer healthy.`);
     }
-    if (result.status >= 200 && result.status < 300) {
-      state.lastRealRequestAt = Date.now();
-      const usage = (result.body as { usage?: { completion_tokens?: unknown } }).usage;
-      const completionTokens = typeof usage?.completion_tokens === "number" ? usage.completion_tokens : null;
-      recordSpeedResult({ ability: model, modelId: backend.identity.model, engine: backend.identity.build, firstTokenMs: Math.round(performance.now() - startedAt), tokensPerSecond: completionTokens && completionTokens > 0 ? Math.round(completionTokens / Math.max((performance.now() - startedAt) / 1000, 0.001)) : null });
-    }
-    return { ...result, headers: identityHeaders(backend.identity) };
+    if (result.status >= 200 && result.status < 300) current.lastRealRequestAt = Date.now();
+    return { ...result, headers: identityHeaders(processRecord.identity) };
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
-      return { status: 499, body: { error: "Request cancelled" }, headers: identityHeaders(backend.identity) };
+      return { status: 499, body: { error: "Request cancelled" }, headers: identityHeaders(processRecord.identity) };
     }
-    if (await backend.client.health()) {
-      const message = (error as Error).message;
-      return { status: error instanceof EngineUnavailableError ? 504 : 503, body: { error: message }, headers: identityHeaders(backend.identity) };
+    if (await processRecord.client.health()) {
+      return { status: error instanceof EngineUnavailableError ? 504 : 503, body: { error: (error as Error).message }, headers: identityHeaders(processRecord.identity) };
     }
-    const unavailable = error instanceof EngineUnavailableError
-      ? error
-      : new EngineUnavailableError(`Engine request failed: ${(error as Error).message}`);
-    state.backend = null;
-    state.status = { ...state.status, state: "offline", reason: unavailable.reason };
-    void retireBackend(backend);
+    const unavailable = error instanceof EngineUnavailableError ? error : new EngineUnavailableError(`Engine request failed: ${(error as Error).message}`);
+    current.process = null;
+    current.starting = null;
+    current.status = { ...current.status, state: "offline", reason: unavailable.reason };
+    emit({ id: "engine.state", data: { engine: role, state: "offline", reason: unavailable.reason } });
+    void retire(processRecord);
     throw unavailable;
   } finally {
-    backend.activeRequests--;
-    if (state.backend === backend && backend.activeRequests === 0) state.status = { ...state.status, state: "ready" };
+    processRecord.activeRequests--;
+    if (current.process === processRecord && processRecord.activeRequests === 0) current.status = { ...current.status, state: "ready" };
   }
 }
 
-export interface ChatStreamResult {
-  status: number;
-  body: ReadableStream<Uint8Array> | null;
-  headers: Record<string, string>;
-}
-
-function finishStream(backend: ChatBackend): void {
-  backend.activeRequests--;
-  if (state.backend === backend) {
-    if (backend.activeRequests === 0) state.status = { ...state.status, state: "ready" };
-    state.lastRealRequestAt = Date.now();
+function finishStream(role: RoleId, processRecord: RoleProcess): void {
+  const current = runtime(role);
+  processRecord.activeRequests--;
+  if (current.process === processRecord) {
+    if (processRecord.activeRequests === 0) current.status = { ...current.status, state: "ready" };
+    current.lastRealRequestAt = Date.now();
   }
 }
 
-function trackedStream(backend: ChatBackend, upstream: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
+function trackedStream(role: RoleId, processRecord: RoleProcess, upstream: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
   const reader = upstream.getReader();
   let finished = false;
-  const finish = () => {
-    if (finished) return;
-    finished = true;
-    finishStream(backend);
-  };
+  const finish = () => { if (finished) return; finished = true; finishStream(role, processRecord); };
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
       try {
         const next = await reader.read();
-        if (next.done) {
-          finish();
-          controller.close();
-        } else {
-          controller.enqueue(next.value);
-        }
-      } catch (error) {
-        finish();
-        controller.error(error);
-      }
+        if (next.done) { finish(); controller.close(); } else controller.enqueue(next.value);
+      } catch (error) { finish(); controller.error(error); }
     },
     async cancel(reason) {
-      try {
-        await reader.cancel(reason);
-      } finally {
-        finish();
-      }
+      try { await reader.cancel(reason); } finally { finish(); }
     },
   });
 }
 
-export async function streamChat(model: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<ChatStreamResult> {
-  const backend = await getChatBackend();
-  backend.activeRequests++;
-  state.status = { ...state.status, state: "busy", kind: backend.kind, identity: backend.identity };
+export async function streamRole(requested: RoleId, path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<RoleStreamReply> {
+  const role = processRoleFor(requested);
+  const processRecord = await getProcess(role);
+  const current = runtime(role);
+  processRecord.activeRequests++;
+  current.status = { ...current.status, state: "busy", kind: processRecord.kind, identity: processRecord.identity };
   try {
-    if (!backend.client.stream) throw new EngineUnavailableError("The engine does not support streaming.");
-    const response = await backend.client.stream({ ...body, model, stream: true }, signal);
-    if (response.status >= 500 && !await backend.client.health()) {
-      throw new EngineUnavailableError("Engine returned HTTP " + response.status + " and is no longer healthy.");
-    }
-    if (!response.body) {
-      finishStream(backend);
-      return { status: response.status, body: null, headers: identityHeaders(backend.identity) };
-    }
-    return { status: response.status, body: trackedStream(backend, response.body), headers: identityHeaders(backend.identity) };
+    if (!processRecord.client.stream) throw new EngineUnavailableError("The engine does not support streaming.");
+    const response = await processRecord.client.stream(path, { ...body, stream: true }, signal);
+    if (response.status >= 500 && !await processRecord.client.health()) throw new EngineUnavailableError(`Engine returned HTTP ${response.status} and is no longer healthy.`);
+    if (!response.body) { finishStream(role, processRecord); return { status: response.status, body: null, headers: identityHeaders(processRecord.identity) }; }
+    return { status: response.status, body: trackedStream(role, processRecord, response.body), headers: identityHeaders(processRecord.identity) };
   } catch (error) {
-    finishStream(backend);
-    if ((error instanceof DOMException && error.name === "AbortError") || signal?.aborted) {
-      return { status: 499, body: null, headers: identityHeaders(backend.identity) };
-    }
-    if (error instanceof EngineUnavailableError) {
-      if (await backend.client.health()) {
-        return { status: 504, body: null, headers: identityHeaders(backend.identity) };
-      }
-      state.backend = null;
-      state.status = { ...state.status, state: "offline", reason: error.reason };
-      void retireBackend(backend);
-      throw error;
-    }
-    if (await backend.client.health()) {
-      return { status: 503, body: null, headers: identityHeaders(backend.identity) };
-    }
-    state.backend = null;
-    state.status = { ...state.status, state: "offline", reason: (error as Error).message };
-    void retireBackend(backend);
-    throw new EngineUnavailableError("Engine streaming request failed: " + (error as Error).message);
+    finishStream(role, processRecord);
+    if ((error instanceof DOMException && error.name === "AbortError") || signal?.aborted) return { status: 499, body: null, headers: identityHeaders(processRecord.identity) };
+    if (await processRecord.client.health()) return { status: error instanceof EngineUnavailableError ? 504 : 503, body: null, headers: identityHeaders(processRecord.identity) };
+    const unavailable = error instanceof EngineUnavailableError ? error : new EngineUnavailableError(`Engine streaming request failed: ${(error as Error).message}`);
+    current.process = null;
+    current.starting = null;
+    current.status = { ...current.status, state: "offline", reason: unavailable.reason };
+    emit({ id: "engine.state", data: { engine: role, state: "offline", reason: unavailable.reason } });
+    void retire(processRecord);
+    throw unavailable;
   }
 }
 
+// ---- tests ----------------------------------------------------------------
+
 export function resetSupervisorForTests(): void {
-  state.backend = null;
-  state.startingPromise = null;
-  state.generation++;
-  state.manuallyStopped = false;
-  state.status = initialStatus();
-  state.lastRealRequestAt = null;
+  for (const current of runtimes.values()) current.generation++;
+  runtimes.clear();
+  pinnedModels.clear();
+  preferredModels.clear();
 }
 
-// The moment the last real request (or post-load check) succeeded, or null
-// if none has since the supervisor started. This is the source of a role's
-// `ready` claim and its `checkedAt` stamp.
-export function lastRealRequestAt(): number | null {
-  return state.lastRealRequestAt;
-}
-
-export function setSupervisorFactoryForTests(factory: BackendFactory | null): void {
-  testBackendFactory = factory;
+export function setSupervisorFactoryForTests(factory: ProcessFactory | null): void {
+  testFactory = factory;
   resetSupervisorForTests();
 }
+
+/** A scripted process for the suite: answers every wire with a fixed
+ * reply and streams two chunks, never touching a real engine. */
+export function scriptedProcess(role: RoleId, overrides: Partial<RoleProcess> = {}): RoleProcess {
+  const client: EngineClient = {
+    baseUrl: "in-process://scripted",
+    async request(path, body) {
+      if (path === "/v1/embeddings") return { status: 200, body: { object: "list", data: [{ object: "embedding", index: 0, embedding: [0.1, 0.2, 0.3] }], model: role, usage: { prompt_tokens: 1, total_tokens: 1 } } };
+      const messages = Array.isArray(body.messages) ? body.messages : [];
+      const last = messages.at(-1) as { content?: unknown } | undefined;
+      const content = typeof last?.content === "string" && last.content.trim() ? "Scripted Stack reply." : "The scripted Stack engine is ready.";
+      return { status: 200, body: { id: "scripted-completion", object: "chat.completion", choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }], usage: { prompt_tokens: 1, completion_tokens: 4, total_tokens: 5 } } };
+    },
+    async stream(_path, _body, signal) {
+      const encoder = new TextEncoder();
+      const chunks = [
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "Scripted" } }] })}\n\n`,
+        `data: ${JSON.stringify({ choices: [{ delta: { content: " Stack" } }] })}\n\n`,
+        `data: ${JSON.stringify({ usage: { prompt_tokens: 1, completion_tokens: 2 } })}\n\n`,
+        "data: [DONE]\n\n",
+      ];
+      const body = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          for (const chunk of chunks) {
+            if (signal?.aborted) { controller.error(new DOMException("Cancelled", "AbortError")); return; }
+            controller.enqueue(encoder.encode(chunk));
+            await new Promise((resolve) => setTimeout(resolve, 5));
+          }
+          controller.close();
+        },
+      });
+      return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
+    },
+    async health() { return true; },
+  };
+  return { role, kind: "url", client, identity: { host: "stub", build: "scripted", model: `scripted-${role}`, healthy: true }, modelId: null, pid: null, port: null, activeRequests: 0, retired: false, stop: async () => {}, ...overrides };
+}
+
+export { CHAT_WIRE_ROLES, SPAWNABLE_ROLES };

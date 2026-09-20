@@ -8,11 +8,4 @@ paths = [
   '''(^|/)node_modules(/|$)''',
   '''(^|/)data(/|$)''',
   '''(^|/)data-[^/]+(/|$)''',
-  '''(^|/)frontend/dist(/|$)''',
-  '''(^|/)docs/site/dist(/|$)''',
-  '''(^|/)docs/site/\.astro(/|$)''',
-  '''(^|/)dist(/|$)''',
-  '''(^|/)desktop/src-tauri/target(/|$)''',
-  '''(^|/)desktop/src-tauri/gen(/|$)''',
-  '''(^|/)desktop/src-tauri/binaries/[^/]+$''',
 ]

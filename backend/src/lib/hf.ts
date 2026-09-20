@@ -1,10 +1,10 @@
-import { readStackConfig } from "@/settings/stackKeys";
-import { listFiles, listModels, modelInfo } from "@huggingface/hub";
+import { settingValues } from "@/settings";
+import { listFiles, modelInfo } from "@huggingface/hub";
 
 const DEFAULT_ENDPOINT = "https://huggingface.co";
 
 function currentEndpoint(): string {
-  const value = readStackConfig().find((setting) => setting.key === "huggingFaceEndpoint")?.inEffect;
+  const value = settingValues().huggingFaceEndpoint;
   const trimmed = typeof value === "string" && value.trim() ? value.trim() : DEFAULT_ENDPOINT;
   return trimmed.endsWith("/") ? trimmed.slice(0, -1) : trimmed;
 }
@@ -17,7 +17,6 @@ export function hfUrl(path: string): string {
   return `${currentEndpoint()}/${path.replace(/^\/+/, "")}`;
 }
 
-export interface HfSearchResult { repo: string; name: string; }
 export interface HfFile { name: string; sizeBytes: number | null; sha256: string | null; url: string; }
 export interface HfResolution { repo: string; name: string; revision: string; licence: string | null; gated: boolean; files: HfFile[]; role: "chat" | "image" | "unknown"; }
 
@@ -40,17 +39,6 @@ function roleFrom(info: { task?: string; config?: unknown; cardData?: unknown },
   if (info.task === "text-generation") return "chat";
   const template = valueAt(info.config, "chat_template") ?? valueAt(info.cardData, "chat_template");
   return files.some((file) => file.name.toLowerCase().endsWith(".gguf")) && typeof template === "string" && template.length > 0 ? "chat" : "unknown";
-}
-
-export function huggingFaceSearchEnabled(): boolean {
-  return readStackConfig().find((setting) => setting.key === "huggingFaceSearchEnabled")?.inEffect === true;
-}
-
-export async function searchHuggingFace(query: string): Promise<HfSearchResult[]> {
-  if (!huggingFaceSearchEnabled()) return [];
-  const results: HfSearchResult[] = [];
-  for await (const entry of listModels({ search: { query }, limit: 20, hubUrl: currentEndpoint(), fetch: hubFetch() as typeof fetch })) results.push({ repo: entry.name, name: entry.name });
-  return results;
 }
 
 export async function resolveHuggingFace(repo: string): Promise<HfResolution> {

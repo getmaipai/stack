@@ -1,12 +1,11 @@
 import { chmodSync, existsSync, mkdirSync, readlinkSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ENGINE_READY_MARKER, type EngineArchive, type EngineBinaryPin } from "@/lib/engineCatalog";
-import { extractArchive } from "@/lib/archive";
+import { extractArchive } from "@maipai/core/src/archive";
 import { downloadUrl } from "@/lib/download";
 import { engineCurrentPath, engineTagRoot } from "@/lib/store/layout";
 import { readEngineManifest, removeEngineManifest, writeEngineManifest } from "@/lib/store/manifests";
 import { listModels } from "@/lib/modelStore";
-import { recordDownloadHistory } from "@/lib/hygiene";
 
 function engineNameTag(id: string): { name: string; tag: string } {
   const marker = id.indexOf("-b");
@@ -26,14 +25,14 @@ export function engineBinaryPath(pin: EngineBinaryPin): string {
   return engineToolPath(pin, "llama-server");
 }
 
-async function downloadArchive(pin: EngineBinaryPin, archive: EngineArchive, onProgress: (completed: number, total: number, label: string) => void): Promise<void> {
+async function downloadArchive(pin: EngineBinaryPin, archive: EngineArchive, onProgress: (completed: number, total: number, label: string) => void, signal?: AbortSignal): Promise<void> {
   const destination = join(engineDir(pin.id), ".download.tmp");
   await downloadUrl(archive.url, destination, {
     expectedSha256: archive.sha256,
     expectedBytes: archive.approxBytes,
     onProgress: (progress) => onProgress(progress.completedBytes, progress.totalBytes, archive.label),
+    signal,
   });
-  recordDownloadHistory(archive.approxBytes);
   await extractArchive(destination, engineDir(pin.id));
   rmSync(destination, { force: true });
 }
@@ -41,14 +40,14 @@ async function downloadArchive(pin: EngineBinaryPin, archive: EngineArchive, onP
 export async function ensureEngine(
   pin: EngineBinaryPin,
   onProgress: (completed: number, total: number, label: string) => void = () => {},
-  options: { activate?: boolean } = {},
+  options: { activate?: boolean; signal?: AbortSignal } = {},
 ): Promise<void> {
   const destination = engineDir(pin.id);
   const readyMarker = join(destination, ENGINE_READY_MARKER);
   if (existsSync(readyMarker)) return;
   mkdirSync(destination, { recursive: true });
-  await downloadArchive(pin, pin.archive, onProgress);
-  for (const archive of pin.extraArchives ?? []) await downloadArchive(pin, archive, onProgress);
+  await downloadArchive(pin, pin.archive, onProgress, options.signal);
+  for (const archive of pin.extraArchives ?? []) await downloadArchive(pin, archive, onProgress, options.signal);
   if (pin.platform !== "win32") chmodSync(engineBinaryPath(pin), 0o755);
   writeFileSync(readyMarker, new Date().toISOString());
   const { name, tag } = engineNameTag(pin.id);

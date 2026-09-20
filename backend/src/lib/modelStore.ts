@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db, sqlite } from "@/db";
-import { modelGroups, modelUsage, models } from "@/db/schema";
+import { models } from "@/db/schema";
 import { downloadUrl, DownloadVerificationError, sha256OfFile, type DownloadOptions } from "@/lib/download";
 import { dataDir, modelsDir } from "@/lib/paths";
 import { hfUrl } from "@/lib/hf";
@@ -20,8 +20,6 @@ export const ModelSourceSchema = z.enum(["catalog", "huggingface"]);
 // manifests and Hugging Face metadata can grow without changing the DB shape.
 export interface ModelRecord {
   id: string;
-  nickname: string | null;
-  groupId: string | null;
   roles: RoleId[];
   source: "catalog" | "huggingface";
   provenance: Record<string, unknown>;
@@ -41,8 +39,6 @@ export interface ModelRecord {
 
 export interface ModelRecordInput {
   id: string;
-  nickname?: string | null;
-  groupId?: string | null;
   roles: RoleId[];
   source: "catalog" | "huggingface";
   provenance: Record<string, unknown>;
@@ -63,6 +59,7 @@ export interface DownloadModelOptions {
   destination: string;
   download?: typeof downloadUrl;
   onProgress?: DownloadOptions["onProgress"];
+  signal?: AbortSignal;
   now?: () => string;
 }
 
@@ -114,8 +111,6 @@ function parseJson<T>(value: string, fallback: T): T {
 function toRecord(row: typeof models.$inferSelect): ModelRecord {
   return {
     id: row.id,
-    nickname: row.nickname,
-    groupId: row.groupId,
     roles: parseJson<RoleId[]>(row.roles, []),
     source: ModelSourceSchema.parse(row.source),
     provenance: parseJson<Record<string, unknown>>(row.provenance, {}),
@@ -169,8 +164,6 @@ export function upsertModel(input: ModelRecordInput, now = new Date().toISOStrin
   const carries = (field: keyof ModelRecordInput): boolean => Object.prototype.hasOwnProperty.call(input, field);
   const record: ModelRecord = {
     id: input.id,
-    nickname: carries("nickname") ? input.nickname ?? null : existing?.nickname ?? null,
-    groupId: carries("groupId") ? input.groupId ?? null : existing?.groupId ?? null,
     roles: input.roles,
     source: input.source,
     provenance: input.provenance,
@@ -189,8 +182,6 @@ export function upsertModel(input: ModelRecordInput, now = new Date().toISOStrin
   };
   db.insert(models).values({
     id: record.id,
-    nickname: record.nickname,
-    groupId: record.groupId,
     roles: json(record.roles),
     source: record.source,
     provenance: json(record.provenance),
@@ -210,8 +201,6 @@ export function upsertModel(input: ModelRecordInput, now = new Date().toISOStrin
     target: models.id,
     set: {
       roles: json(record.roles),
-      nickname: record.nickname,
-      groupId: record.groupId,
       source: record.source,
       provenance: json(record.provenance),
       revision: record.revision,
@@ -295,6 +284,7 @@ async function installRegisteredModel(
   const downloadOptions: DownloadOptions = {
     expectedSha256: verifiedDownload.sha256,
     onProgress: options.onProgress,
+    signal: options.signal,
   };
   await downloader(verifiedDownload.url, destination, downloadOptions);
   const actual = await sha256OfFile(destination);
@@ -324,7 +314,6 @@ async function installRegisteredModel(
     createdAt: installed.installedAt ?? now,
   });
   emit({ id: "model.installed", data: { model: installed.id, path: installed.modelPath } });
-  void import("@/lib/speedTest").then(({ scheduleSpeedTest }) => scheduleSpeedTest());
   return installed;
 }
 
@@ -343,7 +332,5 @@ export function clearModelsForTests(): void {
     throw new Error("clearModelsForTests refused: data dir is not under the OS temp directory");
   }
   for (const model of listModels()) removeModelManifest(model.id);
-  db.delete(modelUsage).run();
-  db.delete(modelGroups).run();
   sqlite.exec("DELETE FROM models");
 }

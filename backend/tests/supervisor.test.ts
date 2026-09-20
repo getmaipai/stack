@@ -1,271 +1,176 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
 import { app } from "@/app";
-import {
-  completeChat,
-  getChatBackend,
-  reportChatEngineExited,
-  resetSupervisorForTests,
-  restartChatEngine,
-  setSupervisorFactoryForTests,
-  unloadIdleChatEngine,
-  type ChatBackend,
-  type EngineClient,
-} from "@/lib/supervisor";
-import { testClientHeaders } from "./authTest";
+import { __resetEventsForTests, eventsAfter } from "@/lib/events";
+import { __resetHealthForTests } from "@/lib/health";
+import { getProcess, getRoleStatus, lastRealRequestAt, loadTimeoutForModel, preferModel, probeReplyOk, probeRequest, processRoleFor, requestRole, restartRole, resetSupervisorForTests, scriptedProcess, selectedModel, setSupervisorFactoryForTests, setSupervisorTimeoutsForTests, stopRole, streamRole, unloadIdleRole, unloadRole, waitHealthy, EngineUnavailableError, type RoleProcess } from "@/lib/supervisor";
+import { clearModelsForTests, upsertModel } from "@/lib/modelStore";
+import type { RoleId } from "@/roles";
 
-const originalUrl = process.env.STACK_MANAGED_ENGINE_URL;
-const originalChatUrl = process.env.STACK_CHAT_ENGINE_URL;
+let started: RoleId[] = [];
+beforeEach(() => {
+  started = [];
+  __resetEventsForTests(); __resetHealthForTests();
+  setSupervisorFactoryForTests(async (role) => { started.push(role); return scriptedProcess(role); });
+});
+afterEach(() => { setSupervisorFactoryForTests(null); setSupervisorTimeoutsForTests(null); resetSupervisorForTests(); });
 
-afterEach(() => {
-  if (originalUrl === undefined) delete process.env.STACK_MANAGED_ENGINE_URL;
-  else process.env.STACK_MANAGED_ENGINE_URL = originalUrl;
-  if (originalChatUrl === undefined) delete process.env.STACK_CHAT_ENGINE_URL;
-  else process.env.STACK_CHAT_ENGINE_URL = originalChatUrl;
-  setSupervisorFactoryForTests(null);
+test("the first request starts the role's process once, and ready is stamped from that real request", async () => {
+  const [first, second] = await Promise.all([getProcess("chat"), getProcess("chat")]);
+  expect(first).toBe(second);
+  expect(started).toEqual(["chat"]);
+  expect(getRoleStatus("chat")).toMatchObject({ state: "ready", kind: "url", identity: { model: "scripted-chat" } });
+  expect(lastRealRequestAt("chat")).not.toBeNull();
+  expect(eventsAfter(0).map((event) => event.id)).toEqual(expect.arrayContaining(["engine.state", "role.state"]));
 });
 
-function backend(client: EngineClient, kind: "spawned" | "managed" | "url" = "spawned", stop = async () => {}): ChatBackend {
-  return {
-    client,
-    kind,
-    identity: { host: "local", build: "test-revision", model: "test.gguf", healthy: true },
-    pid: null,
-    stop,
-    activeRequests: 0,
-    retired: false,
-  };
-}
+test("roles that share chat's model run on chat's process", async () => {
+  expect(processRoleFor("judge")).toBe("chat");
+  await getProcess("coding");
+  await getProcess("judge");
+  expect(started).toEqual(["chat"]);
+  expect(getRoleStatus("router").state).toBe("ready");
+});
 
-test("a managed engine completes chat with identity headers", async () => {
-  const server = Bun.serve({
-    port: 0,
-    fetch(request) {
-      const path = new URL(request.url).pathname;
-      if (path === "/health") return Response.json({ status: "ok" });
-      if (path === "/props") return Response.json({ build_info: "managed-test", model_path: "/models/chat.gguf" });
-      if (path === "/v1/chat/completions") return Response.json({ id: "cmpl-test", choices: [{ message: { role: "assistant", content: "hello" } }] });
-      return new Response("not found", { status: 404 });
-    },
+test("a request carries the identity headers and the reply of the engine", async () => {
+  const reply = await requestRole("chat", "/v1/chat/completions", { model: "chat", messages: [{ role: "user", content: "hi" }] });
+  expect(reply.status).toBe(200);
+  expect(reply.headers).toEqual({ "x-maipai-engine": "stub", "x-maipai-model": "scripted-chat", "x-maipai-revision": "scripted" });
+  expect((reply.body as { choices: Array<{ message: { content: string } }> }).choices[0]!.message.content).toBe("Scripted Stack reply.");
+  const embed = await requestRole("embed", "/v1/embeddings", { model: "embed", input: "OK" });
+  expect(probeReplyOk("embed", embed)).toBe(true);
+  expect(started).toEqual(["chat", "embed"]);
+});
+
+test("streaming passes the engine's bytes through and finishes the request when the stream ends", async () => {
+  const stream = await streamRole("chat", "/v1/chat/completions", { model: "chat", messages: [] });
+  expect(stream.status).toBe(200);
+  const text = await new Response(stream.body).text();
+  expect(text).toContain("data: [DONE]");
+  expect(getRoleStatus("chat").state).toBe("ready");
+});
+
+test("stop drains and marks the role stopped; restart starts a new generation", async () => {
+  await getProcess("chat");
+  await stopRole("chat");
+  expect(getRoleStatus("chat")).toMatchObject({ state: "stopped" });
+  await expect(getProcess("chat")).rejects.toBeInstanceOf(EngineUnavailableError);
+  await restartRole("chat");
+  await getProcess("chat");
+  expect(started).toEqual(["chat", "chat"]);
+});
+
+test("a process that fails to start leaves the role offline with the reason", async () => {
+  setSupervisorFactoryForTests(async () => { throw new EngineUnavailableError("No verified and installed chat model is available."); });
+  await expect(getProcess("chat")).rejects.toThrow(/No verified/);
+  expect(getRoleStatus("chat")).toMatchObject({ state: "offline", reason: "No verified and installed chat model is available." });
+});
+
+test("a living engine's 5xx is returned as is and does not retire the process", async () => {
+  setSupervisorFactoryForTests(async (role) => {
+    const scripted = scriptedProcess(role);
+    scripted.client.request = async () => ({ status: 500, body: { error: "slot busy" } });
+    return scripted;
   });
-  process.env.STACK_MANAGED_ENGINE_URL = `http://127.0.0.1:${server.port}`;
-  delete process.env.STACK_CHAT_ENGINE_URL;
-  resetSupervisorForTests();
+  const reply = await requestRole("chat", "/v1/chat/completions", { model: "chat", messages: [] });
+  expect(reply.status).toBe(500);
+  expect(getRoleStatus("chat").state).toBe("ready");
+});
 
-  const response = await app.request("/v1/chat/completions", {
-    method: "POST",
-    headers: { ...testClientHeaders, "content-type": "application/json" },
-    body: JSON.stringify({ model: "chat", messages: [{ role: "user", content: "hi" }] }),
+test("an engine that stops answering its health probe is retired and reported offline", async () => {
+  setSupervisorFactoryForTests(async (role) => {
+    const scripted = scriptedProcess(role);
+    scripted.client.request = async () => { throw new EngineUnavailableError("connection refused"); };
+    scripted.client.health = async () => false;
+    return scripted;
   });
-  expect(response.status).toBe(200);
-  expect((await response.json() as { choices: unknown[] }).choices).toHaveLength(1);
-  expect(response.headers.get("x-maipai-engine")).toBe("local");
-  expect(response.headers.get("x-maipai-model")).toBe("chat.gguf");
-  expect(response.headers.get("x-maipai-revision")).toBe("managed-test");
-  server.stop();
+  await expect(requestRole("chat", "/v1/chat/completions", { model: "chat", messages: [] })).rejects.toBeInstanceOf(EngineUnavailableError);
+  expect(getRoleStatus("chat").state).toBe("offline");
 });
 
-test("a loaded role whose last check failed is offline with the reason, not ready", async () => {
-  resetSupervisorForTests();
-  const client: EngineClient = {
-    baseUrl: "http://scripted",
-    complete: async () => { throw new Error("connection refused"); },
-    health: async () => false,
-  };
-  setSupervisorFactoryForTests(async () => backend(client, "managed"));
-  const response = await app.request("/v1/chat/completions", {
-    method: "POST",
-    headers: { ...testClientHeaders, "content-type": "application/json" },
-    body: JSON.stringify({ model: "chat", messages: [] }),
+test("a cancelled request is a normal end, not a retirement", async () => {
+  setSupervisorFactoryForTests(async (role) => {
+    const scripted = scriptedProcess(role);
+    scripted.client.request = async () => { throw new DOMException("Cancelled", "AbortError"); };
+    return scripted;
   });
-  expect(response.status).toBe(503);
-  const body = await response.json() as { offline_reason: string };
-  expect(body.offline_reason).toContain("connection");
-  expect(body.offline_reason).not.toBe("");
-  const roles = await app.request("/stack/v1/roles", { headers: testClientHeaders });
-  const rolesBody = await roles.json() as { roles: Array<{ id: string; state: { state: string; reason?: string | null }; reason?: string | null }> };
-  const chat = rolesBody.roles.find((r) => r.id === "chat");
-  expect(chat?.state.state).toBe("offline");
-  expect(chat?.state.reason).toBeTruthy();
-  expect(chat?.reason).toBeTruthy();
+  const reply = await requestRole("chat", "/v1/chat/completions", { model: "chat", messages: [] });
+  expect(reply.status).toBe(499);
+  expect(getRoleStatus("chat").state).toBe("ready");
 });
 
-test("a stale check older than an hour drops ready to loaded with time stamps present", async () => {
-  process.env.STACK_SHOWROOM = "1";
-  resetSupervisorForTests();
-  const client: EngineClient = {
-    baseUrl: "http://scripted",
-    complete: async () => ({ status: 200, body: { choices: [{ message: { content: "ok" } }] } }),
-    health: async () => true,
-  };
-  setSupervisorFactoryForTests(async () => backend(client, "managed"));
-  await completeChat("chat", { model: "chat", messages: [] });
-  const response = await app.request("/stack/v1/roles", { headers: testClientHeaders });
-  expect(response.status).toBe(200);
-  const fresh = (await response.json()) as { roles: Array<{ id: string; state: { state: string; since: string; checkedAt?: string } }> };
-  const chatFresh = fresh.roles.find((r) => r.id === "chat");
-  expect(chatFresh?.state.state).toBe("ready");
-  expect(chatFresh?.state.since).toBeTruthy();
-  expect(chatFresh?.state.checkedAt).toBeTruthy();
-  delete process.env.STACK_SHOWROOM;
+test("idle unload retires a quiet process after the declared minutes, sooner on battery", async () => {
+  await getProcess("chat");
+  const later = new Date(Date.now() + 20 * 60_000);
+  expect(await unloadIdleRole("chat", { now: later, onBattery: false, idleMinutes: 30, batteryIdleMinutes: 10 })).toBe(false);
+  expect(await unloadIdleRole("chat", { now: later, onBattery: true, idleMinutes: 30, batteryIdleMinutes: 10 })).toBe(true);
+  expect(getRoleStatus("chat").state).toBe("installed");
+  await getProcess("chat");
+  expect(started).toEqual(["chat", "chat"]);
 });
 
-test("a vanished managed engine returns its offline reason", async () => {
-  const client: EngineClient = {
-    baseUrl: "http://scripted",
-    complete: async () => { throw new Error("connection refused"); },
-    health: async () => false,
-  };
-  setSupervisorFactoryForTests(async () => backend(client, "managed"));
-  const response = await app.request("/v1/chat/completions", {
-    method: "POST",
-    headers: { ...testClientHeaders, "content-type": "application/json" },
-    body: JSON.stringify({ model: "chat", messages: [] }),
-  });
-  expect(response.status).toBe(503);
-  expect((await response.json() as { offline_reason: string }).offline_reason).toContain("connection");
+test("the post-load probe is the smallest real request for the wire", () => {
+  expect(probeRequest("chat").path).toBe("/v1/chat/completions");
+  expect(probeRequest("embed").path).toBe("/v1/embeddings");
+  expect(probeReplyOk("chat", { status: 200, body: { choices: [{ message: { content: "", reasoning_content: "thinking" } }] } })).toBe(true);
+  expect(probeReplyOk("chat", { status: 200, body: { choices: [{ message: { content: "" } }] } })).toBe(false);
+  expect(probeReplyOk("embed", { status: 200, body: { data: [] } })).toBe(false);
 });
 
-test("a failed spawned engine can be reported and restarted", async () => {
+test("the load timeout scales with model size between the floor and the ceiling", () => {
+  setSupervisorTimeoutsForTests({ loadFloorMs: 1_000 });
+  expect(loadTimeoutForModel(0)).toBe(1_000);
+  expect(loadTimeoutForModel(3 * 1024 ** 3)).toBe(1_000 + 3 * 60_000);
+  expect(loadTimeoutForModel(100 * 1024 ** 3)).toBe(20 * 60_000);
+});
+
+test("waitHealthy gives up when the process exits before it is healthy", async () => {
+  const client: RoleProcess["client"] = { baseUrl: "x", request: async () => ({ status: 200, body: {} }), health: async () => false };
+  await expect(waitHealthy(client, 200, () => false)).rejects.toThrow(/exited before/);
+  await expect(waitHealthy(client, 50, () => true)).rejects.toThrow(/load timeout/);
+});
+
+test("the roles route derives state from the supervisor and never stores it", async () => {
+  await getProcess("chat");
+  const response = await app.request("/stack/v1/roles");
+  const body = await response.json() as { roles: Array<{ id: string; state: { state: string; checkedAt?: string } }> };
+  expect(body.roles.find((role) => role.id === "chat")!.state.state).toBe("ready");
+  expect(body.roles.find((role) => role.id === "chat")!.state.checkedAt).toBeDefined();
+  expect(body.roles.find((role) => role.id === "image")!.state.state).toBe("notInstalled");
+});
+
+test("after an engine goes offline mid-request, the next request starts a fresh process (regression: a stale start promise was reused)", async () => {
   let starts = 0;
-  const client: EngineClient = {
-    baseUrl: "http://scripted",
-    complete: async () => ({ status: 200, body: { choices: [{ message: { content: "ok" } }] } }),
-    health: async () => true,
-  };
-  setSupervisorFactoryForTests(async () => {
+  setSupervisorFactoryForTests(async (role) => {
     starts++;
-    return backend(client);
+    const scripted = scriptedProcess(role);
+    if (starts === 1) { scripted.client.request = async () => { throw new EngineUnavailableError("connection refused"); }; scripted.client.health = async () => false; }
+    return scripted;
   });
-  await completeChat("chat", { model: "chat", messages: [] });
-  reportChatEngineExited("scripted crash");
-  await completeChat("chat", { model: "chat", messages: [] });
+  await expect(requestRole("chat", "/v1/chat/completions", { model: "chat", messages: [] })).rejects.toBeInstanceOf(EngineUnavailableError);
+  const reply = await requestRole("chat", "/v1/chat/completions", { model: "chat", messages: [] });
+  expect(reply.status).toBe(200);
   expect(starts).toBe(2);
 });
 
-test("restart drains an in-flight request and stale starts are discarded", async () => {
-  let resolveCompletion!: (value: { status: number; body: unknown }) => void;
-  let stopCalls = 0;
-  const client: EngineClient = {
-    baseUrl: "http://scripted",
-    complete: () => new Promise((resolve) => { resolveCompletion = resolve; }),
-    health: async () => true,
-  };
-  setSupervisorFactoryForTests(async () => backend(client, "spawned", async () => { stopCalls++; }));
-  const request = completeChat("chat", { model: "chat", messages: [] });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  const restart = restartChatEngine();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(stopCalls).toBe(0);
-  resolveCompletion({ status: 200, body: { choices: [{ message: { content: "ok" } }] } });
-  await request;
-  await restart;
-  expect(stopCalls).toBe(1);
+test("unload is undone by the next request; stop stays stopped until a restart", async () => {
+  await getProcess("chat");
+  expect(await unloadRole("chat", "Unloaded to free memory.")).toBe(true);
+  expect(getRoleStatus("chat").state).toBe("installed");
+  await getProcess("chat");
+  expect(started).toEqual(["chat", "chat"]);
+  await stopRole("chat");
+  await expect(getProcess("chat")).rejects.toThrow(/stopped/);
 });
 
-test("a start from an old generation is stopped before the new one is installed", async () => {
-  let releaseFirst!: (value: ChatBackend) => void;
-  let starts = 0;
-  const client: EngineClient = {
-    baseUrl: "http://scripted",
-    complete: async () => ({ status: 200, body: { choices: [{ message: { content: "ok" } }] } }),
-    health: async () => true,
-  };
-  setSupervisorFactoryForTests(() => {
-    starts++;
-    if (starts === 1) return new Promise((resolve) => { releaseFirst = resolve; });
-    return Promise.resolve(backend(client));
-  });
-  const first = getChatBackend();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  await restartChatEngine();
-  releaseFirst(backend(client));
-  await first;
-  expect(starts).toBe(2);
-});
-
-test("a living engine's 500 is returned without retirement", async () => {
-  let calls = 0;
-  let stopCalls = 0;
-  const client: EngineClient = {
-    baseUrl: "http://scripted",
-    complete: async () => ++calls === 1 ? { status: 500, body: { error: "busy" } } : { status: 200, body: { ok: true } },
-    health: async () => true,
-  };
-  setSupervisorFactoryForTests(async () => backend(client, "managed", async () => { stopCalls++; }));
-  expect((await completeChat("chat", {})).status).toBe(500);
-  expect((await completeChat("chat", {})).status).toBe(200);
-  expect(stopCalls).toBe(0);
-});
-
-test("battery idle policy unloads a just-in-time chat model sooner", async () => {
-  let stopped = 0;
-  const client: EngineClient = { baseUrl: "http://scripted", complete: async () => ({ status: 200, body: { ok: true } }), health: async () => true };
-  setSupervisorFactoryForTests(async () => backend(client, "spawned", async () => { stopped++; }));
-  await getChatBackend();
-  expect(await unloadIdleChatEngine({ now: new Date(Date.now() + 11 * 60_000), onBattery: true, idleMinutes: 30, batteryIdleMinutes: 10 })).toBe(true);
-  expect(stopped).toBe(1);
-});
-
-test("an aborted completion is a cancellation and does not retire the engine", async () => {
-  let stopCalls = 0;
-  const client: EngineClient = {
-    baseUrl: "http://scripted",
-    complete: async () => { throw new DOMException("Cancelled", "AbortError"); },
-    health: async () => false,
-  };
-  setSupervisorFactoryForTests(async () => backend(client, "managed", async () => { stopCalls++; }));
-  const result = await completeChat("chat", {}, AbortSignal.abort());
-  expect(result.status).toBe(499);
-  expect(stopCalls).toBe(0);
-});
-
-test("waitHealthy accepts a delayed loading response within the tuned timeout", async () => {
-  let calls = 0;
-  const { waitHealthy, setSupervisorTimeoutsForTests } = await import("@/lib/supervisor");
-  setSupervisorTimeoutsForTests({ loadFloorMs: 100 });
-  try {
-    await waitHealthy({ health: async () => ++calls > 1, baseUrl: "scripted", complete: async () => ({ status: 200, body: {} }) }, 300);
-    expect(calls).toBeGreaterThan(1);
-  } finally {
-    setSupervisorTimeoutsForTests(null);
-  }
-});
-
-test("post-load checks time out instead of hanging", async () => {
-  const { postLoadCheck, setSupervisorTimeoutsForTests } = await import("@/lib/supervisor");
-  setSupervisorTimeoutsForTests({ postLoadMs: 10 });
-  try {
-    await expect(postLoadCheck({ baseUrl: "scripted", health: async () => true, complete: () => new Promise(() => {}) }, null)).rejects.toThrow();
-  } finally {
-    setSupervisorTimeoutsForTests(null);
-  }
-});
-
-test("post-load checks record the kernel footprint when a process is present", async () => {
-  const { postLoadCheck } = await import("@/lib/supervisor");
-  const { __setMemoryReaderForTests } = await import("@/lib/memory");
-  const { scriptedMemoryReader } = await import("@/lib/memory/scripted");
-  const { GOVERNOR_MEMORY_DEFAULT } = await import("./governorMemoryDefault");
-  // This is about the real process footprint, not the suite's scripted
-  // default (tests/preload.ts): opt out of it, then restore the default.
-  __setMemoryReaderForTests(null);
-  try {
-    const check = await postLoadCheck({ baseUrl: "scripted", health: async () => true, complete: async () => ({ status: 200, body: { choices: [{ message: { content: "OK" } }] } }) }, process.pid);
-    expect(check.replyOk).toBe(true);
-    expect(check.actualBytes).toBeGreaterThan(1_048_576);
-  } finally {
-    __setMemoryReaderForTests(scriptedMemoryReader([GOVERNOR_MEMORY_DEFAULT]));
-  }
-});
-
-test("a free spawned port is selected before engine launch", async () => {
-  const { findFreePort } = await import("@/lib/supervisor");
-  const port = await findFreePort();
-  expect(port).toBeGreaterThan(0);
-});
-
-test("a reasoning-only reply passes the post-load check", async () => {
-  const { postLoadCheck } = await import("@/lib/supervisor");
-  const check = await postLoadCheck({ baseUrl: "scripted", health: async () => true, complete: async () => ({ status: 200, body: { choices: [{ message: { content: "", reasoning_content: "OK" } }] } }) }, null);
-  expect(check.replyOk).toBe(true);
+test("Home's load names the model: the preferred selectable model wins over the first one", () => {
+  clearModelsForTests();
+  const verified = { source: "catalog" as const, provenance: {}, revision: "r", sha256: "a".repeat(64), licence: "MIT", verifiedAt: new Date().toISOString(), modelPath: "/tmp/never-opened.gguf" };
+  upsertModel({ id: "chat-a", roles: ["chat"], ...verified });
+  upsertModel({ id: "chat-b", roles: ["chat"], ...verified });
+  expect(selectedModel("chat")?.id).toBe("chat-a");
+  preferModel("chat", "chat-b");
+  expect(selectedModel("chat")?.id).toBe("chat-b");
+  preferModel("chat", "missing");
+  expect(selectedModel("chat")?.id).toBe("chat-a");
+  clearModelsForTests();
 });

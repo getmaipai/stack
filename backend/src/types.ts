@@ -1,22 +1,5 @@
-import type { RoleId } from "@/roles";
+import type { Env } from "hono";
 
-export interface ClientRecord {
-  id: string;
-  name: string;
-  keyPrefix: string;
-  allowedRoles: RoleId[];
-  createdAt: string;
-  lastSeenAt: string | null;
-  revokedAt: string | null;
-  requests: number;
-  tokensIn: number;
-  tokensOut: number;
-  audioSeconds: number;
-  jobs: number;
-}
-
-export type AppEnv = {
-  Variables: {
-    client?: ClientRecord;
-  };
-};
+// The Stack's Hono environment: no per-request variables, because there
+// is no caller identity to carry. Loopback is the whole authentication.
+export type AppEnv = Env;

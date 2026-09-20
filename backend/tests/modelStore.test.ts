@@ -16,19 +16,19 @@ import {
 import { STACK_CHAT_MODEL } from "@/lib/modelCatalog";
 import { hfUrl } from "@/lib/hf";
 import { downloadUrl } from "@/lib/download";
-import { __resetStackSettingsForTests, updateStackConfig } from "@/settings/stackKeys";
+import { __resetSettingsForTests, updateSettings } from "@/settings";
 
 const fixtureDir = join(tmpdir(), `maipai-stack-models-${Date.now()}`);
 
 beforeEach(() => {
   clearModelsForTests();
-  __resetStackSettingsForTests();
+  __resetSettingsForTests();
   mkdirSync(fixtureDir, { recursive: true });
 });
 
 afterEach(() => {
   clearModelsForTests();
-  __resetStackSettingsForTests();
+  __resetSettingsForTests();
   rmSync(fixtureDir, { recursive: true, force: true });
 });
 
@@ -214,7 +214,7 @@ afterAll(() => mirrorServer.stop(true));
 
 test("a pinned catalog model downloads from the configured Hugging Face mirror", async () => {
   const mirror = new URL(mirrorServer.url).href.replace(/\/$/, "");
-  updateStackConfig({ huggingFaceEndpoint: mirror });
+  updateSettings({ huggingFaceEndpoint: mirror });
   const expectedUrl = hfUrl(`Qwen/Qwen3-1.7B-GGUF/resolve/${STACK_CHAT_MODEL.revision}/Qwen3-1.7B-Q8_0.gguf`);
   expect(expectedUrl).toBe(`${mirror}/Qwen/Qwen3-1.7B-GGUF/resolve/${STACK_CHAT_MODEL.revision}/Qwen3-1.7B-Q8_0.gguf`);
   let requestedUrl = "";
@@ -236,7 +236,7 @@ test("a pinned catalog model downloads from the configured Hugging Face mirror",
 
 test("an incomplete Hugging Face provenance record throws before writing", async () => {
   const mirror = new URL(mirrorServer.url).href.replace(/\/$/, "");
-  updateStackConfig({ huggingFaceEndpoint: mirror });
+  updateSettings({ huggingFaceEndpoint: mirror });
   const incompleteUrl = hfUrl("example/model/resolve/main/incomplete.gguf");
   await expect(installHuggingFaceModel({
     id: "hf-incomplete",

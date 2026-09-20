@@ -1,6 +1,6 @@
 import { dlopen, FFIType, ptr } from "bun:ffi";
 import os from "node:os";
-import { raiseRepair } from "@/lib/repairs";
+import { raise } from "@/lib/health";
 import type { MemoryReader, MemoryPressure, MemorySnapshot } from "@/lib/memory/types";
 
 const PAGE_SIZE_FALLBACK = 16_384;
@@ -22,7 +22,7 @@ let warned = false;
 function warning(detail: string): void {
   if (warned) return;
   warned = true;
-  try { raiseRepair("Memory reader degraded", detail, "free_memory"); } catch { /* startup and tests may not have the database */ }
+  try { raise({ code: "memory-reader-degraded", severity: "warning", title: "Memory reader degraded", text: detail, cause: detail }); } catch { /* startup and tests may not have the database */ }
 }
 
 function loadSymbols(): DarwinSymbols {

@@ -2,97 +2,45 @@
 
 All notable changes to MaiPai Stack are recorded here. The format is
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
-uses [Semantic Versioning](https://semver.org/). Everything stays 0.x until
-the product passes its battle-tested checklist in `docs/dev.md`.
+uses [Semantic Versioning](https://semver.org/). The Stack has no
+release of its own: it ships inside MaiPai Home's installer and updates
+with Home's releases, so this file tracks what a Home release picks up.
 
 ## [Unreleased]
 
-### Added
+### Changed
 
-- STACK-04c model groups: persistent nicknames, nested one-membership groups,
-  per-model utilization and load seconds, governor-backed group actions, and
-  grouped Models and Monitoring showroom captures.
+- The Stack is MaiPai Home's engine foundation, not a product
+  (2026-09-20, `.github/docs/DECISIONS.md`). The backend was started
+  fresh on that design: the governor, the kernel memory readers, the
+  model store and its on-disk layout, the resumable checksummed
+  downloads, the engine catalog and install, the identity probe, the
+  health list, the role declaration, the profiles, the engine swap and
+  rollback, and the launchd service were kept with their tests; the
+  supervisor is now per role (spawned, managed, or a read-only url
+  binding) with the same lifecycle; the event feed is one typed
+  server-sent stream that stays open and replays by sequence; every
+  setting is declared once and served for Home's renderer; readiness,
+  updates against the Catalog's signed index, the job queue shape, the
+  privacy rows, the precious-state declaration and the diagnostics
+  bundle are routes Home calls. Loopback is the only authentication.
+- The shared helpers (log, withTimeout, paths, archive, the zip writer,
+  the hardware probe, the openapi router) come from `@maipai/core` in
+  `getmaipai/shared` (pinned `core-v0.1.0`); the local copies are gone.
+- The state database has three tables (`meta`, `models`, `health`) and
+  one migration. A data directory from before the refocus does not
+  migrate (nothing was ever installed): the daemon refuses it with a
+  message naming the path.
 
-- STACK-34 detect and adopt: loopback-only engine and model-folder probes,
-  explicit role-scoped adoption, version-floor health, and Forget without
-  changing the detected host or source folder.
+### Removed
 
-- STACK-36 Overview console: range-aware usage, memory, and speed series with
-  seven dashboard widgets, clickable status rings, and showroom captures.
-
-- STACK-35 property panel: reusable engine, model, and detected-store detail
-  panels with tabs, action buttons, arrow-key selection, and phone sheets.
-
-- STACK-36 showroom mode: a development-only believable household fixture
-  behind the real routes, with a `bun run showroom` command and full-page
-  screenshot capture support.
-
-- STACK-19 engine management: operator controls, declarative engine
-  configuration with restart state, derived version status, install progress,
-  protected build removal, and the Engines page with Configure sheet.
-
-- STACK-10 update manifests, opt-in conditional checks, engine tag swap and
-  rollback controls, and the weekly model revision watch.
-
-- The STACK-09b daemon-owned health list with idempotent health changes,
-  resolve and ignore actions, Repairs compatibility, producer codes, and
-  board cards with one Fix or Learn more action.
-
-- The STACK-04b content-addressed store: Hugging Face cache layout, engine
-  manifests, import scanning, ranged downloads with resume, storage
-  accounting, migration, and reference-counted model and engine removal.
-
-- The kernel memory ledger for STACK-06b: macOS FFI, Linux proc and PSI
-  twin, Windows named stub, pressure watermarks, measured footprints, GGUF
-  estimates, and llama-fit-params dry runs.
-- The one-line macOS arm64 installer and compiled single-file daemon for
-  STACK-15 and STACK-15b, with checksum verification and launchd service
-  controls.
-- Try it for STACK-12: a stateless chat surface with copied shadcn message
-  primitives, live identity and latency metrics, voice offline states, and
-  generator acknowledgement/job placeholders.
-- The professional dashboard shell for STACK-11c: eleven Stack sections,
-  responsive sidebar, search/command palette, monitoring chart, alerts,
-  access view, and honest empty states for updates, backups, and Try it.
-- The board-first install flow for STACK-11b: branded hardware and ability
-  cards, deferred operator password, scripted setup downloads, pause/resume,
-  and honest progress copy.
-- Streaming chat completions now pass through OpenAI-shaped SSE chunks
-  with identity headers, abort propagation, and usage counters.
-- The first-run admin UI, operator login, role board, memory card,
-  notifications and Repairs list, served by the Stack daemon.
-- The event feed (`/stack/v1/events`, SSE with replay), the durable notification center, Repairs with one action each, and rotating redacted logs per engine.
-- The hardware probe, profile tiers, and `/stack/v1/hardware` route.
-- The pinned engine catalog, verified archive downloader, installer, and engine listing route.
-- The model provenance store with Catalog and Hugging Face install paths and verified role selection.
-- The spawned, managed, and URL supervisor with generation-safe restarts and real chat binding.
-- The role declaration, hardware profile reconciliation, OpenAI-shaped route stubs, and identity contract.
-- The Bun backend scaffold with a health route, OpenAPI explorer and SQLite metadata store.
-- The docs site skeleton (`docs/site/`, Astro Starlight) and the first
-  user pages (`docs/user/getting-started.md`,
-  `docs/user/fix-a-problem.md`).
-- The design record (`docs/dev.md`), the experience design (`docs/ux.md`),
-  the integration contracts for Home, Bot, Go and Catalog
-  (`docs/integrations.md`), the privacy page (`docs/user/privacy.md`) and
-  the backlog.
-- The generated API document (`docs/api/openapi.json`) and its drift check
-  in the gate, with the API reference wired into the docs site.
-- The "What your computer can run" page
-  (`docs/user/what-your-computer-can-run.md`).
-- Operator setup and login, role-scoped client keys, counters and revoke
-  routes for the Stack API.
-- The memory governor's admission, queue, eviction, cap and budget status
-  route.
-- The "Keys for your tools" user page
-  (`docs/user/keys-for-your-tools.md`).
-
-### Security
-
-- Bumped `drizzle-orm` to `^0.45.2` to address the SQL injection advisory.
-
-### Fixed
-
-- Model re-registration no longer clears installed model state.
-- Existing model files are verified by checksum before they are marked installed.
-- Fixed the remaining block B review findings across supervisor timeouts,
-  liveness, streaming refusal, provenance errors and advisory model sizes.
+- The console, the showroom, the library, the palette, the helper, the
+  MCP server, the Tauri desktop app, the installer and docs site, the
+  operator login, client keys, the alert channels, detection and
+  adoption of other tools, model groups, the series and live samplers,
+  the weekly digest, storage hygiene and accounting, the network probe,
+  the licence sentences, the setup plan, the speed test, the
+  maintenance scheduler (Home owns every schedule and calls the Stack's
+  routes), the Stack-release update manifests, the user docs tier, the
+  release workflows, and every test and script for them. The product
+  era's history is in git at `d4e088e`.

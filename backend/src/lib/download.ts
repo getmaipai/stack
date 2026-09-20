@@ -2,8 +2,12 @@ import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream, existsSync, statSync, unlinkSync } from "node:fs";
 import { mkdirSync, renameSync } from "node:fs";
 import { dirname } from "node:path";
-import { withTimeout } from "@/lib/withTimeout";
-import { stackSettingValues } from "@/settings/stackKeys";
+import { withTimeout } from "@maipai/core/src/withTimeout";
+
+// The declared `downloadCapMbps` setting, pushed here by settings.ts when
+// it changes, so this module reads no configuration of its own.
+let defaultCapMbps = 0;
+export function setDownloadCapMbps(mbps: number): void { defaultCapMbps = Number.isFinite(mbps) && mbps > 0 ? mbps : 0; }
 
 export interface DownloadProgress {
   completedBytes: number;
@@ -94,8 +98,7 @@ async function downloadOnce(url: string, destPath: string, opts: DownloadOptions
 
 export async function downloadUrl(url: string, destPath: string, opts: DownloadOptions): Promise<void> {
   if (existsSync(destPath)) return;
-  const configuredCap = Number(stackSettingValues().downloadCapMbps ?? 0);
-  const effectiveOptions = opts.downloadCapMbps === undefined ? { ...opts, downloadCapMbps: configuredCap } : opts;
+  const effectiveOptions = opts.downloadCapMbps === undefined ? { ...opts, downloadCapMbps: defaultCapMbps } : opts;
   let verificationRetried = false;
   for (let attempt = 1; ; attempt += 1) {
     try {

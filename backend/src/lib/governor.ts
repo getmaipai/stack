@@ -1,8 +1,6 @@
-import { measureProcessMemoryBytes } from "@/lib/supervisor";
 import { emit } from "@/lib/events";
 import { getMemoryReader, type MemoryPressure, type MemoryReader } from "@/lib/memory";
 import { raise, resolve as resolveHealth } from "@/lib/health";
-import { recordMemorySample } from "@/lib/series";
 
 const GB = 1_073_741_824;
 
@@ -184,11 +182,17 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
   return { id: request.id, kind: request.kind, requestedBytes: peak.bytes };
 }
 
+/** A spawned process's pid is known only after admission; the resident
+ * RSS watch needs it on the loaded item. */
+export function setGovernorPid(id: string, pid: number | null): void {
+  const item = loaded.get(id);
+  if (item) item.pid = pid;
+}
+
 export function getRunState(): RunState { return runState; }
 
 export function setRunState(next: RunState): void {
   runState = next;
-  emit({ id: "run.state", data: { state: next } });
 }
 
 export async function pauseAll(): Promise<void> {
@@ -265,7 +269,6 @@ export function startGovernor(options: StartGovernorOptions): () => void {
     pressurePolls = systemBreaches;
     const arithmeticPressure: MemoryPressure = systemBreaches >= tuning.systemSustainedPolls ? "warn" : "normal";
     pressure = kernelPressure === "critical" ? "critical" : kernelPressure === "warn" || arithmeticPressure === "warn" ? "warn" : "normal";
-    recordMemorySample({ totalBytes: totalMemoryBytes, freeBytes: freeMemoryBytes, availablePercent, pressure, loadedBytes: loadedBytes() });
     if (pressure === "critical") {
       raise({ code: "memory-pressure-critical", severity: "critical", title: "Memory pressure is critical", text: "The governor is stopping work to protect this computer.", cause: "The kernel reported critical memory pressure.", fix: { label: "Free memory", action: "free_memory" } });
       resolveHealth("memory-pressure-warn");

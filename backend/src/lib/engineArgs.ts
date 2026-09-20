@@ -12,6 +12,8 @@ export interface LlamaServerArgsOptions {
   contextLength: number;
   /** KV cache quantization, on by default on Apple silicon. */
   kvCacheQuantized?: boolean;
+  /** Serve `/v1/embeddings` instead of chat: the `embed` role's launch. */
+  embeddings?: boolean;
 }
 
 export function llamaServerArgs(options: LlamaServerArgsOptions): string[] {
@@ -62,5 +64,7 @@ export function llamaServerArgs(options: LlamaServerArgsOptions): string[] {
   // Quantized KV cache: the q8_0 pair for keys and values, on by
   // default on Apple silicon (hub, FAST-01).
   if (options.kvCacheQuantized ?? true) args.push("-ctk", "q8_0", "-ctv", "q8_0");
+  // An embedding model is served with pooling on and no chat template.
+  if (options.embeddings) args.push("--embeddings");
   return args;
 }

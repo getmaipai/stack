@@ -1,12 +1,12 @@
 MaiPai Stack
 Copyright (c) 2026 Jesse Torres
 
-This product will download third-party engines and models on demand at
-the user's request (llama.cpp, MLX-based servers, ComfyUI, speech
-runtimes, and the models the user selects). None of them are vendored
-here. Each is fetched from its pinned upstream URL, checksum verified,
-and used under its own licence, which the Stack records with the
-download and shows before selection. Attributions for anything this
+This service downloads third-party engines and models on demand when
+MaiPai Home asks it to (llama.cpp, MLX-based servers, ComfyUI, speech
+runtimes, and the models the household selects). None of them are
+vendored here. Each is fetched from its pinned upstream URL, checksum
+verified, and used under its own licence, which the Stack records with
+the download and reports before selection. Attributions for anything this
 repo redistributes are listed here as they are added.
 
 - hono (MIT) - https://hono.dev (the backend HTTP framework)
@@ -17,14 +17,5 @@ repo redistributes are listed here as they are added.
 - drizzle-kit (MIT) - https://orm.drizzle.team (generating the backend database schema)
 - typescript (Apache-2.0) - https://www.typescriptlang.org/ (the backend language)
 - @types/bun (MIT) - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/bun (type definitions for the backend)
-- astro (MIT) - https://astro.build (the docs site)
-- @astrojs/starlight (MIT) - https://starlight.astro.build (the docs site theme)
-- starlight-openapi (MIT) - https://github.com/HiDeoo/starlight-openapi (the docs site API reference)
-- sharp (Apache-2.0) - https://sharp.pixelplumbing.com (image processing for the docs site)
-- cmdk (MIT) - https://github.com/pacocoursey/cmdk (the command palette)
-- recharts (MIT) - https://recharts.org (the monitoring chart)
-- @tanstack/react-table (MIT) - https://tanstack.com/table (table primitives used by the admin shell)
 - @huggingface/gguf (MIT) - https://github.com/huggingface/huggingface.js (GGUF header and remote range parser)
-
-The MaiPai Stack brand assets are used under the MaiPai brand rules in
-getmaipai/.github/brand/README.md.
+- @huggingface/hub (MIT) - https://github.com/huggingface/huggingface.js (model metadata and file lists for provenance)

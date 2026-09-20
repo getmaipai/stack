@@ -7,10 +7,10 @@ import { STACK_CHAT_MODEL } from "@/lib/modelCatalog";
 import { ENGINE_BINARIES, type EngineBinaryPin } from "@/lib/engineCatalog";
 import { PROFILE_TIERS, type ProfileTier } from "@/profiles";
 import { GovernorRules } from "@/lib/governor";
-import { ENGINE_SETTINGS, type EngineSettingDeclaration } from "@/settings/engineKeys";
+import { SETTINGS } from "@/settings";
 
 const GB = 1_073_741_824;
-const contextLength: number = ((ENGINE_SETTINGS["llama-server"].find((entry: EngineSettingDeclaration) => entry.key === "contextLength")?.default as number | undefined) ?? 4096);
+const contextLength: number = ((SETTINGS.find((entry) => entry.key === "engines.llama-server.contextLength")?.default as number | undefined) ?? 4096);
 const engineMultiplier = GovernorRules.engineMultipliers["llama-server"] ?? GovernorRules.engineMultipliers.default;
 
 // Qwen3-1.7B: 28 layers, kv_head 8, head_dim 96. q8_0 KV cache: 34/32

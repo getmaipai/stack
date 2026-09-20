@@ -1,42 +1,46 @@
-import { afterEach, expect, test } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
 import { app } from "@/app";
-import { setUpdatesEnabled } from "@/updates/check";
-import { __resetStackSettingsForTests } from "@/settings/stackKeys";
+import { __resetSettingsForTests, applyPendingSettings, engineSettingValues, readSettings, SETTINGS, settingValues, updateSettings } from "@/settings";
 import { getGovernorStatus } from "@/lib/governor";
-import { __resetOperatorForTests } from "@/lib/operator";
-import { STACK_SETTING_SECTIONS } from "@/settings/stackKeys";
-import { iconNames } from "../../frontend/src/kit/icons";
 
-afterEach(() => { setUpdatesEnabled(false); __resetStackSettingsForTests(); __resetOperatorForTests(); });
+beforeEach(() => __resetSettingsForTests());
 
-test("every declared settings section icon is available to the frontend", () => {
-  expect(STACK_SETTING_SECTIONS.map((section) => section.icon).every((icon) => iconNames.includes(icon as typeof iconNames[number]))).toBe(true);
+test("every setting is declared once with a section, a level and a default", () => {
+  const keys = SETTINGS.map((setting) => setting.key);
+  expect(new Set(keys).size).toBe(keys.length);
+  for (const setting of SETTINGS) {
+    expect(["basic", "advanced", "developer"]).toContain(setting.disclosure);
+    expect(typeof setting.section).toBe("string");
+    expect(setting.default).not.toBeUndefined();
+  }
+  expect(keys).toEqual(expect.arrayContaining(["modelBudgetBytes", "updatesEnabled", "port", "engines.llama-server.contextLength", "engines.chat.hostUrl", "engines.tts.hostUrl"]));
 });
 
-test("Stack settings route serves grouped declarations and keeps LAN access pending until restart", async () => {
-  const setup = await app.request("/stack/v1/operator/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "test password" }) });
-  const cookie = setup.headers.get("set-cookie")?.split(";")[0] ?? "";
-  const response = await app.request("/stack/v1/settings", { headers: { cookie } });
-  expect(response.status).toBe(200);
-  const initial = await response.json() as { settings: Array<{ key: string; group?: string; pending: unknown }> };
-  expect(initial.settings.map((setting) => setting.key)).toEqual(expect.arrayContaining(["stackName", "theme", "updatesEnabled", "lanAccess", "port", "historyRetention", "logLevel", "modelBudgetBytes"]));
-  expect(initial.settings.every((setting) => setting.group)).toBe(true);
-  const updated = await app.request("/stack/v1/settings", { method: "PUT", headers: { "content-type": "application/json", cookie }, body: JSON.stringify({ updatesEnabled: true, lanAccess: true }) });
-  expect(updated.status).toBe(200);
-  const body = await updated.json() as { settings: Array<{ key: string; inEffect: unknown; pending: unknown }> };
-  expect(body.settings.find((setting) => setting.key === "updatesEnabled")?.inEffect).toBe(true);
-  expect(body.settings.find((setting) => setting.key === "lanAccess")?.pending).toBe(true);
+test("a live key applies at once and reaches the module that consumes it", () => {
+  updateSettings({ modelBudgetBytes: 4 * 1_073_741_824 });
+  expect(settingValues().modelBudgetBytes).toBe(4 * 1_073_741_824);
+  expect(getGovernorStatus().capBytes).toBe(4 * 1_073_741_824);
 });
 
-test("Memory settings apply to the governor without a restart", async () => {
-  const setup = await app.request("/stack/v1/operator/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "test password" }) });
-  const cookie = setup.headers.get("set-cookie")?.split(";")[0] ?? "";
-  const response = await app.request("/stack/v1/settings", { method: "PUT", headers: { "content-type": "application/json", cookie }, body: JSON.stringify({ modelBudgetBytes: 2_147_483_648 }) });
-  expect(response.status).toBe(200);
-  expect(getGovernorStatus().capBytes).toBe(2_147_483_648);
+test("a restart key stays pending until applied, and a value equal to the one in effect clears it", () => {
+  updateSettings({ "engines.llama-server.contextLength": 8192 });
+  const record = readSettings().find((setting) => setting.key === "engines.llama-server.contextLength")!;
+  expect(record.inEffect).toBe(4096);
+  expect(record.pending).toBe(8192);
+  expect(engineSettingValues("engines.llama-server").contextLength).toBe(4096);
+  applyPendingSettings();
+  expect(engineSettingValues("engines.llama-server").contextLength).toBe(8192);
+  updateSettings({ "engines.llama-server.contextLength": 8192 });
+  expect(readSettings().find((setting) => setting.key === "engines.llama-server.contextLength")!.pending).toBeNull();
 });
 
-test("settings route requires a signed-in session", async () => {
-  const response = await app.request("/stack/v1/settings");
-  expect(response.status).toBe(401);
+test("an unknown key or an out-of-range value is refused, and the route says so", async () => {
+  expect(() => updateSettings({ theme: "dark" })).toThrow(/Unknown Stack setting/);
+  expect(() => updateSettings({ port: 70_000 })).toThrow();
+  const response = await app.request("/stack/v1/settings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ lanAccess: true }) });
+  expect(response.status).toBe(400);
+  const listed = await app.request("/stack/v1/settings");
+  const body = await listed.json() as { sections: unknown[]; settings: Array<{ key: string; inEffect: unknown; pending: unknown }> };
+  expect(body.sections.length).toBeGreaterThan(0);
+  expect(body.settings.find((setting) => setting.key === "updatesEnabled")).toMatchObject({ inEffect: false, pending: null });
 });

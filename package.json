@@ -2,23 +2,15 @@
   "name": "@maipai/stack",
   "version": "0.1.0",
   "private": true,
-  "description": "MaiPai Stack: the local AI foundation. See docs/dev.md.",
+  "description": "MaiPai Stack: the engine foundation of MaiPai Home. See docs/dev.md.",
   "license": "AGPL-3.0",
-  "workspaces": ["backend", "frontend", "desktop"],
+  "workspaces": [
+    "backend"
+  ],
   "scripts": {
     "start": "bun --cwd backend start",
-    "showroom": "STACK_SHOWROOM=1 NODE_ENV=development PORT=8770 bun --cwd backend start",
     "dev": "bun --cwd backend dev",
-    "build": "bun --cwd frontend build",
     "test": "bun --cwd backend test",
-    "desktop:dev": "bun --cwd desktop dev",
-    "desktop:build": "bun --cwd desktop build"
-  },
-  "devDependencies": {
-    "playwright": "^1.48.0"
-  },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "pagefind": "^1.5.2"
+    "check": "bash scripts/check.sh"
   }
 }

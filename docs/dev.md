@@ -141,13 +141,18 @@ mean what they say, and logs under the data directory. Home's installer
 installs the Stack and its service unit; Home's watchdog sits above it
 (org `SERVICES.md`).
 
-The backend imports `@maipai/core` from `getmaipai/shared` for the
-helpers every product shares (log, withTimeout, paths, archive,
-diagnostics, the hardware probe, the openapi helper) and `@maipai/spec`
-for the wire shapes it declares (the role reply headers, the event
-envelope, the health item, the settings declaration, the precious-state
-declaration). The engine and model catalogs stay product-side. `data/`
-holds everything runtime and is never tracked.
+The backend imports `@maipai/core` from `getmaipai/shared` (pinned
+`core-v0.1.0`, a `file:` dependency on the sibling checkout, the gate
+failing loud when the sibling or its version is wrong) for the helpers
+every product shares: `createLogger`, `withTimeout`, `ensureDataDir`,
+`extractArchive`, the zip writer behind the diagnostics bundle, the
+hardware probe and the openapi router. The Stack's own instances
+(`lib/log.ts`, `lib/paths.ts`, `lib/hardware.ts`) bind them to this
+product's data layout. `@maipai/spec` follows at RF-05 for the wire
+shapes (the role reply headers, the event envelope, the health item,
+the settings declaration, the precious-state declaration). The engine
+and model catalogs stay product-side. `data/` holds everything runtime
+and is never tracked.
 
 ### Roles and the router
 
@@ -440,8 +445,8 @@ Home words the tier for a person; the Stack reports the facts.
 ### State on disk
 
 One SQLite file, `data/stack.db`, holds state: the declared settings'
-values in `meta`, model records with their provenance and measured
-peaks, and open health items. Nothing else is stored: the governor's
+values and the last readiness run in `meta`, model records with their
+provenance and measured peaks, and open health items. Nothing else is stored: the governor's
 ledger and the event ring are in memory, and history a person reads
 (usage, memory over time, speed results) is Home's to keep if Home
 wants it. The earlier two-database plan (a `metrics.db` of samples) is

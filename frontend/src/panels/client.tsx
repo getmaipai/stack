@@ -1,5 +1,0 @@
-import type { ReactNode } from "react";
-import type { PropertyAction } from "@/kit/blocks/property-panel/PropertyPanel";
-import { KeyValueList } from "@/kit/blocks/property-panel/KeyValueList";
-export interface ClientPanelResult { actions: PropertyAction[]; primaryActions: [PropertyAction, PropertyAction]; facts: Array<{ label: string; value: ReactNode }>; overview: ReactNode }
-export function clientPanel(name: string, roles: string[], onRevoke: () => void): ClientPanelResult { const rotate: PropertyAction = { label: "Rotate key", icon: "RefreshCw", onClick: () => {} }; const revoke: PropertyAction = { label: "Revoke", icon: "Square", onClick: onRevoke, destructive: true }; return { actions: [rotate, revoke], primaryActions: [rotate, revoke], facts: [{ label: "State", value: "Active" }, { label: "Roles", value: roles.length }, { label: "Usage", value: "Local" }], overview: <KeyValueList items={[{ label: "Kind", value: "Client" }, { label: "Name", value: name }, { label: "Allowed roles", value: roles.join(", ") }, { label: "Key", value: "Shown once at creation" }, { label: "Counters", value: "Local to this Stack" }]} /> }; }

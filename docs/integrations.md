@@ -70,18 +70,19 @@ engine. A client that wants the model is Home's business to authorize.
 | Surface | Path | What Home does with it |
 |---|---|---|
 | Roles | `GET /stack/v1/roles` | the Engines page: per role, its declaration, state (`notInstalled`, `installed`, `loaded`, `ready` with `checkedAt`, `offline` with `reason`), `since`, the bound model with its measured or estimated footprint |
-| Engines | `GET /stack/v1/engines`; `POST /stack/v1/engines/{name}/{install,start,stop,restart}`; `PUT /stack/v1/engines/{name}/current` | pinned builds and their install and version state (`current` / `notCurrent` with the reason, `needsRestart`); the actions behind Home's buttons |
-| Models | `GET /stack/v1/models`; `POST /stack/v1/models` (pull by pin); `POST /stack/v1/models/import`; `DELETE /stack/v1/models/{id}`; `POST /stack/v1/models/{id}/actions` (`load`, `unload`, `pin`, `unpin`) | the model list with provenance, install state, runtime state and measured footprint; install from the Catalog index or import a verified local file |
+| Engines | `GET /stack/v1/engines`; `POST /stack/v1/engines/{name}/{install,start,stop,restart}`; `PUT /stack/v1/engines/{name}/current`; `DELETE /stack/v1/engines/{name}/builds/{tag}` | pinned builds and their install and version state (`current` / `notCurrent` with the reason, `needsRestart`); the actions behind Home's buttons |
+| Models | `GET /stack/v1/models`; `GET /stack/v1/models/catalog` (the pins this build ships); `POST /stack/v1/models` (pull by pin); `POST /stack/v1/models/import`; `DELETE /stack/v1/models/{id}`; `POST /stack/v1/models/{id}/actions` (`load`, `unload`, `pin`, `unpin`) | the model list with provenance, install state, runtime state and measured footprint; install from the Catalog index or import a verified local file |
 | Jobs | `POST /stack/v1/jobs`; `GET /stack/v1/jobs/{id}`; `DELETE /stack/v1/jobs/{id}`; result by id | Home's picture, video and music packages |
 | Health | `GET /stack/v1/health`; `POST /stack/v1/health/{code}/{fix,resolve,ignore}` | Home's Repairs list: the problem list as data, the fix button calls `fix` and shows the result |
 | Readiness | `POST /stack/v1/check`; `GET /stack/v1/check/latest` | the check Home schedules and the "Check now" button |
 | Updates | `GET /stack/v1/updates`; `POST /stack/v1/updates/check`; `POST /stack/v1/updates/engines/{name}/{apply,rollback}` | the Updates page: installed, available, last checked, notes, go back |
 | Events | `GET /stack/v1/events` (SSE) | Home's notification bridge, below |
-| Hardware and budget | `GET /stack/v1/hardware`; `GET /stack/v1/budget`; `GET /stack/v1/budget/decisions` | the facts behind "what your computer can run", the memory picture, the governor's last 200 decisions |
+| Hardware and budget | `GET /stack/v1/hardware`; `GET /stack/v1/hardware/budget`; `GET /stack/v1/hardware/budget/decisions` | the facts behind "what your computer can run", the memory picture, the governor's last 200 decisions |
 | Settings | `GET /stack/v1/settings` (the declaration with values); `PUT /stack/v1/settings`; `POST /stack/v1/settings/apply` | Home's generic settings renderer, below |
 | Storage | `POST /stack/v1/storage/sweep` | the prune Home schedules (orphaned blobs past their grace period) |
 | Privacy | `GET /stack/v1/privacy` | the outbound endpoint rows for Home's privacy page, below |
 | Backup | `GET /stack/v1/backup` | the precious-state declaration for Home's backup, below |
+| Diagnostics | `GET /stack/v1/diagnostics` | a redacted zip (log tail, health, hardware without the computer name, settings, versions) Home hands to the person; nothing is sent anywhere |
 | Liveness | `GET /healthz` | `{ ok, version, uptimeSeconds }`; Home checks its pinned minimum Stack version here at boot |
 
 Home calls every maintenance action; the Stack keeps no schedule of its

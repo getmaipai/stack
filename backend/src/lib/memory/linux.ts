@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import os from "node:os";
-import { raiseRepair } from "@/lib/repairs";
+import { raise } from "@/lib/health";
 import type { MemoryReader, MemoryPressure, MemorySnapshot } from "@/lib/memory/types";
 
-function warning(detail: string): void { try { raiseRepair("Memory reader degraded", detail, "free_memory"); } catch { /* startup and tests may not have the database */ } }
+function warning(detail: string): void { try { raise({ code: "memory-reader-degraded", severity: "warning", title: "Memory reader degraded", text: detail, cause: detail }); } catch { /* startup and tests may not have the database */ } }
 
 function pressure(): MemoryPressure {
   const line = readFileSync("/proc/pressure/memory", "utf8").split("\n").find((entry) => entry.startsWith("some ")) ?? "";
