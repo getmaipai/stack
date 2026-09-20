@@ -198,22 +198,21 @@ by the specification; their tick lines stay as history.
 
 ## 6. The owner's calls
 
-1. **Scope of the managed categories.** The specification's primary
-   purpose line reads "a package manager, runtime manager, and system
-   monitor for the entire local AI stack", and its taxonomy names
-   Ollama, vLLM, Diffusers, ComfyUI, n8n, Langflow, LoRAs, ControlNets,
-   VAEs, trainers and datasets. The design record says the Stack
-   manages its own pinned engines and models and reaches everything
-   else through four seams. The console is built to the taxonomy
-   either way (decision 1); the call is whether the daemon grows to
-   install and run those third-party runtimes and workflows itself
-   (each an L item with its own design pass: Ollama and vLLM as engine
-   kinds, ComfyUI as STACK-13, n8n and Langflow as pointed-at hosts,
-   adapters as STACK-96, training new), and in what order after the
-   first release.
-2. **The light theme.** Decision 5 derives one; if the owner wants
-   dark only, the appearance control is dropped and UI-01 loses half
-   its work.
+1. **Scope of the managed categories: decided 2026-09-19, 22:55.** The
+   owner: "let's prove some out before doing too much. I want llama.cpp,
+   Ollama, and ComfyUI." So after the UI block, the daemon learns to
+   install, run and watch exactly three runtimes as first-class
+   components: llama.cpp (already the Stack's own engine), Ollama (a
+   new engine kind in the catalog, with the detected-install path
+   already in `detect.ts` as its adoption route) and ComfyUI (the
+   managed ComfyUI and its jobs, STACK-13). Each gets its own design
+   pass and item before code. Everything else the taxonomy names
+   (vLLM, Diffusers, n8n, Langflow, adapters, training) stays as
+   decision 1 says: a truthful empty state, or "point the Stack at a
+   server you run", until a later call.
+2. **The light theme: decided 2026-09-19, 22:45.** Both light and dark
+   are required (the owner: the spec's screenshots show both).
+   Decision 5 stands as written.
 
 ## 7. Verification of the whole
 
