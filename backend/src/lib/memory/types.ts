@@ -5,6 +5,8 @@ export interface MemorySnapshot {
   availablePercent: number;
   pressure: MemoryPressure;
   freeBytes: number;
+  degraded: boolean;
+  probeError?: string;
 }
 
 export interface MemoryReader {

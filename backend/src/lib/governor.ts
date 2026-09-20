@@ -63,6 +63,7 @@ export interface GovernorStatus {
   freeMemoryBytes: number;
   availablePercent: number;
   pressure: MemoryPressure;
+  memoryReadingDegraded: boolean;
   loaded: GovernorLoadedModel[];
   queue: Array<{ id: string; position: number; kind: GovernorKind }>;
 }
@@ -95,6 +96,8 @@ let freeMemoryBytes = 0;
 let availablePercent = 0;
 let pressure: MemoryPressure = "normal";
 let pressurePolls = 0;
+let memoryReadingDegraded = false;
+let lastDegradedProbeError: string | null = null;
 let runState: RunState = "running";
 const loaded = new Map<string, LoadedInternal>();
 const queue: Array<GovernorRequest> = [];
@@ -141,6 +144,7 @@ function workingMargin(): number {
 }
 
 function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
+  if (memoryReadingDegraded) return false;
   if (pressure !== "normal") return false;
   const generatorBusy = request.kind === "generator" && [...loaded.values()].some((item) => item.kind === "generator");
   if (generatorBusy) return false;
@@ -151,6 +155,10 @@ function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
 export async function admit(request: GovernorRequest): Promise<GovernorHandle | { queued: true; position: number } | { refused: true; reason: string }> {
   if (runState !== "running") { decide("Refused", "The Stack is paused.", request.id); return { refused: true, reason: "The Stack is paused." }; }
   const peak = peakFor(request);
+  if (memoryReadingDegraded) {
+    decide("Refused", "The memory reading is unavailable.", request.id);
+    return { refused: true, reason: "The memory reading is unavailable." };
+  }
   if (!canAdmit(request, peak.bytes)) {
     const refusals = (refusalCounts.get(request.id) ?? 0) + 1;
     refusalCounts.set(request.id, refusals);
@@ -223,6 +231,7 @@ export function getGovernorStatus(): GovernorStatus {
     freeMemoryBytes,
     availablePercent,
     pressure,
+    memoryReadingDegraded,
     loaded: [...loaded.values()].map(({ peakBaselineBytes: _baseline, processBreaches: _breaches, keepAliveSeconds: _keepAlive, ...item }) => item),
     queue: queue.map((request, index) => ({ id: request.id, position: index + 1, kind: request.kind })),
   };
@@ -259,6 +268,15 @@ export function startGovernor(options: StartGovernorOptions): () => void {
   async function poll(): Promise<void> {
     if (stopped) return;
     const reading = memoryReader.read();
+    if (reading.degraded) {
+      memoryReadingDegraded = true;
+      lastDegradedProbeError = `The memory probe failed: ${(reading.probeError ?? "no detail was reported")}`;
+      raise({ code: "memory-reading-unavailable", severity: "warning", title: "This computer's memory cannot be read right now", text: "The Stack keeps what is running but will not start anything new until the reading is back.", cause: lastDegradedProbeError, fix: { label: "Check again", action: "free_memory" } });
+      return;
+    }
+    memoryReadingDegraded = false;
+    lastDegradedProbeError = null;
+    resolveHealth("memory-reading-unavailable");
     totalMemoryBytes = options.totalMemory?.() ?? reading.totalBytes;
     freeMemoryBytes = options.freeMemory?.() ?? reading.freeBytes;
     availablePercent = reading.availablePercent;
@@ -344,5 +362,7 @@ export function __resetGovernorForTests(): void {
   availablePercent = reading.availablePercent;
   pressure = "normal";
   pressurePolls = 0;
+  memoryReadingDegraded = false;
+  lastDegradedProbeError = null;
   runState = "running";
 }

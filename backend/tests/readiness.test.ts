@@ -34,8 +34,8 @@ test("a skipped role never makes the check green on its own, and a failed role b
 
 test("the fit-together pass fails when critical pressure arrives while a generator runs", async () => {
   const reader = scriptedMemoryReader([
-    { totalBytes: 16 * 1024 ** 3, availablePercent: 50, pressure: "normal", freeBytes: 8 * 1024 ** 3 },
-    { totalBytes: 16 * 1024 ** 3, availablePercent: 2, pressure: "critical", freeBytes: 128 * 1024 ** 2 },
+    { totalBytes: 16 * 1024 ** 3, availablePercent: 50, pressure: "normal", freeBytes: 8 * 1024 ** 3, degraded: false },
+    { totalBytes: 16 * 1024 ** 3, availablePercent: 2, pressure: "critical", freeBytes: 128 * 1024 ** 2, degraded: false },
   ]);
   const run = await runCheck({ roleIds: ["chat"], requestRole: async () => ({ status: 200 }), memoryReader: reader, sampleMs: 5, fitGenerator: () => new Promise((resolve) => setTimeout(resolve, 30)) });
   expect(run.fitTogether).toMatchObject({ ok: false });

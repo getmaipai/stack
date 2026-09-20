@@ -12,15 +12,16 @@ function pressure(): MemoryPressure {
 }
 
 export function createLinuxMemoryReader(): MemoryReader {
-  let previous: MemorySnapshot = { totalBytes: os.totalmem(), availablePercent: 0, pressure: "normal", freeBytes: 0 };
+  let previous: MemorySnapshot | null = null;
   return {
     read: () => {
       try {
         const values = Object.fromEntries(readFileSync("/proc/meminfo", "utf8").split("\n").flatMap((line) => { const match = line.match(/^([^:]+):\s+(\d+)/); return match ? [[match[1]!.replaceAll(" ", ""), Number(match[2]) * 1024]] : []; }));
         const totalBytes = Number(values.MemTotal ?? os.totalmem()); const freeBytes = Number(values.MemAvailable ?? 0);
-        previous = { totalBytes, freeBytes, availablePercent: totalBytes ? freeBytes / totalBytes * 100 : 0, pressure: pressure() };
-      } catch (error) { warning(`The Linux memory ledger probe failed: ${(error as Error).message}`); }
-      return { ...previous };
+        previous = { totalBytes, freeBytes, availablePercent: totalBytes ? freeBytes / totalBytes * 100 : 0, pressure: pressure(), degraded: false };
+      } catch (error) { const detail = `The Linux memory ledger probe failed: ${(error as Error).message}`; warning(detail); if (previous) return { ...previous, degraded: true, probeError: detail }; return { totalBytes: os.totalmem(), availablePercent: 0, pressure: "normal", freeBytes: os.totalmem(), degraded: true, probeError: detail }; }
+      if (previous) return { ...previous };
+      return { totalBytes: os.totalmem(), availablePercent: 0, pressure: "normal", freeBytes: os.totalmem(), degraded: true };
     },
     processFootprint: (pid) => {
       try { const line = readFileSync(`/proc/${pid}/status`, "utf8").split("\n").find((entry) => entry.startsWith("VmRSS:")); return line ? Number(line.replace(/\D/g, "")) * 1024 : null; } catch { return null; }

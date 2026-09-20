@@ -71,7 +71,7 @@ function footprint(pid: number): number | null {
 }
 
 export function createDarwinMemoryReader(): MemoryReader {
-  let previous: MemorySnapshot = { totalBytes: os.totalmem(), availablePercent: 0, pressure: "normal", freeBytes: 0 };
+  let previous: MemorySnapshot | null = null;
   return {
     read: () => {
       try {
@@ -79,11 +79,15 @@ export function createDarwinMemoryReader(): MemoryReader {
         const availablePercent = Math.max(0, Math.min(100, sysctlNumber("kern.memorystatus_level")));
         const pressure = pressureFor(sysctlNumber("kern.memorystatus_vm_pressure_level"));
         const freeBytes = hostFreeBytes();
-        previous = { totalBytes, availablePercent, pressure, freeBytes };
+        previous = { totalBytes, availablePercent, pressure, freeBytes, degraded: false };
       } catch (error) {
-        warning(`The macOS memory ledger probe failed: ${(error as Error).message}`);
+        const detail = `The macOS memory ledger probe failed: ${(error as Error).message}`;
+        warning(detail);
+        if (previous) return { ...previous, degraded: true, probeError: detail };
+        return { totalBytes: os.totalmem(), availablePercent: 0, pressure: "normal", freeBytes: os.totalmem(), degraded: true, probeError: detail };
       }
-      return { ...previous };
+      if (previous) return { ...previous };
+      return { totalBytes: os.totalmem(), availablePercent: 0, pressure: "normal", freeBytes: os.totalmem(), degraded: true };
     },
     processFootprint: footprint,
   };

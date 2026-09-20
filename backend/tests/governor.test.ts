@@ -11,6 +11,7 @@ import {
   type GovernorHandle,
 } from "@/lib/governor";
 import { scriptedMemoryReader } from "@/lib/memory/scripted";
+import { __resetHealthForTests } from "@/lib/health";
 
 const GB = 1_073_741_824;
 const stops: Array<() => void> = [];
@@ -18,6 +19,7 @@ const stops: Array<() => void> = [];
 beforeEach(() => {
   __resetGovernorForTests();
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 64 * GB, freeMemoryBytes: 32 * GB });
+  __resetHealthForTests();
 });
 
 afterEach(async () => {
@@ -118,7 +120,7 @@ test("release advances the queue", async () => {
 });
 
 test("kernel warn pressure pauses admission and reports the available percent", async () => {
-  const stop = startGovernor({ pid: 1, pollMs: 1, memoryReader: scriptedMemoryReader([{ totalBytes: 64 * GB, freeBytes: 32 * GB, availablePercent: 8, pressure: "warn" }]) });
+  const stop = startGovernor({ pid: 1, pollMs: 1, memoryReader: scriptedMemoryReader([    { totalBytes: 64 * GB, freeBytes: 32 * GB, availablePercent: 8, pressure: "warn", degraded: false }]) });
   stops.push(stop);
   await Bun.sleep(5);
   expect(getGovernorStatus()).toMatchObject({ pressure: "warn", availablePercent: 8 });
@@ -129,11 +131,50 @@ test("kernel critical pressure aborts an in-flight generator", async () => {
   await admit({ id: "generator-critical", kind: "generator", requestedBytes: GB });
   const aborted: string[] = [];
   const stop = startGovernor({ pid: 1, pollMs: 1, memoryReader: scriptedMemoryReader([
-    { totalBytes: 64 * GB, freeBytes: 32 * GB, availablePercent: 50, pressure: "normal" },
-    { totalBytes: 64 * GB, freeBytes: GB, availablePercent: 2, pressure: "critical" },
+    { totalBytes: 64 * GB, freeBytes: 32 * GB, availablePercent: 50, pressure: "normal", degraded: false },
+    { totalBytes: 64 * GB, freeBytes: GB, availablePercent: 2, pressure: "critical", degraded: false },
   ]), abort: (id) => { aborted.push(id); } });
   stops.push(stop);
   await Bun.sleep(5);
   expect(getGovernorStatus().pressure).toBe("critical");
   expect(aborted).toContain("generator-critical");
+});
+
+test("a degraded reading changes no state, flags the status, refuses new work, and recovers", async () => {
+  const { list: listHealth } = await import("@/lib/health");
+  await Bun.sleep(10);
+  await admit({ id: "resident-kept", kind: "resident", requestedBytes: GB, modelFileBytes: GB, engine: "llama-server" });
+  const stop = startGovernor({ pid: 1, pollMs: 1, memoryReader: scriptedMemoryReader([
+    { totalBytes: 64 * GB, freeBytes: 32 * GB, availablePercent: 50, pressure: "normal", degraded: false },
+    { probeError: "The kernel's ledger was unreachable." },
+    { probeError: "The kernel's ledger was unreachable." },
+    { probeError: "The kernel's ledger was unreachable." },
+    { totalBytes: 64 * GB, freeBytes: 32 * GB, availablePercent: 50, pressure: "normal", degraded: false },
+  ]) });
+  stops.push(stop);
+  let degradedStatus = getGovernorStatus();
+  for (let index = 0; index < 20 && !degradedStatus.memoryReadingDegraded; index++) {
+    await Bun.sleep(5);
+    degradedStatus = getGovernorStatus();
+  }
+  const degraded = degradedStatus;
+  expect(degraded.memoryReadingDegraded).toBe(true);
+  expect(degraded.freeMemoryBytes).toBe(32 * GB);
+  expect(degraded.pressure).toBe("normal");
+  expect(await admit({ id: "new-load", kind: "resident", requestedBytes: GB })).toEqual({ refused: true, reason: "The memory reading is unavailable." });
+  expect(getGovernorStatus().loaded).toHaveLength(1);
+  const item = listHealth().find((entry) => entry.code === "memory-reading-unavailable");
+  expect(item?.severity).toBe("warning");
+  expect(item?.title).toBe("This computer's memory cannot be read right now");
+  expect(item?.text).toBe("The Stack keeps what is running but will not start anything new until the reading is back.");
+  expect(item?.cause).toBe("The memory probe failed: The kernel's ledger was unreachable.");
+  expect(item?.fix).toEqual({ label: "Check again", action: "free_memory" });
+  let recoveredStatus = getGovernorStatus();
+  for (let index = 0; index < 20 && recoveredStatus.memoryReadingDegraded; index++) {
+    await Bun.sleep(5);
+    recoveredStatus = getGovernorStatus();
+  }
+  expect(recoveredStatus.memoryReadingDegraded).toBe(false);
+  expect(listHealth().find((entry) => entry.code === "memory-reading-unavailable")).toBeUndefined();
+  expect("id" in (await admit({ id: "after-recovery", kind: "resident", requestedBytes: GB }))).toBe(true);
 });

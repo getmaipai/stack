@@ -399,6 +399,18 @@ process footprint replaces the estimate.
 On the robot, the body's power and thermal budget is an additional
 admission input with the same thresholds and actions (Bot's GOV-01).
 
+A failed probe is a degraded reading, never a fake full-memory event:
+every reader flags it with `degraded: true` on the snapshot (the last
+good reading's numbers, or all memory free before any success, and the
+probe's error), and the governor treats it as no reading at all. A
+degraded poll changes no state that an admission or an unload decision
+reads; free bytes, the breach count and the pressure keep their previous
+values. It sets a `memoryReadingDegraded` flag on the status object and
+raises the warning health item `memory-reading-unavailable` once, which
+the next successful read resolves. While the reading is degraded the
+governor refuses admission of a new load with the reason "The memory
+reading is unavailable." and touches nothing already running.
+
 Rejected: a static reservation (ignores current pressure and measured
 peaks); an OS-level cap (macOS gives no clean native RSS cap for a
 spawned child); letting each engine decide (cannot enforce one budget

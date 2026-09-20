@@ -153,6 +153,8 @@ are never copied. Nothing migrates Home until STACK-16.
   the decision ledger. Kept unchanged in RF-04.
 - [x] **STACK-06b: the kernel's ledger.** `bun:ffi` against libSystem
   on macOS, `/proc` on Linux, a scripted reader for tests. Kept.
+- [x] **Degraded memory reading (issue #3)** (S): a failed probe never
+  reads as full memory; verified at this commit.
 - [x] **STACK-74 (M): Studio bench protocol and rollback rehearsal.**
   The protocol in `plans/studio-bench-protocol-2026-09-20.md` (models
   by digest, contexts, builds, the request mix, the pressure samples,

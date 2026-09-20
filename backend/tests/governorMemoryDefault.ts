@@ -5,4 +5,4 @@ import type { MemorySnapshot } from "@/lib/memory/types";
 // supervisor.test.ts restore it after opting out for a real-reader
 // test) so the three can't drift out of sync with each other.
 const GB = 1_073_741_824;
-export const GOVERNOR_MEMORY_DEFAULT: MemorySnapshot = { totalBytes: 128 * GB, freeBytes: 64 * GB, availablePercent: 50, pressure: "normal" };
+export const GOVERNOR_MEMORY_DEFAULT: MemorySnapshot = { totalBytes: 128 * GB, freeBytes: 64 * GB, availablePercent: 50, pressure: "normal", degraded: false };
