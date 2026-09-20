@@ -419,7 +419,10 @@ values. It sets a `memoryReadingDegraded` flag on the status object and
 raises the warning health item `memory-reading-unavailable` once, which
 the next successful read resolves. While the reading is degraded the
 governor refuses admission of a new load with the reason "The memory
-reading is unavailable." and touches nothing already running.
+reading is unavailable." and touches nothing already running; a release
+during a degraded reading frees the handle's accounting but leaves the
+queue untouched, so the next good read drains it through the c-84 path
+rather than refusing the head.
 
 Rejected: a static reservation (ignores current pressure and measured
 peaks); an OS-level cap (macOS gives no clean native RSS cap for a

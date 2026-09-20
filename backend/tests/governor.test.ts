@@ -254,3 +254,37 @@ test("admission-refused-repeatedly still raises after three refusals of the same
   expect(third).toMatchObject({ queued: true, position: 1 });
   expect(listHealth().find((entry) => entry.code === "admission-refused-repeatedly")).toMatchObject({ severity: "warning", title: "Work is waiting for memory" });
 });
+
+test("a release during a degraded read keeps the head queued with its promise pending, and the next good read admits it", async () => {
+  await admit({ id: "busy", kind: "generator", requestedBytes: GB });
+  const first = await admit({ id: "first", kind: "resident", requestedBytes: GB }) as GovernorHandle;
+  const queued = await admit({ id: "queued", kind: "generator", requestedBytes: 2 * GB });
+  expect(queued).toMatchObject({ queued: true, position: 1 });
+  const stop = startGovernor({ pid: 1, pollMs: 1, memoryReader: scriptedMemoryReader([
+    { totalBytes: 64 * GB, freeBytes: 8 * GB, availablePercent: 12, pressure: "warn", degraded: false },
+    { probeError: "The kernel's ledger was unreachable." },
+    { probeError: "The kernel's ledger was unreachable." },
+    { probeError: "The kernel's ledger was unreachable." },
+    { totalBytes: 64 * GB, freeBytes: 32 * GB, availablePercent: 50, pressure: "normal", degraded: false },
+    { totalBytes: 64 * GB, freeBytes: 32 * GB, availablePercent: 50, pressure: "normal", degraded: false },
+    { totalBytes: 64 * GB, freeBytes: 32 * GB, availablePercent: 50, pressure: "normal", degraded: false },
+    { totalBytes: 64 * GB, freeBytes: 32 * GB, availablePercent: 50, pressure: "normal", degraded: false },
+    { totalBytes: 64 * GB, freeBytes: 32 * GB, availablePercent: 50, pressure: "normal", degraded: false },
+  ]) });
+  stops.push(stop);
+  let degradedStatus = getGovernorStatus();
+  for (let index = 0; index < 20 && !degradedStatus.memoryReadingDegraded; index++) {
+    await Bun.sleep(5);
+    degradedStatus = getGovernorStatus();
+  }
+  expect(degradedStatus.memoryReadingDegraded).toBe(true);
+  release(first);
+  expect(getGovernorStatus().queue).toMatchObject([{ id: "queued", position: 1 }]);
+  expect(getGovernorStatus().loaded).toMatchObject([{ id: "busy", kind: "generator" }]);
+  release({ id: "busy", kind: "generator", requestedBytes: GB });
+  const settled = (queued as { admitted: Promise<unknown> }).admitted;
+  const result = await settled;
+  expect(result).toMatchObject({ id: "queued", kind: "generator" });
+  expect(getGovernorStatus().queue).toHaveLength(0);
+  expect(getGovernorStatus().loaded).toMatchObject([{ id: "queued", kind: "generator" }]);
+});

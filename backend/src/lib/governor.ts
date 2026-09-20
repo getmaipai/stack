@@ -232,6 +232,7 @@ function settleAdmission(entry: QueuedEntry): void {
 
 export function release(handle: GovernorHandle): void {
   loaded.delete(handle.id);
+  if (memoryReadingDegraded) return;
   const next = queue.shift();
   if (next && !next.settled) settleAdmission(next);
 }
