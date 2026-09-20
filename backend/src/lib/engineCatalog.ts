@@ -161,8 +161,8 @@ export function engineRole(name: string): EngineRole { return ENGINE_ROLE[name] 
  * environment under data/engines/<name>/<version>/ (STACK-94c). */
 export interface ManagedRuntime { name: string; version: string; roles: string[]; platforms: string; }
 export const MANAGED_RUNTIMES: ManagedRuntime[] = [
-  { name: "pocket-tts", version: "3.1.0", roles: ["tts"], platforms: "macOS arm64 (a hashed requirements file per platform; the Linux files land with the first Linux tts run)" },
-  { name: "comfyui", version: "v0.36.0", roles: ["image"], platforms: "macOS arm64 (a hashed requirements file per platform; the source archive is the same on every platform)" },
+  { name: "pocket-tts", version: "3.1.0", roles: ["tts"], platforms: "macOS 14 or later on arm64 (torch 2.13 ships macOS 14 wheels only; a hashed requirements file per platform, the Linux files land with the first Linux tts run)" },
+  { name: "comfyui", version: "v0.36.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (torch 2.13 ships macOS 14 wheels only; a hashed requirements file per platform, the source archive is the same on every platform)" },
 ];
 
 export const ENGINE_READY_MARKER = ".engine-ready";

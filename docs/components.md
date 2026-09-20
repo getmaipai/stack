@@ -158,7 +158,7 @@ Engines per platform:
 | `uv-0.12.17-macos-arm64` | 0.12.17 | darwin arm64 | pinned, verified (the tool that builds the tts environment) |
 | `uv-0.12.17-linux-arm64` | 0.12.17 | linux arm64 | pinned, not yet verified (the tool that builds the tts environment) |
 | `uv-0.12.17-linux-x64` | 0.12.17 | linux x64 | pinned, not yet verified (the tool that builds the tts environment) |
-| `pocket-tts` | 3.1.0 | macOS arm64 (a hashed requirements file per platform; the Linux files land with the first Linux tts run) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
+| `pocket-tts` | 3.1.0 | macOS 14 or later on arm64 (torch 2.13 ships macOS 14 wheels only; a hashed requirements file per platform, the Linux files land with the first Linux tts run) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
@@ -193,7 +193,7 @@ Engines per platform:
 | `comfyui-v0.36.0-macos-arm64` | v0.36.0 | darwin arm64 | pinned, verified (the engine's source; its environment is the row below) |
 | `comfyui-v0.36.0-linux-arm64` | v0.36.0 | linux arm64 | pinned, not yet verified (the engine's source; its environment is the row below) |
 | `comfyui-v0.36.0-linux-x64` | v0.36.0 | linux x64 | pinned, not yet verified (the engine's source; its environment is the row below) |
-| `comfyui` | v0.36.0 | macOS arm64 (a hashed requirements file per platform; the source archive is the same on every platform) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
+| `comfyui` | v0.36.0 | macOS 14 or later on arm64 (torch 2.13 ships macOS 14 wheels only; a hashed requirements file per platform, the source archive is the same on every platform) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|

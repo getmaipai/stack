@@ -8,6 +8,15 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ## [Unreleased]
 
+### Security
+
+- The Python environments the Stack builds for Pocket TTS and ComfyUI
+  moved to torch 2.13.0 and setuptools 84.0.0 (the Dependabot alerts
+  on torch up to 2.12.1 and setuptools below 83.0.0), recompiled with
+  hashes on 2026-09-20. torch 2.13 ships wheels for macOS 14 and later
+  only, so those two engines now need macOS 14 or later on an Apple
+  silicon Mac; the build refuses an older Mac with the reason.
+
 ### Changed
 
 - The Stack is MaiPai Home's engine foundation, not a product

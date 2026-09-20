@@ -1101,7 +1101,7 @@ and identity-bound like every other (STACK-87).
 | `stt` | `silero_vad.onnx` | 0.6 MB | release tag `asr-models`, sha256 `9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6` | the voice activity detector the session and the endpointer use, MIT; a component of the role, never a model a person selects |
 | `stt`, alternative, named not pinned | `sherpa-onnx-whisper-tiny.en`, `base.en` | 118 MB, 209 MB | release tag `asr-models` | same runtime; pinned only if the Studio bench asks for it |
 | `tts` runtime | `uv-<platform>.tar.gz` | 16.9 MB (macOS arm64), 19.0 MB (Linux arm64), 19.8 MB (Linux x64) | astral-sh/uv release `0.12.17`, sha256 `85f00cbd…`, `d636d1b6…`, `fa82fd8d…` in `engineCatalog.ts` | builds the venv (a managed Python 3.12, the hashed requirements) under `data/engines/pocket-tts/3.1.0/` |
-| `tts` environment | `pocket-tts.darwin-arm64.requirements.txt` | 820 lines, 772 hashes | `backend/src/speech/` | pocket-tts 3.1.0, torch 2.11.0, numpy 2.5.3 and the rest by version and hash; the Linux files land with the first Linux `tts` run |
+| `tts` environment | `pocket-tts.darwin-arm64.requirements.txt` | 817 lines, 768 hashes | `backend/src/speech/` | pocket-tts 3.1.0, torch 2.13.0, setuptools 84.0.0, numpy 2.5.3 and the rest by version and hash (recompiled 2026-09-20 for the Dependabot alerts on setuptools below 83 and torch 2.12.1; torch 2.13 ships macOS 14 wheels only, so the file is compiled with `MACOSX_DEPLOYMENT_TARGET=14.0` and needs macOS 14 or later); the Linux files land with the first Linux `tts` run |
 | `tts` | `languages/english/model.safetensors` | 219.0 MB | `kyutai/pocket-tts-without-voice-cloning` @ `d29db797…`, sha256 `be9c6b48…` | the weights, placed in the hub cache; the gated twin is fetched by the engine when a token is set |
 | `tts`, component | `languages/english/tokenizer.model` | 59 KB | the same repository and revision, sha256 `d461765a…` | the tokenizer |
 | `tts`, component | `languages/english/embeddings/alba.safetensors` | 6.2 MB | the same repository @ `e81d79e8…`, sha256 `69c32db6…` | the default voice; other presets and community voices are fetched by the engine on first use |
@@ -1221,9 +1221,13 @@ checksum refusal and a deliberate re-pin), extracted to
 `data/engines/comfyui/v0.36.0/` with `main.py` at its root; the
 environment is a venv beside it, built by the pinned uv from
 `backend/src/generators/comfyui.darwin-arm64.requirements.txt`
-(2,150 lines, 2,065 hashes, compiled from the release's own
-`requirements.txt`: torch 2.11.0, torchvision 0.26.0, transformers
-5.17.0, the ComfyUI frontend package 1.52.7 and the rest). `POST
+(2,143 lines, 2,057 hashes, compiled from the release's own
+`requirements.txt`: torch 2.13.0, torchvision 0.28.0, torchaudio 2.11.0
+(its last release, imports clean beside torch 2.13), transformers
+5.17.0, setuptools 84.0.0, the ComfyUI frontend package 1.52.7 and the
+rest; recompiled on 2026-09-20 for the Dependabot alerts on setuptools
+and torch, with `MACOSX_DEPLOYMENT_TARGET=14.0` since torch 2.13 ships
+macOS 14 wheels only). `POST
 /stack/v1/engines/comfyui/install` is one job: the archive, uv, a
 managed Python 3.12, the wheels; a second request joins it. ComfyUI's
 own base directory (its model folders, inputs, outputs, temp, user
@@ -1291,7 +1295,10 @@ The graph and the wire were proven on 2026-09-20 on the p16 laptop
 against a ComfyUI started outside the Stack from the same hashed
 environment and the same checkpoint (the scratch run, no governor):
 `/system_stats` answered after 25 s with ComfyUI 0.36.0, torch 2.11.0
-and one `mps` device; `/object_info/CheckpointLoaderSimple` listed
+and one `mps` device (the environment as first compiled; after the
+2026-09-20 recompile the same start was repeated from the new file:
+up in 20 s with torch 2.13.0, torchaudio 2.11.0 and torchvision 0.28.0
+importing clean, the checkpoint loader listed); `/object_info/CheckpointLoaderSimple` listed
 the checkpoint; the graph above at 512 by 512, 8 steps, seed 7,
 rendered in 18.3 s to a 433,537-byte PNG of a lighthouse on a rocky
 shore, fetched through `/view`; the process held 862 MB resident by

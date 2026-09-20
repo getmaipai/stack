@@ -90,8 +90,20 @@ export function ensureUvEnvironment(spec: UvEnvironmentSpec, onProgress: (phase:
   return inFlight;
 }
 
+/** The macOS the hashed requirements were compiled for: torch 2.13
+ * ships macOS 14 wheels only, so an older Mac is refused with the
+ * reason before uv fails on a platform tag. */
+export const MACOS_FLOOR = 14;
+function macosMajor(): number | null {
+  if (process.platform !== "darwin") return null;
+  const major = Number(String(Bun.spawnSync(["sw_vers", "-productVersion"]).stdout).trim().split(".")[0]);
+  return Number.isFinite(major) ? major : null;
+}
+
 async function buildUvEnvironment(spec: UvEnvironmentSpec, onProgress: (phase: string) => void, options: { signal?: AbortSignal }): Promise<void> {
   if (!spec.requirements) throw new Error(`No hashed requirements file for ${process.platform} ${process.arch} yet; the ${spec.name} environment cannot be built on this machine.`);
+  const macos = macosMajor();
+  if (macos !== null && macos < MACOS_FLOOR) throw new Error(`The ${spec.name} environment needs macOS ${MACOS_FLOOR} or later (this Mac runs ${macos}); torch 2.13 ships wheels for macOS 14 only.`);
   const uvPin = installedEnginePin("uv");
   if (!uvPin) throw new Error(`No pinned uv build for ${process.platform} ${process.arch}.`);
   onProgress("uv");
