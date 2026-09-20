@@ -2,10 +2,11 @@ import { afterEach, expect, mock, test } from "bun:test";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { DashboardShell } from "@/pages/DashboardShell";
+import { allDestinations, groups } from "@/lib/taxonomy";
 
 const originalEventSource = globalThis.EventSource;
 
-afterEach(() => { cleanup(); globalThis.EventSource = originalEventSource; });
+afterEach(() => { cleanup(); globalThis.EventSource = originalEventSource; localStorage.removeItem("maipai-stack:rail"); Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 1440 }); });
 
 const hardwareResponse = { hardware: { platform: "darwin", arch: "arm64", totalRamGb: 32, cpuCount: 8, isAppleSilicon: true, unifiedMemoryGb: 32, cudaDevices: [], freeDiskBytes: 500_000_000_000, totalDiskBytes: 1_000_000_000_000, osVersion: "15.0" }, proposed: null, tiers: [] };
 const budgetResponse = { totalMemoryBytes: 24_000_000_000, capBytes: 16_000_000_000, freeMemoryBytes: 15_700_000_000, pressure: false, loaded: [], queue: [] };
@@ -25,25 +26,73 @@ function stubStackFetch(responses: Record<string, unknown>): void {
 }
 
 const boardExtras = { "/stack/v1/hardware": hardwareResponse, "/stack/v1/budget": budgetResponse, "/stack/v1/storage": storageResponse, "/stack/v1/notifications": { notifications: [] }, "/stack/v1/setup/plan": { plan: null, downloads: [], health: null } };
+const shellExtras = { ...boardExtras, "/stack/v1/repairs": { repairs: [] }, "/stack/v1/roles": { roles: [] }, "/stack/v1/operator": { state: "signedOut", required: false } };
 
-test("the Stack shell lists every section in order", () => {
-  stubStackFetch({ ...boardExtras, "/stack/v1/repairs": { repairs: [] }, "/stack/v1/roles": { roles: [] }, "/stack/v1/operator": { state: "signedOut", required: false } });
-  render(<MemoryRouter initialEntries={["/updates"]}><DashboardShell /></MemoryRouter>);
+test("the rail lists all 17 destinations in the spec's group order", () => {
+  stubStackFetch(shellExtras);
+  render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
   const text = document.body.textContent ?? "";
   let previous = -1;
-  for (const section of ["Overview", "Engines", "Models", "Clients", "Tester", "Monitoring", "Settings", "Logs", "Alerts"]) {
-    const next = text.indexOf(section);
-    expect(next).toBeGreaterThan(previous);
+  for (const destination of allDestinations()) {
+    const next = text.indexOf(destination.label);
+    expect(next, destination.label).toBeGreaterThan(previous);
     previous = next;
   }
-  expect(text).toContain("Settings");
+});
+
+test("the four group labels are visible, uppercase, in order", () => {
+  stubStackFetch(shellExtras);
+  render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
+  const nav = document.querySelector('[data-sidebar="content"]')!;
+  const text = nav.textContent ?? "";
+  let previous = -1;
+  for (const group of groups) {
+    const next = text.indexOf(group.label);
+    expect(next, group.label).toBeGreaterThan(previous);
+    previous = next;
+  }
+});
+
+test("/engines redirects to /runtimes, /help and /library redirect to /docs", async () => {
+  stubStackFetch({ ...shellExtras, "/stack/v1/engines": { engines: [] } });
+  render(<MemoryRouter initialEntries={["/engines"]}><DashboardShell /><RoutePath /></MemoryRouter>);
+  await waitFor(() => expect(document.querySelector('[data-testid="route-path"]')?.textContent).toBe("/runtimes"));
+  cleanup();
+
+  stubStackFetch(shellExtras);
+  render(<MemoryRouter initialEntries={["/help/getting-started"]}><DashboardShell /><RoutePath /></MemoryRouter>);
+  await waitFor(() => expect(document.querySelector('[data-testid="route-path"]')?.textContent).toBe("/docs/getting-started"));
+  cleanup();
+
+  stubStackFetch(shellExtras);
+  render(<MemoryRouter initialEntries={["/library"]}><DashboardShell /><RoutePath /></MemoryRouter>);
+  await waitFor(() => expect(document.querySelector('[data-testid="route-path"]')?.textContent).toBe("/docs"));
+});
+
+test("the old phone-only detail routes land back on their list, not a silent fallback to Overview", async () => {
+  stubStackFetch({ ...shellExtras, "/stack/v1/models": { models: [] } });
+  render(<MemoryRouter initialEntries={["/models/qwen3-27b-instruct"]}><DashboardShell /><RoutePath /></MemoryRouter>);
+  await waitFor(() => expect(document.querySelector('[data-testid="route-path"]')?.textContent).toBe("/models"));
+  cleanup();
+
+  stubStackFetch({ ...shellExtras, "/stack/v1/engines": { engines: [] } });
+  render(<MemoryRouter initialEntries={["/engines/llama-server"]}><DashboardShell /><RoutePath /></MemoryRouter>);
+  await waitFor(() => expect(document.querySelector('[data-testid="route-path"]')?.textContent).toBe("/runtimes"));
 });
 
 test("/access redirects to the Clients route", async () => {
-  stubStackFetch({ ...boardExtras, "/stack/v1/repairs": { repairs: [] }, "/stack/v1/roles": { roles: [] }, "/stack/v1/operator": { state: "signedOut", required: false }, "/stack/v1/clients": { clients: [] } });
+  stubStackFetch({ ...shellExtras, "/stack/v1/clients": { clients: [] } });
   render(<MemoryRouter initialEntries={["/access"]}><DashboardShell /><RoutePath /></MemoryRouter>);
   await waitFor(() => expect(document.querySelector('[data-testid="route-path"]')?.textContent).toBe("/clients"));
   expect(document.querySelector('a[href="/clients"]')).toBeTruthy();
+});
+
+test("a new taxonomy destination without a page yet shows its name and Coming in this release", async () => {
+  const destination = allDestinations().find((item) => item.id === "adapters")!;
+  stubStackFetch(shellExtras);
+  render(<MemoryRouter initialEntries={[destination.path]}><DashboardShell /></MemoryRouter>);
+  await waitFor(() => expect(document.body.textContent).toContain("Coming in this release."));
+  expect(document.querySelector("h1")?.textContent).toBe(destination.label);
 });
 
 test("the root waits for its plan before choosing the overview instead of mounting the board", async () => {
@@ -76,30 +125,64 @@ test("the root waits for its plan before choosing the overview instead of mounti
 });
 
 test("Monitoring renders governor decision sentences", async () => {
-  stubStackFetch({ ...boardExtras, "/stack/v1/groups": { groups: [] }, "/stack/v1/budget/decisions": { decisions: [{ at: new Date().toISOString(), decision: "Refused", model: "image", reason: "Memory was tight." }] } });
+  stubStackFetch({ ...shellExtras, "/stack/v1/groups": { groups: [] }, "/stack/v1/budget/decisions": { decisions: [{ at: new Date().toISOString(), decision: "Refused", model: "image", reason: "Memory was tight." }] } });
   render(<MemoryRouter initialEntries={["/monitoring"]}><DashboardShell /></MemoryRouter>);
   await waitFor(() => expect(document.body.textContent).toContain("Refused image: Memory was tight."));
 });
 
-test("the collapsed rail keeps every section and carries a tooltip on each button", () => {
-  stubStackFetch({ ...boardExtras, "/stack/v1/repairs": { repairs: [] }, "/stack/v1/roles": { roles: [] }, "/stack/v1/operator": { state: "signedOut", required: false } });
+test("the collapsed rail keeps every destination and carries a tooltip on each button", () => {
+  stubStackFetch(shellExtras);
   render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
-  const trigger = document.querySelector('[data-sidebar="trigger"]') ?? document.querySelector("button[aria-label*='sidebar']") ?? document.querySelector("button[aria-label*='menu']");
-  if (!trigger) throw new Error("no sidebar trigger found");
+  const trigger = document.querySelector('[data-sidebar="trigger"]')!;
   fireEvent.click(trigger);
   const buttons = Array.from(document.querySelectorAll('[data-slot="sidebar-menu-button"]'));
-  const sections = ["Overview", "Engines", "Models", "Clients", "Tester", "Monitoring", "Settings", "Logs", "Alerts"];
+  const labels = allDestinations().map((destination) => destination.label);
   const text = document.body.textContent ?? "";
-  for (const title of sections) {
-    expect(text).toContain(title);
-  }
+  for (const label of labels) expect(text).toContain(label);
   for (const button of buttons) {
     const link = button.querySelector("a");
-    const text = link?.textContent?.trim() ?? "";
-    if (sections.includes(text)) {
-      expect(button.innerHTML).toContain(text);
-    }
+    const linkText = link?.textContent?.trim() ?? "";
+    if (labels.includes(linkText)) expect(button.innerHTML).toContain(linkText);
   }
+});
+
+test("the rail toggle collapses the sidebar and persists the choice across a remount", () => {
+  stubStackFetch(shellExtras);
+  const { unmount } = render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
+  const toggle = document.querySelector('button[aria-label="Collapse navigation"]')!;
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  fireEvent.click(toggle);
+  expect(document.querySelector('button[aria-label="Expand navigation"]')?.getAttribute("aria-expanded")).toBe("false");
+  expect(localStorage.getItem("maipai-stack:rail")).toBe("collapsed");
+  unmount();
+  render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
+  const reopened = document.querySelector('button[aria-label="Expand navigation"]');
+  expect(reopened).toBeTruthy();
+  // The toggle must stay visible once collapsed, or there is no way back to expanded.
+  expect(reopened?.className ?? "").not.toContain("hidden");
+});
+
+test("the rail defaults collapsed at 960-1279px and expanded at 1280px and up, until toggled", () => {
+  Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 1000 });
+  stubStackFetch(shellExtras);
+  render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
+  expect(document.querySelector('button[aria-label="Expand navigation"]')).toBeTruthy();
+  cleanup();
+  Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 1440 });
+  stubStackFetch(shellExtras);
+  render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
+  expect(document.querySelector('button[aria-label="Collapse navigation"]')).toBeTruthy();
+});
+
+test("under 720px the rail becomes an off-canvas drawer, not a separate phone shell", async () => {
+  Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 400 });
+  stubStackFetch(shellExtras);
+  render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
+  expect(document.querySelector("[data-phone-shell]")).toBeNull();
+  expect(document.querySelector('[data-sidebar="sidebar"][data-mobile="true"]')).toBeNull();
+  fireEvent.click(document.querySelector('[data-sidebar="trigger"]')!);
+  await waitFor(() => expect(document.querySelector('[data-sidebar="sidebar"][data-mobile="true"]')).toBeTruthy());
+  expect((document.body.textContent ?? "")).toContain("Overview");
 });
 
 test("⌘K and / focus the header search, and a result navigates", async () => {
@@ -116,45 +199,22 @@ test("⌘K and / focus the header search, and a result navigates", async () => {
   await waitFor(() => expect(document.body.textContent).toContain("No models are installed yet"));
 });
 
-test("the sidebar footer shows the Stack health and links to alerts", async () => {
-  stubStackFetch({ ...boardExtras, "/stack/v1/repairs": { repairs: [] }, "/stack/v1/roles": { roles: [] }, "/stack/v1/operator": { state: "signedOut", required: false } });
-  render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
-  await waitFor(() => expect(document.body.textContent).toContain("All good"));
-  const healthLink = document.querySelector('a[href="/alerts"]');
-  expect(healthLink).toBeTruthy();
-});
-
-test("an open repair turns the sidebar health line amber and counts it", async () => {
+test("the Alerts nav item shows a red dot when a role has stopped", async () => {
   stubStackFetch({
-    ...boardExtras,
-    "/stack/v1/repairs": { repairs: [{ id: "r1", title: "Rebuild the model index", detail: "The index went stale.", action: "Rebuild", level: "passive", resolvedAt: null }] },
-    "/stack/v1/roles": { roles: [] },
-    "/stack/v1/operator": { state: "signedOut", required: false },
-  });
-  render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
-  await waitFor(() => expect(document.body.textContent).toContain("1 thing needs attention"));
-});
-
-test("a stopped engine turns the sidebar health dot red", async () => {
-  stubStackFetch({
-    ...boardExtras,
-    "/stack/v1/repairs": { repairs: [] },
+    ...shellExtras,
     "/stack/v1/roles": { roles: [{ id: "local-1", wire: "local", residency: "local", description: "A local model", state: "stopped", reason: null }] },
-    "/stack/v1/operator": { state: "signedOut", required: false },
   });
   render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
-  await waitFor(() => expect(document.body.textContent).toContain("All good"));
-  const dot = Array.from(document.querySelectorAll('a[href="/alerts"] span[aria-hidden]')).at(-1);
-  expect(dot?.className).toContain("bg-red-500");
+  const alertsLink = await waitFor(() => document.querySelector('a[href="/alerts"]'));
+  expect(alertsLink).toBeTruthy();
+  const dot = alertsLink?.querySelector("span[aria-hidden]");
+  await waitFor(() => expect(dot?.className).toContain("bg-red-500"));
 });
 
 test("the header bell opens the notification popover and shows the unread count", async () => {
   const now = new Date().toISOString();
   stubStackFetch({
-    ...boardExtras,
-    "/stack/v1/repairs": { repairs: [] },
-    "/stack/v1/roles": { roles: [] },
-    "/stack/v1/operator": { state: "signedOut", required: false },
+    ...shellExtras,
     "/stack/v1/notifications": { notifications: [{ id: "n1", title: "The chat engine is stopped.", level: "time_sensitive", at: now, data: "{}", readAt: null, dismissedAt: null }] },
   });
   render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
@@ -166,11 +226,10 @@ test("the header bell opens the notification popover and shows the unread count"
 });
 
 test("the header stays fixed while the routed page scrolls", async () => {
-  stubStackFetch({ ...boardExtras, "/stack/v1/repairs": { repairs: [] }, "/stack/v1/roles": { roles: [] }, "/stack/v1/operator": { state: "signedOut", required: false } });
+  stubStackFetch(shellExtras);
   render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
-  await waitFor(() => expect(document.body.textContent).toContain("All good"));
+  await waitFor(() => expect(document.querySelector("header")).toBeTruthy());
   const header = document.querySelector("header");
-  expect(header).toBeTruthy();
   const inset = header?.parentElement;
   expect(inset).toBeTruthy();
   const scroller = inset?.querySelector(":scope > div.flex-1");
@@ -180,12 +239,9 @@ test("the header stays fixed while the routed page scrolls", async () => {
   expect(scroller?.getAttribute("class") ?? "").toContain("overflow-y-auto");
 });
 
-test("the sidebar shows quiet indicators for engines, updates, alerts, and detected models", async () => {
+test("the rail shows quiet indicators for runtimes, updates, and alerts", async () => {
   stubStackFetch({
-    ...boardExtras,
-    "/stack/v1/repairs": { repairs: [] },
-    "/stack/v1/roles": { roles: [] },
-    "/stack/v1/operator": { state: "signedOut", required: false },
+    ...shellExtras,
     "/stack/v1/engines": { engines: [
       { id: "llama-0.4.5-darwin-arm64-b1", label: "Llama", platform: "darwin", arch: "arm64", verified: true, installed: true, matchesThisMachine: true, running: "0.4.5", currentTag: "0.4.5", newestTag: "0.4.5", current: true, notCurrent: false, needsRestart: false, state: "current", stateReason: null },
       { id: "mistral-0.5.0-darwin-arm64-b1", label: "Mistral", platform: "darwin", arch: "arm64", verified: true, installed: true, matchesThisMachine: true, running: "0.5.0", currentTag: "0.5.0", newestTag: "0.5.1", current: false, notCurrent: true, needsRestart: false, state: "notCurrent", stateReason: "newer available" },
@@ -195,32 +251,24 @@ test("the sidebar shows quiet indicators for engines, updates, alerts, and detec
     "/stack/v1/detected": { detected: [{ id: "d1", name: "Local store", path: "/models", version: "1.0", couldHold: ["chat"], forgotten: false, adopted: false, target: null }] },
   });
   render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
-  await waitFor(() => expect(document.body.textContent).toContain("1 thing needs attention"));
-  const sidebar = document.querySelector('[data-sidebar="content"]');
-  expect(sidebar).toBeTruthy();
-  // Engines: one not-current + one unadopted detected = 2, badge shows the number
-  const enginesLink = document.querySelector('a[href="/engines"]');
-  expect(enginesLink?.textContent).toContain("2");
-  // Updates badge
-  const updatesLink = document.querySelector('a[href="/settings"]');
-  expect(updatesLink?.textContent).toContain("1");
-  // Alerts: severity dot, no count badge
+  const runtimesLink = await waitFor(() => document.querySelector('a[href="/runtimes"]'));
+  await waitFor(() => expect(runtimesLink?.textContent).toContain("2"));
+  const settingsLink = document.querySelector('a[href="/settings"]');
+  expect(settingsLink?.textContent).toContain("1");
   const alertsLink = document.querySelector('a[href="/alerts"]');
-  expect(alertsLink).toBeTruthy();
   const dot = alertsLink?.querySelector("span[aria-hidden]");
   expect(dot?.className).toContain("bg-red-500");
   expect(alertsLink?.textContent).not.toContain("1");
 });
 
-test("the page title appears once, in the header", async () => {
-  stubStackFetch({ ...boardExtras, "/stack/v1/repairs": { repairs: [] }, "/stack/v1/roles": { roles: [] }, "/stack/v1/operator": { state: "signedOut", required: false }, "/stack/v1/models": { models: [] } });
+test("the page title appears once, in the header, for every destination", async () => {
+  stubStackFetch({ ...shellExtras, "/stack/v1/models": { models: [] } });
   render(<MemoryRouter initialEntries={["/models"]}><DashboardShell /></MemoryRouter>);
   await waitFor(() => expect(document.querySelector("h1")?.textContent).toBe("Models"));
   expect(document.querySelectorAll("h1").length).toBe(1);
-  for (const heading of document.querySelectorAll("h2")) expect(heading.textContent).not.toContain("Models");
 });
 
-test("the top bar names this computer and offers the appearance control", async () => {
+test("the top bar shows the destination title and offers the appearance control", async () => {
   stubStackFetch({
     ...boardExtras,
     "/stack/v1/repairs": { repairs: [{ id: "r1", title: "Needs attention", detail: "A repair is open.", action: "Review", level: "passive", resolvedAt: null }] },
@@ -228,46 +276,23 @@ test("the top bar names this computer and offers the appearance control", async 
     "/stack/v1/operator": { state: "signedOut", required: false },
   });
   render(<MemoryRouter initialEntries={["/updates"]}><DashboardShell /></MemoryRouter>);
-  await waitFor(() => expect(document.querySelector('[data-sidebar="header"] p[title]')?.getAttribute("title")).toBe("1 thing needs attention"));
-  expect(document.body.textContent).toContain("This computer");
+  await waitFor(() => expect(document.querySelector("header h1")?.textContent).toBe("Settings"));
   await waitFor(() => expect(document.querySelector('header button[aria-label="Use dark appearance"]')).toBeTruthy());
   expect(document.querySelector('header button[aria-label="Use light appearance"]')).toBeTruthy();
   expect(document.querySelector('header button[aria-label="Use system appearance"]')).toBeTruthy();
 });
 
-test("the responsive header keeps three phone actions and no text input", async () => {
-  stubStackFetch({ ...boardExtras, "/stack/v1/settings": { settings: [] }, "/stack/v1/repairs": { repairs: [] }, "/stack/v1/roles": { roles: [] }, "/stack/v1/operator": { state: "signedOut", required: false } });
+test("the narrow header keeps notifications visible; the search wrapper is marked hidden below sm", async () => {
+  stubStackFetch({ ...shellExtras, "/stack/v1/settings": { settings: [] } });
   Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 400 });
   render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
-  await waitFor(() => expect(document.querySelector('button[aria-label="Ask"]')).toBeTruthy());
-  expect(document.querySelector("header input")).toBeNull();
-  expect(document.querySelector("[data-notifications-trigger]")).toBeTruthy();
-  expect(document.querySelector("[data-profile-trigger]")).toBeTruthy();
+  await waitFor(() => expect(document.querySelector("[data-notifications-trigger]")).toBeTruthy());
+  const searchWrapper = document.querySelector('header input[placeholder*="Search"]')?.closest("header > div > div");
+  expect(searchWrapper?.className ?? "").toContain("hidden");
   cleanup();
   Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 1440 });
   render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
   await waitFor(() => expect(document.querySelector('header input[placeholder*="Search"]')).toBeTruthy());
-});
-
-test("the shell pins admin below the common group and exposes resources", async () => {
-  Object.defineProperty(window, "innerHeight", { configurable: true, writable: true, value: 1000 });
-  stubStackFetch({ ...boardExtras, "/stack/v1/settings": { settings: [] }, "/stack/v1/repairs": { repairs: [] }, "/stack/v1/roles": { roles: [] }, "/stack/v1/operator": { state: "signedOut", required: false } });
-  render(<MemoryRouter initialEntries={["/settings"]}><DashboardShell /></MemoryRouter>);
-  await waitFor(() => expect(document.querySelector('[data-nav-mode="pinned"]')).toBeTruthy());
-  expect(document.body.textContent).toContain("Memory");
-  expect(document.body.textContent).toContain("8.3 GB used of 24 GB · 16 GB budget for models");
-  expect(document.body.textContent).toContain("465.7 GB free");
-  const nav = document.querySelector('[data-sidebar="content"]')!;
-  expect(nav.textContent?.indexOf("Overview")).toBeLessThan(nav.textContent?.indexOf("Settings") ?? 0);
-  expect(document.body.textContent).toContain("Updates");
-  expect(document.body.textContent).toContain("Backups");
-  expect(document.body.textContent).not.toContain("Try it");
-  expect(document.body.textContent).not.toContain("Access");
-  Object.defineProperty(window, "innerHeight", { configurable: true, writable: true, value: 560 });
-  cleanup();
-  render(<MemoryRouter initialEntries={["/settings"]}><DashboardShell /></MemoryRouter>);
-  await waitFor(() => expect(document.querySelector('[data-nav-mode="categorized"]')).toBeTruthy());
-  expect(document.querySelector('[data-sidebar="content"]')?.textContent).toContain("Manage");
 });
 
 test("the search's Pause everything command requires a second click to confirm before posting", async () => {

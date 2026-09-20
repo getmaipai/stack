@@ -1,6 +1,7 @@
 import * as React from "react"
 
-const MOBILE_BREAKPOINT = 768
+// 720, not Tailwind's usual 768: the spec's rail tier (docs/plans/ui-spec-2026-09-19/spec.md, "Left navigation rail" > Responsive).
+const MOBILE_BREAKPOINT = 720
 
 export function useIsMobile() {
   const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined)

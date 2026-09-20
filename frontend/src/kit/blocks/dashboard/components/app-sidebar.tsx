@@ -1,32 +1,50 @@
 import * as React from "react";
 import { getIcon } from "@/kit/icons";
 import { Link, useLocation } from "react-router-dom";
-import type { BudgetResponse, HardwareInfo, HealthItem, LiveDrive, RepairRecord, RoleRecord } from "@/lib/api";
+import type { BudgetResponse, HardwareInfo, LiveDrive } from "@/lib/api";
+import { groups as taxonomyGroups } from "@/lib/taxonomy";
 import { NavMain, type NavGroup } from "@/kit/blocks/dashboard/components/nav-main";
 import { NavResources } from "@/kit/blocks/dashboard/components/nav-resources";
-import { healthSummary } from "@/kit/blocks/dashboard/components/nav-health";
-import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/kit/ui/sidebar";
+import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/kit/ui/sidebar";
 
-const iconMap = { Overview: "LayoutDashboard", Engines: "Cpu", Models: "Box", Library: "Folder", Clients: "KeyRound", Tester: "Bot", Monitoring: "Gauge", Settings: "Settings", Logs: "FileText", Alerts: "Bell" } as const;
-const DOT = { good: "bg-emerald-500", warn: "bg-amber-500", bad: "bg-red-500" } as const;
+const ChevronsLeft = getIcon("ChevronsLeft");
+const ChevronsRight = getIcon("ChevronsRight");
 
-export function AppSidebar({ repairs, roles, health = [], engineCount = 0, updateCount = 0, alertSeverity = null, engineTooltip = "Engines", updateTooltip = "Updates", alertTooltip = "Alerts", hardware, budget, drives, runState, ...props }: React.ComponentProps<typeof Sidebar> & { repairs: RepairRecord[]; roles: RoleRecord[]; health?: HealthItem[]; engineCount?: number; updateCount?: number; alertSeverity?: "critical" | "error" | "warning" | null; engineTooltip?: string; updateTooltip?: string; alertTooltip?: string; hardware?: HardwareInfo; budget?: BudgetResponse; drives?: LiveDrive[]; runState?: string }) {
+function RailToggle(): React.ReactElement {
+  const { state, toggleSidebar } = useSidebar();
+  const expanded = state === "expanded";
+  return <button type="button" onClick={toggleSidebar} aria-expanded={expanded} aria-label={expanded ? "Collapse navigation" : "Expand navigation"} className="flex size-11 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
+    {expanded ? <ChevronsLeft className="size-5" /> : <ChevronsRight className="size-5" />}
+  </button>;
+}
+
+export function AppSidebar({ engineCount = 0, updateCount = 0, alertSeverity = null, engineTooltip = "Runtimes", updateTooltip = "Updates", alertTooltip = "Alerts", hardware, budget, drives, runState, ...props }: React.ComponentProps<typeof Sidebar> & { engineCount?: number; updateCount?: number; alertSeverity?: "critical" | "error" | "warning" | null; engineTooltip?: string; updateTooltip?: string; alertTooltip?: string; hardware?: HardwareInfo; budget?: BudgetResponse; drives?: LiveDrive[]; runState?: string }) {
   const location = useLocation();
-  const [categorized, setCategorized] = React.useState(false);
-  React.useEffect(() => {
-    const update = () => setCategorized(window.innerHeight < 700);
-    update();
-    const target = document.querySelector('[data-sidebar="sidebar"]');
-    if (typeof ResizeObserver === "undefined" || !target) return;
-    const observer = new ResizeObserver(() => update()); observer.observe(target); return () => observer.disconnect();
-  }, []);
-  const { tone, sentence } = healthSummary(repairs, roles, health);
-  const common = ["Overview", "Engines", "Models", "Library", "Clients", "Tester", "Monitoring"].map((title) => ({ title, url: { Overview: "/", Engines: "/engines", Models: "/models", Library: "/library", Clients: "/clients", Tester: "/try", Monitoring: "/monitoring" }[title]!, icon: getIcon(iconMap[title as keyof typeof iconMap]), isActive: location.pathname === ({ Overview: "/", Engines: "/engines", Models: "/models", Library: "/library", Clients: "/clients", Tester: "/try", Monitoring: "/monitoring" }[title]!), badge: title === "Engines" ? engineCount : 0, tooltip: title === "Engines" ? engineTooltip : undefined }));
-  const admin = ["Settings", "Logs", "Alerts"].map((title) => ({ title, url: { Settings: "/settings", Logs: "/logs", Alerts: "/alerts" }[title]!, icon: getIcon(iconMap[title as keyof typeof iconMap]), isActive: location.pathname.startsWith({ Settings: "/settings", Logs: "/logs", Alerts: "/alerts" }[title]!), badge: title === "Settings" ? updateCount : 0, dot: title === "Alerts" ? alertSeverity : null, tooltip: title === "Settings" ? updateTooltip : title === "Alerts" ? alertTooltip : undefined }));
-  const groups: NavGroup[] = [{ label: "Manage", items: common }, { label: "Administer", items: admin }];
+  const badges: Record<string, number> = { runtimes: engineCount, settings: updateCount };
+  const dots: Record<string, "critical" | "error" | "warning" | null> = { alerts: alertSeverity };
+  const tooltips: Record<string, string> = { runtimes: engineTooltip, settings: updateTooltip, alerts: alertTooltip };
+  const groups: NavGroup[] = taxonomyGroups.map((group) => ({
+    label: group.label,
+    items: group.destinations.map((destination) => ({
+      title: destination.label,
+      url: destination.path,
+      icon: getIcon(destination.icon),
+      isActive: location.pathname === destination.path || (destination.path !== "/" && location.pathname.startsWith(`${destination.path}/`)),
+      badge: badges[destination.id] ?? 0,
+      dot: dots[destination.id] ?? null,
+      tooltip: tooltips[destination.id],
+    })),
+  }));
   return <Sidebar collapsible="icon" className="bg-[var(--surface-sidebar)] p-3 pb-4" {...props}>
-    <SidebarHeader className="p-0"><SidebarMenu><SidebarMenuItem><SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:p-1.5!"><Link to="/"><img className="size-7" src="/brand/maipai-stack-icon-light.png" alt="" /><span className="text-base font-semibold">MaiPai Stack</span></Link></SidebarMenuButton></SidebarMenuItem></SidebarMenu><div className="px-3 pt-2"><p className="flex items-center gap-2 text-xs text-muted-foreground"><span aria-hidden className={`size-2 rounded-full ${DOT[tone]}`} />{hardware?.computerName ?? "This computer"}</p><p className="sr-only" title={sentence}>{sentence}</p></div></SidebarHeader>
-    <SidebarContent className="flex flex-col"><NavMain groups={groups} categorized={categorized} /></SidebarContent>
+    <SidebarHeader className="p-0">
+      <SidebarMenu><SidebarMenuItem>
+        <div className="flex items-center justify-between gap-2 px-1.5 py-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-2">
+          <SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:p-1.5! flex-1 group-data-[collapsible=icon]:flex-none"><Link to="/"><img className="size-7" src="/brand/maipai-stack-icon-light.png" alt="" /><div className="flex min-w-0 flex-col group-data-[collapsible=icon]:hidden"><span className="truncate text-base font-semibold">MaiPai Stack</span><span className="truncate text-xs text-sidebar-foreground/60">Your AI. On Your Terms.</span></div></Link></SidebarMenuButton>
+          <RailToggle />
+        </div>
+      </SidebarMenuItem></SidebarMenu>
+    </SidebarHeader>
+    <SidebarContent className="flex flex-col"><NavMain groups={groups} /></SidebarContent>
     <SidebarFooter className="p-0"><NavResources capBytes={budget?.capBytes} totalMemoryBytes={budget?.totalMemoryBytes} freeMemoryBytes={budget?.freeMemoryBytes} freeDiskBytes={hardware?.freeDiskBytes} drives={drives ?? hardware?.drives} pressure={budget?.pressure} runState={runState} /></SidebarFooter>
   </Sidebar>;
 }

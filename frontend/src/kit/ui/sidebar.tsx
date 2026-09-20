@@ -26,9 +26,12 @@ import {
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
-const SIDEBAR_WIDTH = "16rem"
+// 252/72: the spec's rail widths (docs/plans/ui-spec-2026-09-19/spec.md,
+// "Left navigation rail"). The Stack's one SidebarProvider drives its open
+// state as a controlled prop backed by localStorage, not this cookie.
+const SIDEBAR_WIDTH = "252px"
 const SIDEBAR_WIDTH_MOBILE = "18rem"
-const SIDEBAR_WIDTH_ICON = "3rem"
+const SIDEBAR_WIDTH_ICON = "72px"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 
 type SidebarContextProps = {

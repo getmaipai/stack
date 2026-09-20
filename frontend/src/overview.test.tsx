@@ -118,7 +118,7 @@ test("Live renders every GPU, preserves unknown measurements, and lists connecte
   cleanup();
   Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 400 });
   render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
-  await waitFor(() => expect(document.querySelector("[data-phone-shell] [data-live-section]")).toBeTruthy());
+  await waitFor(() => expect(document.querySelector("[data-live-section]")).toBeTruthy());
   expect(document.body.textContent).toContain("NVIDIA RTX 5090");
   Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: originalWidth });
 });

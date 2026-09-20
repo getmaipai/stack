@@ -4,6 +4,7 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { getIcon } from "@/kit/icons";
 import { type BudgetResponse, type EngineRecord, type HardwareResponse, type HealthItem, type RepairRecord, type RoleRecord, type SetupPlanResponse } from "@/lib/api";
+import { allDestinations } from "@/lib/taxonomy";
 import { BoardPage } from "@/pages/BoardPage";
 import { TryItPage } from "@/pages/TryItPage";
 import { OverviewPage } from "@/pages/OverviewPage";
@@ -19,49 +20,32 @@ import { ModelsPage } from "@/pages/ModelsPage";
 import { AccessPage } from "@/pages/AccessPage";
 import { AlertsPage } from "@/pages/AlertsPage";
 import { SettingsPage } from "@/pages/SettingsPage";
-import { LibraryPage } from "@/pages/LibraryPage";
 import { HelpPage } from "@/pages/HelpPage";
-import { PhoneModeContext, usePhoneMode } from "@/kit/blocks/phone/PhoneMode";
-import { PhoneHeader } from "@/kit/blocks/phone/PhoneHeader";
-import { TabBar } from "@/kit/blocks/phone/TabBar";
-import { DetailCard } from "@/kit/blocks/phone/DetailCard";
-import { ActionList } from "@/kit/blocks/phone/ActionList";
-import { actionsFor, type ThingKind } from "@/lib/actions";
+import { PhoneModeContext } from "@/kit/blocks/phone/PhoneMode";
 import { isDesktop, listenForTrayAction, notify, setTraySnapshot } from "@/kit/host";
 import { api } from "@/lib/api";
 import { RelativeTime } from "@/kit/ui/relative-time";
 import { Skeleton } from "@/kit/ui/skeleton";
-import { HelperPanel } from "@/kit/blocks/helper/HelperPanel";
-import type { IntentFacts } from "@/lib/intents";
 
 const Gauge = getIcon("Gauge");
+
+const RAIL_KEY = "maipai-stack:rail";
+function readRailPreference(): boolean | null { try { const value = localStorage.getItem(RAIL_KEY); return value === "expanded" ? true : value === "collapsed" ? false : null; } catch { return null; } }
+function writeRailPreference(open: boolean): void { try { localStorage.setItem(RAIL_KEY, open ? "expanded" : "collapsed"); } catch { /* a private window may refuse storage */ } }
+function defaultRailOpen(): boolean { return typeof window === "undefined" || window.innerWidth >= 1280; }
 
 export type SectionFrameComponent = ({ title, description, children }: { title: string; description: string; children: ReactNode }) => ReactNode;
 
 export function SectionFrame({ title: _title, description, children }: { title: string; description: string; children: ReactNode }) {
-  const phone = usePhoneMode();
-  return <main className="mx-auto w-full max-w-7xl space-y-5 px-4 py-5 sm:px-8 lg:px-10 lg:py-6">{description ? <p className={phone ? "hidden" : "text-sm text-muted-foreground"}>{description}</p> : null}{children}</main>;
+  return <main className="mx-auto w-full max-w-7xl space-y-5 px-4 py-5 sm:px-8 lg:px-10 lg:py-6">{description ? <p className="text-sm text-muted-foreground">{description}</p> : null}{children}</main>;
 }
 
-function PhoneDetail({ kind, endpoint, id }: { kind: Extract<ThingKind, "model" | "engine">; endpoint: string; id: string }) {
-  const navigate = useNavigate();
-  const data = useApiResource<{ models?: Array<Record<string, unknown>>; engines?: Array<Record<string, unknown>> }>(endpoint);
-  const records = kind === "model" ? data.data?.models ?? [] : data.data?.engines ?? [];
-  const item = records.find((row) => String(row.id) === id) ?? { id, name: id };
-  const label = String(item.name ?? item.label ?? item.id ?? id);
-  const actions = actionsFor(kind, item, () => undefined);
-  const rows = Object.entries(item).filter(([key, value]) => ["id", "name", "label", "platform", "arch", "state", "currentTag", "newestTag"].includes(key) && (typeof value === "string" || typeof value === "number" || typeof value === "boolean")).slice(0, 8).map(([key, value]) => ({ label: key.replaceAll(/([A-Z])/g, " $1"), value: String(value) }));
-  return <main className="space-y-4 px-4 py-4"><button type="button" className="flex min-h-11 items-center gap-2 text-sm text-primary" onClick={() => navigate(kind === "model" ? "/models" : "/engines")}><span aria-hidden>‹</span>Back</button><h1 className="text-2xl font-semibold">{label}</h1><DetailCard rows={[{ label: "Nickname", placeholder: "Enter a nickname", editable: kind === "model" }, { label: "Group", value: "Choose a group", onClick: () => undefined }, ...rows]} /><ActionList actions={actions} /></main>;
+function ComingSoonPage({ id }: { id: string }) {
+  const destination = allDestinations().find((item) => item.id === id);
+  return <SectionFrame title={destination?.label ?? ""} description={destination?.subtitle ?? ""}><p className="text-sm text-muted-foreground">Coming in this release.</p></SectionFrame>;
 }
 
-function PhoneShell({ children, locationPath, onNavigate, health, helperFacts }: { children: ReactNode; locationPath: string; onNavigate: (path: string) => void; health: string; helperFacts: IntentFacts }) {
-  const action: "Add" | "Search" = ["/models", "/engines"].includes(locationPath) ? "Add" : "Search";
-  const title = locationPath.startsWith("/models") ? "Models" : locationPath.startsWith("/engines") ? "Engines" : locationPath.startsWith("/try") ? "Ask" : locationPath.startsWith("/alerts") ? "Alerts" : locationPath.startsWith("/settings") ? "Settings" : locationPath === "/" ? "Overview" : "Things";
-  return <div data-phone-shell className="min-h-svh bg-background pb-16"><PhoneHeader computerName="This computer" health={health} action={action} onAction={() => undefined} /><div className="hidden" aria-hidden="true"><button type="button" aria-label="Ask" /><button type="button" data-notifications-trigger /><button type="button" data-profile-trigger /></div><main className="mx-auto w-full max-w-xl"><h1 className="px-4 pt-4 text-2xl font-semibold">{title}</h1>{["/models", "/engines"].includes(locationPath) && <div className="mx-4 mt-3 grid grid-cols-2 rounded-lg border p-1"><button type="button" className={`min-h-11 rounded-md text-sm ${locationPath === "/models" ? "bg-muted font-medium" : ""}`} onClick={() => onNavigate("/models")}>Models</button><button type="button" className={`min-h-11 rounded-md text-sm ${locationPath === "/engines" ? "bg-muted font-medium" : ""}`} onClick={() => onNavigate("/engines")}>Engines</button></div>}{locationPath.startsWith("/settings") && <nav aria-label="Settings navigation" className="mx-4 mt-3 divide-y rounded-xl border"><a className="block min-h-11 px-4 py-3" href="/clients">Clients</a><a className="block min-h-11 px-4 py-3" href="/monitoring">Monitoring</a><a className="block min-h-11 px-4 py-3" href="/logs">Logs</a></nav>}<div className="px-4 pb-4">{children}{locationPath.startsWith("/try") && <HelperPanel question="How is chat doing?" facts={helperFacts} onClose={() => onNavigate("/")} />}</div></main><TabBar activePath={locationPath} onNavigate={onNavigate} /></div>;
-}
-
-function PhoneModelRoute() { const { id = "" } = useParams(); return <PhoneDetail kind="model" endpoint="/stack/v1/models" id={id} />; }
-function PhoneEngineRoute() { const { id = "" } = useParams(); return <PhoneDetail kind="engine" endpoint="/stack/v1/engines" id={id} />; }
+function RedirectToDocs() { const { page } = useParams(); return <Navigate to={page ? `/docs/${page}` : "/docs"} replace />; }
 
 function MonitoringPage() {
   const budget = useApiResource<BudgetResponse>("/stack/v1/budget");
@@ -79,11 +63,19 @@ function LogsPage() { const [level, setLevel] = useState("all"); const [follow, 
 
 export function DashboardShell() {
   const location = useLocation(); const navigate = useNavigate();
-  const [phone, setPhone] = useState(() => typeof window !== "undefined" && window.innerWidth < 640);
+  const [phone, setPhone] = useState(() => typeof window !== "undefined" && window.innerWidth < 720);
+  const [railOpen, setRailOpen] = useState<boolean>(() => readRailPreference() ?? defaultRailOpen());
+  useEffect(() => {
+    if (readRailPreference() !== null) return;
+    const update = () => setRailOpen(defaultRailOpen());
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  function handleRailOpenChange(next: boolean): void { setRailOpen(next); writeRailPreference(next); }
   const repairs = useApiResource<{ repairs: RepairRecord[] }>("/stack/v1/repairs");
   const roles = useApiResource<{ roles: RoleRecord[] }>("/stack/v1/roles");
   const engines = useApiResource<{ engines: EngineRecord[] }>("/stack/v1/engines");
-  const models = useApiResource<{ models: Array<{ sizeBytes?: number | null }> }>("/stack/v1/models");
   const updates = useApiResource<{ app: { available: string | null }; engines: { available: string | null }; models: { available: string | null } }>("/stack/v1/updates");
   const health = useApiResource<{ health: HealthItem[] }>("/stack/v1/health");
   const detected = useApiResource<{ detected: Array<{ id: string; name: string; version: string; path?: string; couldHold: string[]; forgotten: boolean; adopted: boolean; target: string | null }> }>("/stack/v1/detected");
@@ -95,13 +87,12 @@ export function DashboardShell() {
   // The global ⌘K/"/" listener and its modal moved into SiteHeader's own
   // GlobalSearch, which focuses the real header input per spec ("it is
   // not a separate blank modal") instead of opening a dialog.
-  useEffect(() => { const update = () => setPhone(window.innerWidth < 640); update(); window.addEventListener("resize", update); return () => window.removeEventListener("resize", update); }, []);
-  const repairRows = repairs.data?.repairs ?? []; const roleRows = roles.data?.roles ?? [];
+  useEffect(() => { const update = () => setPhone(window.innerWidth < 720); update(); window.addEventListener("resize", update); return () => window.removeEventListener("resize", update); }, []);
+  const roleRows = roles.data?.roles ?? [];
   const enginesToCheck = engines.data?.engines?.filter((engine) => engine.matchesThisMachine && engine.state !== "current") ?? [];
   const detectedToAdopt = (detected.data?.detected ?? []).filter((item) => !item.adopted && !item.forgotten).length;
   const engineCount = enginesToCheck.length + detectedToAdopt;
   const updateCount = updates.data ? ((updates.data.app?.available ?? null) != null ? 1 : 0) + ((updates.data.engines?.available ?? null) != null ? 1 : 0) + ((updates.data.models?.available ?? null) != null ? 1 : 0) : 0;
-  const helperFacts: IntentFacts = { engines: (engines.data?.engines ?? []).length, models: (models.data?.models ?? []).length, clients: 0, chatReady: roleRows.some((role) => role.id === "chat" && ["ready", "busy"].includes(role.state)), updates: updateCount, modelStorageBytes: (models.data?.models ?? []).reduce((total, model) => total + (model.sizeBytes ?? 0), 0) };
   const alertCount = health.data?.health?.filter((item) => item.severity === "critical" || item.severity === "error").length ?? 0;
   const alertSeverity = roleRows.some((role) => role.state === "stopped") ? "critical" : (health.data?.health ?? []).reduce<"critical" | "error" | "warning" | null>((worst, item) => { const rank: Record<string, number> = { warning: 1, error: 2, critical: 3 }; const itemRank = rank[item.severity] ?? 0; const worstRank = worst ? rank[worst] ?? 0 : 0; return itemRank > worstRank ? item.severity : worst; }, null);
   const engineTooltip = engineCount === 0 ? "Engines" : `${engineCount} ${engineCount === 1 ? "engine needs" : "engines need"} attention`;
@@ -120,9 +111,37 @@ export function DashboardShell() {
     return () => remove();
   }, [currentRunState, navigate, refetchRunState]);
   useEffect(() => { if (location.pathname !== "/abilities") sessionStorage.setItem("maipai-stack:last-route", location.pathname); }, [location.pathname]);
-  const routes = <Routes><Route path="/" element={<BoardPageProxy />} /><Route path="/abilities" element={<AbilitiesProxy />} /><Route path="/models/:id" element={<PhoneModelRoute />} /><Route path="/engines/:id" element={<PhoneEngineRoute />} /><Route path="/models" element={<ModelsPage Frame={SectionFrame} />} /><Route path="/engines" element={<EnginesPage Frame={SectionFrame} />} /><Route path="/monitoring" element={<MonitoringPage />} /><Route path="/library" element={<LibraryPage Frame={SectionFrame} />} /><Route path="/help/:page?" element={<HelpPage Frame={SectionFrame} />} /><Route path="/alerts" element={<AlertsPage Frame={SectionFrame} />} /><Route path="/logs" element={<LogsPage />} /><Route path="/clients" element={<AccessPage Frame={SectionFrame} />} /><Route path="/access" element={<Navigate to="/clients" replace />} /><Route path="/try" element={<TryItPage />} /><Route path="/updates" element={<Navigate to="/settings/updates" replace />} /><Route path="/backups" element={<Navigate to="/settings/backups" replace />} /><Route path="/settings/*" element={<SettingsPage Frame={SectionFrame} />} /><Route path="*" element={<BoardPageProxy />} /></Routes>;
-  if (phone) return <PhoneModeContext.Provider value={true}><PhoneShell locationPath={location.pathname} onNavigate={navigate} health={health.data?.health?.[0]?.text ?? "This computer is healthy."} helperFacts={helperFacts}>{routes}</PhoneShell></PhoneModeContext.Provider>;
-  return <SidebarProvider><AppSidebar repairs={repairRows} roles={roleRows} health={health.data?.health ?? []} engineCount={engineCount} updateCount={updateCount} alertSeverity={alertSeverity} engineTooltip={engineTooltip} updateTooltip={updateTooltip} alertTooltip={alertTooltip} hardware={hardware.data?.hardware} budget={budget.data} runState={runState.data?.state} /><SidebarInset className="h-svh overflow-hidden bg-[var(--surface-page)]"><SiteHeader /><div className="flex-1 overflow-y-auto">{routes}</div><StackFooter /></SidebarInset></SidebarProvider>;
+  const routes = <Routes>
+    <Route path="/" element={<BoardPageProxy />} />
+    <Route path="/abilities" element={<AbilitiesProxy />} />
+    <Route path="/models" element={<ModelsPage Frame={SectionFrame} />} />
+    <Route path="/models/:id" element={<Navigate to="/models" replace />} />
+    <Route path="/adapters" element={<ComingSoonPage id="adapters" />} />
+    <Route path="/apps" element={<ComingSoonPage id="apps" />} />
+    <Route path="/runtimes" element={<EnginesPage Frame={SectionFrame} />} />
+    <Route path="/engines" element={<Navigate to="/runtimes" replace />} />
+    <Route path="/engines/:id" element={<Navigate to="/runtimes" replace />} />
+    <Route path="/workflows" element={<ComingSoonPage id="workflows" />} />
+    <Route path="/extensions" element={<ComingSoonPage id="extensions" />} />
+    <Route path="/training" element={<ComingSoonPage id="training" />} />
+    <Route path="/system" element={<ComingSoonPage id="system" />} />
+    <Route path="/packages" element={<ComingSoonPage id="packages" />} />
+    <Route path="/monitoring" element={<MonitoringPage />} />
+    <Route path="/docs" element={<HelpPage Frame={SectionFrame} />} />
+    <Route path="/docs/:page" element={<HelpPage Frame={SectionFrame} />} />
+    <Route path="/help/:page?" element={<RedirectToDocs />} />
+    <Route path="/library" element={<Navigate to="/docs" replace />} />
+    <Route path="/alerts" element={<AlertsPage Frame={SectionFrame} />} />
+    <Route path="/logs" element={<LogsPage />} />
+    <Route path="/clients" element={<AccessPage Frame={SectionFrame} />} />
+    <Route path="/access" element={<Navigate to="/clients" replace />} />
+    <Route path="/try" element={<TryItPage />} />
+    <Route path="/updates" element={<Navigate to="/settings/updates" replace />} />
+    <Route path="/backups" element={<Navigate to="/settings/backups" replace />} />
+    <Route path="/settings/*" element={<SettingsPage Frame={SectionFrame} />} />
+    <Route path="*" element={<BoardPageProxy />} />
+  </Routes>;
+  return <PhoneModeContext.Provider value={phone}><SidebarProvider open={railOpen} onOpenChange={handleRailOpenChange}><AppSidebar engineCount={engineCount} updateCount={updateCount} alertSeverity={alertSeverity} engineTooltip={engineTooltip} updateTooltip={updateTooltip} alertTooltip={alertTooltip} hardware={hardware.data?.hardware} budget={budget.data} runState={runState.data?.state} /><SidebarInset className="h-svh overflow-hidden bg-[var(--surface-page)]"><SiteHeader /><div className="flex-1 overflow-y-auto">{routes}</div><StackFooter /></SidebarInset></SidebarProvider></PhoneModeContext.Provider>;
 }
 
 function BoardPageProxy() {
