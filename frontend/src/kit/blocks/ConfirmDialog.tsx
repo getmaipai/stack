@@ -36,7 +36,7 @@ export function ConfirmDialog({ open, title, affectedFiles = [], affectedDepende
           </div>
         )}
         <DialogFooter>
-          <Button type="button" variant="outline" autoFocus onClick={onCancel}>{cancelLabel}</Button>
+          <Button type="button" variant="outline" onClick={onCancel}>{cancelLabel}</Button>
           <Button type="button" variant="destructive" onClick={onConfirm}>{confirmLabel}</Button>
         </DialogFooter>
       </DialogContent>

@@ -24,5 +24,5 @@ UI-10/UI-12 sections). Main checkout.
   no null handling on the older one). Not migrated here since
   `SegmentedBar.tsx` is Overview's file (UI-11), and UI-11's own spec
   already replaces its Storage widget with a `ResourceRow` built on the
-  new shared formatter — noting it here so whoever builds UI-11 knows
-  to delete `SegmentedBar.tsx`'s copy rather than keep both.
+  new shared formatter, noted here so whoever builds UI-11 knows to
+  delete `SegmentedBar.tsx`'s copy rather than keep both.
