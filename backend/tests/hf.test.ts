@@ -11,7 +11,7 @@ test("hfUrl builds URLs from the default Hugging Face endpoint", () => {
 });
 
 test("hfUrl follows the Hugging Face endpoint setting, with a trailing slash allowed", () => {
-  updateSettings({ huggingFaceEndpoint: "https://hf.internal/" });
+  updateSettings({ "stack.updates.model_host": "https://hf.internal/" });
   expect(huggingFaceEndpoint()).toBe("https://hf.internal");
   expect(hfUrl("/Qwen/Qwen3-8B-GGUF/resolve/7c41481f/chat.gguf")).toBe("https://hf.internal/Qwen/Qwen3-8B-GGUF/resolve/7c41481f/chat.gguf");
 });

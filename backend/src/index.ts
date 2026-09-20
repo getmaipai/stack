@@ -10,7 +10,7 @@ import { stopAllRoles, unloadIdleRoles } from "@/lib/supervisor";
 import { execFileSync } from "node:child_process";
 
 export function serveOptions(): { port: number; hostname: "127.0.0.1"; fetch: (request: Request) => Response | Promise<Response>; idleTimeout: number } {
-  const port = Number(process.env.PORT ?? settingValues().port ?? 8770);
+  const port = Number(process.env.PORT ?? settingValues()["stack.runtime.port"] ?? 8770);
   return { port, hostname: "127.0.0.1", fetch: app.fetch, idleTimeout: 255 };
 }
 
@@ -26,7 +26,7 @@ async function serve(): Promise<void> {
   const server = Bun.serve(options);
   const idle = setInterval(() => {
     const values = settingValues();
-    void unloadIdleRoles({ onBattery: onBattery(), idleMinutes: Number(values.idleUnloadMinutes ?? 30), batteryIdleMinutes: Number(values.idleUnloadOnBatteryMinutes ?? 10) }).catch(() => {});
+    void unloadIdleRoles({ onBattery: onBattery(), idleMinutes: Number(values["stack.runtime.idle_unload_minutes"] ?? 30), batteryIdleMinutes: Number(values["stack.runtime.idle_unload_on_battery_minutes"] ?? 10) }).catch(() => {});
   }, 60_000);
   (idle as unknown as { unref?: () => void }).unref?.();
   let stopping = false;

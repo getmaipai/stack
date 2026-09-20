@@ -12,6 +12,7 @@ import type { MemoryReader } from "@/lib/memory/types";
 import { probeReplyOk, probeRequest, requestRole, getRoleStatus, SPAWNABLE_ROLES } from "@/lib/supervisor";
 import { resolveRoleState } from "@/lib/router";
 import { ROLE_IDS, ROLES, type RoleId } from "@/roles";
+import type { HealthFix } from "@/lib/health";
 
 const LATEST_KEY = "readiness.latest";
 
@@ -28,7 +29,7 @@ export interface CheckOptions {
 
 let running: { startedAt: string } | null = null;
 
-function fixFor(role: RoleId, reason: string): { label: string; action: string } {
+function fixFor(role: RoleId, reason: string): HealthFix {
   if (reason.toLowerCase().includes("memory")) return { label: "Free memory", action: "free_memory" };
   if (ROLES[role].wire === "chat" || ROLES[role].wire === "embeddings") return { label: "Restart engine", action: "restart_engine" };
   return { label: "Reinstall model", action: "reinstall_model" };

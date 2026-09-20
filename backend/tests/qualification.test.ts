@@ -10,7 +10,7 @@ import { GovernorRules } from "@/lib/governor";
 import { SETTINGS } from "@/settings";
 
 const GB = 1_073_741_824;
-const contextLength: number = ((SETTINGS.find((entry) => entry.key === "engines.llama-server.contextLength")?.default as number | undefined) ?? 4096);
+const contextLength: number = ((SETTINGS.find((entry) => entry.key === "stack.engines.llama_server.context_length")?.default as number | undefined) ?? 4096);
 const engineMultiplier = GovernorRules.engineMultipliers["llama-server"] ?? GovernorRules.engineMultipliers.default;
 
 // Qwen3-1.7B: 28 layers, kv_head 8, head_dim 96. q8_0 KV cache: 34/32

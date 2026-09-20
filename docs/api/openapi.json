@@ -137,7 +137,23 @@
                 "type": "object",
                 "properties": {
                   "model": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "quality": {
+                    "type": "string",
+                    "enum": [
+                      "fast",
+                      "everyday",
+                      "best"
+                    ]
+                  },
+                  "stream": {
+                    "type": "boolean"
+                  },
+                  "timeout_ms": {
+                    "type": "integer",
+                    "minimum": 1
                   },
                   "messages": {
                     "type": "array",
@@ -158,9 +174,6 @@
                         "nullable": true
                       }
                     }
-                  },
-                  "stream": {
-                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -295,7 +308,23 @@
                 "type": "object",
                 "properties": {
                   "model": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "quality": {
+                    "type": "string",
+                    "enum": [
+                      "fast",
+                      "everyday",
+                      "best"
+                    ]
+                  },
+                  "stream": {
+                    "type": "boolean"
+                  },
+                  "timeout_ms": {
+                    "type": "integer",
+                    "minimum": 1
                   },
                   "input": {
                     "anyOf": [
@@ -443,7 +472,23 @@
                 "type": "object",
                 "properties": {
                   "model": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "quality": {
+                    "type": "string",
+                    "enum": [
+                      "fast",
+                      "everyday",
+                      "best"
+                    ]
+                  },
+                  "stream": {
+                    "type": "boolean"
+                  },
+                  "timeout_ms": {
+                    "type": "integer",
+                    "minimum": 1
                   },
                   "file": {
                     "type": "string"
@@ -580,7 +625,23 @@
                 "type": "object",
                 "properties": {
                   "model": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "quality": {
+                    "type": "string",
+                    "enum": [
+                      "fast",
+                      "everyday",
+                      "best"
+                    ]
+                  },
+                  "stream": {
+                    "type": "boolean"
+                  },
+                  "timeout_ms": {
+                    "type": "integer",
+                    "minimum": 1
                   },
                   "input": {
                     "type": "string"
@@ -718,10 +779,8 @@
                 "type": "object",
                 "properties": {
                   "model": {
-                    "type": "string"
-                  },
-                  "prompt": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1
                   },
                   "quality": {
                     "type": "string",
@@ -730,6 +789,16 @@
                       "everyday",
                       "best"
                     ]
+                  },
+                  "stream": {
+                    "type": "boolean"
+                  },
+                  "timeout_ms": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "prompt": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -2609,7 +2678,8 @@
                         "type": "object",
                         "properties": {
                           "code": {
-                            "type": "string"
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9.-]*$"
                           },
                           "severity": {
                             "type": "string",
@@ -2620,31 +2690,45 @@
                             ]
                           },
                           "title": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "text": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "since": {
-                            "type": "string"
+                            "type": "string",
+                            "format": "date-time"
                           },
                           "cause": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "fix": {
                             "type": "object",
                             "properties": {
                               "label": {
-                                "type": "string"
+                                "type": "string",
+                                "minLength": 1
                               },
                               "action": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "restart_engine",
+                                  "free_memory",
+                                  "retry_download",
+                                  "rollback_update",
+                                  "reinstall_engine",
+                                  "reinstall_model"
+                                ]
                               }
                             },
                             "required": [
                               "label",
                               "action"
-                            ]
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -2654,7 +2738,8 @@
                           "text",
                           "since",
                           "cause"
-                        ]
+                        ],
+                        "additionalProperties": false
                       }
                     }
                   },
@@ -4110,125 +4195,107 @@
                         "type": "object",
                         "properties": {
                           "key": {
-                            "type": "string"
+                            "type": "string",
+                            "pattern": "^stack(\\.[a-z][a-z0-9_]*)+$"
                           },
-                          "type": {
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "device"
+                            ]
+                          },
+                          "selector": {
                             "type": "string",
                             "enum": [
                               "number",
-                              "boolean",
+                              "select",
                               "text",
-                              "enum"
+                              "boolean"
                             ]
+                          },
+                          "range": {
+                            "nullable": true
                           },
                           "default": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "boolean"
-                              }
-                            ]
+                            "nullable": true
                           },
                           "label": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "help": {
                             "type": "string"
                           },
-                          "disclosure": {
+                          "section": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "collapsed": {
+                                "type": "boolean"
+                              },
+                              "order": {
+                                "type": "integer"
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "level": {
                             "type": "string",
                             "enum": [
                               "basic",
                               "advanced",
-                              "developer"
+                              "expert"
                             ]
                           },
-                          "needsRestart": {
+                          "secret": {
                             "type": "boolean"
                           },
-                          "section": {
-                            "type": "string"
-                          },
-                          "order": {
-                            "type": "integer"
-                          },
-                          "range": {
-                            "type": "object",
-                            "properties": {
-                              "min": {
-                                "type": "number"
-                              },
-                              "max": {
-                                "type": "number"
-                              }
-                            }
-                          },
-                          "options": {
+                          "needs": {
                             "type": "array",
                             "items": {
-                              "type": "object",
-                              "properties": {
-                                "value": {
-                                  "type": "string"
-                                },
-                                "label": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "value",
-                                "label"
-                              ]
+                              "type": "string"
                             }
                           },
-                          "inEffect": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "boolean"
-                              }
+                          "lives_in": {
+                            "type": "string",
+                            "enum": [
+                              "stack"
                             ]
                           },
+                          "honoured_by": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "home",
+                                "bot"
+                              ]
+                            },
+                            "minItems": 1
+                          },
+                          "needs_restart": {
+                            "type": "boolean"
+                          },
+                          "in_effect": {
+                            "nullable": true
+                          },
                           "pending": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "boolean"
-                              },
-                              {
-                                "nullable": true
-                              }
-                            ]
+                            "nullable": true
                           }
                         },
                         "required": [
                           "key",
-                          "type",
-                          "default",
+                          "scope",
+                          "selector",
                           "label",
-                          "help",
-                          "disclosure",
-                          "needsRestart",
-                          "section",
-                          "order",
-                          "inEffect",
-                          "pending"
-                        ]
+                          "level",
+                          "lives_in",
+                          "honoured_by",
+                          "needs_restart"
+                        ],
+                        "additionalProperties": false
                       }
                     }
                   },
@@ -4291,125 +4358,107 @@
                         "type": "object",
                         "properties": {
                           "key": {
-                            "type": "string"
+                            "type": "string",
+                            "pattern": "^stack(\\.[a-z][a-z0-9_]*)+$"
                           },
-                          "type": {
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "device"
+                            ]
+                          },
+                          "selector": {
                             "type": "string",
                             "enum": [
                               "number",
-                              "boolean",
+                              "select",
                               "text",
-                              "enum"
+                              "boolean"
                             ]
+                          },
+                          "range": {
+                            "nullable": true
                           },
                           "default": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "boolean"
-                              }
-                            ]
+                            "nullable": true
                           },
                           "label": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "help": {
                             "type": "string"
                           },
-                          "disclosure": {
+                          "section": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "collapsed": {
+                                "type": "boolean"
+                              },
+                              "order": {
+                                "type": "integer"
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "level": {
                             "type": "string",
                             "enum": [
                               "basic",
                               "advanced",
-                              "developer"
+                              "expert"
                             ]
                           },
-                          "needsRestart": {
+                          "secret": {
                             "type": "boolean"
                           },
-                          "section": {
-                            "type": "string"
-                          },
-                          "order": {
-                            "type": "integer"
-                          },
-                          "range": {
-                            "type": "object",
-                            "properties": {
-                              "min": {
-                                "type": "number"
-                              },
-                              "max": {
-                                "type": "number"
-                              }
-                            }
-                          },
-                          "options": {
+                          "needs": {
                             "type": "array",
                             "items": {
-                              "type": "object",
-                              "properties": {
-                                "value": {
-                                  "type": "string"
-                                },
-                                "label": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "value",
-                                "label"
-                              ]
+                              "type": "string"
                             }
                           },
-                          "inEffect": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "boolean"
-                              }
+                          "lives_in": {
+                            "type": "string",
+                            "enum": [
+                              "stack"
                             ]
                           },
+                          "honoured_by": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "home",
+                                "bot"
+                              ]
+                            },
+                            "minItems": 1
+                          },
+                          "needs_restart": {
+                            "type": "boolean"
+                          },
+                          "in_effect": {
+                            "nullable": true
+                          },
                           "pending": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "boolean"
-                              },
-                              {
-                                "nullable": true
-                              }
-                            ]
+                            "nullable": true
                           }
                         },
                         "required": [
                           "key",
-                          "type",
-                          "default",
+                          "scope",
+                          "selector",
                           "label",
-                          "help",
-                          "disclosure",
-                          "needsRestart",
-                          "section",
-                          "order",
-                          "inEffect",
-                          "pending"
-                        ]
+                          "level",
+                          "lives_in",
+                          "honoured_by",
+                          "needs_restart"
+                        ],
+                        "additionalProperties": false
                       }
                     }
                   },
@@ -4472,125 +4521,107 @@
                         "type": "object",
                         "properties": {
                           "key": {
-                            "type": "string"
+                            "type": "string",
+                            "pattern": "^stack(\\.[a-z][a-z0-9_]*)+$"
                           },
-                          "type": {
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "device"
+                            ]
+                          },
+                          "selector": {
                             "type": "string",
                             "enum": [
                               "number",
-                              "boolean",
+                              "select",
                               "text",
-                              "enum"
+                              "boolean"
                             ]
+                          },
+                          "range": {
+                            "nullable": true
                           },
                           "default": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "boolean"
-                              }
-                            ]
+                            "nullable": true
                           },
                           "label": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "help": {
                             "type": "string"
                           },
-                          "disclosure": {
+                          "section": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "collapsed": {
+                                "type": "boolean"
+                              },
+                              "order": {
+                                "type": "integer"
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "level": {
                             "type": "string",
                             "enum": [
                               "basic",
                               "advanced",
-                              "developer"
+                              "expert"
                             ]
                           },
-                          "needsRestart": {
+                          "secret": {
                             "type": "boolean"
                           },
-                          "section": {
-                            "type": "string"
-                          },
-                          "order": {
-                            "type": "integer"
-                          },
-                          "range": {
-                            "type": "object",
-                            "properties": {
-                              "min": {
-                                "type": "number"
-                              },
-                              "max": {
-                                "type": "number"
-                              }
-                            }
-                          },
-                          "options": {
+                          "needs": {
                             "type": "array",
                             "items": {
-                              "type": "object",
-                              "properties": {
-                                "value": {
-                                  "type": "string"
-                                },
-                                "label": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "value",
-                                "label"
-                              ]
+                              "type": "string"
                             }
                           },
-                          "inEffect": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "boolean"
-                              }
+                          "lives_in": {
+                            "type": "string",
+                            "enum": [
+                              "stack"
                             ]
                           },
+                          "honoured_by": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "home",
+                                "bot"
+                              ]
+                            },
+                            "minItems": 1
+                          },
+                          "needs_restart": {
+                            "type": "boolean"
+                          },
+                          "in_effect": {
+                            "nullable": true
+                          },
                           "pending": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "boolean"
-                              },
-                              {
-                                "nullable": true
-                              }
-                            ]
+                            "nullable": true
                           }
                         },
                         "required": [
                           "key",
-                          "type",
-                          "default",
+                          "scope",
+                          "selector",
                           "label",
-                          "help",
-                          "disclosure",
-                          "needsRestart",
-                          "section",
-                          "order",
-                          "inEffect",
-                          "pending"
-                        ]
+                          "level",
+                          "lives_in",
+                          "honoured_by",
+                          "needs_restart"
+                        ],
+                        "additionalProperties": false
                       }
                     }
                   },
@@ -4686,8 +4717,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "dataDir": {
-                      "type": "string"
+                    "data_dir": {
+                      "type": "string",
+                      "minLength": 1
                     },
                     "paths": {
                       "type": "array",
@@ -4695,7 +4727,8 @@
                         "type": "object",
                         "properties": {
                           "path": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "mode": {
                             "type": "string",
@@ -4705,10 +4738,12 @@
                             ]
                           },
                           "what": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "why": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           }
                         },
                         "required": [
@@ -4716,14 +4751,17 @@
                           "mode",
                           "what",
                           "why"
-                        ]
-                      }
+                        ],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1
                     }
                   },
                   "required": [
-                    "dataDir",
+                    "data_dir",
                     "paths"
-                  ]
+                  ],
+                  "additionalProperties": false
                 }
               }
             }

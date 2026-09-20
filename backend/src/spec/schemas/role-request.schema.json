@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://getmaipai.github.io/shared/spec/schemas/role-request.schema.json",
+  "title": "RoleRequest",
+  "description": "The fields the Stack reads on every OpenAI-shaped request to /v1/*: `model` names a role (chat, embed, stt, tts, image, ...) or an installed model id; the rest is passed to the engine unchanged. Declared here so Home builds requests against one shape; moves to shared/spec at the refocus's 0c.",
+  "type": "object",
+  "required": ["model"],
+  "properties": {
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "description": "A role id (`chat`, `coding`, `judge`, `router`, `embed`, `rerank`, `vision`, `stt`, `tts`, `wakeword`, `image`, `video`, `music`) or an installed model id."
+    },
+    "quality": {
+      "type": "string",
+      "enum": ["fast", "everyday", "best"],
+      "description": "Generator roles only: which of the tiered models the sizing profile installed."
+    },
+    "stream": { "type": "boolean" },
+    "timeout_ms": { "type": "integer", "minimum": 1 }
+  }
+}

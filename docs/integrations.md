@@ -8,9 +8,17 @@ this file is the design of the seams and the shapes Home builds
 against. Every change to a seam is additive (org compatibility rule): a
 field or endpoint Home relies on is never removed or repurposed without
 a versioned path and a changelog note. The wire shapes named below are
-declared once in `@maipai/spec` (`getmaipai/shared`) and imported here;
-until that declaration lands, `backend/src/spec/` holds them locally and
-the org rule "shared record changes go through the spec first" applies.
+declared once, in exactly `home/spec`'s shape, under `backend/src/spec/`
+(a JSON Schema 2020-12 file per shape with the `$id` it carries once
+moved, a hand-written Zod mirror the backend imports, fixtures, and
+`backend/tests/spec.test.ts` proving schema and mirror agree on every
+fixture) and defined nowhere else in the backend. They move to
+`shared/spec` at the refocus's step 0c as a copy, after which the
+backend imports `@maipai/spec` and the local folder is deleted. The
+files: `role-request.schema.json`, `role-reply-headers.schema.json`,
+`stack-event.schema.json`, `health-item.schema.json`,
+`stack-setting.schema.json`, `precious-state.schema.json`. The org rule
+"shared record changes go through the spec first" applies to them.
 
 ## Authentication: loopback, nothing else
 
@@ -37,11 +45,12 @@ OpenAI-shaped, so an existing client library works unchanged.
 | `POST /v1/images/generations` | `image` | the job API with a wait |
 | `GET /v1/models` | all | role ids plus installed model ids in OpenAI's list shape |
 
-The `model` field carries a role id (`"chat"`) or an installed model id.
-Generator roles accept `quality: fast | everyday | best`.
+The request's common fields are spec `RoleRequest`: `model` carries a
+role id (`"chat"`) or an installed model id; generator roles accept
+`quality: fast | everyday | best`; `stream` and `timeout_ms` are
+optional; everything else passes to the engine unchanged.
 
-**Every reply** carries the identity headers, declared in the spec as
-`RoleReplyHeaders`:
+**Every reply** carries the identity headers, spec `RoleReplyHeaders`:
 
 | Header | Value |
 |---|---|
@@ -93,22 +102,23 @@ not built, and BACKLOG.md carries its item.
 ## The event feed
 
 `GET /stack/v1/events` is a server-sent stream that stays open. Each
-event is `id: <seq>` and `data: <envelope>`, where the envelope (spec
-`StackEvent`) is `{ id, at, seq, data }`. A reconnect with
-`Last-Event-Id` replays from the in-memory ring (500 events), then
-continues live. The ids and what `data` carries:
+event is `id: <seq>`, `event: <id>` and `data: <envelope>`, where the
+envelope (spec `StackEvent`) is `{ id, at, seq, data }` and `data`'s
+shape per id is fixed by the schema. A reconnect with `Last-Event-Id`
+replays from the in-memory ring (500 events), then continues live. The
+ids and what `data` carries:
 
 | Event | `data` | Home maps it to |
 |---|---|---|
 | `role.state` | `{ role, state, since, reason? }` | the Engines page live state |
 | `engine.state` | `{ engine, state, reason? }` | the Engines page; an `offline` becomes a Repairs entry |
-| `pressure` | `{ pressure, freeMemoryBytes, floorBytes, availablePercent }` or `{ reason, id }` | a quiet admin status |
-| `job.progress` | `{ job, percent, completedBytes, totalBytes, status }` | the package's progress; also model and engine downloads |
-| `job.done` | `{ job, ok, reason? }` | the package's result |
+| `pressure` | `{ pressure, free_memory_bytes, floor_bytes, available_percent }`, or `{ pressure, reason, id }` when the governor acted on one process | a quiet admin status |
+| `job.progress` | `{ job, kind, state, percent, completed_bytes, total_bytes, status }` | the package's progress; also model and engine downloads |
+| `job.done` | `{ job, kind, ok, reason? }` | the package's result |
 | `model.installed` | `{ model, path }` or `{ model, removed: true }` | an admin notification |
 | `update.available` | `{ kind: "engine" or "model", name, installed, available }` | an admin notification with the Updates link |
 | `update.applied` | `{ kind, name, tag }` | an admin notification |
-| `update.failed` | `{ kind, name, reason }` | an immediate admin notification plus the `failed-swap` health item |
+| `update.failed` | `{ kind, name?, reason }` | an immediate admin notification plus the `failed-swap` health item |
 | `health.changed` | `{ code, severity, title, open }` | a Repairs entry opened or closed |
 
 The Stack never notifies a person; Home's notification system (org
@@ -117,36 +127,40 @@ subscriber. Progress events are live only and never become history.
 
 ## Health items
 
-Spec `HealthItem`: `{ code, severity: critical | error | warning, title,
-text, since, cause, fix?: { label, action } }`. `code` is stable and
-unique per condition; Home keys its Repairs list on it. `fix.action` is
-one of `restart_engine`, `free_memory`, `retry_download`,
-`rollback_update`, `reinstall_engine`, `reinstall_model`; Home renders
+Spec `HealthItem` (`health-item.schema.json`): `{ code, severity:
+critical | error | warning, title, text, since, cause, fix?: { label,
+action } }`. `code` is stable and unique per condition; Home keys its
+Repairs list on it. `fix.action` is one of `restart_engine`,
+`free_memory`, `retry_download`, `rollback_update`, `reinstall_engine`,
+`reinstall_model`; Home renders
 the label and calls `POST /stack/v1/health/{code}/fix`, which returns
 `{ ok, result }`. A code that needs a human (a host to plug back in)
 has no `fix` and Home shows the cause.
 
 ## The settings declaration
 
-Spec `SettingDeclaration`: `{ key, type: number | boolean | text |
-enum, default, label, help, disclosure: basic | advanced | developer,
-needsRestart, section, order, range?: { min, max }, options?:
-[{ value, label }] }`. `GET /stack/v1/settings` returns every
-declaration with `inEffect` and `pending` values; `PUT` validates
-against the declaration and stores; `POST .../apply` promotes pending
-values (Home restarts the service through the service manager). Home
-renders this with its generic settings renderer (org `SETTINGS.md`) on
-its Engines page and never declares a Stack key of its own. The one
-Home-side setting is the Stack's port, declared once in Home's settings
-definition and filled by the installer.
+Spec `StackSetting` (`stack-setting.schema.json`): a `SettingsKey` from
+`home/spec` (`key`, `scope: device`, `selector: number | select | text |
+boolean`, `range`, `default`, `label`, `help`, `section: { id, order }`,
+`level: basic | advanced | expert`, `secret`, `needs`, `lives_in:
+stack`, `honoured_by`) plus the Stack's value half: `needs_restart`,
+`in_effect`, `pending`. One shape, so Home's generic settings renderer
+(org `SETTINGS.md`) draws the Stack's keys the way it draws its own.
+`GET /stack/v1/settings` returns every declaration with its values;
+`PUT` validates against the declaration and stores; `POST .../apply`
+promotes pending values (Home restarts the service through the service
+manager). Home never declares a Stack key of its own; the one Home-side
+setting is the Stack's port, declared once in Home's settings definition
+and filled by the installer.
 
-Sections and keys as declared today: `memory` (`modelBudgetBytes`,
-`systemLowWaterPct`, `systemLowWaterFloorBytes`, `systemSustainedPolls`),
-`updates` (`updatesEnabled`, `huggingFaceEndpoint`), `runtime`
-(`idleUnloadMinutes`, `idleUnloadOnBatteryMinutes`, `downloadCapMbps`,
-`port`), `engines.llama-server` (`contextLength`, `slots`, `threads`,
-`cacheRamMb`, `flashAttention`), and per role a `url` binding
-(`engines.<role>.hostUrl`, `engines.<role>.expectedVersion`) for a
+Keys as declared today, all under `stack.`: `memory.model_budget_bytes`,
+`memory.low_water_pct`, `memory.low_water_floor_bytes`,
+`memory.sustained_polls`; `updates.enabled`, `updates.model_host`;
+`runtime.idle_unload_minutes`, `runtime.idle_unload_on_battery_minutes`,
+`runtime.download_cap_mbps`, `runtime.port`;
+`engines.llama_server.context_length`, `.slots`, `.threads`,
+`.cache_ram_mb`, `.flash_attention`; and per role a `url` binding,
+`engines.<role>.host_url` and `engines.<role>.expected_version`, for a
 server the person already runs.
 
 ## The privacy rows
@@ -158,8 +172,8 @@ own. The rows the Stack declares:
 
 | What | When it happens | What it carries | Who receives it | Setting |
 |---|---|---|---|---|
-| Checking for engine and model updates | Only when Home has switched update checks on, then when Home's schedule calls the check | A `GET` with `If-None-Match` and `User-Agent: maipai-stack/<version> (<os>-<arch>)`, no query string or identifier | The Catalog's signed index on GitHub | `updatesEnabled` |
-| Downloading a model or an engine build | Only when Home installs one or applies an update | The name of the pinned file | Hugging Face or the mirror declared in `huggingFaceEndpoint`, and GitHub for engine archives, straight from this computer | none: an explicit action |
+| Checking for engine and model updates | Only when Home has switched update checks on, then when Home's schedule calls the check | A `GET` with `If-None-Match` and `User-Agent: maipai-stack/<version> (<os>-<arch>)`, no query string or identifier | The Catalog's signed index on GitHub | `stack.updates.enabled` |
+| Downloading a model or an engine build | Only when Home installs one or applies an update | The name of the pinned file | Hugging Face or the mirror declared in `stack.updates.model_host`, and GitHub for engine archives, straight from this computer | none: an explicit action |
 | Reading a model's provenance before install | Only when Home asks to install a model by repository | The repository name, then its immutable revision and file list | Hugging Face or the declared mirror | none: an explicit action |
 
 Nothing else leaves the machine. Adding or changing an outbound
@@ -169,8 +183,10 @@ carries a test that fails when a fetch target exists without a row.
 
 ## The precious-state declaration
 
-`GET /stack/v1/backup` returns spec `PreciousState`: the paths Home's
-backup takes and the reason for each. Today: `data/stack.db` (settings
+`GET /stack/v1/backup` returns spec `PreciousState`
+(`precious-state.schema.json`): `{ data_dir, paths: [{ path, mode:
+include | exclude, what, why }] }`, the paths Home's backup takes and the
+reason for each. Today: `data/stack.db` (settings
 values, model provenance, measured peaks, open health items:
 `include`), `data/keys/` (`include`), `data/models/` and `data/engines/`
 (rebuildable from their pins: `exclude`, with the sentence Home shows).

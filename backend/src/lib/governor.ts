@@ -279,7 +279,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
       resolveHealth("memory-pressure-warn");
       resolveHealth("memory-pressure-critical");
     }
-    if (pressure !== "normal" && (systemBreaches === tuning.systemSustainedPolls || kernelPressure !== "normal")) emit({ id: "pressure", data: { freeMemoryBytes, floorBytes: floor, pressure, availablePercent } });
+    if (pressure !== "normal" && (systemBreaches === tuning.systemSustainedPolls || kernelPressure !== "normal")) emit({ id: "pressure", data: { pressure, free_memory_bytes: Math.round(freeMemoryBytes), floor_bytes: Math.round(floor), available_percent: Math.max(0, Math.min(100, availablePercent)) } });
     const processReader = options.processMemory ?? ((pid: number) => Promise.resolve(memoryReader.processFootprint(pid)));
     const now = options.now?.() ?? Date.now();
     for (const item of [...loaded.values()]) {
@@ -289,7 +289,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
           item.processBreaches++;
         } else item.processBreaches = 0;
         if (item.kind === "resident" && item.processBreaches >= tuning.processSustainedPolls) {
-          emit({ id: "pressure", data: { reason: "resident RSS exceeded measured peak", id: item.id } });
+          emit({ id: "pressure", data: { pressure, reason: "resident RSS exceeded measured peak", id: item.id } });
           await options.restart?.(item.id);
           item.processBreaches = 0;
         }

@@ -9,23 +9,22 @@ import { dataDir, keysDir, stackDbPath } from "@/lib/paths";
 import { engineRoot, modelsRoot } from "@/lib/store/layout";
 import { pruneUnreferenced } from "@/lib/store/manifests";
 import { diagnosticsBundle } from "@/lib/diagnostics";
+import { PreciousState } from "@/spec/ts/precious-state";
 
-export const PreciousStateSchema = z.object({ dataDir: z.string(), paths: z.array(z.object({ path: z.string(), mode: z.enum(["include", "exclude"]), what: z.string(), why: z.string() })) });
-
-export function preciousState() {
-  return {
-    dataDir,
+export function preciousState(): PreciousState {
+  return PreciousState.parse({
+    data_dir: dataDir,
     paths: [
       { path: stackDbPath, mode: "include" as const, what: "The Stack's state", why: "Settings values, model provenance, measured peaks and open health items live here and nowhere else." },
       { path: keysDir, mode: "include" as const, what: "Keys", why: "Small and not recoverable from anywhere else." },
       { path: modelsRoot, mode: "exclude" as const, what: "Model files", why: "Rebuilt from their pins: every file is downloaded again and verified by checksum." },
       { path: engineRoot, mode: "exclude" as const, what: "Engine builds", why: "Rebuilt from their pins on the next install." },
     ],
-  };
+  });
 }
 
 const privacyRoute = createRoute({ method: "get", path: "/privacy", tags: ["Declarations"], summary: "The Stack's outbound endpoints, as rows for Home's privacy page", responses: { 200: { content: { "application/json": { schema: z.object({ rows: z.array(PrivacyRowSchema) }) } }, description: "What leaves the house, when, what it carries, who receives it." } } });
-const backupRoute = createRoute({ method: "get", path: "/backup", tags: ["Declarations"], summary: "Which state is precious, for Home's backup", responses: { 200: { content: { "application/json": { schema: PreciousStateSchema } }, description: "Paths to include and to exclude, with the reason for each." } } });
+const backupRoute = createRoute({ method: "get", path: "/backup", tags: ["Declarations"], summary: "Which state is precious, for Home's backup", responses: { 200: { content: { "application/json": { schema: PreciousState } }, description: "Paths to include and to exclude, with the reason for each." } } });
 const sweepRoute = createRoute({ method: "post", path: "/storage/sweep", tags: ["Declarations"], summary: "Prune orphaned blobs past their grace period", responses: { 200: { content: { "application/json": { schema: z.object({ removed: z.array(z.string()) }) } }, description: "The digests removed." } } });
 const diagnosticsRoute = createRoute({ method: "get", path: "/diagnostics", tags: ["Declarations"], summary: "A redacted diagnostics bundle (zip)", responses: { 200: { content: { "application/zip": { schema: z.string() } }, description: "Log tail, health, hardware, settings, versions. Nothing is sent anywhere." } } });
 

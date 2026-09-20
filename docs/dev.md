@@ -167,10 +167,14 @@ every product shares: `createLogger`, `withTimeout`, `ensureDataDir`,
 `extractArchive`, the zip writer behind the diagnostics bundle, the
 hardware probe and the openapi router. The Stack's own instances
 (`lib/log.ts`, `lib/paths.ts`, `lib/hardware.ts`) bind them to this
-product's data layout. `@maipai/spec` follows at RF-05 for the wire
-shapes (the role reply headers, the event envelope, the health item,
-the settings declaration, the precious-state declaration). The engine
-and model catalogs stay product-side. `data/` holds everything runtime
+product's data layout. The wire shapes Home builds against (the role
+request and reply headers, the event envelope, the health item, the
+settings declaration, the precious-state declaration) are declared once
+under `backend/src/spec/` in exactly `home/spec`'s shape (JSON Schema
+2020-12, a Zod mirror the backend imports, fixtures, a round-trip test)
+and move to `shared/spec` at step 0c, after which `@maipai/spec` is
+imported and the local folder deleted. The engine and model catalogs
+stay product-side. `data/` holds everything runtime
 and is never tracked.
 
 ### Roles and the router
@@ -323,7 +327,7 @@ Admission reads free memory now and the requested peak. A load starts
 only when free memory minus the requested peak leaves the profile's
 working margin (4 GB on p16, 8 GB on p32, 12 GB on p64, 20 GB on p128)
 and the loaded total stays under the cap (total memory minus the OS
-margin, 8 GB by default, declared as `modelBudgetBytes`). Only one
+margin, 8 GB by default, declared as `stack.memory.model_budget_bytes`). Only one
 generator runs at a time; a request that cannot be admitted enters a
 queue of four with a position, or is refused with a reason. Three
 refusals of the same request raise `admission-refused-repeatedly`.
@@ -434,17 +438,21 @@ while a pending setting differs from the one in effect.
 
 ### Settings
 
-Every Stack setting is declared once, in `backend/src/settings.ts`,
-with key, type, default, disclosure level (`basic | advanced |
-developer`), `needsRestart`, section and range or options, and the
-declaration is exported on `GET /stack/v1/settings` for Home's generic
-renderer (org `SETTINGS.md`). Values are stored in the Stack's `meta`
-table; a key marked `needsRestart` is held as pending until the next
-start. Per-engine settings (llama-server's `contextLength`, `slots`,
-`threads`, `cacheRamMb`, `flashAttention`; a `url` binding's `hostUrl`
-and `expectedVersion`) are part of the same declaration under their
-engine's section. Home never duplicates a Stack setting; it renders the
-declaration and persists the person's choice through the Stack's route.
+Every Stack setting is declared once, in `backend/src/settings.ts`, in
+the spec's `StackSetting` shape: a `SettingsKey` (`home/spec`) with
+`key` under `stack.`, `selector`, `default`, `label`, `help`,
+`section`, `level` (`basic | advanced | expert`), `lives_in: stack`,
+plus `needs_restart`, `in_effect` and `pending`. The declaration is
+served on `GET /stack/v1/settings` for Home's generic renderer (org
+`SETTINGS.md`), which draws it the way it draws Home's own keys. Values
+are stored in the Stack's `meta` table; a key marked `needs_restart` is
+held as pending until the next start. Per-engine settings
+(`stack.engines.llama_server.context_length`, `.slots`, `.threads`,
+`.cache_ram_mb`, `.flash_attention`; a `url` binding's
+`stack.engines.<role>.host_url` and `.expected_version`) are part of
+the same declaration under their engine's section. Home never
+duplicates a Stack setting; it renders the declaration and persists the
+person's choice through the Stack's route.
 
 ### Sizing and profiles
 

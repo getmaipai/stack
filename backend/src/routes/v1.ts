@@ -11,13 +11,15 @@ import { ROLE_IDS, ROLES, type RoleId } from "@/roles";
 import { EngineUnavailableError, requestRole, streamRole } from "@/lib/supervisor";
 import { listModels } from "@/lib/modelStore";
 import { hasJobRunner, submitJob } from "@/lib/jobs";
+import { RoleRequest } from "@/spec/ts/role-request";
+import { RoleReplyHeaders } from "@/spec/ts/role-reply-headers";
 
 const MessageSchema = z.object({ role: z.string(), content: z.unknown() }).passthrough();
-const ChatRequestSchema = z.object({ model: z.string(), messages: z.array(MessageSchema), stream: z.boolean().optional() }).passthrough();
-const EmbeddingsRequestSchema = z.object({ model: z.string(), input: z.union([z.string(), z.array(z.string())]) }).passthrough();
-const TranscriptionRequestSchema = z.object({ model: z.string(), file: z.string().optional() }).passthrough();
-const SpeechRequestSchema = z.object({ model: z.string(), input: z.string() }).passthrough();
-const ImageRequestSchema = z.object({ model: z.string(), prompt: z.string(), quality: z.enum(["fast", "everyday", "best"]).optional() }).passthrough();
+const ChatRequestSchema = RoleRequest.extend({ messages: z.array(MessageSchema) });
+const EmbeddingsRequestSchema = RoleRequest.extend({ input: z.union([z.string(), z.array(z.string())]) });
+const TranscriptionRequestSchema = RoleRequest.extend({ file: z.string().optional() });
+const SpeechRequestSchema = RoleRequest.extend({ input: z.string() });
+const ImageRequestSchema = RoleRequest.extend({ prompt: z.string() });
 
 const UnknownModelSchema = z.object({ error: z.string(), roles: z.array(z.string()) });
 const NoEngineSchema = z.object({ error: z.string(), role: z.string(), state: z.string(), offline_reason: z.string() });
@@ -35,7 +37,7 @@ type Wire = "chat" | "embeddings" | "transcription" | "speech" | "job";
 const WIRE_PATHS: Record<Exclude<Wire, "job">, string> = { chat: "/v1/chat/completions", embeddings: "/v1/embeddings", transcription: "/v1/audio/transcriptions", speech: "/v1/audio/speech" };
 
 function jsonReply<T extends Context>(c: T, body: unknown, status: number, headers: Record<string, string>) {
-  for (const [name, value] of Object.entries(headers)) c.header(name, value);
+  for (const [name, value] of Object.entries(RoleReplyHeaders.parse(headers))) c.header(name, value);
   return c.json(body as never, status as never);
 }
 

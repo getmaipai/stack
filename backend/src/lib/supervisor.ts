@@ -267,7 +267,7 @@ function runtime(role: RoleId): RoleRuntime {
 
 function urlBindingFor(role: RoleId): { kind: EngineKind; url: string } | null {
   const values = settingValues();
-  const configured = values[`engines.${role}.hostUrl`];
+  const configured = values[`stack.engines.${role}.host_url`];
   if (typeof configured === "string" && configured.trim()) return { kind: "url", url: configured.trim() };
   const env = process.env[`STACK_${role.toUpperCase()}_ENGINE_URL`];
   if (env) return { kind: "url", url: env };
@@ -305,7 +305,8 @@ async function startUrlProcess(role: RoleId, url: string): Promise<RoleProcess> 
 
 async function startSpawnedProcess(role: RoleId): Promise<RoleProcess> {
   if (!SPAWNABLE_ROLES.includes(role)) throw new EngineUnavailableError(`No engine can be started for ${role} on this machine yet.`);
-  const config = engineSettingValues("engines.llama-server");
+  const declared = engineSettingValues("engines.llama_server");
+  const config = { contextLength: declared.context_length, slots: declared.slots, threads: declared.threads, cacheRamMb: declared.cache_ram_mb, flashAttention: declared.flash_attention } as Record<string, number | boolean | string | string[]>;
   const pin = installedEnginePin();
   const model = selectedModel(role);
   if (!pin || !engineInstalled()) throw new EngineUnavailableError("No installed llama-server build is available for this machine.");

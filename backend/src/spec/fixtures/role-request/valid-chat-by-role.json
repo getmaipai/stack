@@ -1,0 +1,10 @@
+{
+  "model": "chat",
+  "messages": [
+    {
+      "role": "user",
+      "content": "hello"
+    }
+  ],
+  "stream": true
+}

@@ -36,7 +36,7 @@ export const enginesRoutes = apiRouter<AppEnv>();
 enginesRoutes.openapi(listRoute, async (c) => {
   const hardware = await detectHardware();
   const selected = selectEngineBinary(hardware);
-  const needsRestart = readSettings().some((setting) => setting.key.startsWith("engines.llama-server.") && setting.pending !== null);
+  const needsRestart = readSettings().some((setting) => setting.key.startsWith("stack.engines.llama_server.") && setting.pending !== null);
   const status = getRoleStatus("chat");
   return c.json({ engines: ENGINE_BINARIES.map((pin) => {
     const name = engineName(pin);

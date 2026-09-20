@@ -37,7 +37,7 @@ export function hasJobRunner(kind: string): boolean { return runners.has(kind); 
 function touch(job: Job, patch: Partial<Job>): Job {
   const next = { ...job, ...patch, updatedAt: new Date().toISOString() };
   jobs.set(job.id, next);
-  emit({ id: "job.progress", data: { job: next.id, kind: next.kind, state: next.state, percent: next.percent, completedBytes: next.completedBytes, totalBytes: next.totalBytes, status: next.status } });
+  emit({ id: "job.progress", data: { job: next.id, kind: next.kind, state: next.state, percent: next.percent, completed_bytes: next.completedBytes, total_bytes: next.totalBytes, status: next.status } });
   if (next.state === "done" || next.state === "failed" || next.state === "cancelled") {
     emit({ id: "job.done", data: { job: next.id, kind: next.kind, ok: next.state === "done", reason: next.reason } });
     prune();
@@ -57,7 +57,7 @@ export function createJob(input: { kind: string; role?: string | null; totalByte
   const job: Job = { id: input.id ?? `job-${crypto.randomUUID()}`, kind: input.kind, role: input.role ?? null, state: "running", percent: 0, completedBytes: 0, totalBytes: input.totalBytes ?? 0, status: input.status ?? "starting", input: input.input ?? null, result: null, reason: null, createdAt: now, updatedAt: now };
   jobs.set(job.id, job);
   controllers.set(job.id, new AbortController());
-  emit({ id: "job.progress", data: { job: job.id, kind: job.kind, state: job.state, percent: 0, completedBytes: 0, totalBytes: job.totalBytes, status: job.status } });
+  emit({ id: "job.progress", data: { job: job.id, kind: job.kind, state: job.state, percent: 0, completed_bytes: 0, total_bytes: job.totalBytes, status: job.status } });
   return job;
 }
 

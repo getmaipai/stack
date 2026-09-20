@@ -23,7 +23,7 @@ test("with update checks off, nothing is fetched and the state says so", async (
 });
 
 test("installed, available, last checked: a newer model revision in the index is announced once; engines report unknown until the Catalog publishes their index", async () => {
-  updateSettings({ updatesEnabled: true });
+  updateSettings({ "stack.updates.enabled": true });
   upsertModel({ id: "qwen3-1.7b-q8-0", roles: ["chat"], source: "catalog", provenance: {}, revision: "old-revision", sha256: "a".repeat(64), licence: "Apache-2.0" });
   const fetcher = async (input: string | URL | Request) => String(input) === MODEL_INDEX_URL ? respond(modelIndex) : String(input) === ENGINE_INDEX_URL ? respond({ error: "not found" }, 404) : respond({}, 500);
   const state = await checkCatalog(fetcher);
@@ -37,7 +37,7 @@ test("installed, available, last checked: a newer model revision in the index is
 });
 
 test("an engine index names the available build against the current link", async () => {
-  updateSettings({ updatesEnabled: true });
+  updateSettings({ "stack.updates.enabled": true });
   mkdirSync(engineTagRoot("llama-server", "b1"), { recursive: true });
   await swapEngine("llama-server", "b1");
   const index = { version: "1", engines: [{ name: "llama-server", tag: "b2", platform: process.platform, arch: process.arch, url: "https://github.com/ggml-org/llama.cpp/releases/download/b2/x.tar.gz", sha256: "c".repeat(64), size: 5, notes: "faster" }] };
@@ -47,7 +47,7 @@ test("an engine index names the available build against the current link", async
 });
 
 test("the request is a conditional GET with the Stack user agent and no identifier", async () => {
-  updateSettings({ updatesEnabled: true });
+  updateSettings({ "stack.updates.enabled": true });
   const seen: Array<{ url: string; headers: Record<string, string> }> = [];
   await checkCatalog(async (input, init) => { seen.push({ url: String(input), headers: (init?.headers ?? {}) as Record<string, string> }); return respond({}, 404); });
   expect(seen[0]!.url).toBe(MODEL_INDEX_URL);
@@ -57,7 +57,7 @@ test("the request is a conditional GET with the Stack user agent and no identifi
 });
 
 test("an invalid index leaves available unknown instead of a guess", async () => {
-  updateSettings({ updatesEnabled: true });
+  updateSettings({ "stack.updates.enabled": true });
   await expect(checkCatalog(async () => respond({ version: "1", models: [{ id: "x" }] }))).rejects.toThrow();
   expect(updatesState().models.lastChecked).toBeNull();
   const response = await app.request("/stack/v1/updates");

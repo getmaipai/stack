@@ -32,7 +32,7 @@ are never copied. Nothing migrates Home until STACK-16.
 
 | Milestone | Items, in order | Why here |
 |---|---|---|
-| **The refocus (2026-09-20)** | RF-01, RF-02, RF-03, RF-04, RF-05, RF-06 | The repo becomes the daemon and nothing else, on the shared libraries, with the seam to Home explicit. |
+| **The refocus (2026-09-20)** | RF-01, RF-02, RF-03, RF-04, RF-05, RF-05b, RF-06 | The repo becomes the daemon and nothing else, on the shared libraries, with the seam to Home explicit. |
 | Studio proof | STACK-13, STACK-74, STACK-14, STACK-93 | Complete generator jobs and the bench protocol, measure the Studio with the full resident set, prove the governor across two engines. |
 | Home adoption | STACK-75, STACK-16 | Pin and test the Stack/Home wire, then move Home onto the Stack with rollback after the Studio proof. |
 | Speech and the robot | STACK-94, STACK-95, STACK-17 | The speech roles on the Mac, then the Linux service and the robot profile. |
@@ -82,19 +82,22 @@ are never copied. Nothing migrates Home until STACK-16.
   (STACK-13), the speech engines (STACK-94), systemd (STACK-95). Exit:
   `bash scripts/check.sh` and a `code-review` at medium on this
   checkout.
-- [ ] **RF-05 (M): the seam, explicit.** The wire shapes (role reply
-  headers, the event envelope and ids, the health item, the settings
-  declaration, the precious-state declaration, the job) declared once
-  in `shared/spec` and imported here, each with a fixture Home's side
-  imports; `integrations.md` updated in the same commit. Waits on the
-  coordinator's word after RF-04 (whether `spec` exists in `shared` or
-  the shapes are declared under `backend/src/spec/` for B to move).
-  Files: `backend/src/spec/` or the `shared/spec` import,
-  `backend/src/events.ts`, `backend/src/settings.ts`,
-  `backend/src/lib/health.ts`, `backend/src/routes/{privacy,backup}.ts`,
-  `backend/tests/seams.test.ts`, `docs/integrations.md`. Mirror:
-  `home/spec`'s record and fixture pattern. Out of scope: Home's
-  consumers. Exit: `bash scripts/check.sh`.
+- [x] **RF-05 (M): the seam, explicit.** The wire shapes (the role
+  request and reply headers, the event envelope and its ten ids, the
+  health item, the settings declaration as a `SettingsKey` plus the
+  value half, the precious-state declaration) declared once under
+  `backend/src/spec/` in exactly `home/spec`'s shape: JSON Schema
+  2020-12 with the `shared/spec` `$id`, a hand-written Zod mirror the
+  backend imports and defines nowhere else, valid and invalid fixtures,
+  and `tests/spec.test.ts` round-tripping every fixture through Ajv 2020
+  and the mirror. Landed on `main` with this line.
+- [ ] **RF-05b (S, B at 0c): move `backend/src/spec` to `shared/spec`;
+  then import `@maipai/spec` and delete the local Zod mirror.** The six
+  schema files, their fixtures and `tests/spec.test.ts` copy across
+  unchanged (same `$id`s); `shared/spec`'s `gen:ts` replaces
+  `backend/src/spec/ts/`; the backend's imports change from
+  `@/spec/ts/<name>` to `@maipai/spec`; `scripts/check.sh` pins the
+  `spec-v` tag beside `core-v`. Exit: `bash scripts/check.sh`.
 - [ ] **RF-06 (S): the Home hand-off.** `docs/plans/home-adoption-2026-09-xx.md`:
   what Home's backlog gains (the Engines page, the Updates and Repairs
   wiring, installing the Stack inside Home's installer, the Studio

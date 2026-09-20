@@ -1,0 +1,15 @@
+{
+  "key": "stack.runtime.port",
+  "scope": "device",
+  "selector": "number",
+  "default": 8770,
+  "label": "Port",
+  "level": "developer",
+  "lives_in": "stack",
+  "honoured_by": [
+    "home"
+  ],
+  "needs_restart": true,
+  "in_effect": 8770,
+  "pending": null
+}

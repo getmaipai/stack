@@ -21,7 +21,7 @@ export const PRIVACY_ROWS: PrivacyRow[] = [
     when: "Only when Home has switched update checks on, then when Home's schedule calls the check",
     carries: "A GET with If-None-Match and User-Agent: maipai-stack/<version> (<os>-<arch>), no query string or identifier",
     receiver: "The Catalog's signed index on GitHub",
-    setting: "updatesEnabled",
+    setting: "stack.updates.enabled",
     hosts: ["github.com"],
   },
   {
@@ -29,7 +29,7 @@ export const PRIVACY_ROWS: PrivacyRow[] = [
     what: "Downloading a model or an engine build",
     when: "Only when Home installs one or applies an update",
     carries: "The name of the pinned file",
-    receiver: "Hugging Face or the mirror declared in huggingFaceEndpoint for models, and GitHub for engine archives, straight from this computer",
+    receiver: "Hugging Face or the mirror declared in stack.updates.model_host for models, and GitHub for engine archives, straight from this computer",
     setting: null,
     hosts: ["huggingface.co", "github.com"],
   },

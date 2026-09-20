@@ -214,7 +214,7 @@ afterAll(() => mirrorServer.stop(true));
 
 test("a pinned catalog model downloads from the configured Hugging Face mirror", async () => {
   const mirror = new URL(mirrorServer.url).href.replace(/\/$/, "");
-  updateSettings({ huggingFaceEndpoint: mirror });
+  updateSettings({ "stack.updates.model_host": mirror });
   const expectedUrl = hfUrl(`Qwen/Qwen3-1.7B-GGUF/resolve/${STACK_CHAT_MODEL.revision}/Qwen3-1.7B-Q8_0.gguf`);
   expect(expectedUrl).toBe(`${mirror}/Qwen/Qwen3-1.7B-GGUF/resolve/${STACK_CHAT_MODEL.revision}/Qwen3-1.7B-Q8_0.gguf`);
   let requestedUrl = "";
@@ -236,7 +236,7 @@ test("a pinned catalog model downloads from the configured Hugging Face mirror",
 
 test("an incomplete Hugging Face provenance record throws before writing", async () => {
   const mirror = new URL(mirrorServer.url).href.replace(/\/$/, "");
-  updateSettings({ huggingFaceEndpoint: mirror });
+  updateSettings({ "stack.updates.model_host": mirror });
   const incompleteUrl = hfUrl("example/model/resolve/main/incomplete.gguf");
   await expect(installHuggingFaceModel({
     id: "hf-incomplete",

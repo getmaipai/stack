@@ -1,0 +1,11 @@
+{
+  "data_dir": "/data/stack",
+  "paths": [
+    {
+      "path": "/data/stack/stack.db",
+      "mode": "keep",
+      "what": "x",
+      "why": "x"
+    }
+  ]
+}

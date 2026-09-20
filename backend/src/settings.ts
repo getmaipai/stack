@@ -1,44 +1,28 @@
-// Every Stack setting, declared once (org SETTINGS.md). Home's generic
-// renderer draws from `GET /stack/v1/settings`; values live in `meta`.
-// A key marked `needsRestart` is held as pending until the next start.
-// Per-engine keys and the per-role url bindings are part of the same
-// declaration under their own sections.
+// Every Stack setting, declared once (org SETTINGS.md) in the spec's
+// StackSetting shape: a SettingsKey (home/spec) restricted to the Stack
+// plus the value half. Home's generic renderer draws from
+// `GET /stack/v1/settings`; values live in `meta`. A key marked
+// `needs_restart` is held as pending until the next start. Per-engine
+// keys and the per-role url bindings are part of the same declaration
+// under their own sections.
 import { eq, like } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { meta } from "@/db/schema";
 import { defaultModelBudgetBytes, setGovernorMemorySettings } from "@/lib/governor";
 import { setDownloadCapMbps } from "@/lib/download";
+import { StackSetting } from "@/spec/ts/stack-setting";
 
-export type SettingType = "number" | "boolean" | "text" | "enum";
-export type Disclosure = "basic" | "advanced" | "developer";
 export type SettingValue = number | boolean | string;
-export interface SettingOption { value: string; label: string; }
 
-export interface SettingDeclaration {
-  key: string;
-  type: SettingType;
-  default: SettingValue;
-  label: string;
-  help: string;
-  disclosure: Disclosure;
-  needsRestart: boolean;
-  section: string;
-  order: number;
-  range?: { min?: number; max?: number };
-  options?: SettingOption[];
-}
-
-export interface SettingRecord extends SettingDeclaration {
-  inEffect: SettingValue;
-  pending: SettingValue | null;
-}
+/** The declaration half of a StackSetting: everything but the values. */
+export type SettingDeclaration = Omit<StackSetting, "in_effect" | "pending">;
 
 export const SETTING_SECTIONS = [
   { id: "memory", label: "Memory" },
   { id: "updates", label: "Updates" },
   { id: "runtime", label: "Runtime" },
-  { id: "engines.llama-server", label: "llama-server" },
+  { id: "engines.llama_server", label: "llama-server" },
   { id: "engines.chat", label: "Chat engine" },
   { id: "engines.embed", label: "Embeddings engine" },
   { id: "engines.stt", label: "Voice in engine" },
@@ -51,29 +35,31 @@ export const SETTING_SECTIONS = [
 export const URL_BINDING_ROLES = ["chat", "embed", "stt", "tts"] as const;
 export type UrlBindingRole = typeof URL_BINDING_ROLES[number];
 
+const stack = { scope: "device" as const, lives_in: "stack" as const, honoured_by: ["home", "bot"] as Array<"home" | "bot"> };
+
 function urlBinding(role: UrlBindingRole, order: number): SettingDeclaration[] {
   return [
-    { key: `engines.${role}.hostUrl`, type: "text", default: "", label: "Server URL", help: `An OpenAI-shaped server you already run, used for ${role} instead of an engine the Stack starts. Leave empty to let the Stack manage the engine.`, disclosure: "advanced", needsRestart: true, section: `engines.${role}`, order },
-    { key: `engines.${role}.expectedVersion`, type: "text", default: "", label: "Expected version", help: "Optional build string checked against the server's identity.", disclosure: "developer", needsRestart: true, section: `engines.${role}`, order: order + 10 },
+    { ...stack, key: `stack.engines.${role}.host_url`, selector: "text", default: "", label: "Server URL", help: `An OpenAI-shaped server you already run, used for ${role} instead of an engine the Stack starts. Leave empty to let the Stack manage the engine.`, section: { id: `engines.${role}`, order }, level: "advanced", needs_restart: true },
+    { ...stack, key: `stack.engines.${role}.expected_version`, selector: "text", default: "", label: "Expected version", help: "Optional build string checked against the server's identity.", section: { id: `engines.${role}`, order: order + 10 }, level: "expert", needs_restart: true },
   ];
 }
 
 export const SETTINGS: SettingDeclaration[] = [
-  { key: "modelBudgetBytes", type: "number", default: defaultModelBudgetBytes(), label: "Memory for models", help: "The maximum memory the Stack may use for loaded models. The rest stays available for the computer.", disclosure: "basic", needsRestart: false, range: { min: 0, max: defaultModelBudgetBytes() + 8 * 1_073_741_824 }, section: "memory", order: 10 },
-  { key: "systemLowWaterPct", type: "number", default: 10, label: "Low memory percentage", help: "Warn when available memory falls below this percentage.", disclosure: "advanced", needsRestart: false, range: { min: 1, max: 99 }, section: "memory", order: 20 },
-  { key: "systemLowWaterFloorBytes", type: "number", default: 1_073_741_824, label: "Low memory floor", help: "Warn when available memory falls below this many bytes.", disclosure: "advanced", needsRestart: false, range: { min: 0, max: defaultModelBudgetBytes() }, section: "memory", order: 30 },
-  { key: "systemSustainedPolls", type: "number", default: 2, label: "Pressure confirmation polls", help: "How many low readings confirm memory pressure.", disclosure: "advanced", needsRestart: false, range: { min: 1, max: 20 }, section: "memory", order: 40 },
-  { key: "updatesEnabled", type: "boolean", default: false, label: "Check for updates", help: "Allow the Stack to read the Catalog's signed index when Home asks it to check. Nothing is downloaded or installed without an explicit action.", disclosure: "basic", needsRestart: false, section: "updates", order: 10 },
-  { key: "huggingFaceEndpoint", type: "text", default: "https://huggingface.co", label: "Model host", help: "Where model files are downloaded from: Hugging Face, or a mirror you run.", disclosure: "advanced", needsRestart: false, section: "updates", order: 20 },
-  { key: "idleUnloadMinutes", type: "number", default: 30, label: "Unload after idle", help: "Minutes without a request before a resident engine is unloaded.", disclosure: "advanced", needsRestart: false, range: { min: 1, max: 1440 }, section: "runtime", order: 10 },
-  { key: "idleUnloadOnBatteryMinutes", type: "number", default: 10, label: "Unload after idle on battery", help: "The same limit while the computer runs on battery.", disclosure: "advanced", needsRestart: false, range: { min: 1, max: 1440 }, section: "runtime", order: 20 },
-  { key: "downloadCapMbps", type: "number", default: 0, label: "Download cap", help: "Maximum download speed in Mbps. Zero means no cap.", disclosure: "advanced", needsRestart: false, range: { min: 0, max: 100_000 }, section: "runtime", order: 30 },
-  { key: "port", type: "number", default: 8770, label: "Port", help: "The loopback port the Stack listens on after the next start.", disclosure: "developer", needsRestart: true, range: { min: 1, max: 65535 }, section: "runtime", order: 40 },
-  { key: "engines.llama-server.contextLength", type: "number", default: 4096, label: "Context length", help: "How much conversation the engine can hold at once.", disclosure: "advanced", needsRestart: true, range: { min: 512, max: 262_144 }, section: "engines.llama-server", order: 10 },
-  { key: "engines.llama-server.slots", type: "number", default: 1, label: "Parallel slots", help: "How many requests the engine can serve concurrently.", disclosure: "advanced", needsRestart: true, range: { min: 1, max: 16 }, section: "engines.llama-server", order: 20 },
-  { key: "engines.llama-server.threads", type: "number", default: 0, label: "CPU threads", help: "CPU threads used by the engine. Zero lets the engine choose.", disclosure: "developer", needsRestart: true, range: { min: 0, max: 256 }, section: "engines.llama-server", order: 30 },
-  { key: "engines.llama-server.cacheRamMb", type: "number", default: 0, label: "Cache RAM", help: "Optional cache reservation in megabytes.", disclosure: "developer", needsRestart: true, range: { min: 0, max: 1_048_576 }, section: "engines.llama-server", order: 40 },
-  { key: "engines.llama-server.flashAttention", type: "boolean", default: true, label: "Flash attention", help: "Use the faster attention implementation when supported.", disclosure: "advanced", needsRestart: true, section: "engines.llama-server", order: 50 },
+  { ...stack, key: "stack.memory.model_budget_bytes", selector: "number", range: { min: 0, max: defaultModelBudgetBytes() + 8 * 1_073_741_824 }, default: defaultModelBudgetBytes(), label: "Memory for models", help: "The maximum memory the Stack may use for loaded models. The rest stays available for the computer.", section: { id: "memory", order: 10 }, level: "basic", needs_restart: false },
+  { ...stack, key: "stack.memory.low_water_pct", selector: "number", range: { min: 1, max: 99 }, default: 10, label: "Low memory percentage", help: "Warn when available memory falls below this percentage.", section: { id: "memory", order: 20 }, level: "advanced", needs_restart: false },
+  { ...stack, key: "stack.memory.low_water_floor_bytes", selector: "number", range: { min: 0, max: defaultModelBudgetBytes() }, default: 1_073_741_824, label: "Low memory floor", help: "Warn when available memory falls below this many bytes.", section: { id: "memory", order: 30 }, level: "advanced", needs_restart: false },
+  { ...stack, key: "stack.memory.sustained_polls", selector: "number", range: { min: 1, max: 20 }, default: 2, label: "Pressure confirmation polls", help: "How many low readings confirm memory pressure.", section: { id: "memory", order: 40 }, level: "advanced", needs_restart: false },
+  { ...stack, key: "stack.updates.enabled", selector: "boolean", default: false, label: "Check for updates", help: "Allow the Stack to read the Catalog's signed index when Home asks it to check. Nothing is downloaded or installed without an explicit action.", section: { id: "updates", order: 10 }, level: "basic", needs_restart: false },
+  { ...stack, key: "stack.updates.model_host", selector: "text", default: "https://huggingface.co", label: "Model host", help: "Where model files are downloaded from: Hugging Face, or a mirror you run.", section: { id: "updates", order: 20 }, level: "advanced", needs_restart: false },
+  { ...stack, key: "stack.runtime.idle_unload_minutes", selector: "number", range: { min: 1, max: 1440 }, default: 30, label: "Unload after idle", help: "Minutes without a request before a resident engine is unloaded.", section: { id: "runtime", order: 10 }, level: "advanced", needs_restart: false },
+  { ...stack, key: "stack.runtime.idle_unload_on_battery_minutes", selector: "number", range: { min: 1, max: 1440 }, default: 10, label: "Unload after idle on battery", help: "The same limit while the computer runs on battery.", section: { id: "runtime", order: 20 }, level: "advanced", needs_restart: false },
+  { ...stack, key: "stack.runtime.download_cap_mbps", selector: "number", range: { min: 0, max: 100_000 }, default: 0, label: "Download cap", help: "Maximum download speed in Mbps. Zero means no cap.", section: { id: "runtime", order: 30 }, level: "advanced", needs_restart: false },
+  { ...stack, key: "stack.runtime.port", selector: "number", range: { min: 1, max: 65535 }, default: 8770, label: "Port", help: "The loopback port the Stack listens on after the next start.", section: { id: "runtime", order: 40 }, level: "expert", needs_restart: true },
+  { ...stack, key: "stack.engines.llama_server.context_length", selector: "number", range: { min: 512, max: 262_144 }, default: 4096, label: "Context length", help: "How much conversation the engine can hold at once.", section: { id: "engines.llama_server", order: 10 }, level: "advanced", needs_restart: true },
+  { ...stack, key: "stack.engines.llama_server.slots", selector: "number", range: { min: 1, max: 16 }, default: 1, label: "Parallel slots", help: "How many requests the engine can serve concurrently.", section: { id: "engines.llama_server", order: 20 }, level: "advanced", needs_restart: true },
+  { ...stack, key: "stack.engines.llama_server.threads", selector: "number", range: { min: 0, max: 256 }, default: 0, label: "CPU threads", help: "CPU threads used by the engine. Zero lets the engine choose.", section: { id: "engines.llama_server", order: 30 }, level: "expert", needs_restart: true },
+  { ...stack, key: "stack.engines.llama_server.cache_ram_mb", selector: "number", range: { min: 0, max: 1_048_576 }, default: 0, label: "Cache RAM", help: "Optional cache reservation in megabytes.", section: { id: "engines.llama_server", order: 40 }, level: "expert", needs_restart: true },
+  { ...stack, key: "stack.engines.llama_server.flash_attention", selector: "boolean", default: true, label: "Flash attention", help: "Use the faster attention implementation when supported.", section: { id: "engines.llama_server", order: 50 }, level: "advanced", needs_restart: true },
   ...urlBinding("chat", 10),
   ...urlBinding("embed", 10),
   ...urlBinding("stt", 10),
@@ -82,53 +68,83 @@ export const SETTINGS: SettingDeclaration[] = [
 
 const byKey = new Map(SETTINGS.map((declaration) => [declaration.key, declaration]));
 
-function metaKey(key: string, state: "inEffect" | "pending"): string { return `settings.${key}.${state}`; }
+// The keys as the backend named them before the spec's StackSetting shape
+// (58cae15 to the commit that added this). A row stored under one of them
+// is renamed once at load so no stored value is orphaned (org: no data
+// debt); the old row is deleted after the copy.
+const RENAMED_KEYS: Record<string, string> = {
+  modelBudgetBytes: "stack.memory.model_budget_bytes", systemLowWaterPct: "stack.memory.low_water_pct", systemLowWaterFloorBytes: "stack.memory.low_water_floor_bytes", systemSustainedPolls: "stack.memory.sustained_polls",
+  updatesEnabled: "stack.updates.enabled", huggingFaceEndpoint: "stack.updates.model_host",
+  idleUnloadMinutes: "stack.runtime.idle_unload_minutes", idleUnloadOnBatteryMinutes: "stack.runtime.idle_unload_on_battery_minutes", downloadCapMbps: "stack.runtime.download_cap_mbps", port: "stack.runtime.port",
+  "engines.llama-server.contextLength": "stack.engines.llama_server.context_length", "engines.llama-server.slots": "stack.engines.llama_server.slots", "engines.llama-server.threads": "stack.engines.llama_server.threads", "engines.llama-server.cacheRamMb": "stack.engines.llama_server.cache_ram_mb", "engines.llama-server.flashAttention": "stack.engines.llama_server.flash_attention",
+  ...Object.fromEntries(URL_BINDING_ROLES.flatMap((role) => [[`engines.${role}.hostUrl`, `stack.engines.${role}.host_url`], [`engines.${role}.expectedVersion`, `stack.engines.${role}.expected_version`]])),
+};
+
+export function migrateRenamedSettingKeys(): number {
+  let moved = 0;
+  for (const [oldKey, newKey] of Object.entries(RENAMED_KEYS)) {
+    for (const [oldState, newState] of [["inEffect", "in_effect"], ["pending", "pending"]] as const) {
+      const from = `settings.${oldKey}.${oldState}`;
+      const row = db.select({ value: meta.value }).from(meta).where(eq(meta.key, from)).get();
+      if (!row) continue;
+      const to = `settings.${newKey}.${newState}`;
+      if (!db.select({ key: meta.key }).from(meta).where(eq(meta.key, to)).get()) db.insert(meta).values({ key: to, value: row.value }).run();
+      db.delete(meta).where(eq(meta.key, from)).run();
+      moved++;
+    }
+  }
+  return moved;
+}
+migrateRenamedSettingKeys();
+
+function metaKey(key: string, state: "in_effect" | "pending"): string { return `settings.${key}.${state}`; }
 function read(key: string): string | null { return db.select({ value: meta.value }).from(meta).where(eq(meta.key, key)).get()?.value ?? null; }
 function write(key: string, value: unknown): void { db.insert(meta).values({ key, value: JSON.stringify(value) }).onConflictDoUpdate({ target: meta.key, set: { value: JSON.stringify(value) } }).run(); }
 function clear(key: string): void { db.delete(meta).where(eq(meta.key, key)).run(); }
 
 function decode(value: string | null, declaration: SettingDeclaration): SettingValue {
-  if (value === null) return declaration.default;
+  if (value === null) return declaration.default as SettingValue;
   let parsed: unknown;
   try { parsed = JSON.parse(value); } catch { parsed = value; }
-  return typeof parsed === "number" || typeof parsed === "boolean" || typeof parsed === "string" ? parsed : declaration.default;
+  return typeof parsed === "number" || typeof parsed === "boolean" || typeof parsed === "string" ? parsed : declaration.default as SettingValue;
 }
 
 function valueSchema(declaration: SettingDeclaration): z.ZodTypeAny {
-  if (declaration.type === "boolean") return z.boolean();
-  if (declaration.type === "number") return z.number().int().min(declaration.range?.min ?? Number.MIN_SAFE_INTEGER).max(declaration.range?.max ?? Number.MAX_SAFE_INTEGER);
-  if (declaration.type === "enum") return z.string().refine((value) => declaration.options?.some((option) => option.value === value) ?? false, "Invalid setting option");
+  const range = (declaration.range ?? {}) as { min?: number; max?: number; options?: Array<{ value: string }> };
+  if (declaration.selector === "boolean") return z.boolean();
+  if (declaration.selector === "number") return z.number().int().min(range.min ?? Number.MIN_SAFE_INTEGER).max(range.max ?? Number.MAX_SAFE_INTEGER);
+  if (declaration.selector === "select") return z.string().refine((value) => range.options?.some((option) => option.value === value) ?? false, "Invalid setting option");
   return z.string();
 }
 
-export function readSettings(): SettingRecord[] {
+export function readSettings(): StackSetting[] {
   return SETTINGS.map((declaration) => {
     const pending = read(metaKey(declaration.key, "pending"));
-    return { ...declaration, inEffect: decode(read(metaKey(declaration.key, "inEffect")), declaration), pending: pending === null ? null : decode(pending, declaration) };
+    return StackSetting.parse({ ...declaration, in_effect: decode(read(metaKey(declaration.key, "in_effect")), declaration), pending: pending === null ? null : decode(pending, declaration) });
   });
 }
 
 export function settingValues(): Record<string, SettingValue> {
-  return Object.fromEntries(readSettings().map((setting) => [setting.key, setting.inEffect]));
+  return Object.fromEntries(readSettings().map((setting) => [setting.key, setting.in_effect as SettingValue]));
 }
 
 /** The values a spawned engine's launch reads: every key under its
- * section, with the section prefix stripped (`contextLength`, not
- * `engines.llama-server.contextLength`). */
+ * section, with the prefix stripped (`context_length`, not
+ * `stack.engines.llama_server.context_length`). */
 export function engineSettingValues(section: string): Record<string, SettingValue> {
-  const prefix = `${section}.`;
-  return Object.fromEntries(readSettings().filter((setting) => setting.key.startsWith(prefix)).map((setting) => [setting.key.slice(prefix.length), setting.inEffect]));
+  const prefix = `stack.${section}.`;
+  return Object.fromEntries(readSettings().filter((setting) => setting.key.startsWith(prefix)).map((setting) => [setting.key.slice(prefix.length), setting.in_effect as SettingValue]));
 }
 
-export function updateSettings(values: Record<string, unknown>): SettingRecord[] {
+export function updateSettings(values: Record<string, unknown>): StackSetting[] {
   for (const key of Object.keys(values)) if (!byKey.has(key)) throw new Error(`Unknown Stack setting: ${key}`);
   for (const [key, raw] of Object.entries(values)) {
     const declaration = byKey.get(key)!;
     const value = valueSchema(declaration).parse(raw) as SettingValue;
-    if (declaration.needsRestart) {
-      if (value === decode(read(metaKey(key, "inEffect")), declaration)) clear(metaKey(key, "pending"));
+    if (declaration.needs_restart) {
+      if (value === decode(read(metaKey(key, "in_effect")), declaration)) clear(metaKey(key, "pending"));
       else write(metaKey(key, "pending"), value);
-    } else write(metaKey(key, "inEffect"), value);
+    } else write(metaKey(key, "in_effect"), value);
   }
   applySettingsToRuntime();
   return readSettings();
@@ -136,11 +152,11 @@ export function updateSettings(values: Record<string, unknown>): SettingRecord[]
 
 /** Promotes every pending value; called at start (after the service
  * manager restarted the process) and by `POST /stack/v1/settings/apply`. */
-export function applyPendingSettings(): SettingRecord[] {
+export function applyPendingSettings(): StackSetting[] {
   for (const declaration of SETTINGS) {
     const pending = read(metaKey(declaration.key, "pending"));
     if (pending === null) continue;
-    write(metaKey(declaration.key, "inEffect"), decode(pending, declaration));
+    write(metaKey(declaration.key, "in_effect"), decode(pending, declaration));
     clear(metaKey(declaration.key, "pending"));
   }
   applySettingsToRuntime();
@@ -152,12 +168,12 @@ export function applyPendingSettings(): SettingRecord[] {
 export function applySettingsToRuntime(): void {
   const values = settingValues();
   setGovernorMemorySettings({
-    modelBudgetBytes: Number(values.modelBudgetBytes),
-    systemLowWaterPct: Number(values.systemLowWaterPct) / 100,
-    systemLowWaterFloorBytes: Number(values.systemLowWaterFloorBytes),
-    systemSustainedPolls: Number(values.systemSustainedPolls),
+    modelBudgetBytes: Number(values["stack.memory.model_budget_bytes"]),
+    systemLowWaterPct: Number(values["stack.memory.low_water_pct"]) / 100,
+    systemLowWaterFloorBytes: Number(values["stack.memory.low_water_floor_bytes"]),
+    systemSustainedPolls: Number(values["stack.memory.sustained_polls"]),
   });
-  setDownloadCapMbps(Number(values.downloadCapMbps));
+  setDownloadCapMbps(Number(values["stack.runtime.download_cap_mbps"]));
 }
 
 export function __resetSettingsForTests(): void {

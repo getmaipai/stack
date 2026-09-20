@@ -1,0 +1,12 @@
+{
+  "code": "engine.crashed.chat",
+  "severity": "error",
+  "title": "The chat engine crashed",
+  "text": "The spawned engine exited unexpectedly.",
+  "since": "2026-09-20T07:36:25.751Z",
+  "cause": "The engine process exited.",
+  "fix": {
+    "label": "Restart engine",
+    "action": "restart_engine"
+  }
+}

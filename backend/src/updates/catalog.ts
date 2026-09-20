@@ -42,7 +42,7 @@ const key = (suffix: string) => `updates.${suffix}`;
 const read = (suffix: string) => db.select({ value: meta.value }).from(meta).where(eq(meta.key, key(suffix))).get()?.value ?? null;
 const write = (suffix: string, value: string) => db.insert(meta).values({ key: key(suffix), value }).onConflictDoUpdate({ target: meta.key, set: { value } }).run();
 
-export function updatesEnabled(): boolean { return settingValues().updatesEnabled === true; }
+export function updatesEnabled(): boolean { return settingValues()["stack.updates.enabled"] === true; }
 
 export function conditionalHeaders(etag: string | null): Record<string, string> {
   return { "if-none-match": etag ?? "", "user-agent": `maipai-stack/${packageJson.version} (${process.platform}-${process.arch})` };

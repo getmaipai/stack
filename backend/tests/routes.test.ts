@@ -110,7 +110,7 @@ test("hardware, budget, backup and the diagnostics bundle answer as data without
   expect(hardware.tiers).toHaveLength(4);
   const budget = await (await app.request("/stack/v1/hardware/budget")).json() as { capBytes: number; pressure: string };
   expect(budget.capBytes).toBeGreaterThan(0);
-  const backup = await (await app.request("/stack/v1/backup")).json() as { paths: Array<{ mode: string }> };
+  const backup = await (await app.request("/stack/v1/backup")).json() as { data_dir: string; paths: Array<{ mode: string }> };
   expect(backup.paths.map((path) => path.mode)).toEqual(["include", "include", "exclude", "exclude"]);
   const bundle = await app.request("/stack/v1/diagnostics");
   expect(bundle.headers.get("content-type")).toBe("application/zip");

@@ -6,6 +6,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { app } from "@/app";
 import { PRIVACY_ROWS } from "@/lib/privacy";
+import { SETTINGS } from "@/settings";
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => { const path = join(dir, entry); return statSync(path).isDirectory() ? sourceFiles(path) : path.endsWith(".ts") ? [path] : []; });
@@ -27,4 +28,9 @@ test("the rows are served as data for Home's privacy page", async () => {
   const body = await response.json() as { rows: Array<{ what: string; when: string; carries: string; receiver: string; setting: string | null }> };
   expect(body.rows.length).toBe(PRIVACY_ROWS.length);
   for (const row of body.rows) for (const field of ["what", "when", "carries", "receiver"] as const) expect(row[field].length).toBeGreaterThan(10);
+});
+
+test("a row's governing setting is a declared key", () => {
+  const keys = new Set(SETTINGS.map((setting) => setting.key));
+  for (const row of PRIVACY_ROWS) if (row.setting !== null) expect(keys, `row ${row.id} names ${row.setting}`).toContain(row.setting);
 });

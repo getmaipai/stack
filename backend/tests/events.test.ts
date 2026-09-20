@@ -32,7 +32,7 @@ test("the feed stays open: a reconnect replays after Last-Event-Id, then live ev
 
 test("a subscriber that throws never stops the producer", () => {
   const unsubscribe = subscribe(() => { throw new Error("boom"); });
-  expect(() => emit({ id: "job.done", data: { job: "j", ok: true } })).not.toThrow();
+  expect(() => emit({ id: "job.done", data: { job: "j", kind: "image", ok: true } })).not.toThrow();
   unsubscribe();
 });
 

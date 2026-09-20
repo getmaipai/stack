@@ -4,7 +4,7 @@ import { listFiles, modelInfo } from "@huggingface/hub";
 const DEFAULT_ENDPOINT = "https://huggingface.co";
 
 function currentEndpoint(): string {
-  const value = settingValues().huggingFaceEndpoint;
+  const value = settingValues()["stack.updates.model_host"];
   const trimmed = typeof value === "string" && value.trim() ? value.trim() : DEFAULT_ENDPOINT;
   return trimmed.endsWith("/") ? trimmed.slice(0, -1) : trimmed;
 }

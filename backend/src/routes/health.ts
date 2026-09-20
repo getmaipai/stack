@@ -8,8 +8,7 @@ import { getProcess, restartRole, stopRole, unloadAllRoles } from "@/lib/supervi
 import { rollbackEngine, currentEngine, previousEngine } from "@/updates/engines";
 import { ROLE_IDS, type RoleId } from "@/roles";
 
-export const HealthItemSchema = z.object({ code: z.string(), severity: z.enum(["critical", "error", "warning"]), title: z.string(), text: z.string(), since: z.string(), cause: z.string(), fix: z.object({ label: z.string(), action: z.string() }).optional() });
-export const FIX_ACTIONS = ["restart_engine", "free_memory", "retry_download", "rollback_update", "reinstall_engine", "reinstall_model"] as const;
+import { HealthItem as HealthItemSchema } from "@/spec/ts/health-item";
 
 const listRoute = createRoute({ method: "get", path: "/", tags: ["Health"], summary: "Active health items", responses: { 200: { content: { "application/json": { schema: z.object({ health: z.array(HealthItemSchema) }) } }, description: "Open problems, each with at most one fix." } } });
 const fixRoute = createRoute({ method: "post", path: "/{code}/fix", tags: ["Health"], summary: "Run a health item's fix", request: { params: idParamSchema("code") }, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.boolean(), result: z.string() }) } }, description: "What the fix did." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown item or no fix." } } });

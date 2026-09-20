@@ -1,0 +1,10 @@
+{
+  "id": "update.failed",
+  "at": "2026-09-20T07:36:25.751Z",
+  "seq": 9,
+  "data": {
+    "kind": "engine",
+    "name": "llama-server",
+    "reason": "The replacement engine failed its post-load check."
+  }
+}
