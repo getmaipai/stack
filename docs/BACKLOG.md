@@ -49,7 +49,8 @@ are never copied. Nothing migrates Home until STACK-16.
   d4e088e).
 - [x] **RF-03 (S): this backlog.** Rewritten to the goals; the
   dashboard refreshed 2026-09-20. Landed on `main` with this file.
-- [ ] **RF-04 (L): the backend, fresh.** `git rm -r backend/src
+- [x] **RF-04 (L): the backend, fresh.** Landed on `main` at 58cae15
+  (144 tests, gate green, review findings fixed). `git rm -r backend/src
   backend/tests`; the kept modules restored by path from d4e088e at
   their `@/lib` paths with their tests (governor, memory readers,
   download, store, engine catalog and install, model store and catalog,
@@ -108,7 +109,7 @@ are never copied. Nothing migrates Home until STACK-16.
   headers on every reply; 503 with `offline_reason` for an unbound role,
   409 for incomplete provenance, 400 with the role list for an unknown
   id; streaming chat passes the engine's SSE bytes through. Kept
-  through RF-04 (the router rewritten without the client-key check).
+  through RF-04 at 58cae15 (the router rewritten without the client-key check).
 - [ ] **STACK-93 (M): the second engine adapter under the governor.**
   `mlx-serve` or `oMLX` (the Studio bench's pick) as a second spawned
   engine kind: its pin in `engineCatalog.ts`, its launch args, its
@@ -127,7 +128,7 @@ are never copied. Nothing migrates Home until STACK-16.
 - [x] **STACK-08: the spawned llama-server supervisor.** Pinned build,
   free-port probe, size-scaled load timeout, post-load completion,
   measured footprint, restart on exit, drain on stop, idle unload.
-  Rewritten per role in RF-04 with the same lifecycle pieces.
+  Rewritten per role in RF-04 at 58cae15 with the same lifecycle pieces.
 - [ ] **STACK-13 (M): jobs and the managed ComfyUI.** The job API
   (submit, progress on the feed, cancel, result by id) and the
   synchronous `/v1/images/generations` wrapper; ComfyUI as a `managed`
