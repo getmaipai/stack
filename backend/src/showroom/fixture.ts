@@ -84,4 +84,29 @@ export function showroomSeries(range: "hour" | "day" | "week") {
   return { usage, memory, speed };
 }
 
+const resourceBucketCounts = { hour: 60, day: 96, week: 168, month: 120 } as const;
+const resourceStepMs = { hour: 60_000, day: 15 * 60_000, week: 60 * 60_000, month: 6 * 60 * 60_000 } as const;
+
+export function showroomResourceSeries(range: "hour" | "day" | "week" | "month") {
+  const count = resourceBucketCounts[range];
+  const step = resourceStepMs[range];
+  const at = (index: number) => new Date(now.getTime() - (count - index - 1) * step).toISOString();
+  const wave = (index: number, base: number, amplitude: number) => Math.round(base + amplitude * Math.sin((index / count) * Math.PI * 2));
+  const cpu = Array.from({ length: count }, (_, index) => ({ at: at(index), percent: wave(index, 28, 18), usedBytes: null, totalBytes: null }));
+  const memory = Array.from({ length: count }, (_, index) => ({ at: at(index), percent: wave(index, 55, 8), usedBytes: Math.round(showroomHardware.totalRamGb * 1_073_741_824 * (0.5 + wave(index, 0, 8) / 100)), totalBytes: showroomHardware.totalRamGb * 1_073_741_824 }));
+  const gpu = Array.from({ length: count }, (_, index) => ({ at: at(index), percent: wave(index, 20, 20), usedBytes: null, totalBytes: null }));
+  const driveTotal = showroomHardware.drives[0]!.totalBytes;
+  const storage = Array.from({ length: count }, (_, index) => ({ at: at(index), percent: Math.round((showroomHardware.drives[0]!.usedBytes / driveTotal) * 100), usedBytes: showroomHardware.drives[0]!.usedBytes, totalBytes: driveTotal }));
+  return {
+    cpu,
+    memory,
+    gpu,
+    storage,
+    devices: {
+      gpus: [{ index: 0, name: "Apple M4 Pro", utilization: gpu[gpu.length - 1]!.percent, memoryUsedBytes: null, memoryTotalBytes: null }],
+      drives: [{ name: showroomHardware.drives[0]!.name, usedBytes: showroomHardware.drives[0]!.usedBytes, totalBytes: driveTotal }],
+    },
+  };
+}
+
 export function showroomResolveHealth(code: string): boolean { const item = showroomHealth.find((entry) => entry.code === code); if (!item) return false; showroomHealth.splice(showroomHealth.indexOf(item), 1); return true; }

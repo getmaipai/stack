@@ -173,3 +173,17 @@ export const channels = sqliteTable("channels", {
 
 // Compatibility name for the old repair adapter and its route alias.
 export const repairs = health;
+
+// The two-database split (STACK-50) is not built yet; this stays in
+// stack.db like every other series table, discriminated by kind rather
+// than one table per resource so a future resource doesn't need a
+// migration of its own.
+export const resourceSamples = sqliteTable("resource_samples", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  at: text("at").notNull(),
+  kind: text("kind").notNull(),
+  percent: integer("percent"),
+  usedBytes: integer("used_bytes"),
+  totalBytes: integer("total_bytes"),
+  devices: text("devices"),
+});

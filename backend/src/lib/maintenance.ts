@@ -12,7 +12,7 @@ import { applyAvailableEngineUpdate, currentEngine } from "@/updates/engines";
 import { emit } from "@/lib/events";
 import { runWeeklyDigest } from "@/lib/digest";
 import { getChatBackend, unloadIdleChatEngine } from "@/lib/supervisor";
-import { usualChatHour } from "@/lib/series";
+import { pruneResourceSamples, usualChatHour } from "@/lib/series";
 
 export type MaintenanceJobKind = "update.check" | "engine.update" | "smoke.test" | "storage.sweep" | "benchmark" | "library.fetch" | "digest";
 export const MAINTENANCE_JOB_KINDS: MaintenanceJobKind[] = ["update.check", "engine.update", "smoke.test", "storage.sweep", "benchmark", "library.fetch", "digest"];
@@ -49,7 +49,14 @@ export function registeredMaintenanceJobs(settings: () => Record<string, string 
       }
     } },
     { kind: "smoke.test", run: async () => { await runCheck(); } },
-    { kind: "storage.sweep", run: async () => { pruneUnreferenced(); } },
+    // Two independent prunes, each isolated: the scheduler's run loop has no
+    // per-job try/catch of its own, so a failure in one must not also skip
+    // the other (or, since a throw here aborts the whole run, every later
+    // job that night).
+    { kind: "storage.sweep", run: async () => {
+      try { pruneUnreferenced(); } catch { /* the next sweep retries */ }
+      try { pruneResourceSamples(); } catch { /* the next sweep retries */ }
+    } },
     { kind: "benchmark", due: () => residentChatModel() !== null, run: async () => { const model = residentChatModel(); if (model) await runSpeedTest(model); } },
     { kind: "library.fetch", run: async () => { await fetchLibrary(); } },
     { kind: "digest", run: async () => { if (settings().alertWeeklyDigest === true) runWeeklyDigest(); } },

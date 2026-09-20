@@ -4,6 +4,7 @@ import { startDetection } from "@/lib/detect";
 import { startMaintenanceScheduler } from "@/lib/maintenance";
 import { activateStackConfig, stackSettingValues } from "@/settings/stackKeys";
 import { startLiveSampler, stopLiveSampler } from "@/lib/live";
+import { startResourcesSampler, stopResourcesSampler } from "@/lib/series";
 
 const port = Number(process.env.PORT ?? 8770);
 
@@ -23,11 +24,13 @@ async function serve(): Promise<void> {
   const stopDetection = startDetection();
   const stopMaintenance = startMaintenanceScheduler();
   startLiveSampler();
+  startResourcesSampler();
   let stopping = false;
   const stop = async (exitCode: number): Promise<void> => {
     if (stopping) return;
     stopping = true;
     stopLiveSampler();
+    stopResourcesSampler();
     stopDetection();
     stopMaintenance();
     server.stop(true);

@@ -3103,6 +3103,242 @@
         }
       }
     },
+    "/stack/v1/series/resources": {
+      "get": {
+        "tags": [
+          "Monitoring"
+        ],
+        "summary": "CPU, memory, GPU, and storage history",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "hour",
+                "day",
+                "week",
+                "month"
+              ],
+              "default": "hour"
+            },
+            "required": false,
+            "name": "range",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bucketed resource history, with nulls where no sample exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "range": {
+                      "type": "string",
+                      "enum": [
+                        "hour",
+                        "day",
+                        "week",
+                        "month"
+                      ]
+                    },
+                    "cpu": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "type": "string"
+                          },
+                          "percent": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "usedBytes": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "totalBytes": {
+                            "type": "number",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "at",
+                          "percent",
+                          "usedBytes",
+                          "totalBytes"
+                        ]
+                      }
+                    },
+                    "memory": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "type": "string"
+                          },
+                          "percent": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "usedBytes": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "totalBytes": {
+                            "type": "number",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "at",
+                          "percent",
+                          "usedBytes",
+                          "totalBytes"
+                        ]
+                      }
+                    },
+                    "gpu": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "type": "string"
+                          },
+                          "percent": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "usedBytes": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "totalBytes": {
+                            "type": "number",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "at",
+                          "percent",
+                          "usedBytes",
+                          "totalBytes"
+                        ]
+                      }
+                    },
+                    "storage": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "type": "string"
+                          },
+                          "percent": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "usedBytes": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "totalBytes": {
+                            "type": "number",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "at",
+                          "percent",
+                          "usedBytes",
+                          "totalBytes"
+                        ]
+                      }
+                    },
+                    "devices": {
+                      "type": "object",
+                      "properties": {
+                        "gpus": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "index": {
+                                "type": "number"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "utilization": {
+                                "type": "number",
+                                "nullable": true
+                              },
+                              "memoryUsedBytes": {
+                                "type": "number",
+                                "nullable": true
+                              },
+                              "memoryTotalBytes": {
+                                "type": "number",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "index",
+                              "name",
+                              "utilization",
+                              "memoryUsedBytes",
+                              "memoryTotalBytes"
+                            ]
+                          }
+                        },
+                        "drives": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "usedBytes": {
+                                "type": "number"
+                              },
+                              "totalBytes": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "usedBytes",
+                              "totalBytes"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "gpus",
+                        "drives"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "range",
+                    "cpu",
+                    "memory",
+                    "gpu",
+                    "storage",
+                    "devices"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/ready": {
       "get": {
         "tags": [
