@@ -26,3 +26,28 @@ test("Add sheet installs a catalog model and imports a scripted folder", async (
   fireEvent.click([...document.querySelectorAll("button")].find((button) => button.textContent === "Import path by link")!);
   await waitFor(() => expect(calls.some((call) => call === "POST /stack/v1/models/import")).toBe(true));
 });
+
+test("clearing the Hugging Face search box and searching again keeps the disabled banner", async () => {
+  // Regression: searchHuggingFace used to default a skipped (empty-query)
+  // request to `enabled: true`, so re-searching with an empty box after
+  // a real "disabled" response flipped the banner off again.
+  globalThis.fetch = mock((input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path.includes("kind=huggingface")) return Promise.resolve(Response.json({ enabled: false, results: [] }));
+    if (path.includes("catalog/search")) return Promise.resolve(Response.json({ enabled: true, results: [] }));
+    if (path.endsWith("/models/import")) return Promise.resolve(Response.json({ candidates: [] }));
+    return Promise.resolve(Response.json({ ok: true }));
+  }) as unknown as typeof fetch;
+  render(<AddSheet kind="model" open onOpenChange={() => {}} />);
+  const hfTab = await waitFor(() => { const button = [...document.querySelectorAll('button[role="tab"]')].find((candidate) => candidate.textContent === "Hugging Face"); expect(button).toBeTruthy(); return button!; });
+  fireEvent.mouseDown(hfTab);
+  fireEvent.click(hfTab);
+  const searchInput = await waitFor(() => { const input = document.querySelector<HTMLInputElement>('input[aria-label="Search Hugging Face"]'); expect(input).toBeTruthy(); return input!; });
+  fireEvent.change(searchInput, { target: { value: "qwen" } });
+  fireEvent.click([...document.querySelectorAll("button")].find((button) => button.textContent === "Search")!);
+  await waitFor(() => expect(document.body.textContent).toContain("Hugging Face search is off"));
+
+  fireEvent.change(searchInput, { target: { value: "" } });
+  fireEvent.click([...document.querySelectorAll("button")].find((button) => button.textContent === "Search")!);
+  await waitFor(() => expect(document.body.textContent).toContain("Hugging Face search is off"));
+});

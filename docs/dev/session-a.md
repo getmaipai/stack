@@ -26,3 +26,57 @@ UI-10/UI-12 sections). Main checkout.
   already replaces its Storage widget with a `ResourceRow` built on the
   new shared formatter, noted here so whoever builds UI-11 knows to
   delete `SegmentedBar.tsx`'s copy rather than keep both.
+- **UI-12's real data sources are `/stack/v1/models`, `/stack/v1/groups`
+  and `/stack/v1/detected` for Installed, not the spec text's literal
+  `/stack/v1/components?category=models`** (no `/components` route
+  exists in this backend). Coordinator-confirmed. Browse combines the
+  local catalog route and, when the filter box has text, Hugging Face
+  search, reusing `AddSheet`'s own resolve step (unresolved Hugging
+  Face rows show "Review", which resolves and opens the same
+  `DetailsPane` before Install unblocks). Updates renders the
+  aggregate `models` version state from `/stack/v1/updates`; Recommended
+  renders that route's `recommendations` array. The nested group tree
+  is dropped for a flat table; a model's group name is searchable
+  through the filter box instead of a separate dropdown, since the
+  approved screenshot (`models-browser-and-pane.png`) does not show a
+  distinct group filter control either.
+- **Quantization, Runtime (engine assignment) and Context length show
+  "Not reported" everywhere in UI-12**, list and pane alike: the real
+  `ModelSchema` (`backend/src/routes/models.ts`) never exposes these
+  fields today, even though the approved screenshot shows populated
+  values. Architecture likewise, except where a model's own
+  `provenance.licence` happens to carry it.
+- **The pane's Settings and Logs tabs render `Empty` states, not
+  fabricated content.** No per-model settings exist server-side
+  (`/stack/v1/settings` is one global collection, not model-scoped),
+  and no per-model log tail exists (`/stack/v1/logs/{name}` tails a
+  named operator log, not a model or engine's own log). Files shows the
+  one real file behind `modelPath` and its size; there is no per-model
+  multi-file listing outside the Hugging Face resolve step.
+- **The action rail's Test button calls the existing, unparameterized
+  `/stack/v1/speed-test`**, which always measures whatever the resident
+  chat model is (`backend/src/lib/speedTest.ts`'s `residentChatModel()`),
+  the same limitation `OverviewPage`'s own "Run Speed Test" button
+  already ships with. Disabled with a stated reason on any model
+  without the `chat` role, since testing those would silently measure
+  a different model than the one the rail is showing.
+- **Bug fixed in `pane/DetailsPane.tsx` (shared UI-10 code, not
+  UI-12-only): the phone-width sheet still carried the desktop
+  `min-w-[480px]`, which wins over the `max-[719px]:w-full` it also
+  sets (min-width always overrides width), pushing every phone
+  capture 90px past the viewport.** Fixed with
+  `max-[719px]:min-w-0`; a regression test in
+  `pane/DetailsPane.test.tsx` asserts both classes are present.
+  Content inside pane tabs also needs `min-w-0` on any CSS grid item
+  holding a long, truncated string (a grid item's automatic minimum
+  width is its content's, not zero, unlike a plain block element).
+  ModelsPage's Overview/Usage tabs now carry it; worth checking for the
+  same shape in any other pane content Session C or B write later.
+- **`panels/model.tsx` and `panels/group.tsx` (the pre-rebuild
+  `modelPanel`/`groupPanel` property-panel adapters) deleted as
+  UI-12 orphaned them**, along with their two cases in the shared
+  `panels.test.tsx`. `lib/actions.ts`'s own "model" and "group"
+  `ThingKind` branches are now unreachable in production the same way
+  but were left in place: narrowing that shared, still-tested function
+  is a larger edit than this item's scope, flagged here rather than
+  done silently.

@@ -65,6 +65,14 @@ test("a disabled action carries its reason and cannot be clicked", async () => {
   expect(clicked).toBe(false);
 });
 
+test("the phone-width sheet has no minimum width wider than the viewport", async () => {
+  render(<DetailsPane open onClose={() => undefined} icon="Box" hue="--cat-models" name="Qwen3" identifier="qwen3" status="running" />);
+  await settle();
+  const content = document.querySelector('[data-slot="sheet-content"]')!;
+  expect(content.className).toContain("max-[719px]:w-full");
+  expect(content.className).toContain("max-[719px]:min-w-0");
+});
+
 test("the close control fires onClose", async () => {
   let closed = false;
   render(<DetailsPane open onClose={() => { closed = true; }} icon="Box" hue="--cat-models" name="Qwen3" identifier="qwen3" status="running" />);

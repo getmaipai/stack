@@ -58,7 +58,7 @@ export function DetailsPane({ open, onClose, icon, hue, name, identifier, status
           "duration-200 data-[state=closed]:duration-150 data-[state=closed]:slide-out-to-right-6 data-[state=open]:slide-in-from-right-6",
           "motion-reduce:transition-none motion-reduce:data-[state=open]:animate-none motion-reduce:data-[state=closed]:animate-none",
           "max-[959px]:inset-4 max-[959px]:w-auto max-[959px]:max-w-none",
-          "max-[719px]:inset-0 max-[719px]:h-svh max-[719px]:w-full max-[719px]:rounded-none max-[719px]:border-0",
+          "max-[719px]:inset-0 max-[719px]:h-svh max-[719px]:w-full max-[719px]:min-w-0 max-[719px]:rounded-none max-[719px]:border-0",
         )}
       >
         <div className="flex items-center gap-3 border-b p-4">

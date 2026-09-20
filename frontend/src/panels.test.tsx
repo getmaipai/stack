@@ -6,8 +6,6 @@ import { KeyValueList } from "@/kit/blocks/property-panel/KeyValueList";
 import { channelPanel } from "@/panels/channel";
 import { clientPanel } from "@/panels/client";
 import { detectedPanel } from "@/panels/detected";
-import { groupPanel } from "@/panels/group";
-import { modelPanel } from "@/panels/model";
 
 afterEach(() => cleanup());
 
@@ -18,8 +16,6 @@ function renderAdapter(kind: string, name: string, adapter: { actions: Array<{ l
 test("every property-panel adapter exposes actions that call its route handler", () => {
   const calls: string[] = [];
   const cases = [
-    ["Model", modelPanel({ id: "llama", nickname: "Family chat" }, (action) => calls.push(`model:${action}`)), "model"],
-    ["Group", groupPanel("Family", (action) => calls.push(`group:${action}`)), "group"],
     ["Client", clientPanel("Kitchen display", ["chat"], () => calls.push("client:revoke")), "client"],
     ["Channel", channelPanel("Matter", "today", (action) => calls.push(`channel:${action}`)), "channel"],
     ["Detected", detectedPanel("Ollama", (action) => calls.push(`detected:${action}`)), "detected"],
@@ -33,7 +29,7 @@ test("every property-panel adapter exposes actions that call its route handler",
     }
     cleanup();
   }
-  expect(calls).toEqual(["model:load", "model:unload", "model:pin", "model:remove", "group:load", "group:unload", "group:pin", "group:unpin", "group:checkUpdates", "group:move", "group:remove", "client:revoke", "channel:test", "channel:edit", "detected:adopt", "detected:forget"]);
+  expect(calls).toEqual(["client:revoke", "channel:test", "channel:edit", "detected:adopt", "detected:forget"]);
 });
 
 test("the refined panel exposes icon tabs, quick facts, primary actions, and copyable metadata", async () => {

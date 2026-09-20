@@ -9,11 +9,12 @@ import { displayName } from "@/lib/names";
 import { ScanStatus, scanComputer, type DetectedScan } from "@/lib/detectedScan";
 import { isDesktop, pickFolder } from "@/kit/host";
 import { sentenceFor } from "@/lib/unavailable";
+import { searchCatalog, searchHuggingFace, resolveHuggingFace, installFromCatalog, type CatalogEntry } from "@/lib/catalogSearch";
 
 const Plus = getIcon("Plus");
 const engineInstallSentence = sentenceFor("engine-install-unqualified")!;
 
-type Entry = { id: string; name: string; kind: "model" | "engine"; roles?: string[]; licence: string | null; licenceSentence?: string; licenceFlag?: string; licenceUrl?: string | null; sizeBytes: number | null; source: string; revision: string | null; url: string | null; sha256: string | null; repo: string | null; runsOnThisComputer?: boolean; files?: Array<{ name: string; sizeBytes: number | null; sha256: string | null; url: string }> };
+type Entry = CatalogEntry;
 type Candidate = { source: string; path: string; digest: string; sizeBytes: number; name: string; repo?: string; revision?: string };
 
 function size(value: number | null): string { if (value === null) return "Size not recorded"; return `${Math.round(value / 1_000_000)} MB`; }
@@ -22,14 +23,14 @@ export interface AddSheetProps { kind: "model" | "engine"; open: boolean; onOpen
 
 export function AddSheet({ kind, open, onOpenChange, onAdded }: AddSheetProps) {
   const [query, setQuery] = useState(""); const [catalog, setCatalog] = useState<Entry[]>([]); const [hub, setHub] = useState<Entry[]>([]); const [resolved, setResolved] = useState<Entry | null>(null); const [candidates, setCandidates] = useState<Candidate[]>([]); const [path, setPath] = useState(""); const [enabled, setEnabled] = useState(true); const [busy, setBusy] = useState<string | null>(null); const [scanResult, setScanResult] = useState<DetectedScan | null>(null); const [scanBusy, setScanBusy] = useState(false);
-  const loadCatalog = useCallback(async () => { const response = await fetch(`/stack/v1/catalog/search?kind=${kind}&q=${encodeURIComponent(query)}`); if (response.ok) setCatalog((await response.json() as { results: Entry[] }).results); }, [kind, query]);
-  async function searchHub() { setResolved(null); if (!query.trim()) { setHub([]); return; } const response = await fetch(`/stack/v1/catalog/search?kind=huggingface&q=${encodeURIComponent(query)}`); if (response.ok) { const body = await response.json() as { enabled: boolean; results: Entry[] }; setEnabled(body.enabled); setHub(body.results); } }
-  async function resolveHub(entry: Entry) { if (!entry.repo) return; setBusy(entry.id); try { const response = await fetch(`/stack/v1/catalog/huggingface/resolve?repo=${encodeURIComponent(entry.repo)}`); if (response.ok) setResolved((await response.json() as { result: Entry }).result); } finally { setBusy(null); } }
+  const loadCatalog = useCallback(async () => { setCatalog(await searchCatalog(kind, query)); }, [kind, query]);
+  async function searchHub() { setResolved(null); const body = await searchHuggingFace(query); if (body.enabled !== undefined) setEnabled(body.enabled); setHub(body.results); }
+  async function resolveHub(entry: Entry) { if (!entry.repo) return; setBusy(entry.id); try { setResolved(await resolveHuggingFace(entry.repo)); } finally { setBusy(null); } }
   async function scanCandidates() { const response = await fetch("/stack/v1/models/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ scan: true }) }); if (response.ok) setCandidates((await response.json() as { candidates: Candidate[] }).candidates); }
   async function chooseFolder() { const selected = await pickFolder(); if (selected) setPath(selected); }
   async function scanComputerNow() { setScanBusy(true); try { setScanResult(await scanComputer()); onAdded?.(); } finally { setScanBusy(false); } }
   useEffect(() => { if (!open) return; void loadCatalog(); void scanCandidates(); }, [open, kind, loadCatalog]);
-  async function install(entry: Entry, source: "catalog" | "huggingface") { setBusy(entry.id); try { if (kind === "engine") { const marker = entry.id.indexOf("-b"); const name = marker > 0 ? entry.id.slice(0, marker) : entry.id; const tag = marker > 0 ? entry.id.slice(marker + 1).split("-")[0] : entry.revision ?? entry.id; await fetch(`/stack/v1/engines/${name}/install`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tag }) }); } else await fetch("/stack/v1/models", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: entry.id, source, roles: entry.roles ?? ["chat"], url: entry.url, sha256: entry.sha256, licence: entry.licence, revision: entry.revision }) }); onAdded?.(); } finally { setBusy(null); } }
+  async function install(entry: Entry, source: "catalog" | "huggingface") { setBusy(entry.id); try { if (kind === "engine") { const marker = entry.id.indexOf("-b"); const name = marker > 0 ? entry.id.slice(0, marker) : entry.id; const tag = marker > 0 ? entry.id.slice(marker + 1).split("-")[0] : entry.revision ?? entry.id; await fetch(`/stack/v1/engines/${name}/install`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tag }) }); } else await installFromCatalog(entry, source); onAdded?.(); } finally { setBusy(null); } }
   async function importCandidate(candidate: Candidate) { setBusy(candidate.path); try { await fetch("/stack/v1/models/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path: candidate.path, id: candidate.name, roles: ["chat"], licence: "Licence not recorded" }) }); onAdded?.(); } finally { setBusy(null); } }
   async function upload(file: File) { setBusy(file.name); try { const form = new FormData(); form.append("file", file); await fetch("/stack/v1/models/upload", { method: "POST", body: form }); onAdded?.(); } finally { setBusy(null); } }
   const installBlocked = !resolved || resolved.roles?.[0] === "unknown" || resolved.licenceFlag === "gated" || !resolved.sha256;
