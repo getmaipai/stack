@@ -2,7 +2,7 @@
 # MaiPai Stack pre-commit gate. Runs the backend checks, then the pinned
 # @maipai/standards core (gitleaks, PII wordlist, prose lint, licence check).
 # Needs two sibling checkouts: getmaipai/.github (the standards) and
-# getmaipai/shared (the @maipai/core the backend imports), each at the
+# getmaipai/commons (the @maipai/core the backend imports), each at the
 # pinned tag; a missing sibling or a wrong version fails here, loud.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -11,17 +11,17 @@ STANDARDS_DIR="${MAIPAI_STANDARDS_DIR:-../.github}"
 STANDARDS_DIR="$(cd "$STANDARDS_DIR" && pwd)"
 export MAIPAI_STANDARDS_DIR="$STANDARDS_DIR"
 
-# The @maipai/core pin (shared tag core-v0.1.0). Bump this line and the
+# The @maipai/core pin (commons tag core-v0.1.0). Bump this line and the
 # file: dependency in backend/package.json together, then `bun install`.
 CORE_PIN="0.1.0"
-SHARED_DIR="${MAIPAI_SHARED_DIR:-../shared}"
-if [ ! -f "$SHARED_DIR/core/package.json" ]; then
-  echo "getmaipai/shared is missing at $SHARED_DIR (set MAIPAI_SHARED_DIR); the backend imports @maipai/core from its core/ workspace."
+COMMONS_DIR="${MAIPAI_COMMONS_DIR:-../commons}"
+if [ ! -f "$COMMONS_DIR/core/package.json" ]; then
+  echo "getmaipai/commons is missing at $COMMONS_DIR (set MAIPAI_COMMONS_DIR); the backend imports @maipai/core from its core/ workspace."
   exit 1
 fi
-CORE_VERSION="$(sed -n 's/^  "version": "\([^"]*\)",$/\1/p' "$SHARED_DIR/core/package.json")"
+CORE_VERSION="$(sed -n 's/^  "version": "\([^"]*\)",$/\1/p' "$COMMONS_DIR/core/package.json")"
 if [ "$CORE_VERSION" != "$CORE_PIN" ]; then
-  echo "@maipai/core at $SHARED_DIR/core is version $CORE_VERSION; this repo pins core-v$CORE_PIN. Check out the tag there or move the pin here."
+  echo "@maipai/core at $COMMONS_DIR/core is version $CORE_VERSION; this repo pins core-v$CORE_PIN. Check out the tag there or move the pin here."
   exit 1
 fi
 

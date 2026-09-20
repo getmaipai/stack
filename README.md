@@ -42,7 +42,7 @@ pins today, engine by engine and model by model, is
 Standards live
 in [getmaipai/.github](https://github.com/getmaipai/.github);
 `scripts/check.sh` is the gate and needs sibling checkouts of
-`getmaipai/.github` and `getmaipai/shared`.
+`getmaipai/.github` and `getmaipai/commons`.
 
 ---
 

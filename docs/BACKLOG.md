@@ -20,7 +20,7 @@ Size tags: **S** (a session or less), **M** (a real slice, days), **L**
 **Execution contract for every item:** read `dev.md` and
 `integrations.md` and the named files before editing. Bun, Hono with
 `@hono/zod-openapi`, Zod, SQLite through Drizzle; `@maipai/core` and
-`@maipai/spec` from the sibling `getmaipai/shared` checkout at the
+`@maipai/spec` from the sibling `getmaipai/commons` checkout at the
 pinned tag; tests in `bun:test`, deterministic and offline, engines
 driven by scripted stand-ins. Every item exits with
 `bash scripts/check.sh` in addition to its named check. Hard-won logic

@@ -76,7 +76,7 @@ to Home.
 
 ## Ownership of fundamentals (one definition, one place)
 
-Libraries live once in `getmaipai/shared` (`ui`, `core`, `spec`) and
+Libraries live once in `getmaipai/commons` (`ui`, `core`, `spec`) and
 every product imports them; the Stack houses no library. Services are
 each owned by one product on the machine: Home owns every human-facing
 one, the Stack owns the engines. This table is that rule applied.
@@ -99,7 +99,7 @@ one, the Stack owns the engines. This table is that rule applied.
 ## Layout
 
 `backend/` (Bun, Hono with `@hono/zod-openapi`, Zod, Drizzle/SQLite;
-imports `@maipai/core` from a sibling `getmaipai/shared` checkout
+imports `@maipai/core` from a sibling `getmaipai/commons` checkout
 pinned by tag, `core-v0.1.0` today, as a `file:` dependency in
 `backend/package.json`; `@maipai/spec` joins it at RF-05), `docs/` (dev tier only:
 `dev.md`, `integrations.md`, `BACKLOG.md`, `api/` generated, `plans/`
