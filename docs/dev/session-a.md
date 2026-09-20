@@ -99,3 +99,30 @@ zero backend files touched): the memory-pressure one from Step 0
 (getmaipai/stack#1) and a newly filed one, `backend/tests/hardware.test.ts`
 failing only inside the full suite (getmaipai/stack#4). Next up per
 `docs/plans/lane-a-continue-2026-09-20.md`.
+
+## Stopped mid UI-12b (2026-09-20, second run on this lane)
+
+Edited, all uncommitted in the working tree: `frontend/src/kit/blocks/pane/PaneContainer.tsx`
+(new), `kit/ui/sheet.tsx`, `kit/blocks/pane/DetailsPane.tsx` and its
+test, `pages/DashboardShell.tsx` (the pane's portal now scopes to the
+shell's content region instead of the viewport); `kit/blocks/browser/CategoryBrowser.tsx`
+and its test (a `secondaryAction` slot); `pages/ModelsPage.tsx` and its
+test (merged detected/installed rows into one table, Type is the
+subtype with roles moved to a Roles column and the pane's capability
+tags, one licence field, a working Sort control); `backend/src/routes/models.ts`,
+`backend/src/lib/gguf.ts` (+`evictGgufFacts`, +tests), `backend/src/lib/modelStore.ts`
+(evicts on remove), `backend/src/showroom/fixture.ts`, `docs/api/openapi.json`
+(regenerated); five re-captures at `docs/assets/screens/models-*.png`.
+All six of the coordinator's UI-12b points (a-f) are done and opened
+against the reference; two real bugs code review found (a stale
+per-file GGUF cache entry after a model is removed, and the scoped
+overlay not following the pane back to a viewport-fixed sheet under
+719px) are fixed and tested. The one code-review finding left open:
+`selectedIds` now mixes `model:`/`detected:` row ids in one selection
+state on the merged table, harmless today since nothing reads
+`selectedIds` yet, but a foot-gun for whoever wires the first bulk
+action against it. `bash scripts/check.sh` was full green on this
+exact diff immediately before the stop order arrived. To resume:
+read the diff (`git status`, `git diff`), decide on the open
+`selectedIds` finding, run the gate once more, code-review, commit,
+push.
