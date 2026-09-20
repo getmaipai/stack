@@ -212,3 +212,19 @@ test("the uv rows are never reported as running an older build while tts serves"
     rmSync(engineTagRoot("uv", "0.12.17").replace(/\/0\.12\.17$/, ""), { recursive: true, force: true });
   }
 });
+
+test("a Pocket TTS environment built before the marker rename is recognised and renamed once", async () => {
+  const { ENGINE_READY_MARKER } = await import("@/lib/engineCatalog");
+  const { ENV_READY_MARKER } = await import("@/lib/uvEnvironment");
+  const { writeEngineManifest } = await import("@/lib/store/manifests");
+  const { pocketTtsInstalled, pocketTtsRoot, pocketTtsBinary } = await import("@/speech/pocketTts");
+  const root = pocketTtsRoot();
+  mkdirSync(join(root, "venv", "bin"), { recursive: true });
+  writeFileSync(pocketTtsBinary(), "");
+  writeFileSync(join(root, ENGINE_READY_MARKER), "old");
+  writeEngineManifest({ kind: "engine", name: "pocket-tts", tag: "3.1.0", assetUrl: "requirements:pocket-tts.darwin-arm64.requirements.txt", sizeBytes: 0, sha256: "", extractedAt: "now", blobs: [] });
+  expect(pocketTtsInstalled()).toBe(true);
+  expect(existsSync(join(root, ENV_READY_MARKER))).toBe(true);
+  expect(existsSync(join(root, ENGINE_READY_MARKER))).toBe(false);
+  rmSync(join(root, ".."), { recursive: true, force: true });
+});

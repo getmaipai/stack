@@ -158,7 +158,7 @@ Engines per platform:
 | `uv-0.12.17-macos-arm64` | 0.12.17 | darwin arm64 | pinned, verified (the tool that builds the tts environment) |
 | `uv-0.12.17-linux-arm64` | 0.12.17 | linux arm64 | pinned, not yet verified (the tool that builds the tts environment) |
 | `uv-0.12.17-linux-x64` | 0.12.17 | linux x64 | pinned, not yet verified (the tool that builds the tts environment) |
-| `pocket-tts` | 3.1.0 | macOS arm64 (a hashed requirements file per platform; the Linux files land with the first Linux tts run) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/); updates with the Stack's release |
+| `pocket-tts` | 3.1.0 | macOS arm64 (a hashed requirements file per platform; the Linux files land with the first Linux tts run) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
@@ -190,14 +190,17 @@ Engines per platform:
 
 | Engine | Build | Platform | Status |
 |---|---|---|---|
-| ComfyUI (managed) | | | candidate (dev.md, Jobs; STACK-13) |
+| `comfyui-v0.36.0-macos-arm64` | v0.36.0 | darwin arm64 | pinned, verified (the engine's source; its environment is the row below) |
+| `comfyui-v0.36.0-linux-arm64` | v0.36.0 | linux arm64 | pinned, not yet verified (the engine's source; its environment is the row below) |
+| `comfyui-v0.36.0-linux-x64` | v0.36.0 | linux x64 | pinned, not yet verified (the engine's source; its environment is the row below) |
+| `comfyui` | v0.36.0 | macOS arm64 (a hashed requirements file per platform; the source archive is the same on every platform) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
 | p16 | not available |  |  |  |  |  |  |  | not available |
 | p32 | not available |  |  |  |  |  |  |  | not available |
-| p64 | on demand |  |  |  |  |  |  |  | not yet |
-| p128 | on demand |  |  |  |  |  |  |  | not yet |
+| p64 | on demand | `sd-1-5-emaonly` | fp32 | 3.97 GB | not measured | not measured | CreativeML-OpenRAIL-M | stable-diffusion-v1-5/stable-diffusion-v1-5 @ 451f4fe16113bff5a5d2269ed5ad43b0592e9a14 | pinned |
+| p128 | on demand | `sd-1-5-emaonly` | fp32 | 3.97 GB | not measured | not measured | CreativeML-OpenRAIL-M | stable-diffusion-v1-5/stable-diffusion-v1-5 @ 451f4fe16113bff5a5d2269ed5ad43b0592e9a14 | pinned |
 
 ## video (Video)
 
@@ -205,7 +208,7 @@ Engines per platform:
 
 | Engine | Build | Platform | Status |
 |---|---|---|---|
-| ComfyUI (managed) | | | candidate (dev.md, Jobs; STACK-13) |
+| ComfyUI (managed), the same environment as image | | | candidate (dev.md, Jobs; a later item) |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|

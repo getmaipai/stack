@@ -110,18 +110,59 @@ export const ENGINE_BINARIES: EngineBinaryPin[] = [
     archive: { label: "uv (Linux x64)", url: "https://github.com/astral-sh/uv/releases/download/0.12.17/uv-x86_64-unknown-linux-gnu.tar.gz", sha256: "fa82fd8dde8e8eefdecada6aa0889666556cfceb690d06e0c3bca49eb3070a63", approxBytes: 19_755_224 },
     verified: false,
   },
+  {
+    id: "comfyui-v0.36.0-macos-arm64",
+    name: "comfyui",
+    tag: "v0.36.0",
+    platform: "darwin",
+    arch: "arm64",
+    tool: "main.py",
+    requiresNvidia: false,
+    label: "ComfyUI v0.36.0 source (the same archive on every platform)",
+    docsUrl: "https://github.com/comfyanonymous/ComfyUI/tree/v0.36.0",
+    archive: { label: "ComfyUI v0.36.0 source", url: "https://github.com/comfyanonymous/ComfyUI/archive/refs/tags/v0.36.0.tar.gz", sha256: "ab0d2f14e6a20616c6019d7af733aa897507a9a34ed0e88cec9d9c574065e8a1", approxBytes: 12_479_903 },
+    verified: true,
+  },
+  {
+    id: "comfyui-v0.36.0-linux-arm64",
+    name: "comfyui",
+    tag: "v0.36.0",
+    platform: "linux",
+    arch: "arm64",
+    tool: "main.py",
+    requiresNvidia: false,
+    label: "ComfyUI v0.36.0 source (the same archive on every platform)",
+    docsUrl: "https://github.com/comfyanonymous/ComfyUI/tree/v0.36.0",
+    archive: { label: "ComfyUI v0.36.0 source", url: "https://github.com/comfyanonymous/ComfyUI/archive/refs/tags/v0.36.0.tar.gz", sha256: "ab0d2f14e6a20616c6019d7af733aa897507a9a34ed0e88cec9d9c574065e8a1", approxBytes: 12_479_903 },
+    verified: false,
+  },
+  {
+    id: "comfyui-v0.36.0-linux-x64",
+    name: "comfyui",
+    tag: "v0.36.0",
+    platform: "linux",
+    arch: "x64",
+    tool: "main.py",
+    requiresNvidia: false,
+    label: "ComfyUI v0.36.0 source (the same archive on every platform)",
+    docsUrl: "https://github.com/comfyanonymous/ComfyUI/tree/v0.36.0",
+    archive: { label: "ComfyUI v0.36.0 source", url: "https://github.com/comfyanonymous/ComfyUI/archive/refs/tags/v0.36.0.tar.gz", sha256: "ab0d2f14e6a20616c6019d7af733aa897507a9a34ed0e88cec9d9c574065e8a1", approxBytes: 12_479_903 },
+    verified: false,
+  },
 ];
 
 /** The role each engine name serves, for the routes that act on "the
  * engine's role" (start, stop, restart, the swap's drain). */
-export const ENGINE_ROLE: Record<string, "chat" | "tts"> = { "llama-server": "chat", uv: "tts", "pocket-tts": "tts" };
-export function engineRole(name: string): "chat" | "tts" { return ENGINE_ROLE[name] ?? "chat"; }
+export type EngineRole = "chat" | "tts" | "image";
+export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", uv: "tts", "pocket-tts": "tts", comfyui: "image" };
+export function engineRole(name: string): EngineRole { return ENGINE_ROLE[name] ?? "chat"; }
 
 /** Runtimes the Stack assembles from pinned wheels through uv, in an
  * environment under data/engines/<name>/<version>/ (STACK-94c). */
 export interface ManagedRuntime { name: string; version: string; roles: string[]; platforms: string; }
 export const MANAGED_RUNTIMES: ManagedRuntime[] = [
   { name: "pocket-tts", version: "3.1.0", roles: ["tts"], platforms: "macOS arm64 (a hashed requirements file per platform; the Linux files land with the first Linux tts run)" },
+  { name: "comfyui", version: "v0.36.0", roles: ["image"], platforms: "macOS arm64 (a hashed requirements file per platform; the source archive is the same on every platform)" },
 ];
 
 export const ENGINE_READY_MARKER = ".engine-ready";

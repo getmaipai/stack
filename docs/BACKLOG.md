@@ -145,26 +145,41 @@ are never copied. Nothing migrates Home until STACK-16.
   OpenAI's image shape, 202 with the id past its deadline. Driven by a
   scripted sidecar in `tests/generatorQueue.test.ts`. Landed on `main`
   with this line.
-- [ ] **STACK-13b (M): ComfyUI as a managed engine.** A pinned ComfyUI
-  release built into an environment through the pinned uv the way
-  Pocket TTS is (`backend/src/speech/pocketTts.ts` is the mirror), a
-  pinned small image model with sha256 in the store, the `image` role's
-  runner registered with its memory estimate so
-  `/v1/images/generations` returns real images through the queue,
-  identity headers from the managed process, cancel interrupting the
-  ComfyUI queue. Acceptance: one image renders live on the dev machine
-  if the governor admits it, otherwise the refusal numbers recorded as
-  with STACK-96 and the live pass becomes 13b-live. Files:
-  `backend/src/lib/engineCatalog.ts`, `backend/src/lib/modelCatalog.ts`,
-  `backend/src/lib/supervisor.ts`, `backend/src/generators/`,
-  `backend/src/routes/v1.ts`. Mirror: the Pocket TTS environment and
-  launch; ComfyUI's `/prompt`, `/history` and `/interrupt` routes. Out
-  of scope: video and music engines; image editing; any UI. Exit:
-  `bash scripts/check.sh` and the live render (or the refusal) in
-  `dev.md`.
+- [x] **STACK-13b (M): ComfyUI as a managed engine.** ComfyUI v0.36.0
+  as an engine archive plus a venv the Stack builds through the pinned
+  uv from a hashed requirements file (one builder with Pocket TTS);
+  Stable Diffusion 1.5 EMA-only as the pinned checkpoint with sha256,
+  linked into ComfyUI's folder; the `image` role's runner rendering one
+  text-to-image graph through ComfyUI's queue with cancel; the
+  generator's checkpoint-list probe; the engines routes building the
+  environment as one job. The graph proven on the dev machine outside
+  the governor (a lighthouse in 18.3 s); through the Stack the governor
+  refused the engine with its numbers, recorded in `dev.md` "The image
+  role". Landed on `main` with this line.
+- [ ] **13b-live (S): the render through the Stack.** Rerun
+  `bash scripts/prove-image.sh` with about 2 GB more free than the
+  laptop had (needs 5.2 GB with the p16 margin of 4 GB) or on the
+  Studio and record the transcript in `dev.md` beside the refusal:
+  the engine's start, the checkpoint's load, the render's time, the
+  measured footprint, the readiness check ok. Files: `docs/dev.md`.
+  Mirror: the tts live table. Out of scope: any code change; if the
+  run finds one, it is its own item. Exit: `bash scripts/check.sh
+  --docs` and the table in `dev.md`.
 
 ## Governor and sizing
 
+- [ ] **STACK-06d (S): the governor's tier follows the machine.**
+  `startGovernor` takes a `tier` and nothing passes one (the supervisor
+  starts it per process without it), so the active tier stays the
+  `p16` default on every machine and a 128 GB Studio keeps back 4 GB,
+  not the table's 20 GB. Objective: the daemon sets the tier from
+  `proposeProfile` at start and when the hardware reading changes, and
+  `GET /stack/v1/hardware/budget` reports it. Files:
+  `backend/src/lib/governor.ts`, `backend/src/daemon.ts`,
+  `backend/src/routes/hardware.ts`. Mirror: the tier table in
+  `governor.ts`. Out of scope: the margins themselves. Exit: `bash
+  scripts/check.sh` with a test that a p128 hardware reading sets the
+  p128 margin.
 - [ ] **STACK-06c (S): the governor drains its queue on memory
   changes.** Today a queued request is re-admitted only inside
   `release()`, so a request queued for pressure or the working margin

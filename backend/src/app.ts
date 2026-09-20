@@ -20,6 +20,7 @@ import { hardwareRoutes } from "@/routes/hardware";
 import { settingsRoutes } from "@/routes/settings";
 import { declarationRoutes } from "@/routes/declarations";
 import { speechRoutes, websocket } from "@/routes/speech";
+import { registerGenerators } from "@/generators";
 import { SESSION_PATH } from "@/speech/server";
 
 /** The websocket handler Bun.serve needs beside `app.fetch` for the
@@ -28,6 +29,9 @@ export { websocket };
 
 export const version = packageJson.version;
 export const app = apiRouter<AppEnv>();
+// The generator runners exist from the first request; a role with no
+// engine still answers the honest 503 through the route's bound check.
+registerGenerators();
 
 const livenessRoute = createRoute({
   method: "get", path: "/healthz", tags: ["Health"], summary: "Stack process liveness",

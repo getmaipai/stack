@@ -10,10 +10,19 @@ import { eventsAfter } from "@/lib/events";
 import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, getGovernorStatus, release, type GovernorHandle } from "@/lib/governor";
 import { __resetHealthForTests } from "@/lib/health";
 import { __resetJobsForTests, cancelJob, getJob, registerJobRunner, submitJob, waitForJob, type Job } from "@/lib/jobs";
+import { clearModelsForTests, upsertModel } from "@/lib/modelStore";
+import { resetSupervisorForTests, scriptedProcess, setSupervisorFactoryForTests } from "@/lib/supervisor";
 
 const GB = 1_073_741_824;
-beforeEach(() => { __resetHealthForTests(); __resetJobsForTests(); __resetGovernorForTests(); __setGovernorTuningForTestsOnly({ totalMemoryBytes: 32 * GB, freeMemoryBytes: 24 * GB, tier: "p32" }); });
-afterEach(() => { __resetJobsForTests(); __resetGovernorForTests(); });
+beforeEach(() => { __resetHealthForTests(); __resetJobsForTests(); __resetGovernorForTests(); __setGovernorTuningForTestsOnly({ totalMemoryBytes: 32 * GB, freeMemoryBytes: 24 * GB, tier: "p32" }); clearModelsForTests(); });
+afterEach(() => { __resetJobsForTests(); __resetGovernorForTests(); clearModelsForTests(); setSupervisorFactoryForTests(null); resetSupervisorForTests(); });
+
+/** An image model on the store and a scripted engine, so the images
+ * route sees a bound role with an engine and reaches the queue. */
+function imageRoleBound(): void {
+  upsertModel({ id: "image-test", roles: ["image"], source: "catalog", provenance: {}, revision: "r", sha256: "d".repeat(64), licence: "CreativeML-OpenRAIL-M", verifiedAt: new Date().toISOString(), modelPath: "/tmp/never/image.safetensors" });
+  setSupervisorFactoryForTests(async (role) => scriptedProcess(role));
+}
 
 /** The scripted sidecar: renders in four steps of `stepMs`, honours the
  * abort signal, returns one image. */
@@ -112,6 +121,7 @@ test("cancel removes a queued render and renumbers the rest, and aborts a runnin
 });
 
 test("POST /v1/images/generations waits for the render and answers in OpenAI's image shape; past its deadline it answers 202 with the job id", async () => {
+  imageRoleBound();
   scriptedSidecar({ stepMs: 10 });
   const response = await app.request("/v1/images/generations", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: "image", prompt: "a lighthouse" }) });
   expect(response.status).toBe(200);
@@ -129,9 +139,10 @@ test("POST /v1/images/generations waits for the render and answers in OpenAI's i
   expect(done?.state).toBe("done");
 });
 
-test("with no generator installed the images route is an honest 503, and a submit is refused with the reason", async () => {
+test("with no image model or no engine installed the images route is an honest 503, and a submit with no runner is refused with the reason", async () => {
   const response = await app.request("/v1/images/generations", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: "image", prompt: "x" }) });
   expect(response.status).toBe(503);
+  __resetJobsForTests();
   const result = submitJob({ kind: "image" });
   expect(result).toMatchObject({ refused: true, reason: expect.stringContaining("No engine on this machine can run image jobs") });
 });

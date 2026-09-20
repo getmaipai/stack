@@ -8,7 +8,7 @@ import type { AppEnv } from "@/types";
 import { identityHeaders } from "@/lib/identity";
 import { noEngineResponse, resolveRole, UnknownRoleError, UnverifiedModelError } from "@/lib/router";
 import { ROLE_IDS, ROLES, type RoleId } from "@/roles";
-import { EngineUnavailableError, requestRole, speakRole, speechForm, streamRole } from "@/lib/supervisor";
+import { EngineUnavailableError, requestRole, roleHasEngine, roleIsBound, speakRole, speechForm, streamRole } from "@/lib/supervisor";
 import { listModels } from "@/lib/modelStore";
 import { hasJobRunner, submitJob, waitForJob } from "@/lib/jobs";
 import { RoleRequest } from "@/spec/ts/role-request";
@@ -72,7 +72,7 @@ async function reply<T extends Context>(c: T, wire: Wire, body: Record<string, u
       // for it up to timeout_ms (two minutes when unsaid) and answers in
       // OpenAI's image shape; past the deadline the job goes on and the
       // reply carries its id, 202, for Home to fetch by id.
-      if (!hasJobRunner(role)) { const result = noEngineResponse(role); return jsonReply(c, result.body, result.status, result.headers); }
+      if (!hasJobRunner(role) || !roleIsBound(role) || !roleHasEngine(role)) { const result = noEngineResponse(role, !roleHasEngine(role) ? `No ${role} engine is installed on this machine.` : undefined); return jsonReply(c, result.body, result.status, result.headers); }
       const submitted = submitJob({ kind: role, role, input: body });
       if ("refused" in submitted) return jsonReply(c, { ...noEngineResponse(role, submitted.reason).body }, 503, identityHeaders(null));
       const timeoutMs = typeof body.timeout_ms === "number" && body.timeout_ms > 0 ? body.timeout_ms : DEFAULT_RENDER_WAIT_MS;

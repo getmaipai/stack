@@ -103,7 +103,7 @@ caller (principle 1: no second copy of identity).
   |---|---|
   | See what this computer can run: the hardware facts, the profile tier, measured fit per role, worded for a dad by Home | `GET /stack/v1/hardware`, `GET /stack/v1/roles` (the bound model's measured or estimated footprint), `GET /stack/v1/hardware/budget` |
   | Choose the features you want: roles on or off (a role off is its engine unloaded and not started on demand) | `GET /stack/v1/roles`; `POST /stack/v1/models/{id}/actions` (`load`, `unload`, `pin`, `unpin`); `POST /stack/v1/engines/{name}/{start,stop}` |
-  | Install, reinstall or remove an engine or a model, including LoRAs and sidecars for image and video once STACK-13b lands, with progress | `POST /stack/v1/engines/{name}/install`, `PUT /stack/v1/engines/{name}/current`, `DELETE /stack/v1/engines/{name}/builds/{tag}`; `POST /stack/v1/models` (pull by pin), `POST /stack/v1/models/import`, `DELETE /stack/v1/models/{id}`; progress on `job.progress` and `GET /stack/v1/jobs/{id}` |
+  | Install, reinstall or remove an engine or a model, including the image engine and its checkpoint (STACK-13b; LoRAs and video sidecars later), with progress | `POST /stack/v1/engines/{name}/install`, `PUT /stack/v1/engines/{name}/current`, `DELETE /stack/v1/engines/{name}/builds/{tag}`; `POST /stack/v1/models` (pull by pin), `POST /stack/v1/models/import`, `DELETE /stack/v1/models/{id}`; progress on `job.progress` and `GET /stack/v1/jobs/{id}` |
   | Repairs: the problem list with one fix each, the fix button | `GET /stack/v1/health`; `POST /stack/v1/health/{code}/{fix,resolve,ignore}`; `POST /stack/v1/check` and `GET /stack/v1/check/latest` for "Check now" |
   | Updates as installed, available, last checked, go back | `GET /stack/v1/updates`, `POST /stack/v1/updates/check`, `POST /stack/v1/updates/engines/{name}/{apply,rollback}` |
   | The Stack's settings, in Home's generic settings renderer: no second declaration shape, because every Stack setting is a `home/spec` `SettingsKey` (scope `device`, `lives_in: stack`, keys under `stack.*`) plus `needs_restart`, `in_effect` and `pending` | `GET /stack/v1/settings` (the `StackSetting` list), `PUT /stack/v1/settings`, `POST /stack/v1/settings/apply` |
@@ -183,10 +183,11 @@ caller (principle 1: no second copy of identity).
 
 ## What the Stack still owes Home for these
 
-Nothing on this list is blocked on the Stack today except by scope
-already in the Stack's backlog: STACK-13b (the
-managed ComfyUI, which items 4 and 6 need for images). The speech
-roles item 2's voice path needs landed with STACK-94b and 94c, systemd
-for item 1 on the robot with STACK-95, and the Catalog engine index
-for item 5 with STACK-97. Each is filed in `stack/docs/BACKLOG.md`
-with its own acceptance.
+Nothing on this list is blocked on the Stack today. The generator
+jobs and the managed ComfyUI items 4 and 6 need for images landed with
+STACK-13a and 13b (the render through the Stack itself waits on
+13b-live, a memory matter, not a code one), the speech roles item 2's
+voice path needs with STACK-94b and 94c, systemd for item 1 on the
+robot with STACK-95, and the Catalog engine index for item 5 with
+STACK-97. Each is filed in `stack/docs/BACKLOG.md` with its own
+acceptance.

@@ -49,12 +49,14 @@ export function modelFileName(path: string): string {
   return path.split(/[\\/]/).pop() || path;
 }
 
-export async function readEngineIdentity(url: string, timeoutMs = 3_000): Promise<EngineIdentity> {
+export async function readEngineIdentity(url: string, timeoutMs = 3_000, healthPath = "/health"): Promise<EngineIdentity> {
   const base = url.replace(/\/$/, "");
   const [healthy, props] = await Promise.all([
-    // llama-server and the speech worker say `ok`; Pocket TTS says `healthy`.
-    fetch(`${base}/health`, { signal: AbortSignal.timeout(timeoutMs) })
-      .then(async (res) => { if (!res.ok) return false; const status = ((await res.json()) as { status?: string }).status; return status === "ok" || status === "healthy"; })
+    // llama-server and the speech worker say `ok`; Pocket TTS says
+    // `healthy`; an engine with a different liveness route (ComfyUI's
+    // /system_stats) is alive on any 2xx there.
+    fetch(`${base}${healthPath}`, { signal: AbortSignal.timeout(timeoutMs) })
+      .then(async (res) => { if (!res.ok) return false; if (healthPath !== "/health") return true; const status = ((await res.json()) as { status?: string }).status; return status === "ok" || status === "healthy"; })
       .catch(() => false),
     fetch(`${base}/props`, { signal: AbortSignal.timeout(timeoutMs) })
       .then(async (res) => (res.ok ? ((await res.json()) as Props) : {}))

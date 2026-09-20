@@ -128,9 +128,29 @@ export const STACK_TTS_VOICE: CatalogModelLike = {
   },
 };
 
+// The `image` pin (STACK-13b): Stable Diffusion 1.5, the EMA-only
+// single-file checkpoint, the smallest mainstream file ComfyUI's plain
+// checkpoint loader takes, from the maintained mirror of the original
+// repository. CreativeML Open RAIL-M, from the repository's card; the
+// use terms are the person's, as every model's are.
+export const STACK_IMAGE_MODEL: CatalogModelLike = {
+  id: "sd-1-5-emaonly",
+  role: "image",
+  repo: "stable-diffusion-v1-5/stable-diffusion-v1-5",
+  license: "CreativeML-OpenRAIL-M",
+  revision: "451f4fe16113bff5a5d2269ed5ad43b0592e9a14",
+  engine: "comfyui",
+  sizing: { profile: "p16", quantization: "fp32" },
+  download: {
+    url: hfUrl("stable-diffusion-v1-5/stable-diffusion-v1-5/resolve/451f4fe16113bff5a5d2269ed5ad43b0592e9a14/v1-5-pruned-emaonly.safetensors"),
+    sha256: "6ce0161689b3853acaa03779ec93eafe75a02f4ced659bee03f50797806fa2fa",
+    approx_bytes: 4_265_146_304,
+  },
+};
+
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_IMAGE_MODEL];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a
@@ -147,10 +167,7 @@ export const ROLE_CANDIDATES: Partial<Record<string, RoleCandidate[]>> = {
   tts: [
     { name: "Kokoro 82M through the stt worker's runtime, rejected by the owner's ear on 2026-09-04; the alternative if he reverses it", kind: "model", source: "dev.md, The speech roles" },
   ],
-  image: [
-    { name: "ComfyUI (managed)", kind: "engine", source: "dev.md, Jobs; STACK-13" },
-  ],
   video: [
-    { name: "ComfyUI (managed)", kind: "engine", source: "dev.md, Jobs; STACK-13" },
+    { name: "ComfyUI (managed), the same environment as image", kind: "engine", source: "dev.md, Jobs; a later item" },
   ],
 };

@@ -8,7 +8,8 @@
 // that module drives it. Until a runner is registered for a kind, a
 // submit for it is refused with a reason rather than left queued.
 import { emit } from "@/lib/events";
-import { admit, getGovernorDecisions, getGovernorStatus, getRunState, GovernorRules, release, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
+import { release, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
+import { __setAdmissionTuningForTests, AdmissionRefusedError, waitForAdmission } from "@/lib/admission";
 import { StackJob, StackJobState } from "@/spec/ts/stack-job";
 
 export const JobStateSchema = StackJobState;
@@ -38,11 +39,6 @@ const queues = new Map<string, Job[]>();
 /** The generator job in flight per role, if any. */
 const inFlight = new Map<string, string>();
 const KEEP_FINISHED = 200;
-const ADMISSION_POLL_MS = 250;
-/** How often a request waiting on nothing loaded asks the governor to
- * look again: its own poll interval, so the "work is waiting for
- * memory" warning it raises after three refusals means a real wait. */
-let kickMs: number = GovernorRules.pollMs;
 
 export function registerJobRunner(kind: string, runner: JobRunner, options: JobRunnerOptions = {}): void { runners.set(kind, { run: runner, options }); }
 export function hasJobRunner(kind: string): boolean { return runners.has(kind); }
@@ -165,99 +161,24 @@ async function pump(role: string): Promise<void> {
   run(job, runner, () => { release(handle!); settle(); });
 }
 
-/** The peak the governor will compute for a request, mirrored from its
- * `peakFor` so a refusal here agrees with an admission there. */
-function governorPeak(request: GovernorRequest): number {
-  if (request.measuredPeakBytes && request.measuredPeakBytes > 0) return request.measuredPeakBytes;
-  if (!request.modelFileBytes) return request.requestedBytes;
-  const multiplier = GovernorRules.engineMultipliers[request.engine as keyof typeof GovernorRules.engineMultipliers] ?? GovernorRules.engineMultipliers.default;
-  return Math.ceil(request.modelFileBytes * multiplier);
-}
-
-/** Why a request vanished from the governor's queue without admission:
- * a pause (the governor clears its queue and records nothing), or a
- * refusal recorded since the wait began (a re-admission on a release
- * that found the queue full); never the stale reason it was queued for. */
-function governorReasonFor(id: string, since: string): string {
-  if (getRunState() !== "running") return "The Stack is paused.";
-  const refused = getGovernorDecisions().find((decision) => decision.model === id && decision.decision === "Refused" && decision.at >= since);
-  return refused?.reason ?? "The governor dropped the request from its queue.";
-}
-
 /** The governor's answer for one job: the handle once admitted, null
  * when the job was cancelled while waiting (the role is settled at
  * once through `onCancelled`, and the admission, if it ever lands, is
- * released by a watcher left behind), a thrown reason when refused. */
+ * released by the watcher `waitForAdmission` leaves behind), a thrown
+ * reason when refused. */
 async function admitJob(jobId: string, request: GovernorRequest, onCancelled: () => void): Promise<GovernorHandle | null> {
-  // A peak the budget can never hold is refused now with the numbers,
-  // not queued for memory that will not come.
-  const status = getGovernorStatus();
-  const peak = governorPeak(request);
-  if (peak > status.capBytes) throw new Error(`The render needs about ${gb(peak)} GB; the memory budget for models is ${gb(status.capBytes)} GB.`);
-  const answer = await admit(request);
-  if ("refused" in answer) throw new Error(answer.reason);
-  if (!("queued" in answer)) return answer;
-  updateJob(jobId, { status: `waiting for memory (${answer.position} ahead)` });
-  // Queued in the governor: it admits a queued request only inside a
-  // release, and says nothing, so the loaded set is watched for it.
-  // When nothing it waits on is loaded (the wait was pressure or the
-  // working margin), no release will ever come; a release of a handle
-  // the governor does not hold is its one public way to re-run its
-  // queue head, and it is used for that until the governor drains on
-  // memory changes itself (BACKLOG, the governor area).
-  const waitStartedAt = new Date().toISOString();
-  let cancelledAt: number | null = null;
-  let lastKick = Date.now();
-  while (true) {
-    await new Promise((resolve) => setTimeout(resolve, ADMISSION_POLL_MS));
-    const current = getGovernorStatus();
-    const admitted = current.loaded.find((item) => item.id === request.id);
-    if (admitted) {
-      const handle: GovernorHandle = { id: request.id, kind: "generator", requestedBytes: admitted.peakBytes };
-      if (cancelledAt !== null || jobs.get(jobId)?.state !== "running") {
-        // Admitted in the same window the cancel landed: the role is
-        // settled here if the cancel was not seen yet, and the admission goes back.
-        release(handle);
-        if (cancelledAt === null) onCancelled();
-        return null;
-      }
-      return handle;
-    }
-    const waiting = current.queue.find((item) => item.id === request.id);
-    if (!waiting) {
-      if (cancelledAt !== null) return null;
-      if (jobs.get(jobId)?.state === "running") throw new Error(governorReasonFor(request.id, waitStartedAt));
-      onCancelled();
-      return null;
-    }
-    if (cancelledAt === null && jobs.get(jobId)?.state !== "running") {
-      // Cancelled while waiting: the role moves on now; this loop stays
-      // only to release the admission if the governor grants it later.
-      cancelledAt = Date.now();
-      onCancelled();
-    }
-    if (cancelledAt === null) updateJob(jobId, { status: `waiting for memory (${waiting.position} ahead)` });
-    // The kick, for a live wait and for a cancelled one alike (a phantom
-    // at the head would otherwise hold the live requests behind it):
-    // whenever this request is anywhere in the governor's queue, nothing
-    // loaded is a generator and pressure is normal. A kick that still
-    // cannot admit the head moves it to the back of the governor's
-    // queue (its admit re-pushes), so the order among waiting requests
-    // rotates until one fits; STACK-06c retires the whole mechanism.
-    // A cancelled wait kicks only while a live wait of this module sits
-    // behind its phantom; alone, it just watches, so the governor's
-    // "work is waiting for memory" warning never fires for a job nobody
-    // is waiting on.
-    const liveWaiting = cancelledAt === null || current.queue.some((item) => item.id !== request.id && jobs.get(item.id)?.state === "running");
-    const generatorLoaded = current.loaded.some((item) => item.kind === "generator");
-    if (liveWaiting && !generatorLoaded && current.pressure === "normal" && Date.now() - lastKick >= kickMs) {
-      lastKick = Date.now();
-      release({ id: `kick:${request.id}`, kind: "generator", requestedBytes: 0 });
-    }
+  try {
+    return await waitForAdmission(request, {
+      stillWanted: () => jobs.get(jobId)?.state === "running",
+      onGaveUp: onCancelled,
+      onPosition: (position) => { updateJob(jobId, { status: `waiting for memory (${position} ahead)` }); },
+    });
+  } catch (error) {
+    if (error instanceof AdmissionRefusedError) throw new Error(error.message.replace(/^job-[^ ]+ needs/, "The render needs"));
+    throw error;
   }
 }
 
-function gb(bytes: number): string { return (bytes / 1_073_741_824).toFixed(1); }
 
 export function cancelJob(id: string): Job | null {
   const job = jobs.get(id);
@@ -291,5 +212,5 @@ export async function waitForJob(id: string, timeoutMs: number): Promise<Job | n
 export function __resetJobsForTests(options: { kickMs?: number } = {}): void {
   for (const controller of controllers.values()) controller.abort();
   controllers.clear(); jobs.clear(); runners.clear(); queues.clear(); inFlight.clear();
-  kickMs = options.kickMs ?? GovernorRules.pollMs;
+  __setAdmissionTuningForTests(options);
 }

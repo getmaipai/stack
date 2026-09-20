@@ -458,19 +458,21 @@ modules, never queued here.
 One governor fact the queue works around rather than owns: the
 governor drains its queue only inside a release, so a request it
 queued for pressure or the working margin, with nothing loaded, would
-wait forever after memory freed. The queue's poll therefore, when its
-request is at the head, nothing loaded is a generator and pressure is
-normal, releases a handle the governor does not hold, its one public
-way to re-run the queue head, no more often than the governor's own
-poll interval, so the "work is waiting for memory" warning the
-governor raises after three refusals still means a real wait; a
-cancelled job's watcher kicks the same way, so its phantom at the head
-never holds a live request behind it. A kick that still cannot admit
-the head moves that request to the back of the governor's queue, so
-the order among waiting requests rotates until one fits: a known limit
-of the workaround. The governor draining on memory changes itself,
-with a callback the caller can wait on, is STACK-06c in the backlog;
-when it lands the kick and the poll go.
+wait forever after memory freed. The wait (`backend/src/lib/admission.ts`,
+shared with an engine start since STACK-13b) therefore, when its
+request sits in the governor's queue, nothing it waits on is loaded
+and pressure is normal, releases a handle the governor does not hold,
+its one public way to re-run the queue head, no more often than the
+governor's own poll interval, so the "work is waiting for memory"
+warning the governor raises after three refusals still means a real
+wait; a given-up wait's watcher kicks only while a live wait sits
+behind its phantom, so a phantom at the head never holds a live
+request and a lone phantom never raises the warning. A kick that
+still cannot admit the head moves that request to the back of the
+governor's queue, so the order among waiting requests rotates until
+one fits: a known limit of the workaround. The governor draining on
+memory changes itself, with a callback the caller can wait on, is
+STACK-06c in the backlog; when it lands the kick and the poll go.
 
 `/v1/images/generations` submits and waits up to `timeout_ms` (two
 minutes unsaid) and answers in OpenAI's image shape with the job id,
@@ -1191,6 +1193,114 @@ pin's `hub_file` placement when the body left it out, so the files
 landed in the plain store and the engine fetched its own copies (the
 first byte then 15.7 s); the route now completes a body from the
 Stack's own pin as it does from the Catalog's index, with a test.
+
+## The image role: ComfyUI as a managed engine (STACK-13b, 2026-09-20)
+
+ComfyUI is the `image` role's engine, managed the way Pocket TTS is
+(one builder for both, `backend/src/lib/uvEnvironment.ts`): its
+release `v0.36.0` (2026-09-15) arrives as an engine archive, the tag's
+source tarball from GitHub (12.5 MB, sha256 `ab0d2f14…`, the same
+file on every platform, pinned per machine so the selectors stay one
+shape; a tarball GitHub regenerated with different bytes would be a
+checksum refusal and a deliberate re-pin), extracted to
+`data/engines/comfyui/v0.36.0/` with `main.py` at its root; the
+environment is a venv beside it, built by the pinned uv from
+`backend/src/generators/comfyui.darwin-arm64.requirements.txt`
+(2,150 lines, 2,065 hashes, compiled from the release's own
+`requirements.txt`: torch 2.11.0, torchvision 0.26.0, transformers
+5.17.0, the ComfyUI frontend package 1.52.7 and the rest). `POST
+/stack/v1/engines/comfyui/install` is one job: the archive, uv, a
+managed Python 3.12, the wheels; a second request joins it. ComfyUI's
+own base directory (its model folders, inputs, outputs, temp, user
+settings, the empty `custom_nodes` it lists before it serves) is
+`data/generators/comfyui/`, never inside the source tree. The launch
+is `<venv>/bin/python main.py --listen 127.0.0.1 --port <free>
+--base-directory <base> --disable-auto-launch --disable-metadata
+--dont-print-server`, with HOME and every cache under `data/` and no
+manager, no API nodes and no telemetry; `GET /system_stats` is its
+liveness (any 2xx), and the identity headers say `local
+comfyui-v0.36.0` and the checkpoint file.
+
+The checkpoint is a store pin: Stable Diffusion 1.5, the EMA-only
+single-file `v1-5-pruned-emaonly.safetensors` (4,265,146,304 bytes,
+sha256 `6ce01616…`) from the maintained mirror
+`stable-diffusion-v1-5/stable-diffusion-v1-5` at revision `451f4fe1…`,
+CreativeML Open RAIL-M from the repository's card. It is the smallest
+mainstream file ComfyUI's plain checkpoint loader takes; the distilled
+alternatives on the hub (`segmind/tiny-sd`, `nota-ai/bk-sdm-tiny`) ship
+in the diffusers folder layout across several files, and `sd-turbo`'s
+single file is 5.2 GB under a research licence. The launch links the
+store's file into ComfyUI's checkpoints folder, so the file it loads
+is the store's, with its provenance and checksum.
+
+The render is a job (STACK-13a): the runner registered for `image`
+gets the role's living process from the supervisor (started and
+admitted like every engine, its checkpoint a resident at the file
+times the engine's multiplier until measured, evicted by the
+supervisor's idle unload like any role's), holds it as one request,
+and runs one text-to-image graph through ComfyUI's own queue:
+`CheckpointLoaderSimple`, two `CLIPTextEncode` (the prompt and the
+negative prompt), `EmptyLatentImage` (the size, multiples of eight),
+`KSampler` (steps, seed, cfg, euler), `VAEDecode`, `SaveImage`.
+`POST /prompt` queues it, `GET /history/{id}` is followed every half
+second until it completes (ComfyUI's step-by-step progress only
+travels over its websocket; the job reports "rendering" until the
+image exists), `GET /view` fetches the PNG, and the job's result is
+`{ images: [{ b64_json, seed }] }`, which `/v1/images/generations`
+answers in OpenAI's shape. Cancel removes a queued graph from
+ComfyUI's queue and interrupts a running one (`/queue` with `delete`,
+`/interrupt`). The generator's post-load check and readiness probe
+ask `GET /object_info/CheckpointLoaderSimple` for the checkpoints the
+engine can load and require the pinned one on the list; a render is a
+job, never a probe. The job's own admission (STACK-13a) is the
+render's transient set on top of the resident checkpoint, 1 GB at 512
+by 512 and scaled by the pixel count asked for (a side is 64 to 2048,
+a multiple of eight), until measured.
+
+An engine start the governor queues no longer fails on the spot: it
+waits up to fifteen seconds for memory through the same wait the job
+queue uses (`backend/src/lib/admission.ts`, one loop for both: the
+loaded set watched for the admission, the governor nudged when
+nothing it waits on is loaded, a give-up leaving a watcher that
+returns a late admission so no phantom ever blocks the next request;
+a stop or a restart during the wait ends it at once), then fails with
+the governor's words and numbers. The environment's ready marker is
+its own (`.env-ready`), distinct from the source archive's
+`.engine-ready` in the same directory, so a build that failed after
+the archive extracted is not mistaken for an environment. One build
+is in flight per engine.
+
+### The graph proven, the governor's answer recorded (13b-live)
+
+The graph and the wire were proven on 2026-09-20 on the p16 laptop
+against a ComfyUI started outside the Stack from the same hashed
+environment and the same checkpoint (the scratch run, no governor):
+`/system_stats` answered after 25 s with ComfyUI 0.36.0, torch 2.11.0
+and one `mps` device; `/object_info/CheckpointLoaderSimple` listed
+the checkpoint; the graph above at 512 by 512, 8 steps, seed 7,
+rendered in 18.3 s to a 433,537-byte PNG of a lighthouse on a rocky
+shore, fetched through `/view`; the process held 862 MB resident by
+`ps` (Metal's allocations are outside RSS; the Stack's own reader
+uses `phys_footprint`, which counts them).
+
+Through the Stack (`scripts/prove-image.sh`, three runs, the last
+with the bounded wait): the install job built the environment in
+15.3 s (the archive, uv, the wheels; `engines/comfyui` 1.4 GB), the
+checkpoint downloaded and verified in 75 s, `image` stood
+`installed`, and the render was refused by the governor after the
+start's wait: "The current memory budget cannot admit the request. It
+needs about 5.2 GB with 7.1 GB free, after the working margin the
+machine's tier keeps back; memory pressure is normal. The image engine
+waited 15 s for memory and gave up." (the file's 4.27 GB times the
+default 1.3, and 7.1 minus 5.2 is under the p16 margin of 4 GB; the
+governor's decisions show the four nudges, one every five seconds).
+The job failed with that sentence after 15.1 s, the route answered
+500 with it, the readiness check reported `image` failed with it,
+nothing loaded, nothing left in the governor's queue, the port came
+free and the scratch directory was removed. That is the governor
+doing its job on a busy laptop, not a defect; the margin was not
+loosened for the proof. The live pass through the Stack is 13b-live,
+to be run with about 2 GB more free or on the Studio.
 
 ## Measured so far
 
