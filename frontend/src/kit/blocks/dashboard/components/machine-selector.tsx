@@ -54,7 +54,7 @@ export function MachineSelector() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" className="flex items-center gap-1.5">
+        <Button type="button" variant="ghost" size="sm" aria-label={`Machine and stack: ${name}`} className="flex items-center gap-1.5">
           <MonitorIcon className="size-4" />
           <span aria-hidden="true" className={`size-2 rounded-full ${dotClass}`} />
           <span className="hidden max-w-32 truncate text-sm lg:inline">{name}</span>
