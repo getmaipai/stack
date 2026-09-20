@@ -226,7 +226,12 @@ same daemon on its API port, with Vite proxying the API paths in development.
 Asset names carry content hashes served `immutable` while `index.html` is
 served `no-cache`, so a rebuilt UI is never served stale.
 Until KIT-01 extracts `@maipai/ui`, it carries a copied subset of Home's kit
-under `frontend/src/kit/`; those copied files are not edited in the Stack.
+under `frontend/src/kit/`. The UI reconciliation program
+([`plans/ui-reconcile-2026-09-19.md`](plans/ui-reconcile-2026-09-19.md))
+is the one exception: it rebuilds the kit's tokens, icons and dashboard
+blocks in place to the owner's approved specification, one item at a
+time. Outside that program, copied files are still not edited in the
+Stack.
 
 ### Roles and the router
 

@@ -1,21 +1,18 @@
-/* Copied from home's kit until KIT-01 extracts `@maipai/ui`; do not edit here. Dark is black, per ux.md's references. */
 /* The kit's token set (docs/UI.md > Themes): one set of tokens, light and
- * dark, no raw colors in app code. Stack's accent is orange (brand/README.md's
- * per-product accent table); everything else here is a reasonable neutral
- * scale, not yet run through a real theme generator (4.11-adjacent
- * "themes are a small declared object... full token set generated from
- * it" is real future scope, deferred: this is one hand-picked default,
- * not the generator).
+ * dark, no raw colors in app code. The palette is the owner's approved UI
+ * specification (docs/plans/ui-spec-2026-09-19/spec.md, section 1 and 4):
+ * a navy dark theme (the reference and default) with seven luminous
+ * accents, plus a derived light theme on the same hues.
  *
- * Values are full CSS color functions (`hsl(...)`), not bare component
- * triples: Tailwind v4's CSS-first `@theme inline` maps `--color-primary`
- * straight to `var(--primary)` with no wrapping step (unlike v3's JS
- * config, which used to do `hsl(var(--primary) / <alpha-value>)` for
- * you), so the variable itself has to already be a valid color. Every
- * call site reads `var(--x)` directly (in Tailwind's `[var(--x)]`
- * arbitrary-value form or, on shadcn's generated components, the plain
- * `bg-primary`/`text-foreground` utilities `@theme inline` below wires
- * up), never `hsl(var(--x))`. */
+ * Values are complete CSS colors (hex here, matching the spec's own
+ * table), not bare component triples: Tailwind v4's CSS-first
+ * `@theme inline` maps `--color-primary` straight to `var(--primary)`
+ * with no wrapping step (unlike v3's JS config, which used to do
+ * `hsl(var(--primary) / <alpha-value>)` for you), so the variable itself
+ * has to already be a valid color. Every call site reads `var(--x)`
+ * directly (in Tailwind's `[var(--x)]` arbitrary-value form or, on
+ * shadcn's generated components, the plain `bg-primary`/`text-foreground`
+ * utilities `@theme inline` below wires up), never `hsl(var(--x))`. */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -27,67 +24,100 @@
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
-  /* The kit's surfaces, pinned. docs/UI.md: phone under 640, tablet to
-   * 1024, desktop above. These happen to equal Tailwind's defaults
-   * today, which is exactly why they are written down: `sm:` and `lg:`
-   * are load-bearing across the primitives, and a later theme edit that
-   * moved them would silently move every grid, rail and split in the
-   * product. kit/responsive.ts holds the same two numbers and a test
-   * fails if the two ever disagree. */
+  /* The kit's surfaces, pinned. `sm:` and `lg:` are load-bearing across
+   * the primitives, so they are written down rather than left to
+   * Tailwind's defaults. `sm` stays for the existing primitives; `md`,
+   * `lg` and `xl` are the spec's responsive tiers (section 7: 720, 960,
+   * 1280). kit/responsive.ts, if it exists, holds the same numbers and a
+   * test fails if the two ever disagree. */
   --breakpoint-sm: 640px;
-  --breakpoint-lg: 1024px;
+  --breakpoint-md: 720px;
+  --breakpoint-lg: 960px;
+  --breakpoint-xl: 1280px;
+
+  /* Radii, shadow and type scale (spec section 1). --radius-card and
+   * --radius-control are named for the spec's own vocabulary; --radius
+   * below (1rem = 16px) already gives the kit's --radius-lg the same
+   * 16px, so cards keep reading one source. */
+  --radius-card: 16px;
+  --radius-control: 12px;
+  --radius-pill: 999px;
+  --shadow-panel: 0 12px 28px rgba(0, 0, 0, 0.24);
+
+  --font-size-title: 30px;
+  --font-weight-title: 600;
+  --font-size-section: 18px;
+  --font-weight-section: 600;
+  --font-size-metric: 28px;
+  --font-weight-metric: 600;
+  --font-size-body: 13.5px;
+  --font-weight-body: 500;
+  --font-size-supporting: 12px;
+  --font-weight-supporting: 400;
+
+  /* The five named hues beyond electric blue (which is --primary), and
+   * the eight category colors that use them (spec section 4). Each
+   * points at --primary or a --hue-* var, never a repeated literal, so
+   * the two can't drift apart. */
+  --hue-violet: #a434ff;
+  --hue-teal: #00e3ae;
+  --hue-orange: #ff8a35;
+  --hue-pink: #ff3e9a;
+  --hue-red: #ff4b62;
+  --cat-models: var(--primary);
+  --cat-adapters: var(--hue-pink);
+  --cat-apps: var(--primary);
+  --cat-runtimes: var(--primary);
+  --cat-workflows: var(--hue-orange);
+  --cat-extensions: var(--hue-teal);
+  --cat-training: var(--hue-violet);
+  --cat-system: var(--hue-teal);
 }
 
 :root {
-  --surface-page: hsl(240 6% 97%);
-  --surface-card: hsl(0 0% 100%);
-  --surface-pane: hsl(240 6% 95%);
-  --surface-sidebar: hsl(240 6% 95%);
-  --background: hsl(0 0% 100%);
-  --foreground: hsl(240 10% 4%);
-  --card: hsl(0 0% 100%);
-  --card-foreground: hsl(240 10% 4%);
-  --popover: hsl(0 0% 100%);
-  --popover-foreground: hsl(240 10% 4%);
-  --border: hsl(240 6% 90%);
-  --input: hsl(240 6% 90%);
-  --muted: hsl(240 5% 96%);
-  --muted-foreground: hsl(240 4% 46%);
-  --secondary: hsl(240 5% 96%);
-  --secondary-foreground: hsl(240 10% 4%);
-  --accent: hsl(240 5% 96%);
-  --accent-foreground: hsl(240 10% 4%);
-  /* Stack's accent is orange per the MaiPai brand table. Keep the rest of
-   * the copied kit tokens unchanged so this app owns only its primary hue. */
-  --primary: hsl(22 99% 50%);
-  --primary-foreground: hsl(240 10% 4%);
-  /* Darkened from the original hsl(0 72% 51%), same hue and saturation
-   * (getmaipai/home lane 4 item 1's own follow-up, 2026-09-13): every
-   * "destructive" surface in this kit (Button, Badge) pairs solid
-   * `text-destructive` over a `bg-destructive/10` tint, not white text
-   * on a solid fill - a real gap the a11y matrix had never actually
-   * exercised (Repairs' severity badge only renders when an issue
-   * exists, and nothing before this seeded one). Text over its own
-   * 10%-opacity tint measures ~6.3:1 at this lightness; the original
-   * 51% measured ~4.1:1, under WCAG AA's 4.5:1 floor. */
-  --destructive: hsl(0 72% 38%);
-  --destructive-foreground: hsl(0 0% 100%);
-  --ring: hsl(22 99% 50%);
+  /* The light root: the same hues as the dark reference, on light
+   * surfaces (spec section 1, program decision 5). Dark is the default
+   * and the reference; this derivation passes the same AA contrast test. */
+  --surface-page: #f4f7fb;
+  --surface-card: #ffffff;
+  --surface-pane: #e3eaf3;
+  --surface-sidebar: #eaf0f7;
+  --background: #f4f7fb;
+  --foreground: #0b1730;
+  --card: #ffffff;
+  --card-foreground: #0b1730;
+  --popover: #e3eaf3;
+  --popover-foreground: #0b1730;
+  --border: #c9d6e6;
+  --input: #c9d6e6;
+  --muted: #e3eaf3;
+  --muted-foreground: #4a5f7a;
+  --secondary: #e3eaf3;
+  --secondary-foreground: #0b1730;
+  --accent: #e3eaf3;
+  --accent-foreground: #0b1730;
+  --primary: #21a6ff;
+  /* Dark navy text on the electric blue, not white: ~7.2:1 measured,
+   * against white's ~2.6:1 on this lightness of blue. */
+  --primary-foreground: #07111f;
+  --destructive: #ff4b62;
+  --destructive-foreground: #07111f;
+  --ring: #21a6ff;
   /* 1rem, not shadcn's own 0.75rem default: a visual pass (2026-09-06)
    * modeled on well-designed native mobile apps found every card, tile
    * and control there noticeably rounder than this kit's own defaults -
    * one token bump softens buttons, cards, inputs and popovers together
-   * rather than hand-tuning each. */
+   * rather than hand-tuning each. It also happens to give --radius-lg
+   * the spec's 16px card radius for free. */
   --radius: 1rem;
-  --sidebar: hsl(0 0% 100%);
-  --sidebar-foreground: hsl(240 10% 4%);
-  --sidebar-primary: hsl(22 99% 50%);
-  --sidebar-primary-foreground: hsl(240 10% 4%);
-  /* Quiet selection keeps primary actions visually dominant. */
-  --sidebar-accent: color-mix(in srgb, var(--sidebar-primary) 12%, var(--sidebar));
-  --sidebar-accent-foreground: var(--foreground);
-  --sidebar-border: hsl(240 6% 90%);
-  --sidebar-ring: hsl(22 99% 50%);
+  --sidebar: #eaf0f7;
+  --sidebar-foreground: #0b1730;
+  --sidebar-primary: #21a6ff;
+  --sidebar-primary-foreground: #07111f;
+  --sidebar-accent: #e3eaf3;
+  --sidebar-accent-foreground: #0b1730;
+  --sidebar-border: #c9d6e6;
+  --sidebar-ring: #21a6ff;
   --chart-1: hsl(189 94% 40%);
   --chart-2: hsl(240 4% 46%);
   --chart-3: hsl(240 6% 70%);
@@ -103,86 +133,77 @@
   }
 }
 
+/* The dark root is the reference theme (spec section 1): the 13 hex
+ * values, applied both to the system-preference default and the
+ * explicit `.dark` class below, so a toggle and "System" agree. */
 @media (prefers-color-scheme: dark) {
   :root:not(.light) {
-    --surface-page: hsl(0 0% 0%);
-    --surface-card: hsl(240 6% 7%);
-    --surface-pane: hsl(240 6% 4%);
-    --surface-sidebar: hsl(240 6% 4%);
-    --background: hsl(240 10% 6%);
-    --foreground: hsl(0 0% 96%);
-    --card: hsl(240 8% 9%);
-    --card-foreground: hsl(0 0% 96%);
-    --popover: hsl(240 8% 9%);
-    --popover-foreground: hsl(0 0% 96%);
-    --border: hsl(240 6% 18%);
-    --input: hsl(240 6% 18%);
-    --muted: hsl(240 6% 14%);
-    --muted-foreground: hsl(240 5% 65%);
-    --secondary: hsl(240 6% 14%);
-    --secondary-foreground: hsl(0 0% 96%);
-    --accent: hsl(240 6% 14%);
-    --accent-foreground: hsl(0 0% 96%);
-    --primary: hsl(22 99% 58%);
-    --primary-foreground: hsl(240 10% 6%);
-    --ring: hsl(22 99% 58%);
-    /* Lightened, not darkened (same lane 4 item 1 follow-up as :root's
-     * own comment above): a solid destructive/10-20% tint over this
-     * theme's near-black background is itself very dark, so a darker
-     * text color loses contrast against it instead of gaining it -
-     * darkening the way :root's own fix does measures ~2.4:1 here, worse
-     * than the original 51% lightness's ~3.5:1. Lightened to where text
-     * over its own 20%-opacity tint clears 4.5:1 (~4.8:1 measured); dark
-     * themes pairing a lighter accent with a darker surface for the same
-     * semantic role is the same pattern `--primary`'s own dark value
-     * above already uses (55% here vs. `:root`'s 29%). */
-    --destructive: hsl(0 72% 65%);
-    --sidebar: hsl(240 8% 9%);
-    --sidebar-foreground: hsl(0 0% 96%);
-    --sidebar-primary: hsl(22 99% 58%);
-    --sidebar-primary-foreground: hsl(240 10% 6%);
-    --sidebar-accent: color-mix(in srgb, var(--sidebar-primary) 12%, var(--sidebar));
-    --sidebar-accent-foreground: var(--foreground);
-    --sidebar-border: hsl(240 6% 18%);
-    --sidebar-ring: hsl(22 99% 58%);
+    --surface-page: #07111f;
+    --surface-card: #102238;
+    --surface-pane: #142a43;
+    --surface-sidebar: #0a1a2e;
+    --background: #07111f;
+    --foreground: #f4f8ff;
+    --card: #102238;
+    --card-foreground: #f4f8ff;
+    --popover: #142a43;
+    --popover-foreground: #f4f8ff;
+    --border: #294563;
+    --input: #294563;
+    --muted: #142a43;
+    --muted-foreground: #a9bed7;
+    --secondary: #142a43;
+    --secondary-foreground: #f4f8ff;
+    --accent: #142a43;
+    --accent-foreground: #f4f8ff;
+    --primary: #21a6ff;
+    --primary-foreground: #07111f;
+    --ring: #21a6ff;
+    --destructive: #ff4b62;
+    --destructive-foreground: #07111f;
+    --sidebar: #0a1a2e;
+    --sidebar-foreground: #f4f8ff;
+    --sidebar-primary: #21a6ff;
+    --sidebar-primary-foreground: #07111f;
+    --sidebar-accent: #142a43;
+    --sidebar-accent-foreground: #f4f8ff;
+    --sidebar-border: #294563;
+    --sidebar-ring: #21a6ff;
   }
 }
 
 .dark {
-  --surface-page: hsl(0 0% 0%);
-  --surface-card: hsl(240 6% 7%);
-  --surface-pane: hsl(240 6% 4%);
-  --surface-sidebar: hsl(240 6% 4%);
-  --background: hsl(0 0% 0%);
-  --foreground: hsl(0 0% 96%);
-  --card: hsl(240 6% 5%);
-  --card-foreground: hsl(0 0% 96%);
-  --popover: hsl(240 6% 5%);
-  --popover-foreground: hsl(0 0% 96%);
-  --border: hsl(240 5% 16%);
-  --input: hsl(240 5% 16%);
-  --muted: hsl(240 5% 9%);
-  --muted-foreground: hsl(240 4% 62%);
-  --secondary: hsl(240 6% 14%);
-  --secondary-foreground: hsl(0 0% 96%);
-  --accent: hsl(240 6% 14%);
-  --accent-foreground: hsl(0 0% 96%);
-  --primary: hsl(22 99% 58%);
-  --primary-foreground: hsl(240 10% 6%);
-  --ring: hsl(22 99% 58%);
-  /* Same value and reasoning as the `prefers-color-scheme: dark` block
-   * above (lane 4 item 1 follow-up, 2026-09-13): lightened, not
-   * darkened, since a darker text color loses contrast against this
-   * theme's own dark tinted background instead of gaining it. */
-  --destructive: hsl(0 72% 65%);
-  --sidebar: hsl(240 8% 9%);
-  --sidebar-foreground: hsl(0 0% 96%);
-  --sidebar-primary: hsl(22 99% 58%);
-  --sidebar-primary-foreground: hsl(240 10% 6%);
-  --sidebar-accent: color-mix(in srgb, var(--sidebar-primary) 12%, var(--sidebar));
-  --sidebar-accent-foreground: var(--foreground);
-  --sidebar-border: hsl(240 6% 18%);
-  --sidebar-ring: hsl(22 99% 58%);
+  --surface-page: #07111f;
+  --surface-card: #102238;
+  --surface-pane: #142a43;
+  --surface-sidebar: #0a1a2e;
+  --background: #07111f;
+  --foreground: #f4f8ff;
+  --card: #102238;
+  --card-foreground: #f4f8ff;
+  --popover: #142a43;
+  --popover-foreground: #f4f8ff;
+  --border: #294563;
+  --input: #294563;
+  --muted: #142a43;
+  --muted-foreground: #a9bed7;
+  --secondary: #142a43;
+  --secondary-foreground: #f4f8ff;
+  --accent: #142a43;
+  --accent-foreground: #f4f8ff;
+  --primary: #21a6ff;
+  --primary-foreground: #07111f;
+  --ring: #21a6ff;
+  --destructive: #ff4b62;
+  --destructive-foreground: #07111f;
+  --sidebar: #0a1a2e;
+  --sidebar-foreground: #f4f8ff;
+  --sidebar-primary: #21a6ff;
+  --sidebar-primary-foreground: #07111f;
+  --sidebar-accent: #142a43;
+  --sidebar-accent-foreground: #f4f8ff;
+  --sidebar-border: #294563;
+  --sidebar-ring: #21a6ff;
 }
 
 @theme inline {

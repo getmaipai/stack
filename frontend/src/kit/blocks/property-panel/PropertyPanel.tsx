@@ -69,7 +69,7 @@ return <TooltipProvider><div className="flex h-full flex-col" data-testid="prope
 
 export function PropertyPanel(props: PropertyPanelProps) {
   const [mobile, setMobile] = useState(false);
-  useEffect(() => { const update = () => setMobile(window.innerWidth < 1024); update(); window.addEventListener("resize", update); return () => window.removeEventListener("resize", update); }, []);
+  useEffect(() => { const update = () => setMobile(window.innerWidth < 960); update(); window.addEventListener("resize", update); return () => window.removeEventListener("resize", update); }, []);
   if (!props.open) return null;
   if (mobile) return <Sheet open={props.open} onOpenChange={(open) => { if (!open) props.onClose(); }}><SheetContent side="right" className="max-w-none p-0" style={{ width: "calc(100vw - 1rem)", maxWidth: "none" }}><SheetHeader className="sr-only"><SheetTitle>{panelTitle(props.item)}</SheetTitle><SheetDescription>{props.kind} details</SheetDescription></SheetHeader><PanelBody {...props} /></SheetContent></Sheet>;
   return <div className="fixed inset-0 z-40" data-testid="property-panel-overlay"><button type="button" className="absolute inset-0 cursor-default" aria-label="Close panel by clicking outside" onClick={props.onClose} /><aside className="fixed inset-y-0 right-0 w-[420px] max-w-full bg-[var(--surface-pane)] shadow-xl"><PanelBody {...props} /></aside></div>;
