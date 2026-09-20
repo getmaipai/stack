@@ -23,7 +23,11 @@ const profileIds = ["p16", "p32", "p64", "p128"] as const;
 export const ModelIndexEntrySchema = z.object({
   id: z.string(), role: z.string(), profile: z.enum(profileIds), quality: z.number().int().nonnegative(),
   repo: z.string().optional(), license: z.string().optional(), revision: z.string(), engine: z.string().optional(),
-  download: z.object({ url: z.string().url(), sha256: z.string().length(64), approx_bytes: z.number().int().nonnegative() }),
+  download: z.object({
+    url: z.string().url(), sha256: z.string().length(64), approx_bytes: z.number().int().nonnegative(),
+    // A directory model (an MLX build): the files beside the weights, each pinned (STACK-93).
+    directory: z.string().optional(), files: z.array(z.object({ path: z.string(), sha256: z.string().length(64), bytes: z.number().int().nonnegative() })).optional(),
+  }),
 });
 export const ModelIndexSchema = z.object({ version: z.string(), models: z.array(ModelIndexEntrySchema) });
 export type ModelIndexEntry = z.infer<typeof ModelIndexEntrySchema>;

@@ -2028,7 +2028,7 @@
             }
           },
           "400": {
-            "description": "Provenance incomplete.",
+            "description": "Provenance incomplete, or an id that is not a plain name.",
             "content": {
               "application/json": {
                 "schema": {

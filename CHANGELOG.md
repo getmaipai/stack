@@ -17,6 +17,14 @@ with Home's releases, so this file tracks what a Home release picks up.
   only, so those two engines now need macOS 14 or later on an Apple
   silicon Mac; the build refuses an older Mac with the reason.
 
+### Added
+
+- A second chat engine for Apple silicon Macs, mlx-serve v26.9.4, as a
+  pinned release beside llama-server; `stack.engines.chat.engine`
+  chooses which one serves the chat wire after a restart, and an MLX
+  model installs as a directory of files, each checksummed
+  (2026-09-20).
+
 ### Changed
 
 - The Stack is MaiPai Home's engine foundation, not a product

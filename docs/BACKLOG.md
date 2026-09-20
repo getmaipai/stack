@@ -116,18 +116,19 @@ are never copied. Nothing migrates Home until STACK-16.
   409 for incomplete provenance, 400 with the role list for an unknown
   id; streaming chat passes the engine's SSE bytes through. Kept
   through RF-04 at 58cae15 (the router rewritten without the client-key check).
-- [ ] **STACK-93 (M): the second engine adapter under the governor.**
-  `mlx-serve` or `oMLX` (the Studio bench's pick) as a second spawned
-  engine kind: its pin in `engineCatalog.ts`, its launch args, its
-  identity read, its post-load check, admitted by the same governor
-  beside `llama-server`. Acceptance: a scripted two-engine load
-  admits, queues and evicts per the rules in `dev.md`; a live load of
-  both on the Studio records both footprints. Files:
-  `backend/src/lib/engineCatalog.ts`, `backend/src/lib/engineArgs.ts`,
-  `backend/src/lib/supervisor.ts`, `backend/src/lib/governor.ts`,
-  `backend/tests/governor.test.ts`. Mirror: the llama-server adapter.
-  Out of scope: a third engine; Windows. Exit: `bash scripts/check.sh`
-  and the bench command in its report.
+- [x] **STACK-93 (M): the second engine adapter under the governor.**
+  `mlx-serve` v26.9.4 (the pick by the prebuilt rule, `dev.md`, "The
+  second chat engine"; oMLX the named alternative) as a second spawned
+  engine kind: its pin in `engineCatalog.ts`, its launch on loopback,
+  the identity the Stack stamps, admitted by the governor at the file
+  times its own multiplier beside `llama-server`; the chat role bound
+  to either by `stack.engines.chat.engine`; an MLX model as a
+  directory pin of nine verified files
+  (`mlx-community/Qwen3-1.7B-4bit`). Proven live on the laptop
+  (`scripts/prove-mlx.sh`: admitted at 1.38 GB, measured 1.24 GB,
+  first completion 1.88 s with the load, 50 ms warm). Tests:
+  `backend/tests/mlxServe.test.ts`. The Studio bench (STACK-14) puts
+  both engines on one model.
 
 ## Supervisor and engines
 

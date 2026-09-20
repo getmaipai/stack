@@ -8,7 +8,8 @@ import { existsSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { withTimeout } from "@maipai/core/src/withTimeout";
-import { ENGINE_READY_MARKER, installedEnginePin, selectEngineBinary, type EngineBinaryPin } from "@/lib/engineCatalog";
+import { ENGINE_READY_MARKER, installedEnginePin, selectEngineBinary, type ChatEngine, type EngineBinaryPin } from "@/lib/engineCatalog";
+import { managedEnv } from "@/lib/uvEnvironment";
 import { llamaServerArgs } from "@/lib/engineArgs";
 import { currentEngineBinary, currentEngineTag, engineBinaryPath, engineDir } from "@/lib/engineInstall";
 import { detectHardware } from "@/lib/hardware";
@@ -71,6 +72,10 @@ export interface RoleProcess {
   kind: EngineKind;
   client: EngineClient;
   identity: EngineIdentity;
+  /** The engine this process is (the launch plan's name: `llama-server`,
+   * `mlx-serve`, `comfyui`), so a route judges what runs, not what the
+   * setting names for the next start. */
+  engine: string | null;
   modelId: string | null;
   /** The pinned revision of the model the process serves, for the reply headers. */
   modelRevision: string | null;
@@ -340,19 +345,33 @@ const runtimes = new Map<RoleId, RoleRuntime>();
 // The build that runs is the one the store's `current` link names (the
 // swap and the rollback flip that link); before any swap it is the
 // machine's pin, which the first install activated.
-function engineInstalled(): boolean {
-  const current = currentEngineBinary("llama-server");
+function engineInstalled(name: ChatEngine = "llama-server"): boolean {
+  const current = currentEngineBinary(name, name);
   if (current.state === "ready") return true;
   if (current.state === "unready") return false;
-  const pin = installedEnginePin();
+  const pin = installedEnginePin(name);
   return !!pin && existsSync(join(engineDir(pin), ENGINE_READY_MARKER));
+}
+
+/** The chat wire's engine, from the setting (STACK-93): llama-server
+ * unless the person chose mlx-serve; the embed role stays on
+ * llama-server, whose embeddings wire the MLX engine does not serve
+ * for the pinned models. */
+export function chatEngine(): ChatEngine {
+  const chosen = settingValues()["stack.engines.chat.engine"];
+  return chosen === "mlx-serve" ? "mlx-serve" : "llama-server";
+}
+function engineForRole(role: RoleId): string | null {
+  if (CHAT_WIRE_ROLES.includes(role)) return chatEngine();
+  if (role === "embed") return "llama-server";
+  return null;
 }
 
 // The binary to launch: the `current` link's build; the machine pin's own
 // directory only before any link exists. A link that names an unready
 // build is a refusal, never a silent fallback to another build.
 function launchBinary(pin: EngineBinaryPin): string {
-  const current = currentEngineBinary("llama-server");
+  const current = currentEngineBinary(pin.name, pin.tool ?? "llama-server");
   if (current.state === "ready") return current.path;
   if (current.state === "unready") throw new EngineUnavailableError(`The current engine link names ${current.tag}, which never finished installing.`);
   return engineBinaryPath(pin);
@@ -367,7 +386,7 @@ function engineInstalledFor(role: RoleId): boolean {
   if (SPEECH_ROLES.includes(role)) return componentModel(role, "vad") !== null;
   if (role === "tts") return pocketTtsInstalled() && componentModel(role, "tokenizer") !== null && componentModel(role, "voice") !== null;
   if (role === "image") return comfyuiInstalled();
-  return engineInstalled();
+  return engineInstalled(engineForRole(role) === "mlx-serve" ? "mlx-serve" : "llama-server");
 }
 
 function initialStatus(role: RoleId): RoleStatus {
@@ -426,7 +445,11 @@ export function componentModel(role: RoleId, component: string): ModelRecord | n
 }
 
 export function selectedModel(role: RoleId): ModelRecord | null {
-  const selectable = listModels().filter((model) => model.roles.includes(role) && !isComponent(model) && isModelSelectable(model) && model.modelPath);
+  // A record names the engine it is for; the chat wire's chosen engine
+  // decides which records can serve it (a GGUF for llama-server, an MLX
+  // directory for mlx-serve), both installed side by side.
+  const engine = engineForRole(role);
+  const selectable = listModels().filter((model) => model.roles.includes(role) && !isComponent(model) && isModelSelectable(model) && model.modelPath && (!engine || !model.engineRequirements.engine || model.engineRequirements.engine === engine));
   const preferred = preferredModels.get(role);
   return selectable.find((model) => model.id === preferred) ?? selectable[0] ?? null;
 }
@@ -443,7 +466,7 @@ async function startUrlProcess(role: RoleId, url: string): Promise<RoleProcess> 
     throw new EngineUnavailableError(reason);
   }
   resolveHealth(`managed-host-offline.${role}`);
-  return { role, kind: "url", client, identity, modelId: null, modelRevision: null, pid: null, port: Number(new URL(url).port) || null, activeRequests: 0, retired: false, stop: async () => {} };
+  return { role, kind: "url", client, identity, engine: null, modelId: null, modelRevision: null, pid: null, port: Number(new URL(url).port) || null, activeRequests: 0, retired: false, stop: async () => {} };
 }
 
 /** The speech worker's command line, built the way the daemon itself
@@ -454,11 +477,12 @@ export function speechWorkerCommand(args: { role: RoleId; port: number; modelPat
   return [runtime.execPath, ...(viaBun ? [runtime.main] : []), "speech-worker", "--role", args.role, "--port", String(args.port), "--model", args.modelPath, "--vad", args.vadPath, "--threads", String(args.threads)];
 }
 
-interface LaunchPlan { command: string[]; engine: string; build: string; stdin: "pipe" | "ignore"; contextLength: number; kind: "spawned" | "managed"; env?: Record<string, string>; healthPath?: string; }
+export interface LaunchPlan { command: string[]; engine: string; build: string; stdin: "pipe" | "ignore"; contextLength: number; kind: "spawned" | "managed"; env?: Record<string, string>; healthPath?: string; }
 
 /** What to run for a role: llama-server from the `current` link for the
  * chat and embeddings wires, the speech worker for `stt`. */
-function launchPlan(role: RoleId, model: ModelRecord, port: number): LaunchPlan {
+/** What to run for a role, exported for the suite; the supervisor calls it after admission. */
+export function launchPlan(role: RoleId, model: ModelRecord, port: number): LaunchPlan {
   if (SPEECH_ROLES.includes(role)) {
     const vad = componentModel(role, "vad");
     if (!vad?.modelPath) throw new EngineUnavailableError(`The ${role} voice activity detector is not installed.`);
@@ -482,9 +506,20 @@ function launchPlan(role: RoleId, model: ModelRecord, port: number): LaunchPlan 
   }
   const declared = engineSettingValues("engines.llama_server");
   const config = { contextLength: declared.context_length, slots: declared.slots, threads: declared.threads, cacheRamMb: declared.cache_ram_mb, flashAttention: declared.flash_attention } as Record<string, number | boolean | string | string[]>;
+  const contextLength = typeof config.contextLength === "number" ? config.contextLength : 4096;
+  if (engineForRole(role) === "mlx-serve") {
+    // mlx-serve: one model pinned for the life of the process, loopback
+    // only, the context length the llama-server settings declare (one
+    // declaration for the chat wire), its logs under data/.
+    const pin = installedEnginePin("mlx-serve");
+    if (!pin || !engineInstalled("mlx-serve")) throw new EngineUnavailableError("No installed mlx-serve build is available for this machine.");
+    const binary = launchBinary(pin);
+    const slots = typeof config.slots === "number" && config.slots > 0 ? config.slots : 1;
+    const args = ["--model", model.modelPath!, "--serve", "--host", "127.0.0.1", "--port", String(port), "--ctx-size", String(contextLength), "--max-concurrent", String(slots)];
+    return { command: [binary, ...args], engine: "mlx-serve", build: currentEngineTag("mlx-serve") ?? pin.tag, stdin: "ignore", contextLength, kind: "spawned", env: managedEnv() };
+  }
   const pin = installedEnginePin();
   if (!pin || !engineInstalled()) throw new EngineUnavailableError("No installed llama-server build is available for this machine.");
-  const contextLength = typeof config.contextLength === "number" ? config.contextLength : 4096;
   const binary = launchBinary(pin);
   const args = llamaServerArgs({ modelPath: model.modelPath!, port, config, contextLength, kvCacheQuantized: process.platform === "darwin", embeddings: role === "embed" });
   return { command: [binary, ...args], engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength, kind: "spawned" };
@@ -496,6 +531,7 @@ async function startSpawnedProcess(role: RoleId): Promise<RoleProcess> {
   if (!engineInstalledFor(role)) {
     const reason = SPEECH_ROLES.includes(role) ? `The ${role} voice activity detector is not installed.`
       : role === "image" ? "The ComfyUI environment is not built on this machine."
+      : engineForRole(role) === "mlx-serve" ? "No installed mlx-serve build is available for this machine."
       : role === "tts" ? (pocketTtsInstalled() ? "The tts tokenizer or default voice is not installed." : "The Pocket TTS environment is not built on this machine.")
       : "No installed llama-server build is available for this machine.";
     throw new EngineUnavailableError(reason);
@@ -517,7 +553,7 @@ async function startSpawnedProcess(role: RoleId): Promise<RoleProcess> {
     requestedBytes: managed && !generator ? (model.measuredFootprintBytes ?? POCKET_TTS_ESTIMATED_FOOTPRINT) : model.sizeBytes ?? 0,
     modelFileBytes: managed && !generator ? null : model.sizeBytes,
     measuredPeakBytes: model.measuredFootprintBytes,
-    engine: generator ? "comfyui" : managed ? "pocket-tts" : SPEECH_ROLES.includes(role) ? "sherpa-onnx-node" : "llama-server",
+    engine: generator ? "comfyui" : managed ? "pocket-tts" : SPEECH_ROLES.includes(role) ? "sherpa-onnx-node" : engineForRole(role) === "mlx-serve" ? "mlx-serve" : "llama-server",
     pinned: pinnedModels.has(model.id),
   };
   let timedOut = false;
@@ -573,6 +609,9 @@ async function startSpawnedProcess(role: RoleId): Promise<RoleProcess> {
       const model_ = GENERATOR_ROLES.includes(role) ? basename(model.modelPath!) : loadedWeightsRepo({ tokenSet: !!plan.env?.HF_TOKEN })?.repo ?? null;
       identity = { ...identity, build: `${plan.engine}-${plan.build}`, model: model_ };
     }
+    // mlx-serve's /props carries no build_info or model_path: the build
+    // is the pin's tag, the model the directory the Stack launched.
+    if (plan.engine === "mlx-serve") identity = { ...identity, build: identity.build ?? `mlx-serve-${plan.build}`, model: identity.model ?? basename(model.modelPath!) };
     const check = await postLoadCheck(role, client, handle.pid);
     check.loadMs = Math.round(performance.now() - loadStartedAt);
     if (check.actualBytes !== null) recordMeasuredFootprint(model.id, check.actualBytes, contextLength);
@@ -581,7 +620,7 @@ async function startSpawnedProcess(role: RoleId): Promise<RoleProcess> {
     resolveHealth(`post-load-check-failed.${role}`);
     const loadedRevision = plan.kind === "managed" && !GENERATOR_ROLES.includes(role) ? loadedWeightsRepo({ tokenSet: !!plan.env?.HF_TOKEN })?.revision ?? null : null;
     const processRecord: RoleProcess = {
-      role, kind: plan.kind, client, identity, modelId: model.id, modelRevision: loadedRevision ?? model.revision, pid: handle.pid, port, activeRequests: 0, retired: false,
+      role, kind: plan.kind, client, identity, engine: plan.engine, modelId: model.id, modelRevision: loadedRevision ?? model.revision, pid: handle.pid, port, activeRequests: 0, retired: false,
       governorHandle: admission,
       stopGovernor: watchProcessMemory(role, handle.pid),
       stop: async () => { handle.kill(); await handle.exited; },
@@ -660,6 +699,14 @@ export function getRoleStatus(requested: RoleId): RoleStatus {
   const current = runtime(role);
   if (current.process && current.status.state !== "busy") current.status = { ...current.status, kind: current.process.kind, state: "ready", identity: current.process.identity, reason: null };
   return { ...current.status };
+}
+
+/** The engine whose process serves a role right now, or null when
+ * nothing runs; a chat engine chosen by setting but not yet started
+ * is not it. */
+export function runningEngine(requested: RoleId): string | null {
+  const current = runtime(processRoleFor(requested));
+  return current.process && !current.process.retired ? current.process.engine : null;
 }
 
 export function lastRealRequestAt(requested: RoleId): number | null {
@@ -1070,7 +1117,7 @@ export function scriptedProcess(role: RoleId, overrides: Partial<RoleProcess> = 
     },
     async health() { return true; },
   };
-  return { role, kind: "url", client, identity: { host: "stub", build: "scripted", model: `scripted-${role}`, healthy: true }, modelId: null, modelRevision: null, pid: null, port: null, activeRequests: 0, retired: false, stop: async () => {}, ...overrides };
+  return { role, kind: "url", client, identity: { host: "stub", build: "scripted", model: `scripted-${role}`, healthy: true }, engine: null, modelId: null, modelRevision: null, pid: null, port: null, activeRequests: 0, retired: false, stop: async () => {}, ...overrides };
 }
 
 export { CHAT_WIRE_ROLES, SPAWNABLE_ROLES };

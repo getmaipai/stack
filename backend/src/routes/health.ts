@@ -4,8 +4,9 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter, ErrorSchema, idParamSchema } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { ignore, list as listHealth, resolve } from "@/lib/health";
-import { getProcess, restartRole, stopRole, unloadAllRoles } from "@/lib/supervisor";
-import { rollbackEngine, currentEngine, previousEngine } from "@/updates/engines";
+import { chatEngine, getProcess, restartRole, stopRole, unloadAllRoles } from "@/lib/supervisor";
+import { engineRole } from "@/lib/engineCatalog";
+import { rollbackEngine, currentEngine, engineOfFailedSwap, previousEngine } from "@/updates/engines";
 import { ROLE_IDS, type RoleId } from "@/roles";
 
 import { HealthItem as HealthItemSchema } from "@/spec/ts/health-item";
@@ -27,13 +28,17 @@ export async function runFix(code: string): Promise<{ ok: boolean; result: strin
     case "restart_engine": { await restartRole(role); try { await getProcess(role); } catch (error) { return { ok: false, result: (error as Error).message }; } resolve(code); return { ok: true, result: `The ${role} engine was restarted.` }; }
     case "free_memory": { await unloadAllRoles("Unloaded to free memory."); resolve(code); return { ok: true, result: "Every engine was unloaded to free memory; the next request starts what it needs." }; }
     case "rollback_update": {
-      const previous = previousEngine("llama-server");
+      // The engine the failed swap names rolls back; the chat role is
+      // drained and restarted only when that engine is the one it runs.
+      const engine = engineOfFailedSwap(code);
+      const previous = previousEngine(engine);
       if (!previous) return { ok: false, result: "No previous build is recorded to roll back to." };
-      await stopRole("chat", "Draining for a rollback.");
-      await rollbackEngine("llama-server", previous);
-      await restartRole("chat");
+      const runsChat = engineRole(engine) === "chat" && chatEngine() === engine;
+      if (runsChat) await stopRole("chat", "Draining for a rollback.");
+      await rollbackEngine(engine, previous);
+      if (runsChat) await restartRole("chat");
       resolve(code);
-      return { ok: true, result: `Rolled back to ${currentEngine("llama-server") ?? previous}.` };
+      return { ok: true, result: `Rolled back ${engine} to ${currentEngine(engine) ?? previous}.` };
     }
     default: return { ok: false, result: "This repair needs the matching engine or model installer; reinstall from Home's Engines page." };
   }

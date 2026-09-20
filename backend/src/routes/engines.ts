@@ -7,14 +7,14 @@ import { join } from "node:path";
 import { apiRouter, ErrorSchema } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { detectHardware } from "@/lib/hardware";
-import { ENGINE_BINARIES, ENGINE_READY_MARKER, engineRole, MANAGED_RUNTIMES, selectEngineBinary } from "@/lib/engineCatalog";
+import { CHAT_ENGINES, ENGINE_BINARIES, ENGINE_READY_MARKER, engineRole, MANAGED_RUNTIMES, selectEngineBinary, type ChatEngine } from "@/lib/engineCatalog";
 import { ensurePocketTtsEnvironment, pocketTtsInstalled, pocketTtsRoot, POCKET_TTS_NAME } from "@/speech/pocketTts";
 import { comfyuiInstalled, comfyuiRoot, COMFYUI_NAME, ensureComfyuiEnvironment } from "@/generators/comfyui";
 import { engineDir, engineIsBound, ensureEngine, removeEngine } from "@/lib/engineInstall";
 import { readEngineManifest } from "@/lib/store/manifests";
 import { currentEngine, stagingPin, swapEngine } from "@/updates/engines";
 import { deriveEngineVersionState } from "@/lib/engineState";
-import { getProcess, getRoleStatus, restartRole, roleCanBeStartedByStack, stopRole, EngineUnavailableError } from "@/lib/supervisor";
+import { chatEngine, getProcess, getRoleStatus, restartRole, roleCanBeStartedByStack, runningEngine, stopRole, EngineUnavailableError } from "@/lib/supervisor";
 import { readSettings } from "@/settings";
 import { createJob, finishJob, jobSignal, updateJob } from "@/lib/jobs";
 import { emit } from "@/lib/events";
@@ -44,15 +44,22 @@ export const enginesRoutes = apiRouter<AppEnv>();
 const environmentJobs = new Map<string, string>();
 enginesRoutes.openapi(listRoute, async (c) => {
   const hardware = await detectHardware();
-  const needsRestart = readSettings().some((setting) => setting.key.startsWith("stack.engines.llama_server.") && setting.pending !== null);
+  const needsRestart = readSettings().some((setting) => (setting.key.startsWith("stack.engines.llama_server.") || setting.key === "stack.engines.chat.engine") && setting.pending !== null);
+  const chosenChatEngine = chatEngine();
   const pins = ENGINE_BINARIES.map((pin) => {
     // Each engine name has its own pin for this machine and its own role.
     const selected = selectEngineBinary(hardware, pin.name);
     const status = getRoleStatus(engineRole(pin.name));
-    // A tool pin (uv) never runs as the role's engine; only a server
-    // build's running identity is compared with its tag.
-    const running = pin.tool && pin.tool !== "llama-server" ? null : status.identity?.build ?? null;
-    const version = deriveEngineVersionState({ running, currentTag: currentEngine(pin.name), newestTag: selected?.id === pin.id ? pin.tag : null, needsRestart: pin.name === "llama-server" && needsRestart });
+    // Only the build whose process serves the role has its identity
+    // compared with its tag: for the chat wire the engine that is
+    // running (the one the setting chose, once started; until then no
+    // row), a llama-server pin for its other roles; never a tool pin
+    // (uv) or a source pin (ComfyUI), and never a chat engine that is
+    // installed but not running.
+    const isChat = engineRole(pin.name) === "chat";
+    const runsTheRole = isChat ? runningEngine("chat") === pin.name : !pin.tool || pin.tool === "llama-server";
+    const running = runsTheRole ? status.identity?.build ?? null : null;
+    const version = deriveEngineVersionState({ running, currentTag: currentEngine(pin.name), newestTag: selected?.id === pin.id ? pin.tag : null, needsRestart: isChat && pin.name === chosenChatEngine && needsRestart });
     return { id: pin.id, name: pin.name, label: pin.label, platform: pin.platform, arch: pin.arch, verified: pin.verified, installed: existsSync(join(engineDir(pin), ENGINE_READY_MARKER)), matchesThisMachine: selected?.id === pin.id, ...version, directory: engineDir(pin), roleState: status.state, roleReason: status.reason };
   });
   // The managed runtimes the Stack assembles (Pocket TTS): one row each,
@@ -121,14 +128,31 @@ enginesRoutes.openapi(installRoute, async (c) => {
     .catch((error) => finishJob(job.id, { ok: false, reason: error instanceof Error ? error.message : String(error) }));
   return c.json({ job: job.id, engine: pin.id, staged }, 202);
 });
+/** The reason a chat engine cannot be started or restarted as the chat
+ * role: the setting names the other one, so a start would run that.
+ * A stop is judged on what runs (`stoppable`): the engine whose
+ * process holds the role can always be stopped, chosen or not. */
+function unchosenChatEngine(name: string, options: { stoppable?: boolean } = {}): string | null {
+  if (!CHAT_ENGINES.includes(name as ChatEngine)) return null;
+  if (options.stoppable) return runningEngine("chat") === name || (runningEngine("chat") === null && name === chatEngine()) ? null : `The chat role is not running ${name}.`;
+  if (name === chatEngine()) return null;
+  const running = runningEngine("chat");
+  return `The chat role is set to ${chatEngine()}${running && running !== chatEngine() ? ` (${running} runs until the restart)` : ""}; set stack.engines.chat.engine to ${name} and restart the Stack to run it.`;
+}
 for (const action of ["start", "stop", "restart"] as const) enginesRoutes.openapi(controlRoute(action), async (c) => {
   const { name } = c.req.valid("param");
   if (!ENGINE_BINARIES.some((pin) => pin.name === name) && !MANAGED_RUNTIMES.some((runtime) => runtime.name === name)) return c.json({ error: "Unknown engine" }, 404);
   const role = engineRole(name);
+  const unchosen = unchosenChatEngine(name, { stoppable: action === "stop" });
+  if (unchosen) return c.json({ ok: false, reason: unchosen }, 200);
   try {
     if (action === "stop") { await stopRole(role); return c.json({ ok: true }, 200); }
     if (action === "restart") { await restartRole(role); await getProcess(role); return c.json({ ok: true }, 200); }
     const status = getRoleStatus(role);
+    // "Already running" only when the process is this engine's: a chat
+    // role still on the other engine after the setting changed restarts.
+    const other = CHAT_ENGINES.includes(name as ChatEngine) && runningEngine("chat") !== null && runningEngine("chat") !== name;
+    if (other) { await restartRole(role); await getProcess(role); return c.json({ ok: true }, 200); }
     if (status.state === "ready" || status.state === "busy" || status.state === "loading") return c.json({ ok: true, reason: "Already running." }, 200);
     if (!roleCanBeStartedByStack(role) && status.state !== "stopped") return c.json({ ok: false, reason: `The ${role} role is bound to a server the Stack does not start.` }, 200);
     await restartRole(role); await getProcess(role);
@@ -141,7 +165,10 @@ enginesRoutes.openapi(currentRoute, async (c) => {
   const { name } = c.req.valid("param"); const { tag } = c.req.valid("json");
   try {
     const role = engineRole(name);
-    await swapEngine(name, tag, { drain: () => stopRole(role, "Draining for an engine change."), postLoadCheck: async () => { await restartRole(role); await getProcess(role); return true; } });
+    // A chat engine the setting has not chosen swaps its link only: no
+    // process to drain, and nothing to restart that would prove the build.
+    if (unchosenChatEngine(name)) await swapEngine(name, tag);
+    else await swapEngine(name, tag, { drain: () => stopRole(role, "Draining for an engine change."), postLoadCheck: async () => { await restartRole(role); await getProcess(role); return true; } });
     return c.json({ ok: true as const, tag }, 200);
   } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 400); }
 });

@@ -118,7 +118,7 @@ ids and what `data` carries:
 | `model.installed` | `{ model, path }` or `{ model, removed: true }` | an admin notification |
 | `update.available` | `{ kind: "engine" or "model", name, installed, available }` | an admin notification with the Updates link |
 | `update.applied` | `{ kind, name, tag }` | an admin notification |
-| `update.failed` | `{ kind, name?, reason }` | an immediate admin notification plus the `failed-swap` health item |
+| `update.failed` | `{ kind, name?, reason }` | an immediate admin notification plus the `failed-swap` health item (`failed-swap.<name>` for an engine other than llama-server) |
 | `health.changed` | `{ code, severity, title, open }` | a Repairs entry opened or closed |
 
 The Stack never notifies a person; Home's notification system (org

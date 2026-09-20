@@ -4,14 +4,14 @@ import { db } from "@/db";
 import { meta } from "@/db/schema";
 import { resolve } from "node:path";
 import { join } from "node:path";
-import { ENGINE_READY_MARKER } from "@/lib/engineCatalog";
+import { CHAT_ENGINES, ENGINE_BINARIES, ENGINE_READY_MARKER, type ChatEngine } from "@/lib/engineCatalog";
 import { engineCurrentPath, engineTagRoot } from "@/lib/store/layout";
 import { raise } from "@/lib/health";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
 import { emit } from "@/lib/events";
 import { currentEngineTag, ensureEngine } from "@/lib/engineInstall";
 import type { EngineBinaryPin } from "@/lib/engineCatalog";
-import { getProcess, restartRole, stopRole } from "@/lib/supervisor";
+import { chatEngine, getProcess, restartRole, stopRole } from "@/lib/supervisor";
 import { pendingEngineUpdate } from "@/updates/catalog";
 
 export function resolveEnginePin(tag: string): string { return tag.match(/b\d+/)?.[0] ?? tag; }
@@ -42,7 +42,7 @@ export async function swapEngine(name: string, tag: string, options: EngineSwapO
       try { unlinkSync(current); } catch { /* Restore is best effort. */ }
       try { symlinkSync(previous, current); } catch { /* Health item records the failed rollback. */ }
     }
-    if (options.emitEvents !== false) failedSwap(error instanceof Error ? error.message : String(error));
+    if (options.emitEvents !== false) failedSwap(error instanceof Error ? error.message : String(error), name);
     throw error;
   }
 }
@@ -58,27 +58,46 @@ export function previousEngine(name: string): string | null {
   const tag = db.select({ value: meta.value }).from(meta).where(eq(meta.key, previousKey(name))).get()?.value ?? null;
   return tag && existsSync(engineTagRoot(name, tag)) ? tag : null;
 }
-export function failedSwap(reason: string): void {
-  emit({ id: "update.failed", data: { kind: "engine", reason } });
-  raise({ code: "failed-swap", severity: "critical", title: "An update could not start", text: reason, cause: reason, fix: { label: "Roll back", action: "rollback_update" } });
+/** The health code of a failed swap names the engine, so the rollback
+ * fix moves that engine's link: `failed-swap` for llama-server (the
+ * code Home has known since the first swap), `failed-swap.<name>` for
+ * any other. */
+export function failedSwapCode(name: string): string { return name === "llama-server" ? "failed-swap" : `failed-swap.${name}`; }
+export function engineOfFailedSwap(code: string): string { return code === "failed-swap" ? "llama-server" : code.slice("failed-swap.".length); }
+export function failedSwap(reason: string, name = "llama-server"): void {
+  emit({ id: "update.failed", data: { kind: "engine", name, reason } });
+  raise({ code: failedSwapCode(name), severity: "critical", title: `An update of ${name} could not start`, text: reason, cause: reason, fix: { label: "Roll back", action: "rollback_update" } });
 }
 
 export type EngineUpdateRunner = (name: string, tag: string, target: StagingTarget) => Promise<void>;
 /** A pin for a build named by url, checksum and tag: what the Catalog
  * index describes, or what Home stages beside the current build. */
 export interface StagingTarget { url: string; sha256: string; size: number; requires?: string[]; extra?: Array<{ url: string; sha256: string; size: number; label?: string }> }
+const shippedTool = (name: string): string | undefined => ENGINE_BINARIES.find((pin) => pin.name === name)?.tool;
 export function stagingPin(name: string, tag: string, target: StagingTarget): EngineBinaryPin {
   return {
     id: `${name}-${tag}`, name, tag, platform: process.platform as "darwin" | "win32", arch: process.arch as "arm64" | "x64",
     requiresNvidia: target.requires?.includes("nvidia") ?? false, label: `${name} ${tag}`,
     archive: { label: `${name} ${tag}`, url: target.url, sha256: target.sha256, approxBytes: target.size },
+    // The binary's name inside the archive is the engine's own (mlx-serve), read from the shipped pin of the same name.
+    ...(shippedTool(name) ? { tool: shippedTool(name) } : {}),
     ...(target.extra?.length ? { extraArchives: target.extra.map((archive) => ({ label: archive.label ?? `${name} ${tag} extra`, url: archive.url, sha256: archive.sha256, approxBytes: archive.size })) } : {}),
     verified: true,
   };
 }
+/** How an update's swap treats the chat role: drained and restarted on
+ * the new build when the engine is the one the setting chose; a chat
+ * engine not chosen is not the chat role's process, so its link moves
+ * with nothing drained and nothing restarted that could prove the build
+ * (the proof comes when it is chosen). */
+export function updateSwapOptions(name: string): EngineSwapOptions {
+  const runsChat = CHAT_ENGINES.includes(name as ChatEngine) ? chatEngine() === name : true;
+  if (!runsChat) return { emitEvents: false };
+  return { drain: () => stopRole("chat", "Draining for an engine update."), postLoadCheck: async () => { await restartRole("chat"); await getProcess("chat"); return true; }, emitEvents: false };
+}
 async function stageAndSwap(name: string, tag: string, target: StagingTarget): Promise<void> {
   await ensureEngine(stagingPin(name, tag, target), undefined, { activate: false });
-  await swapEngine(name, tag, { drain: () => stopRole("chat", "Draining for an engine update."), postLoadCheck: async () => { await restartRole("chat"); await getProcess("chat"); return true; }, emitEvents: false });
+  await swapEngine(name, tag, updateSwapOptions(name));
 }
 let engineUpdateRunner: EngineUpdateRunner = stageAndSwap;
 export function setEngineUpdateRunnerForTests(value: EngineUpdateRunner): void { engineUpdateRunner = value; }

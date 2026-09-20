@@ -148,9 +148,43 @@ export const STACK_IMAGE_MODEL: CatalogModelLike = {
   },
 };
 
+// The MLX build of the same chat model, for mlx-serve (STACK-93): a
+// directory of nine files, each pinned by path, size and sha256 (the
+// small ones hashed from the download, the hub keeps no LFS digest for
+// them), so the Studio bench compares the two engines on one model.
+const MLX_REPO = "mlx-community/Qwen3-1.7B-4bit";
+const MLX_REVISION = "3b1b1768f8f8cf8351c712464f906e86c2b8269e";
+const mlxFile = (path: string) => hfUrl(`${MLX_REPO}/resolve/${MLX_REVISION}/${path}`);
+export const STACK_MLX_CHAT_MODEL: CatalogModelLike = {
+  id: "qwen3-1.7b-mlx-4bit",
+  role: "chat",
+  repo: MLX_REPO,
+  license: "Apache-2.0",
+  revision: MLX_REVISION,
+  engine: "mlx-serve",
+  sizing: { profile: "p16", quantization: "4-bit" },
+  download: {
+    url: mlxFile("model.safetensors"),
+    sha256: "0e86d9677e519323849eac1bc272caae88567a481ff188c431f70be543d9995f",
+    approx_bytes: 984_013_244,
+    directory: "Qwen3-1.7B-4bit",
+    files: [
+      { path: "model.safetensors", sha256: "0e86d9677e519323849eac1bc272caae88567a481ff188c431f70be543d9995f", bytes: 968_080_210 },
+      { path: "model.safetensors.index.json", sha256: "1e3058d4ba4b04e4de35b74467725cbef90ff022198404218e48f21adc9cfa15", bytes: 49_731 },
+      { path: "config.json", sha256: "507a6701220524eb8b283425bf0856a9ae4f21f4052e563896ddd668994b1dc7", bytes: 937 },
+      { path: "tokenizer.json", sha256: "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4", bytes: 11_422_654 },
+      { path: "tokenizer_config.json", sha256: "253153d0738ceb4c668d2eff957714dd2bea0b56de772a9fdccd96cbf517e6a0", bytes: 9_706 },
+      { path: "special_tokens_map.json", sha256: "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd", bytes: 613 },
+      { path: "added_tokens.json", sha256: "c0284b582e14987fbd3d5a2cb2bd139084371ed9acbae488829a1c900833c680", bytes: 707 },
+      { path: "vocab.json", sha256: "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910", bytes: 2_776_833 },
+      { path: "merges.txt", sha256: "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5", bytes: 1_671_853 },
+    ],
+  },
+};
+
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_IMAGE_MODEL];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_IMAGE_MODEL];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a
@@ -158,8 +192,7 @@ export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_STT_MOD
 export interface RoleCandidate { name: string; kind: "engine" | "model"; source: string; }
 export const ROLE_CANDIDATES: Partial<Record<string, RoleCandidate[]>> = {
   chat: [
-    { name: "mlx-serve", kind: "engine", source: "dev.md, Engines and the supervisor; STACK-14, STACK-93" },
-    { name: "oMLX", kind: "engine", source: "dev.md, Engines and the supervisor; STACK-14, STACK-93" },
+    { name: "oMLX", kind: "engine", source: "the named alternative the Studio bench can call for: dev.md, The second chat engine; STACK-14" },
   ],
   stt: [
     { name: "Whisper tiny.en or base.en on the same runtime, the named alternative", kind: "model", source: "dev.md, The speech roles" },

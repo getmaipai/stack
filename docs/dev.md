@@ -531,7 +531,9 @@ guard (no new requests, up to 60 s for in-flight work, then SIGTERM and
 SIGKILL after 10 s), the `current` link flips, and `/health` plus the
 post-load completion must pass before routing does. A failed swap
 relinks the previous tag and raises `failed-swap` (critical, fix: roll
-back); the previous build is kept until the next update. A model update
+back; for an engine other than llama-server the code is
+`failed-swap.<name>` and the fix rolls that engine back, STACK-93);
+the previous build is kept until the next update. A model update
 is a new revision beside the old under the same rule and is never
 applied without Home's explicit call. Engine version state is derived,
 never stored: the running build, the store's `current` tag and the
@@ -1324,6 +1326,136 @@ doing its job on a busy laptop, not a defect; the margin was not
 loosened for the proof. The live pass through the Stack is 13b-live,
 to be run with about 2 GB more free or on the Studio.
 
+## The second chat engine: mlx-serve (STACK-93, 2026-09-20)
+
+**The pick: mlx-serve**, by the prebuilt rule, and the reason in the
+facts checked on 2026-09-20. `ddalcu/mlx-serve` (MIT, native Zig, no
+Python) publishes a release archive for Apple silicon,
+`mlx-serve-bin-macos-arm64.tar.gz` (v26.9.4, 2026-09-17, 72.1 MB,
+sha256 `5a8b1631…`), holding one binary and its libraries (libmlx,
+libmlxc, mlx.metallib, libllama, libwebp): the same shape as
+llama-server's archive, so it installs, swaps and rolls back through
+the engine store and the Catalog engine index with no new machinery
+and no environment to build. It speaks the OpenAI chat wire and, run
+against the pinned MLX model, answers `GET /health` with
+`{"status":"ok"}` and `GET /props` in llama-server's own shape (the
+context length, the model info, its memory), so the supervisor's one
+identity reader and post-load check serve it as they serve
+llama-server; the build string is the pin's tag, since its `/props`
+carries no `build_info`. It runs one model pinned for the life of the
+process (`--model <dir> --serve --host 127.0.0.1 --port <free>
+--ctx-size <n>`), which is the supervisor's contract. Verified live in
+the scratch run below: health in 3 s, a completion in 0.56 s.
+
+**Rejected for now: oMLX** (`jundot/omlx`, Apache 2.0, Python, the
+larger project with continuous batching and SSD caching). Its releases
+ship wheels for macOS 15 and later only, on GitHub rather than PyPI,
+so it would need the uv environment pattern plus a raised macOS floor
+for the chat role itself, where mlx-serve needs neither. It stays the
+named alternative the Studio bench can call for when it measures both
+against llama-server (STACK-14); the adapter's contract is the same
+and its rows in the catalog would be the environment shape Pocket TTS
+uses.
+
+**The MLX weights pin**: `mlx-community/Qwen3-1.7B-4bit` at revision
+`3b1b1768…` (Apache 2.0), the MLX build of the same model the
+llama-server pin ships, so the Studio bench compares engines on one
+model. An MLX model is a directory of files, not one file: the store
+gains multi-file pins (`download.files`, each with its path, size and
+sha256; the record's own sha256 is the weights file's), downloaded
+one by one, each verified, into one directory that is the record's
+`modelPath`. Nine files, 984 MB, the weights 968 MB.
+
+**Choosing the engine**: `stack.engines.chat.engine` (`llama-server`
+or `mlx-serve`, a `needs_restart` setting) names the chat role's
+engine; a model record names the engine it is for, and the role's
+selected model is the first verified one for the chosen engine, so the
+switch is the setting plus a restart, both models installed side by
+side. The supervisor's launch for the chat wire branches on the
+chosen engine: the `current` link of that engine's store, its own
+arguments, the same admission (the file times the `mlx-serve`
+multiplier the governor already had, 1.4, until measured), the same
+drain, restart and identity claims. HOME for the child is under
+`data/` (mlx-serve keeps its logs and its own model folder there).
+The engines list compares the running build with the row of the
+engine whose process serves the chat role (each process records the
+engine it is), so the other chat engine, installed or even chosen but
+not running, is never "newer installed" against a build it is not
+running; a pending `stack.engines.chat.engine` is the restart on the
+chosen row; the start, restart and current routes for the chat engine
+the setting has not chosen answer with the reason rather than driving
+the chat role's process (a swap of that engine's `current` link moves
+the link and proves nothing, since nothing of it runs), while a stop
+is judged on what runs, so the engine holding the role's memory can
+always be stopped, a start of the chosen engine while the other still
+holds the role is a real start, and the scheduled engine update swaps
+the link of a chat engine not chosen without draining or restarting
+the process that runs (its proof comes when it is chosen); a failed
+swap of mlx-serve raises `failed-swap.mlx-serve` and its rollback fix
+moves mlx-serve's link, draining the chat role only when mlx-serve is
+the engine it runs. The download's `directory` is confined to the
+model's own store path, as each pinned file's path is. A staged
+build of mlx-serve carries the engine's own binary name, as the
+shipped pin does. The setting refuses an engine with no pinned build
+for the machine, so a Windows or Linux box never applies a choice
+that would leave the chat wire with no engine. A pull by id takes a
+directory model's file list from the Catalog's entry when it carries
+one (the index shape has `directory` and `files`) and from the
+shipped pin otherwise (at the shipped revision only, whichever pin
+the body's other fields came from: another revision's files are not
+the shipped hashes), so an index entry without the
+list never turns the model into one file; a pinned path that leaves
+the model's directory is refused before it is written; a pin naming
+both a hub file and a directory is refused, as is half of the
+directory shape (files without a directory or the reverse), and a
+pull of an MLX model that resolved no file list is refused at the
+route rather than installing one lone file no engine launches; a
+secondary file that fails its checksum raises the same
+`stored-blob-checksum-mismatch` item the weights do. A model id is a plain
+name (one path segment, letters, digits, dots, dashes, underscores)
+that is never one of the store's own directories (`hub`,
+`manifests`), refused at the pull and import routes, and the sweep on
+remove never touches those directories whatever a record's id says. The setting's refusal
+never applies to the value already in effect, so a client writing
+every setting back, or the default on a machine with no chat pin,
+is not a change to refuse. A re-install of a
+directory model verifies the weights already placed in the directory
+and fetches only the files that are missing or wrong, the same
+promise the archive beside a package keeps; the job's progress counts
+every file against the directory's total; a pull whose URL names a
+file the pin does not list is refused before a byte moves (the URL's
+path is the name, so Hugging Face's `?download=true` form is the same
+file); and dropping a record sweeps the model's own directory under
+the store, so weights placed by an install that stopped on a later
+file never outlive the record.
+
+**Proven live** (`scripts/prove-mlx.sh` on the p16 laptop, Apple M4
+Pro, 24 GB, 8.3 GB free at the ask, a clean scratch data directory on
+port 8771, two runs, the second recorded): the mlx-serve archive
+downloaded, verified and installed in 2.2 s (`engines/mlx-serve` 220
+MB extracted); the nine model files downloaded and each verified in
+50.6 s, one directory of 984,013,244 bytes, the manifest holding nine
+blobs; with llama-server not installed the chat role stood
+`notInstalled`; the setting stored `mlx-serve` as pending with
+`needs_restart` and the apply put it in effect, after which the role
+stood `installed` on `qwen3-1.7b-mlx-4bit`; the first
+`POST /v1/chat/completions` answered "OK." in 1.88 s including the
+spawn, the load and the identity read (headers
+`x-maipai-engine: local mlx-serve-v26.9.4`,
+`x-maipai-model: Qwen3-1.7B-4bit`, `x-maipai-revision: 3b1b1768…`,
+the identity claim `ok` against the expected name); the governor
+admitted `chat` at the estimate (984 MB times 1.4, 1.38 GB) and the
+process measured 1,244,874,360 bytes by `phys_footprint` after the
+load (1,099,280 KB resident by `ps`), so the multiplier covers it with
+10 percent to spare; a second completion on the warm process answered
+"4" in 50 ms; the readiness check passed chat, coding, judge and
+router through the one process; a restart through
+`POST /stack/v1/engines/mlx-serve/restart` drained, respawned and
+answered again with the same identity; the port came free and the
+scratch directory was removed. The GGUF pin was not installed in the
+run (llama-server's own proof is above); the Studio bench (STACK-14)
+puts the two side by side on one model.
+
 ## Measured so far
 
 On an Apple silicon Mac (2026-09-18, a temporary copy of the owner's
@@ -1348,9 +1480,9 @@ measurement and the first with the full resident set.
    engine serving the `stt` and `tts` roles, which is how the speech
    design note (STACK-94a) reads it, and STACK-17 settles it. The
    robot design pass confirms or amends this in `bot/docs/dev.md`.
-2. **The second engine.** `mlx-serve` and `oMLX` are the Mac
-   candidates beside `llama-server`; the Studio bench decides which
-   gets the second adapter.
+2. **The second engine.** mlx-serve has the second adapter (STACK-93,
+   by the prebuilt rule); oMLX stays the named alternative the Studio
+   bench can call for when it measures both against llama-server.
 
 ## Battle-tested checklist (for 1.0, empty until earned)
 

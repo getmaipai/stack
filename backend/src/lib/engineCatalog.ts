@@ -151,10 +151,31 @@ export const ENGINE_BINARIES: EngineBinaryPin[] = [
   },
 ];
 
+/** The second chat engine (STACK-93): one archive with the binary and
+ * its libraries, the same shape as llama-server's. */
+export const MLX_SERVE_PIN: EngineBinaryPin = {
+  id: "mlx-serve-v26.9.4-macos-arm64",
+  name: "mlx-serve",
+  tag: "v26.9.4",
+  platform: "darwin",
+  arch: "arm64",
+  tool: "mlx-serve",
+  requiresNvidia: false,
+  label: "mlx-serve (macOS, Apple Silicon, MLX and GGUF), v26.9.4",
+  docsUrl: "https://github.com/ddalcu/mlx-serve/tree/v26.9.4/docs",
+  archive: { label: "mlx-serve (macOS arm64)", url: "https://github.com/ddalcu/mlx-serve/releases/download/v26.9.4/mlx-serve-bin-macos-arm64.tar.gz", sha256: "5a8b16317e7e4d5f87f528384a5d28b70bacbdcfce291be2aa6513a87e2a1925", approxBytes: 72_076_199 },
+  verified: true,
+};
+ENGINE_BINARIES.push(MLX_SERVE_PIN);
+
+/** The chat wire's engines, one chosen by `stack.engines.chat.engine`. */
+export const CHAT_ENGINES = ["llama-server", "mlx-serve"] as const;
+export type ChatEngine = typeof CHAT_ENGINES[number];
+
 /** The role each engine name serves, for the routes that act on "the
  * engine's role" (start, stop, restart, the swap's drain). */
 export type EngineRole = "chat" | "tts" | "image";
-export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", uv: "tts", "pocket-tts": "tts", comfyui: "image" };
+export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", "mlx-serve": "chat", uv: "tts", "pocket-tts": "tts", comfyui: "image" };
 export function engineRole(name: string): EngineRole { return ENGINE_ROLE[name] ?? "chat"; }
 
 /** Runtimes the Stack assembles from pinned wheels through uv, in an

@@ -7,7 +7,7 @@ import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import { apiRouter, ErrorSchema, idParamSchema } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
-import { installCatalogModel, listModels, removeModel, upsertModel, type ModelRecord } from "@/lib/modelStore";
+import { installCatalogModel, listModels, refuseUnsafeModelId, removeModel, upsertModel, type CatalogModelLike, type ModelRecord } from "@/lib/modelStore";
 import { readModelManifest } from "@/lib/store/manifests";
 import { importPath } from "@/lib/store/importScan";
 import { modelsDir } from "@/lib/paths";
@@ -27,7 +27,7 @@ const ImportSchema = z.object({ id: z.string(), path: z.string(), roles: z.array
 const ActionSchema = z.object({ action: z.enum(["load", "unload", "pin", "unpin"]) });
 
 const listRoute = createRoute({ method: "get", path: "/", tags: ["Models"], summary: "Installed and known models", responses: { 200: { content: { "application/json": { schema: z.object({ models: z.array(ModelSchema) }) } }, description: "Every model record with its provenance and state." } } });
-const pullRoute = createRoute({ method: "post", path: "/", tags: ["Models"], summary: "Install a pinned model (progress on the event feed)", request: { body: { content: { "application/json": { schema: PullSchema } } } }, responses: { 202: { content: { "application/json": { schema: z.object({ job: z.string(), model: z.string() }) } }, description: "The download job." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "Provenance incomplete." } } });
+const pullRoute = createRoute({ method: "post", path: "/", tags: ["Models"], summary: "Install a pinned model (progress on the event feed)", request: { body: { content: { "application/json": { schema: PullSchema } } } }, responses: { 202: { content: { "application/json": { schema: z.object({ job: z.string(), model: z.string() }) } }, description: "The download job." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "Provenance incomplete, or an id that is not a plain name." } } });
 const importRoute = createRoute({ method: "post", path: "/import", tags: ["Models"], summary: "Import a local model file by verified link", request: { body: { content: { "application/json": { schema: ImportSchema } } } }, responses: { 200: { content: { "application/json": { schema: ModelSchema } }, description: "The imported model." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "The path is not a file." } } });
 const removeRoute = createRoute({ method: "delete", path: "/{id}", tags: ["Models"], summary: "Remove a model", request: { params: idParamSchema("id") }, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.literal(true) }) } }, description: "Removed." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown model." } } });
 const actionRoute = createRoute({ method: "post", path: "/{id}/actions", tags: ["Models"], summary: "Load, unload, pin or unpin a model", request: { params: idParamSchema("id"), body: { content: { "application/json": { schema: ActionSchema } } } }, responses: { 200: { content: { "application/json": { schema: z.object({ modelId: z.string(), ok: z.boolean(), reason: z.string().optional() }) } }, description: "The outcome." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown model." } } });
@@ -38,17 +38,35 @@ export function modelView(model: ModelRecord) {
   return { id: model.id, roles: model.roles, state: model.modelPath && !fileMissing && readModelManifest(model.id) ? "installed" as const : "notInstalled" as const, runtimeState: loadedRoleForModel(model.id) ? "loaded" as const : "ready" as const, pinned: isModelPinned(model.id), sizeBytes: model.sizeBytes, fileMissing, measuredFootprintBytes: model.measuredFootprintBytes, measuredContextLength: model.measuredContextLength, estimated: model.measuredFootprintBytes === null, source: model.source, licence: model.licence, revision: model.revision, sha256: model.sha256, provenance: model.provenance, modelPath: model.modelPath, installedAt: model.installedAt, verifiedAt: model.verifiedAt };
 }
 
+/** What a pull installs: the body's fields, and what it leaves out from
+ * the Catalog's index entry or the Stack's own shipped pin for that id
+ * (a package's archive flag, a hub file's placement, a component's
+ * kind, a directory model's file list), so an install by id lands the
+ * way the pin says. A directory model's files come from the pin that
+ * has them: the Catalog's entry when it carries them, else the shipped
+ * pin, so an index entry without them never turns the model into one
+ * file. */
+export function pullSpec(body: z.infer<typeof PullSchema>): CatalogModelLike & { download: NonNullable<CatalogModelLike["download"]> } {
+  const catalogEntry = catalogModelForId(body.id);
+  const shipped = STACK_MODELS.find((pin) => pin.id === body.id) ?? null;
+  const indexed = catalogEntry ?? shipped;
+  // The shipped list stands in only for the same revision: another
+  // revision's files would be verified against hashes that are not theirs.
+  const directoryPin = catalogEntry?.download?.files ? catalogEntry : shipped?.download?.files && body.revision === shipped.revision ? shipped : null;
+  return { id: body.id, role: body.role, repo: body.repo ?? indexed?.repo, license: body.licence, revision: body.revision, engine: body.engine ?? indexed?.engine, sizing: indexed?.sizing, component: body.component ?? indexed?.component, download: { url: body.url, sha256: body.sha256, approx_bytes: body.approx_bytes ?? indexed?.download?.approx_bytes ?? 0, archive: body.archive ?? indexed?.download?.archive, hub_file: body.hub_file ?? indexed?.download?.hub_file, directory: directoryPin?.download?.directory, files: directoryPin?.download?.files } };
+}
+
 export const modelsRoutes = apiRouter<AppEnv>();
 modelsRoutes.openapi(listRoute, (c) => c.json({ models: listModels().map(modelView) }, 200));
 modelsRoutes.openapi(catalogRoute, (c) => c.json({ models: STACK_MODELS as unknown as Record<string, unknown>[] }, 200));
 modelsRoutes.openapi(pullRoute, (c) => {
   const body = c.req.valid("json");
-  // What the body leaves out comes from the Catalog's index entry or the
-  // Stack's own shipped pin for that id (a package's archive flag, a hub
-  // file's placement, a component's kind), so an install by id lands the
-  // way the pin says.
-  const indexed = catalogModelForId(body.id) ?? STACK_MODELS.find((pin) => pin.id === body.id) ?? null;
-  const model = { id: body.id, role: body.role, repo: body.repo ?? indexed?.repo, license: body.licence, revision: body.revision, engine: body.engine ?? indexed?.engine, sizing: indexed?.sizing, component: body.component ?? indexed?.component, download: { url: body.url, sha256: body.sha256, approx_bytes: body.approx_bytes ?? indexed?.download?.approx_bytes ?? 0, archive: body.archive ?? indexed?.download?.archive, hub_file: body.hub_file ?? indexed?.download?.hub_file } };
+  // The id names the model's directory under the store.
+  try { refuseUnsafeModelId(body.id); } catch (error) { return c.json({ error: (error as Error).message }, 400); }
+  const model = pullSpec(body);
+  // An MLX model is a directory; a pull that resolved no file list for
+  // one would install a lone weights file no engine can launch.
+  if (model.engine === "mlx-serve" && !model.download.files) return c.json({ error: `${body.id} is an MLX model and needs its pinned file list; none is known for revision ${body.revision}.` }, 400);
   const job = createJob({ kind: "model.install", role: body.role, totalBytes: model.download.approx_bytes, status: "downloading", input: { model: body.id } });
   // One directory per model id: two pins whose URLs end in the same file
   // name never share a path.
@@ -61,6 +79,7 @@ modelsRoutes.openapi(pullRoute, (c) => {
 modelsRoutes.openapi(importRoute, (c) => {
   const body = c.req.valid("json");
   try {
+    refuseUnsafeModelId(body.id);
     const manifest = importPath(body.path, { id: body.id, roles: body.roles, licence: body.licence, revision: body.revision });
     const now = new Date().toISOString();
     const record = upsertModel({ id: manifest.id, roles: body.roles, source: "huggingface", provenance: { source: manifest.source, path: manifest.sourcePath }, revision: manifest.revision ?? "import", sha256: manifest.blobs[0]?.digest ?? null, sizeBytes: manifest.sizeBytes, licence: body.licence, modelPath: manifest.blobs[0]?.path ?? null, installedAt: now, verifiedAt: now });

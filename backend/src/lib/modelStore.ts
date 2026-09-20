@@ -5,12 +5,13 @@ import { downloadUrl, DownloadVerificationError, sha256OfFile, type DownloadOpti
 import { dataDir, modelsDir } from "@/lib/paths";
 import { hfUrl } from "@/lib/hf";
 import type { RoleId } from "@/roles";
-import { existsSync, mkdirSync, realpathSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync, renameSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { extractArchive } from "@maipai/core/src/archive";
 import { z } from "zod";
 import { emit } from "@/lib/events";
+import { hfHubRoot, modelManifestRoot } from "@/lib/store/layout";
 import { readModelManifest, removeModelManifest, writeModelManifest } from "@/lib/store/manifests";
 import { readHfFile, writeHfFile } from "@/lib/store/hfCache";
 import { raise } from "@/lib/health";
@@ -81,7 +82,15 @@ export interface CatalogModelLike {
    * is placed in the Stack's Hugging Face hub cache at the record's
    * repo and revision under this path, where an engine that reads the
    * hub finds it; `modelPath` is that snapshot path. */
-  download?: { url: string; sha256: string; approx_bytes: number; archive?: boolean; hub_file?: string };
+  download?: {
+    url: string; sha256: string; approx_bytes: number; archive?: boolean; hub_file?: string;
+    /** A model that is a directory of files (an MLX model): every file
+     * by path, size and sha256, downloaded beside the first into
+     * `directory`, which becomes `modelPath`; `url` and `sha256` are the
+     * weights file's, and the other files resolve from the same base. */
+    directory?: string;
+    files?: Array<{ path: string; sha256: string; bytes: number }>;
+  };
   /** Recorded on the pin by a bench (STACK-74), with a sanitized hardware
    * line, never a hostname: the inventory prints these, and only these. */
   measured?: { footprintBytes: number; contextLength: number; hardware: string };
@@ -306,25 +315,44 @@ async function installRegisteredModel(
   const destination = options.destination;
   const hubRepo = typeof record.provenance.repo === "string" ? record.provenance.repo : null;
   if (verifiedDownload.hub_file && !hubRepo) throw new Error(`Model ${record.id} names a hub file but no repository.`);
+  if (verifiedDownload.hub_file && verifiedDownload.files) throw new Error(`Model ${record.id} cannot be both a hub file and a directory of files.`);
+  // A directory model names both its directory and its files, or neither: half of the shape would install one lone file.
+  if (!!verifiedDownload.files !== !!verifiedDownload.directory) throw new Error(`Model ${record.id} names ${verifiedDownload.files ? "files without a directory" : "a directory without its files"}.`);
   // A hub file already in the cache at the pinned digest is the install;
   // nothing is fetched twice.
   const cachedHubFile = verifiedDownload.hub_file && hubRepo ? readHfFile(hubRepo, record.revision, verifiedDownload.hub_file) : null;
   const alreadyCached = cachedHubFile?.digest === verifiedDownload.sha256.toLowerCase();
   mkdirSync(join(destination, ".."), { recursive: true });
   const downloader = options.download ?? downloadUrl;
-  if (!alreadyCached) {
+  // A directory model's weights, once placed in the directory at the
+  // pinned digest, are the install: a re-install verifies them there
+  // and fetches only what is missing, as the archive beside a package.
+  const directory = verifiedDownload.files && verifiedDownload.directory ? resolve(dirname(destination), verifiedDownload.directory) : null;
+  // The directory is the model's own, under its store path, whatever the index says: a remove sweeps it.
+  if (directory && (!directory.startsWith(resolve(dirname(destination)) + sep) || directory.includes(sep, resolve(dirname(destination)).length + 1))) throw new Error(`Model ${record.id} names a directory outside its own: ${verifiedDownload.directory}`);
+  // The URL's path names the weights file among the pinned ones (a
+  // query string such as Hugging Face's `?download=true` is not the name).
+  const urlPath = (url: string): string => { try { return new URL(url).pathname; } catch { return url; } };
+  const weights = directory ? verifiedDownload.files!.find((file) => urlPath(verifiedDownload.url).endsWith(`/${file.path}`)) ?? null : null;
+  if (directory && !weights) throw new Error(`Model ${record.id} is a directory of pinned files and the URL names none of them.`);
+  const placedWeights = directory && weights ? join(directory, weights.path) : null;
+  const placedDigest = placedWeights && existsSync(placedWeights) ? await sha256OfFile(placedWeights) : null;
+  const alreadyPlaced = placedDigest === verifiedDownload.sha256.toLowerCase();
+  // Progress for a directory model counts every file, the weights first.
+  const directoryTotal = directory ? verifiedDownload.files!.reduce((sum, file) => sum + file.bytes, 0) : 0;
+  if (!alreadyCached && !alreadyPlaced) {
     if (existsSync(destination)) {
       const actual = await sha256OfFile(destination);
       if (actual !== verifiedDownload.sha256.toLowerCase()) rmSync(destination, { force: true });
     }
     const downloadOptions: DownloadOptions = {
       expectedSha256: verifiedDownload.sha256,
-      onProgress: options.onProgress,
+      onProgress: directory ? (progress) => options.onProgress?.({ ...progress, totalBytes: directoryTotal }) : options.onProgress,
       signal: options.signal,
     };
     await downloader(verifiedDownload.url, destination, downloadOptions);
   }
-  const actual = alreadyCached ? cachedHubFile!.digest : await sha256OfFile(destination);
+  const actual = alreadyCached ? cachedHubFile!.digest : alreadyPlaced ? placedDigest! : await sha256OfFile(destination);
   if (actual !== verifiedDownload.sha256.toLowerCase()) {
     rmSync(destination, { force: true });
     raise({ code: "stored-blob-checksum-mismatch", severity: "error", title: "A model checksum did not match", text: `The downloaded bytes for ${record.id} failed verification.`, cause: "The file digest differed from its recorded SHA-256.", fix: { label: "Download again", action: "retry_download" } });
@@ -341,6 +369,38 @@ async function installRegisteredModel(
     // Moved into the hub cache, held once; the snapshot path is the model path.
     modelPath = alreadyCached ? cachedHubFile!.path : writeHfFile({ repo: hubRepo!, revision: record.revision, filePath: verifiedDownload.hub_file, sourcePath: destination, digest: actual, move: true }).path;
   }
+  // A directory model: the other files land beside the weights, each
+  // verified, and the directory is the model path.
+  const fileBlobs: Array<{ digest: string; sizeBytes: number; path: string }> = [];
+  if (directory && verifiedDownload.files) {
+    mkdirSync(directory, { recursive: true });
+    const path = urlPath(verifiedDownload.url);
+    const base = verifiedDownload.url.slice(0, verifiedDownload.url.indexOf(path) + path.lastIndexOf("/") + 1);
+    if (placedWeights && !alreadyPlaced) { mkdirSync(dirname(placedWeights), { recursive: true }); renameSync(destination, placedWeights); }
+    let landed = weights?.bytes ?? 0;
+    for (const file of verifiedDownload.files) {
+      const target = resolve(directory, file.path);
+      // A pinned path stays inside the model's directory, whatever the index says.
+      if (!target.startsWith(resolve(directory) + sep)) throw new Error(`Model ${record.id} pins a file outside its directory: ${file.path}`);
+      mkdirSync(dirname(target), { recursive: true });
+      // The weights are the blob just verified; its digest is the one checked.
+      if (weights && file.path === weights.path) { fileBlobs.push({ digest: actual, sizeBytes: file.bytes, path: target }); continue; }
+      if (!existsSync(target) || (await sha256OfFile(target)) !== file.sha256.toLowerCase()) {
+        rmSync(target, { force: true });
+        const before = landed;
+        await downloader(`${base}${file.path}`, target, { expectedSha256: file.sha256, signal: options.signal, onProgress: (progress) => options.onProgress?.({ ...progress, completedBytes: before + progress.completedBytes, totalBytes: directoryTotal }) });
+      }
+      const digest = await sha256OfFile(target);
+      if (digest !== file.sha256.toLowerCase()) {
+        rmSync(target, { force: true });
+        raise({ code: "stored-blob-checksum-mismatch", severity: "error", title: "A model checksum did not match", text: `The downloaded ${file.path} for ${record.id} failed verification.`, cause: "The file digest differed from its recorded SHA-256.", fix: { label: "Download again", action: "retry_download" } });
+        throw new DownloadVerificationError(`${file.path} failed checksum verification`);
+      }
+      landed += file.bytes;
+      fileBlobs.push({ digest, sizeBytes: file.bytes, path: target });
+    }
+    modelPath = directory;
+  }
   const now = options.now?.() ?? new Date().toISOString();
   const current = getModel(record.id) ?? record;
   const installed = upsertModel({
@@ -351,8 +411,8 @@ async function installRegisteredModel(
   }, now);
   // The blob the manifest names is the file that is really there: the
   // archive beside a package, the hub blob for a hub file.
-  const blobPath = verifiedDownload.hub_file ? modelPath : destination;
-  const blobSize = statSync(blobPath).size;
+  const blobPath = fileBlobs.length ? modelPath : verifiedDownload.hub_file ? modelPath : destination;
+  const blobs = fileBlobs.length ? fileBlobs : [{ digest: installed.sha256 ?? actual, sizeBytes: statSync(blobPath).size, path: blobPath }];
   writeModelManifest({
     kind: "model",
     id: installed.id,
@@ -361,13 +421,27 @@ async function installRegisteredModel(
     repo: typeof installed.provenance.repo === "string" ? installed.provenance.repo : undefined,
     revision: installed.revision,
     roles: installed.roles,
-    blobs: [{ digest: installed.sha256 ?? actual, sizeBytes: blobSize, path: blobPath }],
-    sizeBytes: blobSize,
+    blobs,
+    sizeBytes: blobs.reduce((sum, blob) => sum + blob.sizeBytes, 0),
     createdAt: installed.installedAt ?? now,
   });
   emit({ id: "model.installed", data: { model: installed.id, path: installed.modelPath } });
   bumpStackGeneration(`model ${installed.id} installed`);
   return installed;
+}
+
+/** The store's own subdirectories (the hub cache, the manifests) are
+ * never a model's own directory, whatever a record's id says. */
+function isStoreFixedDir(path: string): boolean {
+  const target = resolve(path);
+  return [hfHubRoot, modelManifestRoot].some((fixed) => target === resolve(fixed) || target.startsWith(resolve(fixed) + sep));
+}
+
+/** A model id names its directory under the store, so it is one path
+ * segment that is not one of the store's own. */
+export function refuseUnsafeModelId(id: string): void {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(id) || id === "." || id === "..") throw new Error(`Model id ${JSON.stringify(id)} is not a plain name.`);
+  if (isStoreFixedDir(join(modelsDir, id))) throw new Error(`Model id ${id} is a directory the store keeps for itself.`);
 }
 
 export function removeModel(id: string): boolean {
@@ -378,6 +452,11 @@ export function removeModel(id: string): boolean {
   const archive = readModelManifest(id)?.blobs[0]?.path;
   if (model.modelPath && model.modelPath.startsWith(modelsDir) && existsSync(model.modelPath)) rmSync(model.modelPath, { recursive: true, force: true });
   if (archive && archive.startsWith(modelsDir) && archive !== model.modelPath && existsSync(archive)) rmSync(archive, { force: true });
+  // The model's own directory under the store (a directory model whose
+  // install stopped after the weights were placed, a download that
+  // never verified) goes with the record; a hub-cache path is not here.
+  const own = join(modelsDir, id);
+  if (existsSync(own) && !isStoreFixedDir(own) && realpathSync(own).startsWith(realpathSync(modelsDir) + sep)) rmSync(own, { recursive: true, force: true });
   removeModelManifest(id);
   db.delete(models).where(eq(models.id, id)).run();
   emit({ id: "model.installed", data: { model: id, removed: true } });

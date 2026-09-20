@@ -14,6 +14,7 @@ import { setDownloadCapMbps } from "@/lib/download";
 import { StackSetting } from "@/spec/ts/stack-setting";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
 import { decryptSecret, encryptSecret } from "@/lib/secrets";
+import { ENGINE_BINARIES } from "@/lib/engineCatalog";
 
 export type SettingValue = number | boolean | string;
 
@@ -57,6 +58,9 @@ export const SETTINGS: SettingDeclaration[] = [
   { ...stack, key: "stack.runtime.idle_unload_on_battery_minutes", selector: "number", range: { min: 1, max: 1440 }, default: 10, label: "Unload after idle on battery", help: "The same limit while the computer runs on battery.", section: { id: "runtime", order: 20 }, level: "advanced", needs_restart: false },
   { ...stack, key: "stack.runtime.download_cap_mbps", selector: "number", range: { min: 0, max: 100_000 }, default: 0, label: "Download cap", help: "Maximum download speed in Mbps. Zero means no cap.", section: { id: "runtime", order: 30 }, level: "advanced", needs_restart: false },
   { ...stack, key: "stack.runtime.port", selector: "number", range: { min: 1, max: 65535 }, default: 8770, label: "Port", help: "The loopback port the Stack listens on after the next start.", section: { id: "runtime", order: 40 }, level: "expert", needs_restart: true },
+  // The chat wire's engine (STACK-93): llama-server or mlx-serve, both
+  // installed side by side; the switch is this setting plus a restart.
+  { ...stack, key: "stack.engines.chat.engine", selector: "select", range: { options: [{ value: "llama-server", label: "llama-server (GGUF, Metal)" }, { value: "mlx-serve", label: "mlx-serve (MLX, Apple silicon)" }] }, default: "llama-server", label: "Chat engine", help: "Which engine answers the chat roles after the next restart: llama-server runs GGUF models everywhere; mlx-serve runs MLX models on Apple silicon.", section: { id: "engines.chat", order: 5 }, level: "advanced", needs_restart: true },
   { ...stack, key: "stack.engines.llama_server.context_length", selector: "number", range: { min: 512, max: 262_144 }, default: 4096, label: "Context length", help: "How much conversation the engine can hold at once.", section: { id: "engines.llama_server", order: 10 }, level: "advanced", needs_restart: true },
   { ...stack, key: "stack.engines.llama_server.slots", selector: "number", range: { min: 1, max: 16 }, default: 1, label: "Parallel slots", help: "How many requests the engine can serve concurrently.", section: { id: "engines.llama_server", order: 20 }, level: "advanced", needs_restart: true },
   { ...stack, key: "stack.engines.llama_server.threads", selector: "number", range: { min: 0, max: 256 }, default: 0, label: "CPU threads", help: "CPU threads used by the engine. Zero lets the engine choose.", section: { id: "engines.llama_server", order: 30 }, level: "expert", needs_restart: true },
@@ -154,11 +158,23 @@ export function engineSettingValues(section: string): Record<string, SettingValu
   return Object.fromEntries(readSettings({ reveal: true }).filter((setting) => setting.key.startsWith(prefix)).map((setting) => [setting.key.slice(prefix.length), setting.in_effect as SettingValue]));
 }
 
+/** A chat engine with no pinned build for this machine cannot be chosen:
+ * the value would apply at the restart and leave every chat-wire role
+ * with no engine until someone flipped it back. */
+function refuseUnservable(key: string, value: SettingValue): void {
+  if (key !== "stack.engines.chat.engine") return;
+  const declaration = byKey.get(key)!;
+  // A value already in effect (a client writing every setting back, the
+  // default on a machine with no chat pin at all) is not a change to refuse.
+  if (value === decode(read(metaKey(key, "in_effect")), declaration)) return;
+  const servable = ENGINE_BINARIES.some((pin) => pin.name === value && pin.platform === process.platform && pin.arch === process.arch);
+  if (!servable) throw new Error(`${value} has no pinned build for ${process.platform} ${process.arch}; the chat engine stays as it is.`);
+}
 export function updateSettings(values: Record<string, unknown>): StackSetting[] {
   for (const key of Object.keys(values)) if (!byKey.has(key)) throw new Error(`Unknown Stack setting: ${key}`);
   // Every value is validated before any is written, so a bad second key
   // never leaves the first one half-applied.
-  const validated = Object.entries(values).map(([key, raw]) => { const declaration = byKey.get(key)!; return { key, declaration, value: valueSchema(declaration).parse(raw) as SettingValue }; });
+  const validated = Object.entries(values).map(([key, raw]) => { const declaration = byKey.get(key)!; const value = valueSchema(declaration).parse(raw) as SettingValue; refuseUnservable(key, value); return { key, declaration, value }; });
   const changed: string[] = [];
   for (const { key, declaration, value } of validated) {
     // A client that reads the settings and writes them all back sends a
