@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { getIcon } from "@/kit/icons";
-import { type BudgetResponse, type EngineRecord, type HardwareResponse, type HealthItem, type RepairRecord, type RoleRecord, type SetupPlanResponse } from "@/lib/api";
+import { type BudgetResponse, type EngineRecord, type HealthItem, type RepairRecord, type RoleRecord, type SetupPlanResponse } from "@/lib/api";
 import { allDestinations } from "@/lib/taxonomy";
 import { BoardPage } from "@/pages/BoardPage";
 import { TryItPage } from "@/pages/TryItPage";
@@ -79,7 +79,6 @@ export function DashboardShell() {
   const updates = useApiResource<{ app: { available: string | null }; engines: { available: string | null }; models: { available: string | null } }>("/stack/v1/updates");
   const health = useApiResource<{ health: HealthItem[] }>("/stack/v1/health");
   const detected = useApiResource<{ detected: Array<{ id: string; name: string; version: string; path?: string; couldHold: string[]; forgotten: boolean; adopted: boolean; target: string | null }> }>("/stack/v1/detected");
-  const hardware = useApiResource<HardwareResponse>("/stack/v1/hardware");
   const budget = useApiResource<BudgetResponse>("/stack/v1/budget");
   const runState = useApiResource<{ state: "running" | "pausing" | "paused" }>("/stack/v1/run-state");
   const refetchRepairs = repairs.refetch; const refetchRoles = roles.refetch; const refetchEngines = engines.refetch; const refetchUpdates = updates.refetch; const refetchHealth = health.refetch; const refetchDetected = detected.refetch; const refetchBudget = budget.refetch; const refetchRunState = runState.refetch; const currentRunState = runState.data?.state;
@@ -141,7 +140,7 @@ export function DashboardShell() {
     <Route path="/settings/*" element={<SettingsPage Frame={SectionFrame} />} />
     <Route path="*" element={<BoardPageProxy />} />
   </Routes>;
-  return <PhoneModeContext.Provider value={phone}><SidebarProvider open={railOpen} onOpenChange={handleRailOpenChange}><AppSidebar engineCount={engineCount} updateCount={updateCount} alertSeverity={alertSeverity} engineTooltip={engineTooltip} updateTooltip={updateTooltip} alertTooltip={alertTooltip} hardware={hardware.data?.hardware} budget={budget.data} runState={runState.data?.state} /><SidebarInset className="h-svh overflow-hidden bg-[var(--surface-page)]"><SiteHeader /><div className="flex-1 overflow-y-auto">{routes}</div><StackFooter /></SidebarInset></SidebarProvider></PhoneModeContext.Provider>;
+  return <PhoneModeContext.Provider value={phone}><SidebarProvider open={railOpen} onOpenChange={handleRailOpenChange}><AppSidebar engineCount={engineCount} updateCount={updateCount} alertSeverity={alertSeverity} engineTooltip={engineTooltip} updateTooltip={updateTooltip} alertTooltip={alertTooltip} /><SidebarInset className="h-svh overflow-hidden bg-[var(--surface-page)]"><SiteHeader /><div className="flex-1 overflow-y-auto">{routes}</div><StackFooter /></SidebarInset></SidebarProvider></PhoneModeContext.Provider>;
 }
 
 function BoardPageProxy() {

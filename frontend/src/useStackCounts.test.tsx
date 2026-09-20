@@ -2,7 +2,8 @@ import { afterEach, expect, mock, test } from "bun:test";
 import { cleanup, renderHook, waitFor } from "@testing-library/react";
 import { useStackCounts } from "@/hooks/use-stack-counts";
 
-afterEach(() => cleanup());
+const originalFetch = globalThis.fetch;
+afterEach(() => { cleanup(); globalThis.fetch = originalFetch; });
 
 function stub(responses: Record<string, unknown>): void {
   globalThis.fetch = mock(async (input: RequestInfo | URL) => {

@@ -5,8 +5,10 @@ import { Link } from "react-router-dom";
 import { getIcon } from "@/kit/icons";
 import type { BudgetResponse, HardwareResponse, HealthItem } from "@/lib/api";
 import { useApiResource } from "@/lib/useApiResource";
+import { worstSeverity } from "@/lib/health-severity";
 import { Badge } from "@/kit/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/kit/ui/tooltip";
+import { useSidebar } from "@/kit/ui/sidebar";
 
 const ActivityIcon = getIcon("Activity");
 const CpuIcon = getIcon("Cpu");
@@ -54,7 +56,8 @@ export function SystemPulse() {
 
   const healthItems = health.data?.health ?? [];
   const affected = healthItems.filter((item) => item.severity === "error" || item.severity === "critical").length;
-  const healthDot: Dot = affected > 0 ? "red" : healthItems.length > 0 ? "amber" : "green";
+  const worst = worstSeverity(healthItems);
+  const healthDot: Dot = worst === "critical" || worst === "error" ? "red" : worst === "warning" ? "amber" : "green";
   const healthTooltip = healthItems.length === 0 ? "Stack health · All good" : `Stack health · ${healthItems.length} component${healthItems.length === 1 ? "" : "s"} need attention`;
 
   const memoryDot: Dot = !budget.data ? "muted" : budget.data.pressure === "critical" ? "red" : budget.data.pressure === "warn" ? "amber" : "green";
@@ -69,10 +72,10 @@ export function SystemPulse() {
   // while live hasn't reported one yet (fresh boot, or a sampling gap),
   // not just when the request itself hasn't resolved (0 is not nullish,
   // so `??` alone would never reach the fallback once live.data loads).
-  const liveGpuCount = live.data?.live.gpus.length ?? 0;
-  const gpuCount = liveGpuCount > 0 ? liveGpuCount : hardware.data?.hardware.isAppleSilicon ? 1 : 0;
+  const liveGpuCount = live.data?.live?.gpus?.length ?? 0;
+  const gpuCount = liveGpuCount > 0 ? liveGpuCount : hardware.data?.hardware?.isAppleSilicon ? 1 : 0;
   const gpuDot: Dot = gpuCount > 0 ? "green" : "muted";
-  const gpuTooltip = gpuCount === 0 ? "GPU · Not reported" : gpuCount === 1 ? `GPU · ${live.data?.live.gpus[0]?.name ?? "1 device"}` : `GPU · ${gpuCount} devices`;
+  const gpuTooltip = gpuCount === 0 ? "GPU · Not reported" : gpuCount === 1 ? `GPU · ${live.data?.live?.gpus?.[0]?.name ?? "1 device"}` : `GPU · ${gpuCount} devices`;
 
   const netData = network.data;
   const networkDot: Dot = !netData || netData.interface === null ? "muted" : netData.gatewayMs === null ? "red" : netData.gatewayMs > 50 ? "amber" : "green";
@@ -84,15 +87,19 @@ export function SystemPulse() {
 
   const signals: Signal[] = [
     { key: "health", label: "Stack health", icon: ActivityIcon, dot: healthDot, tooltip: healthTooltip, badge: { count: affected, tone: "red" }, to: "/alerts?severity=error" },
-    { key: "memory", label: "Memory", icon: CpuIcon, dot: memoryDot, tooltip: memoryTooltip, to: "/monitoring#memory" },
-    { key: "storage", label: "Storage", icon: DatabaseIcon, dot: storageDot, tooltip: storageTooltip, to: "/monitoring#storage" },
-    { key: "gpu", label: "GPU", icon: CircuitBoardIcon, dot: gpuDot, tooltip: gpuTooltip, badge: { count: gpuCount, tone: "blue" }, to: "/monitoring#gpu" },
-    { key: "network", label: "Network", icon: GaugeIcon, dot: networkDot, tooltip: networkTooltip, to: "/monitoring#network" },
+    // Plain /monitoring, not a #fragment: MonitoringPage doesn't have
+    // memory/storage/gpu/network sections with those ids yet (it's one
+    // memory chart and a governor card until UI-18 rebuilds it on UI-07).
+    { key: "memory", label: "Memory", icon: CpuIcon, dot: memoryDot, tooltip: memoryTooltip, to: "/monitoring" },
+    { key: "storage", label: "Storage", icon: DatabaseIcon, dot: storageDot, tooltip: storageTooltip, to: "/monitoring" },
+    { key: "gpu", label: "GPU", icon: CircuitBoardIcon, dot: gpuDot, tooltip: gpuTooltip, badge: { count: gpuCount, tone: "blue" }, to: "/monitoring" },
+    { key: "network", label: "Network", icon: GaugeIcon, dot: networkDot, tooltip: networkTooltip, to: "/monitoring" },
   ];
 
+  const { state } = useSidebar();
   return (
     <TooltipProvider>
-      <div className="flex items-center justify-between px-1">
+      <div className={state === "collapsed" ? "flex flex-col items-center gap-1 py-1" : "flex items-center justify-between px-1"}>
         {signals.map((signal) => <Pulse key={signal.key} signal={signal} />)}
       </div>
     </TooltipProvider>

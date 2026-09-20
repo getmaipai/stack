@@ -6,11 +6,18 @@ import { Button } from "@/kit/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/kit/ui/card";
 import { Input } from "@/kit/ui/input";
 
+// Set by MachineSelector's Lock MaiPai before it reloads the app, so this
+// page can tell "the operator locked it" apart from any other reason the
+// session ended (spec: the login card reads "Locked" with its own
+// sentence only "when the state came from a lock").
+const LOCKED_KEY = "maipai-stack:locked";
+
 export function LoginPage({ state, onSignedIn }: { state: OperatorState; onSignedIn?: (state: OperatorState) => void }) {
   const navigate = useNavigate();
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [locked] = useState(() => state.state === "signedOut" && sessionStorage.getItem(LOCKED_KEY) === "1");
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -18,6 +25,7 @@ export function LoginPage({ state, onSignedIn }: { state: OperatorState; onSigne
     setError(null);
     try {
       const result = await api.post<OperatorState>(state.state === "setupRequired" ? "/stack/v1/operator/setup" : "/stack/v1/operator/login", { password });
+      sessionStorage.removeItem(LOCKED_KEY);
       onSignedIn?.(result);
       navigate("/", { replace: true });
     } catch (caught) {
@@ -35,7 +43,8 @@ export function LoginPage({ state, onSignedIn }: { state: OperatorState; onSigne
             <source media="(prefers-color-scheme: dark)" srcSet="/brand/maipai-stack-icon-dark.png" />
             <img className="size-12" src="/brand/maipai-stack-icon-light.png" alt="MaiPai Stack" />
           </picture>
-          <CardTitle className="text-3xl">{state.state === "setupRequired" ? "Set the operator password" : "Welcome back"}</CardTitle>
+          <CardTitle className="text-3xl">{state.state === "setupRequired" ? "Set the operator password" : locked ? "Locked" : "Welcome back"}</CardTitle>
+          {locked && <p className="text-base text-muted-foreground">Enter the operator password to unlock. The Stack keeps running.</p>}
         </CardHeader>
         <CardContent className="space-y-6 text-center">
           {state.state === "setupRequired" && !state.loopback && !isDesktop() ? <p className="text-base text-muted-foreground">Set the operator password on the computer that runs the Stack first.</p> : <form className="space-y-6" onSubmit={submit}>

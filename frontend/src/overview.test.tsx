@@ -111,10 +111,13 @@ test("Live renders every GPU, preserves unknown measurements, and lists connecte
   expect(document.body.textContent).toContain("Models");
   expect(document.body.textContent).toContain("Archive");
   expect(document.body.textContent).toContain("not mounted");
-  expect(liveRequests).toBe(1);
+  // Two, not one: SystemPulse (the rail footer) reads /stack/v1/live for
+  // its own GPU count independently of this page's Live section, each
+  // through its own useApiResource with no shared cache between them.
+  expect(liveRequests).toBe(2);
   await act(async () => { LiveEventSource.instances.at(-1)?.onmessage?.({ data: JSON.stringify({ id: "live", data: { ...live.live, processes: [] } }) } as MessageEvent); });
   await waitFor(() => expect(document.body.textContent).toContain("No engine is running"));
-  expect(liveRequests).toBe(1);
+  expect(liveRequests).toBe(2);
   cleanup();
   Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 400 });
   render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);

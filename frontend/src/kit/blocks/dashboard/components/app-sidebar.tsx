@@ -1,10 +1,9 @@
 import * as React from "react";
 import { getIcon } from "@/kit/icons";
 import { Link, useLocation } from "react-router-dom";
-import type { BudgetResponse, HardwareInfo, LiveDrive } from "@/lib/api";
 import { groups as taxonomyGroups } from "@/lib/taxonomy";
 import { NavMain, type NavGroup } from "@/kit/blocks/dashboard/components/nav-main";
-import { NavResources } from "@/kit/blocks/dashboard/components/nav-resources";
+import { SystemPulse } from "@/kit/blocks/dashboard/components/system-pulse";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/kit/ui/sidebar";
 
 const ChevronsLeft = getIcon("ChevronsLeft");
@@ -18,7 +17,7 @@ function RailToggle(): React.ReactElement {
   </button>;
 }
 
-export function AppSidebar({ engineCount = 0, updateCount = 0, alertSeverity = null, engineTooltip = "Runtimes", updateTooltip = "Updates", alertTooltip = "Alerts", hardware, budget, drives, runState, ...props }: React.ComponentProps<typeof Sidebar> & { engineCount?: number; updateCount?: number; alertSeverity?: "critical" | "error" | "warning" | null; engineTooltip?: string; updateTooltip?: string; alertTooltip?: string; hardware?: HardwareInfo; budget?: BudgetResponse; drives?: LiveDrive[]; runState?: string }) {
+export function AppSidebar({ engineCount = 0, updateCount = 0, alertSeverity = null, engineTooltip = "Runtimes", updateTooltip = "Updates", alertTooltip = "Alerts", ...props }: React.ComponentProps<typeof Sidebar> & { engineCount?: number; updateCount?: number; alertSeverity?: "critical" | "error" | "warning" | null; engineTooltip?: string; updateTooltip?: string; alertTooltip?: string }) {
   const location = useLocation();
   const badges: Record<string, number> = { runtimes: engineCount, settings: updateCount };
   const dots: Record<string, "critical" | "error" | "warning" | null> = { alerts: alertSeverity };
@@ -45,6 +44,6 @@ export function AppSidebar({ engineCount = 0, updateCount = 0, alertSeverity = n
       </SidebarMenuItem></SidebarMenu>
     </SidebarHeader>
     <SidebarContent className="flex flex-col"><NavMain groups={groups} /></SidebarContent>
-    <SidebarFooter className="p-0"><NavResources capBytes={budget?.capBytes} totalMemoryBytes={budget?.totalMemoryBytes} freeMemoryBytes={budget?.freeMemoryBytes} freeDiskBytes={hardware?.freeDiskBytes} drives={drives ?? hardware?.drives} pressure={budget?.pressure} runState={runState} /></SidebarFooter>
+    <SidebarFooter className="p-0 pb-1"><SystemPulse /></SidebarFooter>
   </Sidebar>;
 }

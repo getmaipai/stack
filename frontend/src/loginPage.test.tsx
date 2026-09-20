@@ -37,3 +37,28 @@ test("a remote browser without loopback sees the on-the-computer sentence instea
   await waitFor(() => expect(screen.getByText("Set the operator password on the computer that runs the Stack first.")).toBeTruthy());
   expect(screen.queryByLabelText("Operator password")).toBeNull();
 });
+
+test("MachineSelector's Lock leaves a marker that reads as Locked, not Welcome back", async () => {
+  setupPage();
+  sessionStorage.setItem("maipai-stack:locked", "1");
+  render(
+    <MemoryRouter initialEntries={["/"]}>
+      <LoginPage state={{ state: "signedOut", required: true, loopback: true }} />
+    </MemoryRouter>,
+  );
+  await waitFor(() => expect(screen.getByText("Locked")).toBeTruthy());
+  expect(screen.getByText("Enter the operator password to unlock. The Stack keeps running.")).toBeTruthy();
+  expect(screen.queryByText("Welcome back")).toBeNull();
+  sessionStorage.clear();
+});
+
+test("signing out normally (no lock marker) still reads Welcome back", async () => {
+  setupPage();
+  render(
+    <MemoryRouter initialEntries={["/"]}>
+      <LoginPage state={{ state: "signedOut", required: true, loopback: true }} />
+    </MemoryRouter>,
+  );
+  await waitFor(() => expect(screen.getByText("Welcome back")).toBeTruthy());
+  expect(screen.queryByText("Locked")).toBeNull();
+});

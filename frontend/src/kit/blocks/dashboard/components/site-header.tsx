@@ -12,6 +12,7 @@ import { Input } from "@/kit/ui/input";
 import { Popover, PopoverAnchor, PopoverContent } from "@/kit/ui/popover";
 import { SidebarTrigger } from "@/kit/ui/sidebar";
 import { NotificationsBell } from "@/kit/blocks/dashboard/components/notifications-popover";
+import { MachineSelector } from "@/kit/blocks/dashboard/components/machine-selector";
 
 const SearchIcon = getIcon("Search");
 const MonitorIcon = getIcon("Monitor");
@@ -93,12 +94,20 @@ function GlobalSearch() {
   const [confirmingPause, setConfirmingPause] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const contentRef = React.useRef<HTMLDivElement>(null);
+  const closeTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const results = useSearchResults(query, confirmingPause);
 
   function closeUnlessMovingIntoResults(relatedTarget: EventTarget | null): void {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
     if (relatedTarget instanceof Node && contentRef.current?.contains(relatedTarget)) return;
-    setTimeout(() => { setOpen(false); setConfirmingPause(false); }, 100);
+    closeTimer.current = setTimeout(() => { setOpen(false); setConfirmingPause(false); }, 100);
   }
+
+  function cancelScheduledClose(): void {
+    if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; }
+  }
+
+  React.useEffect(() => cancelScheduledClose, []);
 
   React.useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -138,7 +147,7 @@ function GlobalSearch() {
             ref={inputRef}
             value={query}
             onChange={(event) => { setQuery(event.target.value); setConfirmingPause(false); }}
-            onFocus={() => setOpen(true)}
+            onFocus={() => { cancelScheduledClose(); setOpen(true); }}
             onBlur={(event) => closeUnlessMovingIntoResults(event.relatedTarget)}
             placeholder="Search models, apps, drivers, anything…"
             aria-label="Search models, apps, drivers, anything"
@@ -166,6 +175,7 @@ function GlobalSearch() {
                   className={`flex w-full items-center rounded-sm px-3 py-2 text-left text-sm hover:bg-accent ${result.destructive ? "text-destructive hover:text-destructive" : "hover:text-accent-foreground"}`}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => select(result)}
+                  onFocus={cancelScheduledClose}
                   onBlur={(event) => closeUnlessMovingIntoResults(event.relatedTarget)}
                 >
                   {result.label}
@@ -206,18 +216,6 @@ function AppearanceControl() {
   );
 }
 
-// Stand-in for the machine/stack selector until UI-04 lands; that item
-// replaces this with the real MachineSelector (monitor icon, health dot,
-// computer name, chevron, Lock MaiPai) in this same slot.
-function MachineSlotPlaceholder() {
-  return (
-    <Button type="button" variant="ghost" size="sm" className="hidden items-center gap-1.5 lg:flex" disabled>
-      <MonitorIcon className="size-4" />
-      <span className="text-sm">This computer</span>
-    </Button>
-  );
-}
-
 export function SiteHeader() {
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center border-b bg-[var(--surface-sidebar)] px-3 sm:px-4 lg:px-6">
@@ -232,7 +230,7 @@ export function SiteHeader() {
         <div className="flex items-center justify-self-end gap-1">
           <AppearanceControl />
           <NotificationsBell />
-          <MachineSlotPlaceholder />
+          <MachineSelector />
         </div>
       </div>
     </header>

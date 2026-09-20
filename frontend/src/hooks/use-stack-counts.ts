@@ -4,6 +4,7 @@
 // hook's shape or callers.
 import { useApiResource } from "@/lib/useApiResource";
 import type { EngineRecord, HealthItem, RoleRecord } from "@/lib/api";
+import { worstHealthItem } from "@/lib/health-severity";
 
 export interface StackCounts {
   updatesAvailable: number;
@@ -11,8 +12,6 @@ export interface StackCounts {
   componentsRunning: number;
   health: { severity: "critical" | "error" | "warning" | null; text: string };
 }
-
-const SEVERITY_RANK: Record<HealthItem["severity"], number> = { warning: 1, error: 2, critical: 3 };
 
 export function useStackCounts(): StackCounts {
   const updates = useApiResource<{ app: { available: string | null }; engines: { available: string | null }; models: { available: string | null } }>("/stack/v1/updates");
@@ -29,10 +28,7 @@ export function useStackCounts(): StackCounts {
   const componentsInstalled = (models.data?.models ?? []).length + installedEngines.length;
   const componentsRunning = (roles.data?.roles ?? []).filter((role) => role.state === "ready" || role.state === "busy").length;
 
-  const worst = (health.data?.health ?? []).reduce<HealthItem | null>((current, item) => {
-    if (!current || SEVERITY_RANK[item.severity] > SEVERITY_RANK[current.severity]) return item;
-    return current;
-  }, null);
+  const worst = worstHealthItem(health.data?.health ?? []);
 
   return {
     updatesAvailable,
