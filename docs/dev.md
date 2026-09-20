@@ -363,6 +363,16 @@ generator runs at a time; a request that cannot be admitted enters a
 queue of four with a position, or is refused with a reason. Three
 refusals of the same request raise `admission-refused-repeatedly`.
 
+The queue drains on a memory change: after each poll the governor
+re-admits its queue head, and only when the reading moved in the
+direction that can admit, pressure back to normal or free memory
+rising above the low-water floor it was below, and never on a poll
+where nothing changed. One re-admission per poll; a head that still
+cannot be admitted stays at the head. A queued request returns a
+promise the caller can await instead of watching the loaded set, and
+`withdraw` removes it before admission and settles the promise
+refused.
+
 Eviction reads idle time, pin state, kernel pressure and resident RSS. A
 JIT model unloads after `idleTtlSeconds` (600) plus any `keep_alive`;
 under pressure the least recently used unpinned JIT model unloads

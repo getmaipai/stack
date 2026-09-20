@@ -100,7 +100,8 @@ let memoryReadingDegraded = false;
 let lastDegradedProbeError: string | null = null;
 let runState: RunState = "running";
 const loaded = new Map<string, LoadedInternal>();
-const queue: Array<GovernorRequest> = [];
+type QueuedEntry = { request: GovernorRequest; settled: boolean; admitted: Promise<GovernorHandle | { refused: true; reason: string }>; resolve: (result: GovernorHandle | { refused: true; reason: string }) => void };
+const queue: QueuedEntry[] = [];
 const refusalCounts = new Map<string, number>();
 const decisions: GovernorDecision[] = [];
 
@@ -128,6 +129,23 @@ export function setGovernorMemorySettings(values: { modelBudgetBytes?: number; s
 }
 export function getGovernorDecisions(): GovernorDecision[] { return [...decisions]; }
 
+function loadedItemFor(request: GovernorRequest): LoadedInternal {
+  const peak = peakFor(request);
+  return {
+    id: request.id,
+    kind: request.kind,
+    peakBytes: peak.bytes,
+    measured: peak.measured,
+    lastUsedAt: nowIso(),
+    idleTtlSeconds: tuning.idleTtlSeconds,
+    pinned: request.pinned ?? false,
+    pid: request.pid ?? null,
+    peakBaselineBytes: request.measuredPeakBytes ?? null,
+    processBreaches: 0,
+    keepAliveSeconds: request.kind === "generator" ? 0 : request.keepAliveSeconds ?? 0,
+  };
+}
+
 function peakFor(request: GovernorRequest): { bytes: number; measured: boolean } {
   if (request.measuredPeakBytes && request.measuredPeakBytes > 0) return { bytes: request.measuredPeakBytes, measured: true };
   if (!request.modelFileBytes) return { bytes: request.requestedBytes, measured: false };
@@ -152,7 +170,7 @@ function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
   return loadedBytes() + peakBytes <= cap && freeMemoryBytes - peakBytes >= workingMargin();
 }
 
-export async function admit(request: GovernorRequest): Promise<GovernorHandle | { queued: true; position: number } | { refused: true; reason: string }> {
+export async function admit(request: GovernorRequest): Promise<GovernorHandle | { queued: true; position: number; admitted: Promise<GovernorHandle | { refused: true; reason: string }> } | { refused: true; reason: string }> {
   if (runState !== "running") { decide("Refused", "The Stack is paused.", request.id); return { refused: true, reason: "The Stack is paused." }; }
   const peak = peakFor(request);
   if (memoryReadingDegraded) {
@@ -164,27 +182,18 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
     refusalCounts.set(request.id, refusals);
     if (refusals >= 3) raise({ code: "admission-refused-repeatedly", severity: "warning", title: "Work is waiting for memory", text: `The governor has deferred ${request.id} repeatedly.`, cause: "The current memory budget cannot admit the request.", fix: { label: "Free memory", action: "free_memory" } });
     if (queue.length >= tuning.queueMax) { decide("Refused", "The governor queue is full.", request.id); return { refused: true, reason: "The governor queue is full." }; }
-    const existing = queue.findIndex((item) => item.id === request.id);
-    if (existing >= 0) return { queued: true, position: existing + 1 };
-    queue.push(request);
+    const existing = queue.findIndex((entry) => entry.request.id === request.id);
+    if (existing >= 0) return { queued: true, position: existing + 1, admitted: queue[existing]!.admitted };
+    let resolveQueued!: (result: GovernorHandle | { refused: true; reason: string }) => void;
+    const admitted: Promise<GovernorHandle | { refused: true; reason: string }> = new Promise<GovernorHandle | { refused: true; reason: string }>((resolve) => { resolveQueued = resolve; });
+    const entry: QueuedEntry = { request, settled: false, admitted, resolve: resolveQueued };
+    queue.push(entry);
     decide("Queued", pressure !== "normal" ? `Memory pressure is ${pressure}.` : "The current memory budget cannot admit the request.", request.id);
-    return { queued: true, position: queue.length };
+    return { queued: true, position: queue.length, admitted };
   }
   refusalCounts.delete(request.id);
   resolveHealth("admission-refused-repeatedly");
-  const item: LoadedInternal = {
-    id: request.id,
-    kind: request.kind,
-    peakBytes: peak.bytes,
-    measured: peak.measured,
-    lastUsedAt: nowIso(),
-    idleTtlSeconds: tuning.idleTtlSeconds,
-    pinned: request.pinned ?? false,
-    pid: request.pid ?? null,
-    peakBaselineBytes: request.measuredPeakBytes ?? null,
-    processBreaches: 0,
-    keepAliveSeconds: request.kind === "generator" ? 0 : request.keepAliveSeconds ?? 0,
-  };
+  const item = loadedItemFor(request);
   loaded.set(request.id, item);
   decide("Admitted", "The current memory budget has room.", request.id);
   return { id: request.id, kind: request.kind, requestedBytes: peak.bytes };
@@ -213,14 +222,35 @@ export async function pauseAll(): Promise<void> {
 
 export function resumeAll(): void { setRunState("running"); }
 
+function settleAdmission(entry: QueuedEntry): void {
+  const item = loadedItemFor(entry.request);
+  loaded.set(entry.request.id, item);
+  decide("Admitted", "The current memory budget has room.", entry.request.id);
+  entry.settled = true;
+  entry.resolve({ id: entry.request.id, kind: entry.request.kind, requestedBytes: item.peakBytes });
+}
+
 export function release(handle: GovernorHandle): void {
   loaded.delete(handle.id);
   const next = queue.shift();
-  if (next) void admit(next);
+  if (next && !next.settled) settleAdmission(next);
+}
+
+/** Removes a queued request before it is admitted and settles its
+ * promise refused; the request behind it becomes the head. */
+export function withdraw(requestId: string): void {
+  const index = queue.findIndex((entry) => entry.request.id === requestId);
+  if (index < 0) return;
+  const entry = queue[index]!;
+  queue.splice(index, 1);
+  if (!entry.settled) {
+    entry.settled = true;
+    entry.resolve({ refused: true, reason: "Withdrawn." });
+  }
 }
 
 export function queuePosition(id: string): number | null {
-  const position = queue.findIndex((request) => request.id === id);
+  const position = queue.findIndex((entry) => entry.request.id === id);
   return position < 0 ? null : position + 1;
 }
 
@@ -233,7 +263,7 @@ export function getGovernorStatus(): GovernorStatus {
     pressure,
     memoryReadingDegraded,
     loaded: [...loaded.values()].map(({ peakBaselineBytes: _baseline, processBreaches: _breaches, keepAliveSeconds: _keepAlive, ...item }) => item),
-    queue: queue.map((request, index) => ({ id: request.id, position: index + 1, kind: request.kind })),
+    queue: queue.map((entry, index) => ({ id: entry.request.id, position: index + 1, kind: entry.request.kind })),
   };
 }
 
@@ -268,6 +298,9 @@ export function startGovernor(options: StartGovernorOptions): () => void {
   async function poll(): Promise<void> {
     if (stopped) return;
     const reading = memoryReader.read();
+    const previousPressure = pressure;
+    const previousFreeMemoryBytes = freeMemoryBytes;
+    const previousTotalMemoryBytes = totalMemoryBytes;
     if (reading.degraded) {
       memoryReadingDegraded = true;
       lastDegradedProbeError = `The memory probe failed: ${(reading.probeError ?? "no detail was reported")}`;
@@ -282,6 +315,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
     availablePercent = reading.availablePercent;
     const kernelPressure = reading.pressure;
     const floor = Math.max(totalMemoryBytes * tuning.systemLowWaterPct, tuning.systemLowWaterFloorBytes);
+    const previousFloor = Math.max(previousTotalMemoryBytes * tuning.systemLowWaterPct, tuning.systemLowWaterFloorBytes);
     const low = freeMemoryBytes < floor;
     systemBreaches = low ? systemBreaches + 1 : 0;
     pressurePolls = systemBreaches;
@@ -321,6 +355,22 @@ export function startGovernor(options: StartGovernorOptions): () => void {
       if (item.kind === "jit" && !item.pinned && (idle || pressure !== "normal")) {
         await options.unload?.(item.id); decide("Unloaded", pressure !== "normal" ? `Memory pressure is ${pressure}.` : "The model was idle.", item.id);
         loaded.delete(item.id);
+      }
+    }
+    if (memoryReadingDegraded) return;
+    const pressureAdmitting = pressure === "normal" && previousPressure !== "normal";
+    const floorAdmitting = previousFreeMemoryBytes < previousFloor && freeMemoryBytes >= floor;
+    if ((pressureAdmitting || floorAdmitting) && queue.length > 0) {
+      let index = 0;
+      while (index < queue.length) {
+        const entry = queue[index]!;
+        if (entry.settled) {
+          queue.splice(index, 1);
+          continue;
+        }
+        if (!canAdmit(entry.request, peakFor(entry.request).bytes)) break;
+        settleAdmission(entry);
+        queue.splice(index, 1);
       }
     }
   }

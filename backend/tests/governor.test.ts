@@ -8,10 +8,11 @@ import {
   setGovernorMemorySettings,
   release,
   startGovernor,
+  withdraw,
   type GovernorHandle,
 } from "@/lib/governor";
 import { scriptedMemoryReader } from "@/lib/memory/scripted";
-import { __resetHealthForTests } from "@/lib/health";
+import { __resetHealthForTests, list as listHealth } from "@/lib/health";
 
 const GB = 1_073_741_824;
 const stops: Array<() => void> = [];
@@ -43,7 +44,7 @@ test("rule 1 grants an admission and reports an estimated peak", async () => {
 test("rule 2 queues work with a position and refuses after four entries", async () => {
   await admit({ id: "generator-0", kind: "generator", requestedBytes: GB });
   for (let index = 1; index <= 4; index++) {
-    expect(await admit({ id: `generator-${index}`, kind: "generator", requestedBytes: 50 * GB })).toEqual({ queued: true, position: index });
+    expect(await admit({ id: `generator-${index}`, kind: "generator", requestedBytes: 50 * GB })).toMatchObject({ queued: true, position: index });
   }
   expect(await admit({ id: "generator-5", kind: "generator", requestedBytes: 50 * GB })).toEqual({ refused: true, reason: "The governor queue is full." });
 });
@@ -124,7 +125,7 @@ test("kernel warn pressure pauses admission and reports the available percent", 
   stops.push(stop);
   await Bun.sleep(5);
   expect(getGovernorStatus()).toMatchObject({ pressure: "warn", availablePercent: 8 });
-  expect(await admit({ id: "pressure-blocked", kind: "resident", requestedBytes: GB })).toEqual({ queued: true, position: 1 });
+  expect(await admit({ id: "pressure-blocked", kind: "resident", requestedBytes: GB })).toMatchObject({ queued: true, position: 1 });
 });
 
 test("kernel critical pressure aborts an in-flight generator", async () => {
@@ -141,7 +142,6 @@ test("kernel critical pressure aborts an in-flight generator", async () => {
 });
 
 test("a degraded reading changes no state, flags the status, refuses new work, and recovers", async () => {
-  const { list: listHealth } = await import("@/lib/health");
   await Bun.sleep(10);
   await admit({ id: "resident-kept", kind: "resident", requestedBytes: GB, modelFileBytes: GB, engine: "llama-server" });
   const stop = startGovernor({ pid: 1, pollMs: 1, memoryReader: scriptedMemoryReader([
@@ -177,4 +177,80 @@ test("a degraded reading changes no state, flags the status, refuses new work, a
   expect(recoveredStatus.memoryReadingDegraded).toBe(false);
   expect(listHealth().find((entry) => entry.code === "memory-reading-unavailable")).toBeUndefined();
   expect("id" in (await admit({ id: "after-recovery", kind: "resident", requestedBytes: GB }))).toBe(true);
+});
+
+test("a queued request is admitted when the memory reading clears, without any release", async () => {
+  const stop = startGovernor({ pid: 1, pollMs: 100, memoryReader: scriptedMemoryReader([
+    { totalBytes: 64 * GB, freeBytes: 8 * GB, availablePercent: 12, pressure: "warn", degraded: false },
+    { totalBytes: 64 * GB, freeBytes: 8 * GB, availablePercent: 12, pressure: "warn", degraded: false },
+    { totalBytes: 64 * GB, freeBytes: 48 * GB, availablePercent: 75, pressure: "normal", degraded: false },
+  ]) });
+  stops.push(stop);
+  await Bun.sleep(10);
+  expect(getGovernorStatus().pressure).toBe("warn");
+  const queued = await admit({ id: "drain-me", kind: "resident", requestedBytes: 2 * GB });
+  expect(queued).toMatchObject({ queued: true, position: 1 });
+  const admitted = await (queued as { admitted: Promise<unknown> }).admitted;
+  expect(admitted).toMatchObject({ id: "drain-me", kind: "resident" });
+  expect(getGovernorStatus().queue).toHaveLength(0);
+});
+
+test("a queued request is admitted when free memory rises over the low-water floor, without any release", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 64 * GB, freeMemoryBytes: 32 * GB });
+  const stop = startGovernor({ pid: 1, pollMs: 100, memoryReader: scriptedMemoryReader([
+    { totalBytes: 64 * GB, freeBytes: 4 * GB, availablePercent: 6, pressure: "normal", degraded: false },
+    { totalBytes: 64 * GB, freeBytes: 4 * GB, availablePercent: 6, pressure: "normal", degraded: false },
+    { totalBytes: 64 * GB, freeBytes: 4 * GB, availablePercent: 6, pressure: "normal", degraded: false },
+    { totalBytes: 64 * GB, freeBytes: 30 * GB, availablePercent: 47, pressure: "normal", degraded: false },
+  ]) });
+  stops.push(stop);
+  await Bun.sleep(10);
+  expect(getGovernorStatus().freeMemoryBytes).toBe(4 * GB);
+  const queued = await admit({ id: "floor-drain", kind: "resident", requestedBytes: 2 * GB });
+  expect(queued).toMatchObject({ queued: true, position: 1 });
+  const admitted = await (queued as { admitted: Promise<unknown> }).admitted;
+  expect(admitted).toMatchObject({ id: "floor-drain", kind: "resident" });
+});
+
+test("a poll with no memory change does not touch the queue", async () => {
+  const stop = startGovernor({ pid: 1, pollMs: 100, memoryReader: scriptedMemoryReader([
+    { totalBytes: 64 * GB, freeBytes: 8 * GB, availablePercent: 12, pressure: "warn", degraded: false },
+    { totalBytes: 64 * GB, freeBytes: 8 * GB, availablePercent: 12, pressure: "warn", degraded: false },
+  ]) });
+  stops.push(stop);
+  await Bun.sleep(10);
+  expect(getGovernorStatus().pressure).toBe("warn");
+  const queued = await admit({ id: "stays-queued", kind: "resident", requestedBytes: 2 * GB });
+  expect(queued).toMatchObject({ queued: true, position: 1 });
+  await Bun.sleep(200);
+  expect(getGovernorStatus().queue).toMatchObject([{ id: "stays-queued", position: 1 }]);
+});
+
+test("withdraw settles the queued promise as refused and promotes the next request to head", async () => {
+  const stop = startGovernor({ pid: 1, pollMs: 25, memoryReader: scriptedMemoryReader([
+    { totalBytes: 64 * GB, freeBytes: 8 * GB, availablePercent: 12, pressure: "warn", degraded: false },
+  ]) });
+  stops.push(stop);
+  await Bun.sleep(5);
+  const first = await admit({ id: "withdrawn-first", kind: "resident", requestedBytes: 2 * GB });
+  expect(first).toMatchObject({ queued: true, position: 1 });
+  const second = await admit({ id: "behind", kind: "resident", requestedBytes: 2 * GB });
+  expect(second).toMatchObject({ queued: true, position: 2 });
+  withdraw("withdrawn-first");
+  const settled = await (first as { admitted: Promise<unknown> }).admitted;
+  expect(settled).toEqual({ refused: true, reason: "Withdrawn." });
+  expect(getGovernorStatus().queue).toMatchObject([{ id: "behind", position: 1 }]);
+});
+
+test("admission-refused-repeatedly still raises after three refusals of the same request", async () => {
+  const stop = startGovernor({ pid: 1, pollMs: 25, memoryReader: scriptedMemoryReader([
+    { totalBytes: 64 * GB, freeBytes: 8 * GB, availablePercent: 12, pressure: "warn", degraded: false },
+  ]) });
+  stops.push(stop);
+  await Bun.sleep(5);
+  await admit({ id: "refuse-me", kind: "resident", requestedBytes: 2 * GB });
+  await admit({ id: "refuse-me", kind: "resident", requestedBytes: 2 * GB });
+  const third = await admit({ id: "refuse-me", kind: "resident", requestedBytes: 2 * GB });
+  expect(third).toMatchObject({ queued: true, position: 1 });
+  expect(listHealth().find((entry) => entry.code === "admission-refused-repeatedly")).toMatchObject({ severity: "warning", title: "Work is waiting for memory" });
 });

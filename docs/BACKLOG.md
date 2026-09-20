@@ -191,8 +191,9 @@ are never copied. Nothing migrates Home until STACK-16.
   margin. `governor.ts` untouched (the governor lane holds it; the
   budget route reporting the tier joins STACK-06c's callback work).
   Landed on `main` with this line.
-- [ ] **STACK-06c (S): the governor drains its queue on memory
-  changes.** Today a queued request is re-admitted only inside
+- [x] **STACK-06c (S): the governor drains its queue on memory
+  changes.** Governor half verified at this commit; jobs.ts drops its
+  kick in a follow-up (STACK-06d, S). Today a queued request is re-admitted only inside
   `release()`, so a request queued for pressure or the working margin
   with nothing loaded waits until an unrelated release; the job queue
   (STACK-13a) works around it by releasing a handle the governor does
@@ -208,6 +209,9 @@ are never copied. Nothing migrates Home until STACK-16.
   rules. Exit: `bash scripts/check.sh` with a test that a request
   queued under pressure runs when the reading clears without any
   release.
+- [ ] **STACK-06d (S): jobs.ts waits on admit's promise and drops the
+  kick and the poll.** Files: backend/src/lib/jobs.ts,
+  backend/tests/generatorQueue.test.ts. Exit: bash scripts/check.sh.
 - [x] **STACK-06: the governor.** Profiles, admission, one generator at
   a time, queue of four, idle and pressure eviction, RSS breach restart,
   the decision ledger. Kept unchanged in RF-04.
