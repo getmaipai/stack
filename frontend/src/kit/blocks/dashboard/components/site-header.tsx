@@ -18,10 +18,23 @@ const MonitorIcon = getIcon("Monitor");
 const SunIcon = getIcon("Sun");
 const MoonIcon = getIcon("Moon");
 
+// Every taxonomy.ts destination has a real route now (DashboardShell.tsx's
+// <Routes>): a built page, or Lane A's ComingSoonPage placeholder for a
+// category whose CategoryBrowser configuration hasn't landed yet (UI-12
+// through UI-19). Nothing here dead-ends. /abilities is the one extra:
+// a real page that isn't a taxonomy destination.
+const EXTRA_DESTINATIONS: TaxonomyDestination[] = [
+  { id: "abilities", label: "Add abilities", path: "/abilities", subtitle: "Install a model, a runtime, or another component.", icon: "Plus" },
+];
+
+function liveDestinations(): TaxonomyDestination[] {
+  return [...allDestinations(), ...EXTRA_DESTINATIONS];
+}
+
 // Longest matching path wins so "/settings/updates" still reads as
 // Settings and "/models/:id" still reads as Models.
 function destinationForPath(pathname: string): TaxonomyDestination {
-  const destinations = allDestinations();
+  const destinations = liveDestinations();
   const overview = destinations.find((d) => d.id === "overview")!;
   let best: TaxonomyDestination | null = null;
   for (const destination of destinations) {
@@ -57,7 +70,7 @@ interface SearchResult { label: string; path: string; destructive?: boolean; arm
 // immediately; selecting anything else disarms it.
 function useSearchResults(query: string, confirmingPause: boolean): SearchResult[] {
   const trimmed = query.trim().toLowerCase();
-  const destinations = allDestinations();
+  const destinations = liveDestinations();
   const pages: SearchResult[] = trimmed
     ? destinations.filter((d) => d.label.toLowerCase().includes(trimmed) || d.subtitle.toLowerCase().includes(trimmed)).map((d) => ({ label: d.label, path: d.path }))
     : destinations.slice(0, 8).map((d) => ({ label: d.label, path: d.path }));
@@ -79,7 +92,13 @@ function GlobalSearch() {
   const [open, setOpen] = React.useState(false);
   const [confirmingPause, setConfirmingPause] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const contentRef = React.useRef<HTMLDivElement>(null);
   const results = useSearchResults(query, confirmingPause);
+
+  function closeUnlessMovingIntoResults(relatedTarget: EventTarget | null): void {
+    if (relatedTarget instanceof Node && contentRef.current?.contains(relatedTarget)) return;
+    setTimeout(() => { setOpen(false); setConfirmingPause(false); }, 100);
+  }
 
   React.useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -120,7 +139,7 @@ function GlobalSearch() {
             value={query}
             onChange={(event) => { setQuery(event.target.value); setConfirmingPause(false); }}
             onFocus={() => setOpen(true)}
-            onBlur={() => setTimeout(() => { setOpen(false); setConfirmingPause(false); }, 100)}
+            onBlur={(event) => closeUnlessMovingIntoResults(event.relatedTarget)}
             placeholder="Search models, apps, drivers, anything…"
             aria-label="Search models, apps, drivers, anything"
             className="pl-9 pr-14"
@@ -129,6 +148,7 @@ function GlobalSearch() {
         </div>
       </PopoverAnchor>
       <PopoverContent
+        ref={contentRef}
         align="start"
         sideOffset={6}
         className="w-(--radix-popover-trigger-width) max-w-md p-1"
@@ -146,6 +166,7 @@ function GlobalSearch() {
                   className={`flex w-full items-center rounded-sm px-3 py-2 text-left text-sm hover:bg-accent ${result.destructive ? "text-destructive hover:text-destructive" : "hover:text-accent-foreground"}`}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => select(result)}
+                  onBlur={(event) => closeUnlessMovingIntoResults(event.relatedTarget)}
                 >
                   {result.label}
                 </button>

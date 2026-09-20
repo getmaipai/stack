@@ -316,3 +316,13 @@ test("the search's Pause everything command requires a second click to confirm b
   fireEvent.click(await waitFor(() => Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "Click again to confirm pausing everything")!));
   await waitFor(() => expect(calls).toContain("/stack/v1/run-state POST"));
 });
+
+test("global search offers every taxonomy destination plus Add abilities, and each lands on a real page", async () => {
+  stubStackFetch({ ...boardExtras, "/stack/v1/repairs": { repairs: [] }, "/stack/v1/roles": { roles: [] }, "/stack/v1/operator": { state: "signedOut", required: false } });
+  render(<MemoryRouter initialEntries={["/"]}><DashboardShell /><RoutePath /></MemoryRouter>);
+  const input = await waitFor(() => document.querySelector('header input[placeholder*="Search"]') as HTMLInputElement);
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "abilities" } });
+  fireEvent.click(await waitFor(() => Array.from(document.querySelectorAll('[role="listbox"] button')).find((item) => item.textContent === "Add abilities")!));
+  await waitFor(() => expect(document.querySelector('[data-testid="route-path"]')?.textContent).toBe("/abilities"));
+});

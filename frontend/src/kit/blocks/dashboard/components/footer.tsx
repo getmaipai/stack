@@ -40,7 +40,8 @@ export function StackFooter() {
         <div className="hidden min-w-0 items-center justify-center gap-3 sm:flex">
           <Link to="/settings/updates" className="hover:text-foreground">{counts.updatesAvailable} update{counts.updatesAvailable === 1 ? "" : "s"} available</Link>
           <span aria-hidden="true">·</span>
-          <Link to="/packages?mode=installed" className="hidden hover:text-foreground md:inline">{counts.componentsInstalled} components installed</Link>
+          {/* Plain text, not a Link: /packages doesn't exist until UI-14 builds it. */}
+          <span className="hidden md:inline">{counts.componentsInstalled} components installed</span>
           <span aria-hidden="true" className="hidden md:inline">·</span>
           <Link to="/monitoring" className="hover:text-foreground">{counts.componentsRunning} running</Link>
         </div>

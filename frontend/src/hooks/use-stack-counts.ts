@@ -22,8 +22,11 @@ export function useStackCounts(): StackCounts {
   const health = useApiResource<{ health: HealthItem[] }>("/stack/v1/health");
 
   const updatesAvailable = updates.data ? [updates.data.app?.available, updates.data.engines?.available, updates.data.models?.available].filter(Boolean).length : 0;
-  const matchingEngines = (engines.data?.engines ?? []).filter((engine) => engine.matchesThisMachine);
-  const componentsInstalled = (models.data?.models ?? []).length + matchingEngines.length;
+  // `installed`, not `matchesThisMachine`: the latter only means this
+  // engine build is compatible with this platform/arch (EnginesPage.tsx
+  // uses `installed` for the same "is it actually here" question).
+  const installedEngines = (engines.data?.engines ?? []).filter((engine) => engine.installed);
+  const componentsInstalled = (models.data?.models ?? []).length + installedEngines.length;
   const componentsRunning = (roles.data?.roles ?? []).filter((role) => role.state === "ready" || role.state === "busy").length;
 
   const worst = (health.data?.health ?? []).reduce<HealthItem | null>((current, item) => {
