@@ -28,8 +28,12 @@ UI-10/UI-12 sections). Main checkout.
   delete `SegmentedBar.tsx`'s copy rather than keep both.
 - **UI-12's real data sources are `/stack/v1/models`, `/stack/v1/groups`
   and `/stack/v1/detected` for Installed, not the spec text's literal
-  `/stack/v1/components?category=models`** (no `/components` route
-  exists in this backend). Coordinator-confirmed. Browse combines the
+  `/stack/v1/components?category=models`**, coordinator-confirmed
+  before UI-08 landed a real `/stack/v1/components` route: checked it
+  after the fact (`backend/src/routes/components.ts`, `ComponentRowSchema`)
+  and it is a generic cross-category summary for Overview's list (no
+  roles, usage, licence, groupId, or model actions), not a fit for this
+  page's management view. Not switched. Browse combines the
   local catalog route and, when the filter box has text, Hugging Face
   search, reusing `AddSheet`'s own resolve step (unresolved Hugging
   Face rows show "Review", which resolves and opens the same
@@ -80,3 +84,18 @@ UI-10/UI-12 sections). Main checkout.
   but were left in place: narrowing that shared, still-tested function
   is a larger edit than this item's scope, flagged here rather than
   done silently.
+
+## Boundary (2026-09-20, end of this lane's run)
+
+`main` is at `fa3ba8d` (Console (UI-12): Models on the shared
+browser), pushed, one commit past `f58e4f6` (Console: read the
+stamped role state everywhere, the STACK-87 crash fix, also pushed).
+Working tree clean, nothing uncommitted. `git stash list` carries two
+entries neither made by this lane (`WIP on c/52-stack-weekly-digest`
+and `On codex/119-stack-release-build: preserve preexisting 119
+Cargo.toml edit`); left alone. Two pre-existing, order-dependent
+backend test flakes were hit while gating (not caused by this lane,
+zero backend files touched): the memory-pressure one from Step 0
+(getmaipai/stack#1) and a newly filed one, `backend/tests/hardware.test.ts`
+failing only inside the full suite (getmaipai/stack#4). Next up per
+`docs/plans/lane-a-continue-2026-09-20.md`.
