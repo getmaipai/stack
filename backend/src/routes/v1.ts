@@ -8,8 +8,11 @@ import type { AppEnv } from "@/types";
 import { identityHeaders } from "@/lib/identity";
 import { noEngineResponse, resolveRole, UnknownRoleError, UnverifiedModelError } from "@/lib/router";
 import { ROLE_IDS, ROLES, type RoleId } from "@/roles";
-import { EngineUnavailableError, requestRole, roleHasEngine, roleIsBound, speakRole, speechForm, streamRole } from "@/lib/supervisor";
-import { listModels } from "@/lib/modelStore";
+import { EngineUnavailableError, getRoleStatus, requestRole, restartRole, roleHasEngine, roleIsBound, speakRole, speechForm, streamRole } from "@/lib/supervisor";
+import { listModels, ProvenanceIncompleteError } from "@/lib/modelStore";
+import { DownloadVerificationError } from "@/lib/download";
+import { POCKET_TTS_GATED_REPO } from "@/speech/pocketTts";
+import { ensureCloningWeights, prepareVoice, voiceNeedsCloning, VoiceRefusedError } from "@/speech/voices";
 import { hasJobRunner, submitJob, waitForJob } from "@/lib/jobs";
 import { RoleRequest } from "@/spec/ts/role-request";
 import { RoleReplyHeaders } from "@/spec/ts/role-reply-headers";
@@ -40,6 +43,9 @@ const ImageRequestSchema = RoleRequest.extend({ prompt: z.string() });
 const UnknownModelSchema = z.object({ error: z.string(), roles: z.array(z.string()) });
 const NoEngineSchema = z.object({ error: z.string(), role: z.string(), state: z.string(), offline_reason: z.string() });
 const UnverifiedModelSchema = z.object({ error: z.string(), model: z.string(), reason: z.literal("unverified"), missing: z.array(z.string()) });
+/** A voice the Stack will not hand to the engine: not pinnable (400), or
+ * cloning it needs is unavailable (409); `error` says what to do. */
+const VoiceRefusedSchema = z.object({ error: z.string(), reason: z.enum(["voice-cloning-unavailable", "voice-not-pinnable"]) });
 const ModelsResponseSchema = z.object({ object: z.literal("list"), data: z.array(z.object({ id: z.string(), object: z.literal("model"), created: z.number(), owned_by: z.literal("maipai-stack") })) });
 
 const inferenceResponses = {
@@ -110,7 +116,7 @@ const modelsRoute = createRoute({ method: "get", path: "/models", tags: ["Roles"
 const chatRoute = createRoute({ method: "post", path: "/chat/completions", tags: ["Roles"], summary: "Chat completions by role", request: { body: { content: { "application/json": { schema: ChatRequestSchema } } } }, responses: inferenceResponses });
 const embeddingsRoute = createRoute({ method: "post", path: "/embeddings", tags: ["Roles"], summary: "Embeddings by role", request: { body: { content: { "application/json": { schema: EmbeddingsRequestSchema } } } }, responses: inferenceResponses });
 const transcriptionsRoute = createRoute({ method: "post", path: "/audio/transcriptions", tags: ["Roles"], summary: "Speech to text (one WAV file, spec/voice's transcribe form)", request: { body: { content: { "multipart/form-data": { schema: TranscriptionFormSchema } } } }, responses: { ...inferenceResponses, 200: { content: { "application/json": { schema: TranscriptionResponseSchema } }, description: "SttTranscribeResponse: the transcript, empty when the file holds no speech, with the identity headers." } } });
-const speechRoute = createRoute({ method: "post", path: "/audio/speech", tags: ["Roles"], summary: "Text to speech (spec/voice's form, the WAV streamed as it is generated)", request: { body: { content: { "multipart/form-data": { schema: SpeechFormSchema } } } }, responses: { ...inferenceResponses, 200: { content: { "audio/wav": { schema: z.string().openapi({ format: "binary" }) } }, description: "TtsSynthesizeResult: a chunked audio/wav body whose header carries the format and a placeholder data size, with the identity headers. Abort the request to cancel." } } });
+const speechRoute = createRoute({ method: "post", path: "/audio/speech", tags: ["Roles"], summary: "Text to speech (spec/voice's form, the WAV streamed as it is generated)", request: { body: { content: { "multipart/form-data": { schema: SpeechFormSchema } } } }, responses: { ...inferenceResponses, 400: { content: { "application/json": { schema: z.union([UnknownModelSchema, VoiceRefusedSchema]) } }, description: "Unknown role or model id, or a voice the Stack cannot pin and verify (reason voice-not-pinnable)." }, 409: { content: { "application/json": { schema: z.union([UnverifiedModelSchema, VoiceRefusedSchema]) } }, description: "The named model's provenance is incomplete, or the voice needs voice cloning that is off or has no token (reason voice-cloning-unavailable)." }, 200: { content: { "audio/wav": { schema: z.string().openapi({ format: "binary" }) } }, description: "TtsSynthesizeResult: a chunked audio/wav body whose header carries the format and a placeholder data size, with the identity headers. Abort the request to cancel." } } });
 const ImageResponseSchema = z.object({ created: z.number().int(), job: z.string(), data: z.array(z.record(z.string(), z.unknown())) });
 const RenderFailedSchema = z.object({ error: z.string(), job: z.string(), role: z.string(), state: z.enum(["failed", "cancelled"]) });
 const imagesRoute = createRoute({ method: "post", path: "/images/generations", tags: ["Roles"], summary: "Image generation (the job API with a wait)", request: { body: { content: { "application/json": { schema: ImageRequestSchema } } } }, responses: { ...inferenceResponses, 200: { content: { "application/json": { schema: ImageResponseSchema } }, description: "OpenAI's image shape with the job id: `data` holds one `{ b64_json }` per image once the render finished within timeout_ms." }, 202: { content: { "application/json": { schema: ImageResponseSchema } }, description: "The render is still running past timeout_ms; fetch it by `job` on /stack/v1/jobs/{id}." }, 499: { content: { "application/json": { schema: RenderFailedSchema } }, description: "The render was cancelled." }, 500: { content: { "application/json": { schema: RenderFailedSchema } }, description: "The generator failed the render; the reason is the generator's own, not an outage." } } });
@@ -133,14 +139,39 @@ v1Routes.openapi(speechRoute, async (c) => {
     const controller = new AbortController();
     c.req.raw.signal.addEventListener("abort", () => controller.abort(), { once: true });
     if (form.timeout_ms) setTimeout(() => controller.abort(), form.timeout_ms);
-    const spoken = await speakRole(resolution.role, speechForm(form.text, form.voice_url), controller.signal);
+    // The voice the engine will read is on disk before the ask (fetched
+    // by the Stack once, then served offline); a voice that needs the
+    // cloning weights waits for them and for an engine that loaded them.
+    const voice = await prepareVoice(form.voice_url, { signal: controller.signal });
+    if (voiceNeedsCloning(voice)) await ensureCloningLoaded(resolution.role, controller.signal);
+    const spoken = await speakRole(resolution.role, speechForm(form.text, voice), controller.signal);
     for (const [name, value] of Object.entries(spoken.headers)) c.header(name, value);
     if (!spoken.body) return new Response(JSON.stringify({ error: spoken.status === 499 ? "Request cancelled" : spoken.status === 504 ? "The engine timed out." : "The engine did not answer." }), { status: spoken.status, headers: { ...spoken.headers, "content-type": "application/json" } });
     return new Response(spoken.body, { status: spoken.status, headers: { ...spoken.headers, "content-type": spoken.contentType ?? "audio/wav", "cache-control": "no-cache" } });
   } catch (error) {
     if (error instanceof EngineUnavailableError) { const result = noEngineResponse("tts", error.reason); return jsonReply(c, result.body, result.status, result.headers); }
     if (error instanceof UnverifiedModelError) return jsonReply(c, { error: error.message, model: error.modelId, reason: "unverified", missing: error.missing }, 409, identityHeaders(null));
+    if (error instanceof VoiceRefusedError) return jsonReply(c, { error: error.message, reason: error.reason }, error.status, identityHeaders(null));
+    if (error instanceof DownloadVerificationError || error instanceof ProvenanceIncompleteError) return jsonReply(c, { error: `The voice could not be fetched: ${error.message}`, reason: "voice-not-pinnable" }, 400, identityHeaders(null));
     return jsonReply(c, { error: error instanceof UnknownRoleError ? error.message : "Unknown role or model.", roles: ROLE_IDS }, 400, identityHeaders(null));
   }
 });
+/** The cloning weights on disk and loaded: fetched now if they can be
+ * (a token, cloning on), and the engine restarted when it is running
+ * on the ungated twin, so the voice is encoded through the right
+ * weights rather than answered 500 by the engine. */
+async function ensureCloningLoaded(role: RoleId, signal: AbortSignal): Promise<void> {
+  let fetched: boolean;
+  try {
+    fetched = await ensureCloningWeights({ signal });
+  } catch (error) {
+    if (error instanceof DownloadVerificationError || error instanceof ProvenanceIncompleteError) throw new VoiceRefusedError(`The voice-cloning weights could not be fetched: ${error.message}`, 409, "voice-cloning-unavailable");
+    throw error;
+  }
+  if (!fetched) throw new VoiceRefusedError("This voice needs the voice-cloning weights, which Hugging Face keeps behind a token; set stack.engines.tts.hf_token, turn on stack.engines.tts.voice_cloning and restart the voice engine.", 409, "voice-cloning-unavailable");
+  const status = getRoleStatus(role);
+  if (status.state === "ready" || status.state === "busy") {
+    if (status.identity?.model !== POCKET_TTS_GATED_REPO) await restartRole(role);
+  }
+}
 v1Routes.openapi(imagesRoute, (c) => reply(c, "job", c.req.valid("json")) as never);

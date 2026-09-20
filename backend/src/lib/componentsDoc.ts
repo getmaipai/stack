@@ -4,6 +4,8 @@
 // the real modules; `renderComponentsDoc` is pure so a test can feed it
 // a scripted catalog. Written by scripts/gen-components-doc.ts and
 // drift-checked by scripts/check.sh like docs/api/openapi.json.
+import { POCKET_TTS_UNGATED_REPO } from "@/speech/pocketTts";
+import { POCKET_TTS_CLONING_REVISION, POCKET_TTS_CLONING_WEIGHTS, POCKET_TTS_PRESET_VOICES, POCKET_TTS_VOICES_REVISION } from "@/speech/voices";
 import { BUNDLED_RUNTIMES, ENGINE_BINARIES, engineRole, MANAGED_RUNTIMES, type BundledRuntime, type EngineBinaryPin, type ManagedRuntime } from "@/lib/engineCatalog";
 import packageJson from "../../package.json";
 import { ROLE_CANDIDATES, STACK_MODELS, type RoleCandidate } from "@/lib/modelCatalog";
@@ -107,6 +109,14 @@ export function renderComponentsDoc(catalog: ComponentsCatalog): string {
     if (components.length) {
       lines.push("");
       lines.push(`Installed beside the model, never selected on its own: ${components.map((component) => `\`${component.id}\` (${component.component}, ${gb(component.download?.approx_bytes)}, ${component.license ?? "licence unknown"}, ${component.repo ?? "catalog"} @ ${component.revision ?? "unknown"})`).join("; ")}.`);
+    }
+    if (modelRole === "tts") {
+      // What the Stack fetches for the voice engine on an explicit need,
+      // never on its start (STACK-94d): the preset voices by name, the
+      // gated cloning weights with a token and cloning turned on.
+      const presets = Object.keys(POCKET_TTS_PRESET_VOICES);
+      lines.push("");
+      lines.push(`Fetched by the Stack only when a request needs them (the engine runs offline): ${presets.length} preset voices (\`${presets.slice(0, 4).join("`, `")}\`, and the rest of the engine's English catalog), each a precomputed embedding at \`${POCKET_TTS_UNGATED_REPO}\` revision \`${POCKET_TTS_VOICES_REVISION.slice(0, 8)}\` pinned by sha256; a community voice as an \`hf://\` path, pinned to its commit and the hub's digest, with the licence its repository or folder states; and \`${POCKET_TTS_CLONING_WEIGHTS.id}\` (cloning-weights, ${gb(POCKET_TTS_CLONING_WEIGHTS.download?.approx_bytes)}, ${POCKET_TTS_CLONING_WEIGHTS.license}, \`${POCKET_TTS_CLONING_WEIGHTS.repo}\` @ \`${POCKET_TTS_CLONING_REVISION.slice(0, 8)}\`, sha256 \`${POCKET_TTS_CLONING_WEIGHTS.download?.sha256.slice(0, 8)}…\`), once, with the person's token, when \`stack.engines.tts.voice_cloning\` is on.`);
     }
     lines.push("");
   }

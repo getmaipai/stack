@@ -19,6 +19,12 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Added
 
+- The voice engine runs offline always; the Stack fetches a voice a
+  request names, or the voice-cloning weights when voice cloning is
+  turned on with a token, once and verified, before the engine uses
+  it, and refuses a voice it cannot pin or cloning it cannot serve
+  with the reason (2026-09-20). New setting
+  `stack.engines.tts.voice_cloning`.
 - A second chat engine for Apple silicon Macs, mlx-serve v26.9.4, as a
   pinned release beside llama-server; `stack.engines.chat.engine`
   chooses which one serves the chat wire after a restart, and an MLX

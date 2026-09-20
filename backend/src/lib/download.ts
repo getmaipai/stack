@@ -23,6 +23,8 @@ export interface DownloadOptions {
   downloadCapMbps?: number;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
+  /** Request headers (a token for a gated file); never logged, never kept. */
+  headers?: Record<string, string>;
 }
 
 async function throttle(bytes: number, capMbps: number | undefined, startedAt: number, now: () => number, sleep: (ms: number) => Promise<void>): Promise<void> {
@@ -33,6 +35,7 @@ async function throttle(bytes: number, capMbps: number | undefined, startedAt: n
 }
 
 const STREAM_IDLE_TIMEOUT_MS = 90_000;
+const CONNECT_TIMEOUT_MS = 30_000;
 const MAX_ATTEMPTS = 6;
 
 export class DownloadVerificationError extends Error {}
@@ -60,8 +63,8 @@ async function downloadOnce(url: string, destPath: string, opts: DownloadOptions
   mkdirSync(dirname(destPath), { recursive: true });
   const partPath = `${destPath}.part`;
   const startAt = existsSync(partPath) ? statSync(partPath).size : 0;
-  const headers: Record<string, string> = startAt > 0 ? { Range: `bytes=${startAt}-` } : {};
-  const res = await fetch(url, { headers, signal: opts.signal });
+  const headers: Record<string, string> = { ...opts.headers, ...(startAt > 0 ? { Range: `bytes=${startAt}-` } : {}) };
+  const res = await withTimeout(fetch(url, { headers, signal: opts.signal }), CONNECT_TIMEOUT_MS, () => new Error(`no response from ${url} for ${CONNECT_TIMEOUT_MS / 1000}s`));
   if (!res.ok && res.status !== 206) throw new Error(`GET ${url} returned ${res.status}`);
   if (startAt > 0 && res.status !== 206) {
     unlinkSync(partPath);

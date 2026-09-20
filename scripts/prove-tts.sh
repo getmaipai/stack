@@ -7,8 +7,14 @@
 # renders one sentence through POST /v1/audio/speech with the identity
 # headers, times the first byte, cancels a second render mid-stream and
 # renders again, runs the readiness check, and refuses an unknown voice.
-# Prints a transcript with timings; touches nothing outside the repo and
-# the scratch directory.
+# STACK-94d: the engine's start is watched for outbound connections
+# (none: it runs offline), a preset voice the computer does not hold is
+# fetched once by the Stack and served offline after, a cloning voice
+# without a token is refused with the reason, and, with HF_TOKEN set in
+# the environment of this script (the operator's own, for this run
+# only), voice cloning is turned on, the gated weights fetched once by
+# the Stack, and a community voice rendered. Prints a transcript with
+# timings; touches nothing outside the repo and the scratch directory.
 #
 #   bash scripts/prove-tts.sh            # port 8771
 #   PORT=8790 bash scripts/prove-tts.sh
@@ -88,11 +94,21 @@ done
 json GET /stack/v1/models | python3 -c "import json,sys;[print('model', m['id'], m['state'], 'sha256', (m['sha256'] or '')[:12], 'path', m['modelPath'].replace('$DATA/','')) for m in json.load(sys.stdin)['models']]"
 json GET /stack/v1/roles | python3 -c "import json,sys;r=[x for x in json.load(sys.stdin)['roles'] if x['id']=='tts'][0];print('tts state before the first request:', r['state']['state'])"
 
-step "4. one sentence through POST /v1/audio/speech (the engine's start plus the first render)"
+step "4. one sentence through POST /v1/audio/speech (the engine's start plus the first render), the engine's connections sampled through its start"
+# Every second while the engine starts, the sockets of any pocket-tts
+# process: an engine that runs offline opens none but its own loopback
+# listener. The samples are read after the render.
+( for _ in $(seq 1 40); do for wpid in $(pgrep -f "pocket-tts serve" 2>/dev/null); do lsof -a -i -n -P -p "$wpid" 2>/dev/null | tail -n +2; done; sleep 1; done ) > "$DATA/engine-sockets.txt" 2>/dev/null &
+SAMPLER=$!
 T=$(now)
 curl -s -D "$DATA/headers.txt" -o "$DATA/out.wav" -w "HTTP %{http_code} %{size_download} bytes, first byte %{time_starttransfer}s, total %{time_total}s\n" -X POST "$BASE/v1/audio/speech" -F "text=$SENTENCE"
 grep -i "^x-maipai\|^content-type" "$DATA/headers.txt" | tr -d '\r'
 echo "in $(since $T)"
+kill "$SAMPLER" 2>/dev/null || true; wait "$SAMPLER" 2>/dev/null || true
+echo "engine sockets seen through the start (loopback listener and Stack connections only, nothing outbound):"
+sort -u "$DATA/engine-sockets.txt" | awk '{print "  " $1, $8, $9, $10}' | sort -u | head -8
+if grep -v "127.0.0.1\|localhost\|\*:" "$DATA/engine-sockets.txt" | grep -q .; then echo "  OUTBOUND CONNECTION SEEN"; else echo "  no outbound connection"; fi
+grep -ci "huggingface\|HEAD /" "$DATA/engines/pocket-tts/3.1.0/"*.log 2>/dev/null | sed 's/^/  hub mentions in the engine log: /' || true
 python3 -c "
 import struct; f=open('$DATA/out.wav','rb').read()
 print('wav', f[:4], 'rate', struct.unpack('<I', f[24:28])[0], 'channels', struct.unpack('<H', f[22:24])[0], 'bits', struct.unpack('<H', f[34:36])[0], 'declared data size', struct.unpack('<I', f[40:44])[0], 'actual audio bytes', len(f)-44, 'seconds', round((len(f)-44)/2/struct.unpack('<I', f[24:28])[0], 2))"
@@ -106,8 +122,39 @@ sleep 0.3
 curl -s -o /dev/null -w "render after the cancel: HTTP %{http_code} %{size_download} bytes, first byte %{time_starttransfer}s\n" -X POST "$BASE/v1/audio/speech" -F "text=$SENTENCE"
 json GET /stack/v1/roles | python3 -c "import json,sys;r=[x for x in json.load(sys.stdin)['roles'] if x['id']=='tts'][0];print('tts state after the cancel:', r['state']['state'])"
 
-step "6. an unknown voice is the engine's refusal, passed through"
+step "6. a voice the Stack cannot pin is refused with the reason before the engine"
 curl -s -w "\nHTTP %{http_code}\n" -X POST "$BASE/v1/audio/speech" -F "text=hello" -F "voice_url=nobody" | head -c 300; echo
+curl -s -w "\nHTTP %{http_code}\n" -X POST "$BASE/v1/audio/speech" -F "text=hello" -F "voice_url=https://example.com/v.wav" | head -c 300; echo
+
+step "6b. a preset voice the computer does not hold: fetched once by the Stack (7.8 MB, sha256 verified, into the hub cache), then served offline"
+ls "$DATA/models/hub/models--kyutai--pocket-tts-without-voice-cloning/snapshots/"*/languages/english/embeddings/ 2>/dev/null | sed 's/^/  embeddings before: /'
+T=$(now)
+curl -s -o /dev/null -w "anna, first ask: HTTP %{http_code} %{size_download} bytes, first byte %{time_starttransfer}s, total %{time_total}s\n" -X POST "$BASE/v1/audio/speech" -F "text=$SENTENCE" -F "voice_url=anna"
+echo "in $(since $T)"
+ls "$DATA/models/hub/models--kyutai--pocket-tts-without-voice-cloning/snapshots/"*/languages/english/embeddings/ 2>/dev/null | sed 's/^/  embeddings after: /'
+curl -s -o /dev/null -w "anna, second ask: HTTP %{http_code} %{size_download} bytes, first byte %{time_starttransfer}s, total %{time_total}s\n" -X POST "$BASE/v1/audio/speech" -F "text=$SENTENCE" -F "voice_url=anna"
+json GET /stack/v1/models | python3 -c "import json,sys;[print('  voice record', m['id'], m['state'], 'sha256', (m['sha256'] or '')[:12]) for m in json.load(sys.stdin)['models'] if 'voice' in m['id']]"
+
+step "6c. a community voice needs cloning: refused with the reason while cloning is off, and while no token is set"
+curl -s -w "\nHTTP %{http_code}\n" -X POST "$BASE/v1/audio/speech" -F "text=hello" -F "voice_url=hf://kyutai/tts-voices/alba-mackenna/casual.wav" | head -c 400; echo
+json PUT /stack/v1/settings '{"stack.engines.tts.voice_cloning":true}' >/dev/null; json POST /stack/v1/settings/apply >/dev/null
+curl -s -w "\nHTTP %{http_code}\n" -X POST "$BASE/v1/audio/speech" -F "text=hello" -F "voice_url=hf://kyutai/tts-voices/alba-mackenna/casual.wav" | head -c 400; echo
+if [ -n "${HF_TOKEN:-}" ]; then
+  step "6d. with the operator's token: the Stack fetches the gated cloning weights once (219 MB, sha256 verified) and the community voice (pinned to its commit), restarts the engine onto the weights, and renders"
+  json PUT /stack/v1/settings "{\"stack.engines.tts.hf_token\":\"$HF_TOKEN\"}" >/dev/null; json POST /stack/v1/settings/apply >/dev/null
+  T=$(now)
+  curl -s -D "$DATA/headers2.txt" -o "$DATA/cloned.wav" -w "cloned voice, first ask: HTTP %{http_code} %{size_download} bytes, first byte %{time_starttransfer}s, total %{time_total}s\n" -X POST "$BASE/v1/audio/speech" -F "text=$SENTENCE" -F "voice_url=hf://kyutai/tts-voices/alba-mackenna/casual.wav"
+  grep -i "^x-maipai" "$DATA/headers2.txt" | tr -d '\r'
+  echo "in $(since $T)"
+  python3 -c "
+import struct,sys; f=open('$DATA/cloned.wav','rb').read()
+print('  wav', f[:4], 'audio bytes', len(f)-44, 'seconds', round((len(f)-44)/2/24000, 2)) if f[:4]==b'RIFF' else print('  body:', f[:300].decode('utf8','replace'))"
+  ls "$DATA/models/hub" | sed 's/^/  hub: /'
+  curl -s -o /dev/null -w "cloned voice, second ask: HTTP %{http_code} %{size_download} bytes, first byte %{time_starttransfer}s, total %{time_total}s\n" -X POST "$BASE/v1/audio/speech" -F "text=$SENTENCE" -F "voice_url=hf://kyutai/tts-voices/alba-mackenna/casual.wav"
+  json GET /stack/v1/roles | python3 -c "import json,sys;r=[x for x in json.load(sys.stdin)['roles'] if x['id']=='tts'][0];print('  tts identity after the restart', r.get('identity'))"
+else
+  echo "(HF_TOKEN not set in this run: the cloning fetch is not exercised)"
+fi
 
 step "7. the readiness check"
 T=$(now)

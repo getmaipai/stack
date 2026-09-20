@@ -170,6 +170,8 @@ Engines per platform:
 
 Installed beside the model, never selected on its own: `pocket-tts-english-tokenizer` (tokenizer, 0.1 MB, CC-BY-4.0, kyutai/pocket-tts-without-voice-cloning @ d29db7978e464fb90cb3359ee0c69a273b9142cc); `pocket-tts-voice-alba` (voice, 5.9 MB, CC-BY-4.0, kyutai/pocket-tts-without-voice-cloning @ e81d79e8194ad4c7ce879c87a4258ef20cbf2487).
 
+Fetched by the Stack only when a request needs them (the engine runs offline): 26 preset voices (`alba`, `anna`, `azelma`, `bill_boerst`, and the rest of the engine's English catalog), each a precomputed embedding at `kyutai/pocket-tts-without-voice-cloning` revision `e81d79e8` pinned by sha256; a community voice as an `hf://` path, pinned to its commit and the hub's digest, with the licence its repository or folder states; and `pocket-tts-english-cloning` (cloning-weights, 0.20 GB, CC-BY-4.0, `kyutai/pocket-tts` @ `39592ff2`, sha256 `473f47d9…`), once, with the person's token, when `stack.engines.tts.voice_cloning` is on.
+
 ## wakeword (Wake word)
 
 Engines per platform:
@@ -224,7 +226,7 @@ Engines per platform:
 
 | Engine | Build | Platform | Status |
 |---|---|---|---|
-| | | | not yet |
+| ACE-Step 1.5 (managed, the official MLX backend, acestep-api), the owner's pick | | | candidate (docs/plans/jev-and-yue-2026-09-20.md; STACK-99) |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|

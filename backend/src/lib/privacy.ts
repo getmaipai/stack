@@ -53,9 +53,9 @@ export const PRIVACY_ROWS: PrivacyRow[] = [
   },
   {
     id: "tts-voices",
-    what: "The voice engine asking Hugging Face for its weights and voices",
-    when: "Each time the voice engine starts (it asks for the voice-cloning weights, and reads the pinned copy on this computer when the ask is refused without a token), and when a person picks a voice the computer does not hold yet",
-    carries: "The file's name, and the Hugging Face token from settings when one is set, so the cloning weights can be read",
+    what: "The Stack fetching a voice, or the voice-cloning weights, for the voice engine",
+    when: "Only when a request names a voice this computer does not hold yet (fetched once, then read from disk), and once for the voice-cloning weights when voice cloning is turned on and a token is set. Never when the voice engine starts: it runs offline and reads only what this computer holds",
+    carries: "The file's name and its pinned revision; the Hugging Face token from settings only for the cloning weights, which Hugging Face keeps behind it",
     receiver: "Hugging Face, straight from this computer",
     setting: "stack.engines.tts.hf_token",
     hosts: ["huggingface.co"],

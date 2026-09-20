@@ -965,10 +965,9 @@ without one, then the pinned ungated file from the cache; bounded to
 three seconds by `HF_HUB_ETAG_TIMEOUT` so a machine with no connection
 starts in that time, not ten); that ask is the privacy row. Running
 the engine offline would remove it but would also stop every preset
-but the pinned one and every community voice, so the engine is never
-run offline: with a token set it fetches the gated weights itself into
-the same cache, and it fetches any preset or community voice on first
-use. After the post-load check the supervisor reads which weights
+but the pinned one and every community voice, so at 94c the engine was
+never run offline. (Superseded at 94d, below: the engine now runs
+offline always and the Stack fetches what a request needs first.) After the post-load check the supervisor reads which weights
 snapshot the cache holds (the gated repository first when a token is
 set) and the identity headers name that repository and revision, not
 the config's first choice; the pinned record's repository and its
@@ -1210,6 +1209,92 @@ pin's `hub_file` placement when the body left it out, so the files
 landed in the plain store and the engine fetched its own copies (the
 first byte then 15.7 s); the route now completes a body from the
 Stack's own pin as it does from the Catalog's index, with a test.
+
+### The voice engine online only when needed (STACK-94d, 2026-09-20)
+
+The rule, superseding the "never run offline" paragraph of 94c above:
+the engine runs with `HF_HUB_OFFLINE=1` always and no token in its
+environment, and the Stack fetches, through its own pinned and
+checksummed download path into the hub cache, exactly what a request
+needs and does not have, before the engine uses it. The only outbound
+calls are the Stack's declared downloads, on an explicit need, never on
+the engine's start. What the engine reads, checked in the installed
+package (3.1.0, `utils/utils.py` and `models/tts_model.py`): every
+`hf://` path goes through `hf_hub_download`, which offline resolves a
+commit-hash revision from the cache layout and raises otherwise; the
+config tries the gated weights first (`kyutai/pocket-tts` at
+`39592ff…`) and falls back to the ungated pin on any failure, so with
+the gated file in the cache the engine loads it offline and has
+cloning, and without it loads the pin; a preset name maps to the
+precomputed embedding `languages/english/embeddings/<name>.safetensors`
+in the ungated repository at `e81d79e8…`, never to cloning; anything
+else (an `hf://` audio file, an `http(s)://` file, an upload) is
+encoded through the cloning weights, and `_cached_get_state_for_audio_prompt`
+does not cache in this version, so a cloned voice costs its encoding
+on every request (1.9 s on the laptop, below).
+
+`backend/src/speech/voices.ts` does the fetching. The 26 preset voices
+of the English catalog are pinned by name, size and sha256 from the
+hub's listing at the embeddings revision (`POCKET_TTS_PRESET_VOICES`);
+`prepareVoice` resolves a request's `voice_url` before the engine sees
+it: a preset name, or the engine's own `hf://` spelling of one,
+becomes the name once its embedding is in the cache at the pinned
+digest (installed through the store as a voice component, the same
+path as the `alba` pin, once; served from disk after); an `hf://`
+path to a community voice is resolved through the hub's API to a
+commit and the file's own LFS digest (`resolveHuggingFace`, one
+metadata call), installed as a voice component at that commit, and
+handed to the engine as `hf://repo/path@commit`, so the engine finds
+it offline; an `http(s)://` voice is allowed only on the household's
+own network (loopback, the private ranges, `.local`, `.home.arpa`:
+Home's cloned voices), which the engine reads over the LAN, and a
+public host is refused as not pinnable; a file the hub publishes no
+digest for, a repository that declares no licence, and a name that is
+no preset are refused with the reason (400, `voice-not-pinnable`).
+`kyutai/tts-voices` declares no licence as a repository and states
+each folder's in its README (read 2026-09-20), so
+`VOICE_FOLDER_LICENCES` pins those: `voice-donations/` and
+`voice-zero/` CC0, `vctk/`, `cml-tts/` and `alba-mackenna/` CC BY 4.0,
+`expresso/` and `ears/` CC BY-NC 4.0; `unmute-prod-website/` is mixed
+and refused.
+
+Cloning is a setting, `stack.engines.tts.voice_cloning` (off by
+default, needs a restart), beside the token. The gated weights
+(`pocket-tts-english-cloning`, `kyutai/pocket-tts` at `39592ff…`,
+219,029,196 bytes, sha256 `473f47d9…` read from the hub's listing with
+a token on 2026-09-20; the same size as the ungated twin, different
+bytes) are fetched by the Stack once, with the token as the request's
+Authorization header and nowhere else, when cloning is on and a token
+is set: at the engine's start (a fetch that fails raises
+`voice-cloning-weights.tts` and never stops the start) or at the first
+cloning request, after which the engine, if it loaded the ungated
+twin, is restarted onto them. A request that needs cloning while the
+weights are not on disk and cannot be fetched is refused with the
+reason before the engine (409, `voice-cloning-unavailable`: cloning
+off, or no token). The identity read after load is unchanged in
+substance: the gated repository first when the cache holds both,
+which is the engine's own order. The privacy row `tts-voices` says
+all of this in the dad's words.
+
+Proven live (`scripts/prove-tts.sh`, two runs on the p16 laptop, the
+second with the operator's own token in the script's environment for
+that run only; the machine was under a parallel gate's memory load
+during the second, so its steps 4 to 6b were the governor refusing
+the engine at 3.1 GB free and pressure warn, and the numbers below
+are the first run's for those steps and the second's for 6d):
+
+| Step | Result | Time |
+|---|---|---|
+| The engine's start, its sockets sampled every second with `lsof` through the first render | the loopback listener only; no outbound connection | first byte 14.6 s |
+| `voice_url=nobody`, `voice_url=https://example.com/v.wav` | 400 `voice-not-pinnable` with the reason, before the engine | |
+| `voice_url=anna`, not on disk | HTTP 200; `anna.safetensors` fetched once by the Stack (7.8 MB, sha256 verified) into the hub cache beside `alba`, the record `pocket-tts-voice-anna` installed; first byte 2.26 s (the fetch inside it) | |
+| `voice_url=anna` again | HTTP 200, first byte 8 ms: read from disk | |
+| `hf://kyutai/tts-voices/alba-mackenna/casual.wav`, cloning off | 409 `voice-cloning-unavailable`, "turned off" | |
+| The same, cloning on, no token | 409 `voice-cloning-unavailable`, "keeps behind a token" | |
+| The same, cloning on, token set | HTTP 200, 2.28 s of audio; the Stack fetched `casual.wav` (958,542 bytes, at commit `323332d3…`, the hub's digest) and the gated weights (219 MB) and restarted the engine onto them; `x-maipai-model: kyutai/pocket-tts`, `x-maipai-revision: 39592ff2…`; the hub cache then holds the three repositories | first byte 23.8 s (the two fetches and the restart inside it) |
+| The same again | HTTP 200, first byte 1.90 s: the engine encodes the voice each time (no cache in 3.1.0) | |
+| `tts` identity after the restart | ok: the pinned repository's gated twin, as allowed | |
+| `POST /stack/v1/check` | ok | 0.23 s |
 
 ## The image role: ComfyUI as a managed engine (STACK-13b, 2026-09-20)
 

@@ -166,6 +166,20 @@ are never copied. Nothing migrates Home until STACK-16.
   Mirror: the tts live table. Out of scope: any code change; if the
   run finds one, it is its own item. Exit: `bash scripts/check.sh
   --docs` and the table in `dev.md`.
+- [ ] **STACK-99 (M): the music role on ACE-Step 1.5.** ACE-Step 1.5
+  as a managed engine through the uv pattern (MIT code and weights,
+  the official MLX backend, its REST server acestep-api, an ungated
+  download pinned by revision and sha256), the music role behind the
+  job API like image, a 30 s instrumental and a 30 s sung clip
+  rendered live with time and footprint measured on the Studio
+  (STACK-14's protocol) before the pin is final. The owner's pick
+  (`docs/plans/jev-and-yue-2026-09-20.md`: YuE2 rejected as CUDA-only
+  with non-commercial weights, Jev rejected as hosted-only). Files:
+  `backend/src/generators/`, `engineCatalog.ts`, `modelCatalog.ts`,
+  `routes/v1.ts`. Mirror: STACK-13b. Out of scope:
+  vocals-versus-instrumental scope for the household (the owner's
+  question in the note), unofficial MLX forks (never). Exit: `bash
+  scripts/check.sh` and the measured table in `dev.md`.
 
 ## Governor and sizing
 
@@ -307,6 +321,19 @@ are never copied. Nothing migrates Home until STACK-16.
   client abort; the readiness probe rendering one sentence; proven
   live on the dev machine (`scripts/prove-tts.sh`, the table in
   `dev.md` "tts proven live"). Landed on `main` with this line.
+- [x] **STACK-94d (M): the voice engine online only when needed.**
+  Pocket TTS runs with `HF_HUB_OFFLINE=1` always and no token in its
+  environment; `backend/src/speech/voices.ts` fetches, through the
+  store's checksummed path into the hub cache, what a request needs
+  and does not have (a preset voice pinned by sha256, a community
+  voice pinned to its commit and the hub's digest, the gated cloning
+  weights once with `stack.engines.tts.voice_cloning` on and a token),
+  before the engine uses it; a voice that cannot be pinned or needs
+  cloning that is unavailable is refused with the reason; the privacy
+  row says so. Tests: `backend/tests/voices.test.ts` (no request on
+  start, a missing voice fetched once then served offline, no token
+  refused with the reason). Proven live (`scripts/prove-tts.sh`,
+  `dev.md` "The voice engine online only when needed").
 
 ## Service and platforms
 

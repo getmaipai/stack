@@ -36,15 +36,17 @@ export function pocketTtsBinary(): string { return join(pocketTtsVenv(), "bin", 
 export function pocketTtsInstalled(): boolean { return uvEnvironmentReady({ name: POCKET_TTS_NAME, version: POCKET_TTS_VERSION, root: pocketTtsRoot(), proof: pocketTtsBinary() }); }
 
 /** The engine's environment: uv's homes and the hub cache under data/
- * (see `managedEnv`), and a bounded ask to the hub at start. */
+ * (see `managedEnv`), and the hub offline always (STACK-94d): the
+ * engine reads what the Stack placed in the cache and asks Hugging
+ * Face for nothing, at start or on a request; the Stack fetches what
+ * a request needs first (`speech/voices.ts`). No token travels: the
+ * gated weights, when wanted, are fetched by the Stack. */
 export function pocketTtsEnv(extra: Record<string, string> = {}): Record<string, string> {
-  return managedEnv({
-    // The engine asks the hub for the gated weights at every start and
-    // falls back to the pinned ungated file when refused; on a machine
-    // with no connection that ask must fail fast, not wait ten seconds.
-    HF_HUB_ETAG_TIMEOUT: "3",
-    ...extra,
-  });
+  const env = managedEnv({ HF_HUB_OFFLINE: "1", ...extra });
+  delete env.HF_TOKEN;
+  delete env.HUGGING_FACE_HUB_TOKEN;
+  delete env.HF_HUB_ETAG_TIMEOUT;
+  return env;
 }
 
 function spec(): UvEnvironmentSpec {
@@ -61,12 +63,13 @@ export function pocketTtsCommand(port: number): string[] {
   return [pocketTtsBinary(), "serve", "--host", "127.0.0.1", "--port", String(port)];
 }
 
-/** Which weights repository the hub cache holds a snapshot of, gated
- * first when a token is set: what the engine loaded, read after its
- * health, not what the config hoped for. */
-export function loadedWeightsRepo(options: { tokenSet: boolean; hubRoot?: string } = { tokenSet: false }): { repo: string; revision: string } | null {
+/** Which weights repository the hub cache holds a snapshot of, the
+ * gated one first when both are there (the engine's config tries it
+ * first and, offline, finds it in the cache): what the engine loaded,
+ * read after its health, not what the config hoped for. */
+export function loadedWeightsRepo(options: { hubRoot?: string } = {}): { repo: string; revision: string } | null {
   const hub = options.hubRoot ?? hfHubRoot;
-  const candidates = options.tokenSet ? [POCKET_TTS_GATED_REPO, POCKET_TTS_UNGATED_REPO] : [POCKET_TTS_UNGATED_REPO, POCKET_TTS_GATED_REPO];
+  const candidates = [POCKET_TTS_GATED_REPO, POCKET_TTS_UNGATED_REPO];
   for (const repo of candidates) {
     const snapshots = join(hub, hfRepoName(repo), "snapshots");
     if (!existsSync(snapshots)) continue;

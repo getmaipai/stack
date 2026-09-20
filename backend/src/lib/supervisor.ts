@@ -21,6 +21,7 @@ import { readFileSync } from "node:fs";
 import bundledClipFile from "../speech/fixtures/clover-two-seconds.wav" with { type: "file" };
 import { TRANSCRIBE_PATH } from "@/speech/server";
 import { loadedWeightsRepo, pocketTtsCommand, pocketTtsEnv, pocketTtsInstalled, POCKET_TTS_ESTIMATED_FOOTPRINT, POCKET_TTS_VERSION } from "@/speech/pocketTts";
+import { ensureCloningWeights, POCKET_TTS_PRESET_VOICES, voiceCloningOn } from "@/speech/voices";
 import { comfyuiCommand, comfyuiEnv, comfyuiInstalled, COMFYUI_VERSION, linkCheckpoint, probeGenerator } from "@/generators/comfyui";
 import { basename } from "node:path";
 import { getRunState, release, setGovernorPid, startGovernor, type GovernorHandle, type GovernorTier } from "@/lib/governor";
@@ -499,10 +500,8 @@ export function launchPlan(role: RoleId, model: ModelRecord, port: number): Laun
   }
   if (role === "tts") {
     if (!pocketTtsInstalled()) throw new EngineUnavailableError("The Pocket TTS environment is not built on this machine.");
-    // The person's token, if set, reaches exactly this environment.
-    const token = settingValues()["stack.engines.tts.hf_token"];
-    const env = pocketTtsEnv(typeof token === "string" && token.trim() ? { HF_TOKEN: token.trim() } : {});
-    return { command: pocketTtsCommand(port), engine: "pocket-tts", build: POCKET_TTS_VERSION, stdin: "ignore", contextLength: 0, kind: "managed", env };
+    // Offline always; the token never travels (STACK-94d).
+    return { command: pocketTtsCommand(port), engine: "pocket-tts", build: POCKET_TTS_VERSION, stdin: "ignore", contextLength: 0, kind: "managed", env: pocketTtsEnv() };
   }
   const declared = engineSettingValues("engines.llama_server");
   const config = { contextLength: declared.context_length, slots: declared.slots, threads: declared.threads, cacheRamMb: declared.cache_ram_mb, flashAttention: declared.flash_attention } as Record<string, number | boolean | string | string[]>;
@@ -537,6 +536,19 @@ async function startSpawnedProcess(role: RoleId): Promise<RoleProcess> {
     throw new EngineUnavailableError(reason);
   }
   if (!model?.modelPath) throw new EngineUnavailableError(`No verified and installed ${role} model is available.`);
+  // The voice engine starts offline; what it may need beyond the pins
+  // (the gated cloning weights, with a token and cloning turned on) the
+  // Stack fetches first, once. A fetch that fails never stops the start:
+  // the engine serves presets, and a cloning request reports the reason.
+  if (role === "tts" && voiceCloningOn()) {
+    try {
+      if (await ensureCloningWeights()) resolveHealth("voice-cloning-weights.tts");
+      else raise({ code: "voice-cloning-weights.tts", severity: "warning", title: "The voice-cloning weights could not be fetched", text: "stack.engines.tts.hf_token is not set, so the gated weights were not fetched.", cause: "no token", fix: { label: "Restart engine", action: "restart_engine" } });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      raise({ code: "voice-cloning-weights.tts", severity: "warning", title: "The voice-cloning weights could not be fetched", text: reason, cause: reason, fix: { label: "Restart engine", action: "restart_engine" } });
+    }
+  }
 
   // A generator's process holds its checkpoint as a resident the
   // supervisor's idle unload evicts (the file times the engine's
@@ -606,7 +618,7 @@ async function startSpawnedProcess(role: RoleId): Promise<RoleProcess> {
     // checkpoint file for ComfyUI; for Pocket TTS the weights the hub
     // cache holds, read after health and never assumed from the config).
     if (plan.kind === "managed") {
-      const model_ = GENERATOR_ROLES.includes(role) ? basename(model.modelPath!) : loadedWeightsRepo({ tokenSet: !!plan.env?.HF_TOKEN })?.repo ?? null;
+      const model_ = GENERATOR_ROLES.includes(role) ? basename(model.modelPath!) : loadedWeightsRepo()?.repo ?? null;
       identity = { ...identity, build: `${plan.engine}-${plan.build}`, model: model_ };
     }
     // mlx-serve's /props carries no build_info or model_path: the build
@@ -618,7 +630,7 @@ async function startSpawnedProcess(role: RoleId): Promise<RoleProcess> {
     runtime(role).status.postLoadCheck = check;
     resolveHealth(`engine.crashed.${role}`);
     resolveHealth(`post-load-check-failed.${role}`);
-    const loadedRevision = plan.kind === "managed" && !GENERATOR_ROLES.includes(role) ? loadedWeightsRepo({ tokenSet: !!plan.env?.HF_TOKEN })?.revision ?? null : null;
+    const loadedRevision = plan.kind === "managed" && !GENERATOR_ROLES.includes(role) ? loadedWeightsRepo()?.revision ?? null : null;
     const processRecord: RoleProcess = {
       role, kind: plan.kind, client, identity, engine: plan.engine, modelId: model.id, modelRevision: loadedRevision ?? model.revision, pid: handle.pid, port, activeRequests: 0, retired: false,
       governorHandle: admission,
@@ -1075,7 +1087,8 @@ export function scriptedProcess(role: RoleId, overrides: Partial<RoleProcess> = 
       if (path !== SPEECH_PATH) return json({ error: "Not found." }, 404);
       const form = init.body instanceof FormData ? init.body : null;
       const voice = form?.get("voice_url");
-      if (typeof voice === "string" && voice && voice !== "alba") return new Response(JSON.stringify({ detail: `Unknown voice ${voice}.` }), { status: 400, headers: { "content-type": "application/json" } });
+      // The real engine takes a preset name or an hf:// path it can read offline; anything else is its own 400.
+      if (typeof voice === "string" && voice && !(voice in POCKET_TTS_PRESET_VOICES) && !voice.startsWith("hf://")) return new Response(JSON.stringify({ detail: `Unknown voice ${voice}.` }), { status: 400, headers: { "content-type": "application/json" } });
       // A 24 kHz mono 16-bit WAV in two chunks: the header with the
       // placeholder data size Pocket TTS writes, then a beat of silence.
       const header = new Uint8Array(44);

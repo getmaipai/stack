@@ -47,10 +47,12 @@ test("POST /v1/audio/speech takes the spec's form and streams the engine's WAV w
   expect(bytes.byteLength).toBe(44 + 4_800);
 });
 
-test("a voice the engine does not have is the engine's own 400, passed through; an empty text is refused before the engine", async () => {
+test("a voice the Stack cannot pin is refused before the engine with the reason; the engine's own 400 for a voice it cannot read passes through the wire; an empty text is refused before the engine", async () => {
   const bad = await speak({ text: "hello", voice_url: "nobody" });
   expect(bad.status).toBe(400);
-  expect(await bad.json()).toEqual({ detail: "Unknown voice nobody." });
+  expect(await bad.json()).toMatchObject({ reason: "voice-not-pinnable" });
+  const engineOwn = await speakRole("tts", speechForm("hello", "nobody"));
+  expect(engineOwn.status).toBe(400);
   expect((await speak({ text: "" })).status).toBe(400);
   expect((await speak({ text: "hello", model: "chat" })).status).toBe(400);
 });
@@ -87,9 +89,11 @@ test("the Hugging Face token is stored encrypted, applied on restart, revealed o
   expect(row.secret).toBe(true);
   expect(row.in_effect).toBe(SECRET_SET);
   expect(JSON.stringify(served)).not.toContain("hf_examplesecret");
-  // The environment carries it as HF_TOKEN and every cache under data/.
+  // The token never reaches the engine's environment (the Stack fetches
+  // the gated weights itself); every cache is under data/, the hub offline.
   const env = pocketTtsEnv({ HF_TOKEN: settingValues()["stack.engines.tts.hf_token"] as string });
-  expect(env.HF_TOKEN).toBe("hf_examplesecret");
+  expect(env.HF_TOKEN).toBeUndefined();
+  expect(env.HF_HUB_OFFLINE).toBe("1");
   expect(env.HOME).toContain("/home");
   expect(env.UV_CACHE_DIR).toContain("/engines/uv/cache");
   expect(env.HF_HUB_CACHE).toBe(hfHubRoot);
@@ -132,18 +136,17 @@ test("a hub file installs into the hub cache once, at the pinned repository and 
   await install();
   expect(downloads).toBe(1);
   expect(selectedModel("tts")?.id).toBe(pin.id);
-  expect(loadedWeightsRepo({ tokenSet: false })).toEqual({ repo: POCKET_TTS_UNGATED_REPO, revision: pin.revision });
+  expect(loadedWeightsRepo()).toEqual({ repo: POCKET_TTS_UNGATED_REPO, revision: pin.revision });
 });
 
-test("the loaded weights are whichever repository the hub cache holds, gated first when a token is set", () => {
+test("the loaded weights are whichever repository the hub cache holds, the gated one first when both are there (the engine's own order, offline)", () => {
   const hub = join(tmpdir(), `maipai-stack-hub-${Date.now()}`);
   const snapshot = (repo: string, revision: string) => { const dir = join(hub, `models--${repo.replaceAll("/", "--")}`, "snapshots", revision, "languages", "english"); mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, "model.safetensors"), "w"); };
-  expect(loadedWeightsRepo({ tokenSet: false, hubRoot: hub })).toBeNull();
+  expect(loadedWeightsRepo({ hubRoot: hub })).toBeNull();
   snapshot(POCKET_TTS_UNGATED_REPO, "d29db797");
-  expect(loadedWeightsRepo({ tokenSet: true, hubRoot: hub })).toEqual({ repo: POCKET_TTS_UNGATED_REPO, revision: "d29db797" });
+  expect(loadedWeightsRepo({ hubRoot: hub })).toEqual({ repo: POCKET_TTS_UNGATED_REPO, revision: "d29db797" });
   snapshot(POCKET_TTS_GATED_REPO, "39592ff2");
-  expect(loadedWeightsRepo({ tokenSet: true, hubRoot: hub })?.repo).toBe(POCKET_TTS_GATED_REPO);
-  expect(loadedWeightsRepo({ tokenSet: false, hubRoot: hub })?.repo).toBe(POCKET_TTS_UNGATED_REPO);
+  expect(loadedWeightsRepo({ hubRoot: hub })?.repo).toBe(POCKET_TTS_GATED_REPO);
   rmSync(hub, { recursive: true, force: true });
 });
 
@@ -191,7 +194,7 @@ test("a redacted secret written back is no change: the real token stays, and so 
   // The engine's environment never carries the daemon's own key.
   process.env.STACK_SECRETS_KEY = "0".repeat(64);
   try { expect(pocketTtsEnv().STACK_SECRETS_KEY).toBeUndefined(); } finally { delete process.env.STACK_SECRETS_KEY; }
-  expect(pocketTtsEnv().HF_HUB_ETAG_TIMEOUT).toBe("3");
+  expect(pocketTtsEnv().HF_HUB_ETAG_TIMEOUT).toBeUndefined();
 });
 
 test("the uv rows are never reported as running an older build while tts serves", async () => {

@@ -41,8 +41,8 @@ function roleFrom(info: { task?: string; config?: unknown; cardData?: unknown },
   return files.some((file) => file.name.toLowerCase().endsWith(".gguf")) && typeof template === "string" && template.length > 0 ? "chat" : "unknown";
 }
 
-export async function resolveHuggingFace(repo: string): Promise<HfResolution> {
-  const info = await modelInfo({ name: repo, hubUrl: currentEndpoint(), fetch: hubFetch() as typeof fetch, additionalFields: ["sha", "cardData", "config", "tags"] });
+export async function resolveHuggingFace(repo: string, options: { revision?: string } = {}): Promise<HfResolution> {
+  const info = await modelInfo({ name: repo, revision: options.revision, hubUrl: currentEndpoint(), fetch: hubFetch() as typeof fetch, additionalFields: ["sha", "cardData", "config", "tags"] });
   const revision = info.sha;
   const files: HfFile[] = [];
   for await (const file of listFiles({ repo: { type: "model", name: repo }, revision, recursive: true, hubUrl: currentEndpoint(), fetch: hubFetch() as typeof fetch })) {

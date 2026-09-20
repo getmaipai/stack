@@ -71,8 +71,13 @@ export const SETTINGS: SettingDeclaration[] = [
   ...urlBinding("stt", 10),
   ...urlBinding("tts", 10),
   // Secret: encrypted at rest, never returned by the settings route, and
-  // handed to the tts engine's environment as HF_TOKEN (STACK-94c).
+  // used by the Stack's own fetch of the gated cloning weights, never
+  // handed to the engine (STACK-94c, 94d).
   { ...stack, key: "stack.engines.tts.hf_token", selector: "text", default: "", label: "Hugging Face token", help: "Lets voice cloning use the gated Pocket TTS weights. Stored encrypted; the Stack never shows it again.", section: { id: "engines.tts", order: 30 }, level: "advanced", needs_restart: true, secret: true },
+  // Voice cloning (STACK-94d): with this on and a token set, the Stack
+  // fetches the gated cloning weights once, before the engine's next
+  // start; the engine itself runs offline always.
+  { ...stack, key: "stack.engines.tts.voice_cloning", selector: "boolean", default: false, label: "Voice cloning", help: "Lets the voice engine speak in a voice from a recording (a family member's, a community voice). Needs a Hugging Face token and one download of the cloning weights; presets work without it.", section: { id: "engines.tts", order: 25 }, level: "advanced", needs_restart: true },
 ];
 
 const byKey = new Map(SETTINGS.map((declaration) => [declaration.key, declaration]));

@@ -657,61 +657,107 @@
             }
           },
           "400": {
-            "description": "Unknown role or model id; the body lists the declared roles.",
+            "description": "Unknown role or model id, or a voice the Stack cannot pin and verify (reason voice-not-pinnable).",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "roles": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "error",
+                        "roles"
+                      ]
                     },
-                    "roles": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "voice-cloning-unavailable",
+                            "voice-not-pinnable"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "error",
+                        "reason"
+                      ]
                     }
-                  },
-                  "required": [
-                    "error",
-                    "roles"
                   ]
                 }
               }
             }
           },
           "409": {
-            "description": "The named model's provenance is incomplete.",
+            "description": "The named model's provenance is incomplete, or the voice needs voice cloning that is off or has no token (reason voice-cloning-unavailable).",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "model": {
-                      "type": "string"
-                    },
-                    "reason": {
-                      "type": "string",
-                      "enum": [
-                        "unverified"
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "model": {
+                          "type": "string"
+                        },
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "unverified"
+                          ]
+                        },
+                        "missing": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "error",
+                        "model",
+                        "reason",
+                        "missing"
                       ]
                     },
-                    "missing": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "voice-cloning-unavailable",
+                            "voice-not-pinnable"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "error",
+                        "reason"
+                      ]
                     }
-                  },
-                  "required": [
-                    "error",
-                    "model",
-                    "reason",
-                    "missing"
                   ]
                 }
               }

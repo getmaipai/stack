@@ -203,4 +203,7 @@ export const ROLE_CANDIDATES: Partial<Record<string, RoleCandidate[]>> = {
   video: [
     { name: "ComfyUI (managed), the same environment as image", kind: "engine", source: "dev.md, Jobs; a later item" },
   ],
+  music: [
+    { name: "ACE-Step 1.5 (managed, the official MLX backend, acestep-api), the owner's pick", kind: "engine", source: "docs/plans/jev-and-yue-2026-09-20.md; STACK-99" },
+  ],
 };
