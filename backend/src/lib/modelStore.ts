@@ -13,6 +13,7 @@ import { emit } from "@/lib/events";
 import { removeModelManifest, writeModelManifest } from "@/lib/store/manifests";
 import { writeHfFile } from "@/lib/store/hfCache";
 import { raise } from "@/lib/health";
+import { bumpStackGeneration } from "@/lib/stackGeneration";
 
 export const ModelSourceSchema = z.enum(["catalog", "huggingface"]);
 
@@ -317,6 +318,7 @@ async function installRegisteredModel(
     createdAt: installed.installedAt ?? now,
   });
   emit({ id: "model.installed", data: { model: installed.id, path: installed.modelPath } });
+  bumpStackGeneration(`model ${installed.id} installed`);
   return installed;
 }
 
@@ -327,6 +329,7 @@ export function removeModel(id: string): boolean {
   if (model.modelPath && model.modelPath.startsWith(modelsDir) && existsSync(model.modelPath)) rmSync(model.modelPath, { force: true });
   db.delete(models).where(eq(models.id, id)).run();
   emit({ id: "model.installed", data: { model: id, removed: true } });
+  bumpStackGeneration(`model ${id} removed`);
   return true;
 }
 

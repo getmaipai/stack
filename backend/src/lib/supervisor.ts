@@ -12,7 +12,7 @@ import { ENGINE_READY_MARKER, installedEnginePin, selectEngineBinary, type Engin
 import { llamaServerArgs } from "@/lib/engineArgs";
 import { currentEngineBinary, engineBinaryPath, engineDir } from "@/lib/engineInstall";
 import { detectHardware } from "@/lib/hardware";
-import { identityHeaders, readEngineIdentity, type EngineIdentity } from "@/lib/identity";
+import { identityHeaders, modelFileName, readEngineIdentity, type EngineIdentity } from "@/lib/identity";
 import { isModelSelectable, listModels, recordMeasuredFootprint, type ModelRecord } from "@/lib/modelStore";
 import { admit, getRunState, release, setGovernorPid, startGovernor, type GovernorHandle } from "@/lib/governor";
 import { emit } from "@/lib/events";
@@ -23,6 +23,7 @@ import { readGgufFacts } from "@/lib/gguf";
 import { hfUrl } from "@/lib/hf";
 import { hfHubRoot } from "@/lib/store/layout";
 import { engineSettingValues, settingValues } from "@/settings";
+import { bumpStackGeneration } from "@/lib/stackGeneration";
 
 export type EngineKind = "spawned" | "managed" | "url";
 export type EngineStatus = RoleState | "loading" | "busy" | "stopped";
@@ -297,7 +298,9 @@ const preferredModels = new Map<RoleId, string>();
 /** Home's "load this model": the next start of the role uses it if it
  * is selectable; otherwise the first selectable model for the role. */
 export function preferModel(role: RoleId, modelId: string | null): void {
+  if ((preferredModels.get(role) ?? null) === modelId) return;
   if (modelId) preferredModels.set(role, modelId); else preferredModels.delete(role);
+  bumpStackGeneration(`${role} now prefers ${modelId ?? "the first selectable model"}`);
 }
 
 export function selectedModel(role: RoleId): ModelRecord | null {
@@ -448,6 +451,33 @@ export function lastRealRequestAt(requested: RoleId): number | null {
   return runtime(processRoleFor(requested)).lastRealRequestAt;
 }
 
+/** The identity a role's process is expected to report, and whether it
+ * does: a spawned process must name the selected model's file; a url
+ * binding with an `expected_version` must report a build containing it.
+ * "Ready" is claimed only when this holds (STACK-87). */
+export function identityCheck(requested: RoleId): { ok: boolean; expected: string | null; actual: string | null; reason: string | null } {
+  const role = processRoleFor(requested);
+  const processRecord = runtime(role).process;
+  if (!processRecord) return { ok: false, expected: null, actual: null, reason: "No process is running." };
+  if (processRecord.kind === "spawned") {
+    const model = processRecord.modelId ? listModels().find((candidate) => candidate.id === processRecord.modelId) : null;
+    const actual = processRecord.identity.model;
+    // A spawned process serves one model record; if the store no longer
+    // has it, what runs is not something the Stack vouches for.
+    if (!model?.modelPath) return { ok: false, expected: null, actual, reason: `The engine runs ${processRecord.modelId ?? "an unknown model"}, which the store no longer has.` };
+    const expected = modelFileName(model.modelPath);
+    if (actual && expected !== actual) return { ok: false, expected, actual, reason: `The engine reports ${actual}; the selected model is ${expected}.` };
+    return { ok: true, expected, actual, reason: null };
+  }
+  const expectedVersion = settingValues()[`stack.engines.${role}.expected_version`];
+  const actual = processRecord.identity.build;
+  if (typeof expectedVersion === "string" && expectedVersion.trim()) {
+    if (!actual || !actual.includes(expectedVersion.trim())) return { ok: false, expected: expectedVersion.trim(), actual, reason: `The server reports build ${actual ?? "unknown"}; ${expectedVersion.trim()} was expected.` };
+    return { ok: true, expected: expectedVersion.trim(), actual, reason: null };
+  }
+  return { ok: true, expected: null, actual, reason: null };
+}
+
 /** A pid is the proof that this process was launched by this Stack. */
 export function roleIsStackOwned(requested: RoleId): boolean {
   const current = runtime(processRoleFor(requested));
@@ -550,7 +580,11 @@ export async function stopAllRoles(reason: string): Promise<void> {
 // ---- pins -----------------------------------------------------------------
 
 const pinnedModels = new Set<string>();
-export function pinModel(id: string, pinned: boolean): void { if (pinned) pinnedModels.add(id); else pinnedModels.delete(id); }
+export function pinModel(id: string, pinned: boolean): void {
+  if (pinnedModels.has(id) === pinned) return;
+  if (pinned) pinnedModels.add(id); else pinnedModels.delete(id);
+  bumpStackGeneration(`model ${id} ${pinned ? "pinned" : "unpinned"}`);
+}
 export function isModelPinned(id: string): boolean { return pinnedModels.has(id); }
 
 /** Which role runtime, if any, currently serves a model file. */

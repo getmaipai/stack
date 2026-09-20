@@ -6,6 +6,7 @@ import { downloadUrl } from "@/lib/download";
 import { engineCurrentPath, engineTagRoot } from "@/lib/store/layout";
 import { readEngineManifest, removeEngineManifest, writeEngineManifest } from "@/lib/store/manifests";
 import { listModels } from "@/lib/modelStore";
+import { bumpStackGeneration } from "@/lib/stackGeneration";
 
 function engineNameTag(id: string): { name: string; tag: string } {
   const marker = id.indexOf("-b");
@@ -74,6 +75,7 @@ export async function ensureEngine(
   mkdirSync(resolve(current, ".."), { recursive: true, mode: 0o700 });
   try { unlinkSync(current); } catch { /* First install has no current link. */ }
   symlinkSync(tag, current);
+  bumpStackGeneration(`engine ${name} installed at ${tag}`);
 }
 
 export function removeEngine(name: string, tag: string): boolean {

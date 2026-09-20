@@ -928,7 +928,7 @@
         "summary": "Every declared role and its current state",
         "responses": {
           "200": {
-            "description": "Declaration, derived state with since and checkedAt, and the bound model.",
+            "description": "Declaration; derived state with since, checkedAt on ready and the reason a role is only loaded; the bound model; what the last readiness run said (not checked, passed, failed, skipped; stale after a change); the identity check.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1077,6 +1077,63 @@
                               "measuredContextLength",
                               "estimated"
                             ]
+                          },
+                          "check": {
+                            "type": "object",
+                            "properties": {
+                              "state": {
+                                "type": "string",
+                                "enum": [
+                                  "not checked",
+                                  "passed",
+                                  "failed",
+                                  "skipped"
+                                ]
+                              },
+                              "at": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "reason": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "stale": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "state",
+                              "at",
+                              "reason",
+                              "stale"
+                            ]
+                          },
+                          "identity": {
+                            "type": "object",
+                            "properties": {
+                              "ok": {
+                                "type": "boolean"
+                              },
+                              "expected": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "actual": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "reason": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "ok",
+                              "expected",
+                              "actual",
+                              "reason"
+                            ]
                           }
                         },
                         "required": [
@@ -1087,7 +1144,9 @@
                           "quality",
                           "id",
                           "state",
-                          "reason"
+                          "reason",
+                          "check",
+                          "identity"
                         ]
                       }
                     }
@@ -3024,6 +3083,9 @@
                     "reason": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "generation": {
+                      "type": "integer"
                     }
                   },
                   "required": [
@@ -3031,7 +3093,8 @@
                     "ok",
                     "results",
                     "fitTogether",
-                    "reason"
+                    "reason",
+                    "generation"
                   ]
                 }
               }
@@ -3048,7 +3111,7 @@
         "summary": "The last readiness run",
         "responses": {
           "200": {
-            "description": "The last recorded run and whether one is in progress.",
+            "description": "The last recorded run (stale once a pin, model, engine or setting changed after it) and whether one is in progress.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3118,6 +3181,16 @@
                         "reason": {
                           "type": "string",
                           "nullable": true
+                        },
+                        "generation": {
+                          "type": "integer"
+                        },
+                        "stale": {
+                          "type": "boolean"
+                        },
+                        "staleReason": {
+                          "type": "string",
+                          "nullable": true
                         }
                       },
                       "required": [
@@ -3125,7 +3198,10 @@
                         "ok",
                         "results",
                         "fitTogether",
-                        "reason"
+                        "reason",
+                        "generation",
+                        "stale",
+                        "staleReason"
                       ]
                     },
                     "running": {

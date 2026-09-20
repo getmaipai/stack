@@ -12,13 +12,16 @@ import type { MemoryReader } from "@/lib/memory/types";
 import { probeReplyOk, probeRequest, requestRole, getRoleStatus, SPAWNABLE_ROLES } from "@/lib/supervisor";
 import { resolveRoleState } from "@/lib/router";
 import { ROLE_IDS, ROLES, type RoleId } from "@/roles";
+import { lastStackChange, stackGeneration } from "@/lib/stackGeneration";
 import type { HealthFix } from "@/lib/health";
 
 const LATEST_KEY = "readiness.latest";
 
 export interface CheckRoleResult { role: RoleId; ok: boolean; ms: number; reason: string | null; loadMs: number | null; skipped?: boolean; }
 export interface FitTogetherResult { ok: boolean; reason: string | null; }
-export interface CheckRun { at: string; ok: boolean; results: CheckRoleResult[]; fitTogether: FitTogetherResult; reason: string | null; }
+export interface CheckRun { at: string; ok: boolean; results: CheckRoleResult[]; fitTogether: FitTogetherResult; reason: string | null; generation: number; }
+/** The last run as Home reads it: stale once a pin, model, engine or setting changed after it ran. */
+export interface CheckRunView extends CheckRun { stale: boolean; staleReason: string | null; }
 export interface CheckOptions {
   roleIds?: RoleId[];
   requestRole?: (role: RoleId) => Promise<{ status: number; reason?: string; loadMs?: number | null }>;
@@ -82,8 +85,11 @@ function installedRoles(): RoleId[] {
 }
 
 export async function runCheck(options: CheckOptions = {}): Promise<CheckRun> {
-  if (running) return { at: new Date().toISOString(), ok: false, results: [], fitTogether: { ok: false, reason: "A check is already running." }, reason: "A check is already running." };
+  if (running) return { at: new Date().toISOString(), ok: false, results: [], fitTogether: { ok: false, reason: "A check is already running." }, reason: "A check is already running.", generation: stackGeneration() };
   running = { startedAt: new Date().toISOString() };
+  // Stamped before any probe runs: a change that lands during the run
+  // must make this run stale, not be absorbed by it.
+  const generation = stackGeneration();
   try {
     const roleIds = options.roleIds ?? installedRoles();
     const results: CheckRoleResult[] = [];
@@ -104,7 +110,7 @@ export async function runCheck(options: CheckOptions = {}): Promise<CheckRun> {
     // A skipped role never makes the whole check green on its own: the
     // run is ok only when at least one role really answered.
     const ok = results.some((result) => result.ok) && results.every((result) => result.ok || result.skipped) && fitTogether.ok;
-    const run: CheckRun = { at, ok, results, fitTogether, reason };
+    const run: CheckRun = { at, ok, results, fitTogether, reason, generation };
     db.insert(meta).values({ key: LATEST_KEY, value: JSON.stringify(run) }).onConflictDoUpdate({ target: meta.key, set: { value: JSON.stringify(run) } }).run();
     return run;
   } finally {
@@ -114,10 +120,24 @@ export async function runCheck(options: CheckOptions = {}): Promise<CheckRun> {
 
 export function runningCheck(): { startedAt: string } | null { return running; }
 
-export function latestCheck(): CheckRun | null {
+export function latestCheck(): CheckRunView | null {
   const row = db.select({ value: meta.value }).from(meta).where(eq(meta.key, LATEST_KEY)).get();
   if (!row) return null;
-  try { return JSON.parse(row.value) as CheckRun; } catch { return null; }
+  try {
+    const run = JSON.parse(row.value) as CheckRun;
+    const stale = run.generation !== stackGeneration();
+    return { ...run, stale, staleReason: stale ? (lastStackChange() ?? "The Stack changed after this run.") : null };
+  } catch { return null; }
+}
+
+/** What the last run said about one role: `not checked` when no run
+ * covered it, `passed`, `failed` with the reason, or `skipped`; stale
+ * carries over from the run. */
+export function roleCheck(role: RoleId): { state: "not checked" | "passed" | "failed" | "skipped"; at: string | null; reason: string | null; stale: boolean } {
+  const latest = latestCheck();
+  const result = latest?.results.find((candidate) => candidate.role === role);
+  if (!latest || !result) return { state: "not checked", at: null, reason: null, stale: false };
+  return { state: result.ok ? "passed" : result.skipped ? "skipped" : "failed", at: latest.at, reason: result.reason, stale: latest.stale };
 }
 
 export function __resetReadinessForTests(): void {

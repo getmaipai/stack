@@ -12,6 +12,7 @@ import { meta } from "@/db/schema";
 import { defaultModelBudgetBytes, setGovernorMemorySettings } from "@/lib/governor";
 import { setDownloadCapMbps } from "@/lib/download";
 import { StackSetting } from "@/spec/ts/stack-setting";
+import { bumpStackGeneration } from "@/lib/stackGeneration";
 
 export type SettingValue = number | boolean | string;
 
@@ -138,14 +139,19 @@ export function engineSettingValues(section: string): Record<string, SettingValu
 
 export function updateSettings(values: Record<string, unknown>): StackSetting[] {
   for (const key of Object.keys(values)) if (!byKey.has(key)) throw new Error(`Unknown Stack setting: ${key}`);
-  for (const [key, raw] of Object.entries(values)) {
-    const declaration = byKey.get(key)!;
-    const value = valueSchema(declaration).parse(raw) as SettingValue;
+  // Every value is validated before any is written, so a bad second key
+  // never leaves the first one half-applied.
+  const validated = Object.entries(values).map(([key, raw]) => { const declaration = byKey.get(key)!; return { key, declaration, value: valueSchema(declaration).parse(raw) as SettingValue }; });
+  const changed: string[] = [];
+  for (const { key, declaration, value } of validated) {
+    const inEffect = decode(read(metaKey(key, "in_effect")), declaration);
     if (declaration.needs_restart) {
-      if (value === decode(read(metaKey(key, "in_effect")), declaration)) clear(metaKey(key, "pending"));
+      // Pending only: nothing running changed yet; applyPendingSettings bumps.
+      if (value === inEffect) clear(metaKey(key, "pending"));
       else write(metaKey(key, "pending"), value);
-    } else write(metaKey(key, "in_effect"), value);
+    } else if (value !== inEffect) { write(metaKey(key, "in_effect"), value); changed.push(key); }
   }
+  if (changed.length > 0) bumpStackGeneration(`settings changed: ${changed.join(", ")}`);
   applySettingsToRuntime();
   return readSettings();
 }
@@ -153,12 +159,15 @@ export function updateSettings(values: Record<string, unknown>): StackSetting[] 
 /** Promotes every pending value; called at start (after the service
  * manager restarted the process) and by `POST /stack/v1/settings/apply`. */
 export function applyPendingSettings(): StackSetting[] {
+  let applied = 0;
   for (const declaration of SETTINGS) {
     const pending = read(metaKey(declaration.key, "pending"));
     if (pending === null) continue;
     write(metaKey(declaration.key, "in_effect"), decode(pending, declaration));
     clear(metaKey(declaration.key, "pending"));
+    applied++;
   }
+  if (applied > 0) bumpStackGeneration(`${applied} pending setting(s) applied`);
   applySettingsToRuntime();
   return readSettings();
 }

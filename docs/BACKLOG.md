@@ -207,19 +207,18 @@ are never copied. Nothing migrates Home until STACK-16.
 
 - [x] **STACK-09b: the health list.** Keyed, durable, one fix per item,
   `health.changed` on every change, producers explicit. Kept.
-- [ ] **STACK-87 (M, re-scoped): ready and current claims time-bound
-  through the rewrite.** The rewritten readiness runner and roles route
-  keep the 2026-09-19 promise: `ready` only within `READY_TTL_MS` of a
-  real request through the public route with the expected identity;
-  installed, loaded, ready, not checked and check failed distinguished;
-  a skipped non-chat role cannot make the check green; the updates
-  route says unknown when the index is missing or invalid. Acceptance:
-  scripted stale identity, skipped role, invalid index and real success
-  produce different states; the tests move with RF-04 and pass. Files:
-  `backend/src/lib/readiness.ts`, `backend/src/lib/router.ts`,
-  `backend/src/routes/{roles,check,updates}.ts`. Mirror: the
-  pre-rewrite `checkMyStack.ts` and `checkMyStack.test.ts`. Out of
-  scope: any UI. Exit: `bash scripts/check.sh`.
+- [x] **STACK-87 (M, re-scoped): ready and current claims time-bound
+  through the rewrite.** `ready` only within `READY_TTL_MS` of a real
+  request through the public route and only with the expected identity
+  (the selected model's file for a spawned engine, the
+  `expected_version` for a url binding), the reason on a role that is
+  only loaded; the roles route says `not checked`, `passed`, `failed`
+  or `skipped` per role from the last run; a run goes stale, with the
+  change named, when a model, engine or setting changes after it (the
+  `stack.generation` counter every producer bumps); a skipped role never
+  makes a run green; the updates route says unknown on a missing or
+  invalid index. `tests/honesty.test.ts` covers each with a scripted
+  stand-in. Landed on `main` with this line.
 - [ ] **STACK-97 (M, cross-repo): the Catalog engine index.** The
   Catalog publishes a signed engine index beside `model-index.json`
   (per platform: name, tag, url, sha256, size, notes), and the Stack's

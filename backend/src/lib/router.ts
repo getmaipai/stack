@@ -5,7 +5,7 @@
 import { ROLE_IDS, READY_TTL_MS, type RoleId, type RoleState, type RoleStateRecord } from "@/roles";
 import { identityHeaders } from "@/lib/identity";
 import { getModel, isModelSelectable } from "@/lib/modelStore";
-import { getRoleStatus, lastRealRequestAt, processRoleFor, selectedModel } from "@/lib/supervisor";
+import { getRoleStatus, identityCheck, lastRealRequestAt, processRoleFor, selectedModel } from "@/lib/supervisor";
 
 export interface RoleResolution { role: RoleId; modelId: string | null; }
 
@@ -60,7 +60,9 @@ export function resolveRoleState(role: RoleId): RoleStateRecord {
   const now = new Date().toISOString();
   if (flat === "ready") {
     const last = lastRealRequestAt(role);
-    if (last === null || Date.now() - last > READY_TTL_MS) return { state: "loaded", since: now };
+    if (last === null || Date.now() - last > READY_TTL_MS) return { state: "loaded", since: now, reason: "No request through the public route in the last hour." };
+    const identity = identityCheck(role);
+    if (!identity.ok) return { state: "loaded", since: now, reason: identity.reason ?? "The engine's identity is not the expected one." };
     return { state: "ready", since: now, checkedAt: new Date(last).toISOString() };
   }
   if (flat === "offline") return { state: "offline", since: now, reason: getRoleStatus(role).reason ?? "The engine is unavailable." };

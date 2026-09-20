@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { ENGINE_READY_MARKER } from "@/lib/engineCatalog";
 import { engineCurrentPath, engineTagRoot } from "@/lib/store/layout";
 import { raise } from "@/lib/health";
+import { bumpStackGeneration } from "@/lib/stackGeneration";
 import { emit } from "@/lib/events";
 import { ensureEngine } from "@/lib/engineInstall";
 import type { EngineBinaryPin } from "@/lib/engineCatalog";
@@ -34,6 +35,7 @@ export async function swapEngine(name: string, tag: string, options: EngineSwapO
     try { unlinkSync(current); } catch { /* First swap. */ }
     symlinkSync(tag, current);
     if (options.postLoadCheck && !await options.postLoadCheck()) throw new Error("The replacement engine failed its post-load check.");
+    bumpStackGeneration(`engine ${name} now ${tag}`);
     if (options.emitEvents !== false) emit({ id: "update.applied", data: { kind: "engine", name, tag } });
   } catch (error) {
     if (previous) {

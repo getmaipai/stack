@@ -210,8 +210,22 @@ missing fields.
 Role state is one enum, `notInstalled | installed | loaded | ready |
 offline`, each with `since`. `ready` is claimed only while the last
 real request or post-load check through the public route succeeded
-within the last hour (`READY_TTL_MS`), and carries `checkedAt`; older
-than that, a role is `loaded` at best. `offline` carries a reason.
+within the last hour (`READY_TTL_MS`) and the process reports the
+expected identity (a spawned engine names the selected model's file; a
+url binding with an `expected_version` reports a build carrying it),
+and carries `checkedAt`; otherwise a role is `loaded` at best, with
+the reason (no recent request, or which identity it reported
+instead). `offline` carries a reason. Beside the state, the roles
+route says what the last readiness run found for the role (`not
+checked`, `passed`, `failed` with the reason, `skipped`) and whether
+that finding is stale: every change to what the Stack runs (a model
+installed or removed, an engine installed or swapped, a model pinned
+or preferred for a role, a setting whose in-effect value changed or a
+pending one applied) bumps a generation counter in `meta`, a run
+records the generation it started at, and a run from an earlier
+generation is reported stale with the change that made it so; a save
+that changes nothing, or that only sets a pending value, stales nothing
+(STACK-87).
 
 ### Engines and the supervisor
 
