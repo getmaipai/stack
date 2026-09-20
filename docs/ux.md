@@ -17,6 +17,23 @@ Three people use the Stack, and the pages are ordered for the first one:
 - **Home**, which is a client and never sees these pages; it reads the
   same facts over the API and shows them in its own Admin.
 
+## The approved UI specification supersedes the sections below (2026-09-19)
+
+The owner approved a full UI design specification on 2026-09-19:
+[plans/ui-spec-2026-09-19/spec.md](plans/ui-spec-2026-09-19/spec.md),
+with six reference images beside it; the blue-black Overview dashboard
+(`overview-dashboard.png`) is the visual source of truth. Where any
+section below (the shell and its second pass, Overview and its second
+pass, the panel and surfaces, the look-and-feel references, the things
+pages, the phone, Docs and the helper, Settings, the menu) disagrees
+with the specification, the specification wins. The audit, the
+reconciling decisions (the taxonomy mapping, Pause everything out of
+the header, Lock in place of sign out, the phone shell retired, dark
+first) and the program are in
+[plans/ui-reconcile-2026-09-19.md](plans/ui-reconcile-2026-09-19.md).
+The sections below stay as the record of how the console got here.
+
+
 ## Install and first open (decided 2026-09-17, evening)
 
 The owner's rule, after seeing the five-step wizard: no wizard. One

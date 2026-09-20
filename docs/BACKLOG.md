@@ -26,6 +26,7 @@ the Studio milestone proves the hub's profile before Home migrates.
 
 | Milestone | Items, in order | Why here |
 |---|---|---|
+| **v0.1.0: the approved UI (2026-09-19, first)** | UI-05, UI-01, UI-02, UI-03, UI-04, UI-06, UI-07, UI-08, UI-09, UI-10, UI-11, UI-12, UI-13, UI-14, UI-15, UI-16, UI-17, UI-18, UI-19, UI-20, UI-21, UI-23 | Take the console to the owner's approved UI specification in full ([the program](plans/ui-reconcile-2026-09-19.md), [the spec](plans/ui-spec-2026-09-19/spec.md)); every other console item waits behind it. |
 | v0.1.0: qualified capabilities | STACK-86, STACK-80, STACK-81, STACK-88, STACK-89, STACK-90, STACK-91, STACK-92 | Prove model operations, role wires, update recovery, engine observation and every visible control on a clean account; the [matrix](plans/v0.1.0-capability-matrix.md) sets each claim. |
 | v0.1.0: app and release | STACK-66, STACK-76, STACK-79, STACK-82, STACK-87, STACK-67, STACK-68 | Install the Tauri app and daemon, authenticate its console, prove the first answer and show useful status. |
 | v0.1.0: help and trust | STACK-55, STACK-37, STACK-69, STACK-70, STACK-28, STACK-29, STACK-71, STACK-72, STACK-77, STACK-78, STACK-85, STACK-73 | Make Help, settings, backups, privacy, licensing and diagnostics truthful. |
@@ -43,6 +44,40 @@ STACK-35 and STACK-36 had repeated entries; each now has one item record.
 STACK-33 is complete in 953eda0. STACK-18 is the existing app shell,
 not the complete release. The host and release work is in STACK-66 and
 RELEASE-STACK-01.
+
+## UI specification reconciliation (2026-09-19)
+
+The owner's approved specification is [plans/ui-spec-2026-09-19/spec.md](plans/ui-spec-2026-09-19/spec.md);
+the audit, decisions and lane plan are [plans/ui-reconcile-2026-09-19.md](plans/ui-reconcile-2026-09-19.md)
+(read its section 3 before any item here). Every item: the flow
+exercised, the capture opened and judged at 1440 px and the tiers the
+item names, `bash scripts/check.sh` green, docs in the same commit.
+Sizes are the org's. Item detail lives in the program note; each line
+here is the record the dashboard reads.
+
+- [ ] **UI-05 (S): the taxonomy declaration.** `frontend/src/lib/taxonomy.ts`: four groups, 17 destinations, eight categories with their subtypes, paths, subtitles, icons and hues, from spec section 2 and 4. A test asserts the lists match the spec word for word. Consumed by the rail, header, footer links, search, tiles and browsers; no second list anywhere (a grep test).
+- [ ] **UI-01 (M): the token set.** `kit/tokens.css` becomes the spec's navy palette (13 values, section 1), the radii, the shadow, the focus ring, the type scale on the system face, the category hues, and the responsive tiers 720/960/1280; a derived light palette; a contrast test over every text-on-surface pair (AA). `tokens.test.ts` asserts the dark root values.
+- [ ] **UI-02 (M): the shell.** Rail 252/72 px with the double-chevron toggle persisted per install, groups and labels from UI-05, collapsed icon rail with tooltips, drawer under 720 px; the 64 px fixed header (destination icon, title and subtitle from the taxonomy; the search field; appearance; notifications; the selector slot); the 40 px fixed footer (version, three linked counts, aggregate health); the content region scrolls alone. The run pill, profile menu, phone tab bar and `SectionFrame` description lines go (program decisions 2, 8, 9). Captures at 1440, 1100, 800 and 390.
+- [ ] **UI-03 (S): the system pulse.** Five signals in order with dots, the two badges, tooltips, click targets to Alerts and Monitoring, the unavailable state; network from UI-06 (muted until it lands).
+- [ ] **UI-04 (S): the machine/stack selector and Lock MaiPai.** This computer's name, OS and health; Lock (logout, the card reads "Locked"), Settings, Help; the Switch stack section only when a remote exists (UI-22). Sign out disappears everywhere.
+- [ ] **UI-06 (S): `GET /stack/v1/network`.** Interface, link speed, gateway latency, nulls when not measurable, cached; a privacy row (LAN gateway only).
+- [ ] **UI-07 (M): resource series.** CPU, memory, per-GPU and per-drive samples recorded on a schedule into the measurements store; `GET /stack/v1/series/resources?range=hour|day|week|month`, bucketed, nulls kept; retention; month added to the range type.
+- [ ] **UI-08 (M): the components aggregate.** `GET /stack/v1/components` (category, subtype, name, identifier, version or size, status, runtime, resources, uptime, last used, notes) across the eight categories from the real stores per program decision 1, with `category` and `status` filters and a summary (installed, running, clients connected, updates); `GET /stack/v1/activity` (durable events) and `GET /stack/v1/notifications` with a read state.
+- [ ] **UI-09 (S): recommendations.** `GET /stack/v1/updates/recommendations`: app, engine and model updates plus fitting models (STACK-21) as rows with icon category, name and version, an evidence-led reason and an action kind.
+- [ ] **UI-10 (M): the shared templates and hooks.** CategoryBrowser (sticky controls dock: mode tabs, facets, filter, sort, list/grid, primary action), DataTable (sticky header, selection, three-dot menu, truncation tooltips), DetailsPane (geometry, motion, tabs only when meaningful, action rail, focus return, overlay under 960, sheet under 720), ConfirmDialog, Empty/Loading/Error states, MetricCard, ResourceRow with sparkline, CategoryTile, ActionTile; hooks for search focus, facet and sort state, selection and pane state, status map, formatters, breakpoints, focus return, confirmation. Each has a test; no page may fork them.
+- [ ] **UI-11 (M): Overview.** Spec section 3 exactly, on UI-10 over UI-07, UI-08 and UI-09; equal-height operational cards; Quick Actions wired (Install Component, Check for Updates, Run Speed Test, View Logs).
+- [ ] **UI-12 (M): Models on the browser.** Columns, modes, facets, pane tabs and the action rail per the spec's Models section; scroll hierarchy per "Models page scrolling and pinned regions".
+- [ ] **UI-13 (M): Runtimes on the browser.** Engines and detected installs; catalog kinds absent on this platform shown truthfully in Browse.
+- [ ] **UI-14 (M): every other category on the browser.** Adapters, Apps, Workflows, Extensions, Training, System / Drivers, Packages, each a configuration of UI-10 with its data source or designed empty state from program decision 1.
+- [ ] **UI-15 (M): the Settings workspace.** Navigator 280 to 320 px with scoped search, the canonical groups, the editor pane, bordered panels, inline "Setting updated", risk confirmations, Diagnostics (Open Logs, Run System Check).
+- [ ] **UI-16 (M): global search.** The typeable header field with results below it (components, packages, docs, logs, settings, commands, the helper), ⌘K focuses it; the palette dialog retires.
+- [ ] **UI-17 (S): notifications.** Unread and actionable badge, the list, mark read, open target; from UI-08.
+- [ ] **UI-18 (M): Monitoring.** Spec section 6 with zero, one or many GPUs and disks, "Not reported", Apple unified memory wording, pressure and attribution; the invented series removed and forbidden by a test.
+- [ ] **UI-19 (S): the remaining destinations.** Logs, Alerts, Clients, Tester, Docs (Help and Library, one search) and Packages inside the shell rules: no duplicate title, toolbars below the header, tokens only.
+- [ ] **UI-20 (S): first run inside the shell.** The board is Overview's first state; `/abilities` stays the Install Component destination.
+- [ ] **UI-21 (M): responsive and accessibility pass.** Captures of Overview, Models with the pane open, Settings and Monitoring at 1440, 1100, 800 and 390; keyboard order; reduced motion; every icon button named; the interaction list from the spec's checklist exercised in the capture script.
+- [ ] **UI-22 (M, after the first release): remote stacks.** Design note first: connect another Stack by address and key, readiness validation, offline retry, switching the console's base.
+- [ ] **UI-23 (S): docs and screenshots.** User docs and README strip regenerated from the new console; `ux.md` sections superseded by the spec carry pointers; CHANGELOG.
 
 ## Built foundation and Studio dependencies
 
