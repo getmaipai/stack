@@ -301,6 +301,28 @@ are never copied. Nothing migrates Home until STACK-16.
 
 ## Speech roles
 
+- [ ] **STACK-101 (M): voices with metadata and a preview.** Objective:
+  `GET /stack/v1/voices` lists every voice the `tts` role can render
+  (presets, community voices the Stack has fetched, cloned voices)
+  with, per voice: id, friendly name, description, language (BCP 47),
+  country, gender (as the source declares it; "unknown" when it does
+  not), source, whether the files are on disk, and licence; and
+  `POST /stack/v1/voices/{id}/preview` renders one fixed sample
+  sentence through the normal `tts` path, cached under `data/` per
+  voice and engine build so the second play is instant. Metadata
+  comes from the voice package's manifest (Catalog `voice` kind) or
+  the preset list the engine ships; nothing is guessed from a file
+  name. Files: `backend/src/speech/voices.ts`, `backend/src/routes/v1.ts`
+  or a new `routes/voices.ts`, `backend/src/spec/` (a Voice wire shape
+  declared once, then moved to `@maipai/spec` like the others),
+  `docs/integrations.md`, `docs/api/openapi.json` regenerated. Mirror:
+  the models route and the `tts` render path (STACK-94c). Acceptance:
+  a scripted-engine test listing presets with their metadata; a live
+  preview on this laptop with the cache hit measured; a voice with
+  missing metadata listed with "unknown", never dropped. Out of scope:
+  the picker itself (home VOICE-BROWSER-01). Exit: `bash scripts/check.sh`
+  and the live preview line in dev.md.
+
 - [x] **STACK-94a (S): the speech design note.** `dev.md`, "The
   speech roles: `stt` and `tts`, designed": sherpa-onnx 1.13.8 for
   `stt` behind our thin spawned worker; Pocket TTS for `tts` (the
