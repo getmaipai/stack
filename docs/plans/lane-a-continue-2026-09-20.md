@@ -30,6 +30,31 @@ edits files. Files: you own `frontend/src/pages/**` except
 
 Your items, in order, each one commit:
 
+0. **UI-12b Models against the reference** (S, first). The coordinator
+   opened the previous session's captures (`/tmp/maipai-capture/out/
+   models-1440-pane.png`, `models-390-sheet.png`); the structure is
+   right and six things are off: (a) the DetailsPane covers the global
+   header's right controls and the footer; the spec's pane is inset 16
+   to 20 px inside the content region, between header and footer, and
+   never covers header controls (fix in `kit/blocks/pane/DetailsPane.tsx`,
+   it is shared, so every category gets it); (b) the page repeats the
+   subtitle "Manage, install, and run AI models" as body text under the
+   header, forbidden by "Current destination header rule"; remove it
+   and the blank band between the filter and the table; (c) detected
+   installs render as a second table with its own header above the main
+   one; they are rows of the one table with status "Detected" (the
+   spec: one table, one sticky header); (d) the Type column shows roles
+   ("Chat, Coding, Judge"); the spec's Type is the subtype (LLM, Image,
+   Video, Audio, Embedding); roles move to the pane's capability tags
+   and to a Roles column hidden under 1280; (e) the pane says "Licence
+   not recorded." above a Licence field reading "Apache-2.0"; one truth;
+   (f) Quantization, Context length and Architecture read "Not reported"
+   for GGUF models although `backend/src/lib/gguf.ts` reads the header;
+   add those three to the models route's record from the GGUF metadata
+   (cached per file), and the column fills. Re-capture the five views to
+   `docs/assets/screens/models-*.png` (in the repo this time) and open
+   them. One commit "Console (UI-12): Models against the reference".
+
 1. **UI-13 Runtimes** on the CategoryBrowser (`pages/EnginesPage.tsx`
    becomes the Runtimes page at `/runtimes`): Installed from
    `/stack/v1/engines` plus detected installs from `/stack/v1/detected`
