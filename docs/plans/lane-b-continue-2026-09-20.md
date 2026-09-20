@@ -22,6 +22,31 @@ you built (header, footer, pulse, selector), `hooks/useStackCounts`.
 
 Your items, in order, each one commit:
 
+0. **Land UI-15 (Codex's Settings workspace) past a Bun segfault** (S/M,
+   first, 45 minutes cap). State in `stack-b`: the cherry-pick sits as
+   commit 0538687 (unpushed) plus a docs note 9764cb8; uncommitted on
+   top: route-level `React.lazy` for the heavy pages and a shared
+   `kit/blocks/dashboard/components/search-field.tsx` used by the header
+   and the Settings navigator (both worth keeping). The full frontend
+   suite (`bun test` in `frontend/`, Bun 1.3.14) segfaults ("panic(main
+   thread): Segmentation fault at address 0x0", the bun.report link is
+   in `docs/dev/session-b.md`) only when SettingsPage's rendered search
+   subtree is reachable in a full-suite run; every file passes alone and
+   main at f4a9866 passes whole. Not a runner flag, not a red push. In
+   order: (a) read the bun.report trace and `docs/dev/session-b.md`'s
+   isolation notes; look for what the crashing subtree does that the
+   header's does not (a `ref` callback, a `Link` inside a labelled
+   control, an effect touching `document` after happy-dom teardown) and
+   fix that in SettingsPage; (b) if the trace points at Bun itself, pin
+   a newer Bun for the repo (`.bun-version` plus `packageManager` in the
+   root package.json, `bun upgrade` locally is fine as a dev-machine
+   choice, recorded in `docs/dev.md` and the README's setup line) and
+   re-run; (c) if neither closes it inside the cap, make the Settings
+   navigator's search an in-page filter without the shared search
+   field, commit, and file the crash as an issue with the reproduction.
+   Then gate, push (UI-15 tick "(verified at <hash>)" with the captures
+   Codex made re-taken by you at 1440 and 800), and report.
+
 1. **UI-11 Overview**, spec section 3 exactly, on A's templates
    (`kit/blocks/cards`, `browser/DataTable`, `states`) over
    `/stack/v1/components/summary`, `/stack/v1/series/resources`,
