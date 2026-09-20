@@ -7,7 +7,7 @@ import { hfUrl } from "@/lib/hf";
 import type { RoleId } from "@/roles";
 import { existsSync, mkdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { extractArchive } from "@maipai/core/src/archive";
 import { z } from "zod";
 import { emit } from "@/lib/events";
@@ -385,9 +385,19 @@ export function removeModel(id: string): boolean {
   return true;
 }
 
+/** The one place a test may empty the models table: only a scratch data
+ * directory, under the OS temp dir or the suite's own `backend/data-test/`
+ * (issue #7), never a real one. */
+export function isScratchDataDir(dir: string): boolean {
+  const real = realpathSync(dir);
+  const scratch = resolve(import.meta.dir, "..", "..", "data-test");
+  const within = (root: string) => real === root || real.startsWith(root + sep);
+  return within(realpathSync(tmpdir())) || within(existsSync(scratch) ? realpathSync(scratch) : scratch);
+}
+
 export function clearModelsForTests(): void {
-  if (!realpathSync(dataDir).startsWith(realpathSync(tmpdir()))) {
-    throw new Error("clearModelsForTests refused: data dir is not under the OS temp directory");
+  if (!isScratchDataDir(dataDir)) {
+    throw new Error("clearModelsForTests refused: data dir is not a scratch directory (the OS temp dir or backend/data-test/)");
   }
   for (const model of listModels()) removeModelManifest(model.id);
   sqlite.exec("DELETE FROM models");

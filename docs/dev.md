@@ -626,9 +626,17 @@ library, so a breaking API change touches one file, and our tests drive
 our interface with scripted stand-ins; a claim about a library is
 verified in its installed source and cited; never a submodule, never a
 vendored tree, never a fork we maintain. The backend suite runs under a
-temp `STACK_DATA_DIR` set by `backend/tests/preload.ts` and refuses a
-real one (2026-09-17 21:40: a gate from the main checkout emptied the
-owner's live models table).
+scratch `STACK_DATA_DIR` of its own set by `backend/tests/preload.ts`
+and refuses a real one (2026-09-17 21:40: a gate from the main checkout
+emptied the owner's live models table). The scratch is
+`backend/data-test/run-<pid>`, git-ignored, one per run; every run
+starts by sweeping the directories of runs whose process is gone, so a
+run leaves at most its own and the next takes it away (issue #7:
+3,084 directories had piled up under the OS temp dir, because Bun's
+test runner fires neither `exit` nor `beforeExit` for a handler a
+preload registers, measured on 2026-09-20). The same change fixed the
+suite's detection-scan roots, which were written with `=` where the
+parser reads `:`, so the scans had been reading the real home caches.
 
 ## Pin and rollback, proven live (STACK-96, 2026-09-20)
 

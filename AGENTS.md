@@ -115,9 +115,10 @@ model declarations.
 
 Runtime data lives under `data/` and is never tracked. Every model or
 engine the Stack uses is downloaded on demand, pinned and checksummed,
-never vendored. The backend test suite runs under a temporary
-`STACK_DATA_DIR` set by `backend/tests/preload.ts` and refuses a real
-one.
+never vendored. The backend test suite runs under a scratch
+`STACK_DATA_DIR` of its own, `backend/data-test/run-<pid>` (git-ignored),
+set by `backend/tests/preload.ts`, which sweeps the directories of
+finished runs at every start and refuses a real data directory.
 
 ## Safety posture
 
