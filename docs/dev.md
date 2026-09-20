@@ -251,7 +251,7 @@ An engine is one of three kinds:
   compile: a Python program in an environment the Stack assembles
   from pinned wheels (Pocket TTS through a pinned `uv`, STACK-94c),
   or a server it starts where it finds it (ComfyUI, whose install
-  STACK-13 decides). Same lifecycle, its own process.
+  STACK-13b decides). Same lifecycle, its own process.
 - **`url`**: a read-only binding to a server Home's person already
   runs, set as one URL per role in the settings declaration. The
   Stack probes its health and identity and reports `offline_reason`
@@ -422,8 +422,66 @@ Image, video, music and long TTS renders are jobs: `POST` returns a job
 id, progress arrives on the event feed, cancel works, and the result is
 fetched by id. ComfyUI's queue is the model and, for image editing, the
 engine. `/v1/images/generations` is the job API with a wait, for simple
-callers. Generator execution is a backlog item; the job shape is
-declared in the spec at step 5 of the refocus.
+callers. The job shape is the spec's `StackJob`
+(`backend/src/spec/`, STACK-13a): id, kind, role, state, percent, the
+byte counts, a status phrase, the queue position, the input, the
+result, the reason, the clocks.
+
+The queue (STACK-13a, 2026-09-20): a generator kind registers its
+runner with its role and a memory estimate for a job; a submit for it
+creates the job `queued` in that role's queue, one job in flight per
+role, in submission order, each queued job carrying its 1-based
+position and renumbered as the queue moves. When a job's turn comes the
+queue asks the governor to admit it as a `generator` request (the
+estimate, or the measured peak once one exists): the governor holds
+one generator at a time across every role and the memory budget's say.
+A peak the budget can never hold (more than the models cap, computed
+the way the governor computes it: the measured peak, else the model
+file times the engine's multiplier, else the requested bytes) is
+refused at once with both numbers in the reason and the job fails,
+never waits. A request the governor queues (another generator running,
+pressure, no room now) leaves the job `running` with the status
+`waiting for memory (n ahead)`, told on the feed as the position
+moves; the governor admits a queued request on a later release without
+telling anyone, so the queue watches the governor's loaded set for the
+job's admission every 250 ms. A job cancelled while waiting frees its
+role at once (the next job runs) and leaves a watcher behind that
+releases the admission if the governor grants it later, so a phantom
+generator never blocks the roles. A request the governor refuses (its
+queue full, the Stack paused) fails the job with the governor's own
+recorded reason. The run itself gets the job, an abort signal (cancel
+aborts it) and a progress callback, and its admission is released
+however it ends; then the next job in the role's queue runs. Downloads
+and installs created by other modules are jobs too, driven by those
+modules, never queued here.
+
+One governor fact the queue works around rather than owns: the
+governor drains its queue only inside a release, so a request it
+queued for pressure or the working margin, with nothing loaded, would
+wait forever after memory freed. The queue's poll therefore, when its
+request is at the head, nothing loaded is a generator and pressure is
+normal, releases a handle the governor does not hold, its one public
+way to re-run the queue head, no more often than the governor's own
+poll interval, so the "work is waiting for memory" warning the
+governor raises after three refusals still means a real wait; a
+cancelled job's watcher kicks the same way, so its phantom at the head
+never holds a live request behind it. A kick that still cannot admit
+the head moves that request to the back of the governor's queue, so
+the order among waiting requests rotates until one fits: a known limit
+of the workaround. The governor draining on memory changes itself,
+with a callback the caller can wait on, is STACK-06c in the backlog;
+when it lands the kick and the poll go.
+
+`/v1/images/generations` submits and waits up to `timeout_ms` (two
+minutes unsaid) and answers in OpenAI's image shape with the job id,
+`data` holding one `{ b64_json }` per image from the runner's result;
+past the deadline it answers 202 with the id and the render goes on
+(Home fetches it by id); a render that failed inside the generator
+answers 500 with the reason (the generator's error, never the
+no-engine 503 a client backs off from), a cancelled one 499. With no generator installed the route is the
+honest 503 and a submit is refused with the reason. The scripted
+sidecar in `tests/generatorQueue.test.ts` drives all of it; ComfyUI as
+the real image generator is STACK-13b.
 
 ### Health
 

@@ -10,7 +10,7 @@ import { noEngineResponse, resolveRole, UnknownRoleError, UnverifiedModelError }
 import { ROLE_IDS, ROLES, type RoleId } from "@/roles";
 import { EngineUnavailableError, requestRole, speakRole, speechForm, streamRole } from "@/lib/supervisor";
 import { listModels } from "@/lib/modelStore";
-import { hasJobRunner, submitJob } from "@/lib/jobs";
+import { hasJobRunner, submitJob, waitForJob } from "@/lib/jobs";
 import { RoleRequest } from "@/spec/ts/role-request";
 import { RoleReplyHeaders } from "@/spec/ts/role-reply-headers";
 
@@ -50,6 +50,7 @@ const inferenceResponses = {
 } as const;
 
 type Wire = "chat" | "embeddings" | "transcription" | "speech" | "job";
+const DEFAULT_RENDER_WAIT_MS = 120_000;
 const WIRE_PATHS: Record<Exclude<Wire, "job">, string> = { chat: "/v1/chat/completions", embeddings: "/v1/embeddings", transcription: "/v1/audio/transcriptions", speech: "/v1/audio/speech" };
 
 function jsonReply<T extends Context>(c: T, body: unknown, status: number, headers: Record<string, string>) {
@@ -67,10 +68,23 @@ async function reply<T extends Context>(c: T, wire: Wire, body: Record<string, u
       return jsonReply(c, { error: `Role '${role}' does not answer on this endpoint.`, roles: ROLE_IDS.filter((id) => ROLES[id].wire === wire) }, 400, identityHeaders(null));
     }
     if (wire === "job") {
+      // The job API with a wait: the render is submitted, the reply waits
+      // for it up to timeout_ms (two minutes when unsaid) and answers in
+      // OpenAI's image shape; past the deadline the job goes on and the
+      // reply carries its id, 202, for Home to fetch by id.
       if (!hasJobRunner(role)) { const result = noEngineResponse(role); return jsonReply(c, result.body, result.status, result.headers); }
       const submitted = submitJob({ kind: role, role, input: body });
       if ("refused" in submitted) return jsonReply(c, { ...noEngineResponse(role, submitted.reason).body }, 503, identityHeaders(null));
-      return jsonReply(c, { created: Math.floor(Date.now() / 1000), job: submitted.job.id, data: [] }, 200, identityHeaders(null));
+      const timeoutMs = typeof body.timeout_ms === "number" && body.timeout_ms > 0 ? body.timeout_ms : DEFAULT_RENDER_WAIT_MS;
+      const settled = await waitForJob(submitted.job.id, timeoutMs);
+      const created = Math.floor(new Date(submitted.job.createdAt).getTime() / 1000);
+      if (!settled || settled.state === "queued" || settled.state === "running") return jsonReply(c, { created, job: submitted.job.id, data: [] }, 202, identityHeaders(null));
+      // A render that failed inside the generator is the generator's
+      // error (500 with the reason), never the no-engine 503 a client
+      // would back off from; a cancelled one is 499.
+      if (settled.state !== "done") return jsonReply(c, { error: settled.reason ?? `The render was ${settled.state}.`, job: settled.id, role, state: settled.state }, settled.state === "cancelled" ? 499 : 500, identityHeaders(null));
+      const images = (settled.result as { images?: Array<Record<string, unknown>> } | null)?.images ?? [];
+      return jsonReply(c, { created, job: settled.id, data: images }, 200, identityHeaders(null));
     }
     if (wire === "chat" && body.stream === true) {
       const result = await streamRole(role, WIRE_PATHS.chat, body, c.req.raw.signal);
@@ -97,7 +111,9 @@ const chatRoute = createRoute({ method: "post", path: "/chat/completions", tags:
 const embeddingsRoute = createRoute({ method: "post", path: "/embeddings", tags: ["Roles"], summary: "Embeddings by role", request: { body: { content: { "application/json": { schema: EmbeddingsRequestSchema } } } }, responses: inferenceResponses });
 const transcriptionsRoute = createRoute({ method: "post", path: "/audio/transcriptions", tags: ["Roles"], summary: "Speech to text (one WAV file, spec/voice's transcribe form)", request: { body: { content: { "multipart/form-data": { schema: TranscriptionFormSchema } } } }, responses: { ...inferenceResponses, 200: { content: { "application/json": { schema: TranscriptionResponseSchema } }, description: "SttTranscribeResponse: the transcript, empty when the file holds no speech, with the identity headers." } } });
 const speechRoute = createRoute({ method: "post", path: "/audio/speech", tags: ["Roles"], summary: "Text to speech (spec/voice's form, the WAV streamed as it is generated)", request: { body: { content: { "multipart/form-data": { schema: SpeechFormSchema } } } }, responses: { ...inferenceResponses, 200: { content: { "audio/wav": { schema: z.string().openapi({ format: "binary" }) } }, description: "TtsSynthesizeResult: a chunked audio/wav body whose header carries the format and a placeholder data size, with the identity headers. Abort the request to cancel." } } });
-const imagesRoute = createRoute({ method: "post", path: "/images/generations", tags: ["Roles"], summary: "Image generation (the job API with a wait)", request: { body: { content: { "application/json": { schema: ImageRequestSchema } } } }, responses: inferenceResponses });
+const ImageResponseSchema = z.object({ created: z.number().int(), job: z.string(), data: z.array(z.record(z.string(), z.unknown())) });
+const RenderFailedSchema = z.object({ error: z.string(), job: z.string(), role: z.string(), state: z.enum(["failed", "cancelled"]) });
+const imagesRoute = createRoute({ method: "post", path: "/images/generations", tags: ["Roles"], summary: "Image generation (the job API with a wait)", request: { body: { content: { "application/json": { schema: ImageRequestSchema } } } }, responses: { ...inferenceResponses, 200: { content: { "application/json": { schema: ImageResponseSchema } }, description: "OpenAI's image shape with the job id: `data` holds one `{ b64_json }` per image once the render finished within timeout_ms." }, 202: { content: { "application/json": { schema: ImageResponseSchema } }, description: "The render is still running past timeout_ms; fetch it by `job` on /stack/v1/jobs/{id}." }, 499: { content: { "application/json": { schema: RenderFailedSchema } }, description: "The render was cancelled." }, 500: { content: { "application/json": { schema: RenderFailedSchema } }, description: "The generator failed the render; the reason is the generator's own, not an outage." } } });
 
 export const v1Routes = apiRouter<AppEnv>();
 v1Routes.openapi(modelsRoute, (c) => c.json({ object: "list" as const, data: [...new Set([...ROLE_IDS, ...listModels().map((model) => model.id)])].map((id) => ({ id, object: "model" as const, created: 0, owned_by: "maipai-stack" as const })) }, 200));

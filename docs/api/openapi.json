@@ -798,14 +798,65 @@
         },
         "responses": {
           "200": {
-            "description": "The engine's OpenAI-shaped reply, with x-maipai-engine, x-maipai-model and x-maipai-revision headers.",
+            "description": "OpenAI's image shape with the job id: `data` holds one `{ b64_json }` per image once the render finished within timeout_ms.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": {
-                    "nullable": true
-                  }
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "job",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "The render is still running past timeout_ms; fetch it by `job` on /stack/v1/jobs/{id}.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "job",
+                    "data"
+                  ]
                 }
               }
             }
@@ -866,6 +917,74 @@
                     "model",
                     "reason",
                     "missing"
+                  ]
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "The render was cancelled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "failed",
+                        "cancelled"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "job",
+                    "role",
+                    "state"
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The generator failed the render; the reason is the generator's own, not an outage.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "failed",
+                        "cancelled"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "job",
+                    "role",
+                    "state"
                   ]
                 }
               }
@@ -2322,10 +2441,12 @@
                       "type": "object",
                       "properties": {
                         "id": {
-                          "type": "string"
+                          "type": "string",
+                          "minLength": 1
                         },
                         "kind": {
-                          "type": "string"
+                          "type": "string",
+                          "minLength": 1
                         },
                         "role": {
                           "type": "string",
@@ -2357,6 +2478,11 @@
                         "status": {
                           "type": "string"
                         },
+                        "position": {
+                          "type": "integer",
+                          "nullable": true,
+                          "minimum": 1
+                        },
                         "input": {
                           "type": "object",
                           "nullable": true,
@@ -2372,10 +2498,12 @@
                           "nullable": true
                         },
                         "createdAt": {
-                          "type": "string"
+                          "type": "string",
+                          "format": "date-time"
                         },
                         "updatedAt": {
-                          "type": "string"
+                          "type": "string",
+                          "format": "date-time"
                         }
                       },
                       "required": [
@@ -2387,11 +2515,13 @@
                         "completedBytes",
                         "totalBytes",
                         "status",
+                        "position",
                         "input",
                         "reason",
                         "createdAt",
                         "updatedAt"
-                      ]
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -2432,10 +2562,12 @@
                         "type": "object",
                         "properties": {
                           "id": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "kind": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "role": {
                             "type": "string",
@@ -2467,6 +2599,11 @@
                           "status": {
                             "type": "string"
                           },
+                          "position": {
+                            "type": "integer",
+                            "nullable": true,
+                            "minimum": 1
+                          },
                           "input": {
                             "type": "object",
                             "nullable": true,
@@ -2482,10 +2619,12 @@
                             "nullable": true
                           },
                           "createdAt": {
-                            "type": "string"
+                            "type": "string",
+                            "format": "date-time"
                           },
                           "updatedAt": {
-                            "type": "string"
+                            "type": "string",
+                            "format": "date-time"
                           }
                         },
                         "required": [
@@ -2497,11 +2636,13 @@
                           "completedBytes",
                           "totalBytes",
                           "status",
+                          "position",
                           "input",
                           "reason",
                           "createdAt",
                           "updatedAt"
-                        ]
+                        ],
+                        "additionalProperties": false
                       }
                     }
                   },
@@ -2543,10 +2684,12 @@
                       "type": "object",
                       "properties": {
                         "id": {
-                          "type": "string"
+                          "type": "string",
+                          "minLength": 1
                         },
                         "kind": {
-                          "type": "string"
+                          "type": "string",
+                          "minLength": 1
                         },
                         "role": {
                           "type": "string",
@@ -2578,6 +2721,11 @@
                         "status": {
                           "type": "string"
                         },
+                        "position": {
+                          "type": "integer",
+                          "nullable": true,
+                          "minimum": 1
+                        },
                         "input": {
                           "type": "object",
                           "nullable": true,
@@ -2593,10 +2741,12 @@
                           "nullable": true
                         },
                         "createdAt": {
-                          "type": "string"
+                          "type": "string",
+                          "format": "date-time"
                         },
                         "updatedAt": {
-                          "type": "string"
+                          "type": "string",
+                          "format": "date-time"
                         }
                       },
                       "required": [
@@ -2608,11 +2758,13 @@
                         "completedBytes",
                         "totalBytes",
                         "status",
+                        "position",
                         "input",
                         "reason",
                         "createdAt",
                         "updatedAt"
-                      ]
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -2661,10 +2813,12 @@
                       "type": "object",
                       "properties": {
                         "id": {
-                          "type": "string"
+                          "type": "string",
+                          "minLength": 1
                         },
                         "kind": {
-                          "type": "string"
+                          "type": "string",
+                          "minLength": 1
                         },
                         "role": {
                           "type": "string",
@@ -2696,6 +2850,11 @@
                         "status": {
                           "type": "string"
                         },
+                        "position": {
+                          "type": "integer",
+                          "nullable": true,
+                          "minimum": 1
+                        },
                         "input": {
                           "type": "object",
                           "nullable": true,
@@ -2711,10 +2870,12 @@
                           "nullable": true
                         },
                         "createdAt": {
-                          "type": "string"
+                          "type": "string",
+                          "format": "date-time"
                         },
                         "updatedAt": {
-                          "type": "string"
+                          "type": "string",
+                          "format": "date-time"
                         }
                       },
                       "required": [
@@ -2726,11 +2887,13 @@
                         "completedBytes",
                         "totalBytes",
                         "status",
+                        "position",
                         "input",
                         "reason",
                         "createdAt",
                         "updatedAt"
-                      ]
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [

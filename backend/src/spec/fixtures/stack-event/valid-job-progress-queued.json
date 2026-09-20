@@ -1,0 +1,15 @@
+{
+  "id": "job.progress",
+  "at": "2026-09-20T12:00:00.000Z",
+  "seq": 9,
+  "data": {
+    "job": "job-2f1c",
+    "kind": "image",
+    "state": "queued",
+    "percent": 0,
+    "completed_bytes": 0,
+    "total_bytes": 0,
+    "status": "queued",
+    "position": 2
+  }
+}

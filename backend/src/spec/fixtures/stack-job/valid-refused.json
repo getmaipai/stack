@@ -1,0 +1,1 @@
+{"id":"job-77d1","kind":"image","role":"image","state":"failed","percent":0,"completedBytes":0,"totalBytes":0,"status":"failed","position":null,"input":{"prompt":"x"},"result":null,"reason":"The current memory budget cannot admit the request.","createdAt":"2026-09-20T12:00:00.000Z","updatedAt":"2026-09-20T12:00:00.200Z"}

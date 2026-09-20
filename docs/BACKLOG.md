@@ -33,7 +33,7 @@ are never copied. Nothing migrates Home until STACK-16.
 | Milestone | Items, in order | Why here |
 |---|---|---|
 | **The refocus (2026-09-20)** | RF-01, RF-02, RF-03, RF-04, RF-05, RF-05b, RF-06 | The repo becomes the daemon and nothing else, on the shared libraries, with the seam to Home explicit. |
-| Studio proof | STACK-13, STACK-74, STACK-14, STACK-93 | Complete generator jobs and the bench protocol, measure the Studio with the full resident set, prove the governor across two engines. |
+| Studio proof | STACK-13a, STACK-13b, STACK-74, STACK-14, STACK-93 | Complete generator jobs and the bench protocol, measure the Studio with the full resident set, prove the governor across two engines. |
 | Home adoption | STACK-75, STACK-16 | Pin and test the Stack/Home wire, then move Home onto the Stack with rollback after the Studio proof. |
 | Speech and the robot | STACK-94a to 94c, STACK-95, STACK-17 | The speech roles on the Mac, then the Linux service and the robot profile. |
 | Operations | STACK-96, STACK-96b, STACK-97, STACK-87 | Pin and rollback proven live, the Catalog engine index, health honesty kept through the rewrite. |
@@ -79,7 +79,7 @@ are never copied. Nothing migrates Home until STACK-16.
   `scripts/check.sh`, `CHANGELOG.md`. Mirror: the kept modules; Home's
   legacy `llmSupervisor.ts`, `ttsSupervisor.ts`, `embedSupervisor.ts`
   for the per-role lifecycle. Out of scope: generator execution
-  (STACK-13), the speech engines (STACK-94b, 94c), systemd (STACK-95). Exit:
+  (STACK-13a, 13b), the speech engines (STACK-94b, 94c), systemd (STACK-95). Exit:
   `bash scripts/check.sh` and a `code-review` at medium on this
   checkout.
 - [x] **RF-05 (M): the seam, explicit.** The wire shapes (the role
@@ -135,19 +135,53 @@ are never copied. Nothing migrates Home until STACK-16.
   free-port probe, size-scaled load timeout, post-load completion,
   measured footprint, restart on exit, drain on stop, idle unload.
   Rewritten per role in RF-04 at 58cae15 with the same lifecycle pieces.
-- [ ] **STACK-13 (M): jobs and the managed ComfyUI.** The job API
-  (submit, progress on the feed, cancel, result by id) and the
-  synchronous `/v1/images/generations` wrapper; ComfyUI as a `managed`
-  engine the Stack starts and stops. Acceptance: a scripted job reports
-  progress and cancels cleanly; the wrapper returns an OpenAI-shaped
-  image response; a second generator queues. Files:
-  `backend/src/routes/jobs.ts`, `backend/src/lib/jobs.ts`,
-  `backend/src/lib/supervisor.ts`. Mirror: the job shape from RF-05;
-  ComfyUI's queue API. Out of scope: video and music engines; any UI.
-  Exit: `bash scripts/check.sh`.
+- [x] **STACK-13a (M): the job API and the generator queue.** The
+  spec's `StackJob` shape with fixtures; submit, progress on the feed,
+  cancel, result by id; a generator role's queue with positions, one in
+  flight per role, admitted through the governor (the governor's own
+  queue waited on, an impossible peak or a governor refusal failing the
+  job with the reason, the admission released however the run ends);
+  `/v1/images/generations` as the job API with a wait answering in
+  OpenAI's image shape, 202 with the id past its deadline. Driven by a
+  scripted sidecar in `tests/generatorQueue.test.ts`. Landed on `main`
+  with this line.
+- [ ] **STACK-13b (M): ComfyUI as a managed engine.** A pinned ComfyUI
+  release built into an environment through the pinned uv the way
+  Pocket TTS is (`backend/src/speech/pocketTts.ts` is the mirror), a
+  pinned small image model with sha256 in the store, the `image` role's
+  runner registered with its memory estimate so
+  `/v1/images/generations` returns real images through the queue,
+  identity headers from the managed process, cancel interrupting the
+  ComfyUI queue. Acceptance: one image renders live on the dev machine
+  if the governor admits it, otherwise the refusal numbers recorded as
+  with STACK-96 and the live pass becomes 13b-live. Files:
+  `backend/src/lib/engineCatalog.ts`, `backend/src/lib/modelCatalog.ts`,
+  `backend/src/lib/supervisor.ts`, `backend/src/generators/`,
+  `backend/src/routes/v1.ts`. Mirror: the Pocket TTS environment and
+  launch; ComfyUI's `/prompt`, `/history` and `/interrupt` routes. Out
+  of scope: video and music engines; image editing; any UI. Exit:
+  `bash scripts/check.sh` and the live render (or the refusal) in
+  `dev.md`.
 
 ## Governor and sizing
 
+- [ ] **STACK-06c (S): the governor drains its queue on memory
+  changes.** Today a queued request is re-admitted only inside
+  `release()`, so a request queued for pressure or the working margin
+  with nothing loaded waits until an unrelated release; the job queue
+  (STACK-13a) works around it by releasing a handle the governor does
+  not hold, no more often than the governor's poll, which also rotates
+  the queue's order when the head still cannot be admitted. Objective: the
+  governor's own poll (`lib/governor.ts`, the memory reading and
+  pressure update) re-admits its queue head when pressure returns to
+  normal or free memory clears the margin, with a callback or a promise
+  the caller of `admit` can wait on instead of watching the loaded set;
+  then `lib/jobs.ts` drops the kick and the poll. Files:
+  `backend/src/lib/governor.ts`, `backend/src/lib/jobs.ts`. Mirror: the
+  queue's admission loop in `jobs.ts`. Out of scope: the admission
+  rules. Exit: `bash scripts/check.sh` with a test that a request
+  queued under pressure runs when the reading clears without any
+  release.
 - [x] **STACK-06: the governor.** Profiles, admission, one generator at
   a time, queue of four, idle and pressure eviction, RSS breach restart,
   the decision ledger. Kept unchanged in RF-04.
