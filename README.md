@@ -36,7 +36,10 @@ the memory governor, the pinned engine and model store, health, updates
 and the event feed behind them. The design record is
 [docs/dev.md](docs/dev.md), the contract Home and Bot build against is
 [docs/integrations.md](docs/integrations.md), and what is built and
-what is missing is [docs/BACKLOG.md](docs/BACKLOG.md). Standards live
+what is missing is [docs/BACKLOG.md](docs/BACKLOG.md), and what the Stack
+pins today, engine by engine and model by model, is
+[docs/components.md](docs/components.md), generated from the code.
+Standards live
 in [getmaipai/.github](https://github.com/getmaipai/.github);
 `scripts/check.sh` is the gate and needs sibling checkouts of
 `getmaipai/.github` and `getmaipai/shared`.
