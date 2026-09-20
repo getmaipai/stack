@@ -10,8 +10,8 @@ import { OverviewPage } from "@/pages/OverviewPage";
 import { useApiResource } from "@/lib/useApiResource";
 import { AppSidebar } from "@/kit/blocks/dashboard/components/app-sidebar";
 import { SiteHeader } from "@/kit/blocks/dashboard/components/site-header";
+import { StackFooter } from "@/kit/blocks/dashboard/components/footer";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/kit/ui/card";
-import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/kit/ui/command";
 import { Separator } from "@/kit/ui/separator";
 import { SidebarInset, SidebarProvider } from "@/kit/ui/sidebar";
 import { EnginesPage } from "@/pages/EnginesPage";
@@ -21,7 +21,6 @@ import { AlertsPage } from "@/pages/AlertsPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { LibraryPage } from "@/pages/LibraryPage";
 import { HelpPage } from "@/pages/HelpPage";
-import type { LibraryRecord } from "@/lib/api";
 import { PhoneModeContext, usePhoneMode } from "@/kit/blocks/phone/PhoneMode";
 import { PhoneHeader } from "@/kit/blocks/phone/PhoneHeader";
 import { TabBar } from "@/kit/blocks/phone/TabBar";
@@ -33,12 +32,9 @@ import { api } from "@/lib/api";
 import { RelativeTime } from "@/kit/ui/relative-time";
 import { Skeleton } from "@/kit/ui/skeleton";
 import { HelperPanel } from "@/kit/blocks/helper/HelperPanel";
-import { answerIntent, type IntentFacts } from "@/lib/intents";
+import type { IntentFacts } from "@/lib/intents";
 
-const Copy = getIcon("Copy"); const ExternalLink = getIcon("ExternalLink"); const Gauge = getIcon("Gauge"); const Search = getIcon("Search"); const Sparkles = getIcon("Sparkles"); const RefreshCw = getIcon("RefreshCw"); const UploadCloud = getIcon("UploadCloud"); const SlidersHorizontal = getIcon("SlidersHorizontal");
-
-const sections = ["Overview", "Engines", "Models", "Library", "Help", "Clients", "Tester", "Monitoring", "Settings", "Logs", "Alerts"];
-const sectionPaths: Record<string, string> = { Overview: "/", Engines: "/engines", Models: "/models", Library: "/library", Help: "/help", Clients: "/clients", Tester: "/try", Monitoring: "/monitoring", Settings: "/settings", Logs: "/logs", Alerts: "/alerts" };
+const Gauge = getIcon("Gauge");
 
 export type SectionFrameComponent = ({ title, description, children }: { title: string; description: string; children: ReactNode }) => ReactNode;
 
@@ -81,28 +77,8 @@ function MonitoringPage() {
 
 function LogsPage() { const [level, setLevel] = useState("all"); const [follow, setFollow] = useState(true); const logs = useApiResource<{ lines?: string[] }>("/stack/v1/logs"); useEffect(() => { if (!follow) return; const timer = window.setInterval(() => void logs.refetch(), 2_000); return () => window.clearInterval(timer); }, [follow, logs.refetch]); const lines = (logs.data?.lines ?? []).filter((line) => level === "all" || line.toLocaleLowerCase().includes(`[${level}]`)); return <SectionFrame title="Logs" description="Recent lines from the Stack daemon and its engines."><Card><CardHeader><CardTitle>Log viewer</CardTitle><CardDescription>Filter and follow local logs.</CardDescription></CardHeader><CardContent><div className="mb-3 flex items-center gap-4 text-sm"><label>Level <select aria-label="Log level" value={level} onChange={(event) => setLevel(event.target.value)}><option value="all">All levels</option><option value="error">Error</option><option value="warn">Warning</option><option value="info">Info</option></select></label><label><input type="checkbox" checked={follow} onChange={(event) => setFollow(event.target.checked)} /> Follow</label></div><pre className="max-h-96 overflow-auto rounded-lg bg-muted p-4 text-xs">{lines.length ? lines.join("\n") : "No log lines yet"}</pre></CardContent></Card></SectionFrame>; }
 
-function CommandPalette({ open, onOpenChange, facts, onAskHelper }: { open: boolean; onOpenChange: (open: boolean) => void; facts?: IntentFacts; onAskHelper?: (question: string) => void }) {
-  const navigate = useNavigate();
-  const [query, setQuery] = useState("");
-  const library = useApiResource<{ library: LibraryRecord[] }>("/stack/v1/library");
-  const librarySearch = useApiResource<{ results: Array<LibraryRecord & { snippet: string }> }>(query.trim() ? `/stack/v1/library/search?q=${encodeURIComponent(query.trim())}` : null);
-  const docsSearch = useApiResource<{ results: Array<{ id?: string; title: string; url?: string; excerpt?: string }> }>(query.trim() ? `/stack/v1/docs/search?q=${encodeURIComponent(query.trim())}` : null);
-  const knowledge = useApiResource<{ records: Array<{ title: string; url: string; excerpt: string }> }>("/knowledge/index.json");
-  const engines = useApiResource<{ engines: EngineRecord[] }>("/stack/v1/engines");
-  const models = useApiResource<{ models: Array<{ sizeBytes?: number | null }> }>("/stack/v1/models");
-  const roles = useApiResource<{ roles: RoleRecord[] }>("/stack/v1/roles");
-  const updates = useApiResource<{ app: { available: string | null }; engines: { available: string | null }; models: { available: string | null } }>("/stack/v1/updates");
-  const [helperQuestion, setHelperQuestion] = useState<string | null>(null);
-  function go(path: string) { onOpenChange(false); navigate(path); }
-  const libraryRows = query.trim() ? librarySearch.data?.results ?? [] : library.data?.library ?? [];
-  const knowledgeRows = query.trim() ? (knowledge.data?.records ?? []).filter((item) => `${item.title} ${item.excerpt}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())) : [];
-  const liveFacts: IntentFacts = facts ?? { engines: (engines.data?.engines ?? []).length, models: (models.data?.models ?? []).length, clients: 0, chatReady: (roles.data?.roles ?? []).some((role) => role.id === "chat" && ["ready", "busy"].includes(role.state)), updates: updates.data ? [updates.data.app?.available, updates.data.engines?.available, updates.data.models?.available].filter(Boolean).length : 0, modelStorageBytes: (models.data?.models ?? []).reduce((total, model) => total + (model.sizeBytes ?? 0), 0) };
-  const intent = query.trim() ? answerIntent(query, liveFacts) : null;
-  return <><CommandDialog open={open} onOpenChange={onOpenChange} title="Ask" description="Search or ask the Stack."><CommandInput value={query} onValueChange={setQuery} placeholder="Search or ask" /><CommandList><CommandEmpty>No matching page or answer.</CommandEmpty><CommandGroup heading="Pages and things">{sections.map((section) => <CommandItem key={section} value={section} onSelect={() => go(sectionPaths[section] ?? "/")}><Search />{section}</CommandItem>)}</CommandGroup>{intent && <CommandGroup heading="Answers"><CommandItem value={`${query} ${intent.sentence}`} onSelect={() => go(intent.href)}><Sparkles />{intent.sentence}</CommandItem></CommandGroup>}{(libraryRows.length > 0 || knowledgeRows.length > 0 || ((docsSearch.data?.results ?? []).length > 0)) && <CommandGroup heading="From the docs">{libraryRows.map((item) => <CommandItem key={item.id} value={`${item.title} ${item.kind} ${"snippet" in item ? item.snippet : ""}`} onSelect={() => go(`/library?item=${encodeURIComponent(item.id)}`)}><Search />{item.title}</CommandItem>)}{knowledgeRows.map((item) => <CommandItem key={item.url} value={`${item.title} ${item.excerpt}`} onSelect={() => window.open(item.url, "_blank", "noopener,noreferrer")}><ExternalLink />{item.title}</CommandItem>)}{(docsSearch.data?.results ?? []).map((item, index) => <CommandItem key={`${item.title}-${index}`} value={`${item.title} ${item.excerpt ?? ""}`} onSelect={() => window.open(item.url ?? "https://getmaipai.github.io/stack/", "_blank", "noopener,noreferrer")}><ExternalLink />{item.title}</CommandItem>)}</CommandGroup>}{query.trim() && <CommandGroup heading="Ask the helper"><CommandItem value={`Ask the helper ${query}`} onSelect={() => { onOpenChange(false); if (onAskHelper) onAskHelper(query); else setHelperQuestion(query); }}><Sparkles />Ask the helper about “{query}”</CommandItem></CommandGroup>}<CommandGroup heading="Settings"><CommandItem value="Updates" onSelect={() => go("/settings#updates")}><RefreshCw />Updates</CommandItem><CommandItem value="Backups" onSelect={() => go("/settings#backups")}><UploadCloud />Backups</CommandItem></CommandGroup><CommandGroup heading="Actions"><CommandItem value="Add abilities" onSelect={() => go("/abilities")}><SlidersHorizontal />Add abilities</CommandItem><CommandItem onSelect={() => go("/api/docs")}><ExternalLink />Open API docs</CommandItem><CommandItem onSelect={() => { void navigator.clipboard?.writeText(window.location.href); onOpenChange(false); }}><Copy />Copy board URL</CommandItem></CommandGroup></CommandList></CommandDialog>{helperQuestion && <HelperPanel question={helperQuestion} facts={liveFacts} onClose={() => setHelperQuestion(null)} />}</>;
-}
-
 export function DashboardShell() {
-  const location = useLocation(); const navigate = useNavigate(); const [paletteOpen, setPaletteOpen] = useState(false);
+  const location = useLocation(); const navigate = useNavigate();
   const [phone, setPhone] = useState(() => typeof window !== "undefined" && window.innerWidth < 640);
   const repairs = useApiResource<{ repairs: RepairRecord[] }>("/stack/v1/repairs");
   const roles = useApiResource<{ roles: RoleRecord[] }>("/stack/v1/roles");
@@ -116,9 +92,10 @@ export function DashboardShell() {
   const runState = useApiResource<{ state: "running" | "pausing" | "paused" }>("/stack/v1/run-state");
   const refetchRepairs = repairs.refetch; const refetchRoles = roles.refetch; const refetchEngines = engines.refetch; const refetchUpdates = updates.refetch; const refetchHealth = health.refetch; const refetchDetected = detected.refetch; const refetchBudget = budget.refetch; const refetchRunState = runState.refetch; const currentRunState = runState.data?.state;
   useEffect(() => { if (typeof EventSource === "undefined") return; const stream = new EventSource("/stack/v1/events"); stream.onmessage = (event) => { try { const envelope = JSON.parse(event.data) as { id?: string; data?: { severity?: string } }; if (envelope.id === "repair") void refetchRepairs(); if (envelope.id === "role.state") void refetchRoles(); if (envelope.id === "health.changed") { void refetchHealth(); if (isDesktop() && (envelope.data?.severity === "critical" || envelope.data?.severity === "error")) void notify("MaiPai Stack health", "The Stack has a serious health item."); } if (envelope.id === "engine.state") void refetchEngines(); if (envelope.id === "update.available") { void refetchUpdates(); if (isDesktop()) void notify("MaiPai Stack update", "An update is available."); } if (envelope.id === "model.installed" && isDesktop()) void notify("MaiPai Stack model", "A model was installed."); if (envelope.id === "detected.changed") void refetchDetected(); if (envelope.id === "pressure" || envelope.id === "budget.changed") void refetchBudget(); if (envelope.id === "run.state") void refetchRunState(); } catch { /* An invalid event cannot take down the shell. */ } }; return () => stream.close(); }, [refetchRepairs, refetchRoles, refetchEngines, refetchUpdates, refetchHealth, refetchDetected, refetchBudget, refetchRunState]);
-  useEffect(() => { const onKey = (event: KeyboardEvent) => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setPaletteOpen(true); } if (event.key === "/" && !["INPUT", "TEXTAREA"].includes((event.target as HTMLElement)?.tagName)) { event.preventDefault(); setPaletteOpen(true); } }; window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey); }, []);
+  // The global ⌘K/"/" listener and its modal moved into SiteHeader's own
+  // GlobalSearch, which focuses the real header input per spec ("it is
+  // not a separate blank modal") instead of opening a dialog.
   useEffect(() => { const update = () => setPhone(window.innerWidth < 640); update(); window.addEventListener("resize", update); return () => window.removeEventListener("resize", update); }, []);
-  const title = sections.find((item) => sectionPaths[item] === location.pathname) ?? (location.pathname.startsWith("/settings") ? "Settings" : location.pathname.startsWith("/help") ? "Help" : "Overview");
   const repairRows = repairs.data?.repairs ?? []; const roleRows = roles.data?.roles ?? [];
   const enginesToCheck = engines.data?.engines?.filter((engine) => engine.matchesThisMachine && engine.state !== "current") ?? [];
   const detectedToAdopt = (detected.data?.detected ?? []).filter((item) => !item.adopted && !item.forgotten).length;
@@ -145,7 +122,7 @@ export function DashboardShell() {
   useEffect(() => { if (location.pathname !== "/abilities") sessionStorage.setItem("maipai-stack:last-route", location.pathname); }, [location.pathname]);
   const routes = <Routes><Route path="/" element={<BoardPageProxy />} /><Route path="/abilities" element={<AbilitiesProxy />} /><Route path="/models/:id" element={<PhoneModelRoute />} /><Route path="/engines/:id" element={<PhoneEngineRoute />} /><Route path="/models" element={<ModelsPage Frame={SectionFrame} />} /><Route path="/engines" element={<EnginesPage Frame={SectionFrame} />} /><Route path="/monitoring" element={<MonitoringPage />} /><Route path="/library" element={<LibraryPage Frame={SectionFrame} />} /><Route path="/help/:page?" element={<HelpPage Frame={SectionFrame} />} /><Route path="/alerts" element={<AlertsPage Frame={SectionFrame} />} /><Route path="/logs" element={<LogsPage />} /><Route path="/clients" element={<AccessPage Frame={SectionFrame} />} /><Route path="/access" element={<Navigate to="/clients" replace />} /><Route path="/try" element={<TryItPage />} /><Route path="/updates" element={<Navigate to="/settings/updates" replace />} /><Route path="/backups" element={<Navigate to="/settings/backups" replace />} /><Route path="/settings/*" element={<SettingsPage Frame={SectionFrame} />} /><Route path="*" element={<BoardPageProxy />} /></Routes>;
   if (phone) return <PhoneModeContext.Provider value={true}><PhoneShell locationPath={location.pathname} onNavigate={navigate} health={health.data?.health?.[0]?.text ?? "This computer is healthy."} helperFacts={helperFacts}>{routes}</PhoneShell></PhoneModeContext.Provider>;
-  return <SidebarProvider><AppSidebar repairs={repairRows} roles={roleRows} health={health.data?.health ?? []} engineCount={engineCount} updateCount={updateCount} alertSeverity={alertSeverity} engineTooltip={engineTooltip} updateTooltip={updateTooltip} alertTooltip={alertTooltip} hardware={hardware.data?.hardware} budget={budget.data} runState={runState.data?.state} /><SidebarInset className="h-svh overflow-hidden bg-[var(--surface-page)]"><SiteHeader title={title} onSearch={() => setPaletteOpen(true)} runState={runState.data?.state ?? "running"} onRunStateChange={() => void runState.refetch()} /><div className="flex-1 overflow-y-auto">{routes}</div></SidebarInset><CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} /></SidebarProvider>;
+  return <SidebarProvider><AppSidebar repairs={repairRows} roles={roleRows} health={health.data?.health ?? []} engineCount={engineCount} updateCount={updateCount} alertSeverity={alertSeverity} engineTooltip={engineTooltip} updateTooltip={updateTooltip} alertTooltip={alertTooltip} hardware={hardware.data?.hardware} budget={budget.data} runState={runState.data?.state} /><SidebarInset className="h-svh overflow-hidden bg-[var(--surface-page)]"><SiteHeader /><div className="flex-1 overflow-y-auto">{routes}</div><StackFooter /></SidebarInset></SidebarProvider>;
 }
 
 function BoardPageProxy() {

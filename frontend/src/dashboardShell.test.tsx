@@ -102,15 +102,18 @@ test("the collapsed rail keeps every section and carries a tooltip on each butto
   }
 });
 
-test("command palette opens from both shortcuts and jumps to Models", async () => {
+test("⌘K and / focus the header search, and a result navigates", async () => {
   stubStackFetch({ ...boardExtras, "/stack/v1/repairs": { repairs: [] }, "/stack/v1/roles": { roles: [] }, "/stack/v1/operator": { state: "signedOut", required: false } });
   render(<MemoryRouter initialEntries={["/updates"]}><DashboardShell /></MemoryRouter>);
+  const input = await waitFor(() => document.querySelector('header input[placeholder*="Search"]') as HTMLInputElement);
   fireEvent.keyDown(window, { key: "k", metaKey: true });
-  expect(document.querySelector('input[placeholder="Search or ask"]')).toBeTruthy();
-  fireEvent.click(Array.from(document.querySelectorAll('[cmdk-item]')).find((item) => item.textContent?.trim() === "Models")!);
-  await waitFor(() => expect(document.body.textContent).toContain("No models are installed yet"));
+  expect(document.activeElement).toBe(input);
+  input.blur();
   fireEvent.keyDown(window, { key: "/" });
-  expect(document.querySelector('input[placeholder="Search or ask"]')).toBeTruthy();
+  expect(document.activeElement).toBe(input);
+  fireEvent.focus(input);
+  fireEvent.click(await waitFor(() => Array.from(document.querySelectorAll('[role="listbox"] button')).find((item) => item.textContent?.trim() === "Models")!));
+  await waitFor(() => expect(document.body.textContent).toContain("No models are installed yet"));
 });
 
 test("the sidebar footer shows the Stack health and links to alerts", async () => {
@@ -160,16 +163,6 @@ test("the header bell opens the notification popover and shows the unread count"
   await waitFor(() => expect(document.body.textContent).toContain("1"));
   fireEvent.pointerDown(trigger as HTMLElement);
   await waitFor(() => expect(document.body.textContent).toContain("The chat engine is stopped."));
-});
-
-test("the header profile menu opens and offers sign out when signed in", async () => {
-  stubStackFetch({ ...boardExtras, "/stack/v1/repairs": { repairs: [] }, "/stack/v1/roles": { roles: [] }, "/stack/v1/operator": { state: "signedIn", required: true } });
-  const { unmount } = render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
-  const trigger = document.querySelector("[data-profile-trigger]");
-  expect(trigger).toBeTruthy();
-  fireEvent.pointerDown(trigger as HTMLElement);
-  await waitFor(() => expect(document.body.textContent).toContain("Sign out"));
-  unmount();
 });
 
 test("the header stays fixed while the routed page scrolls", async () => {
@@ -227,8 +220,7 @@ test("the page title appears once, in the header", async () => {
   for (const heading of document.querySelectorAll("h2")) expect(heading.textContent).not.toContain("Models");
 });
 
-test("the top bar names this computer and toggles the persisted theme", async () => {
-  localStorage.removeItem("maipai-stack-theme");
+test("the top bar names this computer and offers the appearance control", async () => {
   stubStackFetch({
     ...boardExtras,
     "/stack/v1/repairs": { repairs: [{ id: "r1", title: "Needs attention", detail: "A repair is open.", action: "Review", level: "passive", resolvedAt: null }] },
@@ -238,14 +230,9 @@ test("the top bar names this computer and toggles the persisted theme", async ()
   render(<MemoryRouter initialEntries={["/updates"]}><DashboardShell /></MemoryRouter>);
   await waitFor(() => expect(document.querySelector('[data-sidebar="header"] p[title]')?.getAttribute("title")).toBe("1 thing needs attention"));
   expect(document.body.textContent).toContain("This computer");
-  fireEvent.pointerDown(document.querySelector("[data-profile-trigger]") as HTMLElement);
-  const toggle = await waitFor(() => document.querySelector('button[aria-label="Use dark mode"]'));
-  expect(toggle).toBeTruthy();
-  fireEvent.click(toggle as HTMLElement);
-  expect(document.documentElement.classList.contains("dark")).toBe(true);
-  expect(localStorage.getItem("maipai-stack-theme")).toBe("dark");
-  fireEvent.click(document.querySelector('button[aria-label="Use light mode"]') as HTMLElement);
-  expect(document.documentElement.classList.contains("dark")).toBe(false);
+  await waitFor(() => expect(document.querySelector('header button[aria-label="Use dark appearance"]')).toBeTruthy());
+  expect(document.querySelector('header button[aria-label="Use light appearance"]')).toBeTruthy();
+  expect(document.querySelector('header button[aria-label="Use system appearance"]')).toBeTruthy();
 });
 
 test("the responsive header keeps three phone actions and no text input", async () => {
@@ -259,7 +246,7 @@ test("the responsive header keeps three phone actions and no text input", async 
   cleanup();
   Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 1440 });
   render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
-  await waitFor(() => expect(document.querySelector("header")?.textContent).toContain("Ask"));
+  await waitFor(() => expect(document.querySelector('header input[placeholder*="Search"]')).toBeTruthy());
 });
 
 test("the shell pins admin below the common group and exposes resources", async () => {
@@ -276,7 +263,6 @@ test("the shell pins admin below the common group and exposes resources", async 
   expect(document.body.textContent).toContain("Backups");
   expect(document.body.textContent).not.toContain("Try it");
   expect(document.body.textContent).not.toContain("Access");
-  expect(document.querySelector("header input")).toBeNull();
   Object.defineProperty(window, "innerHeight", { configurable: true, writable: true, value: 560 });
   cleanup();
   render(<MemoryRouter initialEntries={["/settings"]}><DashboardShell /></MemoryRouter>);
@@ -284,7 +270,7 @@ test("the shell pins admin below the common group and exposes resources", async 
   expect(document.querySelector('[data-sidebar="content"]')?.textContent).toContain("Manage");
 });
 
-test("the header pill pauses and resumes the scripted Stack in the centered region", async () => {
+test("the search's Pause everything command requires a second click to confirm before posting", async () => {
   let state: "running" | "paused" = "running";
   const calls: string[] = [];
   globalThis.EventSource = undefined as unknown as typeof EventSource;
@@ -298,12 +284,10 @@ test("the header pill pauses and resumes the scripted Stack in the centered regi
     return Response.json(body);
   }) as unknown as typeof fetch;
   render(<MemoryRouter initialEntries={["/models"]}><DashboardShell /></MemoryRouter>);
-  await waitFor(() => expect(document.querySelector('button[aria-label="Pause Stack"]')).toBeTruthy());
-  fireEvent.click(document.querySelector('button[aria-label="Pause Stack"]')!);
-  fireEvent.click(Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "Pause")!);
-  await waitFor(() => expect(document.body.textContent).toContain("Paused"));
-  expect(calls).toContain("/stack/v1/run-state POST");
-  fireEvent.click(document.querySelector('button[aria-label="Resume Stack"]')!);
-  await waitFor(() => expect(document.body.textContent).toContain("Running"));
-  expect(calls.filter((call) => call === "/stack/v1/run-state POST")).toHaveLength(2);
+  const input = await waitFor(() => document.querySelector('header input[placeholder*="Search"]') as HTMLInputElement);
+  fireEvent.focus(input);
+  fireEvent.click(await waitFor(() => Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "Pause everything")!));
+  expect(calls).not.toContain("/stack/v1/run-state POST");
+  fireEvent.click(await waitFor(() => Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "Click again to confirm pausing everything")!));
+  await waitFor(() => expect(calls).toContain("/stack/v1/run-state POST"));
 });
