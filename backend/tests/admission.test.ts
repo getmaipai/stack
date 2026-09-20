@@ -18,7 +18,7 @@ test("the peak mirrors the governor: measured, else the file times the engine's 
   expect(governorPeak({ id: "a", kind: "resident", requestedBytes: 5 })).toBe(5);
 });
 
-test("a queued start is admitted when the holder releases, and a start that times out gives up while its watcher returns the late admission", async () => {
+test("a queued start is admitted when the holder releases, and a start that times out withdraws: no late admission, no phantom", async () => {
   const holder = await admit({ id: "chat", kind: "resident", requestedBytes: 12 * GB }) as GovernorHandle;
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 32 * GB, freeMemoryBytes: 10 * GB, tier: "p32" });
   const positions: number[] = [];
@@ -30,14 +30,17 @@ test("a queued start is admitted when the holder releases, and a start that time
   const handle = await waiting;
   expect(handle?.id).toBe("image");
   release(handle!);
-  // A second start gives up after its deadline; its admission, granted
-  // later, is released by the watcher rather than held by nobody.
+  // A second start gives up after its deadline: it withdraws from the
+  // governor's queue, so no late admission ever happens and a later
+  // release of the holder admits nothing on its behalf.
   const holder2 = await admit({ id: "chat", kind: "resident", requestedBytes: 12 * GB }) as GovernorHandle;
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 32 * GB, freeMemoryBytes: 10 * GB, tier: "p32" });
   let gaveUp = false;
   const late = await waitForAdmission({ id: "image", kind: "resident", requestedBytes: 5 * GB }, { stillWanted: () => true, timeoutMs: 300, onGaveUp: () => { gaveUp = true; } });
   expect(late).toBeNull();
   expect(gaveUp).toBe(true);
+  expect(getGovernorStatus().queue.length).toBe(0);
+  expect(getGovernorStatus().loaded.map((item) => item.id)).toEqual(["chat"]);
   expect(waitingReason("image", { id: "image", kind: "resident", requestedBytes: 5 * GB })).toMatch(/needs about 5\.0 GB with 10\.0 GB free/);
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 32 * GB, freeMemoryBytes: 24 * GB, tier: "p32" });
   release(holder2);

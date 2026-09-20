@@ -1,18 +1,13 @@
 // One way to wait on the governor, for a generator job and for an
 // engine start alike. The governor answers `admit` at once: a handle,
-// `queued`, or `refused`. A queued request is admitted later inside a
-// `release` with no callback, so this loop watches the loaded set for
-// it; when nothing the request waits on is loaded and pressure is
-// normal, no release would ever come, so it releases a handle the
-// governor does not hold (its one public way to re-run the queue head),
-// no more often than the governor's own poll. A caller that stops
-// waiting (a cancel, a deadline) leaves a watcher behind that releases
-// the admission if it ever lands, so a phantom never blocks the next
-// request. STACK-06c retires the watching and the kick.
-import { admit, getGovernorDecisions, getGovernorStatus, getRunState, GovernorRules, release, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
-
-const POLL_MS = 250;
-let kickMs: number = GovernorRules.pollMs;
+// `queued` with its `admitted` promise, or `refused`. A queued request
+// is admitted later inside a `release`, and the governor's own poll
+// settles the `admitted` promise when memory frees, so the wait simply
+// awaits it. A caller that stops waiting (a cancel, a deadline) calls
+// `withdraw`, which removes the request from the governor's queue and
+// settles the `admitted` promise refused, so no late admission ever
+// happens and nothing is loaded that nobody holds.
+import { admit, getGovernorDecisions, getGovernorStatus, getRunState, GovernorRules, withdraw, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
 
 /** The peak the governor will compute for a request, mirrored from its
  * `peakFor` so a refusal here agrees with an admission there. */
@@ -49,7 +44,7 @@ export class AdmissionRefusedError extends Error {
 
 export interface WaitOptions {
   /** Says whether the caller still wants the admission; once false the
-   * caller is told through `onGaveUp` and the loop only watches. */
+   * caller is told through `onGaveUp` and the request is withdrawn. */
   stillWanted: () => boolean;
   /** Called once when the caller stopped wanting it (a cancel, a deadline). */
   onGaveUp?: () => void;
@@ -59,9 +54,9 @@ export interface WaitOptions {
 }
 
 /** Waits for the governor to admit a request. Resolves with the handle,
- * or null when the caller gave up (its late admission, if any, is
- * released by the watcher this leaves behind), and rejects with the
- * governor's reason when the request is refused or dropped, or with
+ * or null when the caller gave up (the request is withdrawn from the
+ * governor's queue, so no late admission ever happens), and rejects with
+ * the governor's reason when the request is refused or dropped, or with
  * the peak's numbers when the budget could never hold it. */
 export async function waitForAdmission(request: GovernorRequest, options: WaitOptions): Promise<GovernorHandle | null> {
   const status = getGovernorStatus();
@@ -71,76 +66,24 @@ export async function waitForAdmission(request: GovernorRequest, options: WaitOp
   if ("refused" in answer) throw new AdmissionRefusedError(answer.reason);
   if (!("queued" in answer)) return answer;
   options.onPosition?.(answer.position);
-  // The caller's promise settles when the admission lands or the caller
-  // gives up; the loop itself runs on as the watcher after a give-up,
-  // until the request is admitted (and released) or dropped.
-  return new Promise<GovernorHandle | null>((resolve, reject) => {
-    const waitStartedAt = new Date().toISOString();
-    const deadline = options.timeoutMs ? Date.now() + options.timeoutMs : null;
-    let gaveUp = false;
-    let lastKick = Date.now();
-    wanted.add(request.id);
-    // One watcher per id: a new wait for the same id (a retry after a
-    // timeout, a restart) takes over the watch and the release duty, so
-    // an old watcher never returns the admission a live wait just took.
-    const token = Symbol(request.id);
-    watchers.set(request.id, token);
-    // A watcher another wait took over leaves `wanted` to that wait.
-    const giveUp = () => { if (gaveUp) return; gaveUp = true; if (watchers.get(request.id) === token) wanted.delete(request.id); options.onGaveUp?.(); resolve(null); };
-    const watch = async () => {
-      while (true) {
-        await new Promise((tick) => setTimeout(tick, POLL_MS));
-        if (watchers.get(request.id) !== token) { if (!gaveUp) giveUp(); return; }
-        const current = getGovernorStatus();
-        const admitted = current.loaded.find((item) => item.id === request.id);
-        if (admitted) {
-          const handle: GovernorHandle = { id: request.id, kind: request.kind, requestedBytes: admitted.peakBytes };
-          watchers.delete(request.id);
-          if (gaveUp || !options.stillWanted()) { release(handle); giveUp(); return; }
-          wanted.delete(request.id);
-          resolve(handle);
-          return;
-        }
-        const waiting = current.queue.find((item) => item.id === request.id);
-        if (!waiting) {
-          watchers.delete(request.id);
-          if (gaveUp) return;
-          wanted.delete(request.id);
-          if (options.stillWanted()) reject(new AdmissionRefusedError(governorReasonFor(request.id, waitStartedAt)));
-          else giveUp();
-          return;
-        }
-        if (!gaveUp && (!options.stillWanted() || (deadline !== null && Date.now() >= deadline))) giveUp();
-        if (!gaveUp) options.onPosition?.(waiting.position);
-        // A wait that was given up kicks only while a live wait sits
-        // behind its phantom; alone, it just watches, so the governor's
-        // "work is waiting for memory" warning never fires for a request
-        // nobody wants. A kick that still cannot admit the head moves that
-        // request to the back of the governor's queue, so the order among
-        // waiting requests rotates until one fits.
-        // Never while the memory reading is degraded: the governor
-        // refuses outright then, and a kick would drop the head for good.
-        const liveWaiting = !gaveUp || current.queue.some((item) => item.id !== request.id && wanted.has(item.id));
-        const generatorLoaded = current.loaded.some((item) => item.kind === "generator");
-        const blockedByGenerator = request.kind === "generator" && generatorLoaded;
-        if (liveWaiting && !blockedByGenerator && current.pressure === "normal" && !current.memoryReadingDegraded && Date.now() - lastKick >= kickMs) {
-          lastKick = Date.now();
-          release({ id: `kick:${request.id}`, kind: request.kind, requestedBytes: 0 });
-        }
-      }
-    };
-    void watch();
-  });
+  let gaveUp = false;
+  const giveUp = () => {
+    if (gaveUp) return;
+    gaveUp = true;
+    options.onGaveUp?.();
+    withdraw(request.id);
+  };
+  if (options.timeoutMs !== undefined) {
+    setTimeout(giveUp, options.timeoutMs);
+  }
+  const admitted = await answer.admitted;
+  if (gaveUp) return null;
+  if ("refused" in admitted) throw new AdmissionRefusedError(admitted.reason);
+  if (!options.stillWanted()) { giveUp(); return null; }
+  return admitted;
 }
 
-/** The requests a caller still waits on, so a given-up wait knows
- * whether a live one sits behind its phantom. */
-const wanted = new Set<string>();
-/** The watcher that owns each id's wait. */
-const watchers = new Map<string, symbol>();
-
-export function __setAdmissionTuningForTests(options: { kickMs?: number } = {}): void {
-  kickMs = options.kickMs ?? GovernorRules.pollMs;
-  wanted.clear();
-  watchers.clear();
+/** Retained for the test harness; the wait no longer polls, so there is
+ * nothing to tune. */
+export function __setAdmissionTuningForTests(_options: { kickMs?: number } = {}): void {
 }
