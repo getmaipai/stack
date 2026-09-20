@@ -19,6 +19,24 @@ history in [plans/field-survey-2026-09-17.md](plans/field-survey-2026-09-17.md).
 Nothing in this file is household content: every person in an example
 is from the org's persona roster.
 
+## Why the Stack exists
+
+Local AI is a pile of parts. One program runs the chat model, a
+different one turns speech into text, another turns text into speech, a
+small model listens for the wake word, and a fourth draws pictures. Each
+starts its own way, keeps its own files, needs its own slice of memory
+and breaks in its own way. Home should never have to know any of that.
+The Stack is the one interface between those raw parts and everything
+MaiPai builds on top: Home asks for "chat" or "say this" at one address
+and gets an answer, and the Stack decides which engine runs it, makes
+sure the right model file is there and untampered, keeps every engine
+fitting in memory at the same time, notices when one breaks and says how
+to fix it, and swaps a new build in, or back out, without Home changing
+a line. Swap an engine, add a role, move from the Mac to the robot's
+Linux box: Home does not change. Without the Stack, every product would
+carry its own copy of all that, and a kid asking for a picture could
+crash the family's chat.
+
 ## What the Stack is
 
 One daemon on the machine Home runs on (and on the robot, where Bot
@@ -35,8 +53,9 @@ recent request through the public route succeeded with the expected
 identity, health is a list of problems with one fix each, and an
 update is "installed X, available Y, last checked at T, go back".
 
-It ships inside Home's installer, updates with Home's releases, and
-runs as its own process under the OS service manager (launchd on
+Home's installer installs the Stack; a person never installs the Stack by itself. It
+updates with Home's releases, and runs as its own process under the OS
+service manager (launchd on
 macOS, systemd on Linux for the robot) because a separate process
 survives a Home crash and is shared by Bot on the same box. Mac first,
 Linux for the robot; the same config and the same API on both.

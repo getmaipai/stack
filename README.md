@@ -1,12 +1,34 @@
-# MaiPai Stack
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/getmaipai/.github/main/brand/maipai-stack-logo-dark.png">
+    <img src="https://raw.githubusercontent.com/getmaipai/.github/main/brand/maipai-stack-logo-light.png" alt="MaiPai Stack" width="360">
+  </picture>
+</p>
 
 MaiPai Stack is the engine foundation of MaiPai Home: the headless
 service that installs, sizes, runs, watches, updates and tests the
 engines and models behind Home, and gives Home one stable address by
 role. It has no interface and no users of its own; Home is its only
-caller. It ships inside [MaiPai Home](https://github.com/getmaipai/home)'s
-installer and updates with Home's releases; there is nothing here to
-install or run on its own.
+caller.
+
+[MaiPai Home](https://github.com/getmaipai/home)'s installer installs the Stack; a person never installs the Stack by itself.
+It updates with Home's releases.
+
+Local AI is a pile of parts. One program runs the chat model, a
+different one turns speech into text, another turns text into speech, a
+small model listens for the wake word, and a fourth draws pictures. Each
+starts its own way, keeps its own files, needs its own slice of memory
+and breaks in its own way. Home should never have to know any of that.
+The Stack is the one interface between those raw parts and everything
+MaiPai builds on top: Home asks for "chat" or "say this" at one address
+and gets an answer, and the Stack decides which engine runs it, makes
+sure the right model file is there and untampered, keeps every engine
+fitting in memory at the same time, notices when one breaks and says how
+to fix it, and swaps a new build in, or back out, without Home changing
+a line. Swap an engine, add a role, move from the Mac to the robot's
+Linux box: Home does not change. Without the Stack, every product would
+carry its own copy of all that, and a kid asking for a picture could
+crash the family's chat.
 
 This repo is the daemon: one Bun process serving the OpenAI-shaped role
 routes and the control routes on a loopback port, with the supervisor,

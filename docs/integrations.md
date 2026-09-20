@@ -179,10 +179,18 @@ Home takes, encrypts, schedules and restores the backup (org
 
 ## Install and service hand-off
 
-Home's installer installs the Stack: it places the `maipai-stack`
-binary for the platform, runs `maipai-stack install-service` (launchd
-`com.maipai.stack` on macOS, `systemd --user` on Linux) with
-`STACK_DATA_DIR` and `PORT` set, and waits for `/healthz`. The service
+Home's installer installs the Stack; a person never installs the Stack by itself.
+
+What Home's installer does, in order: it places the `maipai-stack`
+binary for the platform; it creates the Stack's data directory
+(`STACK_DATA_DIR`, owner-only) beside Home's own; it runs
+`maipai-stack install-service` (launchd `com.maipai.stack` on macOS,
+`systemd --user` on Linux) with `STACK_DATA_DIR` and `PORT` set, which
+writes the unit file and starts the service; it waits for `/healthz`
+to answer with the version it shipped; and it runs the first readiness
+check (`POST /stack/v1/check`) after the first engine and model are
+installed, so the Engines page opens with a real result rather than a
+guess. The service
 unit has `RunAtLoad`, restart on failure with a 30 s throttle, and logs
 under `<data>/logs/`. `maipai-stack start`, `stop`, `status` and
 `uninstall-service` (optionally `--remove-data`) operate the unit. Exit
