@@ -29,12 +29,25 @@ export const ModelIndexSchema = z.object({ version: z.string(), models: z.array(
 export type ModelIndexEntry = z.infer<typeof ModelIndexEntrySchema>;
 export type ModelIndex = z.infer<typeof ModelIndexSchema>;
 
+// The Catalog's engine index (catalog/engines/index.json, published as a
+// signed envelope in the package index's shape by tools/src/engine-index.ts):
+// one entry per name, upstream build tag, platform and arch.
 export const EngineIndexEntrySchema = z.object({
-  name: z.string(), tag: z.string(), platform: z.string(), arch: z.string(),
-  url: z.string().url(), sha256: z.string().length(64), size: z.number().int().nonnegative(), notes: z.string().optional(),
+  name: z.string(), tag: z.string().regex(/^b[0-9]+$/), platform: z.string(), arch: z.string(),
+  url: z.string().url(), sha256: z.string().length(64), size: z.number().int().nonnegative(), licence: z.string().optional(),
+  requires: z.array(z.string()).optional(), extra: z.array(z.object({ url: z.string().url(), sha256: z.string().length(64), size: z.number().int().nonnegative(), label: z.string().optional() })).optional(), notes: z.string().optional(),
 });
-export const EngineIndexSchema = z.object({ version: z.string(), engines: z.array(EngineIndexEntrySchema) });
+const EngineIndexBodySchema = z.object({ version: z.string(), engines: z.array(EngineIndexEntrySchema) });
+// The published document is the signed envelope; a bare body is accepted
+// too (a local build, a fixture). Verifying the signature against the
+// Catalog's release key is the Catalog's release-key item; until then
+// the document is trusted the way the model index is: pinned URL, TLS.
+export const EngineIndexSchema = z.union([
+  z.object({ signed: EngineIndexBodySchema.extend({ type: z.literal("engine-index"), expires: z.string().datetime({ offset: true }), published: z.number().int().optional() }), signatures: z.array(z.object({ keyid: z.string(), sig: z.string() })) }).transform((envelope) => ({ version: envelope.signed.version, engines: envelope.signed.engines, expires: envelope.signed.expires, signed: true as const })),
+  EngineIndexBodySchema.transform((body) => ({ ...body, expires: null, signed: false as const })),
+]);
 export type EngineIndexEntry = z.infer<typeof EngineIndexEntrySchema>;
+export type EngineIndex = z.infer<typeof EngineIndexSchema>;
 
 export type UpdateFetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
@@ -49,7 +62,14 @@ export function conditionalHeaders(etag: string | null): Record<string, string> 
 }
 
 function readModelIndex(): ModelIndex | null { const value = read("modelIndex.body"); return value ? ModelIndexSchema.safeParse(JSON.parse(value)).data ?? null : null; }
-function readEngineIndex(): z.infer<typeof EngineIndexSchema> | null { const value = read("engineIndex.body"); return value ? EngineIndexSchema.safeParse(JSON.parse(value)).data ?? null : null; }
+function readEngineIndex(): EngineIndex | null {
+  const value = read("engineIndex.body");
+  const index = value ? EngineIndexSchema.safeParse(JSON.parse(value)).data ?? null : null;
+  // A signed index past its expiry (or with an expiry that does not
+  // parse) is no longer a claim about what is available.
+  if (index?.expires && !(Date.parse(index.expires) >= Date.now())) return null;
+  return index;
+}
 
 export function catalogModelForId(id: string): CatalogModelLike | null {
   const entry = readModelIndex()?.models.find((model) => model.id === id);
@@ -64,7 +84,9 @@ async function fetchIndex(kind: "modelIndex" | "engineIndex", url: string, fetch
   const body = await response.json();
   const parsed = kind === "modelIndex" ? ModelIndexSchema.safeParse(body) : EngineIndexSchema.safeParse(body);
   if (!parsed.success) throw new Error("The index did not match its declared shape.");
-  write(`${kind}.body`, JSON.stringify(parsed.data));
+  // The document is stored as received (a signed envelope stays one) and
+  // parsed again on every read, so its expiry is honoured later too.
+  write(`${kind}.body`, JSON.stringify(body));
   write(`${kind}.checked`, new Date().toISOString());
   const etag = response.headers.get("etag"); if (etag) write(`${kind}.etag`, etag);
   return "updated";
@@ -74,11 +96,26 @@ export interface EngineUpdateState { name: string; installed: string | null; ava
 export interface ModelUpdateState { id: string; installed: string; available: string | null; }
 export interface UpdatesState { checksEnabled: boolean; engines: EngineUpdateState[]; models: { lastChecked: string | null; entries: ModelUpdateState[] }; }
 
+function buildNumber(tag: string | null): number | null {
+  const match = tag?.match(/^b(\d+)/);
+  return match ? Number(match[1]) : null;
+}
+
+// Whether this machine has an NVIDIA device, recorded by the last check
+// (the hardware probe is async; the index readers are not).
+const NVIDIA_KEY = "hardware.nvidia";
+function nvidiaAvailable(): boolean { return read(NVIDIA_KEY) === "true"; }
+
+/** The newest index entry this machine can run (highest build number,
+ * its requirements met), or null when the index has none or the build
+ * installed is the same or newer. */
 export function pendingEngineUpdate(name = "llama-server"): EngineIndexEntry | null {
-  const entry = readEngineIndex()?.engines.find((candidate) => candidate.name === name && candidate.platform === process.platform && candidate.arch === process.arch);
-  if (!entry) return null;
-  const installed = currentEngine(name);
-  return installed === entry.tag ? null : entry;
+  const entries = (readEngineIndex()?.engines ?? []).filter((candidate) => candidate.name === name && candidate.platform === process.platform && candidate.arch === process.arch && (!candidate.requires?.includes("nvidia") || nvidiaAvailable()));
+  const newest = entries.sort((a, b) => (buildNumber(b.tag) ?? 0) - (buildNumber(a.tag) ?? 0))[0];
+  if (!newest) return null;
+  const installed = buildNumber(currentEngine(name));
+  if (installed !== null && installed >= (buildNumber(newest.tag) ?? 0)) return null;
+  return newest;
 }
 
 export function updatesState(): UpdatesState {
@@ -104,6 +141,7 @@ export function updatesState(): UpdatesState {
  * `update.available` event only for something genuinely new. */
 export async function checkCatalog(fetcher: UpdateFetcher = fetch): Promise<UpdatesState> {
   if (!updatesEnabled()) return updatesState();
+  write(NVIDIA_KEY, String((await detectHardware()).cudaDevices.length > 0));
   const before = updatesState();
   await fetchIndex("modelIndex", MODEL_INDEX_URL, fetcher);
   await fetchIndex("engineIndex", ENGINE_INDEX_URL, fetcher);

@@ -1318,7 +1318,7 @@
                     "properties": {
                       "tag": {
                         "type": "string",
-                        "pattern": "^b[0-9A-Za-z-]+$"
+                        "pattern": "^b[0-9]+(-[0-9a-z-]+)?$"
                       },
                       "url": {
                         "type": "string",

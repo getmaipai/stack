@@ -214,7 +214,7 @@ function parseFitBytes(output: string): number | null {
 export async function dryRunFootprint(modelPath: string, contextLength: number): Promise<number | null> {
   try {
     const hardware = await detectHardware(); const pin = selectEngineBinary(hardware);
-    const fit = process.env.STACK_FIT_BINARY ?? (pin ? join(engineDir(pin.id), "llama-fit-params") : "");
+    const fit = process.env.STACK_FIT_BINARY ?? (pin ? join(engineDir(pin), "llama-fit-params") : "");
     if (!fit || !existsSync(fit)) return null;
     const processHandle = Bun.spawn([fit, "--model", modelPath, "--ctx-size", String(contextLength), "--fit", "on", "--fit-print", "on"], { stdout: "pipe", stderr: "pipe" });
     const output = `${await new Response(processHandle.stdout).text()}\n${processHandle.stderr ? await new Response(processHandle.stderr).text() : ""}`;
@@ -257,7 +257,7 @@ function engineInstalled(): boolean {
   if (current.state === "ready") return true;
   if (current.state === "unready") return false;
   const pin = installedEnginePin();
-  return !!pin && existsSync(join(engineDir(pin.id), ENGINE_READY_MARKER));
+  return !!pin && existsSync(join(engineDir(pin), ENGINE_READY_MARKER));
 }
 
 // The binary to launch: the `current` link's build; the machine pin's own

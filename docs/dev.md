@@ -307,7 +307,10 @@ data/models/manifests/<id>.json
 ```
 
 Engine builds use a versioned layout whose `current` link is the
-selection and rollback pointer:
+selection and rollback pointer; the tag is the upstream build tag
+(`b10797`), the same one the Catalog's engine index names, so
+installed and available compare directly (a store from before the
+tags were upstream build tags is renamed once at start):
 
 ```text
 data/engines/<name>/<tag>/

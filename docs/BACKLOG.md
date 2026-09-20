@@ -219,19 +219,17 @@ are never copied. Nothing migrates Home until STACK-16.
   makes a run green; the updates route says unknown on a missing or
   invalid index. `tests/honesty.test.ts` covers each with a scripted
   stand-in. Landed on `main` with this line.
-- [ ] **STACK-97 (M, cross-repo): the Catalog engine index.** The
-  Catalog publishes a signed engine index beside `model-index.json`
-  (per platform: name, tag, url, sha256, size, notes), and the Stack's
-  updates route answers "available" for engines from it with the same
-  conditional GET and privacy row as models. Until then the engines half
-  reports installed and last checked with available unknown. Files
-  (catalog): the index generator and its release asset; files (stack):
-  `backend/src/updates/index.ts`, `backend/src/routes/updates.ts`,
-  `backend/src/routes/privacy.ts`. Mirror: `updates/models.ts`.
-  Acceptance: an offline test with a fixture index reports installed,
-  available and last checked; the privacy row names one receiver. Out
-  of scope: applying the update (STACK-96). Exit: `bash scripts/check.sh`
-  in both repos.
+- [x] **STACK-97 (M, cross-repo): the Catalog engine index.** Catalog:
+  `engines/index.json` (pins per platform), `tools/src/engine-index.ts`
+  (schema, duplicate-pin refusal, the signed envelope with a thirty-day
+  expiry) and its test. Stack: `updates/catalog.ts` reads the envelope
+  (or a bare body), keeps it as received, takes the newest build for
+  this platform as available against the `current` tag, treats an
+  expired index as unknown; pins carry `name` and `tag` (the upstream
+  build tag) so installed and available compare directly; the
+  components inventory names the index as the source beyond the shipped
+  pins. Signature verification waits on the Catalog's release key.
+  Landed on `main` with this line.
 
 ## Speech roles
 

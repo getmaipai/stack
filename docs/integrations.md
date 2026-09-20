@@ -240,11 +240,21 @@ with source, revision, checksum, licence and role declared, published
 as the signed index at
 `https://github.com/getmaipai/catalog/releases/latest/download/model-index.json`.
 The Stack reads it only through the opt-in update check and installs
-nothing without Home's explicit call. Engine pins are the Stack's own
-catalog per platform, in this repo, because an engine build is not
-something a community contributes and signs; an engine index published
-by the Catalog is a backlog item (cross-repo) so the updates route can
-answer "available" for engines too.
+nothing without Home's explicit call. Engine builds are not community
+packages, so the Catalog carries them as one hand-maintained index
+(`engines/index.json`: name, upstream build tag, platform, arch, url,
+sha256, size, licence, extra archives, notes), published at
+`https://github.com/getmaipai/catalog/releases/latest/download/engine-index.json`
+as a signed envelope in the package index's shape with a thirty-day
+expiry (STACK-97). The Stack reads it with the same conditional GET as
+the model index, keeps the document as received, takes the newest
+build for this platform as "available" against the `current` link's
+tag, and treats an expired index as unknown. The pins this build ships
+(`backend/src/lib/engineCatalog.ts`) are what installs at first run
+without the index; their tags are the same upstream build tags, so
+installed and available compare directly. Verifying the envelope's
+signature against the Catalog's release key waits on that key existing
+(the Catalog's release-signing item).
 
 ## MaiPai Go
 

@@ -62,13 +62,20 @@ export function failedSwap(reason: string): void {
   raise({ code: "failed-swap", severity: "critical", title: "An update could not start", text: reason, cause: reason, fix: { label: "Roll back", action: "rollback_update" } });
 }
 
-export type EngineUpdateRunner = (name: string, tag: string, target: { url: string; sha256: string; size: number }) => Promise<void>;
+export type EngineUpdateRunner = (name: string, tag: string, target: StagingTarget) => Promise<void>;
 /** A pin for a build named by url, checksum and tag: what the Catalog
  * index describes, or what Home stages beside the current build. */
-export function stagingPin(name: string, tag: string, target: { url: string; sha256: string; size: number }): EngineBinaryPin {
-  return { id: `${name}-${tag}`, platform: process.platform as "darwin" | "win32", arch: process.arch as "arm64" | "x64", requiresNvidia: false, label: `${name} ${tag}`, archive: { label: `${name} ${tag}`, url: target.url, sha256: target.sha256, approxBytes: target.size }, verified: true };
+export interface StagingTarget { url: string; sha256: string; size: number; requires?: string[]; extra?: Array<{ url: string; sha256: string; size: number; label?: string }> }
+export function stagingPin(name: string, tag: string, target: StagingTarget): EngineBinaryPin {
+  return {
+    id: `${name}-${tag}`, name, tag, platform: process.platform as "darwin" | "win32", arch: process.arch as "arm64" | "x64",
+    requiresNvidia: target.requires?.includes("nvidia") ?? false, label: `${name} ${tag}`,
+    archive: { label: `${name} ${tag}`, url: target.url, sha256: target.sha256, approxBytes: target.size },
+    ...(target.extra?.length ? { extraArchives: target.extra.map((archive) => ({ label: archive.label ?? `${name} ${tag} extra`, url: archive.url, sha256: archive.sha256, approxBytes: archive.size })) } : {}),
+    verified: true,
+  };
 }
-async function stageAndSwap(name: string, tag: string, target: { url: string; sha256: string; size: number }): Promise<void> {
+async function stageAndSwap(name: string, tag: string, target: StagingTarget): Promise<void> {
   await ensureEngine(stagingPin(name, tag, target), undefined, { activate: false });
   await swapEngine(name, tag, { drain: () => stopRole("chat", "Draining for an engine update."), postLoadCheck: async () => { await restartRole("chat"); await getProcess("chat"); return true; }, emitEvents: false });
 }
@@ -78,6 +85,6 @@ export function resetEngineUpdateRunnerForTests(): void { engineUpdateRunner = s
 export async function applyAvailableEngineUpdate(): Promise<{ tag: string; previous: string | null } | null> {
   const target = pendingEngineUpdate("llama-server"); if (!target) return null;
   const previous = currentEngine("llama-server");
-  await engineUpdateRunner("llama-server", target.tag, { url: target.url, sha256: target.sha256, size: target.size });
+  await engineUpdateRunner("llama-server", target.tag, { url: target.url, sha256: target.sha256, size: target.size, requires: target.requires, extra: target.extra });
   return { tag: target.tag, previous };
 }

@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "bun";
-import { ENGINE_READY_MARKER, type EngineBinaryPin } from "@/lib/engineCatalog";
+import { engineNameTag, ENGINE_READY_MARKER, type EngineBinaryPin } from "@/lib/engineCatalog";
 import { engineBinaryPath, engineDir, ensureEngine } from "@/lib/engineInstall";
 
 const testDirs: string[] = [];
@@ -24,7 +24,8 @@ async function makeArchive(): Promise<{ bytes: Buffer; size: number; sha256: str
 }
 
 function pin(id: string, url: string, size: number, sha256: string): EngineBinaryPin {
-  return { id, platform: "darwin", arch: "arm64", requiresNvidia: false, label: id, archive: { label: "test archive", url, sha256, approxBytes: size }, verified: false };
+  const { name, tag } = engineNameTag(id);
+  return { id, name, tag, platform: "darwin", arch: "arm64", requiresNvidia: false, label: id, archive: { label: "test archive", url, sha256, approxBytes: size }, verified: false };
 }
 
 test("ensureEngine verifies, extracts, marks ready, and skips a ready install", async () => {
@@ -38,7 +39,7 @@ test("ensureEngine verifies, extracts, marks ready, and skips a ready install", 
     const target = pin("test-engine", `${server.url}`, archive.size, archive.sha256);
     await ensureEngine(target);
     expect(existsSync(engineBinaryPath(target))).toBe(true);
-    expect(existsSync(join(engineDir(target.id), ENGINE_READY_MARKER))).toBe(true);
+    expect(existsSync(join(engineDir(target), ENGINE_READY_MARKER))).toBe(true);
     const firstRequests = requests;
     await ensureEngine(target);
     expect(requests).toBe(firstRequests);
@@ -56,7 +57,7 @@ test("a wrong checksum rejects and leaves no ready marker", async () => {
   try {
     const target = pin("wrong-engine", `${server.url}`, archive.size, "0".repeat(64));
     await expect(ensureEngine(target)).rejects.toThrow(/sha256/);
-    expect(existsSync(join(engineDir(target.id), ENGINE_READY_MARKER))).toBe(false);
+    expect(existsSync(join(engineDir(target), ENGINE_READY_MARKER))).toBe(false);
   } finally {
     server.stop(true);
   }
@@ -84,4 +85,29 @@ test("the binary that runs is the one the current link names, and only once that
   } finally {
     rmSync(engineTagRoot(name, "b1").replace(/\/b1$/, ""), { recursive: true, force: true });
   }
+});
+
+test("a store from before the tags were upstream build tags is renamed once and its current link follows", async () => {
+  const { mkdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync, existsSync: exists } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { migrateLegacyEngineTags } = await import("@/lib/engineInstall");
+  const { ENGINE_BINARIES } = await import("@/lib/engineCatalog");
+  const { engineCurrentPath, engineTagRoot } = await import("@/lib/store/layout");
+  const { readEngineManifest, writeEngineManifest } = await import("@/lib/store/manifests");
+  const pin = ENGINE_BINARIES.find((candidate) => candidate.platform === process.platform)!;
+  const legacyTag = pin.id.slice(pin.name.length + 1);
+  const root = engineTagRoot(pin.name, pin.tag).replace(new RegExp(`/${pin.tag}$`), "");
+  try {
+    rmSync(root, { recursive: true, force: true });
+    mkdirSync(engineTagRoot(pin.name, legacyTag), { recursive: true });
+    writeFileSync(join(engineTagRoot(pin.name, legacyTag), ".engine-ready"), "now");
+    writeEngineManifest({ kind: "engine", name: pin.name, tag: legacyTag, assetUrl: pin.archive.url, sizeBytes: 1, sha256: pin.archive.sha256, extractedAt: new Date().toISOString(), blobs: [] });
+    symlinkSync(legacyTag, engineCurrentPath(pin.name));
+    expect(migrateLegacyEngineTags()).toEqual([{ name: pin.name, from: legacyTag, to: pin.tag }]);
+    expect(exists(join(engineTagRoot(pin.name, pin.tag), ".engine-ready"))).toBe(true);
+    expect(exists(engineTagRoot(pin.name, legacyTag))).toBe(false);
+    expect(readlinkSync(engineCurrentPath(pin.name))).toBe(pin.tag);
+    expect(readEngineManifest(pin.name, pin.tag)?.tag).toBe(pin.tag);
+    expect(migrateLegacyEngineTags()).toEqual([]);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

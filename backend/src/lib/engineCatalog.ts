@@ -11,6 +11,11 @@ export interface EngineArchive {
 
 export interface EngineBinaryPin {
   id: string;
+  /** The engine name and the upstream build tag: the store's directory
+   * is `engines/<name>/<tag>`, and the Catalog's engine index names the
+   * same tag, so installed and available compare directly. */
+  name: string;
+  tag: string;
   platform: "darwin" | "win32";
   arch: "arm64" | "x64";
   requiresNvidia: boolean;
@@ -24,6 +29,8 @@ export interface EngineBinaryPin {
 export const ENGINE_BINARIES: EngineBinaryPin[] = [
   {
     id: "llama-server-b10797-macos-arm64",
+    name: "llama-server",
+    tag: "b10797",
     platform: "darwin",
     arch: "arm64",
     requiresNvidia: false,
@@ -39,6 +46,8 @@ export const ENGINE_BINARIES: EngineBinaryPin[] = [
   },
   {
     id: "llama-server-b10797-win-cuda-x64",
+    name: "llama-server",
+    tag: "b10797",
     platform: "win32",
     arch: "x64",
     requiresNvidia: true,
@@ -61,6 +70,16 @@ export const ENGINE_BINARIES: EngineBinaryPin[] = [
 ];
 
 export const ENGINE_READY_MARKER = ".engine-ready";
+
+/** One definition of how a pin id names its engine and tag: a shipped
+ * pin says so itself; a staged pin (`<name>-<tag>`, the tag starting
+ * with the upstream build number) is split at its first `-b<digits>`. */
+export function engineNameTag(id: string): { name: string; tag: string } {
+  const pin = ENGINE_BINARIES.find((candidate) => candidate.id === id);
+  if (pin) return { name: pin.name, tag: pin.tag };
+  const match = id.match(/^(.*?)-(b\d+.*)$/);
+  return match ? { name: match[1]!, tag: match[2]! } : { name: id, tag: "legacy" };
+}
 export const DETECTED_ENGINE_VERSION_FLOORS: Record<string, string> = { ollama: "0.5.0", "lm-studio": "0.3.0", comfyui: "0.3.0", "mlx-serve": "0.1.0", omlx: "0.1.0", "llama-server": "b10797" };
 
 export function selectEngineBinary(hw: HardwareInfo): EngineBinaryPin | null {

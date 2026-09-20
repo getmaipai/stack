@@ -37,15 +37,31 @@ test("installed, available, last checked: a newer model revision in the index is
   expect(eventsAfter(0).filter((event) => event.id === "update.available")).toHaveLength(1);
 });
 
-test("an engine index names the available build against the current link", async () => {
+test("the Catalog's signed engine index names the newest build for this machine against the current link; the same build installed means nothing available; an expired index says unknown", async () => {
   updateSettings({ "stack.updates.enabled": true });
   mkdirSync(engineTagRoot("llama-server", "b1"), { recursive: true });
   writeFileSync(join(engineTagRoot("llama-server", "b1"), ".engine-ready"), "now");
   await swapEngine("llama-server", "b1");
-  const index = { version: "1", engines: [{ name: "llama-server", tag: "b2", platform: process.platform, arch: process.arch, url: "https://github.com/ggml-org/llama.cpp/releases/download/b2/x.tar.gz", sha256: "c".repeat(64), size: 5, notes: "faster" }] };
-  const state = await checkCatalog(async (input) => String(input) === ENGINE_INDEX_URL ? respond(index) : respond({ version: "1", models: [] }));
-  expect(state.engines[0]).toMatchObject({ installed: "b1", available: "b2", availableKnown: true, notes: "faster" });
+  const entry = (tag: string, notes: string) => ({ name: "llama-server", tag, platform: process.platform, arch: process.arch, url: `https://github.com/ggml-org/llama.cpp/releases/download/${tag}/x.tar.gz`, sha256: "c".repeat(64), size: 5, licence: "MIT", notes });
+  const envelope = (engines: unknown[], expires = new Date(Date.now() + 86_400_000).toISOString()) => ({ signed: { type: "engine-index", version: "2026-09-20", expires, published: 1, engines }, signatures: [{ keyid: "k", sig: "s" }] });
+  const state = await checkCatalog(async (input) => String(input) === ENGINE_INDEX_URL ? respond(envelope([entry("b2", "faster"), entry("b3", "fastest"), entry("b1", "installed")])) : respond({ version: "1", models: [] }));
+  expect(state.engines[0]).toMatchObject({ installed: "b1", available: "b3", availableKnown: true, notes: "fastest" });
   expect(engineCurrentPath("llama-server")).toContain("current");
+  __resetUpdatesForTests();
+  const same = await checkCatalog(async (input) => String(input) === ENGINE_INDEX_URL ? respond(envelope([entry("b1", "installed")])) : respond({ version: "1", models: [] }));
+  expect(same.engines[0]).toMatchObject({ installed: "b1", available: null, availableKnown: true });
+  __resetUpdatesForTests();
+  const expired = await checkCatalog(async (input) => String(input) === ENGINE_INDEX_URL ? respond(envelope([entry("b3", "x")], new Date(Date.now() - 1000).toISOString())) : respond({ version: "1", models: [] }));
+  expect(expired.engines[0]).toMatchObject({ available: null, availableKnown: false });
+  __resetUpdatesForTests();
+  // A build this machine cannot run (NVIDIA required, none here) is never offered; a runnable one carries its extras into staging.
+  const cuda = { ...entry("b4", "cuda"), requires: ["nvidia"], extra: [{ url: "https://github.com/x/cudart.zip", sha256: "d".repeat(64), size: 3, label: "cudart" }] };
+  const { stagingPin } = await import("@/updates/engines");
+  const offered = await checkCatalog(async (input) => String(input) === ENGINE_INDEX_URL ? respond(envelope([cuda, entry("b2", "plain")])) : respond({ version: "1", models: [] }));
+  expect(offered.engines[0]!.available).toBe(process.platform === "win32" ? "b2" : "b2");
+  const staged = stagingPin("llama-server", cuda.tag, cuda);
+  expect(staged.requiresNvidia).toBe(true);
+  expect(staged.extraArchives).toEqual([{ label: "cudart", url: "https://github.com/x/cudart.zip", sha256: "d".repeat(64), approxBytes: 3 }]);
 });
 
 test("the request is a conditional GET with the Stack user agent and no identifier", async () => {

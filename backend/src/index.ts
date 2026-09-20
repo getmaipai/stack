@@ -7,6 +7,7 @@ import { logger } from "@/lib/log";
 import { installLaunchdService, launchdStatus, startLaunchdService, stopLaunchdService, uninstallLaunchdService } from "@/service/launchd";
 import { applyPendingSettings, settingValues } from "@/settings";
 import { stopAllRoles, unloadIdleRoles } from "@/lib/supervisor";
+import { migrateLegacyEngineTags } from "@/lib/engineInstall";
 import { execFileSync } from "node:child_process";
 
 export function serveOptions(): { port: number; hostname: "127.0.0.1"; fetch: (request: Request) => Response | Promise<Response>; idleTimeout: number } {
@@ -21,6 +22,7 @@ function onBattery(): boolean {
 
 async function serve(): Promise<void> {
   logger.installConsoleMirror();
+  for (const moved of migrateLegacyEngineTags()) console.log(`Renamed engine ${moved.name} ${moved.from} to ${moved.to}.`);
   applyPendingSettings();
   const options = serveOptions();
   const server = Bun.serve(options);

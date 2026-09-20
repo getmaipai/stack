@@ -6,7 +6,7 @@ const scripted: ComponentsCatalog = {
   roles: ["chat", "judge", "tts", "image"],
   labels: { chat: "Chat", judge: "Judge", tts: "Voice out", image: "Images" },
   shares: { judge: "chat" },
-  engines: [{ id: "llama-server-b10797-macos-arm64", platform: "darwin", arch: "arm64", requiresNvidia: false, label: "llama-server", archive: { label: "x", url: "https://github.com/x", sha256: "a".repeat(64), approxBytes: 1 }, verified: true }],
+  engines: [{ id: "llama-server-b10797-macos-arm64", name: "llama-server", tag: "b10797", platform: "darwin", arch: "arm64", requiresNvidia: false, label: "llama-server", archive: { label: "x", url: "https://github.com/x", sha256: "a".repeat(64), approxBytes: 1 }, verified: true }],
   profiles: PROFILE_TIERS,
   // Declared biggest-first on purpose: the row must pick by profile and
   // size, never by array order.
