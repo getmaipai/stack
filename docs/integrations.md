@@ -202,7 +202,9 @@ binary for the platform; it creates the Stack's data directory
 (`STACK_DATA_DIR`, owner-only) beside Home's own; it runs
 `maipai-stack install-service` (launchd `com.maipai.stack` on macOS,
 `systemd --user` on Linux) with `STACK_DATA_DIR` and `PORT` set, which
-writes the unit file and starts the service; it waits for `/healthz`
+writes the unit file (a LaunchAgent plist, or a `systemd --user` unit
+of `Type=notify` the daemon answers with `READY=1` and the watchdog
+beat) and starts the service; it waits for `/healthz`
 to answer with the version it shipped; and it runs the first readiness
 check (`POST /stack/v1/check`) after the first engine and model are
 installed, so the Engines page opens with a real result rather than a

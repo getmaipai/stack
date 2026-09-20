@@ -154,11 +154,18 @@ Home (the only caller)
 serving the API on one loopback port (default 8770, configurable
 through the settings declaration). Loopback is the only authentication:
 `Bun.serve` binds `127.0.0.1` and nothing else; there is no LAN
-setting. It runs under launchd on macOS (`com.maipai.stack`) and under
-`systemd --user` on Linux, both with restart-on-failure, exit codes that
-mean what they say, and logs under the data directory. Home's installer
-installs the Stack and its service unit; Home's watchdog sits above it
-(org `SERVICES.md`).
+setting. It runs under launchd on macOS (`com.maipai.stack`:
+`RunAtLoad`, `KeepAlive { SuccessfulExit: false }`, `ThrottleInterval
+30`) and under `systemd --user` on Linux (`maipai-stack.service`:
+`Type=notify`, `Restart=on-failure`, `WatchdogSec=30`,
+`StartLimitBurst=5` in 300 s, the daemon sending `READY=1`,
+`WATCHDOG=1` at half the announced interval and `STOPPING=1` to
+`$NOTIFY_SOCKET` itself over an `AF_UNIX` datagram through `bun:ffi`,
+no libsystemd), both with exit codes that mean what they say and logs
+under the data directory; `maipai-stack install-service`, `start`,
+`stop`, `status` and `uninstall-service` pick the manager by platform.
+Home's installer installs the Stack and its service unit; Home's
+watchdog sits above it (org `SERVICES.md`).
 
 The backend imports `@maipai/core` from `getmaipai/shared` (pinned
 `core-v0.1.0`, a `file:` dependency on the sibling checkout, the gate

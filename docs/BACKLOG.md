@@ -253,14 +253,16 @@ are never copied. Nothing migrates Home until STACK-16.
 - [x] **STACK-15: launchd.** `install-service`, `start`, `stop`,
   `status`, `uninstall-service --remove-data`, restart on failure, logs
   under the data directory. Kept.
-- [ ] **STACK-95 (S): the systemd user unit.** `systemd --user` install
-  and control with the same commands, `Restart=on-failure`, the same
-  environment and log paths, chosen by platform in `index.ts`. Files:
-  `backend/src/service/systemd.ts`, `backend/src/index.ts`,
-  `backend/tests/service.test.ts`. Mirror: `service/launchd.ts` and
-  org `SERVICES.md`. Acceptance: the rendered unit matches the standard
-  and a scripted `systemctl` sees install, start, stop and uninstall.
-  Out of scope: a system (non-user) unit. Exit: `bash scripts/check.sh`.
+- [x] **STACK-95 (S): the systemd user unit.**
+  `backend/src/service/systemd.ts` (the `Type=notify` unit with
+  `Restart=on-failure`, `WatchdogSec=30`, `StartLimitBurst=5`, logs
+  under the data directory; install, start, stop, status, uninstall
+  through `systemctl --user`), `service/notify.ts` (`READY=1`,
+  `WATCHDOG=1`, `STOPPING=1` to `$NOTIFY_SOCKET` over an `AF_UNIX`
+  datagram through `bun:ffi`, a no-op elsewhere), `index.ts` picking
+  the manager by platform; `tests/systemd.test.ts` with a scripted
+  `systemctl` and a scripted sender. Linux itself is exercised at
+  STACK-17 on the robot. Landed on `main` with this line.
 - [ ] **STACK-17 (L): the Linux ARM profile.** The robot's `chat`,
   `embed` and `judge` on pinned `llama-server`, the body's speech
   process as a `managed` engine holding `stt` and `tts`, the body's

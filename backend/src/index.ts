@@ -5,6 +5,8 @@
 import { app } from "@/app";
 import { logger } from "@/lib/log";
 import { installLaunchdService, launchdStatus, startLaunchdService, stopLaunchdService, uninstallLaunchdService } from "@/service/launchd";
+import { installSystemdService, startSystemdService, stopSystemdService, systemdStatus, uninstallSystemdService } from "@/service/systemd";
+import { notifySystemd, startSystemdWatchdog } from "@/service/notify";
 import { applyPendingSettings, settingValues } from "@/settings";
 import { stopAllRoles, unloadIdleRoles } from "@/lib/supervisor";
 import { migrateLegacyEngineTags } from "@/lib/engineInstall";
@@ -26,6 +28,10 @@ async function serve(): Promise<void> {
   applyPendingSettings();
   const options = serveOptions();
   const server = Bun.serve(options);
+  // Under systemd (Type=notify) the unit is "started" only now, and the
+  // watchdog is answered from here on; elsewhere both are no-ops.
+  notifySystemd("READY=1");
+  const stopWatchdog = startSystemdWatchdog();
   const idle = setInterval(() => {
     const values = settingValues();
     void unloadIdleRoles({ onBattery: onBattery(), idleMinutes: Number(values["stack.runtime.idle_unload_minutes"] ?? 30), batteryIdleMinutes: Number(values["stack.runtime.idle_unload_on_battery_minutes"] ?? 10) }).catch(() => {});
@@ -35,8 +41,12 @@ async function serve(): Promise<void> {
   const stop = async (exitCode: number): Promise<void> => {
     if (stopping) return;
     stopping = true;
+    notifySystemd("STOPPING=1");
     clearInterval(idle);
+    // The watchdog keeps beating through the drain: a stop that takes
+    // longer than WatchdogSec must not be mistaken for a hang.
     await stopAllRoles("The Stack is stopping.");
+    stopWatchdog();
     server.stop(true);
     process.exitCode = exitCode;
   };
@@ -50,12 +60,18 @@ async function serve(): Promise<void> {
   });
 }
 
+// The service manager for this platform: launchd on macOS, systemd
+// --user on Linux (the robot). Same commands, same data layout.
+const service = process.platform === "linux"
+  ? { install: installSystemdService, uninstall: uninstallSystemdService, start: startSystemdService, stop: stopSystemdService, status: systemdStatus }
+  : { install: installLaunchdService, uninstall: uninstallLaunchdService, start: startLaunchdService, stop: stopLaunchdService, status: launchdStatus };
+
 async function main(): Promise<void> {
   const command = process.argv[2] ?? "serve";
   if (command === "serve") return serve();
-  if (command === "install-service") { console.log(`Installed ${installLaunchdService(process.env.STACK_SERVICE_PROGRAM ?? process.execPath)}`); return; }
+  if (command === "install-service") { console.log(`Installed ${service.install(process.env.STACK_SERVICE_PROGRAM ?? process.execPath)}`); return; }
   if (command === "uninstall-service") {
-    uninstallLaunchdService();
+    service.uninstall();
     if (process.argv.includes("--remove-data")) {
       const { rmSync } = await import("node:fs"); const { resolve } = await import("node:path");
       const data = process.env.STACK_DATA_DIR ? resolve(process.env.STACK_DATA_DIR) : "";
@@ -64,9 +80,9 @@ async function main(): Promise<void> {
     } else console.log("Service removed. Data was kept.");
     return;
   }
-  if (command === "start") { startLaunchdService(); console.log("Service started."); return; }
-  if (command === "stop") { stopLaunchdService(); console.log("Service stopped."); return; }
-  if (command === "status") { console.log(launchdStatus()); return; }
+  if (command === "start") { service.start(); console.log("Service started."); return; }
+  if (command === "stop") { service.stop(); console.log("Service stopped."); return; }
+  if (command === "status") { console.log(service.status()); return; }
   throw new Error(`Unknown command: ${command}`);
 }
 
