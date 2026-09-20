@@ -12,7 +12,7 @@ const ChevronsRight = getIcon("ChevronsRight");
 function RailToggle(): React.ReactElement {
   const { state, toggleSidebar } = useSidebar();
   const expanded = state === "expanded";
-  return <button type="button" onClick={toggleSidebar} aria-expanded={expanded} aria-label={expanded ? "Collapse navigation" : "Expand navigation"} className="flex size-11 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
+  return <button type="button" onClick={toggleSidebar} aria-expanded={expanded} aria-label={expanded ? "Collapse navigation" : "Expand navigation"} className="flex size-9 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
     {expanded ? <ChevronsLeft className="size-5" /> : <ChevronsRight className="size-5" />}
   </button>;
 }
@@ -34,11 +34,11 @@ export function AppSidebar({ engineCount = 0, updateCount = 0, alertSeverity = n
       tooltip: tooltips[destination.id],
     })),
   }));
-  return <Sidebar collapsible="icon" className="bg-[var(--surface-sidebar)] p-3 pb-4" {...props}>
+  return <Sidebar collapsible="icon" className="bg-[var(--surface-sidebar)] p-2 pb-3" {...props}>
     <SidebarHeader className="p-0">
       <SidebarMenu><SidebarMenuItem>
         <div className="flex items-center justify-between gap-2 px-1.5 py-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-2">
-          <SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:p-1.5! flex-1 group-data-[collapsible=icon]:flex-none"><Link to="/"><img className="size-7" src="/brand/maipai-stack-icon-light.png" alt="" /><div className="flex min-w-0 flex-col group-data-[collapsible=icon]:hidden"><span className="truncate text-base font-semibold">MaiPai Stack</span><span className="truncate text-xs text-sidebar-foreground/60">Your AI. On Your Terms.</span></div></Link></SidebarMenuButton>
+          <SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:p-1! flex-1 gap-1 group-data-[collapsible=icon]:flex-none"><Link to="/"><img className="size-6" src="/brand/maipai-stack-icon-light.png" alt="" /><div className="flex min-w-0 flex-col group-data-[collapsible=icon]:hidden"><span className="truncate text-base font-semibold">MaiPai Stack</span><span className="truncate text-xs text-sidebar-foreground/60">Your AI. On Your Terms.</span></div></Link></SidebarMenuButton>
           <RailToggle />
         </div>
       </SidebarMenuItem></SidebarMenu>

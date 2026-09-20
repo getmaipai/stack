@@ -55,8 +55,11 @@ function DestinationHeader() {
     <div className="flex min-w-0 items-center gap-2">
       <Icon className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
       <div className="min-w-0">
-        <h1 className="truncate text-lg font-semibold sm:text-xl">{destination.label}</h1>
-        <p className="hidden truncate text-xs text-muted-foreground sm:block">{destination.subtitle}</p>
+        {/* text-title/text-supporting are the shell's own scale (tokens.css); Tailwind
+            doesn't turn --font-size-* custom properties into utility classes, so they're
+            applied directly rather than duplicating the px/weight values here. */}
+        <h1 className="truncate" style={{ fontSize: "var(--font-size-title)", fontWeight: "var(--font-weight-title)" }}>{destination.label}</h1>
+        <p className="hidden truncate text-muted-foreground sm:block" style={{ fontSize: "var(--font-size-supporting)", fontWeight: "var(--font-weight-supporting)" }}>{destination.subtitle}</p>
       </div>
     </div>
   );
@@ -141,7 +144,7 @@ function GlobalSearch() {
   return (
     <Popover open={open}>
       <PopoverAnchor asChild>
-        <div className="relative w-full max-w-md">
+        <div className="relative w-full">
           <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             ref={inputRef}
@@ -160,7 +163,7 @@ function GlobalSearch() {
         ref={contentRef}
         align="start"
         sideOffset={6}
-        className="w-(--radix-popover-trigger-width) max-w-md p-1"
+        className="w-(--radix-popover-trigger-width) p-1"
         onOpenAutoFocus={(event) => event.preventDefault()}
         onCloseAutoFocus={(event) => event.preventDefault()}
       >
@@ -219,12 +222,18 @@ function AppearanceControl() {
 export function SiteHeader() {
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center border-b bg-[var(--surface-sidebar)] px-3 sm:px-4 lg:px-6">
-      <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-3">
+      <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-3 lg:grid-cols-[1fr_minmax(420px,640px)_1fr]">
         <div className="flex min-w-0 items-center gap-2">
-          <SidebarTrigger className="-ml-1 shrink-0" />
+          {/* The rail's own double-chevron (app-sidebar.tsx's RailToggle) is the
+              one desktop toggle the reference shows; it lives inside the rail
+              itself though, which is off-canvas and undiscoverable below the
+              720px mobile breakpoint, so this stays as the only way to open
+              the mobile drawer there instead of duplicating a visible toggle
+              on desktop. */}
+          <SidebarTrigger className="-ml-1 shrink-0 md:hidden" />
           <DestinationHeader />
         </div>
-        <div className="hidden justify-self-center sm:block">
+        <div className="hidden justify-self-center sm:block sm:w-full">
           <GlobalSearch />
         </div>
         <div className="flex items-center justify-self-end gap-1">

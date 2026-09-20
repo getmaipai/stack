@@ -63,7 +63,11 @@ export function MachineSelector() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72">
         <DropdownMenuLabel>Current stack</DropdownMenuLabel>
-        <DropdownMenuItem disabled className="flex items-start gap-2 opacity-100 data-[disabled]:opacity-100">
+        {/* The violet-blue wash reads as "this is the one you're on"
+            without the bright solid fill nav-main.tsx uses for an active
+            row: machine-stack-selector.png shows the current stack as a
+            highlighted row, not a filled one. */}
+        <DropdownMenuItem disabled className="flex items-start gap-2 rounded-sm bg-[var(--primary)]/15 opacity-100 data-[disabled]:opacity-100">
           <MonitorIcon className="mt-0.5 size-4 shrink-0" />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium text-foreground">{name}</span>
