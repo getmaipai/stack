@@ -204,9 +204,13 @@ by the specification; their tick lines stay as history.
    install, run and watch exactly three runtimes as first-class
    components: llama.cpp (already the Stack's own engine), Ollama (a
    new engine kind in the catalog, with the detected-install path
-   already in `detect.ts` as its adoption route) and ComfyUI (the
-   managed ComfyUI and its jobs, STACK-13). Each gets its own design
-   pass and item before code. Everything else the taxonomy names
+   already in `detect.ts` as its adoption route), ComfyUI (the
+   managed ComfyUI and its jobs, STACK-13) and, added 2026-09-20
+   01:50, oMLX (the MLX server for Apple silicon, an engine kind
+   beside the existing mlx-serve plan in STACK-14). Each gets its own
+   design pass and item before code. With them comes a runtime bench
+   (BENCH-01): the same model run on llama.cpp, Ollama and oMLX with
+   the numbers side by side, so the owner can see the difference. Everything else the taxonomy names
    (vLLM, Diffusers, n8n, Langflow, adapters, training) stays as
    decision 1 says: a truthful empty state, or "point the Stack at a
    server you run", until a later call.
