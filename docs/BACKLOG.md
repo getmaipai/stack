@@ -153,16 +153,17 @@ are never copied. Nothing migrates Home until STACK-16.
   the decision ledger. Kept unchanged in RF-04.
 - [x] **STACK-06b: the kernel's ledger.** `bun:ffi` against libSystem
   on macOS, `/proc` on Linux, a scripted reader for tests. Kept.
-- [ ] **STACK-74 (M): Studio bench protocol and rollback rehearsal.**
-  Fix the model files, context, engine builds, request mix, pressure
-  samples and pass thresholds before STACK-14 runs; one reproducible
-  command under `scripts/bench/` logs model digest, build, sanitized
-  hardware, footprint, first token, throughput and pressure; plus a
-  recorded engine rollback rehearsal. Files: `docs/dev.md`,
-  `scripts/bench/`. Mirror: `llama-bench` as the 2026-09-18 walk ran it
-  (2,218 prompt tok/s, 115 gen tok/s on the pinned model). Out of
-  scope: Home migration, a model winner before measurement. Exit:
-  `bash scripts/check.sh` and the bench command in its report.
+- [x] **STACK-74 (M): Studio bench protocol and rollback rehearsal.**
+  The protocol in `plans/studio-bench-protocol-2026-09-20.md` (models
+  by digest, contexts, builds, the request mix, the pressure samples,
+  the thresholds, the rehearsal); `scripts/bench/studio-bench.sh` as
+  its one command (install through the routes, every row judged,
+  `report.md` and `report.json`, `DRY_RUN=1` for the plan); rehearsed
+  on the p16 laptop with the shipped pin (2,221 prompt tok/s, 114.8 gen
+  tok/s, 414 MB footprint, first token 15 ms median, the rollback
+  rehearsal passed, and a second run judged against that baseline). The
+  Studio run is STACK-14.
+  Landed on `main` with this line.
 - [ ] **STACK-14 (L): the Studio bench.** `chat`, `embed`, `judge`,
   `stt`, `tts` resident together on the Studio, one generator on demand,
   measured with the residency profiles in Home's
@@ -192,16 +193,14 @@ are never copied. Nothing migrates Home until STACK-16.
   is the driver; the transcript and the analysis are in `dev.md`, "Pin
   and rollback, proven live". Rerun `bash scripts/prove-pin-rollback.sh`
   when 1.5 GB more is free or on the Studio: STACK-96b.
-- [ ] **STACK-96b (S): the live pass of the pin and rollback proof.**
-  Rerun `bash scripts/prove-pin-rollback.sh` on a machine with at least
-  1.5 GB more free than this laptop had (or on the Studio) and record
-  run 3 in `dev.md` beside runs 1 and 2: steps 4 to 8 must show chat
-  HTTP 200 after the swap and after the rollback, the broken swap
-  refused with `current` relinked and `failed-swap` raised, the health
-  fix restoring chat, and delete-current refused. Files: `docs/dev.md`.
-  Mirror: run 1's table. Out of scope: any code change; if the script
-  finds one, it is its own item. Exit: `bash scripts/check.sh --docs`
-  and the run-3 table in `dev.md`.
+- [x] **STACK-96b (S): the live pass of the pin and rollback proof.**
+  Run 3 on 2026-09-20, the same laptop with memory free at the
+  daemon's start, as the Studio bench's rehearsal step: swap ok with
+  chat HTTP 200 from the staged build, rollback ok, the broken swap
+  refused with `current` relinked and `failed-swap` raised with its
+  fix, the fix restoring the link, the wrong checksum refused, delete
+  current refused. The table is in `dev.md`, "Pin and rollback, proven
+  live". Landed on `main` with this line.
 
 ## Health, readiness and updates
 

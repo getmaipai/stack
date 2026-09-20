@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readlinkSync, symlinkSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, symlinkSync, unlinkSync } from "node:fs";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { meta } from "@/db/schema";
@@ -9,7 +9,7 @@ import { engineCurrentPath, engineTagRoot } from "@/lib/store/layout";
 import { raise } from "@/lib/health";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
 import { emit } from "@/lib/events";
-import { ensureEngine } from "@/lib/engineInstall";
+import { currentEngineTag, ensureEngine } from "@/lib/engineInstall";
 import type { EngineBinaryPin } from "@/lib/engineCatalog";
 import { getProcess, restartRole, stopRole } from "@/lib/supervisor";
 import { pendingEngineUpdate } from "@/updates/catalog";
@@ -27,7 +27,7 @@ export async function swapEngine(name: string, tag: string, options: EngineSwapO
   // ready marker means the build finished installing and verified.
   if (!existsSync(join(target, ENGINE_READY_MARKER))) throw new Error(`Engine tag is not installed: ${tag}`);
   const current = engineCurrentPath(name);
-  const previous = (() => { try { return readlinkSync(current); } catch { return null; } })();
+  const previous = currentEngineTag(name);
   if (previous && previous !== tag) rememberPrevious(name, previous);
   try {
     await options.drain?.();
@@ -47,7 +47,8 @@ export async function swapEngine(name: string, tag: string, options: EngineSwapO
   }
 }
 export async function rollbackEngine(name: string, tag: string): Promise<void> { await swapEngine(name, tag); }
-export function currentEngine(name: string): string | null { try { return readlinkSync(engineCurrentPath(name)); } catch { return null; } }
+/** The tag the `current` link names; one read, defined with the store. */
+export const currentEngine = currentEngineTag;
 
 // The tag `current` pointed at before the last swap: what "go back"
 // returns to, kept in meta so a failed swap's fix can find it.

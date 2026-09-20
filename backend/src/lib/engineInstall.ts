@@ -32,6 +32,11 @@ export function currentEngineBinary(name: string, tool = name): { state: "none" 
   return { state: "ready", path: join(target, process.platform === "win32" ? `${tool}.exe` : tool) };
 }
 
+/** The tag the `current` link names, or null before any link exists. */
+export function currentEngineTag(name: string): string | null {
+  try { return readlinkSync(engineCurrentPath(name)); } catch { return null; }
+}
+
 export function currentEngineBinaryPath(name: string, tool = name): string | null {
   const current = currentEngineBinary(name, tool);
   return current.state === "ready" ? current.path : null;

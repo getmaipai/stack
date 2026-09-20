@@ -16,10 +16,10 @@ Engines per platform:
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| p16 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
-| p32 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
-| p64 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
-| p128 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
+| p16 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | 0.39 GB (Apple M4 Pro, 24 GB unified memory) | 4096 | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
+| p32 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | 0.39 GB (Apple M4 Pro, 24 GB unified memory) | 4096 | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
+| p64 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | 0.39 GB (Apple M4 Pro, 24 GB unified memory) | 4096 | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
+| p128 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | 0.39 GB (Apple M4 Pro, 24 GB unified memory) | 4096 | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
 
 ## coding (Coding)
 
@@ -36,10 +36,10 @@ Engines per platform:
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| p16 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
-| p32 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
-| p64 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
-| p128 | on demand | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
+| p16 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | 0.39 GB (Apple M4 Pro, 24 GB unified memory) | 4096 | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
+| p32 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | 0.39 GB (Apple M4 Pro, 24 GB unified memory) | 4096 | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
+| p64 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | 0.39 GB (Apple M4 Pro, 24 GB unified memory) | 4096 | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
+| p128 | on demand | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | 0.39 GB (Apple M4 Pro, 24 GB unified memory) | 4096 | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
 
 ## judge (Judge)
 
@@ -56,10 +56,10 @@ Engines per platform:
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| p16 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
-| p32 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
-| p64 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
-| p128 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
+| p16 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | 0.39 GB (Apple M4 Pro, 24 GB unified memory) | 4096 | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
+| p32 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | 0.39 GB (Apple M4 Pro, 24 GB unified memory) | 4096 | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
+| p64 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | 0.39 GB (Apple M4 Pro, 24 GB unified memory) | 4096 | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
+| p128 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | 0.39 GB (Apple M4 Pro, 24 GB unified memory) | 4096 | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
 
 ## router (Router)
 
@@ -76,10 +76,10 @@ Engines per platform:
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| p16 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
-| p32 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
-| p64 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
-| p128 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
+| p16 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | 0.39 GB (Apple M4 Pro, 24 GB unified memory) | 4096 | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
+| p32 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | 0.39 GB (Apple M4 Pro, 24 GB unified memory) | 4096 | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
+| p64 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | 0.39 GB (Apple M4 Pro, 24 GB unified memory) | 4096 | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
+| p128 | resident | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | 0.39 GB (Apple M4 Pro, 24 GB unified memory) | 4096 | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
 
 ## embed (Embeddings)
 
@@ -130,7 +130,7 @@ Engines per platform:
 | p16 | not available |  |  |  |  |  |  |  | not available |
 | p32 | not available |  |  |  |  |  |  |  | not available |
 | p64 | not available |  |  |  |  |  |  |  | not available |
-| p128 | on demand | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
+| p128 | on demand | `qwen3-1.7b-q8-0` | Q8_0 | 1.71 GB | 0.39 GB (Apple M4 Pro, 24 GB unified memory) | 4096 | Apache-2.0 | Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077 | pinned |
 
 ## stt (Voice in)
 

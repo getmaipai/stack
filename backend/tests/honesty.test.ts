@@ -11,7 +11,7 @@ import { getProcess, identityCheck, resetSupervisorForTests, scriptedProcess, se
 import { __resetSettingsForTests, applyPendingSettings, updateSettings } from "@/settings";
 
 beforeEach(() => { __resetHealthForTests(); __resetReadinessForTests(); __resetStackGenerationForTests(); __resetSettingsForTests(); clearModelsForTests(); setSupervisorFactoryForTests(async (role) => scriptedProcess(role)); });
-afterEach(() => { setSupervisorFactoryForTests(null); resetSupervisorForTests(); clearModelsForTests(); });
+afterEach(() => { setSupervisorFactoryForTests(null); resetSupervisorForTests(); clearModelsForTests(); __resetReadinessForTests(); });
 
 const verified = { source: "catalog" as const, provenance: {}, revision: "r1", sha256: "a".repeat(64), licence: "MIT", verifiedAt: new Date().toISOString(), modelPath: "/tmp/never-opened/chat-a.gguf" };
 
@@ -130,4 +130,31 @@ test("a bad value in one key leaves every other key in the same request unwritte
   expect(latestCheck()).toBeNull();
   const { settingValues } = require("@/settings") as typeof import("@/settings");
   expect(settingValues()["stack.runtime.idle_unload_minutes"]).toBe(30);
+});
+
+test("an offline chat group is probed once per check run, not once per role that shares chat's process", async () => {
+  upsertModel({ id: "chat-a", roles: ["chat"], ...verified });
+  let attempts = 0;
+  setSupervisorFactoryForTests(async () => { attempts += 1; throw new Error("llama-server exited during load"); });
+  await expect(getProcess("chat")).rejects.toThrow(/exited/);
+  expect(resolveRoleState("chat").state).toBe("offline");
+  expect(resolveRoleState("coding").state).toBe("offline");
+  attempts = 0;
+  const run = await runCheck();
+  expect(run.ok).toBe(false);
+  expect(run.results.map((result) => result.role)).toEqual(["chat"]);
+  // One start attempt for the probe; the fit-together generator does not
+  // try chat again after its probe failed.
+  expect(attempts).toBe(1);
+});
+
+test("roles sharing a process whose owner failed to start in this run are skipped with the owner's reason, not started again", async () => {
+  upsertModel({ id: "chat-a", roles: ["chat"], ...verified });
+  let attempts = 0;
+  setSupervisorFactoryForTests(async () => { attempts += 1; throw new Error("llama-server exited during load"); });
+  const run = await runCheck({ roleIds: ["coding", "chat", "judge", "router", "vision"] });
+  expect(attempts).toBe(1);
+  expect(run.ok).toBe(false);
+  expect(run.results.map((result) => [result.role, result.ok, result.skipped ?? false])).toEqual([["chat", false, false], ["coding", false, true], ["judge", false, true], ["router", false, true], ["vision", false, true]]);
+  expect(run.results[1]?.reason).toMatch(/runs on chat's process, which failed: llama-server exited during load/);
 });

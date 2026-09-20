@@ -15,22 +15,32 @@ cd "$(dirname "$0")/.."
 
 PORT="${PORT:-8771}"
 BASE="http://127.0.0.1:$PORT"
-DATA="$PWD/data-scratch"
+DATA="${DATA_DIR:-$PWD/data-scratch}"
 LOG="$DATA/daemon.log"
 KEEP_DATA="${KEEP_DATA:-0}"
 
-if lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then echo "port $PORT is in use; pick another with PORT="; exit 1; fi
+port_free() { python3 -c "import socket,sys;s=socket.socket();s.settimeout(0.2)
+try: s.bind(('127.0.0.1',int(sys.argv[1]))); s.close(); sys.exit(0)
+except OSError: sys.exit(1)" "$1"; }
+port_free "$PORT" || { echo "port $PORT is in use; pick another with PORT="; exit 1; }
 rm -rf "$DATA"; mkdir -p "$DATA"
 
-STACK_DATA_DIR="$DATA" PORT="$PORT" bun run backend/src/index.ts serve >"$LOG" 2>&1 &
+# The daemon leads its own process group, so the SIGKILL fallback takes a
+# spawned engine with it instead of orphaning it on its port and memory.
+STACK_DATA_DIR="$DATA" PORT="$PORT" python3 -c 'import os,sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' bun run backend/src/index.ts serve >"$LOG" 2>&1 &
 PID=$!
 echo "daemon pid $PID on port $PORT, data $DATA"
-cleanup() {
+stop_daemon() {
+  # SIGTERM to the daemon alone (it drains and stops its engines); after
+  # 10 s the whole group is killed, engine included.
   kill "$PID" 2>/dev/null || true
-  for _ in 1 2 3 4 5 6 7 8 9 10; do kill -0 "$PID" 2>/dev/null || break; sleep 0.5; done
-  kill -9 "$PID" 2>/dev/null || true
-  if lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then echo "port $PORT still held after stop"; else echo "port $PORT free after stop"; fi
-  if [ "$KEEP_DATA" != "1" ]; then rm -rf "$DATA"; echo "data-scratch removed"; fi
+  for _ in $(seq 1 20); do kill -0 "$PID" 2>/dev/null || break; sleep 0.5; done
+  kill -9 -- "-$PID" 2>/dev/null || true
+}
+cleanup() {
+  stop_daemon
+  if port_free "$PORT"; then echo "port $PORT free after stop"; else echo "port $PORT still held after stop"; fi
+  if [ "$KEEP_DATA" != "1" ]; then rm -rf "$DATA"; echo "scratch data removed"; fi
 }
 trap cleanup EXIT
 
@@ -65,7 +75,9 @@ echo "current link: $CURRENT_TAG"
 
 step "3. install the pinned model (real download, checksum verified)"
 T=$(now)
-BODY="$(echo "$PIN" | python3 -c "import json,sys;m=json.load(sys.stdin);print(json.dumps({'id':m['id'],'role':m['role'],'repo':m.get('repo'),'url':m['download']['url'],'sha256':m['download']['sha256'],'approx_bytes':m['download']['approx_bytes'],'licence':m['license'],'revision':m['revision'],'engine':m.get('engine')}))")"
+BODY="$(echo "$PIN" | python3 -c "import json,sys;m=json.load(sys.stdin);b={'id':m['id'],'role':m['role'],'url':m['download']['url'],'sha256':m['download']['sha256'],'approx_bytes':m['download']['approx_bytes'],'licence':m['license'],'revision':m['revision']}
+b.update({k:m[k] for k in ('repo','engine') if m.get(k) is not None})
+print(json.dumps(b))")"
 JOB="$(json POST /stack/v1/models "$BODY" | field "['job']")"
 echo "job $JOB -> $(wait_job "$JOB") in $(since $T)"
 json GET /stack/v1/models | python3 -c "import json,sys;[print('model', m['id'], m['state'], 'sha256', (m['sha256'] or '')[:12], 'verified', m['verifiedAt'] is not None, m['sizeBytes'], 'bytes') for m in json.load(sys.stdin)['models']]"
@@ -108,7 +120,9 @@ T=$(now)
 json PUT /stack/v1/engines/llama-server/current '{"tag":"b10797-broken"}'; echo " in $(since $T)"
 echo "current link after the failed swap: $(json GET /stack/v1/updates | field "['engines'][0]['installed']")"
 json GET /stack/v1/health | python3 -c "import json,sys;[print('health', h['code'], h['severity'], 'fix', h.get('fix',{}).get('action')) for h in json.load(sys.stdin)['health']]"
-curl -s -o /dev/null -w "chat while offline: HTTP %{http_code}\n" -X POST "$BASE/v1/chat/completions" -H 'content-type: application/json' -d '{"model":"chat","messages":[]}'
+# The previous build is linked back at once, so chat answers again
+# before the fix runs; the fix clears the health item and the reason.
+curl -s -o /dev/null -w "chat after the relink: HTTP %{http_code}\n" -X POST "$BASE/v1/chat/completions" -H 'content-type: application/json' -d '{"model":"chat","messages":[{"role":"user","content":"Reply with just the word OK."}],"max_tokens":8}'
 T=$(now)
 json POST /stack/v1/health/failed-swap/fix; echo " in $(since $T)"
 curl -s -o /dev/null -w "chat after the fix: HTTP %{http_code}\n" -X POST "$BASE/v1/chat/completions" -H 'content-type: application/json' -d '{"model":"chat","messages":[{"role":"user","content":"Reply with just the word OK."}],"max_tokens":8}'

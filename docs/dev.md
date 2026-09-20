@@ -607,9 +607,65 @@ kernel pressure, the unmeasured model is estimated at 1.3 times its
 1.83 GB file (the run-1 measurement was wiped with the scratch
 directory), and free minus that estimate is under `p16`'s 4 GB working
 margin. That is the governor doing its job on a busy machine, not a
-defect, and the margin was not loosened for the proof; the live pass of
-steps 4 to 8 with the fixes in place is STACK-96b, to be rerun with
-1.5 GB more free or on the Studio.
+defect, and the margin was not loosened for the proof.
+
+Run 3 (STACK-96b), the same laptop later the same day with more memory
+free at the daemon's start, as the rehearsal step of the Studio bench
+(`data-bench/20260920T092047Z/rehearsal.log`), with every fix in place:
+
+| Step | Result | Time |
+|---|---|---|
+| Install the pinned engine | job done, `current` link `b10797` (the upstream build tag, after STACK-97) | 0.61 s |
+| Install the pinned model | job done, sha256 verified | 40.69 s |
+| First chat answer | HTTP 200, `x-maipai-engine: local b10797-832fd6f17`, `x-maipai-model: Qwen3-1.7B-Q8_0.gguf`, `x-maipai-revision: 90862c4b…`; measured footprint 414,501,240 bytes at context 4096 | 15.69 s including the load |
+| Stage the same archive as `b10797-proof` | job done, `current` unchanged | 0.61 s |
+| Swap to `b10797-proof` | ok, `current` relinked, chat HTTP 200 from the staged build | 14.95 s including the drain and the post-load check |
+| Roll back to `b10797` | ok, chat HTTP 200 | 0.07 s |
+| Stage `b10797-broken`, truncate its binary, swap to it | refused: the build could not be started; `current` relinked to `b10797`; `failed-swap` critical with the `rollback_update` fix; chat HTTP 200 again at once from the relinked build | 0.08 s |
+| `POST /stack/v1/health/failed-swap/fix` | ok, "Rolled back to b10797", chat HTTP 200 | 0.07 s |
+| Stage `b10797-bad` with a zero checksum | refused, no ready marker | |
+| Remove the current build | HTTP 400 | |
+| Remove the staged proof tag | HTTP 200 | |
+
+The item is closed by that run.
+
+## The Studio bench protocol (STACK-74, 2026-09-20)
+
+[plans/studio-bench-protocol-2026-09-20.md](plans/studio-bench-protocol-2026-09-20.md)
+fixes what STACK-14 measures on the Studio before it runs: the
+machines, the engine builds, the model files by id, repository,
+revision and sha256, the contexts (4096 and 16384, a 64k row once a pin
+allows it), the request mix (`llama-bench` at 512 prompt and 128
+generated tokens over three repetitions, run with nothing loaded; eight
+streamed route requests of a fixed prompt timed to the first content
+chunk; an embeddings request when an embed model is installed; the
+readiness check's fit-together pass), the pressure samples (the budget
+route every 250 ms), the pass thresholds (post-load ok, no critical
+pressure, readiness and fit-together ok, median first token under
+1,000 ms, generated tokens/s within 10 percent of the latest previous
+report for the same model, context and build), and the rollback
+rehearsal that ends every run. `scripts/bench/studio-bench.sh` is the
+protocol's one command: it installs the pins into a scratch directory
+through the public routes, runs every row, judges it against the
+previous report under `data-bench/`, and writes `report.md` and
+`report.json` there; `DRY_RUN=1` prints the plan.
+
+Rehearsed twice on the laptop on 2026-09-20 (Apple M4 Pro, 24 GB,
+tier `p16`), `qwen3-1.7b-q8-0` at context 4096, build
+`b10797-832fd6f17`, the model file cached by the OS. The first run
+(09:20 UTC) is the baseline: load 814 ms, 2,221 prompt tokens/s and
+114.8 generated tokens/s from `llama-bench`, measured footprint
+414,239,048 bytes, minimum free 5.54 GB, worst pressure normal,
+readiness ok, fit-together ok, the rollback rehearsal passed (its
+transcript is run 3 above): pass. The second run (09:23 UTC), judged
+against that baseline and the first with the first-token timing as the
+protocol defines it: load 832 ms, median first token 15 ms over three
+requests of the same prompt (69 ms for the first; the engine's prefix
+cache serves the repeats), 2,222 prompt tokens/s and 112.5 generated
+tokens/s (within the 10 percent), measured footprint 414,550,392
+bytes, minimum free 5.42 GB, worst pressure normal: pass. The pin's
+`measured` block in `modelCatalog.ts` carries the second run's
+footprint, so the components inventory prints it.
 
 ## Measured so far
 

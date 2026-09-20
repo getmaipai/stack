@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { withTimeout } from "@maipai/core/src/withTimeout";
 import { ENGINE_READY_MARKER, installedEnginePin, selectEngineBinary, type EngineBinaryPin } from "@/lib/engineCatalog";
 import { llamaServerArgs } from "@/lib/engineArgs";
-import { currentEngineBinary, engineBinaryPath, engineDir } from "@/lib/engineInstall";
+import { currentEngineBinary, currentEngineTag, engineBinaryPath, engineDir } from "@/lib/engineInstall";
 import { detectHardware } from "@/lib/hardware";
 import { identityHeaders, modelFileName, readEngineIdentity, type EngineIdentity } from "@/lib/identity";
 import { isModelSelectable, listModels, recordMeasuredFootprint, type ModelRecord } from "@/lib/modelStore";
@@ -303,6 +303,14 @@ export function preferModel(role: RoleId, modelId: string | null): void {
   bumpStackGeneration(`${role} now prefers ${modelId ?? "the first selectable model"}`);
 }
 
+/** Whether anything could serve the role: a selectable model for a
+ * spawned engine, or a url binding. An offline role with neither has
+ * nothing to probe or to repair. */
+export function roleIsBound(requested: RoleId): boolean {
+  const role = processRoleFor(requested);
+  return urlBindingFor(role) !== null || (SPAWNABLE_ROLES.includes(role) && selectedModel(role) !== null);
+}
+
 export function selectedModel(role: RoleId): ModelRecord | null {
   const selectable = listModels().filter((model) => model.roles.includes(role) && isModelSelectable(model) && model.modelPath);
   const preferred = preferredModels.get(role);
@@ -340,11 +348,22 @@ async function startSpawnedProcess(role: RoleId): Promise<RoleProcess> {
   const port = await findFreePort();
   const contextLength = typeof config.contextLength === "number" ? config.contextLength : 4096;
   const binary = launchBinary(pin);
-  const handle = Bun.spawn([binary, ...llamaServerArgs({ modelPath: model.modelPath, port, config, contextLength, kvCacheQuantized: process.platform === "darwin", embeddings: role === "embed" })], {
-    stdout: "ignore",
-    stderr: "pipe",
-    env: { ...process.env, HF_HUB_CACHE: hfHubRoot },
-  });
+  const args = llamaServerArgs({ modelPath: model.modelPath, port, config, contextLength, kvCacheQuantized: process.platform === "darwin", embeddings: role === "embed" });
+  const spawnEngine = () => {
+    try {
+      return Bun.spawn([binary, ...args], { stdout: "ignore", stderr: "pipe", env: { ...process.env, HF_HUB_CACHE: hfHubRoot } });
+    } catch (error) {
+      // A binary that will not even start (a truncated or wrong-arch file)
+      // is the same failure as a crash before health, said in one sentence.
+      release(admission);
+      const code = (error as { code?: string }).code ?? (error as Error).name;
+      const reason = `The ${currentEngineTag("llama-server") ?? pin.tag} build of llama-server could not be started (${code}).`;
+      emit({ id: "engine.state", data: { engine: role, state: "offline", reason } });
+      raise({ code: `engine.crashed.${role}`, severity: "error", title: `${ROLES[role].label} engine failed to start`, text: reason, cause: reason, fix: { label: "Restart engine", action: "restart_engine" } });
+      throw new EngineUnavailableError(reason);
+    }
+  };
+  const handle = spawnEngine();
   setGovernorPid(role, handle.pid);
   const client = new OpenAIEngineClient(`http://127.0.0.1:${port}`);
   const stderrText = handle.stderr ? new Response(handle.stderr).text() : Promise.resolve("");

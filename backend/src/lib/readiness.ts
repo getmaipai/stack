@@ -9,7 +9,7 @@ import { meta } from "@/db/schema";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { getMemoryReader } from "@/lib/memory";
 import type { MemoryReader } from "@/lib/memory/types";
-import { probeReplyOk, probeRequest, requestRole, getRoleStatus, SPAWNABLE_ROLES } from "@/lib/supervisor";
+import { probeReplyOk, probeRequest, processRoleFor, requestRole, getRoleStatus, roleIsBound, SPAWNABLE_ROLES } from "@/lib/supervisor";
 import { resolveRoleState } from "@/lib/router";
 import { ROLE_IDS, ROLES, type RoleId } from "@/roles";
 import { lastStackChange, stackGeneration } from "@/lib/stackGeneration";
@@ -78,10 +78,20 @@ export async function runFitTogetherCheck(options: Pick<CheckOptions, "fitGenera
   return critical ? { ok: false, reason: "Critical memory pressure arrived while a generator was running." } : { ok: true, reason: null };
 }
 
-// A role Home stopped on purpose is not probed: the person chose that
+// Every role with something installed is probed, an offline one
+// included (its probe fails with the reason, which is the point). An
+// offline group is probed once, through the role that owns the process:
+// each probe of an offline role is a fresh start attempt, and the four
+// roles sharing chat's process would turn one failed load into five. A
+// role Home stopped on purpose is not probed: the person chose that
 // state, and a "needs attention" item for it would be a false alarm.
 function installedRoles(): RoleId[] {
-  return ROLE_IDS.filter((role) => ["installed", "loaded", "ready"].includes(resolveRoleState(role).state) && getRoleStatus(role).state !== "stopped");
+  return ROLE_IDS.filter((role) => {
+    const state = resolveRoleState(role).state;
+    if (getRoleStatus(role).state === "stopped") return false;
+    if (state === "offline") return processRoleFor(role) === role && roleIsBound(role);
+    return ["installed", "loaded", "ready"].includes(state);
+  });
 }
 
 export async function runCheck(options: CheckOptions = {}): Promise<CheckRun> {
@@ -93,9 +103,27 @@ export async function runCheck(options: CheckOptions = {}): Promise<CheckRun> {
   try {
     const roleIds = options.roleIds ?? installedRoles();
     const results: CheckRoleResult[] = [];
-    for (const role of roleIds) results.push(await checkRole(role, options));
+    // Owners first, whatever order the caller gave, so a sharer always
+    // finds its owner's result.
+    const ordered = [...roleIds].sort((a, b) => Number(processRoleFor(a) !== a) - Number(processRoleFor(b) !== b));
+    for (const role of ordered) {
+      // A role sharing a process whose owner failed earlier in this run
+      // would only start the same engine again; it carries the owner's
+      // reason instead.
+      const owner = processRoleFor(role);
+      const ownerResult = owner === role ? undefined : results.find((result) => result.role === owner);
+      if (ownerResult && !ownerResult.ok && !ownerResult.skipped) {
+        resolveHealth(`check-role.${role}`);
+        results.push({ role, ok: false, skipped: true, ms: 0, reason: `Skipped: ${role} runs on ${owner}'s process, which failed: ${ownerResult.reason ?? "no reason given"}`, loadMs: null });
+        continue;
+      }
+      results.push(await checkRole(role, options));
+    }
+    // The generator runs on chat only when chat's own probe answered:
+    // a chat that failed to start would fail to start again here.
+    const chatAnswered = results.some((result) => result.role === "chat" && result.ok);
     const fitTogether = await runFitTogetherCheck({
-      fitGenerator: options.fitGenerator ?? (!options.requestRole && roleIds.includes("chat") && SPAWNABLE_ROLES.includes("chat") ? async () => {
+      fitGenerator: options.fitGenerator ?? (!options.requestRole && chatAnswered && SPAWNABLE_ROLES.includes("chat") ? async () => {
         const probe = probeRequest("chat");
         const reply = await requestRole("chat", probe.path, probe.body);
         if (!probeReplyOk("chat", reply)) throw new Error(`The generator returned HTTP ${reply.status}.`);
