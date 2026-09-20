@@ -3,7 +3,7 @@
 // components summary route replaces this source without changing the
 // hook's shape or callers.
 import { useApiResource } from "@/lib/useApiResource";
-import type { EngineRecord, HealthItem, RoleRecord } from "@/lib/api";
+import { roleState, type EngineRecord, type HealthItem, type RoleRecord } from "@/lib/api";
 import { worstHealthItem } from "@/lib/health-severity";
 
 export interface StackCounts {
@@ -26,7 +26,7 @@ export function useStackCounts(): StackCounts {
   // uses `installed` for the same "is it actually here" question).
   const installedEngines = (engines.data?.engines ?? []).filter((engine) => engine.installed);
   const componentsInstalled = (models.data?.models ?? []).length + installedEngines.length;
-  const componentsRunning = (roles.data?.roles ?? []).filter((role) => role.state === "ready" || role.state === "busy").length;
+  const componentsRunning = (roles.data?.roles ?? []).filter((role) => roleState(role) === "ready" || roleState(role) === "loaded").length;
 
   const worst = worstHealthItem(health.data?.health ?? []);
 

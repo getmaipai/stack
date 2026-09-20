@@ -1,7 +1,7 @@
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { getIcon } from "@/kit/icons";
-import { api, type RoleRecord } from "@/lib/api";
+import { api, roleState, type RoleRecord, type RoleState } from "@/lib/api";
 import { useApiResource } from "@/lib/useApiResource";
 import { useStackChat } from "@/lib/useStackChat";
 import { labelForRole } from "@/lib/modelStates";
@@ -13,9 +13,9 @@ import { Input } from "@/kit/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/kit/ui/tabs";
 
 const Mic = getIcon("Mic"); const Send = getIcon("Send"); const Square = getIcon("Square"); const Volume2 = getIcon("Volume2");
-const READY = new Set(["ready", "busy"]);
+const READY = new Set<RoleState>(["ready", "loaded"]);
 
-function roleReady(role?: RoleRecord): boolean { return !!role && READY.has(role.state); }
+function roleReady(role?: RoleRecord): boolean { return !!role && READY.has(roleState(role)); }
 
 function OfflineState({ role, labelOf }: { role: RoleRecord; labelOf: (id: string) => string }) {
   const actionLabel = role.id === "tts" ? "Speak" : role.id === "stt" ? "Listen" : labelOf(role.id);

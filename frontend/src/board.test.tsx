@@ -9,7 +9,8 @@ const originalFetch = globalThis.fetch;
 const originalEventSource = globalThis.EventSource;
 const hardware = { platform: "darwin", arch: "arm64", totalRamGb: 24, cpuCount: 10, isAppleSilicon: true, unifiedMemoryGb: 24, cudaDevices: [], freeDiskBytes: 153 * 1_073_741_824, osVersion: "24.6.0" };
 const tier = { id: "p16" as const, label: "This computer can run chat and voice.", minUnifiedGb: 16, minVramGb: 8, resident: ["chat", "stt", "tts"], onDemand: [], installedOnly: [], notAvailable: ["image", "video", "music"] };
-const roles = [{ id: "chat", wire: "chat", residency: "resident", description: "Talk locally.", state: "ready", reason: null }, { id: "stt", wire: "transcription", residency: "resident", description: "Listen locally.", state: "ready", reason: null }, { id: "tts", wire: "speech", residency: "resident", description: "Speak locally.", state: "ready", reason: null }, { id: "image", wire: "job", residency: "jit", description: "Make images.", state: "notInstalled", reason: null }];
+const readyState = { state: "ready" as const, since: new Date().toISOString(), checkedAt: new Date().toISOString() };
+const roles = [{ id: "chat", wire: "chat", residency: "resident", endpoints: ["/v1/chat/completions"], quality: ["fast", "everyday", "best"], description: "Talk locally.", state: readyState, reason: null }, { id: "stt", wire: "transcription", residency: "resident", endpoints: ["/v1/audio/transcriptions"], quality: ["fast", "everyday", "best"], description: "Listen locally.", state: readyState, reason: null }, { id: "tts", wire: "speech", residency: "resident", endpoints: ["/v1/audio/speech"], quality: ["fast", "everyday", "best"], description: "Speak locally.", state: readyState, reason: null }, { id: "image", wire: "job", residency: "jit", endpoints: ["/v1/images/generations"], quality: ["fast", "everyday", "best"], description: "Make images.", state: { state: "notInstalled" as const, since: new Date().toISOString() }, reason: null }];
 
 function responseFor(input: RequestInfo | URL): Response {
   const path = String(input);
@@ -78,6 +79,22 @@ test("the sizer's Install button calls the setup plan route", async () => {
   expect(install).toBeDefined();
   fireEvent.click(install!);
   await waitFor(() => expect(calls.some((call) => call.includes("/stack/v1/setup/plan POST"))).toBe(true));
+});
+
+test("a chosen plan renders the role status badges as plain text, not [object Object]", async () => {
+  // Regression for STACK-87: /stack/v1/roles now sends `state` as the
+  // stamped { state, since, ... } record. Rendering it directly as a
+  // Badge child (`role.state`, pre-fix) throws React error #31 instead
+  // of showing "Ready"; this only passes once the whole board reads it
+  // through `roleState()`.
+  globalThis.EventSource = undefined as unknown as typeof EventSource;
+  globalThis.fetch = mock((input: RequestInfo | URL) => String(input).endsWith("/setup/plan")
+    ? Promise.resolve(Response.json({ plan: { tier: "p16", mode: "small", createdAt: new Date().toISOString(), health: null }, downloads: [], health: null }))
+    : Promise.resolve(responseFor(input))) as unknown as typeof fetch;
+  render(<MemoryRouter><BoardPage /></MemoryRouter>);
+  await waitFor(() => expect(document.body.textContent).toContain("Your abilities"));
+  expect(document.body.textContent).toContain("Ready when asked");
+  expect(document.body.textContent).not.toContain("[object Object]");
 });
 
 test("the board renders health items with one action each", async () => {

@@ -1,11 +1,11 @@
 import { Link } from "react-router-dom";
 import { Card, CardContent } from "@/kit/ui/card";
-import type { BudgetResponse, HealthItem, RoleRecord } from "@/lib/api";
+import { roleState, type BudgetResponse, type HealthItem, type RoleRecord } from "@/lib/api";
 
 export function StatusStrip({ roles, budget, health, engineCount }: { roles: RoleRecord[]; budget?: BudgetResponse; health: HealthItem[]; engineCount: number }) {
   const chat = roles.find((role) => role.id === "chat");
   const parts = [
-    chat?.state === "ready" ? { text: "Chat ready", href: "/models" } : null,
+    chat && roleState(chat) === "ready" ? { text: "Chat ready", href: "/models" } : null,
     (budget?.loaded.length ?? 0) > 0 ? { text: `${budget!.loaded.length} model${budget!.loaded.length === 1 ? "" : "s"} loaded`, href: "/models" } : null,
     engineCount > 0 ? { text: `${engineCount} engine${engineCount === 1 ? "" : "s"} current`, href: "/engines" } : null,
   ].filter((part): part is { text: string; href: string } => Boolean(part));

@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { getIcon } from "@/kit/icons";
-import { type BudgetResponse, type EngineRecord, type HealthItem, type RepairRecord, type RoleRecord, type SetupPlanResponse } from "@/lib/api";
+import { roleState, type BudgetResponse, type EngineRecord, type HealthItem, type RepairRecord, type RoleRecord, type SetupPlanResponse } from "@/lib/api";
 import { allDestinations } from "@/lib/taxonomy";
 import { BoardPage } from "@/pages/BoardPage";
 import { TryItPage } from "@/pages/TryItPage";
@@ -93,7 +93,7 @@ export function DashboardShell() {
   const engineCount = enginesToCheck.length + detectedToAdopt;
   const updateCount = updates.data ? ((updates.data.app?.available ?? null) != null ? 1 : 0) + ((updates.data.engines?.available ?? null) != null ? 1 : 0) + ((updates.data.models?.available ?? null) != null ? 1 : 0) : 0;
   const alertCount = health.data?.health?.filter((item) => item.severity === "critical" || item.severity === "error").length ?? 0;
-  const alertSeverity = roleRows.some((role) => role.state === "stopped") ? "critical" : (health.data?.health ?? []).reduce<"critical" | "error" | "warning" | null>((worst, item) => { const rank: Record<string, number> = { warning: 1, error: 2, critical: 3 }; const itemRank = rank[item.severity] ?? 0; const worstRank = worst ? rank[worst] ?? 0 : 0; return itemRank > worstRank ? item.severity : worst; }, null);
+  const alertSeverity = roleRows.some((role) => roleState(role) === "offline") ? "critical" : (health.data?.health ?? []).reduce<"critical" | "error" | "warning" | null>((worst, item) => { const rank: Record<string, number> = { warning: 1, error: 2, critical: 3 }; const itemRank = rank[item.severity] ?? 0; const worstRank = worst ? rank[worst] ?? 0 : 0; return itemRank > worstRank ? item.severity : worst; }, null);
   const engineTooltip = engineCount === 0 ? "Engines" : `${engineCount} ${engineCount === 1 ? "engine needs" : "engines need"} attention`;
   const updateTooltip = updateCount === 0 ? "Updates" : `${updateCount} update${updateCount === 1 ? "" : "s"} available`;
   const alertTooltip = alertCount === 0 ? "Alerts" : `Alerts: ${alertSeverity === "critical" ? "1 critical" : alertSeverity === "error" ? `${alertCount} error${alertCount === 1 ? "" : "s"}` : `${alertCount} warning${alertCount === 1 ? "" : "s"}`}`;

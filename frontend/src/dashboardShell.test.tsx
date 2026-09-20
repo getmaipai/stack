@@ -199,10 +199,10 @@ test("⌘K and / focus the header search, and a result navigates", async () => {
   await waitFor(() => expect(document.body.textContent).toContain("No models are installed yet"));
 });
 
-test("the Alerts nav item shows a red dot when a role has stopped", async () => {
+test("the Alerts nav item shows a red dot when a role is offline", async () => {
   stubStackFetch({
     ...shellExtras,
-    "/stack/v1/roles": { roles: [{ id: "local-1", wire: "local", residency: "local", description: "A local model", state: "stopped", reason: null }] },
+    "/stack/v1/roles": { roles: [{ id: "local-1", wire: "local", residency: "local", description: "A local model", state: { state: "offline", since: new Date().toISOString(), reason: "The engine crashed." }, reason: "The engine crashed." }] },
   });
   render(<MemoryRouter initialEntries={["/"]}><DashboardShell /></MemoryRouter>);
   const alertsLink = await waitFor(() => document.querySelector('a[href="/alerts"]'));
@@ -305,7 +305,7 @@ test("the search's Pause everything command requires a second click to confirm b
     if (url.pathname.endsWith("/run-state") && init?.method === "POST") { state = JSON.parse(String(init.body)).state; return Response.json({ state }); }
     if (url.pathname.endsWith("/run-state")) return Response.json({ state });
     const path = url.pathname;
-    const body = path.endsWith("/roles") ? { roles: [{ id: "chat", wire: "chat", residency: "resident", description: "Chat", state: "ready", reason: null }] } : path.endsWith("/hardware") ? hardwareResponse : path.endsWith("/budget") ? budgetResponse : path.endsWith("/repairs") ? { repairs: [] } : path.endsWith("/health") ? { health: [] } : path.endsWith("/engines") ? { engines: [] } : path.endsWith("/updates") ? { app: { available: null }, engines: { available: null }, models: { available: null } } : {};
+    const body = path.endsWith("/roles") ? { roles: [{ id: "chat", wire: "chat", residency: "resident", description: "Chat", state: { state: "ready", since: new Date().toISOString(), checkedAt: new Date().toISOString() }, reason: null }] } : path.endsWith("/hardware") ? hardwareResponse : path.endsWith("/budget") ? budgetResponse : path.endsWith("/repairs") ? { repairs: [] } : path.endsWith("/health") ? { health: [] } : path.endsWith("/engines") ? { engines: [] } : path.endsWith("/updates") ? { app: { available: null }, engines: { available: null }, models: { available: null } } : {};
     return Response.json(body);
   }) as unknown as typeof fetch;
   render(<MemoryRouter initialEntries={["/models"]}><DashboardShell /></MemoryRouter>);

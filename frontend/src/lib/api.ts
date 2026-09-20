@@ -1,14 +1,37 @@
 export type OperatorState = { state: "setupRequired" | "signedOut" | "signedIn"; required: boolean; loopback?: boolean };
 
+// The five truthful states a role can be in (backend/src/roles.ts's
+// RoleStateEnum, the one declaration): `ready` is time-boxed server-side
+// and only claimed within an hour of a real success.
+export type RoleState = "notInstalled" | "installed" | "loaded" | "ready" | "offline";
+
+// The stamped record served on /stack/v1/roles (STACK-87): `state` is this
+// object, not a bare string. Read the string through `roleState()` below,
+// never `role.state` directly - it renders as "[object Object]" (or
+// crashes React entirely) the moment it reaches JSX.
+export interface RoleStateRecord {
+  state: RoleState;
+  since: string;
+  checkedAt?: string;
+  reason?: string | null;
+}
+
 export interface RoleRecord {
   id: string;
   label: string;
   wire: string;
   residency: string;
+  endpoints: string[];
+  quality: string[];
   description: string;
-  state: "notInstalled" | "installed" | "loading" | "ready" | "busy" | "stopped" | "offline";
+  sharesModelWith?: string;
+  state: RoleStateRecord;
   reason: string | null;
   model?: { id: string; sizeBytes: number | null; measuredFootprintBytes: number | null; measuredContextLength: number | null; estimated: boolean } | null;
+}
+
+export function roleState(role: { state: RoleStateRecord }): RoleState {
+  return role.state.state;
 }
 
 export interface HardwareInfo {

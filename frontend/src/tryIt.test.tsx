@@ -5,10 +5,15 @@ import { TryItPage } from "@/pages/TryItPage";
 
 afterEach(() => cleanup());
 
+// The real /stack/v1/roles shape (STACK-87): `state` is the stamped
+// { state, since, checkedAt?, reason? } record, not a bare string. A
+// fixture using the old flat shape would let `roleReady()` silently
+// return false for every role and none of these tests would notice,
+// since the negative ("Not ready") path looks the same either way.
 function stubRoles(roles: Array<{ id: string; state: string; reason: string | null }>): void {
   globalThis.fetch = mock(async (input: RequestInfo | URL) => {
     const path = new URL(String(input), "http://local").pathname;
-    if (path.endsWith("/roles")) return new Response(JSON.stringify({ roles: roles.map((role) => ({ id: role.id, wire: role.id, residency: "resident", description: "", state: role.state, reason: role.reason })) }), { status: 200, headers: { "content-type": "application/json" } });
+    if (path.endsWith("/roles")) return new Response(JSON.stringify({ roles: roles.map((role) => ({ id: role.id, wire: role.id, residency: "resident", endpoints: [], quality: ["fast", "everyday", "best"], description: "", state: { state: role.state, since: new Date().toISOString(), checkedAt: role.state === "ready" ? new Date().toISOString() : undefined }, reason: role.reason })) }), { status: 200, headers: { "content-type": "application/json" } });
     return new Response(JSON.stringify({ acknowledged: false }), { status: 200, headers: { "content-type": "application/json" } });
   }) as unknown as typeof fetch;
 }
@@ -36,6 +41,16 @@ test("an uninstalled generator role shows its tab and the offline reason", async
   render(<MemoryRouter><TryItPage initialRole="image" /></MemoryRouter>);
   await waitFor(() => expect(document.body.textContent).toContain("Not ready"));
   expect(document.body.textContent).toContain("The Image engine is waiting for its first install.");
+});
+
+test("a ready chat role renders its composer, not the offline state", async () => {
+  // Regression for STACK-87: reading `role.state` directly against a
+  // string literal instead of through `roleState()` made every role
+  // register as not-ready, including a genuinely ready one.
+  stubRoles([{ id: "chat", state: "ready", reason: null }]);
+  render(<MemoryRouter><TryItPage initialRole="chat" /></MemoryRouter>);
+  await waitFor(() => expect(document.querySelector("#try-chat-composer")).not.toBeNull());
+  expect(document.body.textContent).not.toContain("Not ready");
 });
 
 test("an offline chat tab shows its empty state with the reason and no composer", async () => {
