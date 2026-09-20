@@ -243,9 +243,19 @@ test("post-load checks time out instead of hanging", async () => {
 
 test("post-load checks record the kernel footprint when a process is present", async () => {
   const { postLoadCheck } = await import("@/lib/supervisor");
-  const check = await postLoadCheck({ baseUrl: "scripted", health: async () => true, complete: async () => ({ status: 200, body: { choices: [{ message: { content: "OK" } }] } }) }, process.pid);
-  expect(check.replyOk).toBe(true);
-  expect(check.actualBytes).toBeGreaterThan(1_048_576);
+  const { __setMemoryReaderForTests } = await import("@/lib/memory");
+  const { scriptedMemoryReader } = await import("@/lib/memory/scripted");
+  const { GOVERNOR_MEMORY_DEFAULT } = await import("./governorMemoryDefault");
+  // This is about the real process footprint, not the suite's scripted
+  // default (tests/preload.ts): opt out of it, then restore the default.
+  __setMemoryReaderForTests(null);
+  try {
+    const check = await postLoadCheck({ baseUrl: "scripted", health: async () => true, complete: async () => ({ status: 200, body: { choices: [{ message: { content: "OK" } }] } }) }, process.pid);
+    expect(check.replyOk).toBe(true);
+    expect(check.actualBytes).toBeGreaterThan(1_048_576);
+  } finally {
+    __setMemoryReaderForTests(scriptedMemoryReader([GOVERNOR_MEMORY_DEFAULT]));
+  }
 });
 
 test("a free spawned port is selected before engine launch", async () => {

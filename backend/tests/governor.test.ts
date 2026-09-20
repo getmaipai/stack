@@ -20,8 +20,15 @@ beforeEach(() => {
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 64 * GB, freeMemoryBytes: 32 * GB });
 });
 
-afterEach(() => {
+afterEach(async () => {
   for (const stop of stops.splice(0)) stop();
+  // stop() only cancels the poller's NEXT scheduled tick; a tick already
+  // in flight when stop() runs (pollMs: 1 below means there often is one)
+  // finishes on its own and overwrites pressure/availablePercent when it
+  // does. A beat here lets that straggler land before the reset, so the
+  // reset is always the last word rather than something a later test (or
+  // a later file, since Bun runs the whole suite in one process) inherits.
+  await Bun.sleep(5);
   __resetGovernorForTests();
 });
 
