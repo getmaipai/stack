@@ -9,7 +9,7 @@ import { installLaunchdService, launchdStatus, startLaunchdService, stopLaunchdS
 import { installSystemdService, startSystemdService, stopSystemdService, systemdStatus, uninstallSystemdService } from "@/service/systemd";
 import { notifySystemd, startSystemdWatchdog } from "@/service/notify";
 import { applyPendingSettings, settingValues } from "@/settings";
-import { stopAllRoles, unloadIdleRoles } from "@/lib/supervisor";
+import { setMachineTierFromHardware, stopAllRoles, unloadIdleRoles } from "@/lib/supervisor";
 import { migrateLegacyEngineTags } from "@/lib/engineInstall";
 import { execFileSync } from "node:child_process";
 
@@ -27,6 +27,9 @@ async function serve(): Promise<void> {
   logger.installConsoleMirror();
   for (const moved of migrateLegacyEngineTags()) console.log(`Renamed engine ${moved.name} ${moved.from} to ${moved.to}.`);
   applyPendingSettings();
+  // The governor's working margin follows the machine's tier from here on.
+  const { tier, stop: stopTierWatch } = await setMachineTierFromHardware();
+  console.log(`Machine tier ${tier ?? "unknown (the p16 margin applies)"}.`);
   const options = serveOptions();
   const server = Bun.serve(options);
   // Under systemd (Type=notify) the unit is "started" only now, and the
@@ -47,6 +50,7 @@ async function serve(): Promise<void> {
     // The watchdog keeps beating through the drain: a stop that takes
     // longer than WatchdogSec must not be mistaken for a hang.
     await stopAllRoles("The Stack is stopping.");
+    stopTierWatch();
     stopWatchdog();
     server.stop(true);
     process.exitCode = exitCode;

@@ -22,7 +22,8 @@ import { TRANSCRIBE_PATH } from "@/speech/server";
 import { loadedWeightsRepo, pocketTtsCommand, pocketTtsEnv, pocketTtsInstalled, POCKET_TTS_ESTIMATED_FOOTPRINT, POCKET_TTS_VERSION } from "@/speech/pocketTts";
 import { comfyuiCommand, comfyuiEnv, comfyuiInstalled, COMFYUI_VERSION, linkCheckpoint, probeGenerator } from "@/generators/comfyui";
 import { basename } from "node:path";
-import { getRunState, release, setGovernorPid, startGovernor, type GovernorHandle } from "@/lib/governor";
+import { getRunState, release, setGovernorPid, startGovernor, type GovernorHandle, type GovernorTier } from "@/lib/governor";
+import { proposeProfile } from "@/profiles";
 import { AdmissionRefusedError, waitForAdmission, waitingReason } from "@/lib/admission";
 import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
@@ -582,7 +583,7 @@ async function startSpawnedProcess(role: RoleId): Promise<RoleProcess> {
     const processRecord: RoleProcess = {
       role, kind: plan.kind, client, identity, modelId: model.id, modelRevision: loadedRevision ?? model.revision, pid: handle.pid, port, activeRequests: 0, retired: false,
       governorHandle: admission,
-      stopGovernor: startGovernor({ pid: handle.pid, restart: async () => { await restartRole(role); } }),
+      stopGovernor: watchProcessMemory(role, handle.pid),
       stop: async () => { handle.kill(); await handle.exited; },
     };
     void handle.exited.then(() => {
@@ -700,6 +701,33 @@ export function identityCheck(requested: RoleId): { ok: boolean; expected: strin
     return { ok: true, expected: expectedVersion.trim(), actual, reason: null };
   }
   return { ok: true, expected: null, actual, reason: null };
+}
+
+/** The machine's tier, from the hardware profile: the daemon sets it at
+ * start, and every governor watch started for a process carries it, so
+ * the governor keeps the tier's working margin back (a Studio's 20 GB,
+ * not the p16 default's 4 GB; STACK-06e). */
+let machineTier: GovernorTier | undefined;
+export function setMachineTier(tier: GovernorTier | null | undefined): void { machineTier = tier ?? undefined; }
+export function currentMachineTier(): GovernorTier | undefined { return machineTier; }
+/** Reads the hardware, sets the tier from the proposed profile, and
+ * starts the governor's own memory watch with it, so the tier's margin
+ * is in force from the daemon's start, before any process is spawned
+ * (a process's watch carries the same tier again). Returns the tier
+ * and the watch's stop. */
+export async function setMachineTierFromHardware(): Promise<{ tier: GovernorTier | null; stop: () => void }> {
+  const hardware = await detectHardware();
+  const tier = proposeProfile(hardware)?.id as GovernorTier | undefined;
+  setMachineTier(tier);
+  // The daemon's own pid: no loaded item carries it, so this watch only
+  // keeps the reading and the tier, never restarts anything.
+  return { tier: tier ?? null, stop: startGovernor({ pid: process.pid, tier: machineTier }) };
+}
+
+/** The governor's watch on a spawned process (its RSS against the
+ * measured peak, a restart on a breach), carrying the machine's tier. */
+export function watchProcessMemory(role: RoleId, pid: number): () => void {
+  return startGovernor({ pid, tier: machineTier, restart: async () => { await restartRole(role); } });
 }
 
 /** A pid is the proof that this process was launched by this Stack. */

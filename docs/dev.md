@@ -565,7 +565,14 @@ version, cached for five seconds. Four profile tiers (`p16`, `p32`,
 `p64`, `p128`, by unified memory on Apple silicon and by VRAM
 elsewhere) name each role as resident, on demand, installed only or not
 available; `proposeProfile` picks the highest tier the machine clears.
-Home words the tier for a person; the Stack reports the facts.
+Home words the tier for a person; the Stack reports the facts. The
+tier is also the governor's: the daemon sets it from the hardware
+profile at start (`setMachineTierFromHardware`) and every memory watch
+a spawned process gets carries it, so the working margin the governor
+keeps back for the rest of the computer is the tier's own (4 GB on
+p16, 8 on p32, 12 on p64, 20 on p128; STACK-06e, 2026-09-20; before it
+nothing passed a tier and every machine ran the p16 margin). A machine
+whose profile is unknown keeps the p16 margin, the smallest.
 
 | Platform | Engines | First customer |
 |---|---|---|

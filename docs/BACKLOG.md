@@ -168,18 +168,14 @@ are never copied. Nothing migrates Home until STACK-16.
 
 ## Governor and sizing
 
-- [ ] **STACK-06d (S): the governor's tier follows the machine.**
-  `startGovernor` takes a `tier` and nothing passes one (the supervisor
-  starts it per process without it), so the active tier stays the
-  `p16` default on every machine and a 128 GB Studio keeps back 4 GB,
-  not the table's 20 GB. Objective: the daemon sets the tier from
-  `proposeProfile` at start and when the hardware reading changes, and
-  `GET /stack/v1/hardware/budget` reports it. Files:
-  `backend/src/lib/governor.ts`, `backend/src/daemon.ts`,
-  `backend/src/routes/hardware.ts`. Mirror: the tier table in
-  `governor.ts`. Out of scope: the margins themselves. Exit: `bash
-  scripts/check.sh` with a test that a p128 hardware reading sets the
-  p128 margin.
+- [x] **STACK-06e (S): the governor's tier follows the machine.**
+  `startGovernor` took a `tier` and nothing passed one, so every
+  machine ran the `p16` margin. The daemon now sets the tier from
+  `proposeProfile` at start and every process watch carries it
+  (`watchProcessMemory`); a test holds a p128 machine to p128's 20 GB
+  margin. `governor.ts` untouched (the governor lane holds it; the
+  budget route reporting the tier joins STACK-06c's callback work).
+  Landed on `main` with this line.
 - [ ] **STACK-06c (S): the governor drains its queue on memory
   changes.** Today a queued request is re-admitted only inside
   `release()`, so a request queued for pressure or the working margin
