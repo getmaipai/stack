@@ -1,181 +1,227 @@
-# MaiPai Stack: integrations
+# MaiPai Stack: the contract with Home
 
-What each MaiPai product needs from the Stack, what it stops doing once
-the Stack exists, and the contract between them. The API itself is
-self-documenting (Hono routes as Zod schemas, the OpenAPI explorer at
-`/api/docs`); this file is the design of the seams. Every change to a
-seam is additive (org compatibility rule): a field or endpoint a client
-relies on is never removed or repurposed without a versioned path and a
-changelog note.
+This is the central document for anything that talks to the Stack. Home
+is the only caller; Bot calls it by running Home's platform code on the
+robot. The API itself is self-documenting (Hono routes as Zod schemas,
+the generated `docs/api/openapi.json`, the explorer at `/api/docs`);
+this file is the design of the seams and the shapes Home builds
+against. Every change to a seam is additive (org compatibility rule): a
+field or endpoint Home relies on is never removed or repurposed without
+a versioned path and a changelog note. The wire shapes named below are
+declared once in `@maipai/spec` (`getmaipai/shared`) and imported here;
+until that declaration lands, `backend/src/spec/` holds them locally and
+the org rule "shared record changes go through the spec first" applies.
 
-## The contract, in one place
+## Authentication: loopback, nothing else
 
-| Surface | Path | Who uses it | Status |
-|---|---|---|---|
-| OpenAI-shaped inference | `/v1/chat/completions`, `/v1/embeddings`, `/v1/audio/transcriptions`, `/v1/audio/speech`, `/v1/images/generations`, `/v1/images/edits` | every client, by role name in `model` | partly (chat, streaming chat, embeddings, audio, images; no image edits) |
-| Streaming speech sessions | `/stack/v1/stt/session` (live words), `/stack/v1/tts/stream` (phrase-level, cancel) | Home's voice path, Bot's household runtime | planned |
-| Roles | `GET /stack/v1/roles` (state, engine, model, residency per role) | Home's Admin, Bot's runtime at boot, the board | built |
-| Jobs | `POST /stack/v1/jobs`, `GET /stack/v1/jobs/:id`, `DELETE` to cancel, result by id | Home's picture, video and music packages | lifecycle routes built; generator execution and result by id planned (STACK-13) |
-| Events | `GET /stack/v1/events` (SSE) | Home's notification bridge, the board, the menu bar | built |
-| Health | `GET /stack/v1/health`, resolve or ignore by code | Home's Admin and the Stack board | built |
-| Hardware and budget | `GET /stack/v1/hardware`, `GET /stack/v1/budget` | Home's Admin (read-only view), Bot's runtime | built |
-| Models and engines | `GET /stack/v1/models`, `/engines`; install, pin, unload, remove | the operator; Home's Admin as a view with links | built |
-| Model groups | `GET /stack/v1/groups`; create, move, remove, rollups and actions | the operator; Home's Admin as a view | built |
-| Detected stores | `GET /stack/v1/detected`; scan, adopt or forget folders and local hosts | the operator; Models and Engines pages | built |
-| Storage | `GET /stack/v1/storage` with model ability buckets and shared bytes | the operator; Home's Admin as a view | built |
-| Jobs and downloads | `job.progress` feed rows plus pause and resume endpoints | Home's package surfaces and the board | partly (ranged model and engine transfer; job API planned) |
-| Clients | `/stack/v1/clients` (operator only) | the operator; Home's installer registers Home once | built |
-| Notifications | `GET /stack/v1/notifications`, `POST /stack/v1/notifications/clear`, `POST /stack/v1/notifications/{id}/read`, `POST /stack/v1/notifications/{id}/dismiss` | the operator and Home's notification bridge | built |
-| Alert channels | `GET /stack/v1/channels`, create, update, delete, and `POST /stack/v1/channels/{id}/test` | the operator; Telegram or ntfy after explicit verification | built |
-| Library MCP | `bun run mcp:library` over stdio, `list_installed`, `get_doc`, `search` | Home's assistant and coding tools | built |
-| Repairs | `GET /stack/v1/repairs`, `POST /stack/v1/repairs/{id}/resolve` | the operator and Home's Admin | built |
-| Logs | `GET /stack/v1/logs/{name}` | the operator and Home's Admin | built |
-| Updates | `/stack/v1/updates` (check, apply, roll back) | the operator; Home shows availability through events | engine update and rollback built; app release assets pending |
-| Metrics | `GET /stack/v1/metrics` | a scraper the operator runs | planned (STACK-59) |
-| Identity headers | `x-maipai-engine`, `x-maipai-model`, `x-maipai-revision` on every reply | every client's identity check | built |
-| Model discovery | `GET /v1/models` | coding tools before their first request | built |
+The daemon binds `127.0.0.1` on its declared port (default 8770) and
+nothing else. There is no LAN setting, no key, no session, no operator.
+A process on the same machine is the caller by definition; on the
+household's machine that is Home, installed by Home's installer, with
+the Stack's port declared once in Home's own settings. Anything a
+person or a package should reach passes through Home, which owns
+identity and permissions, and Home never proxies the Stack raw: its
+Admin pages read the Stack's facts through Home's own routes with
+Home's own role check.
 
-The Status column is derived from `docs/api/openapi.json` and refreshed whenever a row's paths land; a row that says built has its paths in the generated document.
+## The role contract (`/v1/*`)
 
-Authentication: the operator uses `/stack/v1/operator/setup`, `/login`,
-`/logout` and the state route; clients use keys created and revoked through
-`/stack/v1/clients`. Inference and streaming speech use a client key as a
-bearer token, and loopback needs one too, so a stray local process cannot
-spend the household's memory. The roles, hardware and engines reads accept
-either a client key or the operator session.
+OpenAI-shaped, so an existing client library works unchanged.
 
-Coding tools use the OpenAI-compatible address and a key scoped to `chat`,
-`coding`, and `embed`. The Clients page shows copyable setup blocks for
-OpenCode, Aider, and Continue after the key is created.
+| Path | Roles | Wire |
+|---|---|---|
+| `POST /v1/chat/completions` | `chat`, `coding`, `judge`, `router`, `vision` | chat completions; `stream: true` passes the engine's SSE bytes through unchanged including `[DONE]`; `tools`, `tool_choice`, `response_format` and `chat_template_kwargs` pass through |
+| `POST /v1/embeddings` | `embed` | embeddings |
+| `POST /v1/audio/transcriptions` | `stt` | transcription (multipart audio) |
+| `POST /v1/audio/speech` | `tts` | speech; phrase-level streaming and cancel |
+| `POST /v1/images/generations` | `image` | the job API with a wait |
+| `GET /v1/models` | all | role ids plus installed model ids in OpenAI's list shape |
 
-## MaiPai Home
+The `model` field carries a role id (`"chat"`) or an installed model id.
+Generator roles accept `quality: fast | everyday | best`.
 
-Home is the Stack's first client and the reason it exists. Home installs
-on top of a running Stack (Home's installer installs the Stack first when
-it is absent, then registers itself as a client with the roles it needs,
-then runs its own first run). Nothing in the household ever touches the
-Stack's pages; Home renders what its people may see.
+**Every reply** carries the identity headers, declared in the spec as
+`RoleReplyHeaders`:
 
-**What Home calls.** Every model request the turn engine, the judge, the
-embedder, the voice path and the generation packages make goes to the
-Stack by role. Home's `engineIdentity` check reads the identity headers
-instead of probing a process. Home's Admin gets an "Engines and models"
-section that is a view of `/stack/v1/roles`, `/hardware` and `/budget`
-with links into the Stack for actions, never a second copy of the facts
-(one definition, one renderer).
+| Header | Value |
+|---|---|
+| `x-maipai-engine` | the engine build that answered (`llama-server b10797`), or `none` |
+| `x-maipai-model` | the model file that answered, or `none` |
+| `x-maipai-revision` | the model's pinned revision, or `none` |
 
-**What Home stops doing after STACK-16.** Spawning, downloading, checksumming,
-supervising and budgeting engines. The migration list is in `dev.md`
-("What moves out of Home, later"); it runs only after the Stack's first
-milestone is proven on the Studio beside the hub, and nothing moves
-before that.
+**Failure shapes**, never a 404 for a known role:
 
-**What Home keeps.** The turn engine and the guards, the safety floor
-(deterministic, in the path, non-removable), consent and provenance on
-household people, memory, packages, the notification system and its
-relationship with phones, and every screen a person sees. Child safety
-stays in Home because children exist only in Home.
+| Status | Body | When |
+|---|---|---|
+| 503 | `{ error, role, state, offline_reason }` | the role has no ready engine; `state` is the role state and `offline_reason` the supervisor's reason |
+| 409 | `{ error, model, reason: "unverified", missing: [...] }` | a named model whose provenance is incomplete |
+| 400 | `{ error, roles: [...] }` | an unknown role or model id, with the declared ids |
+| 499 | `{ error: "Request cancelled" }` | Home cancelled the request |
+| 504 | `{ error }` | the engine timed out on a request while still healthy |
 
-**Notifications.** Home subscribes to the event feed with its key and
-maps `role.state`, `engine.state`, `pressure`, `job.progress`, `job.done`,
-`model.installed`, `update.available`, `update.applied` and `repair` to its
-own notification types (`NOTIFICATIONS.md`): an `update.available` becomes
-an admin notification, a `repair` becomes a Repairs entry in Home's Admin
-with a link, and `pressure` warnings become a quiet status. The Stack never
-notifies a phone; Home does.
+Home's `engineIdentity` check reads the headers instead of probing a
+process. Home's own `/v1` is never a raw pass-through: the Stack's
+`/v1/chat/completions` answers as the model (no memory, no guards, no
+person); Home's answers as the household's assistant through the turn
+engine. A client that wants the model is Home's business to authorize.
 
-**Settings.** Stack settings are declared and rendered in the Stack.
-Home's settings never duplicate them; Home's Admin links across. The one
-Home-side setting is the Stack's address and key, declared once in
-Home's settings definition, filled by the installer.
+## The control API (`/stack/v1/*`)
 
-**Failure after migration.** When the Stack is unreachable, Home's roles go to an honest
-offline state (the same `offline_reason` shape the Stack uses for managed
-hosts), the turn engine answers "I can't think right now" in the
-companion's voice with a Repairs entry for the admin, and nothing else
-in Home stops.
+| Surface | Path | What Home does with it |
+|---|---|---|
+| Roles | `GET /stack/v1/roles` | the Engines page: per role, its declaration, state (`notInstalled`, `installed`, `loaded`, `ready` with `checkedAt`, `offline` with `reason`), `since`, the bound model with its measured or estimated footprint |
+| Engines | `GET /stack/v1/engines`; `POST /stack/v1/engines/{name}/{install,start,stop,restart}`; `PUT /stack/v1/engines/{name}/current` | pinned builds and their install and version state (`current` / `notCurrent` with the reason, `needsRestart`); the actions behind Home's buttons |
+| Models | `GET /stack/v1/models`; `POST /stack/v1/models` (pull by pin); `POST /stack/v1/models/import`; `DELETE /stack/v1/models/{id}`; `POST /stack/v1/models/{id}/actions` (`load`, `unload`, `pin`, `unpin`) | the model list with provenance, install state, runtime state and measured footprint; install from the Catalog index or import a verified local file |
+| Jobs | `POST /stack/v1/jobs`; `GET /stack/v1/jobs/{id}`; `DELETE /stack/v1/jobs/{id}`; result by id | Home's picture, video and music packages |
+| Health | `GET /stack/v1/health`; `POST /stack/v1/health/{code}/{fix,resolve,ignore}` | Home's Repairs list: the problem list as data, the fix button calls `fix` and shows the result |
+| Readiness | `POST /stack/v1/check`; `GET /stack/v1/check/latest` | the check Home schedules and the "Check now" button |
+| Updates | `GET /stack/v1/updates`; `POST /stack/v1/updates/check`; `POST /stack/v1/updates/engines/{name}/{apply,rollback}` | the Updates page: installed, available, last checked, notes, go back |
+| Events | `GET /stack/v1/events` (SSE) | Home's notification bridge, below |
+| Hardware and budget | `GET /stack/v1/hardware`; `GET /stack/v1/budget`; `GET /stack/v1/budget/decisions` | the facts behind "what your computer can run", the memory picture, the governor's last 200 decisions |
+| Settings | `GET /stack/v1/settings` (the declaration with values); `PUT /stack/v1/settings`; `POST /stack/v1/settings/apply` | Home's generic settings renderer, below |
+| Storage | `POST /stack/v1/storage/sweep` | the prune Home schedules (orphaned blobs past their grace period) |
+| Privacy | `GET /stack/v1/privacy` | the outbound endpoint rows for Home's privacy page, below |
+| Backup | `GET /stack/v1/backup` | the precious-state declaration for Home's backup, below |
+| Liveness | `GET /healthz` | `{ ok, version, uptimeSeconds }`; Home checks its pinned minimum Stack version here at boot |
+
+Home calls every maintenance action; the Stack keeps no schedule of its
+own. Every route is Zod-typed and the generated `docs/api/openapi.json`
+is the reference; a row above whose path is not yet in that document is
+not built, and BACKLOG.md carries its item.
+
+## The event feed
+
+`GET /stack/v1/events` is a server-sent stream that stays open. Each
+event is `id: <seq>` and `data: <envelope>`, where the envelope (spec
+`StackEvent`) is `{ id, at, seq, data }`. A reconnect with
+`Last-Event-Id` replays from the in-memory ring (500 events), then
+continues live. The ids and what `data` carries:
+
+| Event | `data` | Home maps it to |
+|---|---|---|
+| `role.state` | `{ role, state, since, reason? }` | the Engines page live state |
+| `engine.state` | `{ engine, state, reason? }` | the Engines page; an `offline` becomes a Repairs entry |
+| `pressure` | `{ pressure, freeMemoryBytes, floorBytes, availablePercent }` or `{ reason, id }` | a quiet admin status |
+| `job.progress` | `{ job, percent, completedBytes, totalBytes, status }` | the package's progress; also model and engine downloads |
+| `job.done` | `{ job, ok, reason? }` | the package's result |
+| `model.installed` | `{ model, path }` or `{ model, removed: true }` | an admin notification |
+| `update.available` | `{ kind: "engine" or "model", name, installed, available }` | an admin notification with the Updates link |
+| `update.applied` | `{ kind, name, tag }` | an admin notification |
+| `update.failed` | `{ kind, name, reason }` | an immediate admin notification plus the `failed-swap` health item |
+| `health.changed` | `{ code, severity, title, open }` | a Repairs entry opened or closed |
+
+The Stack never notifies a person; Home's notification system (org
+`NOTIFICATIONS.md`) is the only thing that does, and it is the one
+subscriber. Progress events are live only and never become history.
+
+## Health items
+
+Spec `HealthItem`: `{ code, severity: critical | error | warning, title,
+text, since, cause, fix?: { label, action } }`. `code` is stable and
+unique per condition; Home keys its Repairs list on it. `fix.action` is
+one of `restart_engine`, `free_memory`, `retry_download`,
+`rollback_update`, `reinstall_engine`, `reinstall_model`; Home renders
+the label and calls `POST /stack/v1/health/{code}/fix`, which returns
+`{ ok, result }`. A code that needs a human (a host to plug back in)
+has no `fix` and Home shows the cause.
+
+## The settings declaration
+
+Spec `SettingDeclaration`: `{ key, type: number | boolean | text |
+enum, default, label, help, disclosure: basic | advanced | developer,
+needsRestart, section, order, range?: { min, max }, options?:
+[{ value, label }] }`. `GET /stack/v1/settings` returns every
+declaration with `inEffect` and `pending` values; `PUT` validates
+against the declaration and stores; `POST .../apply` promotes pending
+values (Home restarts the service through the service manager). Home
+renders this with its generic settings renderer (org `SETTINGS.md`) on
+its Engines page and never declares a Stack key of its own. The one
+Home-side setting is the Stack's port, declared once in Home's settings
+definition and filled by the installer.
+
+Sections and keys as declared today: `memory` (`modelBudgetBytes`,
+`systemLowWaterPct`, `systemLowWaterFloorBytes`, `systemSustainedPolls`),
+`updates` (`updatesEnabled`, `huggingFaceEndpoint`), `runtime`
+(`idleUnloadMinutes`, `idleUnloadOnBatteryMinutes`, `downloadCapMbps`,
+`port`), `engines.llama-server` (`contextLength`, `slots`, `threads`,
+`cacheRamMb`, `flashAttention`), and per role a `url` binding
+(`engines.<role>.hostUrl`, `engines.<role>.expectedVersion`) for a
+server the person already runs.
+
+## The privacy rows
+
+`GET /stack/v1/privacy` returns the Stack's outbound endpoints as data
+in the org's "what leaves the house" shape (`{ what, when, carries,
+receiver, setting }`), and Home's privacy page renders them beside its
+own. The rows the Stack declares:
+
+| What | When it happens | What it carries | Who receives it | Setting |
+|---|---|---|---|---|
+| Checking for engine and model updates | Only when Home has switched update checks on, then when Home's schedule calls the check | A `GET` with `If-None-Match` and `User-Agent: maipai-stack/<version> (<os>-<arch>)`, no query string or identifier | The Catalog's signed index on GitHub | `updatesEnabled` |
+| Downloading a model or an engine build | Only when Home installs one or applies an update | The name of the pinned file | Hugging Face or the mirror declared in `huggingFaceEndpoint`, and GitHub for engine archives, straight from this computer | none: an explicit action |
+| Reading a model's provenance before install | Only when Home asks to install a model by repository | The repository name, then its immutable revision and file list | Hugging Face or the declared mirror | none: an explicit action |
+
+Nothing else leaves the machine. Adding or changing an outbound
+endpoint adds or changes a row here and in the route in the same
+commit, and the backend suite (from the step 4 rewrite of the refocus)
+carries a test that fails when a fetch target exists without a row.
+
+## The precious-state declaration
+
+`GET /stack/v1/backup` returns spec `PreciousState`: the paths Home's
+backup takes and the reason for each. Today: `data/stack.db` (settings
+values, model provenance, measured peaks, open health items:
+`include`), `data/keys/` (`include`), `data/models/` and `data/engines/`
+(rebuildable from their pins: `exclude`, with the sentence Home shows).
+Home takes, encrypts, schedules and restores the backup (org
+`BACKUPS.md`); the Stack only declares.
+
+## Install and service hand-off
+
+Home's installer installs the Stack: it places the `maipai-stack`
+binary for the platform, runs `maipai-stack install-service` (launchd
+`com.maipai.stack` on macOS, `systemd --user` on Linux) with
+`STACK_DATA_DIR` and `PORT` set, and waits for `/healthz`. The service
+unit has `RunAtLoad`, restart on failure with a 30 s throttle, and logs
+under `<data>/logs/`. `maipai-stack start`, `stop`, `status` and
+`uninstall-service` (optionally `--remove-data`) operate the unit. Exit
+codes: 0 clean stop, 1 fatal error (logged), so the service manager's
+restart policy is the outer watchdog and Home's watchdog is the one
+above it (org `SERVICES.md`). The Stack updates when Home's release
+ships a new binary; Home stops the service, replaces the binary, starts
+it, and reads `/healthz` for the new version.
 
 ## MaiPai Bot
 
-Bot builds on the Stack and never requires Home. This follows from the
-robot's design record (`bot/docs/dev.md`, section 2 and section 4): two
-processes on the robot, the household runtime (the hub's own TypeScript
-on Bun) and the Python body that owns every piece of hardware, with
-three llama-server processes for chat, embed and judge, and one governor
-across all of it (GOV-01) whose admission budget the body computes from
-power and thermal state.
-
-The Stack's place in that design, proposed here and to be confirmed or
-amended by the robot design pass:
-
-- **The robot runs its own Stack**, the Linux ARM profile, holding the
-  `chat`, `embed` and `judge` roles as spawned `llama-server` processes
-  with the pins and flags section 4 names (`taskset`, `--cache-reuse`
-  on chat and not on the judge, `enable_thinking: false`). The household
-  runtime's "engine supervisors and their launch adapter" port
-  (RUNTIME-01) is satisfied by a Stack client instead of an in-process
-  supervisor, which is the same code on the hub and the robot, per
-  principle 1.
-- **Speech stays the body's.** STT, TTS, wake, voice activity and
-  speaker evidence run in the body's one speech process over
-  `spec/voice/`, exactly as designed; the Stack registers that process
-  as a `managed` engine holding `stt` and `tts` so the board shows it,
-  the identity contract holds, and the household runtime addresses
-  speech the same way on both nodes. The Stack never spawns or kills it.
-- **One governor, the Stack's, fed by the body.** GOV-01 is met by the
-  Stack's governor reading the body's power and thermal budget as an
-  input to admission, so Bun, Python, Deno, llama-server and the Hailo
-  pipelines are admitted by one policy. The judge's preemption on an
-  interactive arrival (abort the in-flight request, lower CPU weight) is
-  a governor rule the Stack carries for the `judge` role on any
-  platform.
-- **Generation is unavailable on the robot** and the Stack says so per
-  role (`Not installed` on this profile); when paired, the household
-  runtime offers the hub's generator, which is a Home-to-Home link
-  matter, not a Stack one.
-- **Pairing is unchanged.** The link, the replica and the household
-  records are between the two household runtimes. The two Stacks never
-  talk to each other; each serves its own node.
-
-The measurements that decide the robot's engine set (M-01 through M-10)
-stay in the robot's design record and are unchanged by this split; what
-changes is which process runs them, and the answer is the Stack for the
-three language roles.
-
-## MaiPai Go
-
-Go never talks to the Stack. It talks to Home (or to Bot, when Home is
-unreachable), which owns identity and renders the UI schema. A future
-"Stack status" tile in Go is data Home already has from the event feed.
+Bot runs Home's platform code on the robot, so it consumes the Stack
+exactly as Home does, against its own local Stack on the Linux ARM
+profile: `chat`, `embed` and `judge` as spawned `llama-server`
+processes with the pins and flags Bot's design names (`taskset`,
+`--cache-reuse` on chat and not on the judge, `enable_thinking:
+false`). Speech stays the body's: STT, TTS, wake word, voice activity
+and speaker evidence run in the body's one speech process over
+`spec/voice/`; the Stack registers it as a `managed` engine holding
+`stt` and `tts` so the identity contract holds and the household
+runtime addresses speech the same way on both nodes. The body's power
+and thermal budget is an admission input to the robot's governor
+(GOV-01). Generation is unavailable on the robot and the Stack says so
+per role. The two Stacks never talk to each other; pairing is between
+the two household runtimes.
 
 ## MaiPai Catalog
 
-The Catalog's `model` packages are the Stack's preferred model source:
-signed, with source, revision, checksum, licence and role declared in the
-manifest, so a model arrives with its provenance record complete. The
-Catalog publishes its model index as
+The Catalog's `model` packages are the Stack's model source: signed,
+with source, revision, checksum, licence and role declared, published
+as the signed index at
 `https://github.com/getmaipai/catalog/releases/latest/download/model-index.json`.
-The Stack checks that static index only through its opt-in update path.
-Stack installs `model` packages and, for `voice` and `wakeword` packages,
-installs the model half and hands the runtime half to the client that
-loads it (Home's voice sidecar, the robot's body). Engine pins are the
-Stack's own catalog, per platform, not Catalog packages, because an
-engine build is not something a community contributes and signs.
+The Stack reads it only through the opt-in update check and installs
+nothing without Home's explicit call. Engine pins are the Stack's own
+catalog per platform, in this repo, because an engine build is not
+something a community contributes and signs; an engine index published
+by the Catalog is a backlog item (cross-repo) so the updates route can
+answer "available" for engines too.
 
-## MaiPai Desktop (part of `home`)
+## MaiPai Go
 
-Desktop shows Home. It may show the Stack's board state in its dock badge
-using the same event feed Home already consumes, so there is no second
-subscription. The Stack's own menu-bar item is separate and stack-only,
-for a person who runs the Stack without Home. The Stack's Tauri app
-loads its own console and local state, not Home's. STACK-66 completes
-the daemon install path; RELEASE-STACK-01 packages the app and daemon.
-
-## A developer's own tool
-
-The case the Stack serves alone: a key scoped to the roles the tool may
-spend, the explorer at `/api/docs`, the OpenAI-shaped endpoints so an
-existing client library works unchanged, and the identity headers so the
-tool can log which model answered. Role-scoped keys are what let an
-operator run a coding agent against `chat` and `embed` without giving it
-the power to start a video job on the family's machine.
+Go never talks to the Stack. It talks to Home (or to Bot when Home is
+unreachable), which owns identity and renders the UI schema.
