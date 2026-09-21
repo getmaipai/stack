@@ -327,7 +327,7 @@ are never copied. Nothing migrates Home until STACK-16.
   with missing metadata listed with "unknown", never dropped. Out of
   scope: the preview endpoint (STACK-101b). Exit: `bash
   scripts/check.sh`.
-- [ ] **STACK-101b (M): the voice preview.** `POST
+- [x] **STACK-101b (M): the voice preview.** `POST
   /stack/v1/voices/{id}/preview` renders one fixed sample sentence
   through the normal `tts` path, cached under `data/` per voice and
   engine build so the second play is instant. Files:
@@ -336,7 +336,7 @@ are never copied. Nothing migrates Home until STACK-16.
   (STACK-94c). Acceptance: a live preview on this laptop with the
   cache hit measured. Out of scope: the picker itself (home
   VOICE-BROWSER-01). Exit: `bash scripts/check.sh` and the live
-  preview line in dev.md.
+  preview line in dev.md. Landed 2026-09-21 at 79eb703 (c-97): the cached preview per voice and engine build; the `engine` field on the voice wire came with it; the live preview line in dev.md is still pending the coordinator's measurement.
 
 - [x] **STACK-94a (S): the speech design note.** `dev.md`, "The
   speech roles: `stt` and `tts`, designed": sherpa-onnx 1.13.8 for
