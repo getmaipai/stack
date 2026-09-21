@@ -50,9 +50,19 @@ echo "== backend: install"
 
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
+# Resolved to absolute right after creation: the compile step below
+# runs inside `(cd backend && ...)`, so a relative $OUT_DIR (the
+# default, "dist") needs to be re-based from there - `../$OUT_DIR` did
+# that, but silently produced a broken path when a caller (Home's own
+# install.sh, which always passes one) gave an absolute $OUT_DIR
+# instead, prepending a stray "../" onto an absolute path. Resolving
+# once, here, means the compile step below needs no relative-vs-
+# absolute logic of its own at all. Found live wiring HOME-STACK-01's
+# home-side install.sh into this script for real.
+OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 
 echo "== compile: $BINARY_NAME"
-(cd backend && bun build src/index.ts --compile --outfile "../$OUT_DIR/$BINARY_NAME")
+(cd backend && bun build src/index.ts --compile --outfile "$OUT_DIR/$BINARY_NAME")
 
 echo "== migrations (sibling directory, see this script's own header)"
 cp -R backend/src/db/migrations "$OUT_DIR/migrations"
@@ -73,7 +83,7 @@ echo "== live verify: serve + /healthz on a scratch data directory"
 VERIFY_DATA="$(mktemp -d)"
 VERIFY_LOG="$VERIFY_DATA/serve.log"
 VERIFY_PORT=8799
-STACK_DATA_DIR="$VERIFY_DATA" PORT="$VERIFY_PORT" STACK_BUN_BIN="$BUN_BIN" "./$OUT_DIR/$BINARY_NAME" serve >"$VERIFY_LOG" 2>&1 &
+STACK_DATA_DIR="$VERIFY_DATA" PORT="$VERIFY_PORT" STACK_BUN_BIN="$BUN_BIN" "$OUT_DIR/$BINARY_NAME" serve >"$VERIFY_LOG" 2>&1 &
 VERIFY_PID=$!
 cleanup() { kill "$VERIFY_PID" 2>/dev/null || true; rm -rf "$VERIFY_DATA"; }
 trap cleanup EXIT
