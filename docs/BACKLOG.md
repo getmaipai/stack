@@ -410,6 +410,34 @@ are never copied. Nothing migrates Home until STACK-16.
   `home/spec` fixtures. Acceptance: the suite runs from a sibling
   checkout with one command and fails on any shape change. Out of
   scope: Home's consumers. Exit: `bash scripts/check.sh`.
+- [x] **HOME-STACK-01, the Stack's own half (M, done 2026-09-21): the compiled binary.**
+  `scripts/build-binary.sh` compiles `maipai-stack` (`bun build --compile`
+  from `backend/src/index.ts`) for Home's installer to place, verifying
+  live against a real scratch data directory every time it runs rather
+  than trusting a one-time claim: `/healthz`, the role list, and (since
+  a compiled binary can never load `sherpa-onnx-node`'s native binding
+  once it also contains the daemon's own graph - a genuine Bun bundler
+  bug, `getmaipai/stack#8`, filed with a minimal repro) a real `stt`
+  transcription end to end, through a real `bun` (`STACK_BUN_BIN`)
+  running the worker against `backend-src/`, a real dereferenced copy of
+  `backend/` shipped as a sibling of the binary - not a documented gap,
+  a real fix. Also fixed along the way: `db/index.ts`'s migrations
+  folder and `lib/paths.ts`'s default data directory, both invisible to
+  a compiled binary's virtual filesystem (drizzle's migrator and the
+  data-dir fallback both use plain `node:fs`/`import.meta.dir`), now
+  resolve relative to `process.execPath`'s real directory via
+  `lib/paths.ts`'s new `isCompiledBinary`. Every other role (external
+  subprocesses, never a native Node addon) was already unaffected.
+  Files: `scripts/build-binary.sh` (new), `backend/src/db/index.ts`,
+  `backend/src/lib/paths.ts`, `backend/src/lib/supervisor.ts`
+  (`speechWorkerCommand()`'s compiled-vs-bun-run branch),
+  `backend/src/service/launchd.ts` + `systemd.ts` (`STACK_BUN_BIN`
+  passthrough), `backend/package.json`. `bash scripts/check.sh` green,
+  full backend suite 327/327. Out of scope: an actual Linux build;
+  Home's own `install.sh`/`uninstall.sh` wiring (lands in `home`'s own
+  BACKLOG as its own HOME-STACK-01 item - now also has to keep
+  `backend-src/` beside the binary and set `STACK_BUN_BIN`, not just
+  place a single file).
 - [ ] **STACK-16 (L): Home runs on the Stack.** Home's installer
   installs the Stack, Home calls every role by name, bridges the event
   feed into its notification system, renders the Engines page from the

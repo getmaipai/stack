@@ -40,3 +40,25 @@ test("renders the launchd settings and starts the temporary agent", () => {
   uninstallLaunchdService();
   expect(readFileSync(log, "utf8")).toContain(`bootout gui/${process.getuid?.() ?? 0}/com.maipai.stack.test`);
 });
+
+test("carries STACK_BUN_BIN into the unit's own environment when set (getmaipai/stack#8's fix)", () => {
+  const original = process.env.STACK_BUN_BIN;
+  process.env.STACK_BUN_BIN = "/opt/homebrew/bin/bun";
+  try {
+    const plist = renderLaunchdPlist("/Users/test/.maipai/stack/bin/maipai-stack", data);
+    expect(plist).toContain("<key>STACK_BUN_BIN</key><string>/opt/homebrew/bin/bun</string>");
+  } finally {
+    if (original === undefined) delete process.env.STACK_BUN_BIN; else process.env.STACK_BUN_BIN = original;
+  }
+});
+
+test("omits STACK_BUN_BIN entirely when unset", () => {
+  const original = process.env.STACK_BUN_BIN;
+  delete process.env.STACK_BUN_BIN;
+  try {
+    const plist = renderLaunchdPlist("/Users/test/.maipai/stack/bin/maipai-stack", data);
+    expect(plist).not.toContain("STACK_BUN_BIN");
+  } finally {
+    if (original !== undefined) process.env.STACK_BUN_BIN = original;
+  }
+});

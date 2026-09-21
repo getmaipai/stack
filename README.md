@@ -44,6 +44,21 @@ in [getmaipai/.github](https://github.com/getmaipai/.github);
 `scripts/check.sh` is the gate and needs sibling checkouts of
 `getmaipai/.github` and `getmaipai/commons`.
 
+**Build**: `bash scripts/build-binary.sh` compiles the daemon into one
+binary at `dist/maipai-stack-<platform>-<arch>` (`bun build --compile`),
+plus `migrations/` and `backend-src/` (a real, dereferenced copy of this
+repo's own `backend/`) as sibling directories the binary needs at
+runtime - this is what Home's installer runs to place the Stack, never
+something a person runs by hand. Verified live on every run against a
+real scratch data directory: `/healthz`, and a real `stt` transcription
+end to end (a compiled binary can never load `sherpa-onnx-node`'s
+native binding directly - a Bun bundler issue tracked at
+[getmaipai/stack#8](https://github.com/getmaipai/stack/issues/8) - so
+the worker runs through a real `bun`, named by `STACK_BUN_BIN`, against
+the vendored `backend-src/` instead). `SKIP_VERIFY=1` skips all live
+checks; `SKIP_STT_VERIFY=1` keeps `/healthz` but skips the slower real
+download. See `docs/dev.md`'s HOME-STACK-01 entry for the full story.
+
 ---
 
 MaiPai is open-source software for personal, self-hosted, non-commercial

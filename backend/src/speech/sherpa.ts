@@ -27,6 +27,42 @@ interface SherpaStream { acceptWaveform(input: { samples: Float32Array; sampleRa
 function loadModule(): SherpaModule {
   // A require, not an import: the addon and its dylibs load at call time
   // in the worker, and a test that imports this file never touches them.
+  //
+  // Left exactly as `require(RUNTIME_NAME)` on purpose, unmodified -
+  // this line is not the problem. In isolation, inside a `bun build
+  // --compile` binary containing only this file's own graph (session.ts,
+  // audio.ts, nothing else), it resolves and embeds correctly:
+  // sherpa-onnx-node's own addon-static-import.js (upstream's own
+  // accommodation for exactly this - a bundler-visible literal
+  // `require()` per platform/arch, each guarded by a try/catch so only
+  // the one that actually exists on disk resolves) is what addon.js
+  // tries first, before its own runtime-computed fallback paths that a
+  // compiled binary can never see.
+  //
+  // It breaks once this same compiled binary ALSO contains the daemon's
+  // own graph (`bun build backend/src/index.ts --compile`, the real
+  // shape scripts/build-binary.sh produces) - confirmed a genuine Bun
+  // bundler bug, not anything in this file or the daemon's own code: the
+  // minimal repro is two files, this one's `require(RUNTIME_NAME)` plus
+  // a SECOND, otherwise unrelated file anywhere else in the same build
+  // containing ANY other `require()` call at all - even `require("node:
+  // os")`, even one that only ever executes on Linux (service/
+  // notify.ts's `bun:ffi` call, gated `process.platform !== "linux"` and
+  // never reached on this machine) - and sherpa-onnx-node's own native
+  // embedding silently fails to resolve at all, `error: Cannot find
+  // package 'sherpa-onnx-node'`. Tried and ruled out: template-literal
+  // vs plain-string require, `--external`, a true `await import()`
+  // instead of `require()`, obfuscating the second require's own
+  // specifier so it can't be statically read as a literal. None change
+  // the outcome, which is why this is reported as a Bun issue
+  // (getmaipai/stack#8) rather than patched around here - there is no
+  // known workaround inside this file itself. The actual fix lives one
+  // level up, in lib/supervisor.ts's speechWorkerCommand(): a compiled
+  // daemon runs this worker through a real `bun`, against the vendored
+  // source tree scripts/build-binary.sh ships beside the binary, never
+  // as a re-invocation of the compiled binary itself - the exact shape
+  // that hits this bug. This function stays untouched either way; a
+  // real `bun run`, compiled daemon or not, resolves it correctly.
   return require(RUNTIME_NAME) as SherpaModule;
 }
 

@@ -12,6 +12,13 @@ function launchAgentsDir(): string { return join(homeDir(), "Library", "LaunchAg
 export function launchAgentPath(): string { return join(launchAgentsDir(), `${serviceLabel()}.plist`); }
 function serviceDataDir(): string { return resolve(process.env.STACK_DATA_DIR ?? defaultDataDir); }
 function portEnvironment(): string { return process.env.PORT ? `\n  <key>PORT</key><string>${xml(process.env.PORT)}</string>` : ""; }
+// The bun binary the compiled daemon re-invokes the stt worker through
+// (lib/supervisor.ts's speechWorkerCommand(), getmaipai/stack#8) -
+// baked into the unit at install time the same way PORT already is,
+// since a launchd unit's own EnvironmentVariables is the one thing
+// that reaches every later `serve` without the installer having to set
+// it again on every boot.
+function bunBinEnvironment(): string { return process.env.STACK_BUN_BIN ? `\n  <key>STACK_BUN_BIN</key><string>${xml(process.env.STACK_BUN_BIN)}</string>` : ""; }
 function uid(): number { return typeof process.getuid === "function" ? process.getuid() : Number(process.env.USER_ID ?? 0); }
 function launchTarget(): string { return `gui/${uid()}/${serviceLabel()}`; }
 
@@ -35,7 +42,7 @@ export function renderLaunchdPlist(binaryPath: string, dataDirectory = serviceDa
   <key>StandardOutPath</key><string>${xml(join(logs, "stack.log"))}</string>
   <key>StandardErrorPath</key><string>${xml(join(logs, "stack.error.log"))}</string>
   <key>EnvironmentVariables</key>
-  <dict><key>STACK_DATA_DIR</key><string>${xml(dataDirectory)}</string>${portEnvironment()}</dict>
+  <dict><key>STACK_DATA_DIR</key><string>${xml(dataDirectory)}</string>${portEnvironment()}${bunBinEnvironment()}</dict>
 </dict>
 </plist>
 `;

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { installSystemdService, renderSystemdUnit, startSystemdService, stopSystemdService, systemdStatus, systemdUnitPath, uninstallSystemdService } from "@/service/systemd";
 import { __setNotifySenderForTests, notifySystemd, startSystemdWatchdog } from "@/service/notify";
 
-const original = { HOME: process.env.HOME, DATA: process.env.STACK_DATA_DIR, NAME: process.env.STACK_SERVICE_NAME, SYSTEMCTL: process.env.STACK_SYSTEMCTL, PORT: process.env.PORT, SOCKET: process.env.NOTIFY_SOCKET, USEC: process.env.WATCHDOG_USEC };
+const original = { HOME: process.env.HOME, DATA: process.env.STACK_DATA_DIR, NAME: process.env.STACK_SERVICE_NAME, SYSTEMCTL: process.env.STACK_SYSTEMCTL, PORT: process.env.PORT, SOCKET: process.env.NOTIFY_SOCKET, USEC: process.env.WATCHDOG_USEC, BUN_BIN: process.env.STACK_BUN_BIN };
 const root = mkdtempSync(join(tmpdir(), "maipai-stack-systemd-"));
 const home = join(root, "home");
 const data = join(root, "data");
@@ -18,7 +18,7 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  for (const [key, value] of [["HOME", original.HOME], ["STACK_DATA_DIR", original.DATA], ["STACK_SERVICE_NAME", original.NAME], ["STACK_SYSTEMCTL", original.SYSTEMCTL], ["PORT", original.PORT], ["NOTIFY_SOCKET", original.SOCKET], ["WATCHDOG_USEC", original.USEC]] as const) {
+  for (const [key, value] of [["HOME", original.HOME], ["STACK_DATA_DIR", original.DATA], ["STACK_SERVICE_NAME", original.NAME], ["STACK_SYSTEMCTL", original.SYSTEMCTL], ["PORT", original.PORT], ["NOTIFY_SOCKET", original.SOCKET], ["WATCHDOG_USEC", original.USEC], ["STACK_BUN_BIN", original.BUN_BIN]] as const) {
     if (value === undefined) delete process.env[key]; else process.env[key] = value;
   }
   delete process.env.SYSTEMCTL_LOG; __setNotifySenderForTests(null); rmSync(root, { recursive: true, force: true });
@@ -43,6 +43,13 @@ test("renders the unit the services standard names and drives systemctl --user t
   uninstallSystemdService();
   expect(existsSync(systemdUnitPath())).toBe(false);
   expect(readFileSync(log, "utf8")).toContain("--user disable --now maipai-stack-test.service");
+});
+
+test("carries STACK_BUN_BIN into the unit's own environment when set (getmaipai/stack#8's fix), omitted when unset", () => {
+  process.env.STACK_BUN_BIN = "/usr/local/bin/bun";
+  expect(renderSystemdUnit("/home/marlow/.maipai/stack/bin/maipai-stack", data)).toContain('Environment="STACK_BUN_BIN=/usr/local/bin/bun"');
+  delete process.env.STACK_BUN_BIN;
+  expect(renderSystemdUnit("/home/marlow/.maipai/stack/bin/maipai-stack", data)).not.toContain("STACK_BUN_BIN");
 });
 
 test("a path with a space or a percent sign is quoted and escaped in the unit", () => {

@@ -26,6 +26,13 @@ function quote(value: string): string {
 export function renderSystemdUnit(binaryPath: string, dataDirectory = serviceDataDir()): string {
   const logs = join(dataDirectory, "logs");
   const port = process.env.PORT ? `Environment=PORT=${process.env.PORT}\n` : "";
+  // Same reasoning as launchd.ts's own bunBinEnvironment(): the bun
+  // binary the compiled daemon re-invokes the stt worker through
+  // (lib/supervisor.ts's speechWorkerCommand(), getmaipai/stack#8),
+  // baked in at install time. Untested on Linux this session (the
+  // compiled build itself is darwin-only for now); kept in sync with
+  // launchd.ts's own shape rather than left to drift.
+  const bunBin = process.env.STACK_BUN_BIN ? `Environment=${quote(`STACK_BUN_BIN=${process.env.STACK_BUN_BIN}`)}\n` : "";
   return `[Unit]
 Description=MaiPai Stack, the engine foundation of MaiPai Home
 After=network.target
@@ -37,7 +44,7 @@ Type=notify
 NotifyAccess=main
 ExecStart=${quote(binaryPath)} serve
 Environment=${quote(`STACK_DATA_DIR=${dataDirectory}`)}
-${port}Restart=on-failure
+${port}${bunBin}Restart=on-failure
 RestartSec=5
 WatchdogSec=30
 StandardOutput=append:${join(logs, "stack.log").replaceAll("%", "%%")}

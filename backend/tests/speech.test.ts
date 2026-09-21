@@ -234,9 +234,16 @@ test("a session with no stt engine tells the client why and closes", async () =>
 
 test("the worker command differs under bun run and the compiled binary, and the args parse", () => {
   const args = { role: "stt" as const, port: 8791, modelPath: "/m/pkg", vadPath: "/m/silero_vad.onnx", threads: 2 };
-  expect(speechWorkerCommand(args, { execPath: "/opt/bun/bin/bun", main: "/src/backend/src/index.ts" })).toEqual(["/opt/bun/bin/bun", "/src/backend/src/index.ts", "speech-worker", "--role", "stt", "--port", "8791", "--model", "/m/pkg", "--vad", "/m/silero_vad.onnx", "--threads", "2"]);
-  expect(speechWorkerCommand(args, { execPath: "/usr/local/bin/maipai-stack", main: "/$bunfs/root/index.ts" })[0]).toBe("/usr/local/bin/maipai-stack");
-  expect(speechWorkerCommand(args, { execPath: "/usr/local/bin/maipai-stack", main: "/$bunfs/root/index.ts" })[1]).toBe("speech-worker");
+  // Uncompiled (`bun run`): execPath is bun itself, the entry file goes
+  // in between - unchanged from before getmaipai/stack#8's fix.
+  expect(speechWorkerCommand(args, { execPath: "/opt/bun/bin/bun", main: "/src/backend/src/index.ts", isCompiled: false })).toEqual(["/opt/bun/bin/bun", "/src/backend/src/index.ts", "speech-worker", "--role", "stt", "--port", "8791", "--model", "/m/pkg", "--vad", "/m/silero_vad.onnx", "--threads", "2"]);
+  // Compiled: a real bun, against the vendored source tree beside the
+  // binary, never a re-invocation of the compiled binary itself (the
+  // exact shape getmaipai/stack#8 breaks).
+  expect(speechWorkerCommand(args, { execPath: "/opt/maipai/stack/maipai-stack", main: "/$bunfs/root/maipai-stack", isCompiled: true, bunBin: "/opt/maipai/bun" })).toEqual(["/opt/maipai/bun", "/opt/maipai/stack/backend-src/src/index.ts", "speech-worker", "--role", "stt", "--port", "8791", "--model", "/m/pkg", "--vad", "/m/silero_vad.onnx", "--threads", "2"]);
+  // Compiled with no bun named: a clear error, not a silent fall-through
+  // to the broken re-invocation.
+  expect(() => speechWorkerCommand(args, { execPath: "/opt/maipai/stack/maipai-stack", main: "/$bunfs/root/maipai-stack", isCompiled: true })).toThrow(/STACK_BUN_BIN/);
   expect(parseWorkerArgs(["--role", "stt", "--port", "8791", "--model", "/m/pkg", "--vad", "/m/v.onnx"])).toEqual({ role: "stt", port: 8791, model: "/m/pkg", vad: "/m/v.onnx", threads: 2 });
   expect(() => parseWorkerArgs(["--role", "tts", "--port", "1"])).toThrow(/--role stt/);
   expect(() => parseWorkerArgs(["--role", "stt", "--model", "/m"])).toThrow(/--port/);

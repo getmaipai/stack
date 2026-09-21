@@ -6,8 +6,9 @@
 // exit watch, the drain) are the same here, keyed by role.
 import { existsSync } from "node:fs";
 import { createServer } from "node:net";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { withTimeout } from "@maipai/core/src/withTimeout";
+import { isCompiledBinary } from "@/lib/paths";
 import { ENGINE_READY_MARKER, installedEnginePin, selectEngineBinary, type ChatEngine, type EngineBinaryPin } from "@/lib/engineCatalog";
 import { managedEnv } from "@/lib/uvEnvironment";
 import { llamaServerArgs } from "@/lib/engineArgs";
@@ -471,11 +472,31 @@ async function startUrlProcess(role: RoleId, url: string): Promise<RoleProcess> 
 }
 
 /** The speech worker's command line, built the way the daemon itself
- * was started: the compiled binary knows the subcommand; under `bun
- * run`, where execPath is bun itself, the entry file goes in between. */
-export function speechWorkerCommand(args: { role: RoleId; port: number; modelPath: string; vadPath: string; threads: number }, runtime: { execPath: string; main: string } = { execPath: process.execPath, main: Bun.main }): string[] {
+ * was started: under `bun run`, where execPath is bun itself, the
+ * entry file goes in between. A compiled binary is the one case that
+ * does NOT just know its own subcommand: sherpa-onnx-node's native
+ * binding cannot be loaded from inside a `bun build --compile` binary
+ * at all once the same binary also contains the daemon's graph
+ * (getmaipai/stack#8, a genuine Bun bundler bug - full repro in
+ * speech/sherpa.ts's own loadModule()), so a compiled daemon instead
+ * runs the worker through a real `bun`, against the vendored source
+ * tree scripts/build-binary.sh ships as `backend-src/` beside the
+ * binary - the same source and node_modules a normal `bun run` already
+ * resolves the native binding from correctly today, proven live.
+ * `STACK_BUN_BIN` (the installer's own bun, the same one it builds the
+ * frontend with) is required in that case; unset is a clear error, not
+ * a silent fallback to the broken compiled path. */
+export function speechWorkerCommand(
+  args: { role: RoleId; port: number; modelPath: string; vadPath: string; threads: number },
+  runtime: { execPath: string; main: string; isCompiled: boolean; bunBin?: string } = { execPath: process.execPath, main: Bun.main, isCompiled: isCompiledBinary, bunBin: process.env.STACK_BUN_BIN },
+): string[] {
+  const workerArgs = ["speech-worker", "--role", args.role, "--port", String(args.port), "--model", args.modelPath, "--vad", args.vadPath, "--threads", String(args.threads)];
+  if (runtime.isCompiled) {
+    if (!runtime.bunBin) throw new EngineUnavailableError("STACK_BUN_BIN is not set; a compiled build runs the stt worker through a real bun, not a re-invocation of itself (getmaipai/stack#8).");
+    return [runtime.bunBin, join(dirname(runtime.execPath), "backend-src", "src", "index.ts"), ...workerArgs];
+  }
   const viaBun = /^bun(\.exe)?$/i.test(runtime.execPath.split(/[\\/]/).pop() ?? "");
-  return [runtime.execPath, ...(viaBun ? [runtime.main] : []), "speech-worker", "--role", args.role, "--port", String(args.port), "--model", args.modelPath, "--vad", args.vadPath, "--threads", String(args.threads)];
+  return [runtime.execPath, ...(viaBun ? [runtime.main] : []), ...workerArgs];
 }
 
 export interface LaunchPlan { command: string[]; engine: string; build: string; stdin: "pipe" | "ignore"; contextLength: number; kind: "spawned" | "managed"; env?: Record<string, string>; healthPath?: string; }
@@ -489,6 +510,10 @@ export function launchPlan(role: RoleId, model: ModelRecord, port: number): Laun
     if (!vad?.modelPath) throw new EngineUnavailableError(`The ${role} voice activity detector is not installed.`);
     const declared = engineSettingValues("engines.llama_server");
     const threads = typeof declared.threads === "number" && declared.threads > 0 ? declared.threads : 2;
+    // speechWorkerCommand() itself picks the compiled-binary-vs-bun-run
+    // shape (see its own comment, getmaipai/stack#8); no special env
+    // needed here either way - a real `bun run` against the vendored
+    // source resolves the native binding exactly as dev already does.
     return { command: speechWorkerCommand({ role, port, modelPath: model.modelPath!, vadPath: vad.modelPath, threads }), engine: "sherpa-onnx-node", build: "bundled", stdin: "pipe", contextLength: 0, kind: "spawned" };
   }
   if (role === "image") {
