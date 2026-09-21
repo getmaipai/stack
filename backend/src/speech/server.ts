@@ -10,7 +10,7 @@
 import type { ServerWebSocket } from "bun";
 import { decodeWave, frameToSamples, toRecognizerRate, WaveFormatError } from "@/speech/audio";
 import { SttSession, type SttSessionConfig, type Transcriber, type VoiceDetector } from "@/speech/session";
-import type { SttWireEvent } from "@/spec/ts/stt-wire-event";
+import type { SttWireEvent } from "@maipai/spec/stack/ts/stt-wire-event.js";
 
 export const SESSION_PATH = "/v1/audio/transcriptions/stream";
 export const TRANSCRIBE_PATH = "/v1/audio/transcriptions";

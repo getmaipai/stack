@@ -9,7 +9,7 @@
 // submit for it is refused with a reason rather than left queued.
 import { emit } from "@/lib/events";
 import { admit, getGovernorStatus, getRunState, GovernorRules, release, withdraw, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
-import { StackJob, StackJobState } from "@/spec/ts/stack-job";
+import { StackJob, StackJobState } from "@maipai/spec/stack/ts/stack-job.js";
 
 export const JobStateSchema = StackJobState;
 export type JobState = StackJobState;

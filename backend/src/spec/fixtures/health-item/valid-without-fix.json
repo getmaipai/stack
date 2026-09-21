@@ -1,8 +1,0 @@
-{
-  "code": "managed-host-offline.tts",
-  "severity": "error",
-  "title": "Voice out server is offline",
-  "text": "The tts server at the bound URL is offline.",
-  "since": "2026-09-20T07:36:25.751Z",
-  "cause": "The health probe failed."
-}

@@ -11,7 +11,7 @@ import { db } from "@/db";
 import { meta } from "@/db/schema";
 import { defaultModelBudgetBytes, setGovernorMemorySettings } from "@/lib/governor";
 import { setDownloadCapMbps } from "@/lib/download";
-import { StackSetting } from "@/spec/ts/stack-setting";
+import { StackSetting } from "@maipai/spec/stack/ts/stack-setting.js";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
 import { decryptSecret, encryptSecret } from "@/lib/secrets";
 import { ENGINE_BINARIES } from "@/lib/engineCatalog";

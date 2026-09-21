@@ -81,11 +81,11 @@ free afterward.
   `MAIPAI_SHARED_DIR` override, the `@maipai/standards` pattern) in
   its tag message; mirror it in `scripts/check.sh` so the gate fails
   loud when the sibling is missing or its version is not the pin.
-- **Step 5's spec shapes.** Decided when you get there. Report
-  `done` for step 4 and stop; the coordinator will say whether spec
-  exists yet (B's 0c) or whether you declare the wire shapes locally
-  under `backend/src/spec/` for B to move. Do not start step 5 on your
-  own.
+- **Step 5's spec shapes.** The wire shapes are pinned in
+  `@maipai/spec` (tag `spec-v0.1.2` in `getmaipai/commons`) and
+  imported by the backend from the package; the local mirror under
+  `backend/src/spec/` is deleted (RF-05b). The voice stays Stack-local
+  at `backend/src/wire/voice.ts`. Landed on `main` with this line.
 - **The kept design** (the reconciled kit and shell, owner-approved
   2026-09-19) is B's to move; you do not touch `frontend/` before
   step 4 and delete it whole at step 4.

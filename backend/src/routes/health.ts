@@ -9,7 +9,7 @@ import { engineRole } from "@/lib/engineCatalog";
 import { rollbackEngine, currentEngine, engineOfFailedSwap, previousEngine } from "@/updates/engines";
 import { ROLE_IDS, type RoleId } from "@/roles";
 
-import { HealthItem as HealthItemSchema } from "@/spec/ts/health-item";
+import { HealthItem as HealthItemSchema } from "@maipai/spec/stack/ts/health-item.js";
 
 const listRoute = createRoute({ method: "get", path: "/", tags: ["Health"], summary: "Active health items", responses: { 200: { content: { "application/json": { schema: z.object({ health: z.array(HealthItemSchema) }) } }, description: "Open problems, each with at most one fix." } } });
 const fixRoute = createRoute({ method: "post", path: "/{code}/fix", tags: ["Health"], summary: "Run a health item's fix", request: { params: idParamSchema("code") }, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.boolean(), result: z.string() }) } }, description: "What the fix did." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown item or no fix." } } });

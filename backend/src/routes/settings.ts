@@ -2,7 +2,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter, ErrorSchema } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { applyPendingSettings, readSettings, SETTING_SECTIONS, updateSettings } from "@/settings";
-import { StackSetting } from "@/spec/ts/stack-setting";
+import { StackSetting } from "@maipai/spec/stack/ts/stack-setting.js";
 
 const ResponseSchema = z.object({ sections: z.array(z.object({ id: z.string(), label: z.string() })), settings: z.array(StackSetting) });
 

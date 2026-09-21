@@ -1,9 +1,0 @@
-{
-  "id": "model.installed",
-  "at": "2026-09-20T07:36:25.751Z",
-  "seq": 6,
-  "data": {
-    "model": "qwen3-1.7b-q8-0",
-    "path": "/data/models/qwen3-1.7b-q8-0/Qwen3-1.7B-Q8_0.gguf"
-  }
-}

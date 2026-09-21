@@ -93,13 +93,20 @@ are never copied. Nothing migrates Home until STACK-16.
   backend imports and defines nowhere else, valid and invalid fixtures,
   and `tests/spec.test.ts` round-tripping every fixture through Ajv 2020
   and the mirror. Landed on `main` with this line.
-- [ ] **RF-05b (S, B at 0c): move `backend/src/spec` to `shared/spec`;
-  then import `@maipai/spec` and delete the local Zod mirror.** The six
-  schema files, their fixtures and `tests/spec.test.ts` copy across
-  unchanged (same `$id`s); `shared/spec`'s `gen:ts` replaces
-  `backend/src/spec/ts/`; the backend's imports change from
-  `@/spec/ts/<name>` to `@maipai/spec`; `scripts/check.sh` pins the
-  `spec-v` tag beside `core-v`. Exit: `bash scripts/check.sh`.
+- [x] **RF-05b (S): pin the wire shapes in `@maipai/spec` and delete
+  the local Zod mirror.** The nine shapes (the role request and reply
+  headers, the event envelope, the health item, the settings declaration,
+  the precious-state declaration, `SttWireEvent`,
+  `SttTranscribeResponse`, and the job) are imported from
+  `@maipai/spec` (tag `spec-v0.1.2` in `getmaipai/commons`, resolved to
+  its own per-tag worktree by `scripts/ensure-tag.sh`); `backend/src/spec/`
+  and `backend/tests/spec.test.ts` are deleted; the backend's imports
+  change from `@/spec/ts/<name>` to
+  `@maipai/spec/stack/ts/<name>.js`; `scripts/check.sh` pins the
+  `spec-v` tag beside `core-v` through the same `ensure-tag.sh` call.
+  The voice stays Stack-local at `backend/src/wire/voice.ts` (added by
+  `5c5612d` after `spec-v0.1.0` folded the other shapes in, carried by
+   no spec tag). Exit: `bash scripts/check.sh`.
 - [x] **RF-06 (S): the Home hand-off.**
   [plans/home-adoption-2026-09-20.md](plans/home-adoption-2026-09-20.md):
   nine Home items in order (install inside Home's installer, the Stack
@@ -311,8 +318,9 @@ are never copied. Nothing migrates Home until STACK-16.
   not), source, whether the files are on disk, and licence. Metadata
   comes from the preset table the engine ships; nothing is guessed
   from a file name. Files: `backend/src/speech/voiceList.ts`,
-  `backend/src/routes/voices.ts`, `backend/src/spec/` (a Voice wire
-  shape declared once, then moved to `@maipai/spec` like the others),
+  `backend/src/routes/voices.ts`, `backend/src/wire/voice.ts` (a Voice
+  wire shape declared once; it was added after `spec-v0.1.0` folded the
+  other shapes in and no spec tag carries it),
   `docs/integrations.md`, `docs/api/openapi.json` regenerated. Mirror:
   the models route and the `tts` render path (STACK-94c). Acceptance:
   a scripted-engine test listing presets with their metadata; a voice
@@ -343,7 +351,7 @@ are never copied. Nothing migrates Home until STACK-16.
   int8 and Silero VAD as store pins with sha256 (a package archive
   extracts to a directory); `POST /v1/audio/transcriptions` with
   `spec/voice`'s form and `WS /v1/audio/transcriptions/stream` with its
-  `SttWireEvent` contract mirrored under `backend/src/spec/`; identity
+  `SttWireEvent` contract imported from `@maipai/spec`; identity
   headers on every reply; the bundled clip transcribing in the suite
   through scripted engines and live on the dev machine
   (`scripts/prove-stt.sh`, the table in `dev.md` "stt proven live").

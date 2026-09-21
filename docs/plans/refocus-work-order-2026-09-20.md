@@ -228,15 +228,17 @@ edited this checkout.
      copies in their own commits, full gate green in each.
    Only after both adoptions does step 4 remove `frontend/` here.
 0c. **Move the spec (a Home item, may run in parallel after 0b).**
-   Move `home/spec` to `shared/spec` whole, including `pyproject.toml`
-   and the Python package, `gen/`, `schemas.resolved` and the fixture
-   round-trips; tag `spec-v0.1.0` at the current shape. Home pins it
-   and removes the workspace; Catalog deletes `catalog/schema/` (its
-   README already says "mirrored, not hand-edited", and
-   `manifest.schema.json` has drifted) and pins the package; the
-   Stack declares its control API and settings shapes there in step 5.
-   The org rule "shared record changes go through the spec first" now
-   means a commit in `shared/spec` before the hub commit.
+    Move `home/spec` to `shared/spec` whole, including `pyproject.toml`
+    and the Python package, `gen/`, `schemas.resolved` and the fixture
+    round-trips; tag `spec-v0.1.0` at the current shape (later amended
+    to `spec-v0.1.2` in `getmaipai/commons` once the Stack's role
+    shapes were folded in). Home pins it and removes the workspace;
+    Catalog deletes `catalog/schema/` (its README already says
+    "mirrored, not hand-edited", and `manifest.schema.json` has
+    drifted) and pins the package; the Stack imports its control API
+    and settings shapes from `@maipai/spec` in step 5. The org rule
+    "shared record changes go through the spec first" now means a
+    commit in `shared/spec` before the hub commit.
 1. **Org record first.** In `../.github/docs/DECISIONS.md` add a
    2026-09-20 entry that supersedes the 2026-09-17 one: the Stack is
    Home's engine foundation, not a product; the reasons in one
@@ -289,14 +291,14 @@ edited this checkout.
    `package.json` so nothing references a deleted tree, full gate
    green, one commit whose message inventories what was removed and
    what was kept.
-5. **Make the seam explicit.** Add or tighten in `backend/src` the one
-   event feed (SSE, typed), the settings declaration export, the health
-   problem list shape and the precious-state declaration, each with a
-   test that Home's side can import as a fixture. The wire shapes
-   themselves (role request and reply headers, event feed, health
-   item, settings declaration, precious-state declaration) are
-   declared in `shared/spec` and imported here, never defined twice.
-   `docs/integrations.md` is updated in the same commit.
+ 5. **Make the seam explicit.** Add or tighten in `backend/src` the one
+    event feed (SSE, typed), the settings declaration export, the health
+    problem list shape and the precious-state declaration, each with a
+    test that Home's side can import as a fixture. The wire shapes
+    themselves (role request and reply headers, event feed, health
+    item, settings declaration, precious-state declaration) are
+    imported from `@maipai/spec` (tag `spec-v0.1.2`), never defined
+    twice. `docs/integrations.md` is updated in the same commit.
 6. **Hand-off.** Write `docs/plans/home-adoption-2026-09-xx.md`: what
    Home's backlog must gain (the Engines page, the Updates and Repairs
    wiring, installing the Stack inside Home's installer, the Studio

@@ -106,16 +106,17 @@ The refocus order lists `ui` before `core`. Session A's step 4 needs
    reconciled design, so a difference that is the new design is
    expected and stated; a broken layout is a finding to fix). Full
    gate green, review, one commit, push.
-6. **`spec-v0.1.0` (0c).** Move `home/spec` whole (`pyproject.toml`,
-   the Python package, `gen/`, `schemas.resolved`, fixtures, tests,
-   `uv.lock`) to `shared/spec`; its own tests and the Python round
-   trips green inside `shared/check.sh`. Tag, push. Then Home pins it
-   and removes the `spec` workspace (its `check.sh` "spec: standards
-   gen/ presence" block moves to `shared`); full gate, review,
-   commit, push. Then Catalog deletes `catalog/schema/` and
-   `scripts/refresh-schema.sh`, pins the package, and its lint reads
-   the resolved schemas from it; `check.sh` green, review, commit,
-   push.
+ 6. **`spec-v0.1.0` (0c).** Move `home/spec` whole (`pyproject.toml`,
+    the Python package, `gen/`, `schemas.resolved`, fixtures, tests,
+    `uv.lock`) to `shared/spec`; its own tests and the Python round
+    trips green inside `shared/check.sh`. Tag, push (later amended to
+    `spec-v0.1.2` in `getmaipai/commons` once the Stack's role shapes
+    were folded in). Then Home pins it and removes the `spec`
+    workspace (its `check.sh` "spec: standards gen/ presence" block
+    moves to `shared`); full gate, review, commit, push. Then Catalog
+    deletes `catalog/schema/` and `scripts/refresh-schema.sh`, pins the
+    package, and its lint reads the resolved schemas from it;
+    `check.sh` green, review, commit, push.
 
 ## How consumers pin a `shared` workspace (decided)
 

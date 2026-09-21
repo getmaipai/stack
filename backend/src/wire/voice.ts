@@ -1,4 +1,7 @@
-// Hand-written Zod mirror of ../schemas/voice.schema.json.
+// The voice wire shape (STACK-101a): the metadata Home's voice picker
+// shows. Declared locally, not part of @maipai/spec - it was added after
+// spec-v0.1.0 folded the Stack's other wire shapes in, and no spec tag
+// carries it yet.
 import { z } from "zod";
 
 export const Voice = z.object({

@@ -2,7 +2,7 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { health } from "@/db/schema";
 import { emit } from "@/lib/events";
-import { HealthItem as HealthItemSchema, type HealthFixAction } from "@/spec/ts/health-item";
+import { HealthItem as HealthItemSchema, type HealthFixAction } from "@maipai/spec/stack/ts/health-item.js";
 
 export const HEALTH_SEVERITIES = ["critical", "error", "warning"] as const;
 export type HealthSeverity = typeof HEALTH_SEVERITIES[number];

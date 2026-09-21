@@ -10,9 +10,9 @@ import { dataDir } from "@/lib/paths";
 import { identityHeaders } from "@/lib/identity";
 import { POCKET_TTS_VERSION } from "@/speech/pocketTts";
 import { listVoices } from "@/speech/voiceList";
-import { ensureCloningWeights, prepareVoice, voiceNeedsCloning, VoiceRefusedError } from "@/speech/voices";
-import { speakRole, speechForm } from "@/lib/supervisor";
-import { Voice } from "@/spec/ts/voice";
+ import { ensureCloningWeights, prepareVoice, voiceNeedsCloning, VoiceRefusedError } from "@/speech/voices";
+ import { speakRole, speechForm } from "@/lib/supervisor";
+ import { Voice } from "@/wire/voice";
 
 const ListVoicesSchema = z.object({ voices: z.array(Voice) });
 const PreviewSentence = "Hello, this is my voice.";

@@ -1,1 +1,0 @@
-{"id":"job-9a0e","kind":"model.install","role":"chat","state":"running","percent":37,"completedBytes":680000000,"totalBytes":1834426016,"status":"downloading","position":null,"input":{"model":"qwen3-1.7b-q8-0"},"result":null,"reason":null,"createdAt":"2026-09-20T12:00:00.000Z","updatedAt":"2026-09-20T12:00:09.000Z"}

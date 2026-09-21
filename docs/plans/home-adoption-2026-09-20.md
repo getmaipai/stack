@@ -7,8 +7,8 @@ This is the hand-off to the `home` sessions: the items Home's
 the org template, and the order they land in. The Stack's side of every
 seam is in [../integrations.md](../integrations.md); nothing here asks
 the Stack for a route it does not already serve, and the shapes Home
-imports are the six schemas under `backend/src/spec/` (moving to
-`shared/spec` at 0c). The owner's rules that shape this note: the Stack
+imports are the nine shapes pinned in `@maipai/spec` (tag `spec-v0.1.2`
+in `getmaipai/commons`). The owner's rules that shape this note: the Stack
 is Home's engine foundation and Home's installer installs it (a person
 never installs the Stack by itself); one product on every screen; the
 Engines page sits behind Home's existing admin sign-in, and the Stack
@@ -26,7 +26,7 @@ caller (principle 1: no second copy of identity).
 | 5 | HOME-STACK-05: Updates and Repairs wiring | The Updates page and the Repairs list gain the Stack's rows. |
 | 6 | HOME-STACK-06: first-run sizing | Part of Home's first run, after the Engines page exists to land on. |
 | 7 | HOME-STACK-07: the Studio bench as a Home bench | STACK-14's measurement, run from Home against the Stack it installed. |
-| 8 | HOME-STACK-08: the `spec` move (only if 0c has not run) | The wire shapes into `shared/spec`; the Stack then deletes its local mirror (RF-05b). |
+| 8 | HOME-STACK-08: the `spec` move (only if 0c has not run) | The wire shapes into `@maipai/spec` (tag `spec-v0.1.2`); the Stack deletes its local mirror (RF-05b). |
 | 9 | STACK-16 in Home: dual-run, then delete Home's own supervisors | After the Studio proof; rollback restores the old path. |
 
 ## The items
@@ -70,7 +70,7 @@ caller (principle 1: no second copy of identity).
   Stack applies); Home's `/api/voice/hf-token` becomes a write to it.
   Files: Home's engine
   client, the turn engine's model calls, the voice path. Mirror: the
-  request and reply schemas under `stack/backend/src/spec/`; the
+  request and reply schemas pinned in `@maipai/spec`; the
   contract tests in `stack/backend/tests/routes.test.ts`. Acceptance:
   every Home model call goes through the client (an inventory in the
   commit); a scripted Stack 503 becomes "I can't think right now" in
@@ -112,7 +112,7 @@ caller (principle 1: no second copy of identity).
 
   Files: Home's admin routes and the Engines page, the generic
   settings renderer's data source. Mirror: the six schemas under
-  `stack/backend/src/spec/` and `stack/docs/integrations.md`'s tables.
+  `@maipai/spec` and `stack/docs/integrations.md`'s tables.
   Acceptance: every verb above works end to end against a scripted
   Stack in Home's suite and live against the installed Stack; the
   screenshot matrix captures the page at both widths and the review
@@ -159,14 +159,12 @@ caller (principle 1: no second copy of identity).
   bench report and a chosen Studio profile. Out of scope: migrating
   Home before the numbers exist. Exit: the bench command in its
   report.
-- [ ] **HOME-STACK-08 (S, only if 0c has not run): the `spec` move.**
-  `home/spec` moves whole to `shared/spec` (the refocus's 0c); the
-  Stack's six wire-shape schemas, fixtures and round-trip test copy
-  across unchanged from `stack/backend/src/spec/` and its `gen:ts`
-  replaces the hand-written Zod mirror (RF-05b on the Stack's side).
-  Home pins `spec-v0.1.0` and removes the workspace; Catalog deletes
-  its schema mirror and pins the package. Files: `shared/spec`,
-  `home/spec`, `catalog/schema`. Exit: each repo's `scripts/check.sh`.
+- [x] **HOME-STACK-08 (S, only if 0c has not run): the `spec` move.**
+  The wire shapes are pinned in `@maipai/spec` (tag `spec-v0.1.2` in
+  `getmaipai/commons`); the Stack imports them from the package and
+  deleted its local mirror and round-trip test (RF-05b). The voice
+  stays Stack-local at `stack/backend/src/wire/voice.ts`. Landed on
+  `main` with this line.
 - [ ] **STACK-16 in Home (L): dual-run, then delete Home's own
   supervisors.** After item 7's proof: Home registers nothing (there
   are no clients), calls every role through item 2's client, runs its

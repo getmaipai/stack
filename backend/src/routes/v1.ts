@@ -14,8 +14,8 @@ import { DownloadVerificationError } from "@/lib/download";
 import { POCKET_TTS_GATED_REPO } from "@/speech/pocketTts";
 import { ensureCloningWeights, prepareVoice, voiceNeedsCloning, VoiceRefusedError } from "@/speech/voices";
 import { hasJobRunner, submitJob, waitForJob } from "@/lib/jobs";
-import { RoleRequest } from "@/spec/ts/role-request";
-import { RoleReplyHeaders } from "@/spec/ts/role-reply-headers";
+import { RoleRequest } from "@maipai/spec/stack/ts/role-request.js";
+import { RoleReplyHeaders } from "@maipai/spec/stack/ts/role-reply-headers.js";
 
 const MessageSchema = z.object({ role: z.string(), content: z.unknown() }).passthrough();
 const ChatRequestSchema = RoleRequest.extend({ messages: z.array(MessageSchema) });

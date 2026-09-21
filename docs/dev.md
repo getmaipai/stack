@@ -176,11 +176,10 @@ hardware probe and the openapi router. The Stack's own instances
 (`lib/log.ts`, `lib/paths.ts`, `lib/hardware.ts`) bind them to this
 product's data layout. The wire shapes Home builds against (the role
 request and reply headers, the event envelope, the health item, the
-settings declaration, the precious-state declaration) are declared once
-under `backend/src/spec/` in exactly `home/spec`'s shape (JSON Schema
-2020-12, a Zod mirror the backend imports, fixtures, a round-trip test)
-and move to `shared/spec` at step 0c, after which `@maipai/spec` is
-imported and the local folder deleted. The engine and model catalogs
+settings declaration, the precious-state declaration) are pinned in
+`@maipai/spec` (tag `spec-v0.1.2` in `getmaipai/commons`) and imported
+by the backend from the package; the only Stack-local wire shape is the
+voice (`backend/src/wire/voice.ts`). The engine and model catalogs
 stay product-side. `data/` holds everything runtime
 and is never tracked.
 
@@ -436,7 +435,7 @@ id, progress arrives on the event feed, cancel works, and the result is
 fetched by id. ComfyUI's queue is the model and, for image editing, the
 engine. `/v1/images/generations` is the job API with a wait, for simple
 callers. The job shape is the spec's `StackJob`
-(`backend/src/spec/`, STACK-13a): id, kind, role, state, percent, the
+(`@maipai/spec`, STACK-13a): id, kind, role, state, percent, the
 byte counts, a status phrase, the queue position, the input, the
 result, the reason, the clocks.
 
@@ -1038,10 +1037,8 @@ and may send one text frame `{"t":"end"}` to flush the utterance in
 progress; the server sends only JSON events, `ready`, `vad` with
 `speaking` and `rms`, `partial`, `final`, `no_speech` and `error`.
 Home's `/api/stt/stream` becomes a pass-through to this session when
-Home adopts the Stack. The Stack's Zod mirror of the event union lives
-under `backend/src/spec/` with the other wire shapes until RF-05b
-moves them to `shared/spec`, and the fixtures round-trip it the same
-way.
+Home adopts the Stack. The Stack imports the event union and the other
+wire shapes from `@maipai/spec` (tag `spec-v0.1.2`).
 
 `tts` serves `POST /v1/audio/speech`, the address the roles table
 gives the role, with exactly the request and result `spec/voice`

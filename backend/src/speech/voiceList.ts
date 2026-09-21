@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { hfBlobsRoot } from "@/lib/store/layout";
 import { POCKET_TTS_PRESET_VOICES, POCKET_TTS_VOICES_REVISION, presetVoiceModel, voiceLicence } from "@/speech/voices";
 import { POCKET_TTS_UNGATED_REPO } from "@/speech/pocketTts";
-import type { Voice } from "@/spec/ts/voice";
+import type { Voice } from "@/wire/voice";
 
 function presetName(name: string): string {
   return name.split("_").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");

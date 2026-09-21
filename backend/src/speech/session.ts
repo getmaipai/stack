@@ -14,7 +14,7 @@
 // buffer is force-finalized at thirty seconds so steady noise cannot
 // grow it without bound; and bracketed annotations ("[BLANK_AUDIO]",
 // "(typing)") are not speech.
-import type { SttWireEvent } from "@/spec/ts/stt-wire-event";
+import type { SttWireEvent } from "@maipai/spec/stack/ts/stt-wire-event.js";
 import { rms } from "@/speech/audio";
 
 export interface Transcriber { transcribe(samples: Float32Array): Promise<string>; }

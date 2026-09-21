@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { app } from "@/app";
 import { listVoices } from "@/speech/voiceList";
 import { POCKET_TTS_PRESET_VOICES } from "@/speech/voices";
-import { Voice } from "@/spec/ts/voice";
-import { resetSupervisorForTests, scriptedProcess, setSupervisorFactoryForTests } from "@/lib/supervisor";
+ import { Voice } from "@/wire/voice";
+ import { resetSupervisorForTests, scriptedProcess, setSupervisorFactoryForTests } from "@/lib/supervisor";
 
 describe("GET /stack/v1/voices (STACK-101a)", () => {
   test("returns 200 with a Voice-shaped list", async () => {

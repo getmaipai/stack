@@ -8,17 +8,15 @@ this file is the design of the seams and the shapes Home builds
 against. Every change to a seam is additive (org compatibility rule): a
 field or endpoint Home relies on is never removed or repurposed without
 a versioned path and a changelog note. The wire shapes named below are
-declared once, in exactly `home/spec`'s shape, under `backend/src/spec/`
-(a JSON Schema 2020-12 file per shape with the `$id` it carries once
-moved, a hand-written Zod mirror the backend imports, fixtures, and
-`backend/tests/spec.test.ts` proving schema and mirror agree on every
-fixture) and defined nowhere else in the backend. They move to
-`shared/spec` at the refocus's step 0c as a copy, after which the
-backend imports `@maipai/spec` and the local folder is deleted. The
-files: `role-request.schema.json`, `role-reply-headers.schema.json`,
-`stack-event.schema.json`, `health-item.schema.json`,
-`stack-setting.schema.json`, `precious-state.schema.json`. The org rule
-"shared record changes go through the spec first" applies to them.
+pinned in `@maipai/spec` (tag `spec-v0.1.2` in `getmaipai/commons`),
+which the backend imports straight from the package; the only
+Stack-local wire shape is the voice, declared in `backend/src/wire/voice.ts`
+because `spec-v0.1.0` never carried it. The shapes: the role request
+and reply headers, the event feed envelope, the health item, the
+settings declaration, the precious-state declaration, the speech
+session's `SttWireEvent` and `SttTranscribeResponse`, and the job.
+The org rule "shared record changes go through the spec first" applies
+to them.
 
 ## Authentication: loopback, nothing else
 

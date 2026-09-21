@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# MaiPai Stack pre-commit gate. Runs the backend checks, then the pinned
-# @maipai/standards core (gitleaks, PII wordlist, prose lint, licence check).
-# Needs getmaipai/commons (the @maipai/core the backend imports) at the
-# pinned tag. The standards pin resolves its own immutable worktree.
+# MaiPai Stack pre-commit gate. Checks the @maipai/core and @maipai/spec
+# pins against getmaipai/commons, runs the backend's checks, then the
+# pinned @maipai/standards core (gitleaks, PII wordlist, prose lint,
+# licence check). The standards and commons pins each resolve their own
+# immutable per-tag worktree. With --docs it runs only the standards core,
+# the gate for a commit that touches only Markdown.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -15,18 +17,54 @@ fi
 STANDARDS_DIR="$(bash "$STANDARDS_REPO/standards/bin/ensure-tag.sh" "$STD_TAG")"
 export MAIPAI_STANDARDS_DIR="$STANDARDS_DIR"
 
-# The @maipai/core pin (commons tag core-v0.1.0). Bump this line and the
-# file: dependency in backend/package.json together, then `bun install`.
-CORE_PIN="0.1.0"
-COMMONS_DIR="${MAIPAI_COMMONS_DIR:-../commons}"
-if [ ! -f "$COMMONS_DIR/core/package.json" ]; then
-  echo "getmaipai/commons is missing at $COMMONS_DIR (set MAIPAI_COMMONS_DIR); the backend imports @maipai/core from its core/ workspace."
-  exit 1
-fi
-CORE_VERSION="$(sed -n 's/^  "version": "\([^"]*\)",$/\1/p' "$COMMONS_DIR/core/package.json")"
-if [ "$CORE_VERSION" != "$CORE_PIN" ]; then
-  echo "@maipai/core at $COMMONS_DIR/core is version $CORE_VERSION; this repo pins core-v$CORE_PIN. Check out the tag there or move the pin here."
-  exit 1
+# The @maipai/core and @maipai/spec pins, each a full commons tag name
+# (core-v0.1.0, spec-v0.1.2). Each resolves to its own immutable per-tag
+# worktree via getmaipai/commons's scripts/ensure-tag.sh (SHARED-PIN-01,
+# 2026-09-20) instead of reading whatever the commons/ checkout itself
+# happens to have checked out - that checkout is one mutable directory
+# shared by every session on the machine, and reading it directly let one
+# session's `git checkout` there silently detach every other consumer's
+# install underneath it. Bumping a pin is two edits - the tag string here
+# and the matching file: dependency in backend/package.json (it names the
+# same tag in its own path) - then `bun install --force` in backend/ (a
+# plain `bun install` does not refresh a file: dependency's snapshot in
+# bun's content-addressed store).
+if [ "${1:-}" != "--docs" ]; then
+  CORE_TAG="core-v0.1.0"
+  SPEC_TAG="spec-v0.1.2"
+  COMMONS_DIR="${MAIPAI_COMMONS_DIR:-../commons}"
+  if [ ! -d "$COMMONS_DIR" ]; then
+    echo "getmaipai/commons is missing at $COMMONS_DIR (set MAIPAI_COMMONS_DIR); backend imports @maipai/core and @maipai/spec from its workspaces."
+    exit 1
+  fi
+  COMMONS_DIR="$(cd "$COMMONS_DIR" && pwd)"
+
+  # Resolves one workspace's pin to its tag worktree (creating it via
+  # ensure-tag.sh if no consumer has asked for that tag yet, reusing it
+  # otherwise) and checks the worktree's own package.json version against
+  # the tag name, the same honesty-of-the-pin contract the standards core
+  # already uses. Prints the worktree path on stdout.
+  ensure_pin() {
+    local workspace="$1"
+    local tag="$2"
+    local expected_version="${tag#"$workspace"-v}"
+    local dir
+    dir="$(bash "$COMMONS_DIR/scripts/ensure-tag.sh" "$workspace" "$tag")"
+    if [ ! -f "$dir/$workspace/package.json" ]; then
+      echo "$tag's worktree at $dir has no $workspace/package.json - check the workspace name." >&2
+      exit 1
+    fi
+    local actual_version
+    actual_version="$(sed -n 's/^  "version": "\([^"]*\)",$/\1/p' "$dir/$workspace/package.json")"
+    if [ "$actual_version" != "$expected_version" ]; then
+      echo "@maipai/$workspace at $dir/$workspace is version $actual_version, but its own tag is $tag - the tag was cut against the wrong commit in getmaipai/commons." >&2
+      exit 1
+    fi
+    echo "$dir"
+  }
+
+  CORE_DIR="$(ensure_pin core "$CORE_TAG")"
+  SPEC_DIR="$(ensure_pin spec "$SPEC_TAG")"
 fi
 
 if [ "${1:-}" != "--docs" ]; then

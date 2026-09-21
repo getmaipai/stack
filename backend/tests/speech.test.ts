@@ -18,7 +18,7 @@ import { decodeWave, frameToSamples, resampleLinear, rms, toRecognizerRate } fro
 import { isLikelySpeech, SttSession, type Transcriber, type VoiceDetector } from "@/speech/session";
 import { SESSION_PATH, startSpeechServer, TRANSCRIBE_PATH } from "@/speech/server";
 import { parseWorkerArgs } from "@/speech/worker";
-import { SttWireEvent } from "@/spec/ts/stt-wire-event";
+import { SttWireEvent } from "@maipai/spec/stack/ts/stt-wire-event.js";
 import { __resetSettingsForTests } from "@/settings";
 import { modelsDir } from "@/lib/paths";
 

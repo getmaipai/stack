@@ -9,7 +9,7 @@ import { dataDir, keysDir, stackDbPath } from "@/lib/paths";
 import { engineRoot, modelsRoot } from "@/lib/store/layout";
 import { pruneUnreferenced } from "@/lib/store/manifests";
 import { diagnosticsBundle } from "@/lib/diagnostics";
-import { PreciousState } from "@/spec/ts/precious-state";
+import { PreciousState } from "@maipai/spec/stack/ts/precious-state.js";
 
 export function preciousState(): PreciousState {
   return PreciousState.parse({
