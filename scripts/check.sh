@@ -18,7 +18,7 @@ STANDARDS_DIR="$(bash "$STANDARDS_REPO/standards/bin/ensure-tag.sh" "$STD_TAG")"
 export MAIPAI_STANDARDS_DIR="$STANDARDS_DIR"
 
 # The @maipai/core and @maipai/spec pins, each a full commons tag name
-# (core-v0.1.0, spec-v0.1.2). Each resolves to its own immutable per-tag
+# (core-v0.1.0, spec-v0.1.11). Each resolves to its own immutable per-tag
 # worktree via getmaipai/commons's scripts/ensure-tag.sh (SHARED-PIN-01,
 # 2026-09-20) instead of reading whatever the commons/ checkout itself
 # happens to have checked out - that checkout is one mutable directory
@@ -31,7 +31,7 @@ export MAIPAI_STANDARDS_DIR="$STANDARDS_DIR"
 # bun's content-addressed store).
 if [ "${1:-}" != "--docs" ]; then
   CORE_TAG="core-v0.1.0"
-  SPEC_TAG="spec-v0.1.2"
+  SPEC_TAG="spec-v0.1.11"
   COMMONS_DIR="${MAIPAI_COMMONS_DIR:-../commons}"
   if [ ! -d "$COMMONS_DIR" ]; then
     echo "getmaipai/commons is missing at $COMMONS_DIR (set MAIPAI_COMMONS_DIR); backend imports @maipai/core and @maipai/spec from its workspaces."
