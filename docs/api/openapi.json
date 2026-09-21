@@ -5256,6 +5256,67 @@
           }
         }
       }
+    },
+    "/stack/v1/voices/{id}/preview": {
+      "post": {
+        "tags": [
+          "Voices"
+        ],
+        "summary": "Render the preview sentence for one voice",
+        "responses": {
+          "200": {
+            "description": "The preview sentence in this voice, rendered once and served from disk thereafter.",
+            "content": {
+              "audio/wav": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown role or model id, or a voice the Stack cannot pin and verify (reason voice-not-pinnable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The voice id is not one this engine can render.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The voice needs voice cloning that is off or has no token (reason voice-cloning-unavailable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The engine could not render the preview.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }
