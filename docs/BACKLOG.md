@@ -83,7 +83,7 @@ are never copied. Nothing migrates Home until STACK-16.
   for the per-role lifecycle. Out of scope: generator execution
   (STACK-13a, 13b), the speech engines (STACK-94b, 94c), systemd (STACK-95). Exit:
   `bash scripts/check.sh` and a `code-review` at medium on this
-  checkout.
+  checkout. Landed 2026-09-20 at 1c5cad6.
 - [x] **RF-05 (M): the seam, explicit.** The wire shapes (the role
   request and reply headers, the event envelope and its ten ids, the
   health item, the settings declaration as a `SettingsKey` plus the
@@ -92,7 +92,7 @@ are never copied. Nothing migrates Home until STACK-16.
   2020-12 with the `shared/spec` `$id`, a hand-written Zod mirror the
   backend imports and defines nowhere else, valid and invalid fixtures,
   and `tests/spec.test.ts` round-tripping every fixture through Ajv 2020
-  and the mirror. Landed on `main` with this line.
+  and the mirror. Landed on `main` with this line. Landed 2026-09-20 at 1c5cad6.
 - [x] **RF-05b (S): pin the wire shapes in `@maipai/spec` and delete
   the local Zod mirror.** The nine shapes (the role request and reply
   headers, the event envelope, the health item, the settings declaration,
@@ -137,7 +137,7 @@ are never copied. Nothing migrates Home until STACK-16.
   (`scripts/prove-mlx.sh`: admitted at 1.38 GB, measured 1.24 GB,
   first completion 1.88 s with the load, 50 ms warm). Tests:
   `backend/tests/mlxServe.test.ts`. The Studio bench (STACK-14) puts
-  both engines on one model.
+  both engines on one model. Landed 2026-09-20 at c73786f.
 
 ## Supervisor and engines
 
@@ -154,7 +154,7 @@ are never copied. Nothing migrates Home until STACK-16.
   `/v1/images/generations` as the job API with a wait answering in
   OpenAI's image shape, 202 with the id past its deadline. Driven by a
   scripted sidecar in `tests/generatorQueue.test.ts`. Landed on `main`
-  with this line.
+  with this line. Landed 2026-09-20 at 6965a1c.
 - [x] **STACK-13b (M): ComfyUI as a managed engine.** ComfyUI v0.36.0
   as an engine archive plus a venv the Stack builds through the pinned
   uv from a hashed requirements file (one builder with Pocket TTS);
@@ -199,8 +199,8 @@ are never copied. Nothing migrates Home until STACK-16.
   (`watchProcessMemory`); a test holds a p128 machine to p128's 20 GB
   margin. `governor.ts` untouched (the governor lane holds it; the
   budget route reporting the tier joins STACK-06c's callback work).
-   Landed on `main` with this line.
-- [x] **The budget route reports the tier** (S); verified at this commit.
+   Landed on `main` with this line. Landed 2026-09-20 at fa46457.
+- [x] **The budget route reports the tier** (S); verified at this commit. Landed date unrecorded (no commit names this ID; ticked before 2026-09-21).
 - [x] **STACK-06c (S): the governor drains its queue on memory
   changes.** Governor half verified at this commit; jobs.ts drops its
   kick in a follow-up (STACK-06d, S). Today a queued request is re-admitted only inside
@@ -218,19 +218,20 @@ are never copied. Nothing migrates Home until STACK-16.
   queue's admission loop in `jobs.ts`. Out of scope: the admission
   rules. Exit: `bash scripts/check.sh` with a test that a request
   queued under pressure runs when the reading clears without any
-  release.
+  release. Landed 2026-09-20 at 228e06b.
 - [x] **STACK-06d (S): jobs.ts waits on admit's promise and drops the
   kick and the poll.** Files: backend/src/lib/jobs.ts,
-  backend/tests/generatorQueue.test.ts. Exit: bash scripts/check.sh.
+  backend/tests/generatorQueue.test.ts. Exit: bash scripts/check.sh. Landed 2026-09-20 at 0a9cc01.
 - [x] **STACK-06: the governor.** Profiles, admission, one generator at
   a time, queue of four, idle and pressure eviction, RSS breach restart,
-  the decision ledger. Kept unchanged in RF-04.
+  the decision ledger. Kept unchanged in RF-04. Landed 2026-09-20 at 0a9cc01.
 - [x] **STACK-06b: the kernel's ledger.** `bun:ffi` against libSystem
   on macOS, `/proc` on Linux, a scripted reader for tests. Kept.
+  Landed 2026-09-17 at a52c7bf.
 - [x] **Degraded memory reading (issue #3)** (S): a failed probe never
-  reads as full memory; verified at this commit.
+  reads as full memory; verified at this commit. Landed date unrecorded (no commit names this ID; ticked before 2026-09-21).
 - [x] **Release under a degraded reading keeps the head** (S);
-  verified at this commit.
+  verified at this commit. Landed date unrecorded (no commit names this ID; ticked before 2026-09-21).
 - [x] **STACK-74 (M): Studio bench protocol and rollback rehearsal.**
   The protocol in `plans/studio-bench-protocol-2026-09-20.md` (models
   by digest, contexts, builds, the request mix, the pressure samples,
@@ -258,9 +259,9 @@ are never copied. Nothing migrates Home until STACK-16.
 - [x] **STACK-04: the model store.** Provenance-gated records, the HF
   cache layout, engine tag layout with the `current` link, manifests
   with blob references and orphan grace, ranged resumable downloads,
-  read-only import by link. Kept.
+  read-only import by link. Kept. Landed 2026-09-17 at a84e774.
 - [x] **STACK-86: qualification.** The chat and engine pins held to
-  their declarations offline. Kept.
+  their declarations offline. Kept. Landed 2026-09-18 at 063ef7c.
 - [x] **STACK-96 (M): pin and rollback proven live.** Committed at the
   commit that carries this line; live proof outstanding: run 1 proved
   the downloads, the checksum refusal and the first answer and exposed
@@ -270,7 +271,7 @@ are never copied. Nothing migrates Home until STACK-16.
   governor's `p16` margin, not loosened). `scripts/prove-pin-rollback.sh`
   is the driver; the transcript and the analysis are in `dev.md`, "Pin
   and rollback, proven live". Rerun `bash scripts/prove-pin-rollback.sh`
-  when 1.5 GB more is free or on the Studio: STACK-96b.
+  when 1.5 GB more is free or on the Studio: STACK-96b. Landed 2026-09-20 at b8a25b1.
 - [x] **STACK-96b (S): the live pass of the pin and rollback proof.**
   Run 3 on 2026-09-20, the same laptop with memory free at the
   daemon's start, as the Studio bench's rehearsal step: swap ok with
@@ -295,7 +296,7 @@ are never copied. Nothing migrates Home until STACK-16.
   `stack.generation` counter every producer bumps); a skipped role never
   makes a run green; the updates route says unknown on a missing or
   invalid index. `tests/honesty.test.ts` covers each with a scripted
-  stand-in. Landed on `main` with this line.
+  stand-in. Landed on `main` with this line. Landed 2026-09-20 at 6a701d0.
 - [x] **STACK-97 (M, cross-repo): the Catalog engine index.** Catalog:
   `engines/index.json` (pins per platform), `tools/src/engine-index.ts`
   (schema, duplicate-pin refusal, the signed envelope with a thirty-day
@@ -306,7 +307,7 @@ are never copied. Nothing migrates Home until STACK-16.
   build tag) so installed and available compare directly; the
   components inventory names the index as the source beyond the shipped
   pins. Signature verification waits on the Catalog's release key.
-  Landed on `main` with this line.
+  Landed on `main` with this line. Landed 2026-09-20 at 6a701d0.
 
 ## Speech roles
 
@@ -326,7 +327,7 @@ are never copied. Nothing migrates Home until STACK-16.
   a scripted-engine test listing presets with their metadata; a voice
   with missing metadata listed with "unknown", never dropped. Out of
   scope: the preview endpoint (STACK-101b). Exit: `bash
-  scripts/check.sh`.
+  scripts/check.sh`. Landed 2026-09-20 at 6799c8a.
 - [x] **STACK-101b (M): the voice preview.** `POST
   /stack/v1/voices/{id}/preview` renders one fixed sample sentence
   through the normal `tts` path, cached under `data/` per voice and
@@ -364,7 +365,7 @@ are never copied. Nothing migrates Home until STACK-16.
   form and streaming the WAV with identity headers and cancel on
   client abort; the readiness probe rendering one sentence; proven
   live on the dev machine (`scripts/prove-tts.sh`, the table in
-  `dev.md` "tts proven live"). Landed on `main` with this line.
+  `dev.md` "tts proven live"). Landed on `main` with this line. Landed 2026-09-20 at 456f420.
 - [x] **STACK-94d (M): the voice engine online only when needed.**
   Pocket TTS runs with `HF_HUB_OFFLINE=1` always and no token in its
   environment; `backend/src/speech/voices.ts` fetches, through the
@@ -377,7 +378,7 @@ are never copied. Nothing migrates Home until STACK-16.
   row says so. Tests: `backend/tests/voices.test.ts` (no request on
   start, a missing voice fetched once then served offline, no token
   refused with the reason). Proven live (`scripts/prove-tts.sh`,
-  `dev.md` "The voice engine online only when needed").
+  `dev.md` "The voice engine online only when needed"). Landed 2026-09-20 at 6ab81a2.
 
 ## Service and platforms
 
@@ -393,7 +394,7 @@ are never copied. Nothing migrates Home until STACK-16.
   datagram through `bun:ffi`, a no-op elsewhere), `index.ts` picking
   the manager by platform; `tests/systemd.test.ts` with a scripted
   `systemctl` and a scripted sender. Linux itself is exercised at
-  STACK-17 on the robot. Landed on `main` with this line.
+  STACK-17 on the robot. Landed on `main` with this line. Landed 2026-09-20 at 1ab24e9.
 - [ ] **STACK-17 (L): the Linux ARM profile.** The robot's `chat`,
   `embed` and `judge` on pinned `llama-server`, the body's speech
   process as a `managed` engine holding `stt` and `tts`, the body's
@@ -464,7 +465,7 @@ are never copied. Nothing migrates Home until STACK-16.
   the stance, the pinned model and its facts, and a status of pinned,
   candidate (named) or not yet; drift-checked in `scripts/check.sh`
   like the API document; `tests/componentsDoc.test.ts` renders a
-  scripted catalog. Landed on `main` with this line.
+  scripted catalog. Landed on `main` with this line. Landed 2026-09-20 at 8e90d8f.
 - [x] **RF-02** covers `dev.md`, `integrations.md`, `AGENTS.md` and
   `README.md`. The user tier is gone; Home's docs describe what a person
-  sees.
+  sees. Landed date unrecorded (no commit names this ID; ticked before 2026-09-21).
