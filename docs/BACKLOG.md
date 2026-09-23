@@ -395,6 +395,44 @@ are never copied. Nothing migrates Home until STACK-16.
   the manager by platform; `tests/systemd.test.ts` with a scripted
   `systemctl` and a scripted sender. Linux itself is exercised at
   STACK-17 on the robot. Landed on `main` with this line. Landed 2026-09-20 at 1ab24e9.
+- [ ] **STACK-SIZE-01 (M): the sizer honours a per-role step-down.** The
+  hub's design (`home/docs/plans/hardware-tiers-2026-09-23.md`, "The
+  configuration is proposed, never fixed") makes the probe's proposal a
+  default a person may step down per role. Today the Stack only
+  proposes: `setMachineTierFromHardware` (`lib/supervisor.ts`) sets the
+  governor tier from `proposeProfile(hardware)` with no input, and the
+  governor's `pinned` flag is per-process eviction, not a choice. This
+  item: the sizer reads the per-role choice from the household's
+  declared setting (`engines.<role>.choice`: proposed, a pinned
+  candidate, on demand, off) through the Home contract, and accepts any
+  per-role allocation that fits the machine's measured budget with the
+  governor's margin kept, in both directions: a role turned off or
+  stepped down frees memory another role may take (the owner's example:
+  pictures and video off so chat can run a larger model than the tier's
+  default; vision resident instead of on demand). A set that does not
+  fit is refused with the reason and the roles to turn down. The
+  per-role Setting record is the one store of the allocation. Files:
+  `backend/src/profiles.ts`, `lib/supervisor.ts`, `lib/governor.ts`,
+  the hardware and models routes. Tests: a p64 machine with `chat`
+  stepped to the 8B and `image` off runs the 8B and never admits an
+  image job; a p32-class machine with `image` off admits the next
+  larger chat candidate the catalog pins, and the same machine with
+  `image` on refuses it with the reason. Exit: `bash scripts/check.sh`.
+
+- [ ] **STACK-FLOOR-01 (S): the `p8` profile, the robot's pins as the
+  lowest step-down.** The same design's floor tier: an 8 GB laptop or a
+  CPU-only desktop runs the robot's configuration, and every bigger
+  machine may step down to it. Today the lowest profile is `p16`
+  (`backend/src/profiles.ts`). This item adds `p8` below it: the floor
+  chat model (the 1.7B at Q8 today, MEASURE-02's 2B candidate when
+  measured), stt and tts on the CPU, the embedder, no judge model, no
+  generators, its own working margin in the governor's table, and the
+  label in the wizard's words ("The robot's brain on your computer:
+  chat and voice only, no photos or pictures, slower and plainer
+  answers. Uses the least memory."). Test: an 8 GB probe proposes
+  `p8`; a p64 machine stepped to `p8` runs only the floor set. Exit:
+  `bash scripts/check.sh`.
+
 - [ ] **STACK-17 (L): the Linux ARM profile.** The robot's `chat`,
   `embed` and `judge` on pinned `llama-server`, the body's speech
   process as a `managed` engine holding `stt` and `tts`, the body's
