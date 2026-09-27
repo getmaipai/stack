@@ -70,6 +70,56 @@ test("an explicit chat model starts and dispatches through its own model process
   expect(dispatchedModels).toEqual(["chat", "chat", "chat"]);
 });
 
+test("concurrent requests for different models keep the first generation alive", async () => {
+  let releaseFirst!: () => void;
+  const firstGeneration = new Promise<void>((resolve) => { releaseFirst = resolve; });
+  let firstStarted!: () => void;
+  const firstHasStarted = new Promise<void>((resolve) => { firstStarted = resolve; });
+  const processes = new Map<string, RoleProcess>();
+  const outcomes: string[] = [];
+  setSupervisorFactoryForTests(async (role, modelId) => {
+    const processRecord = scriptedProcess(role, {
+      kind: "spawned",
+      modelId: modelId ?? "default-chat-model",
+      identity: { host: "stub", build: "scripted", model: modelId ?? "default-chat-model", healthy: true },
+    });
+    processRecord.client.request = async () => {
+      if (modelId === "qwen-chat-first") {
+        firstStarted();
+        await firstGeneration;
+      }
+      outcomes.push(modelId ?? "default-chat-model");
+      return { status: 200, body: { model: modelId, choices: [{ message: { content: `reply from ${modelId}` } }] } };
+    };
+    processes.set(modelId ?? "default-chat-model", processRecord);
+    return processRecord;
+  });
+
+  const firstRequest = requestRole("chat", "/v1/chat/completions", { model: "qwen-chat-first", messages: [] });
+  await firstHasStarted;
+  const firstProcess = processes.get("qwen-chat-first")!;
+  expect(firstProcess.activeRequests).toBe(1);
+
+  const bothRequests = Promise.all([
+    firstRequest,
+    requestRole("chat", "/v1/chat/completions", { model: "qwen-chat-second", messages: [] }),
+  ]);
+  // Model switching must drain the first generation before retiring its
+  // process, so the second request may finish only after we release it.
+  await Promise.resolve();
+  expect(firstProcess.activeRequests).toBe(1);
+  releaseFirst();
+  const [firstReply, secondReply] = await bothRequests;
+  expect(secondReply.status).toBe(200);
+  expect((secondReply.body as { choices: Array<{ message: { content: string } }> }).choices[0]!.message.content).toBe("reply from qwen-chat-second");
+  expect(firstReply.status).toBe(200);
+  expect((firstReply.body as { choices: Array<{ message: { content: string } }> }).choices[0]!.message.content).toBe("reply from qwen-chat-first");
+  expect(firstProcess.activeRequests).toBe(0);
+  expect(firstProcess.retired).toBe(true);
+  expect(outcomes).toHaveLength(2);
+  expect(outcomes).toEqual(expect.arrayContaining(["qwen-chat-first", "qwen-chat-second"]));
+});
+
 test("streaming chat selects the explicit model process too", async () => {
   let selectedModel: string | undefined;
   let dispatchedModel: unknown;
