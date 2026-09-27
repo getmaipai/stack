@@ -44,9 +44,12 @@ OpenAI-shaped, so an existing client library works unchanged.
 | `GET /v1/models` | all | role ids plus installed model ids in OpenAI's list shape |
 
 The request's common fields are spec `RoleRequest`: `model` carries a
-role id (`"chat"`) or an installed model id; generator roles accept
-`quality: fast | everyday | best`; `stream` and `timeout_ms` are
-optional; everything else passes to the engine unchanged.
+role id (`"chat"`) or an installed model id. An installed model id on a
+chat request selects that model's own process for the request; when the
+field is a role id, the currently active process is used. Generator
+roles accept `quality: fast | everyday | best`; `stream` and
+`timeout_ms` are optional; everything else passes to the engine
+unchanged.
 
 **Every reply** carries the identity headers, spec `RoleReplyHeaders`:
 

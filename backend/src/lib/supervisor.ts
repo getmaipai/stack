@@ -340,9 +340,30 @@ interface RoleRuntime {
   lastRealRequestAt: number | null;
 }
 
-type ProcessFactory = (role: RoleId) => Promise<RoleProcess>;
+type ProcessFactory = (role: RoleId, modelId?: string) => Promise<RoleProcess>;
 let testFactory: ProcessFactory | null = null;
 const runtimes = new Map<RoleId, RoleRuntime>();
+const requestLocks = new Map<RoleId, Promise<void>>();
+
+async function acquireRequestProcess(requested: RoleId, modelId?: string): Promise<RoleProcess> {
+  const role = processRoleFor(requested);
+  const previous = requestLocks.get(role) ?? Promise.resolve();
+  let unlock = () => {};
+  const held = new Promise<void>((resolve) => { unlock = resolve; });
+  const tail = previous.then(() => held);
+  requestLocks.set(role, tail);
+  await previous;
+  try {
+    const processRecord = await getProcess(role, modelId);
+    processRecord.activeRequests++;
+    const current = runtime(role);
+    current.status = { ...current.status, state: "busy", kind: processRecord.kind, identity: processRecord.identity };
+    return processRecord;
+  } finally {
+    unlock();
+    if (requestLocks.get(role) === tail) requestLocks.delete(role);
+  }
+}
 
 // The build that runs is the one the store's `current` link names (the
 // swap and the rollback flip that link); before any swap it is the
@@ -456,6 +477,21 @@ export function selectedModel(role: RoleId): ModelRecord | null {
   return selectable.find((model) => model.id === preferred) ?? selectable[0] ?? null;
 }
 
+/** Models an installed chat process can actually start for a request.
+ * Kept beside selection so the API and dispatcher share the same
+ * provenance, file and engine-compatibility rules. */
+export function selectableModels(role: RoleId): Array<{ id: string; name: string }> {
+  const engine = engineForRole(role);
+  return listModels()
+    .filter((model) => model.roles.includes(role) && !isComponent(model) && isModelSelectable(model) && !!model.modelPath && (!engine || !model.engineRequirements.engine || model.engineRequirements.engine === engine))
+    .map(({ id }) => ({ id, name: id }));
+}
+
+function selectableModel(role: RoleId, modelId: string): ModelRecord | null {
+  const engine = engineForRole(role);
+  return listModels().find((model) => model.id === modelId && model.roles.includes(role) && !isComponent(model) && isModelSelectable(model) && model.modelPath && (!engine || !model.engineRequirements.engine || model.engineRequirements.engine === engine)) ?? null;
+}
+
 // ---- starting a process ---------------------------------------------------
 
 async function startUrlProcess(role: RoleId, url: string): Promise<RoleProcess> {
@@ -549,9 +585,9 @@ export function launchPlan(role: RoleId, model: ModelRecord, port: number): Laun
   return { command: [binary, ...args], engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength, kind: "spawned" };
 }
 
-async function startSpawnedProcess(role: RoleId): Promise<RoleProcess> {
+async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<RoleProcess> {
   if (!SPAWNABLE_ROLES.includes(role)) throw new EngineUnavailableError(`No engine can be started for ${role} on this machine yet.`);
-  const model = selectedModel(role);
+  const model = modelId ? selectableModel(role, modelId) : selectedModel(role);
   if (!engineInstalledFor(role)) {
     const reason = SPEECH_ROLES.includes(role) ? `The ${role} voice activity detector is not installed.`
       : role === "image" ? "The ComfyUI environment is not built on this machine."
@@ -685,32 +721,39 @@ async function startSpawnedProcess(role: RoleId): Promise<RoleProcess> {
   }
 }
 
-async function startProcess(role: RoleId): Promise<RoleProcess> {
-  if (testFactory) return testFactory(role);
+async function startProcess(role: RoleId, modelId?: string): Promise<RoleProcess> {
+  if (testFactory) return testFactory(role, modelId);
   const bound = urlBindingFor(role);
   if (bound) return startUrlProcess(role, bound.url);
-  return startSpawnedProcess(role);
+  return startSpawnedProcess(role, modelId);
 }
 
 /** The running process for a role, starting it under the generation
  * guard when it is not. Roles that share another role's model resolve
  * to that role's process. */
-export async function getProcess(requested: RoleId): Promise<RoleProcess> {
+export async function getProcess(requested: RoleId, modelId?: string): Promise<RoleProcess> {
   const role = processRoleFor(requested);
   if (getRunState() !== "running") throw new EngineUnavailableError("The Stack is paused.");
   const current = runtime(role);
   if (current.manuallyStopped) throw new EngineUnavailableError(`The ${role} engine was stopped.`);
-  if (current.process) return current.process;
+  if (current.process) {
+    if (!modelId || current.process.kind === "url" || current.process.modelId === modelId) return current.process;
+    const previous = current.process;
+    current.process = null;
+    current.status = { ...current.status, state: "loading", reason: null };
+    await retire(previous);
+    return getProcess(role, modelId);
+  }
   if (!current.starting) {
     const generation = current.generation;
     current.status = { ...current.status, state: "loading", reason: null };
     emit({ id: "role.state", data: { role, state: "loaded", since: new Date().toISOString() } });
-    current.starting = startProcess(role).then(async (started) => {
+    current.starting = startProcess(role, modelId).then(async (started) => {
       if (generation !== current.generation) {
         started.retired = true;
         await started.stop();
         current.starting = null;
-        return getProcess(role);
+        return getProcess(role, modelId);
       }
       current.process = started;
       current.starting = null;
@@ -728,7 +771,9 @@ export async function getProcess(requested: RoleId): Promise<RoleProcess> {
       throw error;
     });
   }
-  return current.starting;
+  const starting = await current.starting;
+  if (modelId && starting.kind !== "url" && starting.modelId !== modelId) return getProcess(role, modelId);
+  return starting;
 }
 
 export function getRoleStatus(requested: RoleId): RoleStatus {
@@ -976,14 +1021,14 @@ export async function speakRole(requested: RoleId, form: FormData, signal?: Abor
 
 export async function requestRole(requested: RoleId, path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<RoleReply> {
   const role = processRoleFor(requested);
-  const processRecord = await getProcess(role);
+  const requestedModel = typeof body.model === "string" && body.model !== role ? body.model : undefined;
+  const processRecord = await acquireRequestProcess(role, requestedModel);
   const current = runtime(role);
-  processRecord.activeRequests++;
-  current.status = { ...current.status, state: "busy", kind: processRecord.kind, identity: processRecord.identity };
   try {
     const completionMs = typeof body.timeout_ms === "number" && body.timeout_ms > 0 ? body.timeout_ms : (timeoutOverrides.completionMs ?? DEFAULT_COMPLETION_TIMEOUT_MS);
+    const dispatchBody = requestedModel && processRecord.kind !== "url" ? { ...body, model: role } : body;
     const result = await withTimeout(
-      processRecord.client.request(path, body, signal),
+      processRecord.client.request(path, dispatchBody, signal),
       completionMs,
       () => new EngineUnavailableError(`Engine request timed out after ${Math.ceil(completionMs / 1000)}s.`),
     );
@@ -1040,13 +1085,13 @@ function trackedStream(role: RoleId, processRecord: RoleProcess, upstream: Reada
 
 export async function streamRole(requested: RoleId, path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<RoleStreamReply> {
   const role = processRoleFor(requested);
-  const processRecord = await getProcess(role);
+  const requestedModel = typeof body.model === "string" && body.model !== role ? body.model : undefined;
+  const processRecord = await acquireRequestProcess(role, requestedModel);
   const current = runtime(role);
-  processRecord.activeRequests++;
-  current.status = { ...current.status, state: "busy", kind: processRecord.kind, identity: processRecord.identity };
   try {
     if (!processRecord.client.stream) throw new EngineUnavailableError("The engine does not support streaming.");
-    const response = await processRecord.client.stream(path, { ...body, stream: true }, signal);
+    const dispatchBody = requestedModel && processRecord.kind !== "url" ? { ...body, model: role } : body;
+    const response = await processRecord.client.stream(path, { ...dispatchBody, stream: true }, signal);
     if (response.status >= 500 && !await processRecord.client.health()) throw new EngineUnavailableError(`Engine returned HTTP ${response.status} and is no longer healthy.`);
     if (!response.body) { finishStream(role, processRecord); return { status: response.status, body: null, headers: identityHeaders(processRecord.identity, processRecord.modelRevision) }; }
     return { status: response.status, body: trackedStream(role, processRecord, response.body), headers: identityHeaders(processRecord.identity, processRecord.modelRevision) };

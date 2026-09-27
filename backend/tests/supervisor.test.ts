@@ -43,6 +43,50 @@ test("a request carries the identity headers and the reply of the engine", async
   expect((await requestRole("chat", "/v1/chat/completions", { model: "chat", messages: [] })).headers["x-maipai-revision"]).toBe("90862c4b");
 });
 
+test("an explicit chat model starts and dispatches through its own model process; omission keeps the current process", async () => {
+  const modelStarts: Array<string | undefined> = [];
+  const dispatchedModels: Array<unknown> = [];
+  setSupervisorFactoryForTests(async (role, modelId) => {
+    modelStarts.push(modelId);
+    const processRecord = scriptedProcess(role, {
+      kind: "spawned",
+      modelId: modelId ?? "default-chat-model",
+      identity: { host: "stub", build: "scripted", model: modelId ?? "default-chat-model", healthy: true },
+    });
+    const request = processRecord.client.request!;
+    processRecord.client.request = async (path, body, signal) => { dispatchedModels.push(body.model); return request(path, body, signal); };
+    return processRecord;
+  });
+
+  const defaultReply = await requestRole("chat", "/v1/chat/completions", { model: "chat", messages: [] });
+  expect(defaultReply.headers["x-maipai-model"]).toBe("default-chat-model");
+
+  const selectedReply = await requestRole("chat", "/v1/chat/completions", { model: "qwen-chat-fast", messages: [] });
+  expect(selectedReply.headers["x-maipai-model"]).toBe("qwen-chat-fast");
+
+  const nextDefault = await requestRole("chat", "/v1/chat/completions", { model: "chat", messages: [] });
+  expect(nextDefault.headers["x-maipai-model"]).toBe("qwen-chat-fast");
+  expect(modelStarts).toEqual([undefined, "qwen-chat-fast"]);
+  expect(dispatchedModels).toEqual(["chat", "chat", "chat"]);
+});
+
+test("streaming chat selects the explicit model process too", async () => {
+  let selectedModel: string | undefined;
+  let dispatchedModel: unknown;
+  setSupervisorFactoryForTests(async (role, modelId) => {
+    selectedModel = modelId;
+    const processRecord = scriptedProcess(role, { kind: "spawned", modelId: modelId ?? null, identity: { host: "stub", build: "scripted", model: modelId ?? "default", healthy: true } });
+    const stream = processRecord.client.stream!;
+    processRecord.client.stream = async (path, body, signal) => { dispatchedModel = body.model; return stream(path, body, signal); };
+    return processRecord;
+  });
+  const stream = await streamRole("chat", "/v1/chat/completions", { model: "qwen-chat-stream", messages: [] });
+  expect(stream.headers["x-maipai-model"]).toBe("qwen-chat-stream");
+  expect(await new Response(stream.body).text()).toContain("data: [DONE]");
+  expect(selectedModel).toBe("qwen-chat-stream");
+  expect(dispatchedModel).toBe("chat");
+});
+
 test("streaming passes the engine's bytes through and finishes the request when the stream ends", async () => {
   const stream = await streamRole("chat", "/v1/chat/completions", { model: "chat", messages: [] });
   expect(stream.status).toBe(200);
