@@ -12,10 +12,17 @@ const GB = 1_073_741_824;
 beforeEach(() => { __resetHealthForTests(); __resetGovernorForTests(); __setAdmissionTuningForTests({ kickMs: 100 }); __setGovernorTuningForTestsOnly({ totalMemoryBytes: 32 * GB, freeMemoryBytes: 24 * GB, tier: "p32" }); });
 afterEach(() => { __resetGovernorForTests(); __setAdmissionTuningForTests(); });
 
-test("the peak mirrors the governor: measured, else the file times the engine's multiplier, else the request", () => {
+test("the peak source order is measured, dry run, file multiplier, then request", () => {
   expect(governorPeak({ id: "a", kind: "resident", requestedBytes: 5, measuredPeakBytes: 9 })).toBe(9);
+  expect(governorPeak({ id: "a", kind: "resident", requestedBytes: 5, measuredPeakBytes: 9, dryRunPeakBytes: 12 })).toBe(9);
+  expect(governorPeak({ id: "a", kind: "resident", requestedBytes: 5, dryRunPeakBytes: 8, modelFileBytes: 10 * GB, engine: "llama-server" })).toBe(8);
   expect(governorPeak({ id: "a", kind: "resident", requestedBytes: 5, modelFileBytes: 10 * GB, engine: "llama-server" })).toBe(13 * GB);
   expect(governorPeak({ id: "a", kind: "resident", requestedBytes: 5 })).toBe(5);
+});
+
+test("a dry run peak refuses a request the file-size guess would admit", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 32 * GB, freeMemoryBytes: 24 * GB, tier: "p32" });
+  await expect(waitForAdmission({ id: "dry-run-large", kind: "resident", requestedBytes: 1, modelFileBytes: 5 * GB, engine: "llama-server", dryRunPeakBytes: 40 * GB }, { stillWanted: () => true })).rejects.toThrow(/needs about 40\.0 GB; the memory budget for models is 24\.0 GB/);
 });
 
 test("a queued start is admitted when the holder releases, and a start that times out withdraws: no late admission, no phantom", async () => {

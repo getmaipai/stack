@@ -32,11 +32,10 @@ import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { ROLES, ROLE_IDS, type RoleId, type RoleState } from "@/roles";
 import { getMemoryReader } from "@/lib/memory";
-import { readGgufFacts } from "@/lib/gguf";
-import { hfUrl } from "@/lib/hf";
 import { hfHubRoot } from "@/lib/store/layout";
 import { engineSettingValues, settingValues } from "@/settings";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
+import { logger } from "@/lib/log";
 
 export type EngineKind = "spawned" | "managed" | "url";
 export type EngineStatus = RoleState | "loading" | "busy" | "stopped";
@@ -56,8 +55,6 @@ export interface PostLoadCheck {
   loadMs?: number;
   firstTokenMs?: number;
 }
-
-export interface FootprintEstimate { bytes: number; estimated: boolean; contextLength: number; source: "dry-run" | "gguf"; }
 
 export interface EngineClient {
   readonly baseUrl: string;
@@ -298,12 +295,18 @@ export async function postLoadCheck(role: RoleId, client: EngineClient, pid: num
   return { replyOk: true, actualBytes: await measureProcessMemoryBytes(pid), estimatedBytes: null, firstTokenMs: Math.round(performance.now() - startedAt) };
 }
 
-function parseFitBytes(output: string): number | null {
-  const matches = [...output.matchAll(/(?:memory|ram|footprint|requires?)[^\n]*?(\d+(?:\.\d+)?)\s*(GiB|MiB|GB|MB|bytes)/gi)];
-  const match = matches.at(-1);
-  if (!match) return null;
-  const value = Number(match[1]); const unit = match[2]?.toLowerCase();
-  return unit === "gib" || unit === "gb" ? Math.round(value * 1_073_741_824) : unit === "mib" || unit === "mb" ? Math.round(value * 1_048_576) : Math.round(value);
+export function parseFitRows(output: string): { rows: { name: string; modelMiB: number; contextMiB: number; computeMiB: number }[] } | null {
+  const rows: { name: string; modelMiB: number; contextMiB: number; computeMiB: number }[] = [];
+  for (const line of output.split(/\r?\n/)) {
+    const match = /^(\S+)\s+(\d+)\s+(\d+)\s+(\d+)\s*$/.exec(line);
+    if (match) rows.push({ name: match[1]!, modelMiB: Number(match[2]), contextMiB: Number(match[3]), computeMiB: Number(match[4]) });
+  }
+  return rows.length ? { rows } : null;
+}
+
+export function fitTotalBytes(parsed: NonNullable<ReturnType<typeof parseFitRows>>): number {
+  // Conservative on unified memory; per-device accounting for a discrete GPU belongs to STACK-SIZE-06.
+  return parsed.rows.reduce((sum, row) => sum + row.modelMiB + row.contextMiB + row.computeMiB, 0) * 1_048_576;
 }
 
 export async function dryRunFootprint(modelPath: string, contextLength: number): Promise<number | null> {
@@ -312,21 +315,18 @@ export async function dryRunFootprint(modelPath: string, contextLength: number):
     const fit = process.env.STACK_FIT_BINARY ?? (pin ? join(engineDir(pin), "llama-fit-params") : "");
     if (!fit || !existsSync(fit)) return null;
     const processHandle = Bun.spawn([fit, "--model", modelPath, "--ctx-size", String(contextLength), "--fit", "on", "--fit-print", "on"], { stdout: "pipe", stderr: "pipe" });
-    const output = `${await new Response(processHandle.stdout).text()}\n${processHandle.stderr ? await new Response(processHandle.stderr).text() : ""}`;
-    await processHandle.exited;
-    return parseFitBytes(output);
+    const outputPromise = (async () => `${await new Response(processHandle.stdout).text()}\n${processHandle.stderr ? await new Response(processHandle.stderr).text() : ""}`)();
+    const combined = Promise.all([outputPromise, processHandle.exited]);
+    try {
+      const [output, exitCode] = await withTimeout(combined, 30_000, () => new Error("llama-fit-params timed out."));
+      if (exitCode !== 0) return null;
+      const parsed = parseFitRows(output);
+      return parsed ? fitTotalBytes(parsed) : null;
+    } catch (error) {
+      if ((error as Error).message === "llama-fit-params timed out.") processHandle.kill();
+      return null;
+    }
   } catch { return null; }
-}
-
-export async function estimateFootprint(repo: string, file: string, contextLength: number): Promise<FootprintEstimate> {
-  const url = hfUrl(`${repo}/resolve/main/${file}`);
-  const facts = await readGgufFacts(url);
-  const head = await fetch(url, { method: "HEAD" });
-  const weights = Number(head.headers.get("content-length") ?? 0);
-  const quantization = facts.quantization.toLowerCase();
-  const bytesPerElement = quantization.includes("q4") || quantization === "2" || quantization === "3" ? 18 / 32 : quantization.includes("q8") || quantization === "7" || quantization === "8" ? 34 / 32 : 2;
-  const kvBytes = 2 * facts.layers * facts.kvHeads * facts.headDim * contextLength * bytesPerElement;
-  return { bytes: Math.ceil(weights + kvBytes + 256 * 1_048_576), estimated: true, contextLength, source: "gguf" };
 }
 
 // ---- per-role state -------------------------------------------------------
@@ -597,6 +597,8 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     throw new EngineUnavailableError(reason);
   }
   if (!model?.modelPath) throw new EngineUnavailableError(`No verified and installed ${role} model is available.`);
+  const declaredContextLength = engineSettingValues("engines.llama_server").context_length;
+  const contextLength = typeof declaredContextLength === "number" ? declaredContextLength : 4096;
   // The voice engine starts offline; what it may need beyond the pins
   // (the gated cloning weights, with a token and cloning turned on) the
   // Stack fetches first, once. A fetch that fails never stops the start:
@@ -621,11 +623,16 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   // the wait's watcher releases a late admission, so no phantom.
   const managed = MANAGED_ROLES.includes(role);
   const generator = GENERATOR_ROLES.includes(role);
+  const dryRunPeakBytes = engineForRole(role) === "llama-server" && !managed && !generator && !SPEECH_ROLES.includes(role) && !model.measuredFootprintBytes && model.modelPath.endsWith(".gguf")
+    ? await dryRunFootprint(model.modelPath, contextLength)
+    : null;
+  logger.appendLine(JSON.stringify({ event: "governor.peak-source", role, source: dryRunPeakBytes ? "dry-run" : "none", bytes: dryRunPeakBytes }));
   const request = {
     id: role, kind: "resident" as const,
     requestedBytes: managed && !generator ? (model.measuredFootprintBytes ?? POCKET_TTS_ESTIMATED_FOOTPRINT) : model.sizeBytes ?? 0,
     modelFileBytes: managed && !generator ? null : model.sizeBytes,
     measuredPeakBytes: model.measuredFootprintBytes,
+    dryRunPeakBytes,
     engine: generator ? "comfyui" : managed ? "pocket-tts" : SPEECH_ROLES.includes(role) ? "sherpa-onnx-node" : engineForRole(role) === "mlx-serve" ? "mlx-serve" : "llama-server",
     pinned: pinnedModels.has(model.id),
   };
@@ -644,7 +651,6 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   const port = await findFreePort();
   let plan: LaunchPlan;
   try { plan = launchPlan(role, model, port); } catch (error) { release(admission); throw error; }
-  const contextLength = plan.contextLength;
   const spawnEngine = () => {
     try {
       return Bun.spawn(plan.command, { stdout: "ignore", stderr: "pipe", stdin: plan.stdin, env: plan.env ?? { ...process.env, HF_HUB_CACHE: hfHubRoot } });

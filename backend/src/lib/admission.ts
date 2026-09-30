@@ -7,15 +7,12 @@
 // `withdraw`, which removes the request from the governor's queue and
 // settles the `admitted` promise refused, so no late admission ever
 // happens and nothing is loaded that nobody holds.
-import { admit, getGovernorDecisions, getGovernorStatus, getRunState, GovernorRules, withdraw, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
+import { admit, getGovernorDecisions, getGovernorStatus, getRunState, peakFor, withdraw, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
 
 /** The peak the governor will compute for a request, mirrored from its
  * `peakFor` so a refusal here agrees with an admission there. */
 export function governorPeak(request: GovernorRequest): number {
-  if (request.measuredPeakBytes && request.measuredPeakBytes > 0) return request.measuredPeakBytes;
-  if (!request.modelFileBytes) return request.requestedBytes;
-  const multiplier = GovernorRules.engineMultipliers[request.engine as keyof typeof GovernorRules.engineMultipliers] ?? GovernorRules.engineMultipliers.default;
-  return Math.ceil(request.modelFileBytes * multiplier);
+  return peakFor(request).bytes;
 }
 
 /** Why a request vanished from the governor's queue without admission:

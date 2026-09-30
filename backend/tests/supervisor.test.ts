@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { app } from "@/app";
 import { __resetEventsForTests, eventsAfter } from "@/lib/events";
 import { __resetHealthForTests } from "@/lib/health";
-import { getProcess, getRoleStatus, lastRealRequestAt, loadTimeoutForModel, preferModel, probeReplyOk, probeRequest, processRoleFor, requestRole, restartRole, resetSupervisorForTests, scriptedProcess, selectedModel, setSupervisorFactoryForTests, setSupervisorTimeoutsForTests, stopRole, streamRole, unloadIdleRole, unloadRole, waitHealthy, EngineUnavailableError, type RoleProcess } from "@/lib/supervisor";
+import { dryRunFootprint, fitTotalBytes, getProcess, getRoleStatus, lastRealRequestAt, loadTimeoutForModel, parseFitRows, preferModel, probeReplyOk, probeRequest, processRoleFor, requestRole, restartRole, resetSupervisorForTests, scriptedProcess, selectedModel, setSupervisorFactoryForTests, setSupervisorTimeoutsForTests, stopRole, streamRole, unloadIdleRole, unloadRole, waitHealthy, EngineUnavailableError, type RoleProcess } from "@/lib/supervisor";
 import { clearModelsForTests, upsertModel } from "@/lib/modelStore";
 import type { RoleId } from "@/roles";
 
@@ -21,6 +24,37 @@ test("the first request starts the role's process once, and ready is stamped fro
   expect(getRoleStatus("chat")).toMatchObject({ state: "ready", kind: "url", identity: { model: "scripted-chat" } });
   expect(lastRealRequestAt("chat")).not.toBeNull();
   expect(eventsAfter(0).map((event) => event.id)).toEqual(expect.arrayContaining(["engine.state", "role.state"]));
+});
+
+test("llama-fit-params rows sum device and Host MiB, ignoring its diagnostic", () => {
+  const samples = [
+    ["MTL0 1743 448 304\nHost 315 0 24", 2834],
+    ["MTL0 1743 3584 304\nHost 315 0 80", 6026],
+    ["MTL0 2375 576 301\nHost 304 0 28", 3584],
+    ["MTL0 2375 2304 306\nHost 304 0 52", 5341],
+  ] as const;
+  const diagnostic = "0.00.035.228 I llama_fit_params: printing estimated memory in MiB to stdout (device, model, context, compute) ...";
+  for (const [rows, expectedMiB] of samples) expect(fitTotalBytes(parseFitRows(`${diagnostic}\n${rows}`)!)).toBe(expectedMiB * 1_048_576);
+  expect(parseFitRows("")).toBeNull();
+  expect(parseFitRows(diagnostic)).toBeNull();
+});
+
+test("dryRunFootprint reads the fake fit binary output and returns null on a failed empty run", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "maipai-fit-test-"));
+  const previous = process.env.STACK_FIT_BINARY;
+  try {
+    const binary = join(dir, "fit-ok");
+    writeFileSync(binary, "#!/bin/sh\nprintf 'MTL0 1743 448 304\\nHost 315 0 24\\n'\n"); chmodSync(binary, 0o755);
+    process.env.STACK_FIT_BINARY = binary;
+    expect(await dryRunFootprint("/tmp/model.gguf", 4096)).toBe(2834 * 1_048_576);
+    const empty = join(dir, "fit-empty");
+    writeFileSync(empty, "#!/bin/sh\nexit 1\n"); chmodSync(empty, 0o755);
+    process.env.STACK_FIT_BINARY = empty;
+    expect(await dryRunFootprint("/tmp/model.gguf", 4096)).toBeNull();
+  } finally {
+    if (previous === undefined) delete process.env.STACK_FIT_BINARY; else process.env.STACK_FIT_BINARY = previous;
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("roles that share chat's model run on chat's process", async () => {

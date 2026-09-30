@@ -419,7 +419,8 @@ are never copied. Nothing migrates Home until STACK-16.
   larger chat candidate the catalog pins, and the same machine with
   `image` on refuses it with the reason. Exit: `bash scripts/check.sh`.
 
-- [ ] **STACK-SIZE-02 (S): wire the dry run, fix or delete the header
+- [x] **STACK-SIZE-02 (S): wire the dry run, fix or delete the header
+  Landed 2026-09-30.
   estimator.** Objective: admission's second source (`llama-fit-params`)
   actually runs. Pointers: `backend/src/lib/supervisor.ts`
   (`dryRunFootprint`, `estimateFootprint`, both with no callers),

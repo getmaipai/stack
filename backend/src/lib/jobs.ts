@@ -8,7 +8,7 @@
 // that module drives it. Until a runner is registered for a kind, a
 // submit for it is refused with a reason rather than left queued.
 import { emit } from "@/lib/events";
-import { admit, getGovernorStatus, getRunState, GovernorRules, release, withdraw, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
+import { admit, getGovernorStatus, getRunState, peakFor, release, withdraw, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
 import { StackJob, StackJobState } from "@maipai/spec/stack/ts/stack-job.js";
 
 export const JobStateSchema = StackJobState;
@@ -161,10 +161,7 @@ async function pump(role: string): Promise<void> {
 /** The peak the governor will compute for a request, mirrored from its
  * `peakFor` so a refusal here agrees with an admission there. */
 function governorPeak(request: GovernorRequest): number {
-  if (request.measuredPeakBytes && request.measuredPeakBytes > 0) return request.measuredPeakBytes;
-  if (!request.modelFileBytes) return request.requestedBytes;
-  const multiplier = GovernorRules.engineMultipliers[request.engine as keyof typeof GovernorRules.engineMultipliers] ?? GovernorRules.engineMultipliers.default;
-  return Math.ceil(request.modelFileBytes * multiplier);
+  return peakFor(request).bytes;
 }
 
 /** The governor's answer for one job: the handle once admitted, a

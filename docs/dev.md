@@ -400,13 +400,11 @@ free. Windows has no reader until it can be tested on Windows.
 
 Before a first load, the dry-run path checks the pinned llama.cpp
 archive for `llama-fit-params` (the b10797 macOS archive contains it)
-and stores its fit result with the model and context; a model not yet
-downloaded uses the GGUF header and the KV formula only as an explicitly
-estimated number. (As of 2026-09-30 this path is written but not wired:
-`dryRunFootprint` and `estimateFootprint` have no callers, and the
-estimator has three defects; see "Fit planning versus admission" below
-and STACK-SIZE-02.) After a successful post-load check, the measured
-process footprint replaces the estimate.
+and uses its fit result for admission on a model's first load, for
+llama-server and GGUF files only, with a 30 second limit and null on any
+failure; admission prefers measured peak, then dry run, then file size
+times the engine multiplier. After a successful post-load check, the
+measured process footprint replaces the estimate.
 
 On the robot, the body's power and thermal budget is an additional
 admission input with the same thresholds and actions (Bot's GOV-01).
