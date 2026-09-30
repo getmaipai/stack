@@ -636,6 +636,12 @@ NOTICE, and its JSON output parsed, never its text table. Its one
 outbound call, the range request to the model's host, is declared on
 `GET /stack/v1/privacy` like the model download it precedes.
 
+The route `POST /stack/v1/fit-plan` takes a Hugging Face `.gguf` URL or
+a path in the model store, a context length and a KV cache type, and
+returns the spec's `StackFitPlan`. An uninstalled estimator gives an
+unknown plan and downloads nothing; the header read has its own privacy
+row, `model-size-check`.
+
 Measured against `llama-server` b10797 on a 24 GB Apple silicon laptop
 (Metal, `gguf-parser-go` v0.26.4, Qwen3 1.7B Q8_0 and Qwen3 4B Q4_K_M,
 contexts 4096 to 32768, KV f16 and q8_0, flash attention on and off, 12

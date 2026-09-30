@@ -4518,6 +4518,552 @@
         }
       }
     },
+    "/stack/v1/fit-plan": {
+      "post": {
+        "tags": [
+          "Hardware"
+        ],
+        "summary": "Would this model fit this machine, before it is downloaded",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "url"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "context_tokens": {
+                    "type": "integer",
+                    "minimum": 256,
+                    "maximum": 1048576,
+                    "default": 4096
+                  },
+                  "kv_cache_type": {
+                    "type": "string",
+                    "enum": [
+                      "f16",
+                      "q8_0",
+                      "q4_0"
+                    ],
+                    "default": "f16"
+                  }
+                },
+                "required": [
+                  "source"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The model fit plan.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schema": {
+                      "type": "number",
+                      "enum": [
+                        1
+                      ]
+                    },
+                    "model": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "context_tokens": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "exclusiveMinimum": true
+                    },
+                    "kv_cache_type": {
+                      "type": "string",
+                      "enum": [
+                        "f16",
+                        "q8_0",
+                        "q4_0"
+                      ],
+                      "description": "Element type of the KV cache (the per-token attention memory) for llama.cpp-family engines. f16 is the default. q8_0 and q4_0 are block-quantized (34 bytes per 32 elements and 18 bytes per 32 elements, respectively)."
+                    },
+                    "roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "role": {
+                            "type": "string",
+                            "enum": [
+                              "chat",
+                              "router",
+                              "embed",
+                              "vision",
+                              "image",
+                              "video",
+                              "coding",
+                              "tts",
+                              "stt",
+                              "wakeword",
+                              "turn-signal"
+                            ],
+                            "description": "Matches backend/src/lib/llm.ts's LlmRole, with one addition ahead of that hub code: turn-signal (SPEC-01, dev.md section 12 part 2, the small classifier heads over the turn's existing embedding that ACT-02 fetches on demand, not wired to a real backend yet, same as image/video below). A code review on this migration caught the original wording claiming an exact match already - ACT-02 is what adds turn-signal to LlmRole itself; this is spec-only, declared here first per the migration's own no-hub-code scope."
+                          },
+                          "choice": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "peak": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "low": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "high": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "source": {
+                                    "type": "string",
+                                    "enum": [
+                                      "measured",
+                                      "dry-run",
+                                      "estimated"
+                                    ]
+                                  },
+                                  "as_of": {
+                                    "type": "string",
+                                    "format": "date"
+                                  }
+                                },
+                                "required": [
+                                  "low",
+                                  "high",
+                                  "source",
+                                  "as_of"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "low": {
+                                    "nullable": true
+                                  },
+                                  "high": {
+                                    "nullable": true
+                                  },
+                                  "source": {
+                                    "type": "string",
+                                    "enum": [
+                                      "unknown"
+                                    ]
+                                  },
+                                  "as_of": {
+                                    "type": "string",
+                                    "format": "date"
+                                  }
+                                },
+                                "required": [
+                                  "low",
+                                  "high",
+                                  "source",
+                                  "as_of"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ],
+                            "description": "Bytes; a range with its source and date, never a bare number; unknown is a first-class answer and is never filled with a guess."
+                          }
+                        },
+                        "required": [
+                          "role",
+                          "choice",
+                          "peak"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "total": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "low": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "high": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "measured",
+                                "dry-run",
+                                "estimated"
+                              ]
+                            },
+                            "as_of": {
+                              "type": "string",
+                              "format": "date"
+                            }
+                          },
+                          "required": [
+                            "low",
+                            "high",
+                            "source",
+                            "as_of"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "low": {
+                              "nullable": true
+                            },
+                            "high": {
+                              "nullable": true
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "unknown"
+                              ]
+                            },
+                            "as_of": {
+                              "type": "string",
+                              "format": "date"
+                            }
+                          },
+                          "required": [
+                            "low",
+                            "high",
+                            "source",
+                            "as_of"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ],
+                      "description": "Bytes; a range with its source and date, never a bare number; unknown is a first-class answer and is never filled with a guess."
+                    },
+                    "cap": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "low": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "high": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "measured",
+                                "dry-run",
+                                "estimated"
+                              ]
+                            },
+                            "as_of": {
+                              "type": "string",
+                              "format": "date"
+                            }
+                          },
+                          "required": [
+                            "low",
+                            "high",
+                            "source",
+                            "as_of"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "low": {
+                              "nullable": true
+                            },
+                            "high": {
+                              "nullable": true
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "unknown"
+                              ]
+                            },
+                            "as_of": {
+                              "type": "string",
+                              "format": "date"
+                            }
+                          },
+                          "required": [
+                            "low",
+                            "high",
+                            "source",
+                            "as_of"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ],
+                      "description": "Bytes; a range with its source and date, never a bare number; unknown is a first-class answer and is never filled with a guess."
+                    },
+                    "margin": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "low": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "high": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "measured",
+                                "dry-run",
+                                "estimated"
+                              ]
+                            },
+                            "as_of": {
+                              "type": "string",
+                              "format": "date"
+                            }
+                          },
+                          "required": [
+                            "low",
+                            "high",
+                            "source",
+                            "as_of"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "low": {
+                              "nullable": true
+                            },
+                            "high": {
+                              "nullable": true
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "unknown"
+                              ]
+                            },
+                            "as_of": {
+                              "type": "string",
+                              "format": "date"
+                            }
+                          },
+                          "required": [
+                            "low",
+                            "high",
+                            "source",
+                            "as_of"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ],
+                      "description": "Bytes; a range with its source and date, never a bare number; unknown is a first-class answer and is never filled with a guess."
+                    },
+                    "paths": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string",
+                            "enum": [
+                              "unified",
+                              "gpu",
+                              "multi-gpu",
+                              "cpu-offload",
+                              "cpu"
+                            ]
+                          },
+                          "fits": {
+                            "type": "boolean"
+                          },
+                          "verdict": {
+                            "type": "string",
+                            "enum": [
+                              "yes",
+                              "slow",
+                              "no",
+                              "unknown"
+                            ],
+                            "description": "slow means the cpu-offload path is the only one that fits; unknown means no measured record, dry run or verified architecture exists for this model."
+                          },
+                          "shortfall": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "low": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "high": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "source": {
+                                    "type": "string",
+                                    "enum": [
+                                      "measured",
+                                      "dry-run",
+                                      "estimated"
+                                    ]
+                                  },
+                                  "as_of": {
+                                    "type": "string",
+                                    "format": "date"
+                                  }
+                                },
+                                "required": [
+                                  "low",
+                                  "high",
+                                  "source",
+                                  "as_of"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "low": {
+                                    "nullable": true
+                                  },
+                                  "high": {
+                                    "nullable": true
+                                  },
+                                  "source": {
+                                    "type": "string",
+                                    "enum": [
+                                      "unknown"
+                                    ]
+                                  },
+                                  "as_of": {
+                                    "type": "string",
+                                    "format": "date"
+                                  }
+                                },
+                                "required": [
+                                  "low",
+                                  "high",
+                                  "source",
+                                  "as_of"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ],
+                            "description": "Extra bytes needed for the smallest quantization to fit; absent when it fits."
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "fits",
+                          "verdict"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1
+                    },
+                    "verdict": {
+                      "type": "string",
+                      "enum": [
+                        "yes",
+                        "slow",
+                        "no",
+                        "unknown"
+                      ],
+                      "description": "slow means the cpu-offload path is the only one that fits; unknown means no measured record, dry run or verified architecture exists for this model."
+                    },
+                    "bottleneck": {
+                      "type": "string",
+                      "enum": [
+                        "memory",
+                        "disk",
+                        "context",
+                        "unknown"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "schema",
+                    "model",
+                    "context_tokens",
+                    "kv_cache_type",
+                    "roles",
+                    "total",
+                    "cap",
+                    "margin",
+                    "paths",
+                    "verdict",
+                    "bottleneck"
+                  ],
+                  "additionalProperties": false,
+                  "description": "The Stack's answer to would this model fit this machine at this context, and what would it take. A wire record from the Stack to Home, never stored. Home words it for a person."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The source is not an accepted GGUF URL or model-store path.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/settings": {
       "get": {
         "tags": [

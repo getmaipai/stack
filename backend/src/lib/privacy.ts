@@ -43,6 +43,15 @@ export const PRIVACY_ROWS: PrivacyRow[] = [
     hosts: ["huggingface.co"],
   },
   {
+    id: "model-size-check",
+    what: "The first part of a model file's header, read to size the model before it is downloaded",
+    when: "Only when a person asks whether a model will fit, before any download",
+    carries: "The model file's address; nothing about the household or any person",
+    receiver: "The model's host (Hugging Face)",
+    setting: null,
+    hosts: ["huggingface.co"],
+  },
+  {
     id: "tts-environment",
     what: "Building a Python engine's environment (the packages Pocket TTS and ComfyUI run on)",
     when: "Only when Home installs the voice or image engine, and again when the Stack updates it",
