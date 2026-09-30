@@ -6,6 +6,8 @@ import {
   getGovernorStatus,
   getGovernorDecisions,
   setGovernorMemorySettings,
+  setMetalCapBytes,
+  defaultModelBudgetBytes,
   release,
   startGovernor,
   withdraw,
@@ -94,6 +96,24 @@ test("rule 4 exposes a cap and refuses an admission over it", async () => {
   expect("id" in admitted).toBe(true);
   expect(getGovernorStatus().capBytes).toBe(8 * GB);
   expect(await admit({ id: "too-large", kind: "resident", requestedBytes: 2 * GB })).toMatchObject({ queued: true });
+});
+
+test("Metal cap lowers the 128 GiB budget and admission ceiling", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 128 * GB });
+  setMetalCapBytes(96 * GB);
+  expect(getGovernorStatus().capBytes).toBe(96 * GB);
+  expect(defaultModelBudgetBytes()).toBe(96 * GB);
+  expect(await admit({ id: "over-metal", kind: "resident", requestedBytes: 100 * GB })).toMatchObject({ queued: true });
+});
+
+test("null Metal cap preserves the OS-margin budget, and smaller OS margin wins", () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 128 * GB });
+  setMetalCapBytes(null);
+  expect(getGovernorStatus().capBytes).toBe(120 * GB);
+  expect(defaultModelBudgetBytes()).toBe(120 * GB);
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 24 * GB, freeMemoryBytes: 24 * GB });
+  setMetalCapBytes(18186 * 1_048_576);
+  expect(getGovernorStatus().capBytes).toBe(16 * GB);
 });
 
 test("a live model budget setting changes admission and records refusal", async () => {

@@ -12,6 +12,8 @@ import { applyPendingSettings, settingValues } from "@/settings";
 import { setMachineTierFromHardware, stopAllRoles, unloadIdleRoles } from "@/lib/supervisor";
 import { migrateLegacyEngineTags } from "@/lib/engineInstall";
 import { execFileSync } from "node:child_process";
+import { readMetalCapBytes } from "@/lib/metalCap";
+import { setMetalCapBytes, getGovernorStatus } from "@/lib/governor";
 
 export function serveOptions(): { port: number; hostname: "127.0.0.1"; fetch: (request: Request, server: unknown) => Response | Promise<Response>; websocket: typeof websocket; idleTimeout: number } {
   const port = Number(process.env.PORT ?? settingValues()["stack.runtime.port"] ?? 8770);
@@ -29,6 +31,11 @@ async function serve(): Promise<void> {
   applyPendingSettings();
   // The governor's working margin follows the machine's tier from here on.
   const { tier, stop: stopTierWatch } = await setMachineTierFromHardware();
+  void readMetalCapBytes().then((bytes) => {
+    const previousCapBytes = getGovernorStatus().capBytes;
+    setMetalCapBytes(bytes);
+    logger.appendLine(JSON.stringify({ event: "governor.metal-cap", bytes, loweredCap: bytes !== null && bytes < previousCapBytes }));
+  }).catch(() => {});
   console.log(`Machine tier ${tier ?? "unknown (the p16 margin applies)"}.`);
   const options = serveOptions();
   const server = Bun.serve(options);
@@ -89,4 +96,3 @@ export async function runDaemonCommand(command: string): Promise<void> {
   if (command === "status") { console.log(service.status()); return; }
   throw new Error(`Unknown command: ${command}`);
 }
-

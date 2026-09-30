@@ -95,6 +95,7 @@ interface GovernorTuning {
 let tuning: GovernorTuning = { ...GovernorRules, tiers: undefined as never, engineMultipliers: undefined as never } as unknown as GovernorTuning;
 let activeTier: GovernorTier = "p16";
 let totalMemoryBytes = 0;
+let metalCapBytes: number | null = null;
 let freeMemoryBytes = 0;
 let availablePercent = 0;
 let pressure: MemoryPressure = "normal";
@@ -123,7 +124,12 @@ function decide(decision: string, reason: string, model: string): void {
   if (decisions.length > 200) decisions.length = 200;
 }
 
-export function defaultModelBudgetBytes(): number { return Math.max(0, totalMemoryBytes - GovernorRules.osMarginBytes); }
+export function setMetalCapBytes(bytes: number | null): void { metalCapBytes = bytes; }
+function effectiveCapBytes(): number {
+  const osCap = Math.max(0, totalMemoryBytes - tuning.osMarginBytes);
+  return metalCapBytes === null ? osCap : Math.min(osCap, metalCapBytes);
+}
+export function defaultModelBudgetBytes(): number { return Math.min(Math.max(0, totalMemoryBytes - GovernorRules.osMarginBytes), metalCapBytes ?? Number.POSITIVE_INFINITY); }
 export function setGovernorMemorySettings(values: { modelBudgetBytes?: number; systemLowWaterPct?: number; systemLowWaterFloorBytes?: number; systemSustainedPolls?: number }): void {
   if (values.modelBudgetBytes !== undefined) tuning.osMarginBytes = Math.max(0, totalMemoryBytes - values.modelBudgetBytes);
   if (values.systemLowWaterPct !== undefined) tuning.systemLowWaterPct = values.systemLowWaterPct;
@@ -170,7 +176,7 @@ function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
   if (pressure !== "normal") return false;
   const generatorBusy = request.kind === "generator" && [...loaded.values()].some((item) => item.kind === "generator");
   if (generatorBusy) return false;
-  const cap = Math.max(0, totalMemoryBytes - tuning.osMarginBytes);
+  const cap = effectiveCapBytes();
   return loadedBytes() + peakBytes <= cap && freeMemoryBytes - peakBytes >= workingMargin();
 }
 
@@ -262,7 +268,7 @@ export function queuePosition(id: string): number | null {
 export function getGovernorStatus(): GovernorStatus {
   return {
     totalMemoryBytes,
-    capBytes: Math.max(0, totalMemoryBytes - tuning.osMarginBytes),
+    capBytes: effectiveCapBytes(),
     freeMemoryBytes,
     availablePercent,
     pressure,
@@ -396,6 +402,7 @@ export function __setGovernorTuningForTestsOnly(overrides: Partial<GovernorTunin
 }
 
 export function __resetGovernorForTests(): void {
+  metalCapBytes = null;
   loaded.clear();
   queue.length = 0;
   refusalCounts.clear();

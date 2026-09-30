@@ -362,6 +362,13 @@ generator runs at a time; a request that cannot be admitted enters a
 queue of four with a position, or is refused with a reason. Three
 refusals of the same request raise `admission-refused-repeatedly`.
 
+The cap is the smaller of total memory minus the OS margin and Metal's
+recommended working set, read once at daemon start from
+`llama-server --list-devices` (the first number on the Metal line, MiB).
+On a measured 24 GB Apple silicon laptop it was 18,186 MiB (74 percent),
+which llama.cpp and MLX agree on; there, the OS-margin rule is smaller.
+An unreadable value leaves the OS-margin rule in effect.
+
 The queue drains on a memory change: after each poll the governor
 re-admits its queue head, and only when the reading moved in the
 direction that can admit, pressure back to normal or free memory
@@ -716,7 +723,8 @@ Home moves onto the Stack (STACK-16). Three memory
 reserve rules also exist (the governor's OS margin plus tier margin,
 the operations design's mode-dependent reserve capped by Metal's
 recommended working set, and Home's 96 percent minus 0.7 GB); the
-governor's is the one kept, plus the Metal cap (STACK-SIZE-05).
+governor's is the one kept, plus Metal's recommended working-set cap
+(STACK-SIZE-05).
 
 **Shared shapes come first.** The spec (commons) gains: a KV cache type
 (`f16`, `q8_0`, `q4_0`) wherever a size is quoted, a footprint entry

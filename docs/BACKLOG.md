@@ -469,7 +469,7 @@ are never copied. Nothing migrates Home until STACK-16.
   measured, unexplained); the admission estimate for MLX carries a
   context term. Out of scope: GGUF. Exit: `bash scripts/check.sh` plus
   a Studio bench row (STACK-14).
-- [ ] **STACK-SIZE-05 (S): read Metal's working-set cap.** Objective:
+- [x] **STACK-SIZE-05 (S): read Metal's working-set cap.** Landed 2026-09-30. Objective:
   on Apple silicon the usable memory is capped by the GPU's recommended
   working set, which the governor never reads, so unified-memory totals
   can overstate what the GPU may hold. Pointers: `lib/governor.ts`
