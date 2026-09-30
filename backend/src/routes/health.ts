@@ -13,6 +13,11 @@ import { detectHardware } from "@/lib/hardware";
 
 import { HealthItem as HealthItemSchema } from "@maipai/spec/stack/ts/health-item.js";
 
+const ENGINE_FRIENDLY_NAMES: Record<string, string> = { "gguf-parser": "model size checker" };
+export function installedText(name: string): string {
+  return `The ${ENGINE_FRIENDLY_NAMES[name] ?? name} was installed.`;
+}
+
 const listRoute = createRoute({ method: "get", path: "/", tags: ["Health"], summary: "Active health items", responses: { 200: { content: { "application/json": { schema: z.object({ health: z.array(HealthItemSchema) }) } }, description: "Open problems, each with at most one fix." } } });
 const fixRoute = createRoute({ method: "post", path: "/{code}/fix", tags: ["Health"], summary: "Run a health item's fix", request: { params: idParamSchema("code") }, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.boolean(), result: z.string() }) } }, description: "What the fix did." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown item or no fix." } } });
 const actionRoute = (action: "resolve" | "ignore") => createRoute({ method: "post", path: `/{code}/${action}`, tags: ["Health"], summary: `${action[0]!.toUpperCase()}${action.slice(1)} a health item`, request: { params: idParamSchema("code") }, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.literal(true) }) } }, description: "Done." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown item." } } });
@@ -51,7 +56,7 @@ export async function runFix(code: string): Promise<{ ok: boolean; result: strin
         if (!pin) return { ok: false, result: "No pinned build exists for this computer." };
         await ensureEngine(pin, () => {}, { activate: true });
         resolve(code);
-        return { ok: true, result: "The model size checker was installed." };
+        return { ok: true, result: installedText(name) };
       } catch (error) { return { ok: false, result: (error as Error).message }; }
     }
     default: return { ok: false, result: "This repair needs the matching engine or model installer; reinstall from Home's Engines page." };

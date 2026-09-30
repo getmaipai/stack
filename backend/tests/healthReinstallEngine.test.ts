@@ -7,6 +7,7 @@ import { app } from "@/app";
 import { ENGINE_BINARIES, ENGINE_READY_MARKER } from "@/lib/engineCatalog";
 import { engineDir } from "@/lib/engineInstall";
 import { __resetHealthForTests, raise } from "@/lib/health";
+import { installedText } from "@/routes/health";
 
 let tempRoot = "";
 let originalDataDir: string | undefined;
@@ -47,6 +48,11 @@ test("an unknown engine name returns the fix failure shape", async () => {
   raise({ code: "engine-missing.nope", severity: "warning", title: "Missing", text: "Missing", cause: "Not installed", fix: { label: "Install", action: "reinstall_engine" } });
   const response = await app.request("/stack/v1/health/engine-missing.nope/fix", { method: "POST" });
   expect(await response.json()).toMatchObject({ ok: false, result: expect.any(String) });
+});
+
+test("the reinstall success text uses the friendly name when available and the engine name otherwise", () => {
+  expect(installedText("gguf-parser")).toBe("The model size checker was installed.");
+  expect(installedText("some-engine")).toBe("The some-engine was installed.");
 });
 
 test("a failed download returns its error", async () => {

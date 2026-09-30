@@ -85,6 +85,20 @@ const known = (low: number, high: number, source: Figure["source"], as_of: strin
 const unknown = (as_of: string): UnknownFigure => ({ low: null, high: null, source: "unknown", as_of });
 const verified = (estimate: GgufEstimate | null | undefined): estimate is GgufEstimate => !!estimate && (VERIFIED_ARCHITECTURES as readonly string[]).includes(estimate.architecture);
 
+function allUnknownPaths(input: PlanInput): StackFitPlanType["paths"] {
+  if (input.unifiedMemory) return [{ path: "unified", fits: false, verdict: "unknown" }];
+  if (input.deviceBudgetsBytes.length) {
+    const paths: StackFitPlanType["paths"] = [
+      { path: "gpu", fits: false, verdict: "unknown" },
+      { path: "cpu", fits: false, verdict: "unknown" },
+    ];
+    if (input.deviceBudgetsBytes.length >= 2) paths.push({ path: "multi-gpu", fits: false, verdict: "unknown" });
+    paths.push({ path: "cpu-offload", fits: false, verdict: "unknown" });
+    return paths;
+  }
+  return [{ path: "cpu", fits: false, verdict: "unknown" }];
+}
+
 export function buildFitPlan(input: PlanInput): StackFitPlanType {
   const date = input.asOf;
   const loaded = input.loaded ?? [];
@@ -111,13 +125,7 @@ export function buildFitPlan(input: PlanInput): StackFitPlanType {
       if (!fits) path.shortfall = known(Math.max(0, peak.low - available), Math.max(0, peak.high - available), "estimated", date);
       paths.push(path);
     } else {
-      if (input.unifiedMemory) paths.push({ path: "unified", fits: false, verdict: "unknown" });
-      else if (input.deviceBudgetsBytes.length) {
-        paths.push({ path: "gpu", fits: false, verdict: "unknown" });
-        paths.push({ path: "cpu", fits: false, verdict: "unknown" });
-        if (input.deviceBudgetsBytes.length >= 2) paths.push({ path: "multi-gpu", fits: false, verdict: "unknown" });
-        paths.push({ path: "cpu-offload", fits: false, verdict: "unknown" });
-      } else paths.push({ path: "cpu", fits: false, verdict: "unknown" });
+      paths.push(...allUnknownPaths(input));
     }
   } else if (verified(input.estimate)) {
     const estimate = input.estimate;
@@ -151,13 +159,7 @@ export function buildFitPlan(input: PlanInput): StackFitPlanType {
       }
     }
   } else {
-    if (input.unifiedMemory) paths.push({ path: "unified", fits: false, verdict: "unknown" });
-    else if (input.deviceBudgetsBytes.length) {
-      paths.push({ path: "gpu", fits: false, verdict: "unknown" });
-      paths.push({ path: "cpu", fits: false, verdict: "unknown" });
-      if (input.deviceBudgetsBytes.length >= 2) paths.push({ path: "multi-gpu", fits: false, verdict: "unknown" });
-      paths.push({ path: "cpu-offload", fits: false, verdict: "unknown" });
-    } else paths.push({ path: "cpu", fits: false, verdict: "unknown" });
+    paths.push(...allUnknownPaths(input));
   }
 
   const total = peak.low === null ? peak : known(peak.low + othersBytes, peak.high! + othersBytes, "estimated", date);
