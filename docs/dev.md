@@ -651,7 +651,7 @@ setting `chat.kv_cache_override` is not read by the Stack yet;
 `mlxKvQuantFor` and `mlxServeArgs` hold the MLX rule and flag plumbing,
 and the setting is wired at STACK-16.
 
-The plan judges the candidate as the chat model alongside the roles loaded right now, with the governor's own two conditions: loaded peaks plus the candidate stay within the cap, and free memory after unloading the current chat model and subtracting the candidate stays at least the working margin. A full every-role-of-the-profile sum waits until each role has a pinned model and STACK-SIZE-01's per-role choice.
+The plan judges capacity: the governor's first condition, the loaded roles plus the candidate within the cap, with the current chat model unloaded. Free memory right now is admission's second condition and is not in the plan, because a plan that changed with every open browser tab would tell a person a small model "won't fit" (SIZER-E2E-01, the first real run, found exactly that). A "yes" can still queue at admission on a busy computer. A full every-role-of-the-profile sum waits until each role has a pinned model and STACK-SIZE-01's per-role choice.
 
 The spec vocabulary in spec-v0.1.60 now names all thirteen Stack roles. A
 loaded role the spec does not name yet still counts toward the total but is
@@ -739,12 +739,13 @@ A downloaded GGUF of any architecture can use the dry run.
 
 **One fit across roles.** A set of role choices fits when the resident
 roles' peaks, plus the largest single on-demand or generator peak, stay
-within the cap and leave the tier's working margin free. The planner
-imports the governor's admission arithmetic (`canAdmit`, with
-`governorPeak` mirroring `peakFor`), so a plan it accepts is never
-refused at admission. Wakeword adds nothing (installed only in every
-profile). STACK-SIZE-01 owns the per-role choice; STACK-SIZE-03 adds
-the plan and the verdict on top of it.
+within the cap. The planner mirrors the capacity condition in the
+governor's admission arithmetic (`canAdmit`, with `governorPeak`
+mirroring `peakFor`); free memory and the working margin remain an
+admission-time condition, so a plan it accepts can still queue at
+admission. Wakeword adds nothing (installed only in every profile).
+STACK-SIZE-01 owns the per-role choice; STACK-SIZE-03 adds the plan and
+the verdict on top of it.
 
 **Where the docs and the code disagree.** "Admission is decided from
 kernel pressure and measured peaks, never file sizes" (Goals, item 3)

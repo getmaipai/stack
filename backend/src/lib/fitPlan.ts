@@ -73,7 +73,6 @@ export interface PlanInput {
   capBytes: number;
   workingMarginBytes: number;
   loaded?: { role: string; kind: "resident" | "jit" | "generator"; peakBytes: number; measured: boolean }[];
-  freeMemoryBytes?: number;
   asOf: string;
   tool: { name: string; version: string };
 }
@@ -103,12 +102,9 @@ export function buildFitPlan(input: PlanInput): StackFitPlanType {
   const date = input.asOf;
   const loaded = input.loaded ?? [];
   const others = loaded.filter((item) => item.role !== "chat");
-  const currentChat = loaded.find((item) => item.role === "chat");
   const othersBytes = others.reduce((sum, item) => sum + item.peakBytes, 0);
-  // mirrors canAdmit in governor.ts; a change to one must change the other
-  const available = Math.max(0, input.freeMemoryBytes === undefined
-    ? input.capBytes - othersBytes - input.workingMarginBytes
-    : Math.min(input.capBytes - othersBytes, input.freeMemoryBytes + (currentChat?.peakBytes ?? 0) - input.workingMarginBytes));
+  // mirrors the first condition of canAdmit in governor.ts (loaded plus the candidate within the cap, with the current chat model unloaded); the second condition, free memory now, is a moment-in-time question that admission answers by queueing, so the plan does not include it
+  const available = Math.max(0, input.capBytes - othersBytes);
   const paths: StackFitPlanType["paths"] = [];
   let peak: Figure | UnknownFigure = unknown(date);
   let verdict: "yes" | "slow" | "no" | "unknown" = "unknown";

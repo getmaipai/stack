@@ -55,9 +55,9 @@ test("builds unified yes and no plans with estimate ranges and shortfalls", () =
   const yes = broken({ ...base, estimate });
   expect(yes).toMatchObject({ verdict: "yes", paths: [{ path: "unified", fits: true, verdict: "yes" }], roles: [{ peak: { low: 2635880448, high: 3326314344, source: "estimated" } }] });
   expect(yes.paths[0]).not.toHaveProperty("shortfall");
-  const no = broken({ ...base, estimate, capBytes: 3 * 1024 ** 3, workingMarginBytes: 1024 ** 3 });
+  const no = broken({ ...base, estimate, capBytes: 3 * 1024 ** 3 });
   expect(no.verdict).toBe("no");
-  expect(no.paths[0]?.shortfall).toMatchObject({ low: 2635880448 - (3 * 1073741824 - 1 * 1073741824), high: 3326314344 - (3 * 1073741824 - 1 * 1073741824), source: "estimated" });
+  expect(no.paths[0]?.shortfall).toMatchObject({ low: 0, high: 3326314344 - 3 * 1024 ** 3, source: "estimated" });
 });
 
 test("plans the candidate alongside loaded roles and sums their peaks", () => {
@@ -65,7 +65,7 @@ test("plans the candidate alongside loaded roles and sums their peaks", () => {
     { role: "stt", kind: "resident" as const, peakBytes: 500 * 1024 ** 2, measured: true },
     { role: "tts", kind: "jit" as const, peakBytes: 1024 ** 3, measured: false },
   ];
-  const plan = broken({ ...base, estimate, loaded, freeMemoryBytes: 12 * 1024 ** 3 });
+  const plan = broken({ ...base, estimate, loaded });
   expect(plan.roles.map(({ role, choice }) => [role, choice])).toEqual([["chat", "proposed"], ["stt", "loaded"], ["tts", "loaded"]]);
   expect(plan.roles[1]?.peak).toMatchObject({ source: "measured" });
   expect(plan.roles[2]?.peak).toMatchObject({ source: "estimated" });
@@ -73,17 +73,28 @@ test("plans the candidate alongside loaded roles and sums their peaks", () => {
   expect(() => StackFitPlan.parse(plan)).not.toThrow();
 });
 
-test("unloading the current chat makes room while other loaded roles still count", () => {
-  const common = { ...base, estimate, capBytes: 16 * 1024 ** 3, workingMarginBytes: 4 * 1024 ** 3, freeMemoryBytes: 6 * 1024 ** 3 };
-  const withChat = broken({ ...common, loaded: [{ role: "chat", kind: "resident", peakBytes: 2 * 1024 ** 3, measured: true }] });
-  const withoutChat = broken({ ...common, loaded: [] });
-  expect(withChat.verdict).toBe("yes");
-  expect(withChat.roles).toHaveLength(1);
-  expect(withoutChat.verdict).toBe("no");
+test("a loaded chat model is replaced by the candidate, not added to it", () => {
+  const high = estimate.vramNonumaBytes + estimate.ramUmaBytes;
+  const capBytes = high + 1024 ** 3;
+  const chat = { role: "chat", kind: "resident" as const, peakBytes: 2 * 1024 ** 3, measured: true };
+  const replaced = broken({ ...base, estimate, capBytes, loaded: [chat] });
+  expect(replaced.verdict).toBe("yes");
+  expect(replaced.roles).toHaveLength(1);
+  expect(replaced.total.high).toBe(high);
+  const withStt = broken({ ...base, estimate, capBytes, loaded: [chat, { role: "stt", kind: "resident" as const, peakBytes: capBytes - high + 1, measured: true }] });
+  expect(withStt.verdict).toBe("no");
+});
+
+test("free memory does not change the verdict", () => {
+  const input = { ...base, estimate, capBytes: 16 * 1024 ** 3 };
+  const ordinary = broken(input);
+  const withLegacyFreeMemory = broken({ ...input, ...({ freeMemoryBytes: 0 } as Partial<PlanInput>) });
+  expect(withLegacyFreeMemory.verdict).toBe(ordinary.verdict);
+  expect(withLegacyFreeMemory.total).toEqual(ordinary.total);
 });
 
 test("loaded others can make an otherwise known candidate fail", () => {
-  const plan = broken({ ...base, estimate, loaded: [{ role: "stt", kind: "resident", peakBytes: base.capBytes - 1 * 1024 ** 3, measured: true }], freeMemoryBytes: 16 * 1024 ** 3 });
+  const plan = broken({ ...base, estimate, loaded: [{ role: "stt", kind: "resident", peakBytes: base.capBytes - 1 * 1024 ** 3, measured: true }] });
   expect(plan.verdict).toBe("no");
   expect(plan.paths[0]).toHaveProperty("shortfall");
 });
@@ -95,9 +106,8 @@ test("unlisted loaded roles count toward the fit plan total and verdict", () => 
   ];
   const high = estimate.vramNonumaBytes + estimate.ramUmaBytes;
   const capBytes = high + 1024 ** 3 + 200 * 1024 ** 2;
-  const freeMemoryBytes = 64 * 1024 ** 3;
-  const plan = broken({ ...base, capBytes, estimate, loaded, freeMemoryBytes });
-  const withoutFutureRole = broken({ ...base, capBytes, estimate, loaded: loaded.slice(1), freeMemoryBytes });
+  const plan = broken({ ...base, capBytes, estimate, loaded });
+  const withoutFutureRole = broken({ ...base, capBytes, estimate, loaded: loaded.slice(1) });
   expect(plan.roles).toHaveLength(2);
   expect(plan.roles.map(({ role }) => role)).toEqual(["chat", "stt"]);
   expect(plan.total).toMatchObject({ low: 2635880448 + 500 * 1024 ** 2 + 1024 ** 3, high: 3326314344 + 500 * 1024 ** 2 + 1024 ** 3, source: "estimated" });
@@ -123,7 +133,7 @@ test("lists newly named loaded roles from the spec vocabulary", () => {
 });
 
 test("GPU device fit also checks the host memory estimate", () => {
-  const plan = broken({ ...base, unifiedMemory: false, deviceBudgetsBytes: [8 * 1024 ** 3], estimate: { ...estimate, ramNonumaBytes: 20 * 1024 ** 3 }, freeMemoryBytes: 10 * 1024 ** 3 });
+  const plan = broken({ ...base, unifiedMemory: false, deviceBudgetsBytes: [8 * 1024 ** 3], estimate: { ...estimate, ramNonumaBytes: 20 * 1024 ** 3 } });
   expect(plan.paths.find((path) => path.path === "gpu")).toMatchObject({ fits: false, verdict: "no" });
 });
 
@@ -160,7 +170,7 @@ const mlxFacts = { weightsBytes: 968080210, config: mlxConfig };
 const mlxPlan = (input: Partial<PlanInput> = {}) => buildFitPlan({ ...base, estimate: null, mlx: mlxFacts, ...input });
 
 test("plans an MLX repository on unified memory and leaves unverified cases unknown", () => {
-  const plan = mlxPlan({ freeMemoryBytes: 12 * 1024 ** 3 });
+  const plan = mlxPlan();
   const kvPerToken = 28 * 8 * 128 * 2 * 2;
   const low = Math.ceil(MLX_IDLE_FACTOR * mlxFacts.weightsBytes) + MLX_PREFIX_CACHE_BYTES + Math.ceil(MLX_KV_PEAK_FACTOR_LOW * kvPerToken * base.contextTokens);
   const high = Math.ceil(GovernorRules.engineMultipliers["mlx-serve"] * mlxFacts.weightsBytes) + MLX_PREFIX_CACHE_BYTES + Math.ceil(MLX_KV_PEAK_FACTOR * kvPerToken * base.contextTokens);

@@ -11,25 +11,36 @@ beforeEach(() => {
 });
 afterEach(() => __resetGovernorForTests());
 
-test("fit plan and governor agree with the same available-memory inputs", async () => {
-  for (const scenario of [{ free: 16 * GB, expected: "yes" }, { free: 8 * GB, expected: "no" }] as const) {
-    __resetGovernorForTests();
-    __setGovernorTuningForTestsOnly({ totalMemoryBytes: 32 * GB, freeMemoryBytes: 24 * GB, tier: "p32" });
-    const other = await admit({ id: "stt", kind: "resident", requestedBytes: GB, measuredPeakBytes: GB });
-    expect("id" in other).toBe(true);
-    __setGovernorTuningForTestsOnly({ freeMemoryBytes: scenario.free });
-    const status = getGovernorStatus();
-    const plan = buildFitPlan({
-      modelId: "parity", contextTokens: 4096, kvCacheType: "f16", estimate,
-      unifiedMemory: true, deviceBudgetsBytes: [], capBytes: status.capBytes,
-      workingMarginBytes: status.marginBytes, freeMemoryBytes: status.freeMemoryBytes,
-      loaded: status.loaded.map((item) => ({ role: item.id, kind: item.kind, peakBytes: item.peakBytes, measured: item.measured })),
-      asOf: "2026-09-30", tool: { name: "test", version: "test" },
-    });
-    expect(plan.verdict).toBe(scenario.expected);
-    const admission = await admit({ id: "chat", kind: "resident", requestedBytes: plan.roles[0]!.peak.high! });
-    if (plan.verdict === "yes") expect("id" in admission).toBe(true);
-    else expect(admission).toMatchObject({ queued: true });
-    __resetGovernorForTests();
-  }
+test("capacity no is never admitted, and yes is admitted with ample free memory", async () => {
+  const other = await admit({ id: "stt", kind: "resident", requestedBytes: GB, measuredPeakBytes: GB });
+  expect("id" in other).toBe(true);
+  const status = getGovernorStatus();
+  const plan = buildFitPlan({
+    modelId: "parity", contextTokens: 4096, kvCacheType: "f16", estimate,
+    unifiedMemory: true, deviceBudgetsBytes: [], capBytes: status.capBytes,
+    workingMarginBytes: status.marginBytes,
+    loaded: status.loaded.map((item) => ({ role: item.id, kind: item.kind, peakBytes: item.peakBytes, measured: item.measured })),
+    asOf: "2026-09-30", tool: { name: "test", version: "test" },
+  });
+  expect(plan.verdict).toBe("yes");
+  const admitted = await admit({ id: "chat", kind: "resident", requestedBytes: plan.roles[0]!.peak.high! });
+  expect("id" in admitted).toBe(true);
+
+  __resetGovernorForTests();
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 32 * GB, freeMemoryBytes: 100 * GB, tier: "p32" });
+  const cap = getGovernorStatus().capBytes;
+  const planPeak = estimate.vramNonumaBytes + estimate.ramUmaBytes;
+  const resident = await admit({ id: "stt", kind: "resident", requestedBytes: cap - planPeak + 1, measuredPeakBytes: cap - planPeak + 1 });
+  expect("id" in resident).toBe(true);
+  const capacity = getGovernorStatus();
+  const capacityPlan = buildFitPlan({
+    modelId: "parity", contextTokens: 4096, kvCacheType: "f16", estimate,
+    unifiedMemory: true, deviceBudgetsBytes: [], capBytes: capacity.capBytes,
+    workingMarginBytes: capacity.marginBytes,
+    loaded: capacity.loaded.map((item) => ({ role: item.id, kind: item.kind, peakBytes: item.peakBytes, measured: item.measured })),
+    asOf: "2026-09-30", tool: { name: "test", version: "test" },
+  });
+  expect(capacityPlan.verdict).toBe("no");
+  const queued = await admit({ id: "chat", kind: "resident", requestedBytes: capacityPlan.roles[0]!.peak.high! });
+  expect(queued).toMatchObject({ queued: true });
 });

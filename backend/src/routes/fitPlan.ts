@@ -54,7 +54,7 @@ fitPlanRoutes.openapi(route, async (c) => {
       mlx: facts ? { weightsBytes: facts.weightsBytes, config: facts.config } : null,
       unifiedMemory, deviceBudgetsBytes, capBytes: status.capBytes, workingMarginBytes: status.marginBytes,
       loaded: status.loaded.map((item) => ({ role: item.id, kind: item.kind, peakBytes: item.peakBytes, measured: item.measured })),
-      freeMemoryBytes: status.freeMemoryBytes, asOf: new Date().toISOString().slice(0, 10),
+      asOf: new Date().toISOString().slice(0, 10),
       tool: { name: "huggingface-metadata", version: "api" },
       // mlx-serve is launched without --kv-quant; STACK-SIZE-11 changes that later.
     }), 200);
@@ -97,7 +97,6 @@ fitPlanRoutes.openapi(route, async (c) => {
     modelId, contextTokens, kvCacheType, estimate, cpuEstimate, unifiedMemory,
     deviceBudgetsBytes, capBytes: status.capBytes, workingMarginBytes: status.marginBytes,
     loaded: status.loaded.map((item) => ({ role: item.id, kind: item.kind, peakBytes: item.peakBytes, measured: item.measured })),
-    freeMemoryBytes: status.freeMemoryBytes,
     asOf: new Date().toISOString().slice(0, 10),
     tool: pin ? { name: "gguf-parser", version: pin.tag } : { name: "gguf-parser", version: "not-installed" },
   }), 200);
