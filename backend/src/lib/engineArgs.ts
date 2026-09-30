@@ -19,6 +19,24 @@ export interface LlamaServerArgsOptions {
 export type KvCacheType = "f16" | "q8_0" | "q4_0";
 export type KvCacheOverride = "auto" | "quantized" | "full";
 
+export function mlxKvQuantFor(override: KvCacheOverride | undefined): 8 | null {
+  return override === "quantized" ? 8 : null;
+}
+
+export function mlxServeArgs(options: { modelPath: string; port: number; contextLength: number; slots: number; prefixCacheFlag: string; kvQuant?: 8 | null }): string[] {
+  const args = [
+    "--model", options.modelPath,
+    "--serve",
+    "--host", "127.0.0.1",
+    "--port", String(options.port),
+    "--ctx-size", String(options.contextLength),
+    "--max-concurrent", String(options.slots),
+    "--prefix-cache-mem", options.prefixCacheFlag,
+  ];
+  if (options.kvQuant === 8) args.push("--kv-quant", String(options.kvQuant));
+  return args;
+}
+
 export function defaultKvCacheType(platform: NodeJS.Platform = process.platform): KvCacheType {
   return platform === "darwin" ? "q8_0" : "f16";
 }

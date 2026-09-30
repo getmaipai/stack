@@ -10,6 +10,7 @@ export const MLX_KV_PEAK_FACTOR_LOW = 1.9;
 // Largest observed peak growth over the f16 KV formula on one model
 // (Qwen3 1.7B 4-bit, contexts 4096 to 32768); the ratio fell as context
 // grew. Confirm on the Studio for other models.
+// Keep this unquantized factor even when launch passes --kv-quant 8; a quantized cache needs its own Studio measurement before a smaller factor is written (STACK-14).
 export const MLX_KV_PEAK_FACTOR = 2.9;
 // Placeholder reserve for a model whose architecture or config is not verified.
 export const MLX_UNKNOWN_HEADROOM_BYTES = 2 * 1024 ** 3;

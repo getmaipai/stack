@@ -11,7 +11,7 @@ import { withTimeout } from "@maipai/core/src/withTimeout";
 import { isCompiledBinary } from "@/lib/paths";
 import { ENGINE_READY_MARKER, installedEnginePin, selectEngineBinary, type ChatEngine, type EngineBinaryPin } from "@/lib/engineCatalog";
 import { managedEnv } from "@/lib/uvEnvironment";
-import { defaultKvCacheType, llamaServerArgs } from "@/lib/engineArgs";
+import { defaultKvCacheType, llamaServerArgs, mlxKvQuantFor, mlxServeArgs } from "@/lib/engineArgs";
 import { currentEngineBinary, currentEngineTag, engineBinaryPath, engineDir } from "@/lib/engineInstall";
 import { detectHardware } from "@/lib/hardware";
 import { identityHeaders, modelFileName, readEngineIdentity, type EngineIdentity } from "@/lib/identity";
@@ -576,7 +576,8 @@ export function launchPlan(role: RoleId, model: ModelRecord, port: number): Laun
     if (!pin || !engineInstalled("mlx-serve")) throw new EngineUnavailableError("No installed mlx-serve build is available for this machine.");
     const binary = launchBinary(pin);
     const slots = typeof config.slots === "number" && config.slots > 0 ? config.slots : 1;
-    const args = ["--model", model.modelPath!, "--serve", "--host", "127.0.0.1", "--port", String(port), "--ctx-size", String(contextLength), "--max-concurrent", String(slots), "--prefix-cache-mem", MLX_PREFIX_CACHE_FLAG];
+    // The person-level setting is not read by the Stack yet (STACK-16); undefined means no --kv-quant.
+    const args = mlxServeArgs({ modelPath: model.modelPath!, port, contextLength, slots, prefixCacheFlag: MLX_PREFIX_CACHE_FLAG, kvQuant: mlxKvQuantFor(undefined) });
     return { command: [binary, ...args], engine: "mlx-serve", build: currentEngineTag("mlx-serve") ?? pin.tag, stdin: "ignore", contextLength, kind: "spawned", env: managedEnv() };
   }
   const pin = installedEnginePin();

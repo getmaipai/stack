@@ -648,9 +648,8 @@ privacy row names the content host Hugging Face redirects to,
 `auto` means the platform default: q8_0 on macOS and f16 elsewhere. The
 plan defaults to the type the Stack really launches. The person-level
 setting `chat.kv_cache_override` is not read by the Stack yet;
-`kvCacheTypeFor` is the one place its meaning lives when it is wired at
-STACK-16, and for MLX quantized will map to `--kv-quant 8` in
-STACK-SIZE-11.
+`mlxKvQuantFor` and `mlxServeArgs` hold the MLX rule and flag plumbing,
+and the setting is wired at STACK-16.
 
 The plan judges the candidate as the chat model alongside the roles loaded right now, with the governor's own two conditions: loaded peaks plus the candidate stay within the cap, and free memory after unloading the current chat model and subtracting the candidate stays at least the working margin. A full every-role-of-the-profile sum waits until each role has a pinned model and STACK-SIZE-01's per-role choice.
 

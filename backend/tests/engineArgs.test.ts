@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { defaultKvCacheType, kvCacheTypeFor, llamaServerArgs } from "@/lib/engineArgs";
+import { defaultKvCacheType, kvCacheTypeFor, llamaServerArgs, mlxKvQuantFor, mlxServeArgs } from "@/lib/engineArgs";
 
 const modelPath = "/models/chat.gguf";
 const declaredDefaults: Record<string, number | boolean | string> = {
@@ -9,6 +9,24 @@ const declaredDefaults: Record<string, number | boolean | string> = {
   cacheRamMb: 0,
   flashAttention: true,
 };
+
+test("MLX KV quant follows the override", () => {
+  expect(mlxKvQuantFor("quantized")).toBe(8);
+  expect(mlxKvQuantFor("auto")).toBeNull();
+  expect(mlxKvQuantFor("full")).toBeNull();
+  expect(mlxKvQuantFor(undefined)).toBeNull();
+});
+
+test("MLX serve args append KV quant only when selected", () => {
+  const port = 8770 + 1;
+  const contextLength = 2048 * 2;
+  const slots = 0 + 1;
+  const options = { modelPath, port, contextLength, slots, prefixCacheFlag: "1024MB" };
+  const base = ["--model", modelPath, "--serve", "--host", "127.0.0.1", "--port", String(port), "--ctx-size", String(contextLength), "--max-concurrent", String(slots), "--prefix-cache-mem", "1024MB"];
+  expect(mlxServeArgs({ ...options, kvQuant: null })).toEqual(base);
+  expect(mlxServeArgs({ ...options, kvQuant: 8 })).toEqual([...base, "--kv-quant", "8"]);
+  expect(mlxServeArgs(options)).toEqual(mlxServeArgs({ ...options, kvQuant: null }));
+});
 
 test("a Mac spawn gets the hub's full launch list over the declared defaults", () => {
   const args = llamaServerArgs({ modelPath, port: 8771, config: declaredDefaults, contextLength: 4096, kvCacheType: "q8_0" });
