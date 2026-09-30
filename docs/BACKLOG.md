@@ -444,9 +444,10 @@ are never copied. Nothing migrates Home until STACK-16.
   plan per path, every figure with source, range and date; only verified
   architectures (Qwen3 dense today) get a number, the rest are unknown;
   the range request is declared on `/stack/v1/privacy` with its guarding
-  test; a plan the planner accepts is never refused by admission. Waits
-  on the spec rows in `getmaipai/commons` (KV cache type, footprint
-  entry, engine enum, the fit-plan wire shape). Out of scope: MLX
+  test; a plan the planner accepts is never refused by admission. The
+  spec rows landed in commons as spec-v0.1.59 (SIZER-SPEC-01: KV cache
+  type, footprint entry, engine names, `stack-fit-plan.schema.json`);
+  pin that tag. Out of scope: MLX
   (STACK-SIZE-04), Home's wording. Test: the twelve `llama-server`
   comparison rows from `docs/dev.md` as fixtures. Exit:
   `bash scripts/check.sh`.
