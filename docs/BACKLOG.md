@@ -455,15 +455,18 @@ are never copied. Nothing migrates Home until STACK-16.
   estimate instead of a flat 1.4 times the file size. Pointers:
   `lib/supervisor.ts` (the `mlx-serve` launch, `--ctx-size` and
   `--max-concurrent` today), `lib/governor.ts` (the 1.4 multiplier),
-  `lib/fitPlan.ts`. Acceptance: the launch passes explicit
-  `--prefix-cache-mem`, `--prefill-chunk` and, if the measurement says
-  so, `--kv-quant`; the estimate is weights from the safetensors headers
-  plus a per-token KV term from `config.json` plus the bounded caches and
-  prefill buffers, checked against a real load at three contexts; the
-  admission estimate for MLX carries a context term. Depends on the
-  isolating measurement (SIZER-BAKE-05), whose numbers are recorded in
-  `docs/dev.md` when it lands. Out of scope: GGUF. Exit:
-  `bash scripts/check.sh` plus a Studio bench row (STACK-14).
+  `lib/fitPlan.ts`. Acceptance: the launch passes an explicit
+  `--prefix-cache-mem` (the cache stays resident between requests, 2
+  GiB by default, measured in `docs/dev.md`) and the person's choice on
+  `--kv-quant` (8-bit cut peak growth about a quarter); `--prefill-chunk`
+  is left at its default (no measurable effect on the measured model);
+  the estimate is idle (1.27 times the weights) plus the observed peak
+  growth for the context, verified architectures only, checked against a
+  real load at three contexts on the Studio for more than one model
+  (the peak was 1.9 to 2.9 times the simple KV formula on the one model
+  measured, unexplained); the admission estimate for MLX carries a
+  context term. Out of scope: GGUF. Exit: `bash scripts/check.sh` plus
+  a Studio bench row (STACK-14).
 - [ ] **STACK-SIZE-05 (S): read Metal's working-set cap.** Objective:
   on Apple silicon the usable memory is capped by the GPU's recommended
   working set, which the governor never reads, so unified-memory totals

@@ -652,14 +652,27 @@ size). The measurements say this cannot be a flat multiplier. With
 allocates as the context fills instead of at load; while answering, the
 peak footprint reached 2.37 GB at 3,460 prompt tokens, 4.99 GB at
 13,876 and 7.36 GB at 27,736, which is 1.9 to 2.9 times the simple KV
-formula and 7.6 times the file size at the longest. The server's
-default 2 GiB hot prefix cache and its prompt-processing buffers are
-the likely causes, and the Stack passes none of the flags that bound
-them (`--prefix-cache-mem`, `--prefix-cache-entries`,
-`--prefill-chunk`, `--kv-quant`). The 1.4 multiplier in "The governor"
-above was checked at short context only. STACK-SIZE-04 sets those flags
-explicitly and sizes against them; which flags matter comes from the
-isolating measurement recorded with that item.
+formula and 7.6 times the file size at the longest. The 1.4 multiplier
+in "The governor" above was checked at short context only.
+
+An isolating run (nine loads, same model, same requests) separated the
+causes. Turning the hot prefix cache off (`--prefix-cache-entries 0`)
+did not change the peak (within 0.1 GB at 4K and 16K, 26 MB higher at
+32K), and a smaller prefill chunk (`--prefill-chunk 2048`) changed
+nothing measurable, so neither is the peak's cause. The cache does
+change what stays resident after a request: at 32K the footprint five
+seconds after the response was 5.47 GB with the default cache and 3.32
+GB with it off, so the cache's 2 GiB budget sits in memory between
+requests. `--kv-quant 8` cut the peak growth by 1.17 GB at 16K and 1.47
+GB at 32K (about a quarter). With the cache off the peak growth was
+still 1.9 to 2.7 times the simple KV formula, falling as context grew,
+which points at a transient during prompt processing that this one
+model cannot explain. Until more models are measured, an MLX plan for a
+Qwen3-class dense model uses idle at 1.27 times the weights plus the
+observed peak (up to 2.9 times the KV formula), labelled estimated with
+that range, and any other MLX architecture is unknown. The Stack
+passes none of these flags today; STACK-SIZE-04 sets a cap on the
+prefix cache (retained memory) and decides on `--kv-quant`.
 
 **Verdict shape.** RigSpark (MIT, github.com/shashankswe2020-ux/rigspark,
 read for design only, none of its code or data used) gave the shape of
