@@ -1,4 +1,4 @@
-// MaiPai Stack's pinned engine builds: llama-server, and uv (the tool
+// MaiPai Stack's pinned engine builds: llama-server, gguf-parser, and uv (the tool
 // that assembles Pocket TTS's environment, STACK-94c). Binaries arrive
 // through verified downloads and never live in the repo.
 import type { HardwareInfo } from "@/lib/hardware";
@@ -8,6 +8,8 @@ export interface EngineArchive {
   url: string;
   sha256: string;
   approxBytes: number;
+  /** When set, the download is a single executable, stored in the engine directory under this name instead of being extracted. */
+  rawFileName?: string;
 }
 
 export interface EngineBinaryPin {
@@ -31,6 +33,58 @@ export interface EngineBinaryPin {
 }
 
 export const ENGINE_BINARIES: EngineBinaryPin[] = [
+  {
+    id: "gguf-parser-v0.26.4-macos-arm64",
+    name: "gguf-parser",
+    tag: "v0.26.4",
+    platform: "darwin",
+    arch: "arm64",
+    tool: "gguf-parser",
+    requiresNvidia: false,
+    label: "gguf-parser-go (macOS, Apple Silicon), v0.26.4",
+    docsUrl: "https://github.com/gpustack/gguf-parser-go",
+    archive: { label: "gguf-parser-go (macOS arm64)", url: "https://github.com/gpustack/gguf-parser-go/releases/download/v0.26.4/gguf-parser-darwin-arm64", sha256: "bb33961acc40466312940290553d9f84fdd1d19f532faedd60e02752e2a082b2", approxBytes: 9_130_434, rawFileName: "gguf-parser" },
+    verified: true,
+  },
+  {
+    id: "gguf-parser-v0.26.4-linux-arm64",
+    name: "gguf-parser",
+    tag: "v0.26.4",
+    platform: "linux",
+    arch: "arm64",
+    tool: "gguf-parser",
+    requiresNvidia: false,
+    label: "gguf-parser-go (Linux, ARM64), v0.26.4",
+    docsUrl: "https://github.com/gpustack/gguf-parser-go",
+    archive: { label: "gguf-parser-go (Linux arm64)", url: "https://github.com/gpustack/gguf-parser-go/releases/download/v0.26.4/gguf-parser-linux-arm64", sha256: "46db5a47c96d4860f4c91f1d3ebb0afde90e358a41c263a84c4a1241bc0c36be", approxBytes: 8_847_512, rawFileName: "gguf-parser" },
+    verified: false,
+  },
+  {
+    id: "gguf-parser-v0.26.4-linux-x64",
+    name: "gguf-parser",
+    tag: "v0.26.4",
+    platform: "linux",
+    arch: "x64",
+    tool: "gguf-parser",
+    requiresNvidia: false,
+    label: "gguf-parser-go (Linux, x64), v0.26.4",
+    docsUrl: "https://github.com/gpustack/gguf-parser-go",
+    archive: { label: "gguf-parser-go (Linux x64)", url: "https://github.com/gpustack/gguf-parser-go/releases/download/v0.26.4/gguf-parser-linux-amd64", sha256: "b33c4488eb073d3a58329a1c4c7041af168241a1bb832eb962051da99689c1ec", approxBytes: 9_224_344, rawFileName: "gguf-parser" },
+    verified: false,
+  },
+  {
+    id: "gguf-parser-v0.26.4-win-x64",
+    name: "gguf-parser",
+    tag: "v0.26.4",
+    platform: "win32",
+    arch: "x64",
+    tool: "gguf-parser",
+    requiresNvidia: false,
+    label: "gguf-parser-go (Windows, x64), v0.26.4",
+    docsUrl: "https://github.com/gpustack/gguf-parser-go",
+    archive: { label: "gguf-parser-go (Windows x64)", url: "https://github.com/gpustack/gguf-parser-go/releases/download/v0.26.4/gguf-parser-windows-amd64.exe", sha256: "8da9ae6b8968d5d2dee4eaf48dbc24ed48bf3de02794c8dbe0b2a9443b12c92c", approxBytes: 9_592_832, rawFileName: "gguf-parser.exe" },
+    verified: false,
+  },
   {
     id: "llama-server-b10797-macos-arm64",
     name: "llama-server",

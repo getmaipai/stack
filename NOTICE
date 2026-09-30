@@ -19,5 +19,8 @@ repo redistributes are listed here as they are added.
 - @types/bun (MIT) - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/bun (type definitions for the backend)
 - @huggingface/gguf (MIT) - https://github.com/huggingface/huggingface.js (GGUF header and remote range parser)
 - @huggingface/hub (MIT) - https://github.com/huggingface/huggingface.js (model metadata and file lists for provenance)
+- gguf-parser-go (MIT) - https://github.com/gpustack/gguf-parser-go; Copyright (c) 2024 gguf-parser-go authors
+
+The Stack downloads a pinned release at run time and does not vendor it.
 - ajv (MIT) - https://ajv.js.org (validating the wire-shape fixtures against their JSON Schemas in the test suite)
 - ajv-formats (MIT) - https://github.com/ajv-validator/ajv-formats (the date-time format for those schemas)

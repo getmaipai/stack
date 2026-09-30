@@ -50,7 +50,8 @@ async function downloadArchive(pin: EngineBinaryPin, archive: EngineArchive, onP
     onProgress: (progress) => onProgress(progress.completedBytes, progress.totalBytes, archive.label),
     signal,
   });
-  await extractArchive(destination, engineDir(pin));
+  if (archive.rawFileName) renameSync(destination, join(engineDir(pin), archive.rawFileName));
+  else await extractArchive(destination, engineDir(pin));
   rmSync(destination, { force: true });
 }
 

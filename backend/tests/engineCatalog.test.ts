@@ -49,4 +49,17 @@ describe("selectEngineBinary", () => {
       for (const extra of pin.extraArchives ?? []) expect(extra.sha256).toMatch(/^[a-f0-9]{64}$/);
     }
   });
+
+  test("gguf-parser pins are complete and select verified Apple silicon", () => {
+    const pins = ENGINE_BINARIES.filter((pin) => pin.name === "gguf-parser");
+    expect(new Set(pins.map((pin) => pin.id)).size).toBe(pins.length);
+    for (const pin of pins) {
+      expect(pin.archive.sha256).toMatch(/^[a-f0-9]{64}$/);
+      expect(pin.archive.approxBytes).toBeGreaterThan(0);
+      expect(pin.archive.rawFileName).toBeTruthy();
+    }
+    const result = selectEngineBinary(hw({}), "gguf-parser");
+    expect(result?.id).toBe("gguf-parser-v0.26.4-macos-arm64");
+    expect(result?.verified).toBe(true);
+  });
 });

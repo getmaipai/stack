@@ -48,6 +48,39 @@ test("ensureEngine verifies, extracts, marks ready, and skips a ready install", 
   }
 });
 
+test("ensureEngine installs a verified raw file at the tool path", async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), "maipai-engine-data-"));
+  testDirs.push(dataDir);
+  process.env.STACK_DATA_DIR = dataDir;
+  const bytes = Buffer.from("#!/bin/sh\necho gguf-parser\n");
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  let requests = 0;
+  const server = Bun.serve({ port: 0, fetch: () => { requests += 1; return new Response(bytes); } });
+  try {
+    const target: EngineBinaryPin = {
+      id: "gguf-parser-v0.26.4-macos-arm64",
+      name: "gguf-parser",
+      tag: "v0.26.4",
+      platform: "darwin",
+      arch: "arm64",
+      tool: "gguf-parser",
+      requiresNvidia: false,
+      label: "test raw binary",
+      archive: { label: "test raw binary", url: `${server.url}`, sha256, approxBytes: bytes.length, rawFileName: "gguf-parser" },
+      verified: false,
+    };
+    await ensureEngine(target);
+    expect(requests).toBe(1);
+    expect(existsSync(engineBinaryPath(target))).toBe(true);
+    expect(existsSync(join(engineDir(target), ENGINE_READY_MARKER))).toBe(true);
+    expect(existsSync(join(engineDir(target), ".download.tmp"))).toBe(false);
+    const { mode } = await import("node:fs").then(({ statSync }) => statSync(engineBinaryPath(target)));
+    expect(mode & 0o111).not.toBe(0);
+  } finally {
+    server.stop(true);
+  }
+});
+
 test("a wrong checksum rejects and leaves no ready marker", async () => {
   const dataDir = mkdtempSync(join(tmpdir(), "maipai-engine-data-"));
   testDirs.push(dataDir);
