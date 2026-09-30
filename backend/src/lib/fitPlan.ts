@@ -1,9 +1,15 @@
 import { withTimeout } from "@maipai/core/src/withTimeout";
 import { StackFitPlan, type StackFitPlan as StackFitPlanType } from "@maipai/spec/gen/ts/stack-fit-plan.js";
 import { currentEngineBinaryPath } from "@/lib/engineInstall";
+import { existsSync } from "node:fs";
 
 // An architecture joins this list only after one bench row agrees with a real load (docs/dev.md).
 export const VERIFIED_ARCHITECTURES = ["qwen3"] as const;
+
+export function estimatorAvailable(): boolean {
+  const configured = process.env.STACK_GGUF_PARSER_BINARY;
+  return (configured ? existsSync(configured) : false) || currentEngineBinaryPath("gguf-parser") !== null;
+}
 
 export interface GgufEstimate {
   architecture: string;

@@ -4,7 +4,8 @@ import { basename, isAbsolute, relative, resolve } from "node:path";
 import { apiRouter, ErrorSchema } from "@maipai/core/src/openapi";
 import { StackFitPlan } from "@maipai/spec/gen/ts/stack-fit-plan.js";
 import type { AppEnv } from "@/types";
-import { buildFitPlan, runGgufParser } from "@/lib/fitPlan";
+import { buildFitPlan, estimatorAvailable, runGgufParser } from "@/lib/fitPlan";
+import { raise, resolve as resolveHealth } from "@/lib/health";
 import { getGovernorStatus } from "@/lib/governor";
 import { detectHardware } from "@/lib/hardware";
 import { modelsRoot } from "@/lib/store/layout";
@@ -36,6 +37,8 @@ function inside(root: string, target: string): boolean {
 export const fitPlanRoutes = apiRouter<AppEnv>();
 fitPlanRoutes.openapi(route, async (c) => {
   const { source, context_tokens: contextTokens, kv_cache_type: kvCacheType } = c.req.valid("json");
+  if (!estimatorAvailable()) raise({ code: "engine-missing.gguf-parser", severity: "warning", title: "The model size checker is not installed", text: "Until it is installed, whether a model fits this computer is reported as unknown.", cause: "gguf-parser is pinned by the Stack but has not been downloaded on this machine.", fix: { label: "Install the size checker", action: "reinstall_engine" } });
+  else resolveHealth("engine-missing.gguf-parser");
   let target: { url: string } | { path: string };
   let modelId: string;
   if ("url" in source) {

@@ -638,9 +638,11 @@ outbound call, the range request to the model's host, is declared on
 
 The route `POST /stack/v1/fit-plan` takes a Hugging Face `.gguf` URL or
 a path in the model store, a context length and a KV cache type, and
-returns the spec's `StackFitPlan`. An uninstalled estimator gives an
-unknown plan and downloads nothing; the header read has its own privacy
-row, `model-size-check`.
+returns the spec's `StackFitPlan`. A fit-plan request with no estimator
+installed answers unknown and raises the health item
+`engine-missing.gguf-parser`, whose one fix installs the pinned tool. The
+privacy row names the content host Hugging Face redirects to,
+`us.aws.cdn.hf.co`.
 
 Measured against `llama-server` b10797 on a 24 GB Apple silicon laptop
 (Metal, `gguf-parser-go` v0.26.4, Qwen3 1.7B Q8_0 and Qwen3 4B Q4_K_M,

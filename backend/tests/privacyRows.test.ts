@@ -35,9 +35,11 @@ test("a row's governing setting is a declared key", () => {
   for (const row of PRIVACY_ROWS) if (row.setting !== null) expect(keys, `row ${row.id} names ${row.setting}`).toContain(row.setting);
 });
 
-test("model-size-check declares the Hugging Face header read", () => {
+test("model-size-check declares only the observed Hugging Face header hosts", () => {
   const row = PRIVACY_ROWS.find((entry) => entry.id === "model-size-check");
   expect(row).toBeDefined();
   expect(row!.hosts).toContain("huggingface.co");
+  expect(row!.hosts).toContain("us.aws.cdn.hf.co");
+  expect(row!.hosts.every((host) => ["huggingface.co", "us.aws.cdn.hf.co"].includes(host))).toBe(true);
   for (const field of ["what", "when", "carries", "receiver"] as const) expect(row![field].length).toBeGreaterThan(10);
 });

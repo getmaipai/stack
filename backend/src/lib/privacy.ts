@@ -49,7 +49,7 @@ export const PRIVACY_ROWS: PrivacyRow[] = [
     carries: "The model file's address; nothing about the household or any person",
     receiver: "The model's host (Hugging Face)",
     setting: null,
-    hosts: ["huggingface.co"],
+    hosts: ["huggingface.co", "us.aws.cdn.hf.co"],
   },
   {
     id: "tts-environment",

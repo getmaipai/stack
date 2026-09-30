@@ -5,13 +5,14 @@ import { join } from "node:path";
 import { StackFitPlan } from "@maipai/spec/gen/ts/stack-fit-plan.js";
 import { app } from "@/app";
 import { modelsRoot } from "@/lib/store/layout";
+import { __resetHealthForTests } from "@/lib/health";
 
 const fixture = join(import.meta.dir, "fixtures", "gguf-parser-qwen3-1.7b-4096.json");
 let originalBinary: string | undefined;
 let tempRoot = "";
 const json = (body: unknown) => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
-beforeEach(() => { originalBinary = process.env.STACK_GGUF_PARSER_BINARY; tempRoot = mkdtempSync(join(tmpdir(), "stack-fit-plan-")); });
+beforeEach(() => { originalBinary = process.env.STACK_GGUF_PARSER_BINARY; delete process.env.STACK_GGUF_PARSER_BINARY; tempRoot = mkdtempSync(join(tmpdir(), "stack-fit-plan-")); __resetHealthForTests(); });
 afterEach(() => {
   if (originalBinary === undefined) delete process.env.STACK_GGUF_PARSER_BINARY;
   else process.env.STACK_GGUF_PARSER_BINARY = originalBinary;
@@ -43,12 +44,22 @@ test("POST /stack/v1/fit-plan returns the spec plan for a Hugging Face GGUF", as
 });
 
 test("an uninstalled estimator returns an unknown plan", async () => {
-  process.env.STACK_GGUF_PARSER_BINARY = join(tempRoot, "missing-binary");
   const response = await app.request("/stack/v1/fit-plan", json({ source: { url: "https://huggingface.co/a/b.gguf" } }));
   expect(response.status).toBe(200);
   const body = await response.json() as { verdict: string; paths: Array<{ verdict: string }> };
   expect(body.verdict).toBe("unknown");
   expect(body.paths.every((item) => item.verdict === "unknown")).toBe(true);
+  const health = await (await app.request("/stack/v1/health")).json() as { health: Array<{ code: string; fix?: { action: string } }> };
+  expect(health.health).toContainEqual(expect.objectContaining({ code: "engine-missing.gguf-parser", fix: { label: "Install the size checker", action: "reinstall_engine" } }));
+});
+
+test("an available estimator resolves its missing-engine health item", async () => {
+  const { raise, list } = await import("@/lib/health");
+  raise({ code: "engine-missing.gguf-parser", severity: "warning", title: "missing", text: "missing", cause: "not installed", fix: { label: "Install", action: "reinstall_engine" } });
+  fakeParser();
+  const response = await app.request("/stack/v1/fit-plan", json({ source: { url: "https://huggingface.co/a/b.gguf" } }));
+  expect(response.status).toBe(200);
+  expect(list().some((item) => item.code === "engine-missing.gguf-parser")).toBe(false);
 });
 
 test("fit planning accepts only Hugging Face GGUF URLs and model-store paths", async () => {

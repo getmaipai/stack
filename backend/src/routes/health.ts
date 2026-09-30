@@ -5,9 +5,11 @@ import { apiRouter, ErrorSchema, idParamSchema } from "@maipai/core/src/openapi"
 import type { AppEnv } from "@/types";
 import { ignore, list as listHealth, resolve } from "@/lib/health";
 import { chatEngine, getProcess, restartRole, stopRole, unloadAllRoles } from "@/lib/supervisor";
-import { engineRole } from "@/lib/engineCatalog";
+import { ENGINE_BINARIES, engineRole, selectEngineBinary } from "@/lib/engineCatalog";
 import { rollbackEngine, currentEngine, engineOfFailedSwap, previousEngine } from "@/updates/engines";
 import { ROLE_IDS, type RoleId } from "@/roles";
+import { ensureEngine } from "@/lib/engineInstall";
+import { detectHardware } from "@/lib/hardware";
 
 import { HealthItem as HealthItemSchema } from "@maipai/spec/stack/ts/health-item.js";
 
@@ -39,6 +41,18 @@ export async function runFix(code: string): Promise<{ ok: boolean; result: strin
       if (runsChat) await restartRole("chat");
       resolve(code);
       return { ok: true, result: `Rolled back ${engine} to ${currentEngine(engine) ?? previous}.` };
+    }
+    case "reinstall_engine": {
+      const marker = "engine-missing.";
+      const name = code.includes(marker) ? code.slice(code.indexOf(marker) + marker.length) : "";
+      if (!ENGINE_BINARIES.some((pin) => pin.name === name)) return { ok: false, result: "This repair does not name a pinned engine." };
+      try {
+        const pin = selectEngineBinary(await detectHardware(), name);
+        if (!pin) return { ok: false, result: "No pinned build exists for this computer." };
+        await ensureEngine(pin, () => {}, { activate: true });
+        resolve(code);
+        return { ok: true, result: "The model size checker was installed." };
+      } catch (error) { return { ok: false, result: (error as Error).message }; }
     }
     default: return { ok: false, result: "This repair needs the matching engine or model installer; reinstall from Home's Engines page." };
   }
