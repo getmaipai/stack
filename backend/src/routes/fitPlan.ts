@@ -11,10 +11,12 @@ import { detectHardware } from "@/lib/hardware";
 import { modelsRoot } from "@/lib/store/layout";
 import { installedEnginePin } from "@/lib/engineCatalog";
 import { defaultKvCacheType } from "@/lib/engineArgs";
+import { fetchMlxRepoFacts, isValidMlxRepo, isValidMlxRevision } from "@/lib/mlxMemory";
 
 const SourceSchema = z.union([
   z.object({ url: z.string() }).strict(),
   z.object({ path: z.string() }).strict(),
+  z.object({ repo: z.string(), revision: z.string().optional() }).strict(),
 ]);
 const FitPlanRequestSchema = z.object({
   source: SourceSchema,
@@ -26,7 +28,7 @@ const route = createRoute({
   request: { body: { content: { "application/json": { schema: FitPlanRequestSchema } } } },
   responses: {
     200: { content: { "application/json": { schema: StackFitPlan } }, description: "The model fit plan." },
-    400: { content: { "application/json": { schema: ErrorSchema } }, description: "The source is not an accepted GGUF URL or model-store path." },
+    400: { content: { "application/json": { schema: ErrorSchema } }, description: "The source must be a Hugging Face GGUF address, a GGUF path in the model store, or a Hugging Face model repository." },
   },
 });
 
@@ -39,8 +41,24 @@ export const fitPlanRoutes = apiRouter<AppEnv>();
 fitPlanRoutes.openapi(route, async (c) => {
   const { source, context_tokens: contextTokens, kv_cache_type: requestedKvCacheType } = c.req.valid("json");
   const kvCacheType = requestedKvCacheType ?? defaultKvCacheType();
-  if (!estimatorAvailable()) raise({ code: "engine-missing.gguf-parser", severity: "warning", title: "The model size checker is not installed", text: "Until it is installed, whether a model fits this computer is reported as unknown.", cause: "gguf-parser is pinned by the Stack but has not been downloaded on this machine.", fix: { label: "Install the size checker", action: "reinstall_engine" } });
-  else resolveHealth("engine-missing.gguf-parser");
+  if ("repo" in source) {
+    const revision = source.revision ?? "main";
+    if (!isValidMlxRepo(source.repo) || !isValidMlxRevision(revision)) return c.json({ error: "The repository must look like owner/name, and the revision must be a plain tag, branch or commit." }, 400);
+    const hw = await detectHardware();
+    const unifiedMemory = hw.isAppleSilicon;
+    const deviceBudgetsBytes = unifiedMemory ? [] : hw.cudaDevices.map((d) => d.vramBytes - (d.usedVramBytes ?? 0));
+    const status = getGovernorStatus();
+    const facts = await fetchMlxRepoFacts({ repo: source.repo, revision });
+    return c.json(buildFitPlan({
+      modelId: source.repo, contextTokens, kvCacheType: "f16", estimate: null, cpuEstimate: undefined,
+      mlx: facts ? { weightsBytes: facts.weightsBytes, config: facts.config } : null,
+      unifiedMemory, deviceBudgetsBytes, capBytes: status.capBytes, workingMarginBytes: status.marginBytes,
+      loaded: status.loaded.map((item) => ({ role: item.id, kind: item.kind, peakBytes: item.peakBytes, measured: item.measured })),
+      freeMemoryBytes: status.freeMemoryBytes, asOf: new Date().toISOString().slice(0, 10),
+      tool: { name: "huggingface-metadata", version: "api" },
+      // mlx-serve is launched without --kv-quant; STACK-SIZE-11 changes that later.
+    }), 200);
+  }
   let target: { url: string } | { path: string };
   let modelId: string;
   if ("url" in source) {
@@ -64,6 +82,9 @@ fitPlanRoutes.openapi(route, async (c) => {
     target = { path: resolvedPath };
     modelId = basename(resolvedPath).slice(0, -5);
   }
+
+  if (!estimatorAvailable()) raise({ code: "engine-missing.gguf-parser", severity: "warning", title: "The model size checker is not installed", text: "Until it is installed, whether a model fits this computer is reported as unknown.", cause: "gguf-parser is pinned by the Stack but has not been downloaded on this machine.", fix: { label: "Install the size checker", action: "reinstall_engine" } });
+  else resolveHealth("engine-missing.gguf-parser");
 
   const hw = await detectHardware();
   const unifiedMemory = hw.isAppleSilicon;

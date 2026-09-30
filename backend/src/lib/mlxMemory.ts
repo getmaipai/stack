@@ -46,8 +46,16 @@ export function readMlxKvBytesPerToken(modelDir: string): number | null {
 
 export interface MlxRepoFacts { weightsBytes: number; config: unknown }
 
+export function isValidMlxRepo(repo: string): boolean {
+  return /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(repo) && !repo.split("/").some((part) => part === "." || part === "..");
+}
+
+export function isValidMlxRevision(revision: string): boolean {
+  return /^[A-Za-z0-9._-]{1,64}$/.test(revision);
+}
+
 export async function fetchMlxRepoFacts(input: { repo: string; revision: string; fetchImpl?: typeof fetch }): Promise<MlxRepoFacts | null> {
-  if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(input.repo) || input.repo.split("/").some((part) => part === "." || part === "..") || !/^[A-Za-z0-9._-]{1,64}$/.test(input.revision)) return null;
+  if (!isValidMlxRepo(input.repo) || !isValidMlxRevision(input.revision)) return null;
   const fetchImpl = input.fetchImpl ?? fetch;
   const readBounded = async (response: Response, limit: number): Promise<string | null> => {
     if (!response.ok) return null;

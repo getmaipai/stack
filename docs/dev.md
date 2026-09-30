@@ -666,6 +666,10 @@ KV term comes from the repository's `config.json`. Only verified
 architectures (`qwen3` today) get a number, and every non-Apple machine is
 unknown. The tokenizer and other small files are not counted (about 14 MB
 for the pinned model).
+`POST /stack/v1/fit-plan` also takes `{ source: { repo, revision? } }` for a
+Hugging Face MLX repository; its plan always uses an unquantized f16 KV
+cache until STACK-SIZE-11; an MLX request never raises the estimator health
+item.
 
 Measured against `llama-server` b10797 on a 24 GB Apple silicon laptop
 (Metal, `gguf-parser-go` v0.26.4, Qwen3 1.7B Q8_0 and Qwen3 4B Q4_K_M,

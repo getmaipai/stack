@@ -4555,6 +4555,21 @@
                           "path"
                         ],
                         "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "repo": {
+                            "type": "string"
+                          },
+                          "revision": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "repo"
+                        ],
+                        "additionalProperties": false
                       }
                     ]
                   },
@@ -5055,7 +5070,7 @@
             }
           },
           "400": {
-            "description": "The source is not an accepted GGUF URL or model-store path.",
+            "description": "The source must be a Hugging Face GGUF address, a GGUF path in the model store, or a Hugging Face model repository.",
             "content": {
               "application/json": {
                 "schema": {

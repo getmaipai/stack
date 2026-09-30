@@ -44,7 +44,7 @@ export const PRIVACY_ROWS: PrivacyRow[] = [
   },
   {
     id: "model-size-check",
-    what: "The first part of a model file's header, read to size the model before it is downloaded",
+    what: "The first part of a model file's header is read to size it before download; for a model repository, the file list and configuration file are read",
     when: "Only when a person asks whether a model will fit, before any download",
     carries: "The model file's address; nothing about the household or any person",
     receiver: "The model's host (Hugging Face)",

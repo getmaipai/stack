@@ -42,4 +42,5 @@ test("model-size-check declares only the observed Hugging Face header hosts", ()
   expect(row!.hosts).toContain("us.aws.cdn.hf.co");
   expect(row!.hosts.every((host) => ["huggingface.co", "us.aws.cdn.hf.co"].includes(host))).toBe(true);
   for (const field of ["what", "when", "carries", "receiver"] as const) expect(row![field].length).toBeGreaterThan(10);
+  for (const field of ["what", "when", "carries", "receiver"] as const) expect(row![field].length).toBeGreaterThan(10);
 });

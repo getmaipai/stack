@@ -8,14 +8,21 @@ import { modelsRoot } from "@/lib/store/layout";
 import { __resetHealthForTests } from "@/lib/health";
 import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit } from "@/lib/governor";
 import { defaultKvCacheType } from "@/lib/engineArgs";
+import { raise } from "@/lib/health";
 
 const fixture = join(import.meta.dir, "fixtures", "gguf-parser-qwen3-1.7b-4096.json");
 let originalBinary: string | undefined;
+let originalFetch: typeof fetch;
+const MLX_WEIGHT_BYTES = 968080210;
+const MLX_CONFIG_BYTES = 937;
+const mlxUrls = ["https://huggingface.co/api/models/mlx-community/Qwen3-1.7B-4bit/tree/main", "https://huggingface.co/mlx-community/Qwen3-1.7B-4bit/resolve/main/config.json"];
+let mlxCalls: string[] = [];
 let tempRoot = "";
 const json = (body: unknown) => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
-beforeEach(() => { originalBinary = process.env.STACK_GGUF_PARSER_BINARY; delete process.env.STACK_GGUF_PARSER_BINARY; tempRoot = mkdtempSync(join(tmpdir(), "stack-fit-plan-")); __resetHealthForTests(); __resetGovernorForTests(); });
+beforeEach(() => { originalFetch = globalThis.fetch; mlxCalls = []; originalBinary = process.env.STACK_GGUF_PARSER_BINARY; delete process.env.STACK_GGUF_PARSER_BINARY; tempRoot = mkdtempSync(join(tmpdir(), "stack-fit-plan-")); __resetHealthForTests(); __resetGovernorForTests(); });
 afterEach(() => {
+  globalThis.fetch = originalFetch;
   if (originalBinary === undefined) delete process.env.STACK_GGUF_PARSER_BINARY;
   else process.env.STACK_GGUF_PARSER_BINARY = originalBinary;
   rmSync(tempRoot, { recursive: true, force: true });
@@ -29,6 +36,20 @@ function fakeParser(): void {
   writeFileSync(script, `#!/bin/sh\ncat '${output}'\n`);
   chmodSync(script, 0o755);
   process.env.STACK_GGUF_PARSER_BINARY = script;
+}
+
+function stubMlxFetch(fail: "throw" | "404" | null = null): void {
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input);
+    mlxCalls.push(url);
+    if (fail === "throw") throw new Error("offline");
+    if (url === mlxUrls[0]) return fail === "404" ? new Response("not found", { status: 404 }) : Response.json([
+      { type: "file", path: "model.safetensors", size: MLX_WEIGHT_BYTES, lfs: { size: MLX_WEIGHT_BYTES } },
+      { type: "file", path: "config.json", size: MLX_CONFIG_BYTES },
+    ]);
+    if (url === mlxUrls[1]) return Response.json({ model_type: "qwen3", num_hidden_layers: 28, num_key_value_heads: 8, head_dim: 128, hidden_size: 2048, num_attention_heads: 16 });
+    return new Response("unexpected URL", { status: 500 });
+  }) as typeof fetch;
 }
 
 test("POST /stack/v1/fit-plan returns the spec plan for a Hugging Face GGUF", async () => {
@@ -79,9 +100,47 @@ test("POST fit plan includes a currently loaded role", async () => {
   expect(body.roles).toContainEqual(expect.objectContaining({ role: "stt", choice: "loaded" }));
 });
 
-test("fit planning accepts only Hugging Face GGUF URLs and model-store paths", async () => {
+test("fit planning accepts MLX repositories with f16 KV and never touches estimator health", async () => {
+  stubMlxFetch();
+  const { list } = await import("@/lib/health");
+  const first = await app.request("/stack/v1/fit-plan", json({ source: { url: "https://huggingface.co/a/b.gguf" } }));
+  expect(first.status).toBe(200);
+  expect(list().some((item) => item.code === "engine-missing.gguf-parser")).toBe(true);
+  const response = await app.request("/stack/v1/fit-plan", json({ source: { repo: "mlx-community/Qwen3-1.7B-4bit" }, context_tokens: 4096, kv_cache_type: "q4_0" }));
+  expect(response.status).toBe(200);
+  const body = await response.json() as Record<string, any>;
+  expect(() => StackFitPlan.parse(body)).not.toThrow();
+  expect(body).toMatchObject({ model: "mlx-community/Qwen3-1.7B-4bit", kv_cache_type: "f16" });
+  expect(mlxCalls).toEqual(mlxUrls);
+  expect(list().some((item) => item.code === "engine-missing.gguf-parser")).toBe(true);
+  if (process.platform === "darwin" && process.arch === "arm64") {
+    expect(body.roles[0].peak.source).toBe("estimated");
+    expect(body.roles[0].peak.low).toBeLessThan(body.roles[0].peak.high);
+  } else expect(body.verdict).toBe("unknown");
+});
+
+test("MLX metadata failure returns an unknown plan", async () => {
+  stubMlxFetch("throw");
+  const response = await app.request("/stack/v1/fit-plan", json({ source: { repo: "mlx-community/Qwen3-1.7B-4bit" } }));
+  expect(response.status).toBe(200);
+  expect((await response.json() as { verdict: string }).verdict).toBe("unknown");
+  stubMlxFetch("404");
+  const notFound = await app.request("/stack/v1/fit-plan", json({ source: { repo: "mlx-community/Qwen3-1.7B-4bit" } }));
+  expect(notFound.status).toBe(200);
+  expect((await notFound.json() as { verdict: string }).verdict).toBe("unknown");
+});
+
+test("fit planning accepts only Hugging Face GGUF URLs, model-store paths, and valid MLX repositories", async () => {
+  raise({ code: "engine-missing.gguf-parser", severity: "warning", title: "missing", text: "missing", cause: "not installed", fix: { label: "Install", action: "reinstall_engine" } });
   const invalid = [
     { source: { url: "http://huggingface.co/x/y.gguf" } },
+    { source: { repo: "../x" } },
+    { source: { repo: "a/b/c" } },
+    { source: { repo: "noslash" } },
+    { source: { repo: "" } },
+    { source: { repo: "mlx-community/model", revision: "a b" } },
+    { source: { repo: "mlx-community/model", url: "https://huggingface.co/x/y.gguf" } },
+    { source: { repo: "mlx-community/model", mystery: true } },
     { source: { url: "https://example.com/x.gguf" } },
     { source: { url: "https://huggingface.co/x/y.bin" } },
     { source: { path: join(tempRoot, "outside.gguf") } },
@@ -94,6 +153,8 @@ test("fit planning accepts only Hugging Face GGUF URLs and model-store paths", a
     expect(response.status).toBe(400);
     expect(await response.json()).toHaveProperty("error");
   }
+  const health = await (await app.request("/stack/v1/health")).json() as { health: Array<{ code: string }> };
+  expect(health.health.some((item) => item.code === "engine-missing.gguf-parser")).toBe(true);
   const link = join(modelsRoot, `fit-plan-link-${process.pid}.gguf`);
   try {
     mkdirSync(modelsRoot, { recursive: true });
