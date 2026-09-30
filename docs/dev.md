@@ -658,6 +658,15 @@ The spec vocabulary in spec-v0.1.60 now names all thirteen Stack roles. A
 loaded role the spec does not name yet still counts toward the total but is
 not listed in the plan, so the response always fits the schema.
 
+**MLX planning.** The plan's high figure is exactly what admission uses
+(file size times 1.4 plus the headroom); the low figure uses the measured
+idle factor 1.27 and the low KV factor 1.9. Weights are the sizes of the
+repository's top-level safetensors files from Hugging Face's tree API; the
+KV term comes from the repository's `config.json`. Only verified
+architectures (`qwen3` today) get a number, and every non-Apple machine is
+unknown. The tokenizer and other small files are not counted (about 14 MB
+for the pinned model).
+
 Measured against `llama-server` b10797 on a 24 GB Apple silicon laptop
 (Metal, `gguf-parser-go` v0.26.4, Qwen3 1.7B Q8_0 and Qwen3 4B Q4_K_M,
 contexts 4096 to 32768, KV f16 and q8_0, flash attention on and off, 12

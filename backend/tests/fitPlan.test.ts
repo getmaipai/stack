@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StackFitPlan } from "@maipai/spec/gen/ts/stack-fit-plan.js";
 import { buildFitPlan, parseGgufParserJson, runGgufParser, type GgufEstimate, type PlanInput } from "@/lib/fitPlan";
+import { MLX_IDLE_FACTOR, MLX_KV_PEAK_FACTOR, MLX_KV_PEAK_FACTOR_LOW, MLX_PREFIX_CACHE_BYTES, mlxHeadroomBytes } from "@/lib/mlxMemory";
+import { peakFor, GovernorRules } from "@/lib/governor";
 
 const fixturePath = join(import.meta.dir, "fixtures/gguf-parser-qwen3-1.7b-4096.json");
 const fixtureText = readFileSync(fixturePath, "utf8");
@@ -151,4 +153,31 @@ test("plans discrete GPU and CPU paths and validates every plan against spec", (
   for (const plan of plans) expect(() => StackFitPlan.parse(plan)).not.toThrow();
   const invalid = { ...plans[0] } as Record<string, unknown>; delete invalid.verdict;
   expect(() => StackFitPlan.parse(invalid)).toThrow();
+});
+
+const mlxConfig = { model_type: "qwen3", num_hidden_layers: 28, num_key_value_heads: 8, head_dim: 128 };
+const mlxFacts = { weightsBytes: 968080210, config: mlxConfig };
+const mlxPlan = (input: Partial<PlanInput> = {}) => buildFitPlan({ ...base, estimate: null, mlx: mlxFacts, ...input });
+
+test("plans an MLX repository on unified memory and leaves unverified cases unknown", () => {
+  const plan = mlxPlan({ freeMemoryBytes: 12 * 1024 ** 3 });
+  const kvPerToken = 28 * 8 * 128 * 2 * 2;
+  const low = Math.ceil(MLX_IDLE_FACTOR * mlxFacts.weightsBytes) + MLX_PREFIX_CACHE_BYTES + Math.ceil(MLX_KV_PEAK_FACTOR_LOW * kvPerToken * base.contextTokens);
+  const high = Math.ceil(GovernorRules.engineMultipliers["mlx-serve"] * mlxFacts.weightsBytes) + MLX_PREFIX_CACHE_BYTES + Math.ceil(MLX_KV_PEAK_FACTOR * kvPerToken * base.contextTokens);
+  expect(plan.verdict).toBe("yes");
+  expect(plan.roles[0]?.peak).toMatchObject({ low, high, source: "estimated" });
+  expect(low).toBeLessThan(high);
+  expect(() => StackFitPlan.parse(plan)).not.toThrow();
+  expect(mlxPlan({ mlx: { ...mlxFacts, config: { ...mlxConfig, model_type: "gemma3" } } })).toMatchObject({ verdict: "unknown", roles: [{ peak: { low: null, high: null, source: "unknown" } }] });
+  expect(mlxPlan({ unifiedMemory: false })).toMatchObject({ verdict: "unknown", roles: [{ peak: { low: null, high: null, source: "unknown" } }] });
+  const no = mlxPlan({ capBytes: 1, workingMarginBytes: 0 });
+  expect(no.verdict).toBe("no");
+  expect(no.paths[0]).toHaveProperty("shortfall");
+});
+
+test("MLX planning high equals the governor admission peak", () => {
+  const modelDir = mkdtempSync(join(tmpdir(), "maipai-mlx-plan-parity-")); dirs.push(modelDir);
+  writeFileSync(join(modelDir, "config.json"), JSON.stringify(mlxConfig));
+  const plan = mlxPlan();
+  expect(plan.roles[0]?.peak.high).toBe(peakFor({ id: "chat", kind: "resident", requestedBytes: 0, modelFileBytes: mlxFacts.weightsBytes, engine: "mlx-serve", headroomBytes: mlxHeadroomBytes({ modelDir, contextTokens: base.contextTokens }) }).bytes);
 });

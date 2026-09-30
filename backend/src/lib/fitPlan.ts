@@ -3,6 +3,8 @@ import { StackFitPlan, type StackFitPlan as StackFitPlanType } from "@maipai/spe
 import { currentEngineBinaryPath } from "@/lib/engineInstall";
 import type { KvCacheType } from "@/lib/engineArgs";
 import { existsSync } from "node:fs";
+import { MLX_IDLE_FACTOR, MLX_KV_PEAK_FACTOR, MLX_KV_PEAK_FACTOR_LOW, MLX_PREFIX_CACHE_BYTES, parseMlxKvBytesPerToken } from "@/lib/mlxMemory";
+import { GovernorRules } from "@/lib/governor";
 
 // An architecture joins this list only after one bench row agrees with a real load (docs/dev.md).
 export const VERIFIED_ARCHITECTURES = ["qwen3"] as const;
@@ -64,6 +66,7 @@ export interface PlanInput {
   contextTokens: number;
   kvCacheType: KvCacheType;
   estimate: GgufEstimate | null;
+  mlx?: { weightsBytes: number; config: unknown } | null;
   cpuEstimate?: GgufEstimate | null;
   unifiedMemory: boolean;
   deviceBudgetsBytes: number[];
@@ -96,7 +99,27 @@ export function buildFitPlan(input: PlanInput): StackFitPlanType {
   let peak: Figure | UnknownFigure = unknown(date);
   let verdict: "yes" | "slow" | "no" | "unknown" = "unknown";
 
-  if (verified(input.estimate)) {
+  if (!input.estimate && input.mlx) {
+    const kvPerToken = parseMlxKvBytesPerToken(input.mlx.config);
+    if (input.unifiedMemory && kvPerToken !== null) {
+      const low = Math.ceil(MLX_IDLE_FACTOR * input.mlx.weightsBytes) + MLX_PREFIX_CACHE_BYTES + Math.ceil(MLX_KV_PEAK_FACTOR_LOW * kvPerToken * input.contextTokens);
+      const high = Math.ceil(GovernorRules.engineMultipliers["mlx-serve"] * input.mlx.weightsBytes) + MLX_PREFIX_CACHE_BYTES + Math.ceil(MLX_KV_PEAK_FACTOR * kvPerToken * input.contextTokens);
+      peak = known(low, high, "estimated", date);
+      const fits = peak.high <= available;
+      verdict = fits ? "yes" : "no";
+      const path: StackFitPlanType["paths"][number] = { path: "unified", fits, verdict: fits ? "yes" : "no" };
+      if (!fits) path.shortfall = known(Math.max(0, peak.low - available), Math.max(0, peak.high - available), "estimated", date);
+      paths.push(path);
+    } else {
+      if (input.unifiedMemory) paths.push({ path: "unified", fits: false, verdict: "unknown" });
+      else if (input.deviceBudgetsBytes.length) {
+        paths.push({ path: "gpu", fits: false, verdict: "unknown" });
+        paths.push({ path: "cpu", fits: false, verdict: "unknown" });
+        if (input.deviceBudgetsBytes.length >= 2) paths.push({ path: "multi-gpu", fits: false, verdict: "unknown" });
+        paths.push({ path: "cpu-offload", fits: false, verdict: "unknown" });
+      } else paths.push({ path: "cpu", fits: false, verdict: "unknown" });
+    }
+  } else if (verified(input.estimate)) {
     const estimate = input.estimate;
     if (input.unifiedMemory) {
       peak = known(estimate.vramNonumaBytes, estimate.vramNonumaBytes + estimate.ramUmaBytes, "estimated", date);
