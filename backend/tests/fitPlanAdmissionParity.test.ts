@@ -3,7 +3,7 @@ import { buildFitPlan, type GgufEstimate } from "@/lib/fitPlan";
 import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, getGovernorStatus } from "@/lib/governor";
 
 const GB = 1024 ** 3;
-const estimate: GgufEstimate = { architecture: "qwen3", name: "parity", contextTokens: 4096, fullOffloaded: true, ramUmaBytes: 0, ramNonumaBytes: GB, vramUmaBytes: 0, vramNonumaBytes: GB };
+const estimate: GgufEstimate = { architecture: "qwen3", expertCount: 0, name: "parity", contextTokens: 4096, fullOffloaded: true, ramUmaBytes: 0, ramNonumaBytes: GB, vramUmaBytes: 0, vramNonumaBytes: GB };
 
 beforeEach(() => {
   __resetGovernorForTests();

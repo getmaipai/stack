@@ -21,6 +21,7 @@ afterEach(() => {
 test("parses the measured qwen3 estimate and rejects malformed values", () => {
   expect(estimate).toMatchObject({ architecture: "qwen3", ramUmaBytes: 690433896, ramNonumaBytes: 847720296, vramUmaBytes: 469762048, vramNonumaBytes: 2635880448, fullOffloaded: true });
   for (const text of ["{}", "", "not json"]) expect(parseGgufParserJson(text)).toBeNull();
+  expect(estimate.expertCount).toBe(0);
   for (const mutate of [
     (x: any) => { x.estimate.items[0].ram.uma = -1; },
     (x: any) => { x.estimate.items[0].ram.uma = 1.5; },
@@ -29,6 +30,35 @@ test("parses the measured qwen3 estimate and rejects malformed values", () => {
     const data = JSON.parse(fixtureText); mutate(data);
     expect(parseGgufParserJson(JSON.stringify(data))).toBeNull();
   }
+});
+
+test("parses measured dense llama, rejects invalid expert counts, and plans only dense models", () => {
+  const llamaText = readFileSync(join(import.meta.dir, "fixtures/gguf-parser-llama-3.2-3b-4096.json"), "utf8");
+  const llamaFixture = JSON.parse(llamaText);
+  const llama = parseGgufParserJson(llamaText)!;
+  expect(llama).toMatchObject({ architecture: "llama", expertCount: 0 });
+  expect(llama).toMatchObject({
+    ramUmaBytes: llamaFixture.estimate.items[0].ram.uma,
+    ramNonumaBytes: llamaFixture.estimate.items[0].ram.nonuma,
+    vramUmaBytes: llamaFixture.estimate.items[0].vrams[0].uma,
+    vramNonumaBytes: llamaFixture.estimate.items[0].vrams[0].nonuma,
+  });
+  const withExperts = (expertCount: unknown) => {
+    const data = JSON.parse(llamaText);
+    data.architecture.expertCount = expertCount;
+    return parseGgufParserJson(JSON.stringify(data));
+  };
+  expect(withExperts(8)?.expertCount).toBe(8);
+  for (const expertCount of ["8", -1, 1.5]) expect(withExperts(expertCount)).toBeNull();
+
+  const plan = broken({ ...base, estimate: llama });
+  expect(plan.verdict).toBe("yes");
+  expect(plan.roles[0]?.peak).toMatchObject({ low: llama.vramNonumaBytes, high: llama.vramNonumaBytes + llama.ramUmaBytes, source: "estimated" });
+  expect(() => StackFitPlan.parse(plan)).not.toThrow();
+  const moe = broken({ ...base, estimate: { ...llama, expertCount: 8 } });
+  expect(moe).toMatchObject({ verdict: "unknown", total: { low: null, high: null, source: "unknown" }, roles: [{ peak: { low: null, high: null, source: "unknown" } }] });
+  const gemma = broken({ ...base, estimate: { ...llama, architecture: "gemma3" } });
+  expect(gemma.verdict).toBe("unknown");
 });
 
 test("runs the configured parser with exact arguments for path and URL targets", async () => {

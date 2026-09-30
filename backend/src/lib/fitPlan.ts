@@ -6,8 +6,8 @@ import { existsSync } from "node:fs";
 import { MLX_IDLE_FACTOR, MLX_KV_PEAK_FACTOR, MLX_KV_PEAK_FACTOR_LOW, MLX_PREFIX_CACHE_BYTES, parseMlxKvBytesPerToken } from "@/lib/mlxMemory";
 import { GovernorRules } from "@/lib/governor";
 
-// An architecture joins this list only after one bench row agrees with a real load (docs/dev.md).
-export const VERIFIED_ARCHITECTURES = ["qwen3"] as const;
+// qwen3 and llama were each agreed with real loads (SIZER-BAKE-03; SIZER-LLAMA-01 on Llama 3.2 3B Q4_K_M); dense files only.
+export const VERIFIED_ARCHITECTURES = ["qwen3", "llama"] as const;
 
 export function estimatorAvailable(): boolean {
   const configured = process.env.STACK_GGUF_PARSER_BINARY;
@@ -16,6 +16,7 @@ export function estimatorAvailable(): boolean {
 
 export interface GgufEstimate {
   architecture: string;
+  expertCount: number;
   name: string | null;
   contextTokens: number;
   fullOffloaded: boolean;
@@ -33,13 +34,15 @@ export function parseGgufParserJson(text: string): GgufEstimate | null {
   try {
     const root = JSON.parse(text) as Record<string, any>;
     const architecture = root?.architecture?.architecture;
+    const expertCount = root?.architecture?.expertCount;
     const item = root?.estimate?.items?.[0];
     const vram = item?.vrams?.[0];
     const name = root?.metadata?.name;
     const numbers = [root?.estimate?.contextSize, item?.ram?.uma, item?.ram?.nonuma, vram?.uma, vram?.nonuma];
     if (typeof architecture !== "string" || !architecture.trim() || typeof item?.fullOffloaded !== "boolean" || !numbers.every(isBytes)) return null;
+    if (expertCount !== undefined && expertCount !== null && !isBytes(expertCount)) return null;
     if (name !== undefined && name !== null && typeof name !== "string") return null;
-    return { architecture, name: name ?? null, contextTokens: root.estimate.contextSize, fullOffloaded: item.fullOffloaded, ramUmaBytes: item.ram.uma, ramNonumaBytes: item.ram.nonuma, vramUmaBytes: vram.uma, vramNonumaBytes: vram.nonuma };
+    return { architecture, expertCount: expertCount ?? 0, name: name ?? null, contextTokens: root.estimate.contextSize, fullOffloaded: item.fullOffloaded, ramUmaBytes: item.ram.uma, ramNonumaBytes: item.ram.nonuma, vramUmaBytes: vram.uma, vramNonumaBytes: vram.nonuma };
   } catch { return null; }
 }
 
@@ -82,7 +85,7 @@ type UnknownFigure = { low: null; high: null; source: "unknown"; as_of: string }
 const specRoles = new Set<string>(StackFitPlan.shape.roles.element.shape.role.options);
 const known = (low: number, high: number, source: Figure["source"], as_of: string): Figure => ({ low, high, source, as_of });
 const unknown = (as_of: string): UnknownFigure => ({ low: null, high: null, source: "unknown", as_of });
-const verified = (estimate: GgufEstimate | null | undefined): estimate is GgufEstimate => !!estimate && (VERIFIED_ARCHITECTURES as readonly string[]).includes(estimate.architecture);
+const verified = (estimate: GgufEstimate | null | undefined): estimate is GgufEstimate => !!estimate && estimate.expertCount === 0 && (VERIFIED_ARCHITECTURES as readonly string[]).includes(estimate.architecture);
 
 function allUnknownPaths(input: PlanInput): StackFitPlanType["paths"] {
   if (input.unifiedMemory) return [{ path: "unified", fits: false, verdict: "unknown" }];

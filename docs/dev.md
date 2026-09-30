@@ -730,11 +730,13 @@ Its memory rules (a 2 GiB reserve and 15 percent headroom) are not
 adopted: the governor's OS margin and the tier's working margin are
 the one definition. "Slow" means the CPU-offload path.
 
-**Architectures.** The estimate is trusted only for architectures a
-bench row has verified against a real load: Qwen3 dense, today. Any
-other architecture (mixture-of-experts, sliding-window, MLA, hybrid
-recurrent) gets the verdict unknown, unless a measured record or a dry
-run exists, until one bench row per class agrees with the real load.
+**Architectures.** `qwen3` and `llama` are verified for dense files.
+Llama was measured on Llama 3.2 3B Q4_K_M in six real loads at 4096,
+16384 and 32768 with f16 and q8_0 KV; the plan's high ran 7.0 to 17.1
+percent above the real total. A mixture-of-experts file of any
+architecture stays unknown. Larger llama models are still to be measured
+on the Studio (SIZER-BENCH-01, row D3). Other unverified architectures
+get the verdict unknown, unless a measured record or a dry run exists.
 A downloaded GGUF of any architecture can use the dry run.
 
 **One fit across roles.** A set of role choices fits when the resident
