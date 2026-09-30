@@ -1,0 +1,38 @@
+{
+  "architecture": {
+    "architecture": "qwen3"
+  },
+  "metadata": {
+    "name": "Qwen3 1.7B Instruct"
+  },
+  "estimate": {
+    "contextSize": 4096,
+    "flashAttention": true,
+    "items": [
+      {
+        "offloadLayers": 29,
+        "fullOffloaded": true,
+        "ram": {
+          "handleLayers": 0,
+          "handleLastLayer": -1,
+          "handleOutputLayer": false,
+          "remote": false,
+          "position": 0,
+          "uma": 690433896,
+          "nonuma": 847720296
+        },
+        "vrams": [
+          {
+            "handleLayers": 28,
+            "handleLastLayer": 27,
+            "handleOutputLayer": true,
+            "remote": false,
+            "position": 0,
+            "uma": 469762048,
+            "nonuma": 2635880448
+          }
+        ]
+      }
+    ]
+  }
+}

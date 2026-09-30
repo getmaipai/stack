@@ -451,7 +451,7 @@ are never copied. Nothing migrates Home until STACK-16.
   pin that tag. Out of scope: MLX
   (STACK-SIZE-04), Home's wording. Test: the twelve `llama-server`
   comparison rows from `docs/dev.md` as fixtures. Exit:
-  `bash scripts/check.sh`.
+  `bash scripts/check.sh`. Part B (the module `lib/fitPlan.ts`: parse, run, build) landed 2026-09-30; the route, the privacy declaration and the multi-role sum remain.
 - [ ] **STACK-SIZE-04 (M): MLX sizing with the engine's memory flags set
   and sized against.** Objective: an MLX model gets a context-aware
   estimate instead of a flat 1.4 times the file size. Pointers:
