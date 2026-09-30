@@ -419,6 +419,68 @@ are never copied. Nothing migrates Home until STACK-16.
   larger chat candidate the catalog pins, and the same machine with
   `image` on refuses it with the reason. Exit: `bash scripts/check.sh`.
 
+- [ ] **STACK-SIZE-02 (S): wire the dry run, fix or delete the header
+  estimator.** Objective: admission's second source (`llama-fit-params`)
+  actually runs. Pointers: `backend/src/lib/supervisor.ts`
+  (`dryRunFootprint`, `estimateFootprint`, both with no callers),
+  `lib/admission.ts`, `lib/governor.ts` (the first-load estimate). Mirror
+  the order in `docs/dev.md`, "Fit planning versus admission". Acceptance:
+  a first load of a downloaded GGUF stores the dry run's result with the
+  model and context and admits on it; `estimateFootprint` is deleted
+  (the planner of STACK-SIZE-03 replaces it) or, if kept, takes the KV
+  element size from the KV cache type, resolves a pinned revision and
+  declares its request on `/stack/v1/privacy`. Out of scope: the
+  planner, MLX. Test: a fake `llama-fit-params` output drives admission;
+  a refused fit names the reason. Exit: `bash scripts/check.sh`.
+- [ ] **STACK-SIZE-03 (M): the pre-download planner and its verdict.**
+  Objective: for any model, pinned or not, a fit verdict before a byte of
+  weights is downloaded (owner decision 2026-09-30). Pointers: a new
+  `lib/fitPlan.ts`; the pinned `gguf-parser-go` in `lib/engineCatalog.ts`
+  (exact tag and URL, our own sha256, `verified` per platform, MIT line
+  in `NOTICE`); `lib/governor.ts` for the arithmetic it imports;
+  `routes/`. Mirror `EngineBinaryPin` for the pin and `governorPeak` for
+  the shared arithmetic. Acceptance: JSON output only; verdict yes, slow,
+  no or unknown with the named bottleneck, the shortfall in bytes, one
+  plan per path, every figure with source, range and date; only verified
+  architectures (Qwen3 dense today) get a number, the rest are unknown;
+  the range request is declared on `/stack/v1/privacy` with its guarding
+  test; a plan the planner accepts is never refused by admission. Waits
+  on the spec rows in `getmaipai/commons` (KV cache type, footprint
+  entry, engine enum, the fit-plan wire shape). Out of scope: MLX
+  (STACK-SIZE-04), Home's wording. Test: the twelve `llama-server`
+  comparison rows from `docs/dev.md` as fixtures. Exit:
+  `bash scripts/check.sh`.
+- [ ] **STACK-SIZE-04 (M): MLX sizing with the engine's memory flags set
+  and sized against.** Objective: an MLX model gets a context-aware
+  estimate instead of a flat 1.4 times the file size. Pointers:
+  `lib/supervisor.ts` (the `mlx-serve` launch, `--ctx-size` and
+  `--max-concurrent` today), `lib/governor.ts` (the 1.4 multiplier),
+  `lib/fitPlan.ts`. Acceptance: the launch passes explicit
+  `--prefix-cache-mem`, `--prefill-chunk` and, if the measurement says
+  so, `--kv-quant`; the estimate is weights from the safetensors headers
+  plus a per-token KV term from `config.json` plus the bounded caches and
+  prefill buffers, checked against a real load at three contexts; the
+  admission estimate for MLX carries a context term. Depends on the
+  isolating measurement (SIZER-BAKE-05), whose numbers are recorded in
+  `docs/dev.md` when it lands. Out of scope: GGUF. Exit:
+  `bash scripts/check.sh` plus a Studio bench row (STACK-14).
+- [ ] **STACK-SIZE-05 (S): read Metal's working-set cap.** Objective:
+  on Apple silicon the usable memory is capped by the GPU's recommended
+  working set, which the governor never reads, so unified-memory totals
+  can overstate what the GPU may hold. Pointers: `lib/governor.ts`
+  (`defaultModelBudgetBytes`), the hardware probe in `@maipai/core`.
+  Acceptance: the budget is the smaller of the current rule and the
+  recommended working set, reported in the hardware facts. Test: a
+  probe reporting a cap below total memory lowers the budget. Exit:
+  `bash scripts/check.sh`.
+- [ ] **STACK-SIZE-06 (S): multi-GPU budgets per device.** Objective: a
+  machine with two 8 GB cards is not sized as one 8 GB card.
+  `primaryBudgetBytes` in `@maipai/core` returns the largest single
+  card; the planner's multi-GPU path needs one budget per device from
+  `cudaDevices`. Acceptance: the plan lists each device and marks the
+  multi-GPU throughput as unknown until measured. Exit:
+  `bash scripts/check.sh`.
+
 - [ ] **STACK-FLOOR-01 (S): the `p8` profile, the robot's pins as the
   lowest step-down.** The same design's floor tier: an 8 GB laptop or a
   CPU-only desktop runs the robot's configuration, and every bigger

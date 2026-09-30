@@ -402,7 +402,10 @@ Before a first load, the dry-run path checks the pinned llama.cpp
 archive for `llama-fit-params` (the b10797 macOS archive contains it)
 and stores its fit result with the model and context; a model not yet
 downloaded uses the GGUF header and the KV formula only as an explicitly
-estimated number. After a successful post-load check, the measured
+estimated number. (As of 2026-09-30 this path is written but not wired:
+`dryRunFootprint` and `estimateFootprint` have no callers, and the
+estimator has three defects; see "Fit planning versus admission" below
+and STACK-SIZE-02.) After a successful post-load check, the measured
 process footprint replaces the estimate.
 
 On the robot, the body's power and thermal budget is an additional
@@ -592,6 +595,133 @@ whose profile is unknown keeps the p16 margin, the smallest.
 |---|---|---|
 | macOS, Apple silicon | `llama-server` Metal (baseline), `mlx-serve`, `oMLX`, ComfyUI (managed), sherpa-onnx for `stt` and Pocket TTS for `tts` (STACK-94b, 94c) | MaiPai Home on the Mac Studio |
 | Linux, ARM and x64 | `llama-server` (CPU, CUDA, or the accelerator the robot carries), sherpa-onnx for speech, ComfyUI where a GPU exists | MaiPai Bot |
+
+### Fit planning versus admission (2026-09-30)
+
+Two different questions are both called sizing, and they must never
+share a number source. **Admission** asks "may this process start now",
+and a wrong yes takes down the family's chat, so it is answered from
+measured facts. **Planning** asks "would this model fit this machine at
+this context, before anything is downloaded", and can only be answered
+from what a file's header says, so it is an estimate and is labelled as
+one. If the two are mixed, a header estimate leaks into admission and
+the "never file sizes" rule quietly stops being true (it already has,
+see "Where the docs and the code disagree" below).
+
+Owner decision, 2026-09-30: a person gets a fit verdict for any model,
+including one the Catalog has not pinned and measured, before they
+download it. Planning therefore has to work from headers alone.
+
+**Sources, in order.** Admission reads, first, the measured peak of the
+last load; second, for a GGUF file already on disk, `llama-fit-params`
+(llama.cpp's own dry run, shipped in the pinned b10797 archive); third,
+only for an engine with no dry run, file size times the engine's
+multiplier, labelled estimated. Planning reads a measured record when
+the Catalog carries one for that pin, and otherwise a header estimate
+with its source, a range and a date. A planning number never enters
+admission.
+
+**GGUF planning tool.** `gguf-parser-go` (MIT, GPUStack) reads a GGUF's
+header from a local file or over HTTP range requests and estimates RAM,
+VRAM and KV cache at a chosen context, KV cache type, flash attention
+setting and offload. The Stack runs a pinned release as a subprocess,
+the way it runs `llama-server`: exact tag and URL, our own recorded
+sha256 (the project publishes no checksum file), an MIT line in
+NOTICE, and its JSON output parsed, never its text table. Its one
+outbound call, the range request to the model's host, is declared on
+`GET /stack/v1/privacy` like the model download it precedes.
+
+Measured against `llama-server` b10797 on a 24 GB Apple silicon laptop
+(Metal, `gguf-parser-go` v0.26.4, Qwen3 1.7B Q8_0 and Qwen3 4B Q4_K_M,
+contexts 4096 to 32768, KV f16 and q8_0, flash attention on and off, 12
+runs): the estimator's KV cache matched the server's KV buffer to within
+0.4 percent (exact to the byte in most runs, and equal to the formula
+layers x KV heads x (key length + value length) x context x bytes per
+element); its full GPU footprint ran 4 to 13 percent above the
+server's real total, never below; its RAM figure ran about 330 MiB
+above, near constant. All twelve are dense models. Mixture-of-experts,
+sliding-window, multi-GPU and CUDA are unmeasured.
+
+**MLX and safetensors planning.** `gguf-parser-go` reads GGUF only. For
+an MLX model the Stack computes the same arithmetic itself: weight bytes
+from the safetensors headers (or the file sizes), KV bytes per token
+from `config.json` (layers x KV heads x head dimension x 2 x element
+size). The measurements say this cannot be a flat multiplier. With
+`mlx-serve` v26.9.4 and Qwen3 1.7B 4-bit, idle memory was 1.23 GB
+(1.27 times the weights file) at every context setting, because MLX
+allocates as the context fills instead of at load; while answering, the
+peak footprint reached 2.37 GB at 3,460 prompt tokens, 4.99 GB at
+13,876 and 7.36 GB at 27,736, which is 1.9 to 2.9 times the simple KV
+formula and 7.6 times the file size at the longest. The server's
+default 2 GiB hot prefix cache and its prompt-processing buffers are
+the likely causes, and the Stack passes none of the flags that bound
+them (`--prefix-cache-mem`, `--prefix-cache-entries`,
+`--prefill-chunk`, `--kv-quant`). The 1.4 multiplier in "The governor"
+above was checked at short context only. STACK-SIZE-04 sets those flags
+explicitly and sizes against them; which flags matter comes from the
+isolating measurement recorded with that item.
+
+**Verdict shape.** RigSpark (MIT, github.com/shashankswe2020-ux/rigspark,
+read for design only, none of its code or data used) gave the shape of
+a useful answer, and it is adopted: a verdict of yes, slow, no or
+unknown with the bottleneck named (memory, disk or context); the
+shortfall in bytes when it does not fit; one plan per execution path
+(unified memory, one GPU, several GPUs, CPU offload, CPU); every
+figure carrying its source, a range and a date; unknown stays unknown.
+Its memory rules (a 2 GiB reserve and 15 percent headroom) are not
+adopted: the governor's OS margin and the tier's working margin are
+the one definition. "Slow" means the CPU-offload path.
+
+**Architectures.** The estimate is trusted only for architectures a
+bench row has verified against a real load: Qwen3 dense, today. Any
+other architecture (mixture-of-experts, sliding-window, MLA, hybrid
+recurrent) gets the verdict unknown, unless a measured record or a dry
+run exists, until one bench row per class agrees with the real load.
+A downloaded GGUF of any architecture can use the dry run.
+
+**One fit across roles.** A set of role choices fits when the resident
+roles' peaks, plus the largest single on-demand or generator peak, stay
+within the cap and leave the tier's working margin free. The planner
+imports the governor's admission arithmetic (`canAdmit`, with
+`governorPeak` mirroring `peakFor`), so a plan it accepts is never
+refused at admission. Wakeword adds nothing (installed only in every
+profile). STACK-SIZE-01 owns the per-role choice; STACK-SIZE-03 adds
+the plan and the verdict on top of it.
+
+**Where the docs and the code disagree.** "Admission is decided from
+kernel pressure and measured peaks, never file sizes" (Goals, item 3)
+is not what `governor.ts` and `admission.ts` do before a first load:
+they use file size times a multiplier. "The governor" above describes
+the `llama-fit-params` dry run as if it runs, but `dryRunFootprint` and
+`estimateFootprint` in `lib/supervisor.ts` have no callers. The
+estimator also takes the KV element size from the weight quantization
+(a different thing), fetches `resolve/main` (a branch, against the
+pin-a-revision rule), and makes an undeclared outbound request.
+Home keeps its own copy of the sizing arithmetic
+(`fitsWithin`, `recommend` and `kvCacheBytes` in Home's
+`lib/modelCatalog.ts`), which counts a q8_0 KV element as 1 byte where
+ggml's block layout gives 34/32; that copy is frozen and retires when
+Home moves onto the Stack (STACK-16). Three memory
+reserve rules also exist (the governor's OS margin plus tier margin,
+the operations design's mode-dependent reserve capped by Metal's
+recommended working set, and Home's 96 percent minus 0.7 GB); the
+governor's is the one kept, plus the Metal cap (STACK-SIZE-05).
+
+**Shared shapes come first.** The spec (commons) gains: a KV cache type
+(`f16`, `q8_0`, `q4_0`) wherever a size is quoted, a footprint entry
+(bytes, context, KV type, source of `measured`, `dry-run` or
+`estimated`, tool and version, date, a sanitized hardware line), the
+engines `mlx-serve`, `sherpa-onnx-node` and `pocket-tts` in the engine
+enum, and a Stack fit-plan wire shape (per-role line, total, cap,
+margin, path, verdict, bottleneck, shortfall). The KV cache type
+becomes a setting the Stack declares. STACK-SIZE-03 waits on that.
+
+Measurement records: the reports behind the numbers above are kept in
+the Stack checkout's untracked scratch folder (SIZER-BAKE-01 to 05);
+the hardware is a 24 GB Apple silicon laptop running the hub beside the
+runs, on macOS, with `llama-server` b10797, `gguf-parser-go` v0.26.4
+and `mlx-serve` v26.9.4. Multi-model, MoE and Studio-class numbers
+belong to the Studio bench (STACK-14).
 
 ### State on disk
 
