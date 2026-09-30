@@ -5078,6 +5078,16 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "The Hugging Face repository does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }

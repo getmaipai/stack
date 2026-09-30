@@ -644,6 +644,11 @@ installed answers unknown and raises the health item
 privacy row names the content host Hugging Face redirects to,
 `us.aws.cdn.hf.co`.
 
+The first GGUF plan on a fresh Stack installs `gguf-parser` itself. If it
+cannot, the plan is all unknown and its `tool` says `not-installed`. An
+MLX repository that does not exist is a 404; everything else that cannot
+be read stays unknown.
+
 **The KV cache type.** `full` means f16, `quantized` means q8_0, and
 `auto` means the platform default: q8_0 on macOS and f16 elsewhere. The
 plan defaults to the type the Stack really launches. The person-level

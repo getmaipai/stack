@@ -9,9 +9,35 @@ import { raise, resolve as resolveHealth } from "@/lib/health";
 import { getGovernorStatus } from "@/lib/governor";
 import { detectHardware } from "@/lib/hardware";
 import { modelsRoot } from "@/lib/store/layout";
-import { installedEnginePin } from "@/lib/engineCatalog";
+import { installedEnginePin, selectEngineBinary } from "@/lib/engineCatalog";
+import { ensureEngine } from "@/lib/engineInstall";
+import { withTimeout } from "@maipai/core/src/withTimeout";
 import { defaultKvCacheType } from "@/lib/engineArgs";
-import { fetchMlxRepoFacts, isValidMlxRepo, isValidMlxRevision } from "@/lib/mlxMemory";
+import { fetchMlxRepoLookup, isValidMlxRepo, isValidMlxRevision } from "@/lib/mlxMemory";
+
+const parserInstalls = new Map<string, Promise<void>>();
+let installParserEngine = ensureEngine;
+let selectParserPin = selectEngineBinary;
+export function __setFitPlanInstallerForTests(input: { install?: typeof ensureEngine; selectPin?: typeof selectEngineBinary }): void {
+  installParserEngine = input.install ?? ensureEngine;
+  selectParserPin = input.selectPin ?? selectEngineBinary;
+}
+async function ensureGgufParser(): Promise<boolean> {
+  const hw = await detectHardware();
+  const pin = selectParserPin(hw, "gguf-parser");
+  if (!pin) return false;
+  const key = `${pin.name}:${pin.tag}`;
+  let install = parserInstalls.get(key);
+  if (!install) {
+    const controller = new AbortController();
+    install = withTimeout(installParserEngine(pin, undefined, { activate: true, signal: controller.signal }), 120_000, () => {
+      controller.abort();
+      return new Error("gguf-parser install timed out.");
+    }).finally(() => parserInstalls.delete(key));
+    parserInstalls.set(key, install);
+  }
+  try { await install; return estimatorAvailable(); } catch { return false; }
+}
 
 const SourceSchema = z.union([
   z.object({ url: z.string() }).strict(),
@@ -29,6 +55,7 @@ const route = createRoute({
   responses: {
     200: { content: { "application/json": { schema: StackFitPlan } }, description: "The model fit plan." },
     400: { content: { "application/json": { schema: ErrorSchema } }, description: "The source must be a Hugging Face GGUF address, a GGUF path in the model store, or a Hugging Face model repository." },
+    404: { content: { "application/json": { schema: ErrorSchema } }, description: "The Hugging Face repository does not exist." },
   },
 });
 
@@ -48,8 +75,10 @@ fitPlanRoutes.openapi(route, async (c) => {
     const unifiedMemory = hw.isAppleSilicon;
     const deviceBudgetsBytes = unifiedMemory ? [] : hw.cudaDevices.map((d) => d.vramBytes - (d.usedVramBytes ?? 0));
     const status = getGovernorStatus();
-    const facts = await fetchMlxRepoFacts({ repo: source.repo, revision });
-    return c.json(buildFitPlan({
+    const lookup = await fetchMlxRepoLookup({ repo: source.repo, revision });
+    const facts = lookup.facts;
+    if (!facts && lookup.exists === "no") return c.json({ error: "That model was not found on Hugging Face." }, 404);
+    return c.json({ ...buildFitPlan({
       modelId: source.repo, contextTokens, kvCacheType: "f16", estimate: null, cpuEstimate: undefined,
       mlx: facts ? { weightsBytes: facts.weightsBytes, config: facts.config } : null,
       unifiedMemory, deviceBudgetsBytes, capBytes: status.capBytes, workingMarginBytes: status.marginBytes,
@@ -57,7 +86,7 @@ fitPlanRoutes.openapi(route, async (c) => {
       asOf: new Date().toISOString().slice(0, 10),
       tool: { name: "huggingface-metadata", version: "api" },
       // mlx-serve is launched without --kv-quant; STACK-SIZE-11 changes that later.
-    }), 200);
+    }), tool: { name: "huggingface-metadata", version: "api" } }, 200);
   }
   let target: { url: string } | { path: string };
   let modelId: string;
@@ -83,6 +112,7 @@ fitPlanRoutes.openapi(route, async (c) => {
     modelId = basename(resolvedPath).slice(0, -5);
   }
 
+  if (!estimatorAvailable()) await ensureGgufParser();
   if (!estimatorAvailable()) raise({ code: "engine-missing.gguf-parser", severity: "warning", title: "The model size checker is not installed", text: "Until it is installed, whether a model fits this computer is reported as unknown.", cause: "gguf-parser is pinned by the Stack but has not been downloaded on this machine.", fix: { label: "Install the size checker", action: "reinstall_engine" } });
   else resolveHealth("engine-missing.gguf-parser");
 
@@ -92,12 +122,12 @@ fitPlanRoutes.openapi(route, async (c) => {
   const status = getGovernorStatus();
   const estimate = await runGgufParser({ target, contextTokens, kvCacheType, gpuLayers: "all" });
   const cpuEstimate = unifiedMemory ? undefined : await runGgufParser({ target, contextTokens, kvCacheType, gpuLayers: 0 });
-  const pin = installedEnginePin("gguf-parser");
-  return c.json(buildFitPlan({
+  const pin = estimatorAvailable() ? installedEnginePin("gguf-parser") : null;
+  return c.json({ ...buildFitPlan({
     modelId, contextTokens, kvCacheType, estimate, cpuEstimate, unifiedMemory,
     deviceBudgetsBytes, capBytes: status.capBytes, workingMarginBytes: status.marginBytes,
     loaded: status.loaded.map((item) => ({ role: item.id, kind: item.kind, peakBytes: item.peakBytes, measured: item.measured })),
     asOf: new Date().toISOString().slice(0, 10),
     tool: pin ? { name: "gguf-parser", version: pin.tag } : { name: "gguf-parser", version: "not-installed" },
-  }), 200);
+  }), tool: pin ? { name: "gguf-parser", version: pin.tag } : { name: "gguf-parser", version: "not-installed" } }, 200);
 });

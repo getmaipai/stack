@@ -9,6 +9,7 @@ import { __resetHealthForTests } from "@/lib/health";
 import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit } from "@/lib/governor";
 import { defaultKvCacheType } from "@/lib/engineArgs";
 import { raise } from "@/lib/health";
+import { __setFitPlanInstallerForTests } from "@/routes/fitPlan";
 
 const fixture = join(import.meta.dir, "fixtures", "gguf-parser-qwen3-1.7b-4096.json");
 let originalBinary: string | undefined;
@@ -19,10 +20,12 @@ const mlxUrls = ["https://huggingface.co/api/models/mlx-community/Qwen3-1.7B-4bi
 let mlxCalls: string[] = [];
 let tempRoot = "";
 const json = (body: unknown) => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+const planWithoutTool = (body: Record<string, unknown>) => { const { tool: _tool, ...plan } = body; return plan; };
 
-beforeEach(() => { originalFetch = globalThis.fetch; mlxCalls = []; originalBinary = process.env.STACK_GGUF_PARSER_BINARY; delete process.env.STACK_GGUF_PARSER_BINARY; tempRoot = mkdtempSync(join(tmpdir(), "stack-fit-plan-")); __resetHealthForTests(); __resetGovernorForTests(); });
+beforeEach(() => { __setFitPlanInstallerForTests({}); originalFetch = globalThis.fetch; mlxCalls = []; originalBinary = process.env.STACK_GGUF_PARSER_BINARY; delete process.env.STACK_GGUF_PARSER_BINARY; tempRoot = mkdtempSync(join(tmpdir(), "stack-fit-plan-")); __resetHealthForTests(); __resetGovernorForTests(); });
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  __setFitPlanInstallerForTests({});
   if (originalBinary === undefined) delete process.env.STACK_GGUF_PARSER_BINARY;
   else process.env.STACK_GGUF_PARSER_BINARY = originalBinary;
   rmSync(tempRoot, { recursive: true, force: true });
@@ -58,7 +61,7 @@ test("POST /stack/v1/fit-plan returns the spec plan for a Hugging Face GGUF", as
   const response = await app.request("/stack/v1/fit-plan", json(request));
   expect(response.status).toBe(200);
   const body = await response.json() as Record<string, any>;
-  expect(() => StackFitPlan.parse(body)).not.toThrow();
+  expect(() => StackFitPlan.parse(planWithoutTool(body))).not.toThrow();
   expect(body).toMatchObject({ context_tokens: 8192, kv_cache_type: "q8_0" });
   expect(body.roles[0].peak.source).toBe("estimated");
   expect(["yes", "slow", "no", "unknown"]).toContain(body.verdict);
@@ -69,14 +72,54 @@ test("POST /stack/v1/fit-plan returns the spec plan for a Hugging Face GGUF", as
   expect(explicit.kv_cache_type).toBe("q4_0");
 });
 
-test("an uninstalled estimator returns an unknown plan", async () => {
-  const response = await app.request("/stack/v1/fit-plan", json({ source: { url: "https://huggingface.co/a/b.gguf" } }));
+test("a failed parser install retries and returns unknown with not-installed", async () => {
+  let installs = 0;
+  __setFitPlanInstallerForTests({ install: async () => { installs++; throw new Error("offline"); } });
+  const request = json({ source: { url: "https://huggingface.co/a/b.gguf" } });
+  const response = await app.request("/stack/v1/fit-plan", request);
   expect(response.status).toBe(200);
-  const body = await response.json() as { verdict: string; paths: Array<{ verdict: string }> };
+  const body = await response.json() as { verdict: string; paths: Array<{ verdict: string }>; tool: { version: string } };
   expect(body.verdict).toBe("unknown");
+  expect(body.tool.version).toBe("not-installed");
   expect(body.paths.every((item) => item.verdict === "unknown")).toBe(true);
+  await app.request("/stack/v1/fit-plan", request);
+  expect(installs).toBe(2);
   const health = await (await app.request("/stack/v1/health")).json() as { health: Array<{ code: string; fix?: { action: string } }> };
   expect(health.health).toContainEqual(expect.objectContaining({ code: "engine-missing.gguf-parser", fix: { label: "Install the size checker", action: "reinstall_engine" } }));
+});
+
+test("a missing parser installs on demand before planning and resolves its health item", async () => {
+  __setFitPlanInstallerForTests({ install: async () => { fakeParser(); } });
+  const response = await app.request("/stack/v1/fit-plan", json({ source: { url: "https://huggingface.co/a/b.gguf" } }));
+  expect(response.status).toBe(200);
+  const body = await response.json() as Record<string, any>;
+  expect(body.roles[0].peak.source).toBe("estimated");
+  const health = await (await app.request("/stack/v1/health")).json() as { health: Array<{ code: string }> };
+  expect(health.health.some((item) => item.code === "engine-missing.gguf-parser")).toBe(false);
+});
+
+test("concurrent fit plans share one parser install", async () => {
+  let installs = 0;
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  __setFitPlanInstallerForTests({ install: async () => { installs++; await held; fakeParser(); } });
+  const request = () => app.request("/stack/v1/fit-plan", json({ source: { url: "https://huggingface.co/a/b.gguf" } }));
+  const first = request();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const second = request();
+  release();
+  expect((await first).status).toBe(200);
+  expect((await second).status).toBe(200);
+  expect(installs).toBe(1);
+});
+
+test("a platform without a parser pin stays unknown without installing", async () => {
+  let installs = 0;
+  __setFitPlanInstallerForTests({ selectPin: () => null, install: async () => { installs++; } });
+  const response = await app.request("/stack/v1/fit-plan", json({ source: { url: "https://huggingface.co/a/b.gguf" } }));
+  expect(response.status).toBe(200);
+  expect((await response.json() as { tool: { version: string } }).tool.version).toBe("not-installed");
+  expect(installs).toBe(0);
 });
 
 test("an available estimator resolves its missing-engine health item", async () => {
@@ -96,12 +139,13 @@ test("POST fit plan includes a currently loaded role", async () => {
   const response = await app.request("/stack/v1/fit-plan", json({ source: { url: "https://huggingface.co/a/b.gguf" } }));
   expect(response.status).toBe(200);
   const body = await response.json() as Record<string, any>;
-  expect(() => StackFitPlan.parse(body)).not.toThrow();
+  expect(() => StackFitPlan.parse(planWithoutTool(body))).not.toThrow();
   expect(body.roles).toContainEqual(expect.objectContaining({ role: "stt", choice: "loaded" }));
 });
 
 test("fit planning accepts MLX repositories with f16 KV and never touches estimator health", async () => {
   stubMlxFetch();
+  __setFitPlanInstallerForTests({ install: async () => { throw new Error("offline"); } });
   const { list } = await import("@/lib/health");
   const first = await app.request("/stack/v1/fit-plan", json({ source: { url: "https://huggingface.co/a/b.gguf" } }));
   expect(first.status).toBe(200);
@@ -109,7 +153,7 @@ test("fit planning accepts MLX repositories with f16 KV and never touches estima
   const response = await app.request("/stack/v1/fit-plan", json({ source: { repo: "mlx-community/Qwen3-1.7B-4bit" }, context_tokens: 4096, kv_cache_type: "q4_0" }));
   expect(response.status).toBe(200);
   const body = await response.json() as Record<string, any>;
-  expect(() => StackFitPlan.parse(body)).not.toThrow();
+  expect(() => StackFitPlan.parse(planWithoutTool(body))).not.toThrow();
   expect(body).toMatchObject({ model: "mlx-community/Qwen3-1.7B-4bit", kv_cache_type: "f16" });
   expect(mlxCalls).toEqual(mlxUrls);
   expect(list().some((item) => item.code === "engine-missing.gguf-parser")).toBe(true);
@@ -119,15 +163,19 @@ test("fit planning accepts MLX repositories with f16 KV and never touches estima
   } else expect(body.verdict).toBe("unknown");
 });
 
-test("MLX metadata failure returns an unknown plan", async () => {
+test("MLX metadata network failures return unknown and a missing repository returns 404", async () => {
   stubMlxFetch("throw");
   const response = await app.request("/stack/v1/fit-plan", json({ source: { repo: "mlx-community/Qwen3-1.7B-4bit" } }));
   expect(response.status).toBe(200);
   expect((await response.json() as { verdict: string }).verdict).toBe("unknown");
   stubMlxFetch("404");
   const notFound = await app.request("/stack/v1/fit-plan", json({ source: { repo: "mlx-community/Qwen3-1.7B-4bit" } }));
-  expect(notFound.status).toBe(200);
-  expect((await notFound.json() as { verdict: string }).verdict).toBe("unknown");
+  expect(notFound.status).toBe(404);
+  expect(await notFound.json()).toEqual({ error: "That model was not found on Hugging Face." });
+  globalThis.fetch = (async () => new Response("unavailable", { status: 500 })) as unknown as typeof fetch;
+  const unavailable = await app.request("/stack/v1/fit-plan", json({ source: { repo: "mlx-community/Qwen3-1.7B-4bit" } }));
+  expect(unavailable.status).toBe(200);
+  expect((await unavailable.json() as { verdict: string }).verdict).toBe("unknown");
 });
 
 test("fit planning accepts only Hugging Face GGUF URLs, model-store paths, and valid MLX repositories", async () => {

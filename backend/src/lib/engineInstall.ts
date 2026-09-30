@@ -55,7 +55,7 @@ async function downloadArchive(pin: EngineBinaryPin, archive: EngineArchive, onP
   rmSync(destination, { force: true });
 }
 
-export async function ensureEngine(
+async function installEngine(
   pin: EngineBinaryPin,
   onProgress: (completed: number, total: number, label: string) => void = () => {},
   options: { activate?: boolean; signal?: AbortSignal } = {},
@@ -76,6 +76,20 @@ export async function ensureEngine(
   try { unlinkSync(current); } catch { /* First install has no current link. */ }
   symlinkSync(tag, current);
   bumpStackGeneration(`engine ${name} installed at ${tag}`);
+}
+
+const engineInstalls = new Map<string, Promise<void>>();
+export function ensureEngine(
+  pin: EngineBinaryPin,
+  onProgress: (completed: number, total: number, label: string) => void = () => {},
+  options: { activate?: boolean; signal?: AbortSignal } = {},
+): Promise<void> {
+  const key = `${pin.name}:${pin.tag}:${pin.archive.url}`;
+  const existing = engineInstalls.get(key);
+  if (existing) return existing;
+  const install = installEngine(pin, onProgress, options).finally(() => engineInstalls.delete(key));
+  engineInstalls.set(key, install);
+  return install;
 }
 
 /** Before the tags became the upstream build tags, a shipped pin's

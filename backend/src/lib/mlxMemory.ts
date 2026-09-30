@@ -46,6 +46,7 @@ export function readMlxKvBytesPerToken(modelDir: string): number | null {
 }
 
 export interface MlxRepoFacts { weightsBytes: number; config: unknown }
+export interface MlxRepoLookup { facts: MlxRepoFacts | null; exists: "yes" | "no" | "unknown" }
 
 export function isValidMlxRepo(repo: string): boolean {
   return /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(repo) && !repo.split("/").some((part) => part === "." || part === "..");
@@ -55,8 +56,8 @@ export function isValidMlxRevision(revision: string): boolean {
   return /^[A-Za-z0-9._-]{1,64}$/.test(revision);
 }
 
-export async function fetchMlxRepoFacts(input: { repo: string; revision: string; fetchImpl?: typeof fetch }): Promise<MlxRepoFacts | null> {
-  if (!isValidMlxRepo(input.repo) || !isValidMlxRevision(input.revision)) return null;
+export async function fetchMlxRepoLookup(input: { repo: string; revision: string; fetchImpl?: typeof fetch }): Promise<MlxRepoLookup> {
+  if (!isValidMlxRepo(input.repo) || !isValidMlxRevision(input.revision)) return { facts: null, exists: "unknown" };
   const fetchImpl = input.fetchImpl ?? fetch;
   const readBounded = async (response: Response, limit: number): Promise<string | null> => {
     if (!response.ok) return null;
@@ -65,32 +66,37 @@ export async function fetchMlxRepoFacts(input: { repo: string; revision: string;
   };
   try {
     const treeResponse = await fetchImpl(`https://huggingface.co/api/models/${input.repo}/tree/${input.revision}`, { signal: AbortSignal.timeout(15_000) });
+    const exists = treeResponse.status === 404 ? "no" : treeResponse.ok ? "yes" : "unknown";
     const treeText = await readBounded(treeResponse, 2 * 1024 ** 2);
-    if (treeText === null) return null;
+    if (treeText === null) return { facts: null, exists };
     const tree: unknown = JSON.parse(treeText);
-    if (!Array.isArray(tree)) return null;
+    if (!Array.isArray(tree)) return { facts: null, exists };
     let weightsBytes = 0;
     let found = false;
     for (const entry of tree) {
-      if (!entry || typeof entry !== "object") return null;
+      if (!entry || typeof entry !== "object") return { facts: null, exists };
       const item = entry as Record<string, unknown>;
-      if (typeof item.type !== "string" || typeof item.path !== "string" || typeof item.size !== "number") return null;
+      if (typeof item.type !== "string" || typeof item.path !== "string" || typeof item.size !== "number") return { facts: null, exists };
       if (item.type !== "file" || item.path.includes("/") || !item.path.endsWith(".safetensors")) continue;
       const lfs = item.lfs && typeof item.lfs === "object" ? item.lfs as Record<string, unknown> : undefined;
       const size = lfs?.size ?? item.size;
-      if (typeof size !== "number" || !Number.isFinite(size) || !Number.isInteger(size) || size < 0) return null;
+      if (typeof size !== "number" || !Number.isFinite(size) || !Number.isInteger(size) || size < 0) return { facts: null, exists };
       weightsBytes += size;
       found = true;
     }
-    if (!found) return null;
+    if (!found) return { facts: null, exists };
     let config: unknown = null;
     try {
       const configResponse = await fetchImpl(`https://huggingface.co/${input.repo}/resolve/${input.revision}/config.json`, { signal: AbortSignal.timeout(15_000) });
       const configText = await readBounded(configResponse, 1024 ** 2);
       if (configText !== null) config = JSON.parse(configText);
     } catch { config = null; }
-    return { weightsBytes, config };
-  } catch { return null; }
+    return { facts: { weightsBytes, config }, exists };
+  } catch { return { facts: null, exists: "unknown" }; }
+}
+
+export async function fetchMlxRepoFacts(input: { repo: string; revision: string; fetchImpl?: typeof fetch }): Promise<MlxRepoFacts | null> {
+  return (await fetchMlxRepoLookup(input)).facts;
 }
 
 export function mlxHeadroomBytes(input: { modelDir: string; contextTokens: number }): number {
