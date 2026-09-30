@@ -88,20 +88,36 @@ test("loaded others can make an otherwise known candidate fail", () => {
 
 test("unlisted loaded roles count toward the fit plan total and verdict", () => {
   const loaded = [
-    { role: "judge", kind: "resident" as const, peakBytes: 500 * 1024 ** 2, measured: true },
+    { role: "future-role", kind: "resident" as const, peakBytes: 500 * 1024 ** 2, measured: true },
     { role: "stt", kind: "resident" as const, peakBytes: 1024 ** 3, measured: false },
   ];
   const high = estimate.vramNonumaBytes + estimate.ramUmaBytes;
   const capBytes = high + 1024 ** 3 + 200 * 1024 ** 2;
   const freeMemoryBytes = 64 * 1024 ** 3;
   const plan = broken({ ...base, capBytes, estimate, loaded, freeMemoryBytes });
-  const withoutJudge = broken({ ...base, capBytes, estimate, loaded: loaded.slice(1), freeMemoryBytes });
+  const withoutFutureRole = broken({ ...base, capBytes, estimate, loaded: loaded.slice(1), freeMemoryBytes });
   expect(plan.roles).toHaveLength(2);
   expect(plan.roles.map(({ role }) => role)).toEqual(["chat", "stt"]);
   expect(plan.total).toMatchObject({ low: 2635880448 + 500 * 1024 ** 2 + 1024 ** 3, high: 3326314344 + 500 * 1024 ** 2 + 1024 ** 3, source: "estimated" });
   expect(() => StackFitPlan.parse(plan)).not.toThrow();
-  expect(withoutJudge.verdict).toBe("yes");
+  expect(withoutFutureRole.verdict).toBe("yes");
   expect(plan.verdict).toBe("no");
+});
+
+test("lists newly named loaded roles from the spec vocabulary", () => {
+  const chatPeak = 2635880448;
+  const plan = broken({ ...base, estimate, loaded: [
+    { role: "judge", kind: "resident", peakBytes: 500 * 1024 ** 2, measured: true },
+    { role: "stt", kind: "resident", peakBytes: 1024 ** 3, measured: false },
+  ] });
+  expect(plan.roles.map((r) => r.role)).toEqual(["chat", "judge", "stt"]);
+  expect(plan.total.low).toBe(chatPeak + 500 * 1024 ** 2 + 1024 ** 3);
+  expect(() => StackFitPlan.parse(plan)).not.toThrow();
+  for (const role of ["rerank", "music"] as const) {
+    const listed = broken({ ...base, estimate, loaded: [{ role, kind: "resident", peakBytes: 500 * 1024 ** 2, measured: true }] });
+    expect(listed.roles.map((r) => r.role)).toContain(role);
+    expect(() => StackFitPlan.parse(listed)).not.toThrow();
+  }
 });
 
 test("GPU device fit also checks the host memory estimate", () => {

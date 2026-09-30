@@ -646,6 +646,10 @@ privacy row names the content host Hugging Face redirects to,
 
 The plan judges the candidate as the chat model alongside the roles loaded right now, with the governor's own two conditions: loaded peaks plus the candidate stay within the cap, and free memory after unloading the current chat model and subtracting the candidate stays at least the working margin. A full every-role-of-the-profile sum waits until each role has a pinned model and STACK-SIZE-01's per-role choice.
 
+The spec vocabulary in spec-v0.1.60 now names all thirteen Stack roles. A
+loaded role the spec does not name yet still counts toward the total but is
+not listed in the plan, so the response always fits the schema.
+
 Measured against `llama-server` b10797 on a 24 GB Apple silicon laptop
 (Metal, `gguf-parser-go` v0.26.4, Qwen3 1.7B Q8_0 and Qwen3 4B Q4_K_M,
 contexts 4096 to 32768, KV f16 and q8_0, flash attention on and off, 12
