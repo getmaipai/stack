@@ -697,9 +697,7 @@ which points at a transient during prompt processing that this one
 model cannot explain. Until more models are measured, an MLX plan for a
 Qwen3-class dense model uses idle at 1.27 times the weights plus the
 observed peak (up to 2.9 times the KV formula), labelled estimated with
-that range, and any other MLX architecture is unknown. The Stack
-passes none of these flags today; STACK-SIZE-04 sets a cap on the
-prefix cache (retained memory) and decides on `--kv-quant`. The launch
+that range, and any other MLX architecture is unknown. The launch
 now caps the prefix cache at 1 GiB (`--prefix-cache-mem 1024MB`), and an
 MLX model is admitted at its base estimate plus a headroom (the cache
 cap plus 2.9 times the f16 KV formula at the launch's context length,
