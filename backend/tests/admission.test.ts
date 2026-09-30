@@ -25,6 +25,11 @@ test("a dry run peak refuses a request the file-size guess would admit", async (
   await expect(waitForAdmission({ id: "dry-run-large", kind: "resident", requestedBytes: 1, modelFileBytes: 5 * GB, engine: "llama-server", dryRunPeakBytes: 40 * GB }, { stillWanted: () => true })).rejects.toThrow(/needs about 40\.0 GB; the memory budget for models is 24\.0 GB/);
 });
 
+test("headroom can refuse a request that fits without it", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 32 * GB, freeMemoryBytes: 24 * GB, tier: "p32" });
+  await expect(waitForAdmission({ id: "headroom-large", kind: "resident", requestedBytes: 20 * GB, headroomBytes: 5 * GB }, { stillWanted: () => true })).rejects.toThrow(/needs about 25\.0 GB; the memory budget for models is 24\.0 GB/);
+});
+
 test("a queued start is admitted when the holder releases, and a start that times out withdraws: no late admission, no phantom", async () => {
   const holder = await admit({ id: "chat", kind: "resident", requestedBytes: 12 * GB }) as GovernorHandle;
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 32 * GB, freeMemoryBytes: 10 * GB, tier: "p32" });

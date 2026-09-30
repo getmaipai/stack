@@ -35,6 +35,7 @@ export interface GovernorRequest {
   modelFileBytes?: number | null;
   measuredPeakBytes?: number | null;
   dryRunPeakBytes?: number | null;
+  headroomBytes?: number | null;
   engine?: string;
   pinned?: boolean;
   keepAliveSeconds?: number;
@@ -149,18 +150,23 @@ function loadedItemFor(request: GovernorRequest): LoadedInternal {
     idleTtlSeconds: tuning.idleTtlSeconds,
     pinned: request.pinned ?? false,
     pid: request.pid ?? null,
-    peakBaselineBytes: request.measuredPeakBytes ?? null,
+    peakBaselineBytes: request.measuredPeakBytes == null ? null : request.measuredPeakBytes + (request.headroomBytes ?? 0),
     processBreaches: 0,
     keepAliveSeconds: request.kind === "generator" ? 0 : request.keepAliveSeconds ?? 0,
   };
 }
 
 export function peakFor(request: GovernorRequest): { bytes: number; measured: boolean } {
-  if (request.measuredPeakBytes && request.measuredPeakBytes > 0) return { bytes: request.measuredPeakBytes, measured: true };
-  if (request.dryRunPeakBytes && request.dryRunPeakBytes > 0) return { bytes: request.dryRunPeakBytes, measured: false };
-  if (!request.modelFileBytes) return { bytes: request.requestedBytes, measured: false };
-  const multiplier = GovernorRules.engineMultipliers[request.engine as keyof typeof GovernorRules.engineMultipliers] ?? GovernorRules.engineMultipliers.default;
-  return { bytes: Math.ceil(request.modelFileBytes * multiplier), measured: false };
+  let base: number;
+  let measured = false;
+  if (request.measuredPeakBytes && request.measuredPeakBytes > 0) { base = request.measuredPeakBytes; measured = true; }
+  else if (request.dryRunPeakBytes && request.dryRunPeakBytes > 0) base = request.dryRunPeakBytes;
+  else if (!request.modelFileBytes) base = request.requestedBytes;
+  else {
+    const multiplier = GovernorRules.engineMultipliers[request.engine as keyof typeof GovernorRules.engineMultipliers] ?? GovernorRules.engineMultipliers.default;
+    base = Math.ceil(request.modelFileBytes * multiplier);
+  }
+  return { bytes: base + (request.headroomBytes ?? 0), measured };
 }
 
 function loadedBytes(): number {

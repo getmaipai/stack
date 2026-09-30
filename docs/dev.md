@@ -650,7 +650,7 @@ plan defaults to the type the Stack really launches. The person-level
 setting `chat.kv_cache_override` is not read by the Stack yet;
 `kvCacheTypeFor` is the one place its meaning lives when it is wired at
 STACK-16, and for MLX quantized will map to `--kv-quant 8` in
-STACK-SIZE-04.
+STACK-SIZE-11.
 
 The plan judges the candidate as the chat model alongside the roles loaded right now, with the governor's own two conditions: loaded peaks plus the candidate stay within the cap, and free memory after unloading the current chat model and subtracting the candidate stays at least the working margin. A full every-role-of-the-profile sum waits until each role has a pinned model and STACK-SIZE-01's per-role choice.
 
@@ -699,7 +699,15 @@ Qwen3-class dense model uses idle at 1.27 times the weights plus the
 observed peak (up to 2.9 times the KV formula), labelled estimated with
 that range, and any other MLX architecture is unknown. The Stack
 passes none of these flags today; STACK-SIZE-04 sets a cap on the
-prefix cache (retained memory) and decides on `--kv-quant`.
+prefix cache (retained memory) and decides on `--kv-quant`. The launch
+now caps the prefix cache at 1 GiB (`--prefix-cache-mem 1024MB`), and an
+MLX model is admitted at its base estimate plus a headroom (the cache
+cap plus 2.9 times the f16 KV formula at the launch's context length,
+from the model's own `config.json`; a model whose architecture is not
+verified gets the cache cap plus 2 GiB), and the process watcher's
+baseline includes the same headroom. All constants come from one
+measured model and the Studio bench (STACK-14) confirms them for other
+architectures.
 
 **Verdict shape.** RigSpark (MIT, github.com/shashankswe2020-ux/rigspark,
 read for design only, none of its code or data used) gave the shape of

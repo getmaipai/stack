@@ -71,7 +71,7 @@ test.skipIf(!APPLE_SILICON)("the launch for mlx-serve is its own command on loop
     expect(plan.build).toBe("v26.9.4");
     expect(plan.kind).toBe("spawned");
     expect(plan.command[0]).toMatch(/\/engines\/mlx-serve\/v26\.9\.4\/mlx-serve$/);
-    expect(plan.command.slice(1)).toEqual(["--model", "/tmp/never/Qwen3-1.7B-4bit", "--serve", "--host", "127.0.0.1", "--port", "8797", "--ctx-size", "4096", "--max-concurrent", "1"]);
+    expect(plan.command.slice(1)).toEqual(["--model", "/tmp/never/Qwen3-1.7B-4bit", "--serve", "--host", "127.0.0.1", "--port", "8797", "--ctx-size", "4096", "--max-concurrent", "1", "--prefix-cache-mem", "1024MB"]);
     expect(plan.env?.HOME).toContain("/home");
   } finally {
     rmSync(join(engineDir(MLX_SERVE_PIN), ".."), { recursive: true, force: true });

@@ -43,6 +43,27 @@ test("rule 1 grants an admission and reports an estimated peak", async () => {
   expect(getGovernorStatus().loaded[0]).toMatchObject({ id: "resident-chat", peakBytes: Math.ceil(GB * 1.3), measured: false });
 });
 
+test("peak headroom is added to every base while only the measured base stays measured", async () => {
+  const { peakFor } = await import("@/lib/governor");
+  const headroom = GB;
+  expect(peakFor({ id: "m", kind: "resident", requestedBytes: 5, measuredPeakBytes: 9, headroomBytes: headroom })).toEqual({ bytes: 9 + headroom, measured: true });
+  expect(peakFor({ id: "d", kind: "resident", requestedBytes: 5, dryRunPeakBytes: 8, headroomBytes: headroom })).toEqual({ bytes: 8 + headroom, measured: false });
+  expect(peakFor({ id: "f", kind: "resident", requestedBytes: 5, modelFileBytes: 10 * GB, engine: "llama-server", headroomBytes: headroom })).toEqual({ bytes: Math.ceil(10 * GB * 1.3) + headroom, measured: false });
+  expect(peakFor({ id: "r", kind: "resident", requestedBytes: 5, headroomBytes: headroom })).toEqual({ bytes: 5 + headroom, measured: false });
+});
+
+test("the process watcher includes headroom in its measured resident baseline", async () => {
+  const base = GB;
+  const headroom = GB;
+  await admit({ id: "resident-headroom", kind: "resident", requestedBytes: base, measuredPeakBytes: base, headroomBytes: headroom, pid: 42 });
+  __setGovernorTuningForTestsOnly({ pollMs: 1, processSustainedPolls: 2 });
+  let restarts = 0;
+  const stop = startGovernor({ pid: 42, freeMemory: () => 32 * GB, totalMemory: () => 64 * GB, processMemory: async () => base + headroom, restart: () => { restarts++; } });
+  stops.push(stop);
+  await Bun.sleep(15);
+  expect(restarts).toBe(0);
+});
+
 test("rule 2 queues work with a position and refuses after four entries", async () => {
   await admit({ id: "generator-0", kind: "generator", requestedBytes: GB });
   for (let index = 1; index <= 4; index++) {

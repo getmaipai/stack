@@ -29,6 +29,7 @@ import { getRunState, release, setGovernorPid, startGovernor, type GovernorHandl
 import { proposeProfile } from "@/profiles";
 import { AdmissionRefusedError, waitForAdmission, waitingReason } from "@/lib/admission";
 import { emit } from "@/lib/events";
+import { MLX_PREFIX_CACHE_FLAG, mlxHeadroomBytes } from "@/lib/mlxMemory";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { ROLES, ROLE_IDS, type RoleId, type RoleState } from "@/roles";
 import { getMemoryReader } from "@/lib/memory";
@@ -575,7 +576,7 @@ export function launchPlan(role: RoleId, model: ModelRecord, port: number): Laun
     if (!pin || !engineInstalled("mlx-serve")) throw new EngineUnavailableError("No installed mlx-serve build is available for this machine.");
     const binary = launchBinary(pin);
     const slots = typeof config.slots === "number" && config.slots > 0 ? config.slots : 1;
-    const args = ["--model", model.modelPath!, "--serve", "--host", "127.0.0.1", "--port", String(port), "--ctx-size", String(contextLength), "--max-concurrent", String(slots)];
+    const args = ["--model", model.modelPath!, "--serve", "--host", "127.0.0.1", "--port", String(port), "--ctx-size", String(contextLength), "--max-concurrent", String(slots), "--prefix-cache-mem", MLX_PREFIX_CACHE_FLAG];
     return { command: [binary, ...args], engine: "mlx-serve", build: currentEngineTag("mlx-serve") ?? pin.tag, stdin: "ignore", contextLength, kind: "spawned", env: managedEnv() };
   }
   const pin = installedEnginePin();
@@ -633,6 +634,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     modelFileBytes: managed && !generator ? null : model.sizeBytes,
     measuredPeakBytes: model.measuredFootprintBytes,
     dryRunPeakBytes,
+    headroomBytes: engineForRole(role) === "mlx-serve" && !managed && !generator && !SPEECH_ROLES.includes(role) ? mlxHeadroomBytes({ modelDir: model.modelPath!, contextTokens: contextLength }) : null,
     engine: generator ? "comfyui" : managed ? "pocket-tts" : SPEECH_ROLES.includes(role) ? "sherpa-onnx-node" : engineForRole(role) === "mlx-serve" ? "mlx-serve" : "llama-server",
     pinned: pinnedModels.has(model.id),
   };
