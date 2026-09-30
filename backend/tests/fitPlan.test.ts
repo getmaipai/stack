@@ -58,6 +58,57 @@ test("builds unified yes and no plans with estimate ranges and shortfalls", () =
   expect(no.paths[0]?.shortfall).toMatchObject({ low: 2635880448 - (3 * 1073741824 - 1 * 1073741824), high: 3326314344 - (3 * 1073741824 - 1 * 1073741824), source: "estimated" });
 });
 
+test("plans the candidate alongside loaded roles and sums their peaks", () => {
+  const loaded = [
+    { role: "stt", kind: "resident" as const, peakBytes: 500 * 1024 ** 2, measured: true },
+    { role: "tts", kind: "jit" as const, peakBytes: 1024 ** 3, measured: false },
+  ];
+  const plan = broken({ ...base, estimate, loaded, freeMemoryBytes: 12 * 1024 ** 3 });
+  expect(plan.roles.map(({ role, choice }) => [role, choice])).toEqual([["chat", "proposed"], ["stt", "loaded"], ["tts", "loaded"]]);
+  expect(plan.roles[1]?.peak).toMatchObject({ source: "measured" });
+  expect(plan.roles[2]?.peak).toMatchObject({ source: "estimated" });
+  expect(plan.total).toMatchObject({ low: 2635880448 + 500 * 1024 ** 2 + 1024 ** 3, high: 3326314344 + 500 * 1024 ** 2 + 1024 ** 3, source: "estimated" });
+  expect(() => StackFitPlan.parse(plan)).not.toThrow();
+});
+
+test("unloading the current chat makes room while other loaded roles still count", () => {
+  const common = { ...base, estimate, capBytes: 16 * 1024 ** 3, workingMarginBytes: 4 * 1024 ** 3, freeMemoryBytes: 6 * 1024 ** 3 };
+  const withChat = broken({ ...common, loaded: [{ role: "chat", kind: "resident", peakBytes: 2 * 1024 ** 3, measured: true }] });
+  const withoutChat = broken({ ...common, loaded: [] });
+  expect(withChat.verdict).toBe("yes");
+  expect(withChat.roles).toHaveLength(1);
+  expect(withoutChat.verdict).toBe("no");
+});
+
+test("loaded others can make an otherwise known candidate fail", () => {
+  const plan = broken({ ...base, estimate, loaded: [{ role: "stt", kind: "resident", peakBytes: base.capBytes - 1 * 1024 ** 3, measured: true }], freeMemoryBytes: 16 * 1024 ** 3 });
+  expect(plan.verdict).toBe("no");
+  expect(plan.paths[0]).toHaveProperty("shortfall");
+});
+
+test("unlisted loaded roles count toward the fit plan total and verdict", () => {
+  const loaded = [
+    { role: "judge", kind: "resident" as const, peakBytes: 500 * 1024 ** 2, measured: true },
+    { role: "stt", kind: "resident" as const, peakBytes: 1024 ** 3, measured: false },
+  ];
+  const high = estimate.vramNonumaBytes + estimate.ramUmaBytes;
+  const capBytes = high + 1024 ** 3 + 200 * 1024 ** 2;
+  const freeMemoryBytes = 64 * 1024 ** 3;
+  const plan = broken({ ...base, capBytes, estimate, loaded, freeMemoryBytes });
+  const withoutJudge = broken({ ...base, capBytes, estimate, loaded: loaded.slice(1), freeMemoryBytes });
+  expect(plan.roles).toHaveLength(2);
+  expect(plan.roles.map(({ role }) => role)).toEqual(["chat", "stt"]);
+  expect(plan.total).toMatchObject({ low: 2635880448 + 500 * 1024 ** 2 + 1024 ** 3, high: 3326314344 + 500 * 1024 ** 2 + 1024 ** 3, source: "estimated" });
+  expect(() => StackFitPlan.parse(plan)).not.toThrow();
+  expect(withoutJudge.verdict).toBe("yes");
+  expect(plan.verdict).toBe("no");
+});
+
+test("GPU device fit also checks the host memory estimate", () => {
+  const plan = broken({ ...base, unifiedMemory: false, deviceBudgetsBytes: [8 * 1024 ** 3], estimate: { ...estimate, ramNonumaBytes: 20 * 1024 ** 3 }, freeMemoryBytes: 10 * 1024 ** 3 });
+  expect(plan.paths.find((path) => path.path === "gpu")).toMatchObject({ fits: false, verdict: "no" });
+});
+
 test("unknown architectures and absent estimates stay unknown", () => {
   for (const candidate of [{ ...estimate, architecture: "gemma3" }, null]) {
     const plan = broken({ ...base, estimate: candidate });

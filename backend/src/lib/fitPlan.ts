@@ -68,19 +68,29 @@ export interface PlanInput {
   deviceBudgetsBytes: number[];
   capBytes: number;
   workingMarginBytes: number;
+  loaded?: { role: string; kind: "resident" | "jit" | "generator"; peakBytes: number; measured: boolean }[];
+  freeMemoryBytes?: number;
   asOf: string;
   tool: { name: string; version: string };
 }
 
 type Figure = { low: number; high: number; source: "measured" | "estimated"; as_of: string };
 type UnknownFigure = { low: null; high: null; source: "unknown"; as_of: string };
+const specRoles = new Set<string>(StackFitPlan.shape.roles.element.shape.role.options);
 const known = (low: number, high: number, source: Figure["source"], as_of: string): Figure => ({ low, high, source, as_of });
 const unknown = (as_of: string): UnknownFigure => ({ low: null, high: null, source: "unknown", as_of });
 const verified = (estimate: GgufEstimate | null | undefined): estimate is GgufEstimate => !!estimate && (VERIFIED_ARCHITECTURES as readonly string[]).includes(estimate.architecture);
 
 export function buildFitPlan(input: PlanInput): StackFitPlanType {
   const date = input.asOf;
-  const budget = Math.max(0, input.capBytes - input.workingMarginBytes);
+  const loaded = input.loaded ?? [];
+  const others = loaded.filter((item) => item.role !== "chat");
+  const currentChat = loaded.find((item) => item.role === "chat");
+  const othersBytes = others.reduce((sum, item) => sum + item.peakBytes, 0);
+  // mirrors canAdmit in governor.ts; a change to one must change the other
+  const available = Math.max(0, input.freeMemoryBytes === undefined
+    ? input.capBytes - othersBytes - input.workingMarginBytes
+    : Math.min(input.capBytes - othersBytes, input.freeMemoryBytes + (currentChat?.peakBytes ?? 0) - input.workingMarginBytes));
   const paths: StackFitPlanType["paths"] = [];
   let peak: Figure | UnknownFigure = unknown(date);
   let verdict: "yes" | "slow" | "no" | "unknown" = "unknown";
@@ -89,17 +99,17 @@ export function buildFitPlan(input: PlanInput): StackFitPlanType {
     const estimate = input.estimate;
     if (input.unifiedMemory) {
       peak = known(estimate.vramNonumaBytes, estimate.vramNonumaBytes + estimate.ramUmaBytes, "estimated", date);
-      const fits = peak.high <= budget;
+      const fits = peak.high <= available;
       verdict = fits ? "yes" : "no";
       const path: StackFitPlanType["paths"][number] = { path: "unified", fits, verdict: fits ? "yes" : "no" };
-      if (!fits) path.shortfall = known(Math.max(0, peak.low - budget), Math.max(0, peak.high - budget), "estimated", date);
+      if (!fits) path.shortfall = known(Math.max(0, peak.low - available), Math.max(0, peak.high - available), "estimated", date);
       paths.push(path);
     } else if (input.deviceBudgetsBytes.length) {
       peak = known(estimate.vramNonumaBytes, estimate.vramNonumaBytes, "estimated", date);
-      const gpuFits = estimate.vramNonumaBytes <= Math.max(...input.deviceBudgetsBytes);
+      const gpuFits = estimate.vramNonumaBytes <= Math.max(...input.deviceBudgetsBytes) && estimate.ramNonumaBytes <= available;
       paths.push({ path: "gpu", fits: gpuFits, verdict: gpuFits ? "yes" : "no" });
       const cpu = verified(input.cpuEstimate) ? input.cpuEstimate : null;
-      const cpuFits = !!cpu && cpu.ramNonumaBytes <= budget;
+      const cpuFits = !!cpu && cpu.ramNonumaBytes <= available;
       paths.push({ path: "cpu", fits: cpuFits, verdict: cpu ? (cpuFits ? "slow" : "no") : "unknown" });
       // Multi-GPU and CPU offload are not modeled yet.
       if (input.deviceBudgetsBytes.length >= 2) paths.push({ path: "multi-gpu", fits: false, verdict: "unknown" });
@@ -109,7 +119,7 @@ export function buildFitPlan(input: PlanInput): StackFitPlanType {
       const cpu = verified(input.cpuEstimate) ? input.cpuEstimate : null;
       if (cpu) {
         peak = known(cpu.ramNonumaBytes, cpu.ramNonumaBytes, "estimated", date);
-        const fits = cpu.ramNonumaBytes <= budget;
+        const fits = cpu.ramNonumaBytes <= available;
         verdict = fits ? "slow" : "no";
         paths.push({ path: "cpu", fits, verdict: fits ? "slow" : "no" });
       } else {
@@ -126,8 +136,9 @@ export function buildFitPlan(input: PlanInput): StackFitPlanType {
     } else paths.push({ path: "cpu", fits: false, verdict: "unknown" });
   }
 
-  const total = peak;
+  const total = peak.low === null ? peak : known(peak.low + othersBytes, peak.high! + othersBytes, "estimated", date);
   const role = { role: "chat" as const, choice: "proposed", peak };
-  // Other roles are not included yet; a later item sums them.
-  return { schema: 1, model: input.modelId, context_tokens: input.contextTokens, kv_cache_type: input.kvCacheType, roles: [role], total, cap: known(input.capBytes, input.capBytes, "measured", date), margin: known(input.workingMarginBytes, input.workingMarginBytes, "measured", date), paths, verdict, bottleneck: verdict === "unknown" ? "unknown" : "memory" };
+  // roles the spec vocabulary does not name yet (judge, rerank, music) still count in the total but are not listed; SIZER-SPEC-03 adds them to the vocabulary, then this filter goes
+  const loadedRoles = verdict === "unknown" ? [] : others.filter((item) => specRoles.has(item.role)).map((item) => ({ role: item.role as (typeof StackFitPlan.shape.roles.element.shape.role.options)[number], choice: "loaded" as const, peak: known(item.peakBytes, item.peakBytes, item.measured ? "measured" : "estimated", date) }));
+  return { schema: 1, model: input.modelId, context_tokens: input.contextTokens, kv_cache_type: input.kvCacheType, roles: [role, ...loadedRoles], total, cap: known(input.capBytes, input.capBytes, "measured", date), margin: known(input.workingMarginBytes, input.workingMarginBytes, "measured", date), paths, verdict, bottleneck: verdict === "unknown" ? "unknown" : "memory" };
 }

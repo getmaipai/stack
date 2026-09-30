@@ -6,17 +6,19 @@ import { StackFitPlan } from "@maipai/spec/gen/ts/stack-fit-plan.js";
 import { app } from "@/app";
 import { modelsRoot } from "@/lib/store/layout";
 import { __resetHealthForTests } from "@/lib/health";
+import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit } from "@/lib/governor";
 
 const fixture = join(import.meta.dir, "fixtures", "gguf-parser-qwen3-1.7b-4096.json");
 let originalBinary: string | undefined;
 let tempRoot = "";
 const json = (body: unknown) => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
-beforeEach(() => { originalBinary = process.env.STACK_GGUF_PARSER_BINARY; delete process.env.STACK_GGUF_PARSER_BINARY; tempRoot = mkdtempSync(join(tmpdir(), "stack-fit-plan-")); __resetHealthForTests(); });
+beforeEach(() => { originalBinary = process.env.STACK_GGUF_PARSER_BINARY; delete process.env.STACK_GGUF_PARSER_BINARY; tempRoot = mkdtempSync(join(tmpdir(), "stack-fit-plan-")); __resetHealthForTests(); __resetGovernorForTests(); });
 afterEach(() => {
   if (originalBinary === undefined) delete process.env.STACK_GGUF_PARSER_BINARY;
   else process.env.STACK_GGUF_PARSER_BINARY = originalBinary;
   rmSync(tempRoot, { recursive: true, force: true });
+  __resetGovernorForTests();
 });
 
 function fakeParser(): void {
@@ -60,6 +62,18 @@ test("an available estimator resolves its missing-engine health item", async () 
   const response = await app.request("/stack/v1/fit-plan", json({ source: { url: "https://huggingface.co/a/b.gguf" } }));
   expect(response.status).toBe(200);
   expect(list().some((item) => item.code === "engine-missing.gguf-parser")).toBe(false);
+});
+
+test("POST fit plan includes a currently loaded role", async () => {
+  fakeParser();
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 32 * 1024 ** 3, freeMemoryBytes: 24 * 1024 ** 3, tier: "p32" });
+  const loaded = await admit({ id: "stt", kind: "resident", requestedBytes: 1024 ** 3, measuredPeakBytes: 1024 ** 3 });
+  expect("id" in loaded).toBe(true);
+  const response = await app.request("/stack/v1/fit-plan", json({ source: { url: "https://huggingface.co/a/b.gguf" } }));
+  expect(response.status).toBe(200);
+  const body = await response.json() as Record<string, any>;
+  expect(() => StackFitPlan.parse(body)).not.toThrow();
+  expect(body.roles).toContainEqual(expect.objectContaining({ role: "stt", choice: "loaded" }));
 });
 
 test("fit planning accepts only Hugging Face GGUF URLs and model-store paths", async () => {

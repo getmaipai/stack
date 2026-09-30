@@ -73,6 +73,8 @@ fitPlanRoutes.openapi(route, async (c) => {
   return c.json(buildFitPlan({
     modelId, contextTokens, kvCacheType, estimate, cpuEstimate, unifiedMemory,
     deviceBudgetsBytes, capBytes: status.capBytes, workingMarginBytes: status.marginBytes,
+    loaded: status.loaded.map((item) => ({ role: item.id, kind: item.kind, peakBytes: item.peakBytes, measured: item.measured })),
+    freeMemoryBytes: status.freeMemoryBytes,
     asOf: new Date().toISOString().slice(0, 10),
     tool: pin ? { name: "gguf-parser", version: pin.tag } : { name: "gguf-parser", version: "not-installed" },
   }), 200);
