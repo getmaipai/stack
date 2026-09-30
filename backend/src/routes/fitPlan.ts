@@ -10,6 +10,7 @@ import { getGovernorStatus } from "@/lib/governor";
 import { detectHardware } from "@/lib/hardware";
 import { modelsRoot } from "@/lib/store/layout";
 import { installedEnginePin } from "@/lib/engineCatalog";
+import { defaultKvCacheType } from "@/lib/engineArgs";
 
 const SourceSchema = z.union([
   z.object({ url: z.string() }).strict(),
@@ -18,7 +19,7 @@ const SourceSchema = z.union([
 const FitPlanRequestSchema = z.object({
   source: SourceSchema,
   context_tokens: z.number().int().min(256).max(1_048_576).default(4096),
-  kv_cache_type: z.enum(["f16", "q8_0", "q4_0"]).default("f16"),
+  kv_cache_type: z.enum(["f16", "q8_0", "q4_0"]).optional().openapi({ description: "Defaults to what the Stack will actually launch with on this computer (q8_0 on macOS, f16 elsewhere)." }),
 }).strict();
 const route = createRoute({
   method: "post", path: "/", tags: ["Hardware"], summary: "Would this model fit this machine, before it is downloaded",
@@ -36,7 +37,8 @@ function inside(root: string, target: string): boolean {
 
 export const fitPlanRoutes = apiRouter<AppEnv>();
 fitPlanRoutes.openapi(route, async (c) => {
-  const { source, context_tokens: contextTokens, kv_cache_type: kvCacheType } = c.req.valid("json");
+  const { source, context_tokens: contextTokens, kv_cache_type: requestedKvCacheType } = c.req.valid("json");
+  const kvCacheType = requestedKvCacheType ?? defaultKvCacheType();
   if (!estimatorAvailable()) raise({ code: "engine-missing.gguf-parser", severity: "warning", title: "The model size checker is not installed", text: "Until it is installed, whether a model fits this computer is reported as unknown.", cause: "gguf-parser is pinned by the Stack but has not been downloaded on this machine.", fix: { label: "Install the size checker", action: "reinstall_engine" } });
   else resolveHealth("engine-missing.gguf-parser");
   let target: { url: string } | { path: string };

@@ -4571,7 +4571,7 @@
                       "q8_0",
                       "q4_0"
                     ],
-                    "default": "f16"
+                    "description": "Defaults to what the Stack will actually launch with on this computer (q8_0 on macOS, f16 elsewhere)."
                   }
                 },
                 "required": [

@@ -10,10 +10,23 @@ export interface LlamaServerArgsOptions {
   config: Record<string, number | boolean | string | string[]>;
   /** The context length the spawn and the post-load check both use. */
   contextLength: number;
-  /** KV cache quantization, on by default on Apple silicon. */
-  kvCacheQuantized?: boolean;
+  /** KV cache type; defaults to q8_0 on macOS and f16 elsewhere. */
+  kvCacheType?: KvCacheType;
   /** Serve `/v1/embeddings` instead of chat: the `embed` role's launch. */
   embeddings?: boolean;
+}
+
+export type KvCacheType = "f16" | "q8_0" | "q4_0";
+export type KvCacheOverride = "auto" | "quantized" | "full";
+
+export function defaultKvCacheType(platform: NodeJS.Platform = process.platform): KvCacheType {
+  return platform === "darwin" ? "q8_0" : "f16";
+}
+
+export function kvCacheTypeFor(override: KvCacheOverride | undefined, platform: NodeJS.Platform = process.platform): KvCacheType {
+  if (override === "full") return "f16";
+  if (override === "quantized") return "q8_0";
+  return defaultKvCacheType(platform);
 }
 
 export function llamaServerArgs(options: LlamaServerArgsOptions): string[] {
@@ -61,9 +74,9 @@ export function llamaServerArgs(options: LlamaServerArgsOptions): string[] {
   if (threads > 0) args.push("--threads", String(threads));
   const cacheRamMb = typeof config.cacheRamMb === "number" ? config.cacheRamMb : 0;
   if (cacheRamMb > 0) args.push("--cache-ram-mb", String(cacheRamMb));
-  // Quantized KV cache: the q8_0 pair for keys and values, on by
-  // default on Apple silicon (hub, FAST-01).
-  if (options.kvCacheQuantized ?? true) args.push("-ctk", "q8_0", "-ctv", "q8_0");
+  // f16 is llama-server's default; auto means q8_0 on macOS and f16 elsewhere.
+  const kvCacheType = options.kvCacheType ?? defaultKvCacheType();
+  if (kvCacheType !== "f16") args.push("-ctk", kvCacheType, "-ctv", kvCacheType);
   // An embedding model is served with pooling on and no chat template.
   if (options.embeddings) args.push("--embeddings");
   return args;

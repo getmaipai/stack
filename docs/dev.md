@@ -644,6 +644,14 @@ installed answers unknown and raises the health item
 privacy row names the content host Hugging Face redirects to,
 `us.aws.cdn.hf.co`.
 
+**The KV cache type.** `full` means f16, `quantized` means q8_0, and
+`auto` means the platform default: q8_0 on macOS and f16 elsewhere. The
+plan defaults to the type the Stack really launches. The person-level
+setting `chat.kv_cache_override` is not read by the Stack yet;
+`kvCacheTypeFor` is the one place its meaning lives when it is wired at
+STACK-16, and for MLX quantized will map to `--kv-quant 8` in
+STACK-SIZE-04.
+
 The plan judges the candidate as the chat model alongside the roles loaded right now, with the governor's own two conditions: loaded peaks plus the candidate stay within the cap, and free memory after unloading the current chat model and subtracting the candidate stays at least the working margin. A full every-role-of-the-profile sum waits until each role has a pinned model and STACK-SIZE-01's per-role choice.
 
 The spec vocabulary in spec-v0.1.60 now names all thirteen Stack roles. A

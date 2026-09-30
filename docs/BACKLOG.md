@@ -470,7 +470,8 @@ are never copied. Nothing migrates Home until STACK-16.
   real load at three contexts on the Studio for more than one model
   (the peak was 1.9 to 2.9 times the simple KV formula on the one model
   measured, unexplained); the admission estimate for MLX carries a
-  context term. Out of scope: GGUF. Exit: `bash scripts/check.sh` plus
+  context term. `--kv-quant` follows the KV rule in docs/dev.md
+  (quantized maps to 8, auto and full leave it off). Out of scope: GGUF. Exit: `bash scripts/check.sh` plus
   a Studio bench row (STACK-14).
 - [x] **STACK-SIZE-05 (S): read Metal's working-set cap.** Landed 2026-09-30. Objective:
   on Apple silicon the usable memory is capped by the GPU's recommended

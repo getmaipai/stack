@@ -1,6 +1,7 @@
 import { withTimeout } from "@maipai/core/src/withTimeout";
 import { StackFitPlan, type StackFitPlan as StackFitPlanType } from "@maipai/spec/gen/ts/stack-fit-plan.js";
 import { currentEngineBinaryPath } from "@/lib/engineInstall";
+import type { KvCacheType } from "@/lib/engineArgs";
 import { existsSync } from "node:fs";
 
 // An architecture joins this list only after one bench row agrees with a real load (docs/dev.md).
@@ -40,7 +41,7 @@ export function parseGgufParserJson(text: string): GgufEstimate | null {
   } catch { return null; }
 }
 
-export async function runGgufParser(input: { target: { path: string } | { url: string }; contextTokens: number; kvCacheType: "f16" | "q8_0" | "q4_0"; gpuLayers: "all" | 0 }): Promise<GgufEstimate | null> {
+export async function runGgufParser(input: { target: { path: string } | { url: string }; contextTokens: number; kvCacheType: KvCacheType; gpuLayers: "all" | 0 }): Promise<GgufEstimate | null> {
   try {
     const binary = process.env.STACK_GGUF_PARSER_BINARY || currentEngineBinaryPath("gguf-parser");
     if (!binary) return null;
@@ -61,7 +62,7 @@ export async function runGgufParser(input: { target: { path: string } | { url: s
 export interface PlanInput {
   modelId: string;
   contextTokens: number;
-  kvCacheType: "f16" | "q8_0" | "q4_0";
+  kvCacheType: KvCacheType;
   estimate: GgufEstimate | null;
   cpuEstimate?: GgufEstimate | null;
   unifiedMemory: boolean;

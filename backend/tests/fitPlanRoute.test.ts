@@ -7,6 +7,7 @@ import { app } from "@/app";
 import { modelsRoot } from "@/lib/store/layout";
 import { __resetHealthForTests } from "@/lib/health";
 import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit } from "@/lib/governor";
+import { defaultKvCacheType } from "@/lib/engineArgs";
 
 const fixture = join(import.meta.dir, "fixtures", "gguf-parser-qwen3-1.7b-4096.json");
 let originalBinary: string | undefined;
@@ -42,7 +43,9 @@ test("POST /stack/v1/fit-plan returns the spec plan for a Hugging Face GGUF", as
   expect(["yes", "slow", "no", "unknown"]).toContain(body.verdict);
 
   const defaults = await (await app.request("/stack/v1/fit-plan", json({ source: request.source }))).json() as { context_tokens: number; kv_cache_type: string };
-  expect(defaults).toMatchObject({ context_tokens: 4096, kv_cache_type: "f16" });
+  expect(defaults).toMatchObject({ context_tokens: 4096, kv_cache_type: defaultKvCacheType() });
+  const explicit = await (await app.request("/stack/v1/fit-plan", json({ source: request.source, kv_cache_type: "q4_0" }))).json() as { kv_cache_type: string };
+  expect(explicit.kv_cache_type).toBe("q4_0");
 });
 
 test("an uninstalled estimator returns an unknown plan", async () => {
