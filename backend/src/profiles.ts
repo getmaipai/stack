@@ -63,10 +63,10 @@ export const PROFILE_TIERS: ProfileTier[] = [
   },
 ];
 
-/** Household role pins selected at p16 and above. With no qualifying
- * detected profile the existing 1.7B chat pin remains shared. */
+/** Household chat pin selected at p16 and above. The judge shares chat
+ * through p16; from p32 it has its own 4B pin and process. */
 export const PROFILE_MODEL_BINDINGS: Partial<Record<ProfileTier["id"], Partial<Record<RoleId, string>>>> = {
-  p16: { chat: "qwen3-8b-instruct-q4-k-m", judge: "qwen3-4b-q4-k-m" },
+  p16: { chat: "qwen3-8b-instruct-q4-k-m" },
   p32: { chat: "qwen3-8b-instruct-q4-k-m", judge: "qwen3-4b-q4-k-m" },
   p64: { chat: "qwen3-8b-instruct-q4-k-m", judge: "qwen3-4b-q4-k-m" },
   p128: { chat: "qwen3-8b-instruct-q4-k-m", judge: "qwen3-4b-q4-k-m" },

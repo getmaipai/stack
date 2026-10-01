@@ -35,8 +35,8 @@ test("one section per role in order, one row per profile, the largest fitting pi
 
 test("a shared role shows the role it shares; a role with candidates says so; a role with nothing says not yet", () => {
   const doc = renderComponentsDoc(scripted);
-  expect(doc.split("## judge ")[1]!).toContain("Shares `chat`'s model");
-  expect(doc.split("## judge ")[1]!.split("\n## ")[0]!).toContain("| mlx-serve | | | candidate (STACK-93) |");
+  expect(doc.split("## judge ")[1]!).toContain("Shares `chat`'s model and process unless bound elsewhere");
+  expect(doc.split("## judge ")[1]!.split("\n## ")[0]!).toContain("| `llama-server-b10797-macos-arm64` | b10797 | darwin arm64 | pinned, verified |");
   expect(doc.split("## image ")[1]!).toContain("| p16 | not available |  |  |  |  |  |  |  | not available |");
   expect(doc.split("## tts ")[1]!.split("\n## ")[0]!).toContain("| the chosen TTS runtime | | | candidate (STACK-94) |");
   expect(doc.split("## tts ")[1]!.split("\n## ")[0]!).toContain("| p16 | resident |  |  |  |  |  |  |  | not yet |");

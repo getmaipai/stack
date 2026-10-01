@@ -65,10 +65,10 @@ test("roles that share chat's model run on chat's process", async () => {
   expect(getRoleStatus("router").state).toBe("ready");
 });
 
-test("p16 starts separate chat and judge processes and routes each role request to its process", async () => {
+test("p32 starts separate chat and judge processes and routes each role request to its process", async () => {
   const dispatched: Array<{ role: RoleId; model: unknown }> = [];
   const processStarts: RoleId[] = [];
-  setMachineTier("p16");
+  setMachineTier("p32");
   setSupervisorFactoryForTests(async (role) => {
     processStarts.push(role);
     const processRecord = scriptedProcess(role, {
@@ -87,6 +87,30 @@ test("p16 starts separate chat and judge processes and routes each role request 
   await requestRole("judge", "/v1/chat/completions", { model: "judge", messages: [] });
   expect(processStarts).toEqual(["chat", "judge"]);
   expect(dispatched).toEqual([{ role: "chat", model: "chat" }, { role: "judge", model: "judge" }]);
+});
+
+test("p16 serves judge and chat requests from one chat process", async () => {
+  const dispatched: Array<{ role: RoleId; model: unknown }> = [];
+  const processStarts: RoleId[] = [];
+  setMachineTier("p16");
+  setSupervisorFactoryForTests(async (role) => {
+    processStarts.push(role);
+    const processRecord = scriptedProcess(role, {
+      kind: "spawned",
+      modelId: "qwen3-8b-instruct-q4-k-m",
+      identity: { host: "stub", build: "scripted", model: "qwen3-8b-instruct-q4-k-m", healthy: true },
+    });
+    const request = processRecord.client.request!;
+    processRecord.client.request = async (path, body, signal) => {
+      dispatched.push({ role, model: body.model });
+      return request(path, body, signal);
+    };
+    return processRecord;
+  });
+  await requestRole("chat", "/v1/chat/completions", { model: "chat", messages: [] });
+  await requestRole("judge", "/v1/chat/completions", { model: "judge", messages: [] });
+  expect(processStarts).toEqual(["chat"]);
+  expect(dispatched).toEqual([{ role: "chat", model: "chat" }, { role: "chat", model: "judge" }]);
 });
 
 test("a request carries the identity headers and the reply of the engine", async () => {

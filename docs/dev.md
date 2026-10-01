@@ -19,6 +19,12 @@ history in [plans/field-survey-2026-09-17.md](plans/field-survey-2026-09-17.md).
 Nothing in this file is household content: every person in an example
 is from the org's persona roster.
 
+The household chat pin is Qwen3 8B from p16 upward. On p16 the judge
+uses that same model and process because a separate 4B judge would need
+about 3.76 GiB after chat, leaving less than the 4 GiB working margin
+under the governor's free-memory check. From p32 the judge has its own
+Qwen3 4B pin and process; profiles below p16 keep the shared 1.7B chat.
+
 ## Why the Stack exists
 
 Local AI is a pile of parts. One program runs the chat model, a

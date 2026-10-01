@@ -68,6 +68,7 @@ export const ROLES = {
     residency: "resident",
     endpoints: ["/v1/chat/completions"],
     quality: [],
+    sharesModelWith: "chat",
   },
   router: {
     label: "Router",

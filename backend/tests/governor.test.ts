@@ -43,21 +43,42 @@ test("rule 1 grants an admission and reports an estimated peak", async () => {
   expect(getGovernorStatus().loaded[0]).toMatchObject({ id: "resident-chat", peakBytes: Math.ceil(GB * 1.3), measured: false });
 });
 
-test("the p16 household chat, judge, embed, speech and voice set fits a 24 GiB machine", async () => {
+test("p16 admits chat, voice, speech and embed with realistic 13 GiB starting free memory", async () => {
   const memory = 24 * GB;
-  __setGovernorTuningForTestsOnly({ totalMemoryBytes: memory, freeMemoryBytes: memory });
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: memory, freeMemoryBytes: 13 * GB, tier: "p16" });
   const requests = [
     { id: "chat", kind: "resident" as const, requestedBytes: 5_027_783_488, modelFileBytes: 5_027_783_488, engine: "llama-server" },
-    { id: "judge", kind: "resident" as const, requestedBytes: 2_497_280_256, modelFileBytes: 2_497_280_256, engine: "llama-server" },
-    { id: "embed", kind: "resident" as const, requestedBytes: 84_106_624, modelFileBytes: 84_106_624, engine: "llama-server" },
-    { id: "stt", kind: "resident" as const, requestedBytes: 239_387_872, measuredPeakBytes: 239_387_872 },
     { id: "tts", kind: "resident" as const, requestedBytes: 828_868_000, measuredPeakBytes: 828_868_000 },
+    { id: "stt", kind: "resident" as const, requestedBytes: 239_387_872, measuredPeakBytes: 239_387_872 },
+    { id: "embed", kind: "resident" as const, requestedBytes: 84_106_624, modelFileBytes: 84_106_624, engine: "llama-server" },
   ];
+  // 13 - 6.54 = 6.46; - 0.83 = 5.63; - 0.24 = 5.39; - 0.11 = 5.28 GiB, each above the 4 GiB p16 margin.
   for (const request of requests) expect("id" in await admit(request)).toBe(true);
   const status = getGovernorStatus();
   expect(status.capBytes).toBe(16 * GB);
-  expect(status.loaded.map(({ id }) => id)).toEqual(["chat", "judge", "embed", "stt", "tts"]);
+  expect(status.loaded.map(({ id }) => id)).toEqual(["chat", "tts", "stt", "embed"]);
   expect(status.loaded.reduce((sum, item) => sum + item.peakBytes, 0)).toBeLessThan(status.capBytes);
+});
+
+test("with 11 GiB free p16 admits chat and defers a separate judge at the 4 GiB margin", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 24 * GB, freeMemoryBytes: 11 * GB, tier: "p16" });
+  const chat = { id: "chat", kind: "resident" as const, requestedBytes: 5_027_783_488, modelFileBytes: 5_027_783_488, engine: "llama-server" };
+  const judge = { id: "judge", kind: "resident" as const, requestedBytes: 3_760_000_000, measuredPeakBytes: 3_760_000_000 };
+  expect("id" in await admit(chat)).toBe(true);
+  // Model the machine's free-memory report after chat's 6.54 GiB peak loaded: 11 - 6.54 = about 4.46 GiB remains.
+  __setGovernorTuningForTestsOnly({ freeMemoryBytes: 4.46 * GB });
+  expect(await admit(judge)).toMatchObject({ queued: true, position: 1 });
+  expect(getGovernorDecisions().find((decision) => decision.model === "judge")?.reason).toBe("The current memory budget cannot admit the request.");
+  expect(getGovernorStatus().loaded.map(({ id }) => id)).toEqual(["chat"]);
+});
+
+test("p32 realistic free memory admits chat and its separate judge", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 48 * GB, freeMemoryBytes: 32 * GB, tier: "p32" });
+  const chat = { id: "chat", kind: "resident" as const, requestedBytes: 5_027_783_488, modelFileBytes: 5_027_783_488, engine: "llama-server" };
+  const judge = { id: "judge", kind: "resident" as const, requestedBytes: 2_497_280_256, modelFileBytes: 2_497_280_256, engine: "llama-server" };
+  expect("id" in await admit(chat)).toBe(true);
+  expect("id" in await admit(judge)).toBe(true);
+  expect(getGovernorStatus().loaded.map(({ id }) => id)).toEqual(["chat", "judge"]);
 });
 
 test("peak headroom is added to every base while only the measured base stays measured", async () => {

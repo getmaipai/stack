@@ -116,6 +116,7 @@ export const SPEECH_PATH = "/tts";
  * and `vision` share chat's model and process unless bound elsewhere. */
 export function processRoleFor(role: RoleId): RoleId {
   const definition = ROLES[role] as { sharesModelWith?: RoleId };
+  if (role === "judge" && machineTier && PROFILE_MODEL_BINDINGS[machineTier]?.judge) return role;
   if (role === "judge" && !machineTier) return "chat";
   return definition.sharesModelWith ?? role;
 }
@@ -470,6 +471,7 @@ export function componentModel(role: RoleId, component: string): ModelRecord | n
 }
 
 export function selectedModel(role: RoleId): ModelRecord | null {
+  if (role === "judge" && (!machineTier || !PROFILE_MODEL_BINDINGS[machineTier]?.judge)) return selectedModel("chat");
   // A record names the engine it is for; the chat wire's chosen engine
   // decides which records can serve it (a GGUF for llama-server, an MLX
   // directory for mlx-serve), both installed side by side.

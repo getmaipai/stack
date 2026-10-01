@@ -367,7 +367,7 @@ are never copied. Nothing migrates Home until STACK-16.
   live on the dev machine (`scripts/prove-tts.sh`, the table in
   `dev.md` "tts proven live"). Landed on `main` with this line. Landed 2026-09-20 at 456f420.
 - [x] **STACK-EMBED-01: the embedding model is pinned** (S, Sonnet). Landed 2026-10-01. nomic-embed-text-v1.5 Q4_K_M (84 MB, the file the household already runs) is a pinned model for the embed role, so Home can move search onto the Stack (home STACK16 E3).
-- [x] **STACK-CHAT-01: the household's chat and background models are pinned, and the judge has its own** (M, Sonnet). Landed 2026-10-01. qwen3-8b-instruct-q4-k-m and qwen3-4b-q4-k-m (the files the household already runs) are pinned; on p16 chat binds the 8B and the judge binds the 4B as its own process; smaller profiles keep the shared 1.7B.
+- [x] **STACK-CHAT-01: the household's chat and background models are pinned, and the judge has its own** (M, Sonnet). Landed 2026-10-01. qwen3-8b-instruct-q4-k-m and qwen3-4b-q4-k-m (the files the household already runs) are pinned; on p16 chat binds the 8B and the judge binds the 4B as its own process; smaller profiles keep the shared 1.7B. Corrected by STACK-CHAT-02 (2026-10-01): found live, the free-memory margin refuses chat when a separate judge is resident on a 24 GB machine; p16 shares chat for the judge, a separate judge binds from p32.
 - [x] **STACK-94d (M): the voice engine online only when needed.**
   Pocket TTS runs with `HF_HUB_OFFLINE=1` always and no token in its
   environment; `backend/src/speech/voices.ts` fetches, through the

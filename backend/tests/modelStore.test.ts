@@ -52,7 +52,7 @@ test("the household chat and judge pins match Home's hashes and file sizes", () 
   });
 });
 
-test("p16 selects separate household chat and judge pins while an unprofiled judge shares the 1.7B chat", () => {
+test("p16 judge shares the household 8B chat while p32 selects its separate 4B judge", () => {
   const install = (pin: typeof STACK_CHAT_MODEL | typeof STACK_CHAT_8B_MODEL | typeof STACK_JUDGE_MODEL) => upsertModel({
     id: pin.id,
     roles: [pin.role],
@@ -70,6 +70,10 @@ test("p16 selects separate household chat and judge pins while an unprofiled jud
   const chat = install(STACK_CHAT_8B_MODEL);
   const judge = install(STACK_JUDGE_MODEL);
   setMachineTier("p16");
+  expect(selectedModel("chat")?.id).toBe(chat.id);
+  expect(selectedModel("judge")?.id).toBe(chat.id);
+  expect(processRoleFor("judge")).toBe("chat");
+  setMachineTier("p32");
   expect(selectedModel("chat")?.id).toBe(chat.id);
   expect(selectedModel("judge")?.id).toBe(judge.id);
   expect(processRoleFor("judge")).toBe("judge");

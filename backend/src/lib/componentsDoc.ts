@@ -101,7 +101,10 @@ export function renderComponentsDoc(catalog: ComponentsCatalog): string {
       // A tier where the role does not exist installs nothing for it,
       // whatever chat's pin says.
       if (roleStance === "not available") { lines.push(`| ${profile.id} | not available |  |  |  |  |  |  |  | not available |`); continue; }
-      const model = largest(pinned.filter((candidate) => fits(candidate, profile)));
+      const ownRolePins = catalog.models.filter((candidate) => candidate.role === role && candidate.download?.sha256 && !candidate.component);
+      const rowRole = role === "judge" && profile.id === "p16" ? "chat" : ownRolePins.length > 0 ? role : modelRole;
+      const rowPins = catalog.models.filter((candidate) => candidate.role === rowRole && candidate.download?.sha256 && !candidate.component);
+      const model = largest(rowPins.filter((candidate) => fits(candidate, profile)));
       const measured = model?.measured;
       const status = model ? "pinned" : modelCandidates.length > 0 ? `candidate (${modelCandidates.map((candidate) => candidate.name).join(", ")})` : "not yet";
       lines.push(`| ${profile.id} | ${roleStance} | ${model ? `\`${model.id}\`` : ""} | ${model ? quantization(model) : ""} | ${model ? gb(model.download?.approx_bytes) : ""} | ${measured ? `${gb(measured.footprintBytes)} (${measured.hardware})` : model ? "not measured" : ""} | ${measured ? (measured.contextLength > 0 ? String(measured.contextLength) : "n/a") : model ? "not measured" : ""} | ${model?.license ?? ""} | ${model ? `${model.repo ?? "catalog"} @ ${model.revision ?? "unknown"}` : ""} | ${status} |`);
