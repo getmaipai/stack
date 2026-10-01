@@ -293,6 +293,11 @@ arrive signed with all of this filled in. An existing file is
 hash-checked before it is trusted; a corrupt download is never marked
 verified and raises `stored-blob-checksum-mismatch`.
 
+The `embed` role uses Nomic's `nomic-embed-text-v1.5` Q4_K_M GGUF,
+pinned to the Hugging Face revision and checksum for the file Home
+already runs. Like speech, it is a regular catalog model: once installed
+and verified, the role selects its first compatible model automatically.
+
 **Qualification.** The Stack ships one chat pin and one engine pin,
 and `backend/tests/qualification.test.ts` holds both to their
 declarations offline. The chat pin is `Qwen/Qwen3-1.7B-GGUF`, Q8_0,

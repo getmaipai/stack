@@ -148,6 +148,23 @@ export const STACK_IMAGE_MODEL: CatalogModelLike = {
   },
 };
 
+// Nomic's official GGUF conversion, pinned to the Hub revision whose
+// Q4_K_M file matches the household's existing embedding model.
+export const STACK_EMBED_MODEL: CatalogModelLike = {
+  id: "nomic-embed-text-v1-5-q4-k-m",
+  role: "embed",
+  repo: "nomic-ai/nomic-embed-text-v1.5-GGUF",
+  license: "Apache-2.0",
+  revision: "0188c9bf409793f810680a5a431e7b899c46104c",
+  engine: "llama-server",
+  sizing: { profile: "p16", quantization: "q4_k_m" },
+  download: {
+    url: hfUrl("nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/0188c9bf409793f810680a5a431e7b899c46104c/nomic-embed-text-v1.5.Q4_K_M.gguf"),
+    sha256: "d4e388894e09cf3816e8b0896d81d265b55e7a9fff9ab03fe8bf4ef5e11295ac",
+    approx_bytes: 84_106_624,
+  },
+};
+
 // The MLX build of the same chat model, for mlx-serve (STACK-93): a
 // directory of nine files, each pinned by path, size and sha256 (the
 // small ones hashed from the download, the hub keeps no LFS digest for
@@ -184,7 +201,7 @@ export const STACK_MLX_CHAT_MODEL: CatalogModelLike = {
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_IMAGE_MODEL];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_IMAGE_MODEL, STACK_EMBED_MODEL];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

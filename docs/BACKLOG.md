@@ -366,6 +366,7 @@ are never copied. Nothing migrates Home until STACK-16.
   client abort; the readiness probe rendering one sentence; proven
   live on the dev machine (`scripts/prove-tts.sh`, the table in
   `dev.md` "tts proven live"). Landed on `main` with this line. Landed 2026-09-20 at 456f420.
+- [x] **STACK-EMBED-01: the embedding model is pinned** (S, Sonnet). Landed 2026-10-01. nomic-embed-text-v1.5 Q4_K_M (84 MB, the file the household already runs) is a pinned model for the embed role, so Home can move search onto the Stack (home STACK16 E3).
 - [x] **STACK-94d (M): the voice engine online only when needed.**
   Pocket TTS runs with `HF_HUB_OFFLINE=1` always and no token in its
   environment; `backend/src/speech/voices.ts` fetches, through the

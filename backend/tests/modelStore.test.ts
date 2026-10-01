@@ -13,10 +13,11 @@ import {
   upsertModel,
   ProvenanceIncompleteError,
 } from "@/lib/modelStore";
-import { STACK_CHAT_MODEL } from "@/lib/modelCatalog";
+import { STACK_CHAT_MODEL, STACK_EMBED_MODEL, STACK_MODELS } from "@/lib/modelCatalog";
 import { hfUrl } from "@/lib/hf";
 import { downloadUrl } from "@/lib/download";
 import { __resetSettingsForTests, updateSettings } from "@/settings";
+import { selectedModel } from "@/lib/supervisor";
 
 const fixtureDir = join(tmpdir(), `maipai-stack-models-${Date.now()}`);
 
@@ -46,6 +47,34 @@ test("model records round-trip provenance and preserve the first-boot clock", ()
   }, "2026-09-17T10:00:00.000Z");
   const updated = upsertModel({ ...first, revision: "rev-b" }, "2026-09-18T10:00:00.000Z");
   expect(getModel("chat-one")).toEqual({ ...updated, firstBootAt: "2026-09-17T10:00:00.000Z" });
+});
+
+test("the catalog includes the household embedding pin with its exact checksum and size", () => {
+  const embed = STACK_MODELS.find((model) => model.id === "nomic-embed-text-v1-5-q4-k-m");
+  expect(embed).toEqual(STACK_EMBED_MODEL);
+  expect(embed?.download).toMatchObject({
+    sha256: "d4e388894e09cf3816e8b0896d81d265b55e7a9fff9ab03fe8bf4ef5e11295ac",
+    approx_bytes: 84_106_624,
+  });
+});
+
+test("the embed role selects its installed p16 pin", () => {
+  registerCatalogModel(STACK_EMBED_MODEL);
+  const pin = STACK_EMBED_MODEL;
+  const installed = upsertModel({
+    id: pin.id,
+    roles: ["embed"],
+    source: "catalog",
+    provenance: { package: `model:${pin.id}`, catalogId: pin.id, repo: pin.repo },
+    revision: "0188c9bf409793f810680a5a431e7b899c46104c",
+    sha256: "d4e388894e09cf3816e8b0896d81d265b55e7a9fff9ab03fe8bf4ef5e11295ac",
+    sizeBytes: 84_106_624,
+    licence: "Apache-2.0",
+    engineRequirements: { engine: "llama-server", sizing: { profile: "p16", quantization: "q4_k_m" } },
+    verifiedAt: "2026-10-01T00:00:00.000Z",
+    modelPath: join(fixtureDir, "embed.gguf"),
+  });
+  expect(selectedModel("embed")?.id).toBe(installed.id);
 });
 
 test("Catalog ingestion retains its package provenance and verifies an install", async () => {

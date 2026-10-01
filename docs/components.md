@@ -113,10 +113,10 @@ Engines per platform:
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| p16 | on demand |  |  |  |  |  |  |  | not yet |
-| p32 | resident |  |  |  |  |  |  |  | not yet |
-| p64 | resident |  |  |  |  |  |  |  | not yet |
-| p128 | resident |  |  |  |  |  |  |  | not yet |
+| p16 | on demand | `nomic-embed-text-v1-5-q4-k-m` | q4_k_m | 80.2 MB | not measured | not measured | Apache-2.0 | nomic-ai/nomic-embed-text-v1.5-GGUF @ 0188c9bf409793f810680a5a431e7b899c46104c | pinned |
+| p32 | resident | `nomic-embed-text-v1-5-q4-k-m` | q4_k_m | 80.2 MB | not measured | not measured | Apache-2.0 | nomic-ai/nomic-embed-text-v1.5-GGUF @ 0188c9bf409793f810680a5a431e7b899c46104c | pinned |
+| p64 | resident | `nomic-embed-text-v1-5-q4-k-m` | q4_k_m | 80.2 MB | not measured | not measured | Apache-2.0 | nomic-ai/nomic-embed-text-v1.5-GGUF @ 0188c9bf409793f810680a5a431e7b899c46104c | pinned |
+| p128 | resident | `nomic-embed-text-v1-5-q4-k-m` | q4_k_m | 80.2 MB | not measured | not measured | Apache-2.0 | nomic-ai/nomic-embed-text-v1.5-GGUF @ 0188c9bf409793f810680a5a431e7b899c46104c | pinned |
 
 ## rerank (Re-rank)
 
