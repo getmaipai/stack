@@ -645,10 +645,14 @@ privacy row names the content host Hugging Face redirects to,
 `us.aws.cdn.hf.co`.
 
 When a Hugging Face repository has no safetensors but has GGUF files,
-the plan uses one preferred quant file: Q4_K_M, Q4_K_S, Q4_0, Q5_K_M,
-Q5_K_S, then Q8_0, or the smallest file if none match. It skips vision
-projectors and later shards of split models, and checks the selected file
-the same way as a direct GGUF link.
+the plan skips names containing mmproj or imatrix, later shards of split
+models, and draft-head files ending in -mtp.gguf when another candidate
+exists. A draft-head file is allowed when it is the only candidate. Files
+under 100 MB are never candidates. It prefers the first whole-segment
+match in this order: Q4_K_M, Q4_K_S, IQ4_XS, Q4_0, Q5_K_M, Q5_K_S,
+Q3_K_M, IQ3_S, Q8_0, IQ3_XXS, IQ2_S. If none match, it uses the smallest
+remaining file, and if no candidate remains it returns unknown. The
+selected file is checked the same way as a direct GGUF link.
 
 The first GGUF plan on a fresh Stack installs `gguf-parser` itself. If it
 cannot, the plan is all unknown and its `tool` says `not-installed`. An

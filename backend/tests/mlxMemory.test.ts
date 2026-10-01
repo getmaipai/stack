@@ -79,12 +79,39 @@ test("rejects invalid repositories and revisions without calling fetch", async (
 });
 
 test("prefers GGUF files in the requested quant order", () => {
-  const files = ["model-Q8_0.gguf", "model-Q5_K_S.gguf", "model-Q4_0.gguf", "model-Q4_K_S.gguf", "model-Q4_K_M.gguf"].map((path) => ({ path, size: 1 }));
+  const files = ["model-Q8_0.gguf", "model-Q5_K_S.gguf", "model-Q4_0.gguf", "model-Q4_K_S.gguf", "model-Q4_K_M.gguf"].map((path) => ({ path, size: 200_000_000 }));
   expect(pickGgufFile(files)?.path).toBe("model-Q4_K_M.gguf");
   expect(pickGgufFile(files.slice(0, 4))?.path).toBe("model-Q4_K_S.gguf");
   expect(pickGgufFile(files.slice(0, 3))?.path).toBe("model-Q4_0.gguf");
   expect(pickGgufFile(files.slice(0, 2))?.path).toBe("model-Q5_K_S.gguf");
   expect(pickGgufFile(files.slice(0, 1))?.path).toBe("model-Q8_0.gguf");
+});
+
+test("prefers IQ3_S in the Qwen3.8 repository tree and skips drafts and auxiliary GGUF files", () => {
+  const files = [
+    { path: "Qwen3.8-27B-GSQ-RCO-IQ2_S-mtp.gguf", size: 9_600_000_000 },
+    { path: "Qwen3.8-27B-GSQ-RCO-IQ2_S.gguf", size: 9_300_000_000 },
+    { path: "Qwen3.8-27B-GSQ-RCO-IQ2_XS-mtp.gguf", size: 8_800_000_000 },
+    { path: "Qwen3.8-27B-GSQ-RCO-IQ2_XS.gguf", size: 8_400_000_000 },
+    { path: "Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp.gguf", size: 12_100_000_000 },
+    { path: "Qwen3.8-27B-GSQ-RCO-IQ3_S.gguf", size: 11_800_000_000 },
+    { path: "Qwen3.8-27B-GSQ-RCO-IQ3_XXS-mtp.gguf", size: 10_400_000_000 },
+    { path: "Qwen3.8-27B-GSQ-RCO-IQ3_XXS.gguf", size: 10_100_000_000 },
+    { path: "imatrix-qwen3.8-27b.gguf", size: 13_600_000 },
+    { path: "mmproj-Qwen3.8-27B-BF16.gguf", size: 900_000_000 },
+  ];
+  expect(pickGgufFile(files)?.path).toBe("Qwen3.8-27B-GSQ-RCO-IQ3_S.gguf");
+});
+
+test("allows the preferred draft GGUF when every usable candidate is a draft", () => {
+  expect(pickGgufFile([
+    { path: "model-IQ2_S-mtp.gguf", size: 200_000_000 },
+    { path: "model-IQ3_S-mtp.gguf", size: 300_000_000 },
+  ])?.path).toBe("model-IQ3_S-mtp.gguf");
+});
+
+test("ignores importance-matrix GGUF files", () => {
+  expect(pickGgufFile([{ path: "imatrix-Q4_K_M.gguf", size: 500_000_000 }])).toBeNull();
 });
 
 test("ignores GGUF vision projectors", () => {
@@ -93,13 +120,28 @@ test("ignores GGUF vision projectors", () => {
 
 test("keeps the first shard of a split GGUF model", () => {
   expect(pickGgufFile([
-    { path: "model-Q4_K_M-00002-of-00003.gguf", size: 1 },
-    { path: "model-Q4_K_M-00001-of-00003.gguf", size: 3 },
+    { path: "model-Q4_K_M-00002-of-00003.gguf", size: 200_000_000 },
+    { path: "model-Q4_K_M-00001-of-00003.gguf", size: 300_000_000 },
   ])?.path).toBe("model-Q4_K_M-00001-of-00003.gguf");
 });
 
 test("chooses the smallest unmatched GGUF name", () => {
-  expect(pickGgufFile([{ path: "z.gguf", size: 20 }, { path: "a.gguf", size: 10 }])?.path).toBe("a.gguf");
+  expect(pickGgufFile([{ path: "z.gguf", size: 220_000_000 }, { path: "a.gguf", size: 110_000_000 }])?.path).toBe("a.gguf");
+});
+
+test("never picks an undersized GGUF file as a fallback", () => {
+  expect(pickGgufFile([{ path: "tiny.gguf", size: 100 * 1024 ** 2 }])).toBeNull();
+});
+
+test("matches GGUF quant names by whole segment", () => {
+  expect(pickGgufFile([
+    { path: "x-IQ3_XS.gguf", size: 300_000_000 },
+    { path: "x-IQ3_XXS.gguf", size: 400_000_000 },
+  ])?.path).toBe("x-IQ3_XXS.gguf");
+  expect(pickGgufFile([
+    { path: "x-Q4_K_M.gguf", size: 300_000_000 },
+    { path: "x-Q4_0.gguf", size: 400_000_000 },
+  ])?.path).toBe("x-Q4_K_M.gguf");
 });
 
 test("returns null for an empty GGUF file list", () => {

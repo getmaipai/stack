@@ -49,18 +49,24 @@ export interface MlxRepoFacts { weightsBytes: number; config: unknown }
 export interface MlxRepoLookup { facts: MlxRepoFacts | null; exists: "yes" | "no" | "unknown"; ggufFiles: Array<{ path: string; size: number }> }
 
 export function pickGgufFile(files: Array<{ path: string; size: number }>): { path: string; size: number } | null {
-  const usable = files.filter(({ path }) => {
+  const usable = files.filter(({ path, size }) => {
     const name = path.split("/").at(-1)!.toLowerCase();
-    if (name.includes("mmproj")) return false;
+    if (name.includes("mmproj") || name.includes("imatrix")) return false;
     const shard = /-([0-9]{5})-of-[0-9]{5}\.gguf$/i.exec(name);
-    return !shard || shard[1] === "00001";
+    return (!shard || shard[1] === "00001") && size > 100 * 1024 ** 2;
   });
-  const preferred = ["Q4_K_M", "Q4_K_S", "Q4_0", "Q5_K_M", "Q5_K_S", "Q8_0"];
+  const nonDraft = usable.filter(({ path }) => !path.split("/").at(-1)!.toLowerCase().endsWith("-mtp.gguf"));
+  const candidates = nonDraft.length ? nonDraft : usable;
+  const preferred = ["Q4_K_M", "Q4_K_S", "IQ4_XS", "Q4_0", "Q5_K_M", "Q5_K_S", "Q3_K_M", "IQ3_S", "Q8_0", "IQ3_XXS", "IQ2_S"];
+  const hasToken = (path: string, token: string) => {
+    const segments = path.split("/").at(-1)!.replace(/\.gguf$/i, "").split(/[-.]/);
+    return segments.includes(token);
+  };
   for (const token of preferred) {
-    const found = usable.find(({ path }) => path.split("/").at(-1)!.toUpperCase().includes(token));
+    const found = candidates.find(({ path }) => hasToken(path.toUpperCase(), token));
     if (found) return found;
   }
-  return usable.reduce<typeof usable[number] | null>((smallest, file) => !smallest || file.size < smallest.size ? file : smallest, null);
+  return candidates.reduce<typeof candidates[number] | null>((smallest, file) => !smallest || file.size < smallest.size ? file : smallest, null);
 }
 
 export function isValidMlxRepo(repo: string): boolean {

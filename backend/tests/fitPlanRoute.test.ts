@@ -58,8 +58,8 @@ function stubMlxFetch(fail: "throw" | "404" | null = null, tree?: unknown): void
 test("sizes a GGUF-only repository from its preferred quant file URL", async () => {
   fakeParser();
   const files = [
-    { type: "file", path: "model-Q8_0.gguf", size: 100 },
-    { type: "file", path: "model-Q4_K_M.gguf", size: 90 },
+    { type: "file", path: "model-Q8_0.gguf", size: 200_000_000 },
+    { type: "file", path: "model-Q4_K_M.gguf", size: 180_000_000 },
   ];
   stubMlxFetch(null, files);
   const parserStub = join(tempRoot, "record-parser");
