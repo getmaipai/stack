@@ -24,6 +24,39 @@ export const STACK_CHAT_MODEL: CatalogModelLike = {
   measured: { footprintBytes: 414_550_392, contextLength: 4096, hardware: "Apple M4 Pro, 24 GB unified memory" },
 };
 
+// The household's p16 chat choice, copied from Home's verified pin.
+export const STACK_CHAT_8B_MODEL: CatalogModelLike = {
+  id: "qwen3-8b-instruct-q4-k-m",
+  role: "chat",
+  repo: "Qwen/Qwen3-8B-GGUF",
+  license: "Apache-2.0",
+  revision: "7c41481f57cb95916b40956ab2f0b139b296d974",
+  engine: "llama-server",
+  sizing: { profile: "p16", quantization: "Q4_K_M" },
+  download: {
+    url: hfUrl("Qwen/Qwen3-8B-GGUF/resolve/7c41481f57cb95916b40956ab2f0b139b296d974/Qwen3-8B-Q4_K_M.gguf"),
+    sha256: "d98cdcbd03e17ce47681435b5150e34c1417f50b5c0019dd560e4882c5745785",
+    approx_bytes: 5_027_783_488,
+  },
+};
+
+// The household's background worker pin, exposed as Stack's distinct
+// judge role on machines with a known p16-or-larger profile.
+export const STACK_JUDGE_MODEL: CatalogModelLike = {
+  id: "qwen3-4b-q4-k-m",
+  role: "judge",
+  repo: "Qwen/Qwen3-4B-GGUF",
+  license: "Apache-2.0",
+  revision: "bc640142c66e1fdd12af0bd68f40445458f3869b",
+  engine: "llama-server",
+  sizing: { profile: "p16", quantization: "Q4_K_M" },
+  download: {
+    url: hfUrl("Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/Qwen3-4B-Q4_K_M.gguf"),
+    sha256: "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
+    approx_bytes: 2_497_280_256,
+  },
+};
+
 // The `stt` pins (STACK-94b): sherpa-onnx's Moonshine tiny English
 // package and the Silero voice activity detector, from k2-fsa's rolling
 // `asr-models` release. A rolling tag can replace an asset under the
@@ -201,7 +234,7 @@ export const STACK_MLX_CHAT_MODEL: CatalogModelLike = {
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_IMAGE_MODEL, STACK_EMBED_MODEL];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_IMAGE_MODEL, STACK_EMBED_MODEL];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

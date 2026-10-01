@@ -63,6 +63,15 @@ export const PROFILE_TIERS: ProfileTier[] = [
   },
 ];
 
+/** Household role pins selected at p16 and above. With no qualifying
+ * detected profile the existing 1.7B chat pin remains shared. */
+export const PROFILE_MODEL_BINDINGS: Partial<Record<ProfileTier["id"], Partial<Record<RoleId, string>>>> = {
+  p16: { chat: "qwen3-8b-instruct-q4-k-m", judge: "qwen3-4b-q4-k-m" },
+  p32: { chat: "qwen3-8b-instruct-q4-k-m", judge: "qwen3-4b-q4-k-m" },
+  p64: { chat: "qwen3-8b-instruct-q4-k-m", judge: "qwen3-4b-q4-k-m" },
+  p128: { chat: "qwen3-8b-instruct-q4-k-m", judge: "qwen3-4b-q4-k-m" },
+};
+
 export function proposeProfile(hw: HardwareInfo): ProfileTier | null {
   const availableGb = primaryBudgetBytes(hw) / 1_073_741_824;
   if (availableGb <= 0) return null;

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { app } from "@/app";
 import { __resetEventsForTests, eventsAfter } from "@/lib/events";
 import { __resetHealthForTests } from "@/lib/health";
-import { dryRunFootprint, fitTotalBytes, getProcess, getRoleStatus, lastRealRequestAt, loadTimeoutForModel, parseFitRows, preferModel, probeReplyOk, probeRequest, processRoleFor, requestRole, restartRole, resetSupervisorForTests, scriptedProcess, selectedModel, setSupervisorFactoryForTests, setSupervisorTimeoutsForTests, stopRole, streamRole, unloadIdleRole, unloadRole, waitHealthy, EngineUnavailableError, type RoleProcess } from "@/lib/supervisor";
+import { dryRunFootprint, fitTotalBytes, getProcess, getRoleStatus, lastRealRequestAt, loadTimeoutForModel, parseFitRows, preferModel, probeReplyOk, probeRequest, processRoleFor, requestRole, restartRole, resetSupervisorForTests, scriptedProcess, selectedModel, setMachineTier, setSupervisorFactoryForTests, setSupervisorTimeoutsForTests, stopRole, streamRole, unloadIdleRole, unloadRole, waitHealthy, EngineUnavailableError, type RoleProcess } from "@/lib/supervisor";
 import { clearModelsForTests, upsertModel } from "@/lib/modelStore";
 import type { RoleId } from "@/roles";
 
@@ -15,7 +15,7 @@ beforeEach(() => {
   __resetEventsForTests(); __resetHealthForTests();
   setSupervisorFactoryForTests(async (role) => { started.push(role); return scriptedProcess(role); });
 });
-afterEach(() => { setSupervisorFactoryForTests(null); setSupervisorTimeoutsForTests(null); resetSupervisorForTests(); });
+afterEach(() => { setMachineTier(null); setSupervisorFactoryForTests(null); setSupervisorTimeoutsForTests(null); resetSupervisorForTests(); });
 
 test("the first request starts the role's process once, and ready is stamped from that real request", async () => {
   const [first, second] = await Promise.all([getProcess("chat"), getProcess("chat")]);
@@ -63,6 +63,30 @@ test("roles that share chat's model run on chat's process", async () => {
   await getProcess("judge");
   expect(started).toEqual(["chat"]);
   expect(getRoleStatus("router").state).toBe("ready");
+});
+
+test("p16 starts separate chat and judge processes and routes each role request to its process", async () => {
+  const dispatched: Array<{ role: RoleId; model: unknown }> = [];
+  const processStarts: RoleId[] = [];
+  setMachineTier("p16");
+  setSupervisorFactoryForTests(async (role) => {
+    processStarts.push(role);
+    const processRecord = scriptedProcess(role, {
+      kind: "spawned",
+      modelId: role === "judge" ? "qwen3-4b-q4-k-m" : "qwen3-8b-instruct-q4-k-m",
+      identity: { host: "stub", build: "scripted", model: role, healthy: true },
+    });
+    const request = processRecord.client.request!;
+    processRecord.client.request = async (path, body, signal) => {
+      dispatched.push({ role, model: body.model });
+      return request(path, body, signal);
+    };
+    return processRecord;
+  });
+  await requestRole("chat", "/v1/chat/completions", { model: "chat", messages: [] });
+  await requestRole("judge", "/v1/chat/completions", { model: "judge", messages: [] });
+  expect(processStarts).toEqual(["chat", "judge"]);
+  expect(dispatched).toEqual([{ role: "chat", model: "chat" }, { role: "judge", model: "judge" }]);
 });
 
 test("a request carries the identity headers and the reply of the engine", async () => {

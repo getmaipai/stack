@@ -13,11 +13,11 @@ import {
   upsertModel,
   ProvenanceIncompleteError,
 } from "@/lib/modelStore";
-import { STACK_CHAT_MODEL, STACK_EMBED_MODEL, STACK_MODELS } from "@/lib/modelCatalog";
+import { STACK_CHAT_8B_MODEL, STACK_CHAT_MODEL, STACK_EMBED_MODEL, STACK_JUDGE_MODEL, STACK_MODELS } from "@/lib/modelCatalog";
 import { hfUrl } from "@/lib/hf";
 import { downloadUrl } from "@/lib/download";
 import { __resetSettingsForTests, updateSettings } from "@/settings";
-import { selectedModel } from "@/lib/supervisor";
+import { processRoleFor, selectedModel, setMachineTier } from "@/lib/supervisor";
 
 const fixtureDir = join(tmpdir(), `maipai-stack-models-${Date.now()}`);
 
@@ -28,9 +28,54 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  setMachineTier(null);
   clearModelsForTests();
   __resetSettingsForTests();
   rmSync(fixtureDir, { recursive: true, force: true });
+});
+
+test("every shipped model pin registers through the catalog model boundary", () => {
+  for (const pin of STACK_MODELS) {
+    expect(registerCatalogModel(pin).id).toBe(pin.id);
+  }
+});
+
+test("the household chat and judge pins match Home's hashes and file sizes", () => {
+  expect(STACK_MODELS).toEqual(expect.arrayContaining([STACK_CHAT_8B_MODEL, STACK_JUDGE_MODEL]));
+  expect(STACK_CHAT_8B_MODEL.download).toMatchObject({
+    sha256: "d98cdcbd03e17ce47681435b5150e34c1417f50b5c0019dd560e4882c5745785",
+    approx_bytes: 5_027_783_488,
+  });
+  expect(STACK_JUDGE_MODEL.download).toMatchObject({
+    sha256: "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
+    approx_bytes: 2_497_280_256,
+  });
+});
+
+test("p16 selects separate household chat and judge pins while an unprofiled judge shares the 1.7B chat", () => {
+  const install = (pin: typeof STACK_CHAT_MODEL | typeof STACK_CHAT_8B_MODEL | typeof STACK_JUDGE_MODEL) => upsertModel({
+    id: pin.id,
+    roles: [pin.role],
+    source: "catalog",
+    provenance: { package: `model:${pin.id}`, catalogId: pin.id },
+    revision: pin.revision!,
+    sha256: pin.download!.sha256,
+    sizeBytes: pin.download!.approx_bytes,
+    licence: pin.license!,
+    engineRequirements: { engine: pin.engine, sizing: pin.sizing },
+    verifiedAt: "2026-10-01T00:00:00.000Z",
+    modelPath: join(fixtureDir, `${pin.id}.gguf`),
+  });
+  const small = install(STACK_CHAT_MODEL);
+  const chat = install(STACK_CHAT_8B_MODEL);
+  const judge = install(STACK_JUDGE_MODEL);
+  setMachineTier("p16");
+  expect(selectedModel("chat")?.id).toBe(chat.id);
+  expect(selectedModel("judge")?.id).toBe(judge.id);
+  expect(processRoleFor("judge")).toBe("judge");
+  setMachineTier(null);
+  expect(selectedModel("chat")?.id).toBe(small.id);
+  expect(processRoleFor("judge")).toBe("chat");
 });
 
 test("model records round-trip provenance and preserve the first-boot clock", () => {

@@ -26,7 +26,7 @@ import { ensureCloningWeights, POCKET_TTS_PRESET_VOICES, voiceCloningOn } from "
 import { comfyuiCommand, comfyuiEnv, comfyuiInstalled, COMFYUI_VERSION, linkCheckpoint, probeGenerator } from "@/generators/comfyui";
 import { basename } from "node:path";
 import { getRunState, release, setGovernorPid, startGovernor, type GovernorHandle, type GovernorTier } from "@/lib/governor";
-import { proposeProfile } from "@/profiles";
+import { PROFILE_MODEL_BINDINGS, proposeProfile } from "@/profiles";
 import { AdmissionRefusedError, waitForAdmission, waitingReason } from "@/lib/admission";
 import { emit } from "@/lib/events";
 import { MLX_PREFIX_CACHE_FLAG, mlxHeadroomBytes } from "@/lib/mlxMemory";
@@ -100,7 +100,7 @@ export class EngineUnavailableError extends Error {
 // post-load check sends. Roles that share chat's model run on chat's
 // process; embed has its own model and its own launch flag.
 const CHAT_WIRE_ROLES: RoleId[] = ROLE_IDS.filter((role) => ROLES[role].wire === "chat");
-const SPAWNABLE_ROLES: RoleId[] = ["chat", "embed", "stt", "tts", "image"];
+const SPAWNABLE_ROLES: RoleId[] = ["chat", "judge", "embed", "stt", "tts", "image"];
 /** The roles the speech worker serves: their runtime ships with the
  * Stack (sherpa-onnx-node in package.json), never as an engine build. */
 const SPEECH_ROLES: RoleId[] = ["stt"];
@@ -116,6 +116,7 @@ export const SPEECH_PATH = "/tts";
  * and `vision` share chat's model and process unless bound elsewhere. */
 export function processRoleFor(role: RoleId): RoleId {
   const definition = ROLES[role] as { sharesModelWith?: RoleId };
+  if (role === "judge" && !machineTier) return "chat";
   return definition.sharesModelWith ?? role;
 }
 
@@ -475,7 +476,8 @@ export function selectedModel(role: RoleId): ModelRecord | null {
   const engine = engineForRole(role);
   const selectable = listModels().filter((model) => model.roles.includes(role) && !isComponent(model) && isModelSelectable(model) && model.modelPath && (!engine || !model.engineRequirements.engine || model.engineRequirements.engine === engine));
   const preferred = preferredModels.get(role);
-  return selectable.find((model) => model.id === preferred) ?? selectable[0] ?? null;
+  const profileModel = machineTier ? PROFILE_MODEL_BINDINGS[machineTier]?.[role] : undefined;
+  return selectable.find((model) => model.id === preferred) ?? selectable.find((model) => model.id === profileModel) ?? selectable[0] ?? null;
 }
 
 /** Models an installed chat process can actually start for a request.
@@ -1030,8 +1032,8 @@ export async function speakRole(requested: RoleId, form: FormData, signal?: Abor
 
 export async function requestRole(requested: RoleId, path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<RoleReply> {
   const role = processRoleFor(requested);
-  const requestedModel = typeof body.model === "string" && body.model !== role ? body.model : undefined;
-  const processRecord = await acquireRequestProcess(role, requestedModel);
+  const requestedModel = typeof body.model === "string" && body.model !== requested ? body.model : undefined;
+  const processRecord = await acquireRequestProcess(requested, requestedModel);
   const current = runtime(role);
   try {
     const completionMs = typeof body.timeout_ms === "number" && body.timeout_ms > 0 ? body.timeout_ms : (timeoutOverrides.completionMs ?? DEFAULT_COMPLETION_TIMEOUT_MS);
@@ -1094,8 +1096,8 @@ function trackedStream(role: RoleId, processRecord: RoleProcess, upstream: Reada
 
 export async function streamRole(requested: RoleId, path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<RoleStreamReply> {
   const role = processRoleFor(requested);
-  const requestedModel = typeof body.model === "string" && body.model !== role ? body.model : undefined;
-  const processRecord = await acquireRequestProcess(role, requestedModel);
+  const requestedModel = typeof body.model === "string" && body.model !== requested ? body.model : undefined;
+  const processRecord = await acquireRequestProcess(requested, requestedModel);
   const current = runtime(role);
   try {
     if (!processRecord.client.stream) throw new EngineUnavailableError("The engine does not support streaming.");

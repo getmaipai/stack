@@ -43,9 +43,10 @@ test("a shared role shows the role it shares; a role with candidates says so; a 
   expect(doc.split("## image ")[1]!).toContain("| p128 | on demand |  |  |  |  |  |  |  | not yet |");
 });
 
-test("the real catalog renders every declared role with the shipped chat pin", () => {
+test("the real catalog renders the household chat and judge pins", () => {
   const doc = renderComponentsDoc(collectComponentsCatalog());
   expect([...doc.matchAll(/^## (\S+)/gm)]).toHaveLength(13);
-  expect(doc).toContain("`qwen3-1.7b-q8-0`");
+  expect(doc).toContain("`qwen3-8b-instruct-q4-k-m`");
+  expect(doc).toContain("`qwen3-4b-q4-k-m`");
   expect(doc.startsWith("<!-- GENERATED")).toBe(true);
 });

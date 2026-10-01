@@ -43,6 +43,23 @@ test("rule 1 grants an admission and reports an estimated peak", async () => {
   expect(getGovernorStatus().loaded[0]).toMatchObject({ id: "resident-chat", peakBytes: Math.ceil(GB * 1.3), measured: false });
 });
 
+test("the p16 household chat, judge, embed, speech and voice set fits a 24 GiB machine", async () => {
+  const memory = 24 * GB;
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: memory, freeMemoryBytes: memory });
+  const requests = [
+    { id: "chat", kind: "resident" as const, requestedBytes: 5_027_783_488, modelFileBytes: 5_027_783_488, engine: "llama-server" },
+    { id: "judge", kind: "resident" as const, requestedBytes: 2_497_280_256, modelFileBytes: 2_497_280_256, engine: "llama-server" },
+    { id: "embed", kind: "resident" as const, requestedBytes: 84_106_624, modelFileBytes: 84_106_624, engine: "llama-server" },
+    { id: "stt", kind: "resident" as const, requestedBytes: 239_387_872, measuredPeakBytes: 239_387_872 },
+    { id: "tts", kind: "resident" as const, requestedBytes: 828_868_000, measuredPeakBytes: 828_868_000 },
+  ];
+  for (const request of requests) expect("id" in await admit(request)).toBe(true);
+  const status = getGovernorStatus();
+  expect(status.capBytes).toBe(16 * GB);
+  expect(status.loaded.map(({ id }) => id)).toEqual(["chat", "judge", "embed", "stt", "tts"]);
+  expect(status.loaded.reduce((sum, item) => sum + item.peakBytes, 0)).toBeLessThan(status.capBytes);
+});
+
 test("peak headroom is added to every base while only the measured base stays measured", async () => {
   const { peakFor } = await import("@/lib/governor");
   const headroom = GB;

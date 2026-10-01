@@ -204,6 +204,12 @@ because OpenAI client libraries already send `model` and need no header
 or per-role path. Generator roles accept `quality: fast | everyday |
 best`, mapped to the tiered models the sizing profile installed.
 
+On p16 and larger profiles, chat uses the household's pinned Qwen3 8B
+and judge runs the pinned Qwen3 4B in its own llama-server process.
+Without a detected p16 profile, judge shares chat's Qwen3 1.7B process.
+The profile bindings live in `backend/src/profiles.ts`; Studio bench
+results can later select different models for other machines.
+
 Every reply carries identity headers: `x-maipai-engine` (which engine
 build answered), `x-maipai-model` and `x-maipai-revision`. If no engine
 answered, all three are `none`, including on a 503. An unbound role is
