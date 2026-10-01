@@ -559,6 +559,9 @@ are never copied. Nothing migrates Home until STACK-16.
   RF-06 writes the hand-off. Out of scope: removing Home's supervisors
   before the Studio proof. Exit: Home's gate and the dual-run check.
 
+- [ ] **DATA-LOCATION-STACK: the Stack's class list, record, never-create and moves on Home's request** (M, lands in `getmaipai/stack`; the coordinator files it in the Stack's own backlog; revised 2026-09-30). Objective: the Stack declares `stack-state`, `stack-models` (models and store together), `stack-engines` and `stack-logs`, keeps its own record beside its lock, adopts core's never-create, marker and verified-copy helpers, and serves its classes and moves to Home, per the design record's "The Stack". Pointers: `stack/backend/src/lib/paths.ts` (`ensureDataDir`), `stack/backend/src/lib/store/layout.ts` (`currentEngineRoot`), `stack/backend/src/lib/uvEnvironment.ts` (its `home/` folder assigned to a class), new `GET /stack/v1/storage/classes`, `GET /stack/v1/storage/locations`, `POST /stack/v1/storage/move`, `maipai-stack install-service --location`, `PreciousState` derived from the class list. Mirror: the Stack's own health list and event feed. Acceptance: with its models drive unplugged the Stack raises a health item and creates nothing; a missing `stack-state` refuses to start; a `stack-models` move keeps every hard link and symlink and engines start from the new folder; every folder under `STACK_DATA_DIR` belongs to a class. Out of scope: Home's Storage page (02a). Exit: the Stack's `scripts/check.sh`.
+  Filed here 2026-10-01 from home's DATA-LOCATION design record (`getmaipai/home` `docs/dev.md`, "DATA-LOCATION"); depends on commons spec-v0.1.58 and core-v0.1.1 (landed) and home's items 00c and 01a.
+
 ## Docs
 
 - [x] **STACK-98 (S): the generated components inventory.**
