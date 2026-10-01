@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fetchMlxRepoFacts, MLX_IDLE_FACTOR, MLX_KV_PEAK_FACTOR, MLX_KV_PEAK_FACTOR_LOW, MLX_PREFIX_CACHE_BYTES, MLX_UNKNOWN_HEADROOM_BYTES, mlxHeadroomBytes, parseMlxKvBytesPerToken, readMlxKvBytesPerToken } from "@/lib/mlxMemory";
+import { fetchMlxRepoFacts, MLX_IDLE_FACTOR, MLX_KV_PEAK_FACTOR, MLX_KV_PEAK_FACTOR_LOW, MLX_PREFIX_CACHE_BYTES, MLX_UNKNOWN_HEADROOM_BYTES, mlxHeadroomBytes, parseMlxKvBytesPerToken, pickGgufFile, readMlxKvBytesPerToken } from "@/lib/mlxMemory";
 
 const directories: string[] = [];
 function modelDir(config?: unknown): string {
@@ -76,4 +76,32 @@ test("rejects invalid repositories and revisions without calling fetch", async (
   for (const repo of ["../x", "a/b/c", ""]) expect(await fetchMlxRepoFacts({ repo, revision: "main", fetchImpl })).toBeNull();
   expect(await fetchMlxRepoFacts({ repo: "org/model", revision: "a b", fetchImpl })).toBeNull();
   expect(calls).toBe(0);
+});
+
+test("prefers GGUF files in the requested quant order", () => {
+  const files = ["model-Q8_0.gguf", "model-Q5_K_S.gguf", "model-Q4_0.gguf", "model-Q4_K_S.gguf", "model-Q4_K_M.gguf"].map((path) => ({ path, size: 1 }));
+  expect(pickGgufFile(files)?.path).toBe("model-Q4_K_M.gguf");
+  expect(pickGgufFile(files.slice(0, 4))?.path).toBe("model-Q4_K_S.gguf");
+  expect(pickGgufFile(files.slice(0, 3))?.path).toBe("model-Q4_0.gguf");
+  expect(pickGgufFile(files.slice(0, 2))?.path).toBe("model-Q5_K_S.gguf");
+  expect(pickGgufFile(files.slice(0, 1))?.path).toBe("model-Q8_0.gguf");
+});
+
+test("ignores GGUF vision projectors", () => {
+  expect(pickGgufFile([{ path: "mmproj-Q4_K_M.gguf", size: 1 }])).toBeNull();
+});
+
+test("keeps the first shard of a split GGUF model", () => {
+  expect(pickGgufFile([
+    { path: "model-Q4_K_M-00002-of-00003.gguf", size: 1 },
+    { path: "model-Q4_K_M-00001-of-00003.gguf", size: 3 },
+  ])?.path).toBe("model-Q4_K_M-00001-of-00003.gguf");
+});
+
+test("chooses the smallest unmatched GGUF name", () => {
+  expect(pickGgufFile([{ path: "z.gguf", size: 20 }, { path: "a.gguf", size: 10 }])?.path).toBe("a.gguf");
+});
+
+test("returns null for an empty GGUF file list", () => {
+  expect(pickGgufFile([])).toBeNull();
 });

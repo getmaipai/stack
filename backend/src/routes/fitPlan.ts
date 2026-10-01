@@ -2,7 +2,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { realpathSync } from "node:fs";
 import { basename, isAbsolute, relative, resolve } from "node:path";
 import { apiRouter, ErrorSchema } from "@maipai/core/src/openapi";
-import { StackFitPlan } from "@maipai/spec/gen/ts/stack-fit-plan.js";
+import { StackFitPlan, type StackFitPlan as StackFitPlanType } from "@maipai/spec/gen/ts/stack-fit-plan.js";
 import type { AppEnv } from "@/types";
 import { buildFitPlan, estimatorAvailable, runGgufParser } from "@/lib/fitPlan";
 import { raise, resolve as resolveHealth } from "@/lib/health";
@@ -13,7 +13,7 @@ import { installedEnginePin, selectEngineBinary } from "@/lib/engineCatalog";
 import { ensureEngine } from "@/lib/engineInstall";
 import { withTimeout } from "@maipai/core/src/withTimeout";
 import { defaultKvCacheType } from "@/lib/engineArgs";
-import { fetchMlxRepoLookup, isValidMlxRepo, isValidMlxRevision } from "@/lib/mlxMemory";
+import { fetchMlxRepoLookup, isValidMlxRepo, isValidMlxRevision, pickGgufFile } from "@/lib/mlxMemory";
 
 const parserInstalls = new Map<string, Promise<void>>();
 let installParserEngine = ensureEngine;
@@ -78,6 +78,13 @@ fitPlanRoutes.openapi(route, async (c) => {
     const lookup = await fetchMlxRepoLookup({ repo: source.repo, revision });
     const facts = lookup.facts;
     if (!facts && lookup.exists === "no") return c.json({ error: "That model was not found on Hugging Face." }, 404);
+    if (!facts) {
+      const file = pickGgufFile(lookup.ggufFiles);
+      if (file) {
+        const path = file.path.split("/").map(encodeURIComponent).join("/");
+        return c.json(await planGguf({ url: `https://huggingface.co/${source.repo}/resolve/${revision}/${path}` }, file.path.split("/").at(-1)!.slice(0, -5), contextTokens, kvCacheType), 200);
+      }
+    }
     return c.json({ ...buildFitPlan({
       modelId: source.repo, contextTokens, kvCacheType: "f16", estimate: null, cpuEstimate: undefined,
       mlx: facts ? { weightsBytes: facts.weightsBytes, config: facts.config } : null,
@@ -112,6 +119,10 @@ fitPlanRoutes.openapi(route, async (c) => {
     modelId = basename(resolvedPath).slice(0, -5);
   }
 
+  return c.json(await planGguf(target, modelId, contextTokens, kvCacheType), 200);
+});
+
+async function planGguf(target: { url: string } | { path: string }, modelId: string, contextTokens: number, kvCacheType: "f16" | "q8_0" | "q4_0"): Promise<StackFitPlanType & { tool: { name: string; version: string } }> {
   if (!estimatorAvailable()) await ensureGgufParser();
   if (!estimatorAvailable()) raise({ code: "engine-missing.gguf-parser", severity: "warning", title: "The model size checker is not installed", text: "Until it is installed, whether a model fits this computer is reported as unknown.", cause: "gguf-parser is pinned by the Stack but has not been downloaded on this machine.", fix: { label: "Install the size checker", action: "reinstall_engine" } });
   else resolveHealth("engine-missing.gguf-parser");
@@ -123,11 +134,11 @@ fitPlanRoutes.openapi(route, async (c) => {
   const estimate = await runGgufParser({ target, contextTokens, kvCacheType, gpuLayers: "all" });
   const cpuEstimate = unifiedMemory ? undefined : await runGgufParser({ target, contextTokens, kvCacheType, gpuLayers: 0 });
   const pin = estimatorAvailable() ? installedEnginePin("gguf-parser") : null;
-  return c.json({ ...buildFitPlan({
+  return { ...buildFitPlan({
     modelId, contextTokens, kvCacheType, estimate, cpuEstimate, unifiedMemory,
     deviceBudgetsBytes, capBytes: status.capBytes, workingMarginBytes: status.marginBytes,
     loaded: status.loaded.map((item) => ({ role: item.id, kind: item.kind, peakBytes: item.peakBytes, measured: item.measured })),
     asOf: new Date().toISOString().slice(0, 10),
     tool: pin ? { name: "gguf-parser", version: pin.tag } : { name: "gguf-parser", version: "not-installed" },
-  }), tool: pin ? { name: "gguf-parser", version: pin.tag } : { name: "gguf-parser", version: "not-installed" } }, 200);
-});
+  }), tool: pin ? { name: "gguf-parser", version: pin.tag } : { name: "gguf-parser", version: "not-installed" } };
+}

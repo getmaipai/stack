@@ -41,12 +41,12 @@ function fakeParser(): void {
   process.env.STACK_GGUF_PARSER_BINARY = script;
 }
 
-function stubMlxFetch(fail: "throw" | "404" | null = null): void {
+function stubMlxFetch(fail: "throw" | "404" | null = null, tree?: unknown): void {
   globalThis.fetch = (async (input: string | URL | Request) => {
     const url = String(input);
     mlxCalls.push(url);
     if (fail === "throw") throw new Error("offline");
-    if (url === mlxUrls[0]) return fail === "404" ? new Response("not found", { status: 404 }) : Response.json([
+    if (url.includes("/api/models/") && url.includes("/tree/")) return fail === "404" ? new Response("not found", { status: 404 }) : Response.json(tree ?? [
       { type: "file", path: "model.safetensors", size: MLX_WEIGHT_BYTES, lfs: { size: MLX_WEIGHT_BYTES } },
       { type: "file", path: "config.json", size: MLX_CONFIG_BYTES },
     ]);
@@ -54,6 +54,61 @@ function stubMlxFetch(fail: "throw" | "404" | null = null): void {
     return new Response("unexpected URL", { status: 500 });
   }) as typeof fetch;
 }
+
+test("sizes a GGUF-only repository from its preferred quant file URL", async () => {
+  fakeParser();
+  const files = [
+    { type: "file", path: "model-Q8_0.gguf", size: 100 },
+    { type: "file", path: "model-Q4_K_M.gguf", size: 90 },
+  ];
+  stubMlxFetch(null, files);
+  const parserStub = join(tempRoot, "record-parser");
+  writeFileSync(parserStub, `#!/bin/sh\nprintf '%s\\n' "$@" >> '${join(tempRoot, "parser-args.txt")}'\ncat '${fixture}'\n`);
+  chmodSync(parserStub, 0o755);
+  process.env.STACK_GGUF_PARSER_BINARY = parserStub;
+  const response = await app.request("/stack/v1/fit-plan", json({ source: { repo: "org/model" } }));
+  expect(response.status).toBe(200);
+  const body = await response.json() as Record<string, any>;
+  expect(() => StackFitPlan.parse(planWithoutTool(body))).not.toThrow();
+  const args = readFileSync(join(tempRoot, "parser-args.txt"), "utf8");
+  expect(body.model).toBe("model-Q4_K_M");
+  expect(args).toContain("https://huggingface.co/org/model/resolve/main/model-Q4_K_M.gguf");
+});
+
+test("safetensors repositories keep the MLX path when GGUF files are present", async () => {
+  stubMlxFetch(null, [
+    { type: "file", path: "model.safetensors", size: MLX_WEIGHT_BYTES },
+    { type: "file", path: "model-Q4_K_M.gguf", size: 10 },
+  ]);
+  const response = await app.request("/stack/v1/fit-plan", json({ source: { repo: "mlx-community/Qwen3-1.7B-4bit" } }));
+  expect(response.status).toBe(200);
+  const body = await response.json() as Record<string, any>;
+  expect(body.model).toBe("mlx-community/Qwen3-1.7B-4bit");
+  expect(mlxCalls).toEqual(mlxUrls);
+});
+
+test("a repository with only a vision projector stays unknown", async () => {
+  stubMlxFetch(null, [{ type: "file", path: "mmproj-Q4_K_M.gguf", size: 10 }]);
+  const response = await app.request("/stack/v1/fit-plan", json({ source: { repo: "org/model" } }));
+  expect(response.status).toBe(200);
+  expect((await response.json() as { verdict: string }).verdict).toBe("unknown");
+});
+
+test("a missing GGUF repository returns 404", async () => {
+  stubMlxFetch("404");
+  const response = await app.request("/stack/v1/fit-plan", json({ source: { repo: "org/model" } }));
+  expect(response.status).toBe(404);
+});
+
+test("safetensors take precedence over GGUF files", async () => {
+  stubMlxFetch(null, [
+    { type: "file", path: "model.safetensors", size: MLX_WEIGHT_BYTES },
+    { type: "file", path: "model-Q4_K_M.gguf", size: 10 },
+  ]);
+  const response = await app.request("/stack/v1/fit-plan", json({ source: { repo: "mlx-community/Qwen3-1.7B-4bit" } }));
+  expect(response.status).toBe(200);
+  expect((await response.json() as { model: string }).model).toBe("mlx-community/Qwen3-1.7B-4bit");
+});
 
 test("POST /stack/v1/fit-plan returns the spec plan for a Hugging Face GGUF", async () => {
   fakeParser();

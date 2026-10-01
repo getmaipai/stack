@@ -644,6 +644,12 @@ installed answers unknown and raises the health item
 privacy row names the content host Hugging Face redirects to,
 `us.aws.cdn.hf.co`.
 
+When a Hugging Face repository has no safetensors but has GGUF files,
+the plan uses one preferred quant file: Q4_K_M, Q4_K_S, Q4_0, Q5_K_M,
+Q5_K_S, then Q8_0, or the smallest file if none match. It skips vision
+projectors and later shards of split models, and checks the selected file
+the same way as a direct GGUF link.
+
 The first GGUF plan on a fresh Stack installs `gguf-parser` itself. If it
 cannot, the plan is all unknown and its `tool` says `not-installed`. An
 MLX repository that does not exist is a 404; everything else that cannot

@@ -46,7 +46,22 @@ export function readMlxKvBytesPerToken(modelDir: string): number | null {
 }
 
 export interface MlxRepoFacts { weightsBytes: number; config: unknown }
-export interface MlxRepoLookup { facts: MlxRepoFacts | null; exists: "yes" | "no" | "unknown" }
+export interface MlxRepoLookup { facts: MlxRepoFacts | null; exists: "yes" | "no" | "unknown"; ggufFiles: Array<{ path: string; size: number }> }
+
+export function pickGgufFile(files: Array<{ path: string; size: number }>): { path: string; size: number } | null {
+  const usable = files.filter(({ path }) => {
+    const name = path.split("/").at(-1)!.toLowerCase();
+    if (name.includes("mmproj")) return false;
+    const shard = /-([0-9]{5})-of-[0-9]{5}\.gguf$/i.exec(name);
+    return !shard || shard[1] === "00001";
+  });
+  const preferred = ["Q4_K_M", "Q4_K_S", "Q4_0", "Q5_K_M", "Q5_K_S", "Q8_0"];
+  for (const token of preferred) {
+    const found = usable.find(({ path }) => path.split("/").at(-1)!.toUpperCase().includes(token));
+    if (found) return found;
+  }
+  return usable.reduce<typeof usable[number] | null>((smallest, file) => !smallest || file.size < smallest.size ? file : smallest, null);
+}
 
 export function isValidMlxRepo(repo: string): boolean {
   return /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(repo) && !repo.split("/").some((part) => part === "." || part === "..");
@@ -57,7 +72,7 @@ export function isValidMlxRevision(revision: string): boolean {
 }
 
 export async function fetchMlxRepoLookup(input: { repo: string; revision: string; fetchImpl?: typeof fetch }): Promise<MlxRepoLookup> {
-  if (!isValidMlxRepo(input.repo) || !isValidMlxRevision(input.revision)) return { facts: null, exists: "unknown" };
+  if (!isValidMlxRepo(input.repo) || !isValidMlxRevision(input.revision)) return { facts: null, exists: "unknown", ggufFiles: [] };
   const fetchImpl = input.fetchImpl ?? fetch;
   const readBounded = async (response: Response, limit: number): Promise<string | null> => {
     if (!response.ok) return null;
@@ -68,31 +83,36 @@ export async function fetchMlxRepoLookup(input: { repo: string; revision: string
     const treeResponse = await fetchImpl(`https://huggingface.co/api/models/${input.repo}/tree/${input.revision}`, { signal: AbortSignal.timeout(15_000) });
     const exists = treeResponse.status === 404 ? "no" : treeResponse.ok ? "yes" : "unknown";
     const treeText = await readBounded(treeResponse, 2 * 1024 ** 2);
-    if (treeText === null) return { facts: null, exists };
+    if (treeText === null) return { facts: null, exists, ggufFiles: [] };
     const tree: unknown = JSON.parse(treeText);
-    if (!Array.isArray(tree)) return { facts: null, exists };
+    if (!Array.isArray(tree)) return { facts: null, exists, ggufFiles: [] };
     let weightsBytes = 0;
     let found = false;
+    const ggufFiles: Array<{ path: string; size: number }> = [];
     for (const entry of tree) {
-      if (!entry || typeof entry !== "object") return { facts: null, exists };
+      if (!entry || typeof entry !== "object") return { facts: null, exists, ggufFiles: [] };
       const item = entry as Record<string, unknown>;
-      if (typeof item.type !== "string" || typeof item.path !== "string" || typeof item.size !== "number") return { facts: null, exists };
-      if (item.type !== "file" || item.path.includes("/") || !item.path.endsWith(".safetensors")) continue;
+      if (typeof item.type !== "string" || typeof item.path !== "string" || typeof item.size !== "number") return { facts: null, exists, ggufFiles: [] };
+      if (item.type !== "file" || item.path.includes("/")) continue;
       const lfs = item.lfs && typeof item.lfs === "object" ? item.lfs as Record<string, unknown> : undefined;
       const size = lfs?.size ?? item.size;
-      if (typeof size !== "number" || !Number.isFinite(size) || !Number.isInteger(size) || size < 0) return { facts: null, exists };
-      weightsBytes += size;
-      found = true;
+      if (item.path.endsWith(".safetensors")) {
+        if (typeof size !== "number" || !Number.isFinite(size) || !Number.isInteger(size) || size < 0) return { facts: null, exists, ggufFiles: [] };
+        weightsBytes += size;
+        found = true;
+      } else if (item.path.endsWith(".gguf") && typeof size === "number" && Number.isFinite(size) && Number.isInteger(size) && size >= 0) {
+        ggufFiles.push({ path: item.path, size });
+      }
     }
-    if (!found) return { facts: null, exists };
+    if (!found) return { facts: null, exists, ggufFiles };
     let config: unknown = null;
     try {
       const configResponse = await fetchImpl(`https://huggingface.co/${input.repo}/resolve/${input.revision}/config.json`, { signal: AbortSignal.timeout(15_000) });
       const configText = await readBounded(configResponse, 1024 ** 2);
       if (configText !== null) config = JSON.parse(configText);
     } catch { config = null; }
-    return { facts: { weightsBytes, config }, exists };
-  } catch { return { facts: null, exists: "unknown" }; }
+    return { facts: { weightsBytes, config }, exists, ggufFiles };
+  } catch { return { facts: null, exists: "unknown", ggufFiles: [] }; }
 }
 
 export async function fetchMlxRepoFacts(input: { repo: string; revision: string; fetchImpl?: typeof fetch }): Promise<MlxRepoFacts | null> {
