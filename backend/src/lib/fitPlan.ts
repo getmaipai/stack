@@ -18,6 +18,7 @@ export interface GgufEstimate {
   architecture: string;
   expertCount: number;
   name: string | null;
+  modelFileBytes?: number;
   contextTokens: number;
   fullOffloaded: boolean;
   ramUmaBytes: number;
@@ -38,11 +39,13 @@ export function parseGgufParserJson(text: string): GgufEstimate | null {
     const item = root?.estimate?.items?.[0];
     const vram = item?.vrams?.[0];
     const name = root?.metadata?.name;
+    const modelFileBytes = root?.metadata?.fileSize;
     const numbers = [root?.estimate?.contextSize, item?.ram?.uma, item?.ram?.nonuma, vram?.uma, vram?.nonuma];
     if (typeof architecture !== "string" || !architecture.trim() || typeof item?.fullOffloaded !== "boolean" || !numbers.every(isBytes)) return null;
     if (expertCount !== undefined && expertCount !== null && !isBytes(expertCount)) return null;
     if (name !== undefined && name !== null && typeof name !== "string") return null;
-    return { architecture, expertCount: expertCount ?? 0, name: name ?? null, contextTokens: root.estimate.contextSize, fullOffloaded: item.fullOffloaded, ramUmaBytes: item.ram.uma, ramNonumaBytes: item.ram.nonuma, vramUmaBytes: vram.uma, vramNonumaBytes: vram.nonuma };
+    if (modelFileBytes !== undefined && !isBytes(modelFileBytes)) return null;
+    return { architecture, expertCount: expertCount ?? 0, name: name ?? null, ...(modelFileBytes === undefined ? {} : { modelFileBytes }), contextTokens: root.estimate.contextSize, fullOffloaded: item.fullOffloaded, ramUmaBytes: item.ram.uma, ramNonumaBytes: item.ram.nonuma, vramUmaBytes: vram.uma, vramNonumaBytes: vram.nonuma };
   } catch { return null; }
 }
 
@@ -66,6 +69,7 @@ export async function runGgufParser(input: { target: { path: string } | { url: s
 
 export interface PlanInput {
   modelId: string;
+  modelFileBytes?: number;
   contextTokens: number;
   kvCacheType: KvCacheType;
   estimate: GgufEstimate | null;
@@ -165,5 +169,5 @@ export function buildFitPlan(input: PlanInput): StackFitPlanType {
   const role = { role: "chat" as const, choice: "proposed", peak };
   // a loaded role the spec vocabulary does not name (a Stack role added ahead of the spec) still counts in the total but is not listed, so a response can never fail the schema
   const loadedRoles = verdict === "unknown" ? [] : others.filter((item) => specRoles.has(item.role)).map((item) => ({ role: item.role as (typeof StackFitPlan.shape.roles.element.shape.role.options)[number], choice: "loaded" as const, peak: known(item.peakBytes, item.peakBytes, item.measured ? "measured" : "estimated", date) }));
-  return { schema: 1, model: input.modelId, context_tokens: input.contextTokens, kv_cache_type: input.kvCacheType, roles: [role, ...loadedRoles], total, cap: known(input.capBytes, input.capBytes, "measured", date), margin: known(input.workingMarginBytes, input.workingMarginBytes, "measured", date), paths, verdict, bottleneck: verdict === "unknown" ? "unknown" : "memory" };
+  return { schema: 1, model: input.modelId, ...(input.modelFileBytes === undefined ? {} : { model_file_bytes: input.modelFileBytes }), context_tokens: input.contextTokens, kv_cache_type: input.kvCacheType, roles: [role, ...loadedRoles], total, cap: known(input.capBytes, input.capBytes, "measured", date), margin: known(input.workingMarginBytes, input.workingMarginBytes, "measured", date), paths, verdict, bottleneck: verdict === "unknown" ? "unknown" : "memory" };
 }

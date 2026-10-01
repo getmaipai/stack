@@ -72,7 +72,31 @@ test("sizes a GGUF-only repository from its preferred quant file URL", async () 
   expect(() => StackFitPlan.parse(planWithoutTool(body))).not.toThrow();
   const args = readFileSync(join(tempRoot, "parser-args.txt"), "utf8");
   expect(body.model).toBe("model-Q4_K_M");
+  expect(body.model_file_bytes).toBe(180_000_000);
   expect(args).toContain("https://huggingface.co/org/model/resolve/main/model-Q4_K_M.gguf");
+});
+
+test("MLX repository plans carry the safetensors weights sum as model file bytes", async () => {
+  stubMlxFetch();
+  const response = await app.request("/stack/v1/fit-plan", json({ source: { repo: "mlx-community/Qwen3-1.7B-4bit" } }));
+  expect(response.status).toBe(200);
+  const body = await response.json() as Record<string, any>;
+  expect(body.model_file_bytes).toBe(MLX_WEIGHT_BYTES);
+  expect(() => StackFitPlan.parse(planWithoutTool(body))).not.toThrow();
+});
+
+test("store path plans carry the existing GGUF file's on-disk size", async () => {
+  fakeParser();
+  const path = join(modelsRoot, `fit-plan-size-${process.pid}.gguf`);
+  mkdirSync(modelsRoot, { recursive: true });
+  writeFileSync(path, Buffer.alloc(1234));
+  try {
+    const response = await app.request("/stack/v1/fit-plan", json({ source: { path } }));
+    expect(response.status).toBe(200);
+    const body = await response.json() as Record<string, any>;
+    expect(body.model_file_bytes).toBe(1234);
+    expect(() => StackFitPlan.parse(planWithoutTool(body))).not.toThrow();
+  } finally { rmSync(path, { force: true }); }
 });
 
 test("safetensors repositories keep the MLX path when GGUF files are present", async () => {

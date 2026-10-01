@@ -32,6 +32,15 @@ test("parses the measured qwen3 estimate and rejects malformed values", () => {
   }
 });
 
+test("parses the parser's exact model file size when present", () => {
+  const saved = JSON.parse(readFileSync("/Users/jessetorres/Developer/github.com/getmaipai/stack/data-scratch/sizer-bake/local-32768-f16.json", "utf8"));
+  expect(saved.metadata.fileSize).toBe(1834426016);
+  expect(parseGgufParserJson(JSON.stringify(saved))?.modelFileBytes).toBe(1834426016);
+  const withoutSize = JSON.parse(fixtureText);
+  delete withoutSize.metadata.fileSize;
+  expect(parseGgufParserJson(JSON.stringify(withoutSize))?.modelFileBytes).toBeUndefined();
+});
+
 test("parses measured dense llama, rejects invalid expert counts, and plans only dense models", () => {
   const llamaText = readFileSync(join(import.meta.dir, "fixtures/gguf-parser-llama-3.2-3b-4096.json"), "utf8");
   const llamaFixture = JSON.parse(llamaText);
@@ -172,6 +181,21 @@ test("unknown architectures and absent estimates stay unknown", () => {
     const plan = broken({ ...base, estimate: candidate });
     expect(plan).toMatchObject({ verdict: "unknown", bottleneck: "unknown", total: { low: null, high: null, source: "unknown" }, roles: [{ peak: { low: null, high: null, source: "unknown" } }], paths: [{ fits: false, verdict: "unknown" }] });
   }
+});
+
+test("unverified architecture plans retain a known model file size and omit an unknown one", () => {
+  const withBytes = broken({ ...base, estimate: { ...estimate, architecture: "gemma3", modelFileBytes: 1834426016 }, modelFileBytes: 1834426016 });
+  expect(withBytes).toMatchObject({ verdict: "unknown", model_file_bytes: 1834426016 });
+  expect(() => StackFitPlan.parse(withBytes)).not.toThrow();
+  const withoutBytes = broken({ ...base, estimate: { ...estimate, architecture: "gemma3" } });
+  expect(withoutBytes).not.toHaveProperty("model_file_bytes");
+  expect(() => StackFitPlan.parse(withoutBytes)).not.toThrow();
+});
+
+test("a fit plan with the optional model file size validates against the generated schema", () => {
+  const plan = broken({ ...base, estimate, modelFileBytes: 11800000000 });
+  expect(plan.model_file_bytes).toBe(11800000000);
+  expect(() => StackFitPlan.parse(plan)).not.toThrow();
 });
 
 test("plans discrete GPU and CPU paths and validates every plan against spec", () => {

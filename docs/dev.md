@@ -654,6 +654,12 @@ Q3_K_M, IQ3_S, Q8_0, IQ3_XXS, IQ2_S. If none match, it uses the smallest
 remaining file, and if no candidate remains it returns unknown. The
 selected file is checked the same way as a direct GGUF link.
 
+Every fit plan also carries `model_file_bytes` when the Stack knows the
+file's size: from the GGUF parser, the selected repository file listing,
+the MLX weights total, or the size of a file already in the store. It
+omits that field when the size is unknown, including when the model
+family has no verified memory estimate.
+
 The first GGUF plan on a fresh Stack installs `gguf-parser` itself. If it
 cannot, the plan is all unknown and its `tool` says `not-installed`. An
 MLX repository that does not exist is a 404; everything else that cannot

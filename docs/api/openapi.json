@@ -4615,6 +4615,11 @@
                       "type": "string",
                       "minLength": 1
                     },
+                    "model_file_bytes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "The size of the model file the plan was made for, in bytes, when the Stack knows it from the repository listing or the file itself. A hard fact, known even when the plan's figures are unknown because the model family has not been measured. Absent when the Stack could not read it."
+                    },
                     "context_tokens": {
                       "type": "integer",
                       "minimum": 0,
