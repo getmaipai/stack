@@ -8,6 +8,8 @@ report; nothing is hand-measured. The run itself waits for the Studio
 (this laptop is a 24 GB `p16` and admits the pinned chat model only when
 enough is free, STACK-96b); the laptop is the dry-run machine.
 
+> **Superseded in part 2026-10-02** by [docs/design/RULES.md](../../../home/docs/design/RULES.md) chat rule 4: 4096 as the chat engine's default context no longer holds; the measurements stay valid for that pinned configuration only.
+
 ## What is fixed
 
 **Machines.** The Studio (Apple silicon, 128 GB unified memory, tier

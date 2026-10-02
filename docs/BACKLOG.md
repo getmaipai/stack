@@ -511,6 +511,64 @@ are never copied. Nothing migrates Home until STACK-16.
   Out of scope: people, pairing, Home migration. Exit:
   `bash scripts/check.sh` and a robot live check.
 
+## Thin chat path (2026-10-02)
+
+Rules: `home/docs/design/RULES.md` chat rules 4 and 11; record:
+`home/docs/plans/chat-thin-path-2026-10-02.md`. Home's items are
+`THIN-3A` and `THIN-4G` in `home/docs/BACKLOG.md`.
+
+- [ ] **STACK-CTX-01 (M): the chat engine launches with the machine's
+  real context.** Today the launch falls back to 4,096 tokens
+  (`backend/src/settings.ts:64` default for
+  `stack.engines.llama_server.context_length`,
+  `backend/src/lib/supervisor.ts:570` and `:603`,
+  `backend/src/lib/fitPlan.ts:54`, `backend/src/routes/fitPlan.ts:49`),
+  while the bench that found the thin-path problem ran at 32,768. Change:
+  the default context is the largest the fit plan admits for this machine
+  and model (capped at the model's trained context), never a constant; an
+  owner's explicit setting still wins; the chat role status reports the
+  launched `context_length` and the slot count, and says whether the
+  figure is total or per slot (`--parallel` in `engineArgs.ts:61` splits
+  the context across slots); an engine that cannot be admitted at the
+  minimum refuses with the plain reason (this is the reason Home's issue
+  #203 wants shown). The launch also carries the `--lora` flags for style
+  adapters when a companion pins one (rule 14). Regenerate
+  `docs/components.md` from `backend/src/lib/componentsDoc.ts:107` and
+  `backend/src/lib/modelCatalog.ts:24`; fix the 4,096 sentences in
+  `docs/dev.md:575-580`, `docs/integrations.md:183` and
+  `docs/plans/studio-bench-protocol-2026-09-20.md:37`. Mirror: STACK-SIZE-04
+  (admission headroom) and the existing fit-plan tests. Acceptance: on a
+  24 GB Apple-silicon laptop with the 8B chat model the chat role starts
+  with the context the fit plan admits (not 4,096) and reports it; a
+  second engine started to compete for memory makes the chat role refuse
+  with the memory reason, not a bare failure. Out of scope: Home's window
+  (`THIN-3A`, `THIN-3C`), moving the supervisor onto a router mode (the
+  record's open owner decision). Exit: `bash scripts/check.sh`.
+- [ ] **STACK-SEARCH-01 (L): the Stack installs and owns the search
+  service by default.** Rule 11: by default the Stack installs,
+  configures, runs and health-reports everything chat needs, search
+  included (a SearXNG instance), so a new household sets up nothing and
+  search works with no key and no account. An owner who already runs a
+  SearXNG, on this machine or another, chooses it with one setting; the
+  Stack (and Home, `THIN-4G`) checks it at save time and shows its health
+  like any other service. No model runner is ever adopted this way
+  (`STACK-ADOPT-01` is dropped). Design note first (a doc in
+  `docs/plans/`, written before any code): how it is fetched (pinned
+  version, pinned URL, checksum, a clear offline message, per the org's
+  download-don't-vendor rule), the runtime it needs (see
+  `backend/src/lib/uvEnvironment.ts`), its memory share under the
+  governor, the safesearch-capable engines it names, how the three
+  safesearch levels (child strict, teen moderate, adult off) are passed
+  per request, its health and restart behaviour, update and rollback, and
+  the licence (AGPL-3.0) obligations. Then chunk into `S` and `M` items
+  here. Files: new `backend/src/lib/` service module, `backend/src/roles.ts`
+  or the supporting-service list, `backend/src/settings.ts`. Mirror: how
+  the Stack installs and supervises an engine (`engineInstall.ts`,
+  `supervisor.ts`) and Home's Kiwix sidecar. Acceptance for the design
+  note: it answers each question above and lists the chunked items.
+  Out of scope: page reading (Home's `THIN-4A`), the hosted-key option
+  (`THIN-4H`). Exit: the note, then `bash scripts/check.sh --docs`.
+
 ## Home adoption
 
 - [ ] **STACK-75 (M): pin the Stack/Home contract.** A contract test
