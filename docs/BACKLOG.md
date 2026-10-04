@@ -635,7 +635,7 @@ Rules: `home/docs/design/RULES.md` chat rules 4 and 11; record:
   queue head every poll. Files: `backend/src/lib/governor.ts`,
   `backend/tests/governor.test.ts` (new test first). Out of scope: the
   admission rules and margins. Exit: `bash scripts/check.sh`.
-  Landed 2026-10-03 at HASH.
+  Landed 2026-10-03 at 4156075.
 
 ## Docs
 
