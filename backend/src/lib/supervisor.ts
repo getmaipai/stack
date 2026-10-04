@@ -14,7 +14,8 @@ import { managedEnv } from "@/lib/uvEnvironment";
 import { defaultKvCacheType, llamaServerArgs, mlxKvQuantFor, mlxServeArgs } from "@/lib/engineArgs";
 import { currentEngineBinary, currentEngineTag, engineBinaryPath, engineDir } from "@/lib/engineInstall";
 import { detectHardware } from "@/lib/hardware";
-import { identityHeaders, modelFileName, readEngineIdentity, type EngineIdentity } from "@/lib/identity";
+import { identityHeaders, modelFileName, readEngineContext, readEngineIdentity, type EngineIdentity } from "@/lib/identity";
+import type { EngineContext } from "@/lib/contextSizing";
 import { isComponent, isModelSelectable, listModels, recordMeasuredFootprint, type ModelRecord } from "@/lib/modelStore";
 import { readFileSync } from "node:fs";
 // Imported as a file, so a compiled binary embeds the clip and the probe
@@ -79,6 +80,9 @@ export interface RoleProcess {
   modelId: string | null;
   /** The pinned revision of the model the process serves, for the reply headers. */
   modelRevision: string | null;
+  /** The context the engine reported after it loaded (null for an engine
+   * with no context: speech, generators; absent in the scripted engines). */
+  context?: EngineContext | null;
   pid: number | null;
   port: number | null;
   activeRequests: number;
@@ -536,7 +540,7 @@ export function speechWorkerCommand(
   return [runtime.execPath, ...(viaBun ? [runtime.main] : []), ...workerArgs];
 }
 
-export interface LaunchPlan { command: string[]; engine: string; build: string; stdin: "pipe" | "ignore"; contextLength: number; kind: "spawned" | "managed"; env?: Record<string, string>; healthPath?: string; }
+export interface LaunchPlan { command: string[]; engine: string; build: string; stdin: "pipe" | "ignore"; contextLength: number; slots: number; kind: "spawned" | "managed"; env?: Record<string, string>; healthPath?: string; }
 
 /** What to run for a role: llama-server from the `current` link for the
  * chat and embeddings wires, the speech worker for `stt`. */
@@ -551,19 +555,19 @@ export function launchPlan(role: RoleId, model: ModelRecord, port: number): Laun
     // shape (see its own comment, getmaipai/stack#8); no special env
     // needed here either way - a real `bun run` against the vendored
     // source resolves the native binding exactly as dev already does.
-    return { command: speechWorkerCommand({ role, port, modelPath: model.modelPath!, vadPath: vad.modelPath, threads }), engine: "sherpa-onnx-node", build: "bundled", stdin: "pipe", contextLength: 0, kind: "spawned" };
+    return { command: speechWorkerCommand({ role, port, modelPath: model.modelPath!, vadPath: vad.modelPath, threads }), engine: "sherpa-onnx-node", build: "bundled", stdin: "pipe", contextLength: 0, slots: 0, kind: "spawned" };
   }
   if (role === "image") {
     if (!comfyuiInstalled()) throw new EngineUnavailableError("The ComfyUI environment is not built on this machine.");
     // The pinned checkpoint, linked into ComfyUI's folder so the file it
     // loads is the store's.
     linkCheckpoint(model.modelPath!);
-    return { command: comfyuiCommand(port), engine: "comfyui", build: COMFYUI_VERSION, stdin: "ignore", contextLength: 0, kind: "managed", env: comfyuiEnv(), healthPath: "/system_stats" };
+    return { command: comfyuiCommand(port), engine: "comfyui", build: COMFYUI_VERSION, stdin: "ignore", contextLength: 0, slots: 0, kind: "managed", env: comfyuiEnv(), healthPath: "/system_stats" };
   }
   if (role === "tts") {
     if (!pocketTtsInstalled()) throw new EngineUnavailableError("The Pocket TTS environment is not built on this machine.");
     // Offline always; the token never travels (STACK-94d).
-    return { command: pocketTtsCommand(port), engine: "pocket-tts", build: POCKET_TTS_VERSION, stdin: "ignore", contextLength: 0, kind: "managed", env: pocketTtsEnv() };
+    return { command: pocketTtsCommand(port), engine: "pocket-tts", build: POCKET_TTS_VERSION, stdin: "ignore", contextLength: 0, slots: 0, kind: "managed", env: pocketTtsEnv() };
   }
   const declared = engineSettingValues("engines.llama_server");
   const config = { contextLength: declared.context_length, slots: declared.slots, threads: declared.threads, cacheRamMb: declared.cache_ram_mb, flashAttention: declared.flash_attention } as Record<string, number | boolean | string | string[]>;
@@ -578,13 +582,13 @@ export function launchPlan(role: RoleId, model: ModelRecord, port: number): Laun
     const slots = typeof config.slots === "number" && config.slots > 0 ? config.slots : 1;
     // The person-level setting is not read by the Stack yet (STACK-16); undefined means no --kv-quant.
     const args = mlxServeArgs({ modelPath: model.modelPath!, port, contextLength, slots, prefixCacheFlag: MLX_PREFIX_CACHE_FLAG, kvQuant: mlxKvQuantFor(undefined) });
-    return { command: [binary, ...args], engine: "mlx-serve", build: currentEngineTag("mlx-serve") ?? pin.tag, stdin: "ignore", contextLength, kind: "spawned", env: managedEnv() };
+    return { command: [binary, ...args], engine: "mlx-serve", build: currentEngineTag("mlx-serve") ?? pin.tag, stdin: "ignore", contextLength, slots, kind: "spawned", env: managedEnv() };
   }
   const pin = installedEnginePin();
   if (!pin || !engineInstalled()) throw new EngineUnavailableError("No installed llama-server build is available for this machine.");
   const binary = launchBinary(pin);
   const args = llamaServerArgs({ modelPath: model.modelPath!, port, config, contextLength, kvCacheType: defaultKvCacheType(), embeddings: role === "embed" });
-  return { command: [binary, ...args], engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength, kind: "spawned" };
+  return { command: [binary, ...args], engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength, slots: typeof config.slots === "number" && config.slots > 0 ? config.slots : 1, kind: "spawned" };
 }
 
 async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<RoleProcess> {
@@ -694,15 +698,19 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     // mlx-serve's /props carries no build_info or model_path: the build
     // is the pin's tag, the model the directory the Stack launched.
     if (plan.engine === "mlx-serve") identity = { ...identity, build: identity.build ?? `mlx-serve-${plan.build}`, model: identity.model ?? basename(model.modelPath!) };
+    // The context the engine itself reports, never the one we asked for:
+    // Home sizes its chat window from it. An engine with no /props answer
+    // is held to what the launch plan said.
+    const context = plan.contextLength > 0 ? await readEngineContext(client.baseUrl, plan.contextLength) ?? { contextLength: plan.contextLength, slots: plan.slots, contextPerSlot: Math.floor(plan.contextLength / Math.max(1, plan.slots)) } : null;
     const check = await postLoadCheck(role, client, handle.pid);
     check.loadMs = Math.round(performance.now() - loadStartedAt);
-    if (check.actualBytes !== null) recordMeasuredFootprint(model.id, check.actualBytes, contextLength);
+    if (check.actualBytes !== null) recordMeasuredFootprint(model.id, check.actualBytes, context?.contextLength ?? contextLength);
     runtime(role).status.postLoadCheck = check;
     resolveHealth(`engine.crashed.${role}`);
     resolveHealth(`post-load-check-failed.${role}`);
     const loadedRevision = plan.kind === "managed" && !GENERATOR_ROLES.includes(role) ? loadedWeightsRepo()?.revision ?? null : null;
     const processRecord: RoleProcess = {
-      role, kind: plan.kind, client, identity, engine: plan.engine, modelId: model.id, modelRevision: loadedRevision ?? model.revision, pid: handle.pid, port, activeRequests: 0, retired: false,
+      role, kind: plan.kind, client, identity, engine: plan.engine, modelId: model.id, modelRevision: loadedRevision ?? model.revision, context, pid: handle.pid, port, activeRequests: 0, retired: false,
       governorHandle: admission,
       stopGovernor: watchProcessMemory(role, handle.pid),
       stop: async () => { handle.kill(); await handle.exited; },
@@ -808,6 +816,17 @@ export function lastRealRequestAt(requested: RoleId): number | null {
  * does: a spawned process must name the selected model's file; a url
  * binding with an `expected_version` must report a build containing it.
  * "Ready" is claimed only when this holds (STACK-87). */
+/** What the running engine says its context is, for the roles route
+ * (STACK-CTX-01): all null with the reason when nothing runs or the
+ * engine has no context (speech, generators). */
+export function roleContext(requested: RoleId): { context_length: number | null; slots: number | null; context_per_slot: number | null; reason: string | null } {
+  const processRecord = runtime(processRoleFor(requested)).process;
+  if (!processRecord || processRecord.retired) return { context_length: null, slots: null, context_per_slot: null, reason: "No engine is running." };
+  const context = processRecord.context;
+  if (!context) return { context_length: null, slots: null, context_per_slot: null, reason: "The running engine reports no context." };
+  return { context_length: context.contextLength, slots: context.slots, context_per_slot: context.contextPerSlot, reason: null };
+}
+
 export function identityCheck(requested: RoleId): { ok: boolean; expected: string | null; actual: string | null; reason: string | null } {
   const role = processRoleFor(requested);
   const processRecord = runtime(role).process;

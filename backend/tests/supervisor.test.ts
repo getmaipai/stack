@@ -268,6 +268,15 @@ test("the roles route derives state from the supervisor and never stores it", as
   expect(body.roles.find((role) => role.id === "image")!.state.state).toBe("notInstalled");
 });
 
+test("the roles route carries the running engine's context length, slots and context per slot, and null with a reason when nothing runs (STACK-CTX-01)", async () => {
+  type View = { id: string; context: { context_length: number | null; slots: number | null; context_per_slot: number | null; reason: string | null } };
+  const read = async () => ((await (await app.request("/stack/v1/roles")).json()) as { roles: View[] }).roles.find((role) => role.id === "chat")!;
+  expect((await read()).context).toEqual({ context_length: null, slots: null, context_per_slot: null, reason: "No engine is running." });
+  setSupervisorFactoryForTests(async (role) => scriptedProcess(role, { context: { contextLength: 32768, slots: 1, contextPerSlot: 32768 } }));
+  await getProcess("chat");
+  expect((await read()).context).toEqual({ context_length: 32768, slots: 1, context_per_slot: 32768, reason: null });
+});
+
 test("after an engine goes offline mid-request, the next request starts a fresh process (regression: a stale start promise was reused)", async () => {
   let starts = 0;
   setSupervisorFactoryForTests(async (role) => {

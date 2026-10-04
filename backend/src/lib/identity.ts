@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { engineContextFrom, type EngineContext } from "@/lib/contextSizing";
 import { ENGINE_BINARIES, ENGINE_READY_MARKER } from "@/lib/engineCatalog";
 import { engineTagRoot } from "@/lib/store/layout";
 
@@ -79,4 +80,13 @@ export function identityIncomplete(identity: EngineIdentity): boolean {
 export function installedEngineForMachine(name = "llama-server"): boolean {
   const pin = ENGINE_BINARIES.find((entry) => entry.name === name && entry.platform === process.platform && entry.arch === process.arch && !entry.requiresNvidia);
   return pin ? existsSync(join(engineTagRoot(pin.name, pin.tag), ENGINE_READY_MARKER)) : false;
+}
+
+/** The context the engine itself reports on `/props`, read after it is
+ * healthy; null when it reports none (the caller keeps what it launched). */
+export async function readEngineContext(url: string, launchContext: number, timeoutMs = 3_000): Promise<EngineContext | null> {
+  try {
+    const res = await fetch(`${url.replace(/\/$/, "")}/props`, { signal: AbortSignal.timeout(timeoutMs) });
+    return res.ok ? engineContextFrom(await res.json(), launchContext) : null;
+  } catch { return null; }
 }
