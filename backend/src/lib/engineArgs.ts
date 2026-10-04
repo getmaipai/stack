@@ -53,12 +53,17 @@ export function llamaServerArgs(options: LlamaServerArgsOptions): string[] {
   // measured against, and a spawn with a larger ubatch than it would
   // be rejected (hub, 2026-09-06 review).
   const ubatch = Math.min(1024, contextLength);
+  const slots = typeof config.slots === "number" && config.slots > 0 ? config.slots : 1;
   const args = [
     "--model", options.modelPath,
     "--port", String(options.port),
     // Localhost only: the server is reached only through its own client.
     "--host", "127.0.0.1",
     "-c", String(contextLength),
+    // Always spelled, one slot included: left out, llama-server picks its
+    // own slot count and splits `-c` across them, so a launch context of
+    // N would serve N / slots per request (STACK-CTX-01).
+    "--parallel", String(slots),
     // Flash attention: declared on by default; spelled off when not.
     ...(config.flashAttention === false ? ["-fa", "off"] : ["-fa", "on"]),
     // All layers on the accelerator: nothing stays on the CPU.
@@ -86,8 +91,6 @@ export function llamaServerArgs(options: LlamaServerArgsOptions): string[] {
     // on every turn (hub, FAST-01).
     "--cache-reuse", "256",
   ];
-  const slots = typeof config.slots === "number" ? config.slots : 1;
-  if (slots > 1) args.push("--parallel", String(slots));
   const threads = typeof config.threads === "number" ? config.threads : 0;
   if (threads > 0) args.push("--threads", String(threads));
   const cacheRamMb = typeof config.cacheRamMb === "number" ? config.cacheRamMb : 0;

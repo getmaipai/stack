@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { app } from "@/app";
 import { __resetEventsForTests, eventsAfter } from "@/lib/events";
 import { __resetHealthForTests } from "@/lib/health";
-import { dryRunFootprint, fitTotalBytes, getProcess, getRoleStatus, lastRealRequestAt, loadTimeoutForModel, parseFitRows, preferModel, probeReplyOk, probeRequest, processRoleFor, requestRole, restartRole, resetSupervisorForTests, scriptedProcess, selectedModel, setSupervisorFactoryForTests, setSupervisorTimeoutsForTests, stopRole, streamRole, unloadIdleRole, unloadRole, waitHealthy, EngineUnavailableError, type RoleProcess } from "@/lib/supervisor";
+import { sizeChatLaunch, dryRunFootprint, fitTotalBytes, getProcess, getRoleStatus, lastRealRequestAt, loadTimeoutForModel, parseFitRows, preferModel, probeReplyOk, probeRequest, processRoleFor, requestRole, restartRole, resetSupervisorForTests, scriptedProcess, selectedModel, setSupervisorFactoryForTests, setSupervisorTimeoutsForTests, stopRole, streamRole, unloadIdleRole, unloadRole, waitHealthy, EngineUnavailableError, type RoleProcess } from "@/lib/supervisor";
 import { clearModelsForTests, upsertModel } from "@/lib/modelStore";
 import type { RoleId } from "@/roles";
 
@@ -275,6 +275,14 @@ test("the roles route carries the running engine's context length, slots and con
   setSupervisorFactoryForTests(async (role) => scriptedProcess(role, { context: { contextLength: 32768, slots: 1, contextPerSlot: 32768 } }));
   await getProcess("chat");
   expect((await read()).context).toEqual({ context_length: 32768, slots: 1, context_per_slot: 32768, reason: null });
+});
+
+test("an unreadable GGUF is launched at the declared context with the reason, never a computed guess (STACK-CTX-01)", async () => {
+  upsertModel({ id: "chat-unreadable", roles: ["chat"], source: "catalog", provenance: {}, revision: "r", sha256: "a".repeat(64), licence: "Apache-2.0", verifiedAt: new Date().toISOString(), modelPath: "/tmp/never/chat.gguf", sizeBytes: 4_920_000_000 });
+  const sizing = await sizeChatLaunch(selectedModel("chat")!);
+  expect(sizing).toMatchObject({ contextLength: 4096, slots: 1, kvBytes: null, source: "unknown-shape" });
+  expect(sizing.reason).toContain("KV");
+  clearModelsForTests();
 });
 
 test("after an engine goes offline mid-request, the next request starts a fresh process (regression: a stale start promise was reused)", async () => {

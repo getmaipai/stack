@@ -137,6 +137,9 @@ export function setGovernorMemorySettings(values: { modelBudgetBytes?: number; s
   if (values.systemLowWaterFloorBytes !== undefined) tuning.systemLowWaterFloorBytes = values.systemLowWaterFloorBytes;
   if (values.systemSustainedPolls !== undefined) tuning.systemSustainedPolls = values.systemSustainedPolls;
 }
+/** What a launch is sized against: the model budget (the cap), the active
+ * tier's working margin, and the tier itself (STACK-CTX-01). */
+export function sizingBudget(): { tier: GovernorTier; capBytes: number; marginBytes: number } { return { tier: activeTier, capBytes: effectiveCapBytes(), marginBytes: workingMargin() }; }
 export function getGovernorDecisions(): GovernorDecision[] { return [...decisions]; }
 
 function loadedItemFor(request: GovernorRequest): LoadedInternal {

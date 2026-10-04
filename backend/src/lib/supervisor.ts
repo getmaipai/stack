@@ -15,7 +15,8 @@ import { defaultKvCacheType, llamaServerArgs, mlxKvQuantFor, mlxServeArgs } from
 import { currentEngineBinary, currentEngineTag, engineBinaryPath, engineDir } from "@/lib/engineInstall";
 import { detectHardware } from "@/lib/hardware";
 import { identityHeaders, modelFileName, readEngineContext, readEngineIdentity, type EngineIdentity } from "@/lib/identity";
-import type { EngineContext } from "@/lib/contextSizing";
+import { CO_RESIDENT_BYTES, kvHeadroomBytes, sizeChatContext, type ContextSizing, type EngineContext } from "@/lib/contextSizing";
+import { readGgufFacts } from "@/lib/gguf";
 import { isComponent, isModelSelectable, listModels, recordMeasuredFootprint, type ModelRecord } from "@/lib/modelStore";
 import { readFileSync } from "node:fs";
 // Imported as a file, so a compiled binary embeds the clip and the probe
@@ -26,7 +27,7 @@ import { loadedWeightsRepo, pocketTtsCommand, pocketTtsEnv, pocketTtsInstalled, 
 import { ensureCloningWeights, POCKET_TTS_PRESET_VOICES, voiceCloningOn } from "@/speech/voices";
 import { comfyuiCommand, comfyuiEnv, comfyuiInstalled, COMFYUI_VERSION, linkCheckpoint, probeGenerator } from "@/generators/comfyui";
 import { basename } from "node:path";
-import { getRunState, release, setGovernorPid, startGovernor, type GovernorHandle, type GovernorTier } from "@/lib/governor";
+import { getRunState, release, setGovernorPid, sizingBudget, startGovernor, type GovernorHandle, type GovernorTier } from "@/lib/governor";
 import { proposeProfile } from "@/profiles";
 import { AdmissionRefusedError, waitForAdmission, waitingReason } from "@/lib/admission";
 import { emit } from "@/lib/events";
@@ -83,6 +84,8 @@ export interface RoleProcess {
   /** The context the engine reported after it loaded (null for an engine
    * with no context: speech, generators; absent in the scripted engines). */
   context?: EngineContext | null;
+  /** Why the context is not the one that was wanted (below 8192, capped, KV cost unknown), or null. */
+  contextNote?: string | null;
   pid: number | null;
   port: number | null;
   activeRequests: number;
@@ -545,7 +548,7 @@ export interface LaunchPlan { command: string[]; engine: string; build: string; 
 /** What to run for a role: llama-server from the `current` link for the
  * chat and embeddings wires, the speech worker for `stt`. */
 /** What to run for a role, exported for the suite; the supervisor calls it after admission. */
-export function launchPlan(role: RoleId, model: ModelRecord, port: number): LaunchPlan {
+export function launchPlan(role: RoleId, model: ModelRecord, port: number, sizing?: ContextSizing | null): LaunchPlan {
   if (SPEECH_ROLES.includes(role)) {
     const vad = componentModel(role, "vad");
     if (!vad?.modelPath) throw new EngineUnavailableError(`The ${role} voice activity detector is not installed.`);
@@ -570,7 +573,7 @@ export function launchPlan(role: RoleId, model: ModelRecord, port: number): Laun
     return { command: pocketTtsCommand(port), engine: "pocket-tts", build: POCKET_TTS_VERSION, stdin: "ignore", contextLength: 0, slots: 0, kind: "managed", env: pocketTtsEnv() };
   }
   const declared = engineSettingValues("engines.llama_server");
-  const config = { contextLength: declared.context_length, slots: declared.slots, threads: declared.threads, cacheRamMb: declared.cache_ram_mb, flashAttention: declared.flash_attention } as Record<string, number | boolean | string | string[]>;
+  const config = { contextLength: sizing?.contextLength ?? declared.context_length, slots: sizing?.slots ?? declared.slots, threads: declared.threads, cacheRamMb: declared.cache_ram_mb, flashAttention: declared.flash_attention } as Record<string, number | boolean | string | string[]>;
   const contextLength = typeof config.contextLength === "number" ? config.contextLength : 4096;
   if (engineForRole(role) === "mlx-serve") {
     // mlx-serve: one model pinned for the life of the process, loopback
@@ -591,6 +594,26 @@ export function launchPlan(role: RoleId, model: ModelRecord, port: number): Laun
   return { command: [binary, ...args], engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength, slots: typeof config.slots === "number" && config.slots > 0 ? config.slots : 1, kind: "spawned" };
 }
 
+/** The chat engine's launch context (STACK-CTX-01): computed from the
+ * machine tier, the governor's budget and the model's KV cache cost, and
+ * logged. Only the llama-server chat role is sized; every other role keeps
+ * the declared context length. */
+export async function sizeChatLaunch(model: ModelRecord): Promise<ContextSizing> {
+  const declared = engineSettingValues("engines.llama_server");
+  const facts = await readGgufFacts(model.modelPath!, { allowLocalFile: true }).catch(() => null);
+  const shape = facts && facts.layers > 0 && facts.kvHeads > 0 && facts.headDim > 0 ? { layers: facts.layers, kvHeads: facts.kvHeads, headDim: facts.headDim } : null;
+  const budget = sizingBudget();
+  const kvCacheType = defaultKvCacheType();
+  const fallback = typeof declared.context_length === "number" && declared.context_length > 0 ? declared.context_length : 4096;
+  const sizing = sizeChatContext({
+    ...budget, shape, kvCacheType, modelFileBytes: model.sizeBytes, measuredFootprintBytes: model.measuredFootprintBytes, measuredContextLength: model.measuredContextLength,
+    coResidentBytes: CO_RESIDENT_BYTES, trainedContext: facts?.contextLength ?? 0, slots: typeof declared.slots === "number" ? declared.slots : 1,
+    declaredContext: typeof declared.chat_context_length === "number" && declared.chat_context_length > 0 ? declared.chat_context_length : shape ? 0 : fallback,
+  });
+  logger.appendLine(JSON.stringify({ event: "chat.context-sizing", model: model.id, tier: budget.tier, capBytes: budget.capBytes, marginBytes: budget.marginBytes, kvCacheType, shape, trainedContext: facts?.contextLength ?? 0, contextLength: sizing.contextLength, slots: sizing.slots, kvBytes: sizing.kvBytes, weightsBytes: sizing.weightsBytes, availableBytes: sizing.availableBytes, source: sizing.source, reason: sizing.reason }));
+  return sizing;
+}
+
 async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<RoleProcess> {
   if (!SPAWNABLE_ROLES.includes(role)) throw new EngineUnavailableError(`No engine can be started for ${role} on this machine yet.`);
   const model = modelId ? selectableModel(role, modelId) : selectedModel(role);
@@ -604,7 +627,8 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   }
   if (!model?.modelPath) throw new EngineUnavailableError(`No verified and installed ${role} model is available.`);
   const declaredContextLength = engineSettingValues("engines.llama_server").context_length;
-  const contextLength = typeof declaredContextLength === "number" ? declaredContextLength : 4096;
+  const sizing = role === "chat" && engineForRole(role) === "llama-server" ? await sizeChatLaunch(model) : null;
+  const contextLength = sizing?.contextLength ?? (typeof declaredContextLength === "number" ? declaredContextLength : 4096);
   // The voice engine starts offline; what it may need beyond the pins
   // (the gated cloning weights, with a token and cloning turned on) the
   // Stack fetches first, once. A fetch that fails never stops the start:
@@ -639,7 +663,9 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     modelFileBytes: managed && !generator ? null : model.sizeBytes,
     measuredPeakBytes: model.measuredFootprintBytes,
     dryRunPeakBytes,
-    headroomBytes: engineForRole(role) === "mlx-serve" && !managed && !generator && !SPEECH_ROLES.includes(role) ? mlxHeadroomBytes({ modelDir: model.modelPath!, contextTokens: contextLength }) : null,
+    headroomBytes: engineForRole(role) === "mlx-serve" && !managed && !generator && !SPEECH_ROLES.includes(role) ? mlxHeadroomBytes({ modelDir: model.modelPath!, contextTokens: contextLength })
+      : sizing ? kvHeadroomBytes({ kvPerToken: sizing.kvBytesPerToken, contextLength, measuredFootprintBytes: model.measuredFootprintBytes, measuredContextLength: model.measuredContextLength, dryRunPeakBytes })
+      : null,
     engine: generator ? "comfyui" : managed ? "pocket-tts" : SPEECH_ROLES.includes(role) ? "sherpa-onnx-node" : engineForRole(role) === "mlx-serve" ? "mlx-serve" : "llama-server",
     pinned: pinnedModels.has(model.id),
   };
@@ -657,7 +683,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
 
   const port = await findFreePort();
   let plan: LaunchPlan;
-  try { plan = launchPlan(role, model, port); } catch (error) { release(admission); throw error; }
+  try { plan = launchPlan(role, model, port, sizing); } catch (error) { release(admission); throw error; }
   const spawnEngine = () => {
     try {
       return Bun.spawn(plan.command, { stdout: "ignore", stderr: "pipe", stdin: plan.stdin, env: plan.env ?? { ...process.env, HF_HUB_CACHE: hfHubRoot } });
@@ -710,7 +736,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     resolveHealth(`post-load-check-failed.${role}`);
     const loadedRevision = plan.kind === "managed" && !GENERATOR_ROLES.includes(role) ? loadedWeightsRepo()?.revision ?? null : null;
     const processRecord: RoleProcess = {
-      role, kind: plan.kind, client, identity, engine: plan.engine, modelId: model.id, modelRevision: loadedRevision ?? model.revision, context, pid: handle.pid, port, activeRequests: 0, retired: false,
+      role, kind: plan.kind, client, identity, engine: plan.engine, modelId: model.id, modelRevision: loadedRevision ?? model.revision, context, contextNote: sizing?.reason ?? null, pid: handle.pid, port, activeRequests: 0, retired: false,
       governorHandle: admission,
       stopGovernor: watchProcessMemory(role, handle.pid),
       stop: async () => { handle.kill(); await handle.exited; },
@@ -824,7 +850,7 @@ export function roleContext(requested: RoleId): { context_length: number | null;
   if (!processRecord || processRecord.retired) return { context_length: null, slots: null, context_per_slot: null, reason: "No engine is running." };
   const context = processRecord.context;
   if (!context) return { context_length: null, slots: null, context_per_slot: null, reason: "The running engine reports no context." };
-  return { context_length: context.contextLength, slots: context.slots, context_per_slot: context.contextPerSlot, reason: null };
+  return { context_length: context.contextLength, slots: context.slots, context_per_slot: context.contextPerSlot, reason: processRecord.contextNote ?? null };
 }
 
 export function identityCheck(requested: RoleId): { ok: boolean; expected: string | null; actual: string | null; reason: string | null } {

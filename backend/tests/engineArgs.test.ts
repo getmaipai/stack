@@ -35,6 +35,7 @@ test("a Mac spawn gets the hub's full launch list over the declared defaults", (
     "--port", "8771",
     "--host", "127.0.0.1",
     "-c", "4096",
+    "--parallel", "1",
     "-fa", "on",
     "-ngl", "all",
     "--reasoning", "off",
@@ -54,7 +55,7 @@ test("flashAttention false spells -fa off", () => {
   expect(args[fa + 1]).toBe("off");
 });
 
-test("declared slots, threads and cache RAM are spelled only when above one or zero", () => {
+test("declared slots above one, threads and cache RAM are spelled with their values, and threads and cache RAM only when set", () => {
   const args = llamaServerArgs({ modelPath, port: 8771, config: { ...declaredDefaults, slots: 2, threads: 8, cacheRamMb: 512 }, contextLength: 4096, kvCacheType: "q8_0" });
   expect(args).toContain("--parallel");
   const p = args.indexOf("--parallel");
@@ -105,4 +106,12 @@ test("llama-server args spell q4_0 and omit the default f16 flags", () => {
   expect(q4.slice(q4.indexOf("-ctk"), q4.indexOf("-ctk") + 4)).toEqual(["-ctk", "q4_0", "-ctv", "q4_0"]);
   const f16 = llamaServerArgs({ modelPath, port: 8771, config: declaredDefaults, contextLength: 4096, kvCacheType: "f16" });
   expect(f16).not.toContain("-ctk");
+});
+
+test("--parallel is always spelled, one slot included, so llama-server never picks its own slot count (STACK-CTX-01)", () => {
+  const one = llamaServerArgs({ modelPath, port: 8771, config: declaredDefaults, contextLength: 32768, kvCacheType: "q8_0" });
+  expect(one[one.indexOf("--parallel") + 1]).toBe("1");
+  expect(one[one.indexOf("-c") + 1]).toBe("32768");
+  const none = llamaServerArgs({ modelPath, port: 8771, config: { ...declaredDefaults, slots: undefined as never }, contextLength: 4096, kvCacheType: "f16" });
+  expect(none[none.indexOf("--parallel") + 1]).toBe("1");
 });

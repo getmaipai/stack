@@ -18,6 +18,7 @@ rolesRoutes.openapi(rolesRoute, (c) => c.json({
   roles: ROLE_IDS.map((id) => {
     const state = resolveRoleState(id);
     const model = selectedModel(id) ?? listModels().find((candidate) => candidate.roles.includes(id)) ?? null;
-    return { id, ...ROLES[id], state, reason: state.reason ?? null, model: model ? { id: model.id, sizeBytes: model.sizeBytes, measuredFootprintBytes: model.measuredFootprintBytes, measuredContextLength: model.measuredContextLength, estimated: model.measuredFootprintBytes === null } : null, check: roleCheck(id), identity: identityCheck(id), context: roleContext(id), ...(id === "chat" ? { models: selectableModels(id) } : {}) };
+    const context = roleContext(id);
+    return { id, ...ROLES[id], state, reason: state.reason ?? (context.context_length !== null ? context.reason : null), model: model ? { id: model.id, sizeBytes: model.sizeBytes, measuredFootprintBytes: model.measuredFootprintBytes, measuredContextLength: model.measuredContextLength, estimated: model.measuredFootprintBytes === null } : null, check: roleCheck(id), identity: identityCheck(id), context, ...(id === "chat" ? { models: selectableModels(id) } : {}) };
   }),
 }, 200));
