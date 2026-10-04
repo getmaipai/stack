@@ -291,6 +291,20 @@ test("a queued request is admitted when free memory rises over the low-water flo
   expect(admitted).toMatchObject({ id: "floor-drain", kind: "resident" });
 });
 
+test("a request queued by the working margin alone is admitted once free memory clears it, with no pressure or floor crossing", async () => {
+  // The 2026-10-04 incident: 0.5 GB refused with 7.8 GB free and normal pressure.
+  // Free dipped under peak + margin (4 GB on p16) while an engine loaded, never
+  // under the low-water floor, so no edge fired and the request waited out its deadline.
+  const reading = (freeGb: number) => ({ totalBytes: 24 * GB, freeBytes: freeGb * GB, availablePercent: 30, pressure: "normal" as const, degraded: false });
+  const stop = startGovernor({ pid: 1, pollMs: 100, tier: "p16", memoryReader: scriptedMemoryReader([reading(4.3), reading(4.3), reading(7.8)]) });
+  stops.push(stop);
+  await Bun.sleep(10);
+  const queued = await admit({ id: "margin-only", kind: "resident", requestedBytes: Math.round(0.5 * GB) });
+  expect(queued).toMatchObject({ queued: true, position: 1 });
+  const admitted = await Promise.race([(queued as { admitted: Promise<unknown> }).admitted, Bun.sleep(1_500).then(() => "stuck")]);
+  expect(admitted).toMatchObject({ id: "margin-only", kind: "resident" });
+});
+
 test("a poll with no memory change does not touch the queue", async () => {
   const stop = startGovernor({ pid: 1, pollMs: 100, memoryReader: scriptedMemoryReader([
     { totalBytes: 64 * GB, freeBytes: 8 * GB, availablePercent: 12, pressure: "warn", degraded: false },

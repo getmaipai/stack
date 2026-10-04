@@ -317,9 +317,6 @@ export function startGovernor(options: StartGovernorOptions): () => void {
   async function poll(): Promise<void> {
     if (stopped) return;
     const reading = memoryReader.read();
-    const previousPressure = pressure;
-    const previousFreeMemoryBytes = freeMemoryBytes;
-    const previousTotalMemoryBytes = totalMemoryBytes;
     if (reading.degraded) {
       memoryReadingDegraded = true;
       lastDegradedProbeError = `The memory probe failed: ${(reading.probeError ?? "no detail was reported")}`;
@@ -334,7 +331,6 @@ export function startGovernor(options: StartGovernorOptions): () => void {
     availablePercent = reading.availablePercent;
     const kernelPressure = reading.pressure;
     const floor = Math.max(totalMemoryBytes * tuning.systemLowWaterPct, tuning.systemLowWaterFloorBytes);
-    const previousFloor = Math.max(previousTotalMemoryBytes * tuning.systemLowWaterPct, tuning.systemLowWaterFloorBytes);
     const low = freeMemoryBytes < floor;
     systemBreaches = low ? systemBreaches + 1 : 0;
     pressurePolls = systemBreaches;
@@ -377,9 +373,10 @@ export function startGovernor(options: StartGovernorOptions): () => void {
       }
     }
     if (memoryReadingDegraded) return;
-    const pressureAdmitting = pressure === "normal" && previousPressure !== "normal";
-    const floorAdmitting = previousFreeMemoryBytes < previousFloor && freeMemoryBytes >= floor;
-    if ((pressureAdmitting || floorAdmitting) && queue.length > 0) {
+    // Every poll tries the queue head, not only on a pressure or floor edge:
+    // a request can be queued by the working margin alone (free dipped under
+    // peak + margin while an engine loaded) with neither edge ever firing.
+    if (queue.length > 0) {
       let index = 0;
       while (index < queue.length) {
         const entry = queue[index]!;
