@@ -17,14 +17,14 @@ import { readHfFile, writeHfFile } from "@/lib/store/hfCache";
 import { raise } from "@/lib/health";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
 
-export const ModelSourceSchema = z.enum(["catalog", "huggingface"]);
+export const ModelSourceSchema = z.enum(["catalog", "huggingface", "lm-studio"]);
 
 // This is intentionally a small boundary around the record. Catalog package
 // manifests and Hugging Face metadata can grow without changing the DB shape.
 export interface ModelRecord {
   id: string;
   roles: RoleId[];
-  source: "catalog" | "huggingface";
+  source: z.infer<typeof ModelSourceSchema>;
   provenance: Record<string, unknown>;
   revision: string;
   sha256: string | null;
@@ -43,7 +43,7 @@ export interface ModelRecord {
 export interface ModelRecordInput {
   id: string;
   roles: RoleId[];
-  source: "catalog" | "huggingface";
+  source: z.infer<typeof ModelSourceSchema>;
   provenance: Record<string, unknown>;
   revision: string;
   sha256?: string | null;

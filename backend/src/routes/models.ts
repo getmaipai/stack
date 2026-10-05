@@ -7,7 +7,7 @@ import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import { apiRouter, ErrorSchema, idParamSchema } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
-import { installCatalogModel, listModels, refuseUnsafeModelId, removeModel, upsertModel, type CatalogModelLike, type ModelRecord } from "@/lib/modelStore";
+import { installCatalogModel, listModels, ModelSourceSchema, refuseUnsafeModelId, removeModel, upsertModel, type CatalogModelLike, type ModelRecord } from "@/lib/modelStore";
 import { readModelManifest } from "@/lib/store/manifests";
 import { importPath } from "@/lib/store/importScan";
 import { modelsDir } from "@/lib/paths";
@@ -82,7 +82,7 @@ modelsRoutes.openapi(importRoute, (c) => {
     refuseUnsafeModelId(body.id);
     const manifest = importPath(body.path, { id: body.id, roles: body.roles, licence: body.licence, revision: body.revision });
     const now = new Date().toISOString();
-    const record = upsertModel({ id: manifest.id, roles: body.roles, source: "huggingface", provenance: { source: manifest.source, path: manifest.sourcePath }, revision: manifest.revision ?? "import", sha256: manifest.blobs[0]?.digest ?? null, sizeBytes: manifest.sizeBytes, licence: body.licence, modelPath: manifest.blobs[0]?.path ?? null, installedAt: now, verifiedAt: now });
+    const record = upsertModel({ id: manifest.id, roles: body.roles, source: ModelSourceSchema.parse(manifest.source), provenance: { source: manifest.source, path: manifest.sourcePath }, revision: manifest.revision ?? "import", sha256: manifest.blobs[0]?.digest ?? null, sizeBytes: manifest.sizeBytes, licence: body.licence, modelPath: manifest.blobs[0]?.path ?? null, installedAt: now, verifiedAt: now });
     return c.json(modelView(record), 200);
   } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 400); }
 });

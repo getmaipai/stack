@@ -129,6 +129,35 @@ test("the model routes refuse a pull without full provenance and list records wi
   expect((await app.request("/stack/v1/models/nope/actions", json({ action: "load" }))).status).toBe(404);
 });
 
+test("importing a local GGUF through the route registers its lm-studio source", async () => {
+  const { mkdtempSync, rmSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const root = mkdtempSync(join(tmpdir(), "maipai-stack-route-import-"));
+  const modelPath = join(root, "local-chat.gguf");
+  writeFileSync(modelPath, "local test GGUF bytes");
+  try {
+    const response = await app.request("/stack/v1/models/import", json({
+      id: "local-gguf-route-import",
+      path: modelPath,
+      roles: ["chat"],
+      licence: "Apache-2.0",
+      revision: "local-test-revision",
+    }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      id: "local-gguf-route-import",
+      roles: ["chat"],
+      state: "installed",
+      source: "lm-studio",
+      revision: "local-test-revision",
+      modelPath: expect.any(String),
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("hardware, budget, backup and the diagnostics bundle answer as data without a computer name", async () => {
   const hardware = await (await app.request("/stack/v1/hardware")).json() as { hardware: Record<string, unknown>; tiers: unknown[] };
   expect(hardware.hardware.computerName).toBeUndefined();
