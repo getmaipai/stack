@@ -130,7 +130,7 @@ test("a hub file installs into the hub cache once, at the pinned repository and 
   const installed = await install();
   expect(installed.modelPath).toBe(join(hfHubRoot, "models--kyutai--pocket-tts-without-voice-cloning", "snapshots", pin.revision, "languages", "english", "model.safetensors"));
   expect(lstatSync(installed.modelPath!).isSymbolicLink()).toBe(true);
-  expect(readHfFile(pin.repo, pin.revision, pin.download.hub_file)?.digest).toBe(sha256);
+  expect((await readHfFile(pin.repo, pin.revision, pin.download.hub_file))?.digest).toBe(sha256);
   // Moved, not copied: the download is held once.
   expect(existsSync(join(modelsDir, pin.id, "model.safetensors"))).toBe(false);
   await install();

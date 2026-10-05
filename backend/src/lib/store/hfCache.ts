@@ -29,9 +29,9 @@ function writeBytes(path: string, bytes: Uint8Array): void {
   writeFileSync(path, bytes);
 }
 
-export function writeHfFile(input: HfFileInput): HfCachedFile {
+export async function writeHfFile(input: HfFileInput): Promise<HfCachedFile> {
   if (!input.sourcePath && !input.bytes) throw new Error("writeHfFile needs sourcePath or bytes");
-  const digest = input.digest?.toLowerCase() ?? (input.sourcePath ? sha256OfPath(input.sourcePath) : requireDigest(input.bytes!));
+  const digest = input.digest?.toLowerCase() ?? (input.sourcePath ? await sha256OfPath(input.sourcePath) : requireDigest(input.bytes!));
   const blob = join(hfBlobsRoot(input.repo), digest);
   if (!existsSync(blob)) {
     if (input.sourcePath) {
@@ -59,15 +59,15 @@ function requireDigest(bytes: Uint8Array): string {
   return digest.digest("hex");
 }
 
-export function readHfFile(repo: string, revision: string, filePath: string): HfCachedFile | null {
+export async function readHfFile(repo: string, revision: string, filePath: string): Promise<HfCachedFile | null> {
   const path = join(hfSnapshotsRoot(repo), revision, filePath);
   if (!existsSync(path)) return null;
   const real = Bun.file(path);
-  const digest = sha256OfPath(path);
+  const digest = await sha256OfPath(path);
   return { repo, revision, filePath, path, digest, sizeBytes: real.size };
 }
 
-export function scanHfCache(root: string): HfCachedFile[] {
+export async function scanHfCache(root: string): Promise<HfCachedFile[]> {
   if (!existsSync(root)) return [];
   const results: HfCachedFile[] = [];
   for (const repoName of readdirSync(root)) {
@@ -78,17 +78,17 @@ export function scanHfCache(root: string): HfCachedFile[] {
     const repo = repoName.slice("models--".length).replaceAll("--", "/");
     for (const revision of readdirSync(revisionsRoot)) {
       const revisionRoot = join(revisionsRoot, revision);
-      const walk = (dir: string) => {
+      const walk = async (dir: string): Promise<void> => {
         for (const entry of readdirSync(dir, { withFileTypes: true })) {
           const path = join(dir, entry.name);
-          if (entry.isDirectory()) walk(path);
+          if (entry.isDirectory()) await walk(path);
           else if (entry.isFile() || entry.isSymbolicLink()) {
             const filePath = relative(revisionRoot, path);
-            results.push({ repo, revision, filePath, path, digest: sha256OfPath(path), sizeBytes: statSync(path).size });
+            results.push({ repo, revision, filePath, path, digest: await sha256OfPath(path), sizeBytes: statSync(path).size });
           }
         }
       };
-      walk(revisionRoot);
+      await walk(revisionRoot);
     }
   }
   return results;

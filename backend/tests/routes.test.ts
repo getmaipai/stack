@@ -1,7 +1,8 @@
 // The contract Home builds against, exercised through the app: the role
 // routes and their failure shapes, the control routes, and the rule that
 // nothing needs a key because nothing but loopback is listening.
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import * as fs from "node:fs";
 import { app } from "@/app";
 import { serveOptions } from "@/daemon";
 import { __resetHealthForTests, raise } from "@/lib/health";
@@ -129,13 +130,18 @@ test("the model routes refuse a pull without full provenance and list records wi
   expect((await app.request("/stack/v1/models/nope/actions", json({ action: "load" }))).status).toBe(404);
 });
 
-test("importing a local GGUF through the route registers its lm-studio source", async () => {
+test("importing a multi-chunk local GGUF streams its hash and registers its lm-studio source", async () => {
   const { mkdtempSync, rmSync, writeFileSync } = await import("node:fs");
+  const { createHash } = await import("node:crypto");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
   const root = mkdtempSync(join(tmpdir(), "maipai-stack-route-import-"));
   const modelPath = join(root, "local-chat.gguf");
-  writeFileSync(modelPath, "local test GGUF bytes");
+  const contents = Buffer.alloc(16 * 1024 * 1024 * 2 + 123, 0x5a);
+  writeFileSync(modelPath, contents);
+  const expectedDigest = createHash("sha256").update(contents).digest("hex");
+  contents.fill(0);
+  const wholeFileRead = spyOn(fs, "readFileSync");
   try {
     const response = await app.request("/stack/v1/models/import", json({
       id: "local-gguf-route-import",
@@ -151,9 +157,12 @@ test("importing a local GGUF through the route registers its lm-studio source", 
       state: "installed",
       source: "lm-studio",
       revision: "local-test-revision",
+      sha256: expectedDigest,
       modelPath: expect.any(String),
     });
+    expect(wholeFileRead.mock.calls.some(([path]) => String(path) === modelPath)).toBe(false);
   } finally {
+    wholeFileRead.mockRestore();
     rmSync(root, { recursive: true, force: true });
   }
 });

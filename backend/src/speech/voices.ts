@@ -135,16 +135,16 @@ export function ttsToken(): string | null {
 export function voiceCloningOn(): boolean { return settingValues()["stack.engines.tts.voice_cloning"] === true; }
 
 /** Whether the gated cloning weights are in the hub cache at the pinned digest. */
-export function cloningWeightsPresent(): boolean {
+export async function cloningWeightsPresent(): Promise<boolean> {
   const pin = optionsForTests?.cloningWeights ?? POCKET_TTS_CLONING_WEIGHTS;
-  return readHfFile(POCKET_TTS_GATED_REPO, POCKET_TTS_CLONING_REVISION, pin.download!.hub_file!)?.digest === pin.download!.sha256;
+  return (await readHfFile(POCKET_TTS_GATED_REPO, POCKET_TTS_CLONING_REVISION, pin.download!.hub_file!))?.digest === pin.download!.sha256;
 }
 
 /** Fetches the gated cloning weights once, with the token; false when
  * no token is set (nothing is asked of the hub without one). */
 export async function ensureCloningWeights(given: VoiceOptions = {}): Promise<boolean> {
   const options = withDefaults(given);
-  if (cloningWeightsPresent()) return true;
+  if (await cloningWeightsPresent()) return true;
   const token = ttsToken();
   if (!token) return false;
   const download = options.download ?? downloadUrl;
@@ -194,7 +194,7 @@ export async function prepareVoice(voiceUrl: string | undefined, given: VoiceOpt
     if (!(presetName in presets)) throw new VoiceRefusedError(`${presetName} is not a preset voice of this engine build.`, 400, "voice-not-pinnable");
     const base = presetVoiceModel(presetName);
     const model = { ...base, download: { ...base.download!, sha256: presets[presetName]!.sha256, approx_bytes: presets[presetName]!.bytes } };
-    if (readHfFile(model.repo!, model.revision!, model.download.hub_file!)?.digest !== model.download.sha256) {
+    if ((await readHfFile(model.repo!, model.revision!, model.download.hub_file!))?.digest !== model.download.sha256) {
       await installCatalogModel(model, { destination: join(modelsDir, model.id, `${presetName}.safetensors`), download, signal: options.signal });
     }
     return presetName;
@@ -203,15 +203,15 @@ export async function prepareVoice(voiceUrl: string | undefined, given: VoiceOpt
     let host: string;
     try { host = new URL(voiceUrl).hostname; } catch { throw new VoiceRefusedError("The voice URL is not a URL.", 400, "voice-not-pinnable"); }
     if (!privateHost(host)) throw new VoiceRefusedError(`The voice at ${host} cannot be pinned or verified; name a preset voice, a Hugging Face path, or a voice served on this household's own network.`, 400, "voice-not-pinnable");
-    requireCloning();
+    await requireCloning();
     return voiceUrl;
   }
   const hf = HF_PATH.exec(voiceUrl);
   if (!hf) throw new VoiceRefusedError("A voice is a preset name, a Hugging Face path (hf://owner/repo/file), or a voice served on this household's own network.", 400, "voice-not-pinnable");
   const [, repo, path, requested] = hf as unknown as [string, string, string, string | undefined];
-  requireCloning();
+  await requireCloning();
   const revision = requested && COMMIT.test(requested) ? requested : null;
-  const placed = revision ? readHfFile(repo, revision, path) : null;
+  const placed = revision ? await readHfFile(repo, revision, path) : null;
   if (placed) return `hf://${repo}/${path}@${revision}`;
   const resolve = options.resolve ?? resolveHuggingFace;
   const resolution = await resolve(repo, { revision: requested ?? undefined });
@@ -222,14 +222,14 @@ export async function prepareVoice(voiceUrl: string | undefined, given: VoiceOpt
   if (!licence) throw new VoiceRefusedError(`${repo} declares no licence for ${path}, so the Stack will not install it.`, 400, "voice-not-pinnable");
   const id = `voice-${repo.replace(/[^A-Za-z0-9._-]+/g, "-")}-${path.replace(/[^A-Za-z0-9._-]+/g, "-")}`.slice(0, 120);
   const model: CatalogModelLike = { id, role: "tts", component: "voice", repo, license: licence, revision: resolution.revision, engine: "pocket-tts", sizing: { profile: "p16", quantization: "n/a" }, download: { url: file.url, sha256: file.sha256, approx_bytes: file.sizeBytes ?? 0, hub_file: path } };
-  if (readHfFile(repo, resolution.revision, path)?.digest !== file.sha256) await installCatalogModel(model, { destination: join(modelsDir, id, path.split("/").pop()!), download, signal: options.signal });
+  if ((await readHfFile(repo, resolution.revision, path))?.digest !== file.sha256) await installCatalogModel(model, { destination: join(modelsDir, id, path.split("/").pop()!), download, signal: options.signal });
   return `hf://${repo}/${path}@${resolution.revision}`;
 }
 
 /** Cloning is served only with the gated weights on disk or fetchable:
  * a token set and cloning turned on; otherwise the reason. */
-function requireCloning(): void {
-  if (cloningWeightsPresent()) return;
+async function requireCloning(): Promise<void> {
+  if (await cloningWeightsPresent()) return;
   if (!voiceCloningOn()) throw new VoiceRefusedError("This voice needs voice cloning, which is turned off; turn on stack.engines.tts.voice_cloning (and set a Hugging Face token) and restart the voice engine.", 409, "voice-cloning-unavailable");
   if (!ttsToken()) throw new VoiceRefusedError("This voice needs the voice-cloning weights, which Hugging Face keeps behind a token; set stack.engines.tts.hf_token and restart the voice engine.", 409, "voice-cloning-unavailable");
 }

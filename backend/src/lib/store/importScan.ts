@@ -19,31 +19,31 @@ export interface ImportCandidate {
 
 const MODEL_EXTENSIONS = new Set([".gguf", ".safetensors", ".bin", ".pt", ".pth", ".mlx", ".onnx"]);
 
-function candidate(source: ImportSource, path: string, name = basename(path)): ImportCandidate {
-  return { source, path, digest: sha256OfPath(path), sizeBytes: statSync(path).size, name };
+async function candidate(source: ImportSource, path: string, name = basename(path)): Promise<ImportCandidate> {
+  return { source, path, digest: await sha256OfPath(path), sizeBytes: statSync(path).size, name };
 }
 
-function scanFiles(root: string, source: ImportSource): ImportCandidate[] {
+async function scanFiles(root: string, source: ImportSource): Promise<ImportCandidate[]> {
   if (!existsSync(root)) return [];
   const results: ImportCandidate[] = [];
-  const walk = (dir: string) => {
+  const walk = async (dir: string): Promise<void> => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const path = join(dir, entry.name);
-      if (entry.isDirectory()) walk(path);
-      else if (entry.isFile() && (MODEL_EXTENSIONS.has(path.slice(path.lastIndexOf(".")).toLowerCase()) || source === "ollama")) results.push(candidate(source, path));
+      if (entry.isDirectory()) await walk(path);
+      else if (entry.isFile() && (MODEL_EXTENSIONS.has(path.slice(path.lastIndexOf(".")).toLowerCase()) || source === "ollama")) results.push(await candidate(source, path));
     }
   };
-  walk(root);
+  await walk(root);
   return results;
 }
 
-export function scanImports(roots: Partial<Record<ImportSource, string>> = externalImportRoots()): ImportCandidate[] {
+export async function scanImports(roots: Partial<Record<ImportSource, string>> = externalImportRoots()): Promise<ImportCandidate[]> {
   const result: ImportCandidate[] = [];
   const hf = roots.huggingface;
-  if (hf) for (const file of scanHfCache(hf)) result.push({ source: "huggingface", path: file.path, digest: file.digest, sizeBytes: file.sizeBytes, name: file.filePath, repo: file.repo, revision: file.revision });
+  if (hf) for (const file of await scanHfCache(hf)) result.push({ source: "huggingface", path: file.path, digest: file.digest, sizeBytes: file.sizeBytes, name: file.filePath, repo: file.repo, revision: file.revision });
   for (const source of ["ollama", "mlx-serve", "omlx", "lm-studio"] as const) {
     const root = roots[source];
-    if (root) result.push(...scanFiles(root, source));
+    if (root) result.push(...await scanFiles(root, source));
   }
   return result;
 }
@@ -69,7 +69,7 @@ export function importCandidate(item: ImportCandidate, options: ImportOneOptions
   return manifest;
 }
 
-export function importPath(path: string, options: ImportOneOptions): ModelManifest {
+export async function importPath(path: string, options: ImportOneOptions): Promise<ModelManifest> {
   if (!existsSync(path) || !statSync(path).isFile()) throw new Error(`Import path is not a file: ${path}`);
-  return importCandidate(candidate("lm-studio", path), options);
+  return importCandidate(await candidate("lm-studio", path), options);
 }

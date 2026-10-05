@@ -1,13 +1,10 @@
-import { createHash } from "node:crypto";
 import { appendFileSync, copyFileSync, existsSync, linkSync, mkdirSync, readFileSync, readdirSync, statSync, symlinkSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { sha256OfFile } from "@/lib/fileHash";
 import { ensureStoreLayout, modelManifestRoot, storeRoot } from "@/lib/store/layout";
 
 export const genericBlobRoot = join(storeRoot, "blobs");
-
-export function sha256OfPath(path: string): string {
-  return createHash("sha256").update(readFileSync(path)).digest("hex");
-}
+export const sha256OfPath = sha256OfFile;
 
 export function linkOrCopy(source: string, destination: string): "hardlink" | "symlink" | "copy" {
   mkdirSync(dirname(destination), { recursive: true, mode: 0o700 });
@@ -29,7 +26,8 @@ export function blobPath(digest: string): string {
   return join(genericBlobRoot, digest.toLowerCase());
 }
 
-export function putBlob(source: string, digest = sha256OfPath(source)): { path: string; digest: string; sizeBytes: number } {
+export async function putBlob(source: string, digest?: string): Promise<{ path: string; digest: string; sizeBytes: number }> {
+  digest ??= await sha256OfPath(source);
   const target = blobPath(digest);
   mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
   if (!existsSync(target)) copyFileSync(source, target);

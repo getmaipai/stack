@@ -76,11 +76,11 @@ modelsRoutes.openapi(pullRoute, (c) => {
     .catch((error) => finishJob(job.id, { ok: false, reason: error instanceof Error ? error.message : String(error) }));
   return c.json({ job: job.id, model: body.id }, 202);
 });
-modelsRoutes.openapi(importRoute, (c) => {
+modelsRoutes.openapi(importRoute, async (c) => {
   const body = c.req.valid("json");
   try {
     refuseUnsafeModelId(body.id);
-    const manifest = importPath(body.path, { id: body.id, roles: body.roles, licence: body.licence, revision: body.revision });
+    const manifest = await importPath(body.path, { id: body.id, roles: body.roles, licence: body.licence, revision: body.revision });
     const now = new Date().toISOString();
     const record = upsertModel({ id: manifest.id, roles: body.roles, source: ModelSourceSchema.parse(manifest.source), provenance: { source: manifest.source, path: manifest.sourcePath }, revision: manifest.revision ?? "import", sha256: manifest.blobs[0]?.digest ?? null, sizeBytes: manifest.sizeBytes, licence: body.licence, modelPath: manifest.blobs[0]?.path ?? null, installedAt: now, verifiedAt: now });
     return c.json(modelView(record), 200);

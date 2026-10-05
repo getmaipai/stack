@@ -297,7 +297,7 @@ export async function installHuggingFaceModel(input: HuggingFaceModelInput, opti
     sha256: input.sha256 ?? "",
     approx_bytes: input.sizeBytes ?? 0,
   }, options);
-  const cached = writeHfFile({ repo: input.repo, revision: input.revision, filePath: basename(options.destination), sourcePath: options.destination, digest: installed.sha256 ?? undefined });
+  const cached = await writeHfFile({ repo: input.repo, revision: input.revision, filePath: basename(options.destination), sourcePath: options.destination, digest: installed.sha256 ?? undefined });
   return upsertModel({ ...installed, modelPath: cached.path }, new Date().toISOString());
 }
 
@@ -320,7 +320,7 @@ async function installRegisteredModel(
   if (!!verifiedDownload.files !== !!verifiedDownload.directory) throw new Error(`Model ${record.id} names ${verifiedDownload.files ? "files without a directory" : "a directory without its files"}.`);
   // A hub file already in the cache at the pinned digest is the install;
   // nothing is fetched twice.
-  const cachedHubFile = verifiedDownload.hub_file && hubRepo ? readHfFile(hubRepo, record.revision, verifiedDownload.hub_file) : null;
+  const cachedHubFile = verifiedDownload.hub_file && hubRepo ? await readHfFile(hubRepo, record.revision, verifiedDownload.hub_file) : null;
   const alreadyCached = cachedHubFile?.digest === verifiedDownload.sha256.toLowerCase();
   mkdirSync(join(destination, ".."), { recursive: true });
   const downloader = options.download ?? downloadUrl;
@@ -367,7 +367,7 @@ async function installRegisteredModel(
     await extractArchive(destination, modelPath);
   } else if (verifiedDownload.hub_file) {
     // Moved into the hub cache, held once; the snapshot path is the model path.
-    modelPath = alreadyCached ? cachedHubFile!.path : writeHfFile({ repo: hubRepo!, revision: record.revision, filePath: verifiedDownload.hub_file, sourcePath: destination, digest: actual, move: true }).path;
+    modelPath = alreadyCached ? cachedHubFile!.path : (await writeHfFile({ repo: hubRepo!, revision: record.revision, filePath: verifiedDownload.hub_file, sourcePath: destination, digest: actual, move: true })).path;
   }
   // A directory model: the other files land beside the weights, each
   // verified, and the directory is the model path.

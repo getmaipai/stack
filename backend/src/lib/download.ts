@@ -1,8 +1,10 @@
-import { createHash } from "node:crypto";
-import { createReadStream, createWriteStream, existsSync, statSync, unlinkSync } from "node:fs";
+import { createWriteStream, existsSync, statSync, unlinkSync } from "node:fs";
 import { mkdirSync, renameSync } from "node:fs";
 import { dirname } from "node:path";
+import { sha256OfFile } from "@/lib/fileHash";
 import { withTimeout } from "@maipai/core/src/withTimeout";
+
+export { sha256OfFile } from "@/lib/fileHash";
 
 // The declared `downloadCapMbps` setting, pushed here by settings.ts when
 // it changes, so this module reads no configuration of its own.
@@ -39,16 +41,6 @@ const CONNECT_TIMEOUT_MS = 30_000;
 const MAX_ATTEMPTS = 6;
 
 export class DownloadVerificationError extends Error {}
-
-export function sha256OfFile(filePath: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const hash = createHash("sha256");
-    const stream = createReadStream(filePath);
-    stream.on("data", (chunk) => hash.update(chunk));
-    stream.on("end", () => resolve(hash.digest("hex")));
-    stream.on("error", reject);
-  });
-}
 
 function fail(partPath: string, reason: string): never {
   try {

@@ -9,11 +9,11 @@ import { readModelManifest, removeModelManifest, writeModelManifest, pruneUnrefe
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
-test("a blob shared by two manifests survives one remove and is pruned after the grace period", () => {
+test("a blob shared by two manifests survives one remove and is pruned after the grace period", async () => {
   const dir = mkdtempSync(join(tmpdir(), "maipai-store-test-")); dirs.push(dir);
   const source = join(dir, "blob.bin"); writeFileSync(source, "shared");
   const digest = createHash("sha256").update("shared").digest("hex");
-  const blob = putBlob(source, digest);
+  const blob = await putBlob(source, digest);
   for (const id of ["one", "two"]) writeModelManifest({ kind: "model", id, source: "test", roles: ["chat"], blobs: [{ digest, sizeBytes: blob.sizeBytes, path: blob.path }], sizeBytes: blob.sizeBytes, createdAt: new Date().toISOString() });
   removeModelManifest("one");
   expect(existsSync(blob.path)).toBe(true);

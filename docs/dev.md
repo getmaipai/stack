@@ -360,7 +360,9 @@ first and only blobs with no remaining reference, after a one-hour
 grace period for interrupted pulls. Import from another tool's folder
 is read-only against that tool: a same-volume file is hard-linked into
 the store, otherwise symlinked, copied only where linking is impossible,
-and never trusted until its own digest and licence are recorded.
+and never trusted until its own digest and licence are recorded. File
+digests use one SHA-256 helper that streams 16 MiB chunks, so hashing a
+large local model never reads the whole file into memory.
 
 ### The governor
 
