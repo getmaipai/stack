@@ -8,7 +8,7 @@ report; nothing is hand-measured. The run itself waits for the Studio
 (this laptop is a 24 GB `p16` and admits the pinned chat model only when
 enough is free, STACK-96b); the laptop is the dry-run machine.
 
-> **Superseded in part 2026-10-02** by [docs/design/RULES.md](../../../home/docs/design/RULES.md) chat rule 4: 4096 as the chat engine's default context no longer holds; the measurements stay valid for that pinned configuration only.
+The automatic context default is chosen by the fit plan up to the model's trained context. Historical 4096-token measurements remain valid only for that pinned configuration.
 
 ## What is fixed
 
@@ -36,8 +36,7 @@ judge, embed, STT and TTS); each is added as a pin with its provenance
 before it is benched, and the bench takes the model ids on its command
 line so the same script measures them.
 
-**Context.** 4096 (the default, what the post-load check and the
-readiness probe use) and 16384; each context is its own launch and its
+**Context.** 4096 (a historical setting) and 16384; each context is its own launch and its
 own row. The Studio's two 64k slots are a third row once a 64k-capable
 pin exists.
 

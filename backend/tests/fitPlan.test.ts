@@ -3,7 +3,7 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StackFitPlan } from "@maipai/spec/gen/ts/stack-fit-plan.js";
-import { buildFitPlan, parseGgufParserJson, runGgufParser, type GgufEstimate, type PlanInput } from "@/lib/fitPlan";
+import { buildFitPlan, largestAdmittedContext, parseGgufParserJson, runGgufParser, type GgufEstimate, type PlanInput } from "@/lib/fitPlan";
 import { MLX_IDLE_FACTOR, MLX_KV_PEAK_FACTOR, MLX_KV_PEAK_FACTOR_LOW, MLX_PREFIX_CACHE_BYTES, mlxHeadroomBytes } from "@/lib/mlxMemory";
 import { peakFor, GovernorRules } from "@/lib/governor";
 
@@ -244,4 +244,23 @@ test("MLX planning high equals the governor admission peak", () => {
   writeFileSync(join(modelDir, "config.json"), JSON.stringify(mlxConfig));
   const plan = mlxPlan();
   expect(plan.roles[0]?.peak.high).toBe(peakFor({ id: "chat", kind: "resident", requestedBytes: 0, modelFileBytes: mlxFacts.weightsBytes, engine: "mlx-serve", headroomBytes: mlxHeadroomBytes({ modelDir, contextTokens: base.contextTokens }) }).bytes);
+});
+
+test("automatic context chooses the largest admitted size and respects the model cap", async () => {
+  const rows = new Map<number, GgufEstimate>();
+  for (const contextTokens of [8192, 16384, 32768, 40960]) {
+    rows.set(contextTokens, { ...estimate, contextTokens, ramNonumaBytes: contextTokens * 100_000, ramUmaBytes: contextTokens * 100_000, vramNonumaBytes: contextTokens * 100_000, fullOffloaded: false, architecture: "qwen3", expertCount: 0 });
+  }
+  const choose = (capBytes: number, modelContextTokens = 40960) => largestAdmittedContext({
+    ...base, unifiedMemory: true, deviceBudgetsBytes: [], estimate: null, modelContextTokens, capBytes: capBytes + base.workingMarginBytes,
+    estimateAt: (contextTokens) => rows.get(contextTokens) ?? null,
+  });
+  const only8k = await choose(100_000_000, 8192);
+  expect(only8k.contextTokens).toBe(8192);
+  const thirtyTwoK = await choose(3_500_000_000, 40960);
+  expect(thirtyTwoK.contextTokens).toBe(32768);
+  const capped = await choose(16 * 1024 ** 3, 32768);
+  expect(capped.contextTokens).toBe(32768);
+  const refused = await choose(0, 8192);
+  expect(refused.contextTokens).toBe(8192);
 });

@@ -27,9 +27,9 @@ test("a live key applies at once and reaches the module that consumes it", () =>
 test("a restart key stays pending until applied, and a value equal to the one in effect clears it", () => {
   updateSettings({ "stack.engines.llama_server.context_length": 8192 });
   const record = readSettings().find((setting) => setting.key === "stack.engines.llama_server.context_length")!;
-  expect(record.in_effect).toBe(4096);
+  expect(record.in_effect).toBe(0);
   expect(record.pending).toBe(8192);
-  expect(engineSettingValues("engines.llama_server").context_length).toBe(4096);
+  expect(engineSettingValues("engines.llama_server").context_length).toBe(0);
   applyPendingSettings();
   expect(engineSettingValues("engines.llama_server").context_length).toBe(8192);
   updateSettings({ "stack.engines.llama_server.context_length": 8192 });

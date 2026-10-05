@@ -1077,7 +1077,7 @@
         "summary": "Every declared role and its current state",
         "responses": {
           "200": {
-            "description": "Declaration; derived state with since, checkedAt on ready and the reason a role is only loaded; the bound model; what the last readiness run said (not checked, passed, failed, skipped; stale after a change); the identity check.",
+            "description": "Declaration; derived state with since, checkedAt on ready and the reason a role is only loaded; the bound model; the launched context length, slot count and whether context is per slot or total; what the last readiness run said; the identity check.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1282,6 +1282,31 @@
                               "expected",
                               "actual",
                               "reason"
+                            ]
+                          },
+                          "context_length": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "context_per_slot": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "context_total": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "slots": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "context_scope": {
+                            "type": "string",
+                            "nullable": true,
+                            "enum": [
+                              "total across slots",
+                              "per slot",
+                              null
                             ]
                           },
                           "models": {

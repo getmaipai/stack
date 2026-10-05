@@ -171,3 +171,21 @@ export function buildFitPlan(input: PlanInput): StackFitPlanType {
   const loadedRoles = verdict === "unknown" ? [] : others.filter((item) => specRoles.has(item.role)).map((item) => ({ role: item.role as (typeof StackFitPlan.shape.roles.element.shape.role.options)[number], choice: "loaded" as const, peak: known(item.peakBytes, item.peakBytes, item.measured ? "measured" : "estimated", date) }));
   return { schema: 1, model: input.modelId, ...(input.modelFileBytes === undefined ? {} : { model_file_bytes: input.modelFileBytes }), context_tokens: input.contextTokens, kv_cache_type: input.kvCacheType, roles: [role, ...loadedRoles], total, cap: known(input.capBytes, input.capBytes, "measured", date), margin: known(input.workingMarginBytes, input.workingMarginBytes, "measured", date), paths, verdict, bottleneck: verdict === "unknown" ? "unknown" : "memory" };
 }
+
+/** Select the largest context admitted by the same estimator used by the
+ * fit-plan route. Unknown estimates never authorize a larger launch. */
+export async function largestAdmittedContext(input: Omit<PlanInput, "contextTokens" | "cpuEstimate"> & { modelContextTokens: number; minimumTokens?: number; stepTokens?: number; estimateAt: (contextTokens: number) => Promise<GgufEstimate | null> | GgufEstimate | null; cpuEstimateAt?: (contextTokens: number) => Promise<GgufEstimate | null> | GgufEstimate | null; memoryContextMultiplier?: number }): Promise<{ contextTokens: number; plan: StackFitPlanType }> {
+  const maximum = Math.max(0, Math.floor(input.modelContextTokens / 512) * 512);
+  const minimum = input.minimumTokens ?? 8192;
+  const step = input.stepTokens ?? 512;
+  for (let contextTokens = maximum; contextTokens >= minimum; contextTokens -= step) {
+    const { modelContextTokens: _modelContextTokens, minimumTokens: _minimumTokens, stepTokens: _stepTokens, estimateAt, cpuEstimateAt, memoryContextMultiplier: _memoryContextMultiplier, ...planInput } = input;
+    const memoryContextMultiplier = input.memoryContextMultiplier ?? 1;
+    const plan = buildFitPlan({ ...planInput, contextTokens: contextTokens * memoryContextMultiplier, estimate: await estimateAt(contextTokens), cpuEstimate: await cpuEstimateAt?.(contextTokens) ?? null });
+    if (plan.verdict === "yes" || plan.verdict === "slow") return { contextTokens, plan };
+  }
+  const contextTokens = Math.min(minimum, maximum);
+  const { modelContextTokens: _modelContextTokens, minimumTokens: _minimumTokens, stepTokens: _stepTokens, estimateAt, cpuEstimateAt, memoryContextMultiplier: _memoryContextMultiplier, ...planInput } = input;
+  const memoryContextMultiplier = input.memoryContextMultiplier ?? 1;
+  return { contextTokens, plan: buildFitPlan({ ...planInput, contextTokens: contextTokens * memoryContextMultiplier, estimate: await estimateAt(contextTokens), cpuEstimate: await cpuEstimateAt?.(contextTokens) ?? null }) };
+}

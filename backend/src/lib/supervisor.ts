@@ -13,7 +13,7 @@ import { ENGINE_READY_MARKER, installedEnginePin, selectEngineBinary, type ChatE
 import { managedEnv } from "@/lib/uvEnvironment";
 import { defaultKvCacheType, llamaServerArgs, mlxKvQuantFor, mlxServeArgs } from "@/lib/engineArgs";
 import { currentEngineBinary, currentEngineTag, engineBinaryPath, engineDir } from "@/lib/engineInstall";
-import { detectHardware } from "@/lib/hardware";
+import { detectHardware, primaryBudgetBytes } from "@/lib/hardware";
 import { identityHeaders, modelFileName, readEngineIdentity, type EngineIdentity } from "@/lib/identity";
 import { isComponent, isModelSelectable, listModels, recordMeasuredFootprint, type ModelRecord } from "@/lib/modelStore";
 import { readFileSync } from "node:fs";
@@ -37,6 +37,10 @@ import { hfHubRoot } from "@/lib/store/layout";
 import { engineSettingValues, settingValues } from "@/settings";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
 import { logger } from "@/lib/log";
+import { readGgufFacts } from "@/lib/gguf";
+import { largestAdmittedContext, runGgufParser } from "@/lib/fitPlan";
+import { getGovernorStatus } from "@/lib/governor";
+import { readMlxKvBytesPerToken } from "@/lib/mlxMemory";
 
 export type EngineKind = "spawned" | "managed" | "url";
 export type EngineStatus = RoleState | "loading" | "busy" | "stopped";
@@ -47,6 +51,9 @@ export interface RoleStatus {
   reason: string | null;
   identity: EngineIdentity | null;
   postLoadCheck: PostLoadCheck | null;
+  contextLength?: number | null;
+  slots?: number | null;
+  contextScope?: "total across slots" | "per slot" | null;
 }
 
 export interface PostLoadCheck {
@@ -76,6 +83,9 @@ export interface RoleProcess {
    * `mlx-serve`, `comfyui`), so a route judges what runs, not what the
    * setting names for the next start. */
   engine: string | null;
+  contextLength?: number;
+  slots?: number;
+  contextScope?: "total across slots" | "per slot";
   modelId: string | null;
   /** The pinned revision of the model the process serves, for the reply headers. */
   modelRevision: string | null;
@@ -540,12 +550,50 @@ export function speechWorkerCommand(
   return [runtime.execPath, ...(viaBun ? [runtime.main] : []), ...workerArgs];
 }
 
-export interface LaunchPlan { command: string[]; engine: string; build: string; stdin: "pipe" | "ignore"; contextLength: number; kind: "spawned" | "managed"; env?: Record<string, string>; healthPath?: string; }
+export interface LaunchPlan { command: string[]; engine: string; build: string; stdin: "pipe" | "ignore"; contextLength: number; slots?: number; contextScope?: "total across slots" | "per slot"; kind: "spawned" | "managed"; env?: Record<string, string>; healthPath?: string; }
+
+async function contextForLaunch(model: ModelRecord, config: Record<string, number | boolean | string | string[]>, slots = 1): Promise<number> {
+  const configured = config.contextLength;
+  if (typeof configured === "number" && configured > 0) return configured;
+  const status = getGovernorStatus();
+  const hardware = await detectHardware();
+  const gpuBudgets = hardware.cudaDevices.map((device) => device.vramBytes - (device.usedVramBytes ?? 0));
+  const modelCapBytes = Math.min(status.capBytes, primaryBudgetBytes(hardware) || status.capBytes);
+  const modelContextTokens = model.modelPath?.endsWith(".gguf")
+    ? (await readGgufFacts(model.modelPath, { allowLocalFile: true })).contextLength
+    : (() => {
+      try { const configPath = join(model.modelPath!, "config.json"); return JSON.parse(readFileSync(configPath, "utf8")).max_position_embeddings ?? 4096; }
+      catch { return 4096; }
+    })();
+  const max = Math.min(modelContextTokens || 4096, 262_144);
+  const estimateAt = (contextTokens: number) => model.modelPath?.endsWith(".gguf")
+    ? runGgufParser({ target: { path: model.modelPath }, contextTokens: contextTokens * slots, kvCacheType: defaultKvCacheType(), gpuLayers: "all" })
+    : null;
+  const cpuEstimateAt = (contextTokens: number) => model.modelPath?.endsWith(".gguf")
+    ? runGgufParser({ target: { path: model.modelPath }, contextTokens: contextTokens * slots, kvCacheType: defaultKvCacheType(), gpuLayers: 0 })
+    : null;
+  if (!model.modelPath?.endsWith(".gguf")) {
+    const mlxFacts = readMlxKvBytesPerToken(model.modelPath!) === null ? null : { weightsBytes: model.sizeBytes ?? 0, config: JSON.parse(readFileSync(join(model.modelPath!, "config.json"), "utf8")) };
+    const result = await largestAdmittedContext({ modelId: model.id, modelContextTokens: max, mlx: mlxFacts, estimate: null, estimateAt: () => null, kvCacheType: defaultKvCacheType(), unifiedMemory: hardware.isAppleSilicon, deviceBudgetsBytes: gpuBudgets, capBytes: modelCapBytes, workingMarginBytes: status.marginBytes, loaded: status.loaded.map((item) => ({ role: item.id, kind: item.kind, peakBytes: item.peakBytes, measured: item.measured })), asOf: new Date().toISOString().slice(0, 10), tool: { name: "fit-plan", version: "launch" } });
+    if (result.plan.verdict !== "yes") {
+      const peak = result.plan.roles[0]?.peak.high;
+      throw new EngineUnavailableError(`The fit plan cannot admit the minimum 8,192 token context; estimated peak ${peak === null || peak === undefined ? "unknown" : `${(peak / 1_073_741_824).toFixed(1)} GB`} against a ${(modelCapBytes / 1_073_741_824).toFixed(1)} GB model budget.`);
+    }
+    return result.contextTokens;
+  }
+  const result = await largestAdmittedContext({ modelId: model.id, modelContextTokens: Math.floor(max / slots), estimate: null, estimateAt, cpuEstimateAt, memoryContextMultiplier: slots, kvCacheType: defaultKvCacheType(), unifiedMemory: hardware.isAppleSilicon, deviceBudgetsBytes: gpuBudgets, capBytes: modelCapBytes, workingMarginBytes: status.marginBytes, loaded: status.loaded.map((item) => ({ role: item.id, kind: item.kind, peakBytes: item.peakBytes, measured: item.measured })), asOf: new Date().toISOString().slice(0, 10), tool: { name: "gguf-parser", version: "launch" } });
+  if (result.plan.verdict !== "yes" && result.plan.verdict !== "slow") {
+    const peak = result.plan.roles[0]?.peak.high;
+    const memoryReason = `The fit plan cannot admit the minimum 8,192 token context for ${model.id}; estimated peak ${peak === null || peak === undefined ? "unknown" : `${(peak / 1_073_741_824).toFixed(1)} GB`} against a ${(modelCapBytes / 1_073_741_824).toFixed(1)} GB model budget.`;
+    throw new EngineUnavailableError(memoryReason);
+  }
+  return result.contextTokens;
+}
 
 /** What to run for a role: llama-server from the `current` link for the
  * chat and embeddings wires, the speech worker for `stt`. */
 /** What to run for a role, exported for the suite; the supervisor calls it after admission. */
-export function launchPlan(role: RoleId, model: ModelRecord, port: number): LaunchPlan {
+export async function launchPlan(role: RoleId, model: ModelRecord, port: number, resolvedContextLength?: number): Promise<LaunchPlan> {
   if (SPEECH_ROLES.includes(role)) {
     const vad = componentModel(role, "vad");
     if (!vad?.modelPath) throw new EngineUnavailableError(`The ${role} voice activity detector is not installed.`);
@@ -571,7 +619,8 @@ export function launchPlan(role: RoleId, model: ModelRecord, port: number): Laun
   }
   const declared = engineSettingValues("engines.llama_server");
   const config = { contextLength: declared.context_length, slots: declared.slots, threads: declared.threads, cacheRamMb: declared.cache_ram_mb, flashAttention: declared.flash_attention } as Record<string, number | boolean | string | string[]>;
-  const contextLength = typeof config.contextLength === "number" ? config.contextLength : 4096;
+  const slots = typeof config.slots === "number" && config.slots > 0 ? config.slots : 1;
+  const contextLength = resolvedContextLength ?? (typeof config.contextLength === "number" && config.contextLength > 0 ? config.contextLength : await contextForLaunch(model, config, slots));
   if (engineForRole(role) === "mlx-serve") {
     // mlx-serve: one model pinned for the life of the process, loopback
     // only, the context length the llama-server settings declare (one
@@ -579,16 +628,15 @@ export function launchPlan(role: RoleId, model: ModelRecord, port: number): Laun
     const pin = installedEnginePin("mlx-serve");
     if (!pin || !engineInstalled("mlx-serve")) throw new EngineUnavailableError("No installed mlx-serve build is available for this machine.");
     const binary = launchBinary(pin);
-    const slots = typeof config.slots === "number" && config.slots > 0 ? config.slots : 1;
     // The person-level setting is not read by the Stack yet (STACK-16); undefined means no --kv-quant.
     const args = mlxServeArgs({ modelPath: model.modelPath!, port, contextLength, slots, prefixCacheFlag: MLX_PREFIX_CACHE_FLAG, kvQuant: mlxKvQuantFor(undefined) });
-    return { command: [binary, ...args], engine: "mlx-serve", build: currentEngineTag("mlx-serve") ?? pin.tag, stdin: "ignore", contextLength, kind: "spawned", env: managedEnv() };
+    return { command: [binary, ...args], engine: "mlx-serve", build: currentEngineTag("mlx-serve") ?? pin.tag, stdin: "ignore", contextLength, slots, contextScope: "per slot", kind: "spawned", env: managedEnv() };
   }
   const pin = installedEnginePin();
   if (!pin || !engineInstalled()) throw new EngineUnavailableError("No installed llama-server build is available for this machine.");
   const binary = launchBinary(pin);
   const args = llamaServerArgs({ modelPath: model.modelPath!, port, config, contextLength, kvCacheType: defaultKvCacheType(), embeddings: role === "embed" });
-  return { command: [binary, ...args], engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength, kind: "spawned" };
+  return { command: [binary, ...args], engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength, slots, contextScope: "per slot", kind: "spawned" };
 }
 
 async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<RoleProcess> {
@@ -603,8 +651,10 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     throw new EngineUnavailableError(reason);
   }
   if (!model?.modelPath) throw new EngineUnavailableError(`No verified and installed ${role} model is available.`);
-  const declaredContextLength = engineSettingValues("engines.llama_server").context_length;
-  const contextLength = typeof declaredContextLength === "number" ? declaredContextLength : 4096;
+  const launchConfig = engineSettingValues("engines.llama_server") as Record<string, number | boolean | string | string[]>;
+  const declaredContextLength = launchConfig.context_length;
+  const slots = typeof launchConfig.slots === "number" && launchConfig.slots > 0 ? launchConfig.slots : 1;
+  const contextLength = typeof declaredContextLength === "number" && declaredContextLength > 0 ? declaredContextLength : await contextForLaunch(model, { ...launchConfig, contextLength: 0 }, slots);
   // The voice engine starts offline; what it may need beyond the pins
   // (the gated cloning weights, with a token and cloning turned on) the
   // Stack fetches first, once. A fetch that fails never stops the start:
@@ -629,9 +679,12 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   // the wait's watcher releases a late admission, so no phantom.
   const managed = MANAGED_ROLES.includes(role);
   const generator = GENERATOR_ROLES.includes(role);
-  const dryRunPeakBytes = engineForRole(role) === "llama-server" && !managed && !generator && !SPEECH_ROLES.includes(role) && !model.measuredFootprintBytes && model.modelPath.endsWith(".gguf")
-    ? await dryRunFootprint(model.modelPath, contextLength)
+  const dryRunPeakBytes = engineForRole(role) === "llama-server" && !managed && !generator && !SPEECH_ROLES.includes(role) && model.modelPath.endsWith(".gguf")
+    ? await dryRunFootprint(model.modelPath, contextLength * slots)
     : null;
+  if (engineForRole(role) === "llama-server" && !managed && !generator && !SPEECH_ROLES.includes(role) && model.modelPath.endsWith(".gguf") && !dryRunPeakBytes && !model.measuredFootprintBytes && !(typeof declaredContextLength === "number" && declaredContextLength > 0)) {
+    throw new EngineUnavailableError("The fit plan could not estimate the launched context for the memory governor; install the GGUF parser or set an explicit context length.");
+  }
   logger.appendLine(JSON.stringify({ event: "governor.peak-source", role, source: dryRunPeakBytes ? "dry-run" : "none", bytes: dryRunPeakBytes }));
   const request = {
     id: role, kind: "resident" as const,
@@ -657,7 +710,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
 
   const port = await findFreePort();
   let plan: LaunchPlan;
-  try { plan = launchPlan(role, model, port); } catch (error) { release(admission); throw error; }
+  try { plan = await launchPlan(role, model, port, contextLength); } catch (error) { release(admission); throw error; }
   const spawnEngine = () => {
     try {
       return Bun.spawn(plan.command, { stdout: "ignore", stderr: "pipe", stdin: plan.stdin, env: plan.env ?? { ...process.env, HF_HUB_CACHE: hfHubRoot } });
@@ -706,7 +759,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     resolveHealth(`post-load-check-failed.${role}`);
     const loadedRevision = plan.kind === "managed" && !GENERATOR_ROLES.includes(role) ? loadedWeightsRepo()?.revision ?? null : null;
     const processRecord: RoleProcess = {
-      role, kind: plan.kind, client, identity, engine: plan.engine, modelId: model.id, modelRevision: loadedRevision ?? model.revision, pid: handle.pid, port, activeRequests: 0, retired: false,
+      role, kind: plan.kind, client, identity, engine: plan.engine, contextLength: plan.contextLength, slots: plan.slots, contextScope: plan.contextScope, modelId: model.id, modelRevision: loadedRevision ?? model.revision, pid: handle.pid, port, activeRequests: 0, retired: false,
       governorHandle: admission,
       stopGovernor: watchProcessMemory(role, handle.pid),
       stop: async () => { handle.kill(); await handle.exited; },
@@ -771,7 +824,7 @@ export async function getProcess(requested: RoleId, modelId?: string): Promise<R
       current.process = started;
       current.starting = null;
       current.lastRealRequestAt = Date.now();
-      current.status = { kind: started.kind, state: "ready", reason: null, identity: started.identity, postLoadCheck: current.status.postLoadCheck };
+      current.status = { kind: started.kind, state: "ready", reason: null, identity: started.identity, postLoadCheck: current.status.postLoadCheck, contextLength: started.contextLength ?? null, slots: started.slots ?? null, contextScope: started.contextScope ?? null };
       emit({ id: "engine.state", data: { engine: role, state: "ready" } });
       emit({ id: "role.state", data: { role, state: "ready", since: new Date().toISOString() } });
       return started;
@@ -793,7 +846,7 @@ export function getRoleStatus(requested: RoleId): RoleStatus {
   const role = processRoleFor(requested);
   const current = runtime(role);
   if (current.process && current.status.state !== "busy") current.status = { ...current.status, kind: current.process.kind, state: "ready", identity: current.process.identity, reason: null };
-  return { ...current.status };
+  return { ...current.status, contextLength: current.process?.contextLength ?? current.status.contextLength ?? null, slots: current.process?.slots ?? current.status.slots ?? null, contextScope: current.process?.contextScope ?? current.status.contextScope ?? null };
 }
 
 /** The engine whose process serves a role right now, or null when

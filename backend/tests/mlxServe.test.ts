@@ -57,7 +57,7 @@ test.skipIf(!APPLE_SILICON)("the chat engine is llama-server until the setting s
   expect(() => updateSettings({ "stack.engines.chat.engine": "vllm" })).toThrow();
 });
 
-test.skipIf(!APPLE_SILICON)("the launch for mlx-serve is its own command on loopback with the model directory, the context length and one slot", () => {
+test.skipIf(!APPLE_SILICON)("the launch for mlx-serve is its own command on loopback with the model directory, the context length and one slot", async () => {
   twoChatModels();
   updateSettings({ "stack.engines.chat.engine": "mlx-serve" });
   applyPendingSettings();
@@ -66,7 +66,7 @@ test.skipIf(!APPLE_SILICON)("the launch for mlx-serve is its own command on loop
   writeFileSync(join(engineDir(MLX_SERVE_PIN), "mlx-serve"), "");
   writeFileSync(join(engineDir(MLX_SERVE_PIN), ENGINE_READY_MARKER), "now");
   try {
-    const plan = launchPlan("chat", selectedModel("chat")!, 8797);
+    const plan = await launchPlan("chat", selectedModel("chat")!, 8797, 4096);
     expect(plan.engine).toBe("mlx-serve");
     expect(plan.build).toBe("v26.9.4");
     expect(plan.kind).toBe("spawned");

@@ -159,7 +159,7 @@ the label and calls `POST /stack/v1/health/{code}/fix`, which returns
 `{ ok, result }`. A code that needs a human (a host to plug back in)
 has no `fix` and Home shows the cause.
 
-> **Superseded in part 2026-10-02** by [docs/design/RULES.md](../../home/docs/design/RULES.md) chat rule 4: the chat engine's `context_length` defaulting to 4096 no longer holds; the chat engine is never launched with a smaller context than the machine can hold.
+The chat engine setting `context_length` defaults to `0`, which selects the largest context admitted by the fit plan up to the model's trained context. A positive owner setting is used as-is; the governor still makes the final memory admission decision.
 
 ## The settings declaration
 
