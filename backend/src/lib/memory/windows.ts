@@ -11,6 +11,6 @@ export function createWindowsMemoryReader(): MemoryReader {
       if (!warned) { warned = true; try { raise({ code: "memory-reader-degraded", severity: "warning", title: "Windows memory reader is not available", text: "GlobalMemoryStatusEx and GetProcessMemoryInfo need a Windows FFI implementation.", cause: "GlobalMemoryStatusEx and GetProcessMemoryInfo need a Windows FFI implementation." }); } catch { /* startup and tests may not have the database */ } }
       return { ...snapshot };
     },
-    processFootprint: () => null,
+    processMemoryBytes: () => null,
   };
 }

@@ -18,10 +18,10 @@ export const STACK_CHAT_MODEL: CatalogModelLike = {
     sha256: "061b54daade076b5d3362dac252678d17da8c68f07560be70818cace6590cb1a",
     approx_bytes: 1_834_426_016,
   },
-  // scripts/bench/studio-bench.sh, 2026-09-20 09:23 UTC, the protocol
-  // rehearsal on the p16 laptop: 2,222 prompt tokens/s, 112.5 generated
-  // tokens/s, the footprint the supervisor measured after that load.
-  measured: { footprintBytes: 414_550_392, contextLength: 4096, hardware: "Apple M4 Pro, 24 GB unified memory" },
+  // No measured figure: the 2026-09-20 rehearsal's 414,550,392 bytes was
+  // the macOS physical footprint alone, which leaves out the 1.8 GB of
+  // weights llama-server memory-maps, so it was withdrawn on 2026-10-06
+  // (STACK-PROCMEM-01) until a load is measured with the one definition.
 };
 
 // The household's p16 chat choice, copied from Home's verified pin.

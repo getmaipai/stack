@@ -7,6 +7,11 @@ const PAGE_SIZE_FALLBACK = 16_384;
 const HOST_VM_INFO64 = 4;
 const HOST_VM_INFO64_COUNT = 38;
 const RUSAGE_INFO_V4 = 4;
+// Byte offsets in `struct rusage_info_v4` (<sys/resource.h>): after the
+// 16-byte uuid come user time, system time, idle wakeups, interrupt
+// wakeups, pageins, wired size, then these two.
+const RUSAGE_RESIDENT_SIZE_OFFSET = 64;
+const RUSAGE_PHYS_FOOTPRINT_OFFSET = 72;
 
 type DarwinSymbols = {
   sysctlbyname: (name: string | Uint8Array, old: unknown, length: unknown, newer: null, newLength: bigint) => number;
@@ -59,15 +64,43 @@ function hostFreeBytes(): number {
   return (stats[0]! + stats[2]! + stats[13]!) * (pageSize[0] || PAGE_SIZE_FALLBACK);
 }
 
-function footprint(pid: number): number | null {
+/** The one definition of a process's memory on macOS, from the two
+ * figures one `proc_pid_rusage` call returns: the larger of the resident
+ * size and the physical footprint. The resident size counts the model
+ * weights an engine memory-maps (llama-server maps the GGUF; those clean
+ * file-backed pages are not in the footprint); the footprint counts what
+ * the resident size cannot see (pages the kernel compressed, graphics
+ * memory owned but not mapped). Measured on the live chat engine
+ * (Qwen3-8B Q4_K_M, context 40,960, 2026-10-06): footprint 3.50 GB,
+ * resident 8.38 GB, `vmmap` mapped file 4.7 GiB resident. */
+export function processMemoryFromRusage(figures: { residentBytes: number; footprintBytes: number }): number | null {
+  const best = Math.max(figures.residentBytes, figures.footprintBytes);
+  return Number.isFinite(best) && best > 0 ? best : null;
+}
+
+/** The documented fallback when `proc_pid_rusage` cannot be read:
+ * `ps -o rss=`, the same resident size, at the cost of a process spawn. */
+function psResidentBytes(pid: number): number | null {
   try {
-    const native = loadSymbols(); const usage = new Uint8Array(1024);
-    if (native.proc_pid_rusage(pid, RUSAGE_INFO_V4, ptr(usage)) !== 0) return null;
-    return Number(new DataView(usage.buffer).getBigUint64(72, true));
-  } catch (error) {
-    warning(`The macOS process footprint probe failed: ${(error as Error).message}`);
+    const out = Bun.spawnSync(["ps", "-o", "rss=", "-p", String(pid)]).stdout.toString().trim();
+    const kib = Number(out);
+    return out && Number.isFinite(kib) && kib > 0 ? kib * 1024 : null;
+  } catch {
     return null;
   }
+}
+
+function processMemoryBytes(pid: number): number | null {
+  try {
+    const native = loadSymbols(); const usage = new Uint8Array(1024);
+    if (native.proc_pid_rusage(pid, RUSAGE_INFO_V4, ptr(usage)) === 0) {
+      const view = new DataView(usage.buffer);
+      return processMemoryFromRusage({ residentBytes: Number(view.getBigUint64(RUSAGE_RESIDENT_SIZE_OFFSET, true)), footprintBytes: Number(view.getBigUint64(RUSAGE_PHYS_FOOTPRINT_OFFSET, true)) });
+    }
+  } catch (error) {
+    warning(`The macOS process memory probe failed: ${(error as Error).message}`);
+  }
+  return psResidentBytes(pid);
 }
 
 export function createDarwinMemoryReader(): MemoryReader {
@@ -89,6 +122,6 @@ export function createDarwinMemoryReader(): MemoryReader {
       if (previous) return { ...previous };
       return { totalBytes: os.totalmem(), availablePercent: 0, pressure: "normal", freeBytes: os.totalmem(), degraded: true };
     },
-    processFootprint: footprint,
+    processMemoryBytes,
   };
 }

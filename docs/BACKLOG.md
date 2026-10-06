@@ -258,6 +258,33 @@ are never copied. Nothing migrates Home until STACK-16.
   `backend/src/profiles.ts`, `scripts/bench/`. Out of scope: Home
   migration. Exit: `bash scripts/check.sh` and the bench report.
 
+- [x] **STACK-PROCMEM-01 (M): process memory counts the weights an engine maps; the runaway watch uses this run's own reading.**
+  Measured 2026-10-06 on the live chat (Qwen3-8B Q4_K_M, context
+  40,960): the governor recorded 3,379,206,840 bytes, the macOS
+  `phys_footprint` alone, while about 7.9 GB was resident (the GGUF is
+  memory-mapped, so its pages are outside the footprint). Effects: two
+  "resident RSS exceeded measured peak" restarts of a healthy chat in
+  five minutes, a chat counted at 3.4 GB in every other role's
+  admission, and wrong "measured" figures. Fix: one figure,
+  `MemoryReader.processMemoryBytes` (macOS: the larger of
+  `ri_resident_size` and `ri_phys_footprint`, fallback `ps -o rss=`);
+  the runaway watch's baseline is only this run's post-load reading and
+  a restart waits for requests in flight unless pressure is critical;
+  the run's peak rises with healthy readings and is stored; a GGUF
+  model's figure from the old definition gains its file size once. Also fixed the timing flake in
+  `governor.test.ts` ("a degraded reading changes no state..."). Files:
+  `backend/src/lib/memory/`, `backend/src/lib/governor.ts`,
+  `backend/src/lib/supervisor.ts`, `backend/src/lib/modelStore.ts`,
+  tests. Exit: `bash scripts/check.sh`. Landed on `main` with this line.
+- [ ] **STACK-FIT-CTX-01 (S): a measured peak counts only at the context it was measured at.**
+  `buildFitPlan` uses `measuredPeakBytes` for every context it tries,
+  though the record keeps `measuredContextLength`; a figure measured at
+  a smaller context understates a larger one (the KV cache grows with
+  it). Use the measured figure only at or below its context and fall
+  back to the estimate above it. Files: `backend/src/lib/fitPlan.ts`,
+  `backend/src/lib/supervisor.ts`, `backend/tests/fitPlan.test.ts`.
+  Exit: `bash scripts/check.sh`.
+
 ## Store and provenance
 
 - [x] **STACK-04: the model store.** Provenance-gated records, the HF

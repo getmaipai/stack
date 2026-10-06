@@ -14,6 +14,9 @@ export const GovernorRules = {
   processSafetyMultiplier: 1.3,
   processMinOverageBytes: 500_000_000,
   processSustainedPolls: 3,
+  /** A run's peak is written back to the store only when it rises by at
+   * least this much, so a slowly filling cache is not a write per poll. */
+  peakRecordStepBytes: 64 * 1_048_576,
   osMarginBytes: 8 * GB,
   engineMultipliers: { "llama-server": 1.3, "mlx-serve": 1.4, oMLX: 1.4, default: 1.3 },
   tiers: {
@@ -80,7 +83,15 @@ interface LoadedInternal extends GovernorLoadedModel {
    * only its own entry, never a newer admission under the same id. */
   token: number;
   evicting: boolean;
+  /** The runaway watch's baseline: this process's own reading after its
+   * post-load check, plus headroom. Null until that reading exists; a
+   * figure stored by an earlier run (another context, another definition)
+   * never arms the watch. */
   peakBaselineBytes: number | null;
+  /** The largest healthy reading of this run, and the last one written
+   * back through `onPeak`. */
+  runPeakBytes: number;
+  recordedPeakBytes: number;
   headroomBytes: number;
   processBreaches: number;
   keepAliveSeconds: number;
@@ -96,6 +107,7 @@ interface GovernorTuning {
   processSafetyMultiplier: number;
   processMinOverageBytes: number;
   processSustainedPolls: number;
+  peakRecordStepBytes: number;
   osMarginBytes: number;
 }
 
@@ -159,7 +171,9 @@ function loadedItemFor(request: GovernorRequest): LoadedInternal {
     idleTtlSeconds: tuning.idleTtlSeconds,
     pinned: request.pinned ?? false,
     pid: request.pid ?? null,
-    peakBaselineBytes: request.measuredPeakBytes == null ? null : request.measuredPeakBytes + (request.headroomBytes ?? 0),
+    peakBaselineBytes: null,
+    runPeakBytes: 0,
+    recordedPeakBytes: 0,
     headroomBytes: request.headroomBytes ?? 0,
     processBreaches: 0,
     keepAliveSeconds: request.kind === "generator" ? 0 : request.keepAliveSeconds ?? 0,
@@ -179,15 +193,19 @@ export function peakFor(request: GovernorRequest): { bytes: number; measured: bo
   return { bytes: base + (request.headroomBytes ?? 0), measured };
 }
 
-/** Replace a provisional admission baseline with the footprint measured
- * after this exact process passed its post-load check. */
-export function refreshMeasuredPeak(handle: GovernorHandle, footprintBytes: number): void {
-  if (!Number.isFinite(footprintBytes) || footprintBytes <= 0) return;
+/** Replace a provisional admission peak with the process memory
+ * measured after this exact process passed its post-load check; that
+ * reading is also the runaway watch's baseline for this run. */
+export function refreshMeasuredPeak(handle: GovernorHandle, processBytes: number): void {
+  if (!Number.isFinite(processBytes) || processBytes <= 0) return;
   const item = loaded.get(handle.id);
   if (!item || (handle.token !== undefined && item.token !== handle.token)) return;
-  item.peakBytes = Math.ceil(footprintBytes);
+  const bytes = Math.ceil(processBytes);
+  item.peakBytes = bytes;
   item.measured = true;
-  item.peakBaselineBytes = Math.ceil(footprintBytes) + item.headroomBytes;
+  item.peakBaselineBytes = bytes + item.headroomBytes;
+  item.runPeakBytes = bytes;
+  item.recordedPeakBytes = bytes;
 }
 
 function loadedBytes(): number {
@@ -311,7 +329,7 @@ export function getGovernorStatus(): GovernorStatus {
     memoryReadingDegraded,
     tier: activeTier,
     marginBytes: workingMargin(),
-    loaded: [...loaded.values()].map(({ peakBaselineBytes: _baseline, processBreaches: _breaches, keepAliveSeconds: _keepAlive, token: _token, evicting: _evicting, ...item }) => item),
+    loaded: [...loaded.values()].map(({ peakBaselineBytes: _baseline, runPeakBytes: _runPeak, recordedPeakBytes: _recorded, processBreaches: _breaches, keepAliveSeconds: _keepAlive, token: _token, evicting: _evicting, ...item }) => item),
     queue: queue.map((entry, index) => ({ id: entry.request.id, position: index + 1, kind: entry.request.kind })),
   };
 }
@@ -329,6 +347,13 @@ export interface StartGovernorOptions {
    * item stays counted and may be evicted on a later poll). */
   unload?: (id: string) => Promise<boolean | void> | boolean | void;
   restart?: (id: string) => Promise<void> | void;
+  /** True while the process serves a request: a runaway restart waits
+   * for it to finish unless the kernel reports critical pressure. */
+  busy?: (id: string) => boolean;
+  /** This run's peak rose (a healthy reading above the last one written
+   * back, by at least `peakRecordStepBytes`): the caller stores it, so
+   * the next admission starts from the latest run, not the first. */
+  onPeak?: (id: string, processBytes: number) => void;
   abort?: (id: string) => Promise<void> | void;
   now?: () => number;
   tier?: GovernorTier;
@@ -379,16 +404,33 @@ export function startGovernor(options: StartGovernorOptions): () => void {
       resolveHealth("memory-pressure-critical");
     }
     if (pressure !== "normal" && (systemBreaches === tuning.systemSustainedPolls || kernelPressure !== "normal")) emit({ id: "pressure", data: { pressure, free_memory_bytes: Math.round(freeMemoryBytes), floor_bytes: Math.round(floor), available_percent: Math.max(0, Math.min(100, availablePercent)) } });
-    const processReader = options.processMemory ?? ((pid: number) => Promise.resolve(memoryReader.processFootprint(pid)));
+    const processReader = options.processMemory ?? ((pid: number) => Promise.resolve(memoryReader.processMemoryBytes(pid)));
     const now = options.now?.() ?? Date.now();
     for (const item of [...loaded.values()]) {
-      if (item.pid === options.pid) {
+      // The runaway watch compares this process's memory with its own
+      // post-load reading (never a figure an earlier run stored), so a
+      // healthy engine is never restarted for using what it used at load.
+      if (item.pid === options.pid && item.peakBaselineBytes !== null) {
         const measured = await processReader(options.pid);
-        if (measured !== null && item.peakBaselineBytes !== null && measured > item.peakBaselineBytes * tuning.processSafetyMultiplier + tuning.processMinOverageBytes) {
+        const limit = item.peakBaselineBytes * tuning.processSafetyMultiplier + tuning.processMinOverageBytes;
+        if (measured !== null && measured > limit) {
           item.processBreaches++;
-        } else item.processBreaches = 0;
-        if (item.kind === "resident" && item.processBreaches >= tuning.processSustainedPolls) {
-          emit({ id: "pressure", data: { pressure, reason: "resident RSS exceeded measured peak", id: item.id } });
+        } else {
+          item.processBreaches = 0;
+          if (measured !== null && measured > item.runPeakBytes) {
+            item.runPeakBytes = measured;
+            item.peakBytes = Math.max(item.peakBytes, measured);
+          }
+          if (item.runPeakBytes - item.recordedPeakBytes >= tuning.peakRecordStepBytes) {
+            // A failed write (a locked store) must not stop this watch;
+            // the peak counts as stored only once the write returned, so
+            // the next healthy poll tries again.
+            try { options.onPeak?.(item.id, item.runPeakBytes); item.recordedPeakBytes = item.runPeakBytes; } catch { /* retried on the next poll */ }
+          }
+        }
+        const busy = options.busy?.(item.id) ?? false;
+        if (item.kind === "resident" && item.processBreaches >= tuning.processSustainedPolls && (!busy || pressure === "critical")) {
+          emit({ id: "pressure", data: { pressure, reason: "process memory exceeded its measured peak", id: item.id, process_bytes: measured, limit_bytes: Math.round(limit) } });
           await options.restart?.(item.id);
           item.processBreaches = 0;
         }
@@ -464,6 +506,7 @@ export function __resetGovernorForTests(): void {
     processSafetyMultiplier: GovernorRules.processSafetyMultiplier,
     processMinOverageBytes: GovernorRules.processMinOverageBytes,
     processSustainedPolls: GovernorRules.processSustainedPolls,
+    peakRecordStepBytes: GovernorRules.peakRecordStepBytes,
     osMarginBytes: GovernorRules.osMarginBytes,
   };
   activeTier = "p16";

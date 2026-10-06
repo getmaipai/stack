@@ -231,7 +231,7 @@ export async function waitHealthy(client: EngineClient, timeoutMs = LOAD_FLOOR_M
 
 export async function measureProcessMemoryBytes(pid: number | null): Promise<number | null> {
   if (pid === null) return null;
-  return getMemoryReader().processFootprint(pid);
+  return getMemoryReader().processMemoryBytes(pid);
 }
 
 /** The smallest real request for a role's wire: the post-load check and
@@ -868,7 +868,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     const processRecord: RoleProcess = {
       role, kind: plan.kind, client, identity, engine: plan.engine, contextLength: plan.contextLength, slots: plan.slots, contextScope: plan.contextScope, modelId: model.id, modelRevision: loadedRevision ?? model.revision, pid: handle.pid, port, activeRequests: 0, retired: false,
       governorHandle: admission,
-      stopGovernor: watchProcessMemory(role, handle.pid),
+      stopGovernor: watchProcessMemory(role, handle.pid, { modelId: model.id, contextLength }),
       stop: async () => { handle.kill(); await handle.exited; },
     };
     void handle.exited.then(() => {
@@ -1048,12 +1048,18 @@ export async function setMachineTierFromHardware(): Promise<{ tier: GovernorTier
   return { tier: tier ?? null, stop: startGovernor({ pid: process.pid, tier: machineTier }) };
 }
 
-/** The governor's watch on a spawned process (its RSS against the
- * measured peak, a restart on a breach), carrying the machine's tier. */
-export function watchProcessMemory(role: RoleId, pid: number): () => void {
+/** The governor's watch on a spawned process (its memory against its
+ * own post-load reading, a restart on a sustained runaway once it is
+ * idle), carrying the machine's tier. With `measured`, a rise in this
+ * run's peak is stored for the model, so the next admission and fit plan
+ * start from the latest run. */
+export function watchProcessMemory(role: RoleId, pid: number, measured?: { modelId: string; contextLength: number }): () => void {
   // `unload` is the governor's way to evict a `jit` role (idle, or under
   // pressure): it drains and stops that role's process, never chat's.
-  return startGovernor({ pid, tier: machineTier, restart: async () => { await restartRole(role); }, unload: async (id) => {
+  return startGovernor({ pid, tier: machineTier, restart: async () => { await restartRole(role); }, busy: () => {
+    const current = runtimes.get(role)?.process;
+    return current?.pid === pid && current.activeRequests > 0;
+  }, onPeak: measured ? (_id, bytes) => { recordMeasuredFootprint(measured.modelId, bytes, measured.contextLength); } : undefined, unload: async (id) => {
     // Only a running jit process is evicted here; one still starting is
     // left to its own start, so its admission stays counted.
     if (!JIT_ROLES.includes(id as RoleId) || !runtimes.get(id as RoleId)?.process) return false;

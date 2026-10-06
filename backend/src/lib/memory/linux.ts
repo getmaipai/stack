@@ -23,7 +23,7 @@ export function createLinuxMemoryReader(): MemoryReader {
       if (previous) return { ...previous };
       return { totalBytes: os.totalmem(), availablePercent: 0, pressure: "normal", freeBytes: os.totalmem(), degraded: true };
     },
-    processFootprint: (pid) => {
+    processMemoryBytes: (pid) => {
       try { const line = readFileSync(`/proc/${pid}/status`, "utf8").split("\n").find((entry) => entry.startsWith("VmRSS:")); return line ? Number(line.replace(/\D/g, "")) * 1024 : null; } catch { return null; }
     },
   };

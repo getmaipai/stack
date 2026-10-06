@@ -3,7 +3,7 @@ import type { MemoryReader, MemorySnapshot } from "@/lib/memory/types";
 
 type ScriptedReading = MemorySnapshot | { probeError: string };
 
-export function scriptedMemoryReader(readings: ScriptedReading[], footprints: Record<number, number | null> = {}): MemoryReader {
+export function scriptedMemoryReader(readings: ScriptedReading[], processBytes: Record<number, number | null> = {}): MemoryReader {
   let index = 0;
   let previous: MemorySnapshot | null = null;
   const defaultGood: MemorySnapshot = { totalBytes: 16 * 1_073_741_824, availablePercent: 50, pressure: "normal", freeBytes: 8 * 1_073_741_824, degraded: false };
@@ -18,6 +18,6 @@ export function scriptedMemoryReader(readings: ScriptedReading[], footprints: Re
       previous = reading;
       return { ...previous };
     },
-    processFootprint: (pid) => footprints[pid] ?? null,
+    processMemoryBytes: (pid) => processBytes[pid] ?? null,
   };
 }

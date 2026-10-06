@@ -9,13 +9,19 @@ import {
   installCatalogModel,
   installHuggingFaceModel,
   isModelSelectable,
+  MEASURED_MEMORY_DEFINITION,
+  recordMeasuredFootprint,
   registerCatalogModel,
+  upgradeMeasuredFiguresFromOlderDefinition,
   upsertModel,
   ProvenanceIncompleteError,
 } from "@/lib/modelStore";
 import { STACK_CHAT_8B_MODEL, STACK_CHAT_MODEL, STACK_EMBED_MODEL, STACK_JUDGE_MODEL, STACK_MODELS } from "@/lib/modelCatalog";
 import { hfUrl } from "@/lib/hf";
 import { downloadUrl } from "@/lib/download";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { meta } from "@/db/schema";
 import { __resetSettingsForTests, updateSettings } from "@/settings";
 import { processRoleFor, selectedModel, setMachineTier } from "@/lib/supervisor";
 
@@ -341,4 +347,22 @@ test("a model size estimate is advisory when its hash matches", async () => {
     download: async (_url, path, options) => { expectedBytes = options.expectedBytes; writeFileSync(path, contents); },
   });
   expect(expectedBytes).toBeUndefined();
+});
+
+test("a footprint-only figure for a GGUF gains its mapped weights once; other figures and new ones are kept", () => {
+  // The 8B chat's stored figure on 2026-10-06: the macOS footprint alone,
+  // 3,379,206,840 bytes, while 8,382,824,448 were resident with the
+  // 5,027,783,488-byte GGUF mapped.
+  upsertModel({ id: "chat-8b", roles: ["chat"], source: "catalog", provenance: { package: "model:chat-8b" }, revision: "rev-a", sizeBytes: 5_027_783_488, modelPath: "/models/chat-8b/Qwen3-8B-Q4_K_M.gguf", measuredFootprintBytes: 3_379_206_840, measuredContextLength: 40_960 }, "2026-10-06T13:00:00.000Z");
+  upsertModel({ id: "stt-one", roles: ["stt"], source: "catalog", provenance: { package: "model:stt-one" }, revision: "rev-a", sizeBytes: 107_600_538, modelPath: "/models/stt-one", measuredFootprintBytes: 260_097_296, measuredContextLength: 4096 }, "2026-10-06T13:00:00.000Z");
+  db.delete(meta).where(eq(meta.key, "models.measured_memory_definition")).run();
+  expect(upgradeMeasuredFiguresFromOlderDefinition()).toBe(1);
+  expect(getModel("chat-8b")).toMatchObject({ measuredFootprintBytes: 8_406_990_328, measuredContextLength: 40_960 });
+  expect(getModel("stt-one")).toMatchObject({ measuredFootprintBytes: 260_097_296 });
+  expect(db.select().from(meta).where(eq(meta.key, "models.measured_memory_definition")).get()?.value).toBe(MEASURED_MEMORY_DEFINITION);
+  // Once marked, a start changes nothing, and a new reading is stored as read.
+  expect(upgradeMeasuredFiguresFromOlderDefinition()).toBe(0);
+  recordMeasuredFootprint("chat-8b", 8_382_824_448, 40_960);
+  expect(upgradeMeasuredFiguresFromOlderDefinition()).toBe(0);
+  expect(getModel("chat-8b")).toMatchObject({ measuredFootprintBytes: 8_382_824_448, measuredContextLength: 40_960 });
 });

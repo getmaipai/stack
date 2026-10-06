@@ -94,10 +94,13 @@ test("peak headroom is added to every base while only the measured base stays me
 test("the process watcher includes headroom in its measured resident baseline", async () => {
   const base = GB;
   const headroom = GB;
-  await admit({ id: "resident-headroom", kind: "resident", requestedBytes: base, measuredPeakBytes: base, headroomBytes: headroom, pid: 42 });
+  const admission = await admit({ id: "resident-headroom", kind: "resident", requestedBytes: base, measuredPeakBytes: base, headroomBytes: headroom, pid: 42 }) as GovernorHandle;
+  refreshMeasuredPeak(admission, base);
+  // 1.3 x (base + headroom) + 0.5 GB is above this reading; without the
+  // headroom, 1.3 x base + 0.5 GB would be below it.
   __setGovernorTuningForTestsOnly({ pollMs: 1, processSustainedPolls: 2 });
   let restarts = 0;
-  const stop = startGovernor({ pid: 42, freeMemory: () => 32 * GB, totalMemory: () => 64 * GB, processMemory: async () => base + headroom, restart: () => { restarts++; } });
+  const stop = startGovernor({ pid: 42, freeMemory: () => 32 * GB, totalMemory: () => 64 * GB, processMemory: async () => 2.2 * GB, restart: () => { restarts++; } });
   stops.push(stop);
   await Bun.sleep(15);
   expect(restarts).toBe(0);
@@ -157,7 +160,7 @@ test("rule 3 keeps pinned models during pressure", async () => {
 });
 
 test("rule 3 restarts a resident model after sustained RSS overage", async () => {
-  await admit({ id: "resident-chat", kind: "resident", requestedBytes: GB, measuredPeakBytes: GB, pid: 42 });
+  refreshMeasuredPeak(await admit({ id: "resident-chat", kind: "resident", requestedBytes: GB, measuredPeakBytes: GB, pid: 42 }) as GovernorHandle, GB);
   __setGovernorTuningForTestsOnly({ pollMs: 1, processSustainedPolls: 2 });
   let restarts = 0;
   const stop = startGovernor({ pid: 42, freeMemory: () => 32 * GB, totalMemory: () => 64 * GB, processMemory: async () => 2 * GB, restart: () => { restarts++; } });
@@ -240,13 +243,16 @@ test("kernel critical pressure aborts an in-flight generator", async () => {
 test("a degraded reading changes no state, flags the status, refuses new work, and recovers", async () => {
   await Bun.sleep(10);
   await admit({ id: "resident-kept", kind: "resident", requestedBytes: GB, modelFileBytes: GB, engine: "llama-server" });
-  const stop = startGovernor({ pid: 1, pollMs: 1, memoryReader: scriptedMemoryReader([
-    { totalBytes: 64 * GB, freeBytes: 32 * GB, availablePercent: 50, pressure: "normal", degraded: false },
-    { probeError: "The kernel's ledger was unreachable." },
-    { probeError: "The kernel's ledger was unreachable." },
-    { probeError: "The kernel's ledger was unreachable." },
-    { totalBytes: 64 * GB, freeBytes: 32 * GB, availablePercent: 50, pressure: "normal", degraded: false },
-  ]) });
+  // The reading stays degraded until the test says so: a fixed script of
+  // three degraded polls at 1 ms could pass between two 5 ms looks on a
+  // loaded machine, which made this test fail about 1 run in 6.
+  let probeFails = false;
+  const good = scriptedMemoryReader([{ totalBytes: 64 * GB, freeBytes: 32 * GB, availablePercent: 50, pressure: "normal", degraded: false }]);
+  const failing = scriptedMemoryReader([{ totalBytes: 64 * GB, freeBytes: 32 * GB, availablePercent: 50, pressure: "normal", degraded: false }, { probeError: "The kernel's ledger was unreachable." }]);
+  failing.read();
+  const stop = startGovernor({ pid: 1, pollMs: 1, memoryReader: { read: () => probeFails ? failing.read() : good.read(), processMemoryBytes: () => null } });
+  await Bun.sleep(5);
+  probeFails = true;
   stops.push(stop);
   let degradedStatus = getGovernorStatus();
   for (let index = 0; index < 20 && !degradedStatus.memoryReadingDegraded; index++) {
@@ -265,6 +271,7 @@ test("a degraded reading changes no state, flags the status, refuses new work, a
   expect(item?.text).toBe("The Stack keeps what is running but will not start anything new until the reading is back.");
   expect(item?.cause).toBe("The memory probe failed: The kernel's ledger was unreachable.");
   expect(item?.fix).toEqual({ label: "Check again", action: "free_memory" });
+  probeFails = false;
   let recoveredStatus = getGovernorStatus();
   for (let index = 0; index < 20 && recoveredStatus.memoryReadingDegraded; index++) {
     await Bun.sleep(5);
@@ -397,4 +404,105 @@ test("a release during a degraded read keeps the head queued with its promise pe
   expect(result).toMatchObject({ id: "queued", kind: "generator" });
   expect(getGovernorStatus().queue).toHaveLength(0);
   expect(getGovernorStatus().loaded).toMatchObject([{ id: "queued", kind: "generator" }]);
+});
+
+// STACK-PROCMEM-01: the live 8B chat (Qwen3-8B Q4_K_M, context 40,960)
+// was recorded at 3,379,206,840 bytes, the macOS footprint alone, while
+// about 7.9 GB was resident with the weights the engine maps; the watch
+// restarted it twice on ordinary use (2026-10-06, 13:00:43 and 13:05:40 UTC).
+const RECORDED_FOOTPRINT = 3_379_206_840;
+const RESIDENT_WITH_WEIGHTS = 7_900_000_000;
+
+test("a stale 3.38 GB stored figure never restarts a chat engine holding 7.9 GB", async () => {
+  await admit({ id: "chat", kind: "resident", requestedBytes: 5_027_783_488, measuredPeakBytes: RECORDED_FOOTPRINT, pid: 42 });
+  __setGovernorTuningForTestsOnly({ pollMs: 1, processSustainedPolls: 2 });
+  let restarts = 0;
+  const stop = startGovernor({ pid: 42, freeMemory: () => 32 * GB, totalMemory: () => 64 * GB, processMemory: async () => RESIDENT_WITH_WEIGHTS, restart: () => { restarts++; } });
+  stops.push(stop);
+  await Bun.sleep(15);
+  expect(restarts).toBe(0);
+});
+
+test("after its post-load reading of 7.9 GB, a healthy chat is kept and a runaway past 1.3 x plus 0.5 GB is restarted", async () => {
+  const admission = await admit({ id: "chat", kind: "resident", requestedBytes: 5_027_783_488, measuredPeakBytes: RECORDED_FOOTPRINT, pid: 42 }) as GovernorHandle;
+  refreshMeasuredPeak(admission, RESIDENT_WITH_WEIGHTS);
+  expect(getGovernorStatus().loaded[0]).toMatchObject({ id: "chat", peakBytes: RESIDENT_WITH_WEIGHTS, measured: true });
+  __setGovernorTuningForTestsOnly({ pollMs: 1, processSustainedPolls: 2 });
+  let reading = 8_485_470_208; // the same engine an hour later, cache filling
+  let restarts = 0;
+  const stop = startGovernor({ pid: 42, freeMemory: () => 32 * GB, totalMemory: () => 64 * GB, processMemory: async () => reading, restart: () => { restarts++; } });
+  stops.push(stop);
+  await Bun.sleep(15);
+  expect(restarts).toBe(0);
+  reading = Math.ceil(RESIDENT_WITH_WEIGHTS * 1.3 + 500_000_000) + 1;
+  for (let index = 0; index < 40 && restarts === 0; index++) await Bun.sleep(5);
+  expect(restarts).toBeGreaterThan(0);
+});
+
+test("the measured peak follows this run upward and is handed back to be stored", async () => {
+  const admission = await admit({ id: "chat", kind: "resident", requestedBytes: 5_027_783_488, measuredPeakBytes: RECORDED_FOOTPRINT, pid: 42 }) as GovernorHandle;
+  refreshMeasuredPeak(admission, RESIDENT_WITH_WEIGHTS);
+  __setGovernorTuningForTestsOnly({ pollMs: 1 });
+  const stored: number[] = [];
+  let reading = RESIDENT_WITH_WEIGHTS + 10_000_000; // under the 64 MiB step: not written
+  const stop = startGovernor({ pid: 42, freeMemory: () => 32 * GB, totalMemory: () => 64 * GB, processMemory: async () => reading, onPeak: (_id, bytes) => { stored.push(bytes); } });
+  stops.push(stop);
+  await Bun.sleep(10);
+  expect(stored).toEqual([]);
+  expect(getGovernorStatus().loaded[0]?.peakBytes).toBe(RESIDENT_WITH_WEIGHTS + 10_000_000);
+  reading = 8_485_470_208;
+  for (let index = 0; index < 40 && stored.length === 0; index++) await Bun.sleep(5);
+  expect(stored).toEqual([8_485_470_208]);
+  expect(getGovernorStatus().loaded[0]?.peakBytes).toBe(8_485_470_208);
+  // A lower reading later never lowers this run's peak.
+  reading = RESIDENT_WITH_WEIGHTS;
+  await Bun.sleep(10);
+  expect(getGovernorStatus().loaded[0]?.peakBytes).toBe(8_485_470_208);
+});
+
+test("a runaway restart waits while the engine serves a request, unless pressure is critical", async () => {
+  const admission = await admit({ id: "chat", kind: "resident", requestedBytes: GB, measuredPeakBytes: GB, pid: 42 }) as GovernorHandle;
+  refreshMeasuredPeak(admission, GB);
+  __setGovernorTuningForTestsOnly({ pollMs: 1, processSustainedPolls: 2 });
+  let busy = true;
+  let restarts = 0;
+  const stop = startGovernor({ pid: 42, freeMemory: () => 32 * GB, totalMemory: () => 64 * GB, processMemory: async () => 4 * GB, busy: () => busy, restart: () => { restarts++; } });
+  stops.push(stop);
+  await Bun.sleep(15);
+  expect(restarts).toBe(0);
+  busy = false;
+  for (let index = 0; index < 40 && restarts === 0; index++) await Bun.sleep(5);
+  expect(restarts).toBeGreaterThan(0);
+});
+
+test("a runaway under critical kernel pressure is restarted even mid-request", async () => {
+  const admission = await admit({ id: "chat", kind: "resident", requestedBytes: GB, measuredPeakBytes: GB, pid: 42 }) as GovernorHandle;
+  refreshMeasuredPeak(admission, GB);
+  __setGovernorTuningForTestsOnly({ pollMs: 1, processSustainedPolls: 2 });
+  let restarts = 0;
+  const stop = startGovernor({ pid: 42, processMemory: async () => 4 * GB, busy: () => true, restart: () => { restarts++; }, memoryReader: scriptedMemoryReader([{ totalBytes: 64 * GB, freeBytes: 32 * GB, availablePercent: 50, pressure: "critical", degraded: false }]) });
+  stops.push(stop);
+  for (let index = 0; index < 40 && restarts === 0; index++) await Bun.sleep(5);
+  expect(restarts).toBeGreaterThan(0);
+});
+
+test("a peak that cannot be stored keeps the watch running", async () => {
+  const admission = await admit({ id: "chat", kind: "resident", requestedBytes: GB, measuredPeakBytes: GB, pid: 42 }) as GovernorHandle;
+  refreshMeasuredPeak(admission, GB);
+  __setGovernorTuningForTestsOnly({ pollMs: 1, processSustainedPolls: 2 });
+  let reading = 1.2 * GB;
+  let restarts = 0;
+  let locked = true;
+  const stored: number[] = [];
+  const stop = startGovernor({ pid: 42, freeMemory: () => 32 * GB, totalMemory: () => 64 * GB, processMemory: async () => reading, onPeak: (_id, bytes) => { if (locked) throw new Error("database is locked"); stored.push(bytes); }, restart: () => { restarts++; } });
+  stops.push(stop);
+  await Bun.sleep(10);
+  // The peak levelled off while the store was locked: it is written once
+  // the store is back, not only after a further rise.
+  locked = false;
+  for (let index = 0; index < 40 && stored.length === 0; index++) await Bun.sleep(5);
+  expect(stored[0]).toBe(1.2 * GB);
+  reading = 4 * GB;
+  for (let index = 0; index < 40 && restarts === 0; index++) await Bun.sleep(5);
+  expect(restarts).toBeGreaterThan(0);
 });

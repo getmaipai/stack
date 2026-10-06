@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db, sqlite } from "@/db";
-import { models } from "@/db/schema";
+import { meta, models } from "@/db/schema";
 import { downloadUrl, DownloadVerificationError, sha256OfFile, type DownloadOptions } from "@/lib/download";
 import { dataDir, modelsDir } from "@/lib/paths";
 import { hfUrl } from "@/lib/hf";
@@ -184,9 +184,43 @@ export function reconcileModelSize(record: ModelRecord): ModelRecord {
   }
 }
 
-export function recordMeasuredFootprint(id: string, footprintBytes: number, contextLength: number): void {
-  db.update(models).set({ measuredFootprintBytes: footprintBytes, measuredContextLength: contextLength }).where(eq(models.id, id)).run();
+/** Stores a model's measured process memory (the one definition in
+ * `MemoryReader.processMemoryBytes`) at the context it ran with. The
+ * column keeps its first name, `measured_footprint_bytes`. */
+export function recordMeasuredFootprint(id: string, processBytes: number, contextLength: number): void {
+  db.update(models).set({ measuredFootprintBytes: processBytes, measuredContextLength: contextLength }).where(eq(models.id, id)).run();
+  markMeasuredMemoryDefinition();
 }
+
+/** Which definition the stored measured figures were taken with. Before
+ * `process-memory-v2` the macOS figure was the physical footprint alone,
+ * which leaves out the weights llama-server memory-maps (the 8B chat
+ * stored 3,379,206,840 bytes while about 7.9 GB was resident). */
+export const MEASURED_MEMORY_DEFINITION = "process-memory-v2";
+const MEASURED_MEMORY_DEFINITION_KEY = "models.measured_memory_definition";
+
+function markMeasuredMemoryDefinition(): void {
+  db.insert(meta).values({ key: MEASURED_MEMORY_DEFINITION_KEY, value: MEASURED_MEMORY_DEFINITION }).onConflictDoUpdate({ target: meta.key, set: { value: MEASURED_MEMORY_DEFINITION } }).run();
+}
+
+/** Run once at start on a store whose figures carry no mark (or an older
+ * one). A GGUF model's figure gains its file size, the mapped weights the
+ * old figure left out (the 8B chat: 3,379,206,840 + 5,027,783,488 bytes,
+ * against 8,382,824,448 read live), so its next admission is close to the
+ * truth rather than falling back to the much larger dry run; any other
+ * figure is kept (those engines load weights into their own memory, which
+ * the footprint already counted). Every figure is measured again at the
+ * model's next load. Every new figure writes the mark, so a fresh store
+ * holds no mark until its first measurement. */
+export function upgradeMeasuredFiguresFromOlderDefinition(): number {
+  const current = db.select({ value: meta.value }).from(meta).where(eq(meta.key, MEASURED_MEMORY_DEFINITION_KEY)).get()?.value;
+  if (current === MEASURED_MEMORY_DEFINITION) return 0;
+  const upgraded = sqlite.prepare("UPDATE models SET measured_footprint_bytes = measured_footprint_bytes + size_bytes WHERE measured_footprint_bytes IS NOT NULL AND size_bytes IS NOT NULL AND lower(model_path) LIKE '%.gguf'").run().changes;
+  const measured = (sqlite.prepare("SELECT count(*) AS n FROM models WHERE measured_footprint_bytes IS NOT NULL").get() as { n: number }).n;
+  if (measured > 0) markMeasuredMemoryDefinition();
+  return upgraded;
+}
+upgradeMeasuredFiguresFromOlderDefinition();
 
 export function isModelSelectable(record: ModelRecord | null): boolean {
   return !!record?.sha256 && !!record.licence && !!record.verifiedAt;

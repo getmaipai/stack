@@ -275,8 +275,8 @@ size-scaled load timeout (60 s floor plus 60 s per GB, 20 min ceiling),
 the post-load check (a real completion with `enable_thinking: false`
 before a role is `ready`; a model answering in `reasoning_content` is
 still alive), the process watch with restart on exit, the measured
-footprint after load (recorded on the model record, replacing the
-estimate), idle unload after the declared idle minutes (shorter on
+process memory after load (recorded on the model record, replacing the
+estimate, and raised while the run's peak rises), idle unload after the declared idle minutes (shorter on
 battery), and a drain on stop. A living engine's 5xx is returned as is;
 a cancelled request is a normal end, not a retirement. Only an engine
 whose health probe fails is retired and reported offline.
@@ -398,27 +398,34 @@ promise the caller can await instead of watching the loaded set, and
 `withdraw` removes it before admission and settles the promise
 refused.
 
-Eviction reads idle time, pin state, kernel pressure and resident RSS. A
-JIT model unloads after `idleTtlSeconds` (600) plus any `keep_alive`;
-under pressure the least recently used unpinned JIT model unloads
-first; a pinned model never unloads. A resident model restarts when its
-process footprint exceeds 1.3 times its measured peak plus 500 MB for
-three polls. Critical pressure aborts the in-flight generator. The poll
+Eviction reads idle time, pin state, kernel pressure and process
+memory. A JIT model unloads after `idleTtlSeconds` (600) plus any
+`keep_alive`; under pressure the least recently used unpinned JIT model
+unloads first; a pinned model never unloads. A resident model restarts
+when its process memory exceeds 1.3 times this run's own post-load
+reading plus 500 MB for three polls (the runaway watch); a figure an
+earlier run stored never arms the watch, and the restart waits for the
+engine's requests in flight to finish unless the kernel reports critical
+pressure. The pressure event names the reading and the limit
+(`process_bytes`, `limit_bytes`). A healthy reading above the run's
+peak raises the admission peak, and each rise of 64 MiB or more is
+written to the model record, so the next admission and fit plan start
+from the latest run. Critical pressure aborts the in-flight generator. The poll
 is every 5 s idle, every 1 s during a load. The governor keeps a bounded
 in-memory ledger of its newest 200 decisions with the reason for each,
 served on the budget route; nothing about decisions is persisted.
 
 **The kernel's ledger.** The governor reads one `MemoryReader`:
 `{ totalBytes, availablePercent, pressure: normal | warn | critical,
-freeBytes, processFootprint(pid) }`. On macOS, `hw.memsize`,
+freeBytes, processMemoryBytes(pid) }`. On macOS, `hw.memsize`,
 `kern.memorystatus_level`, `kern.memorystatus_vm_pressure_level` (1
 normal, 2 warn, 4 critical) and `host_statistics64` (free plus inactive
 plus purgeable pages) through `bun:ffi` against `libSystem.B.dylib`,
-and `proc_pid_rusage` with `RUSAGE_INFO_V4` for `ri_phys_footprint`;
+and `proc_pid_rusage` with `RUSAGE_INFO_V4` for process memory (below);
 every failure keeps the previous reading and raises a warning health
 item. On Linux, `MemAvailable` from `/proc/meminfo`, PSI memory `some
 avg10` above 10 as warn and above 50 as critical, `VmRSS` from
-`/proc/<pid>/status`. Kernel warn or critical is always the soft or
+`/proc/<pid>/status` (which already counts mapped files). Kernel warn or critical is always the soft or
 hard watermark regardless of arithmetic; the arithmetic watermark is
 free memory below 10 percent or 1 GiB for two polls. `os.freemem()` is
 not used: it reported 0.09 GB on a Mac the kernel called 61 percent
@@ -430,7 +437,48 @@ and uses its fit result for admission on a model's first load, for
 llama-server and GGUF files only, with a 30 second limit and null on any
 failure; admission prefers measured peak, then dry run, then file size
 times the engine multiplier. After a successful post-load check, the
-measured process footprint replaces the estimate.
+measured process memory replaces the estimate.
+
+**Process memory, one definition (STACK-PROCMEM-01, 2026-10-06).** Every
+measured peak, the post-load measurement and the runaway watch read one
+figure, `MemoryReader.processMemoryBytes(pid)`: the process's resident
+set including the model weights it memory-maps, never less than the
+kernel's own charge for it. On macOS that is the larger of
+`ri_resident_size` and `ri_phys_footprint` from the same
+`proc_pid_rusage` call (one syscall, no spawn); if that call fails, the
+fallback is `ps -o rss=`, the same resident size at the cost of a spawn.
+The footprint alone, used before this date, leaves out the clean
+file-backed pages of an mmap'd GGUF: the live chat engine (Qwen3-8B
+Q4_K_M, context 40,960, llama.cpp b10797, the p16 laptop: Apple M4 Pro,
+24 GB) had recorded 3,379,206,840 bytes while about 7.9 GB was resident,
+and the watch restarted it twice on ordinary use. Read on the same engine
+on 2026-10-06, read only:
+
+| Reading | Bytes | What it counts |
+|---|---|---|
+| `ri_phys_footprint` (the old figure; `footprint -p` 3,333 MiB) | 3,495,172,816 | dirty and compressed anonymous memory, Metal buffers; not the mapped GGUF |
+| `ri_resident_size` (`ps -o rss=` 8,186,352 KiB) | 8,382,824,448 | everything resident, the mapped weights included |
+| `vmmap --summary` resident, a minute later | 8.1 GiB, of which mapped file 4.7 GiB and shared memory (Metal) 3.0 GiB | the same, by region |
+| `vmmap` swapped (compressed) | 219 MiB | in the footprint, not the resident size |
+
+The larger of the two rusage figures is the resident size whenever the
+weights are mapped, and the footprint whenever the kernel has compressed
+more than the mapped weights hold (a Metal or MPS process with nothing
+mapped, ComfyUI among them). It still misses the compressed part while
+weights are resident (219 MiB here); the exact sum (footprint plus the
+resident mapped-file pages) needs a per-region walk or `task_info` on
+another task, which an unprivileged process cannot get, so the cheap
+figure is the one used. Figures stored under the old definition are
+upgraded once at start (`models.measured_memory_definition` in `meta`
+names the definition in force): a GGUF model's figure gains its file
+size, the mapped weights it left out (the 8B chat: 3,379,206,840 plus
+5,027,783,488 is 8,406,990,328 bytes, against 8,382,824,448 read live),
+so its next admission is near the truth instead of falling back to the
+11.5 GB dry run, which with the p16 working margin of 4 GB would need
+15.5 GB free to start; other figures are kept (those engines hold their
+weights in their own memory, which the footprint counted). Each model is
+measured again at its next load. The 1.7B chat pin's 414,550,392-byte
+figure was withdrawn for the same reason.
 
 On the robot, the body's power and thermal budget is an additional
 admission input with the same thresholds and actions (Bot's GOV-01).
@@ -1646,7 +1694,8 @@ the checkpoint; the graph above at 512 by 512, 8 steps, seed 7,
 rendered in 18.3 s to a 433,537-byte PNG of a lighthouse on a rocky
 shore, fetched through `/view`; the process held 862 MB resident by
 `ps` (Metal's allocations are outside RSS; the Stack's own reader
-uses `phys_footprint`, which counts them).
+takes the larger of the resident size and `phys_footprint`, which
+counts them).
 
 Through the Stack (`scripts/prove-image.sh`, three runs, the last
 with the bounded wait): the install job built the environment in
