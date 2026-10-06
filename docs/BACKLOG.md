@@ -118,6 +118,8 @@ are never copied. Nothing migrates Home until STACK-16.
 
 ## Roles and the router
 
+- [ ] **STACK-WAKE-01 (S): the wakeword role hosts the pinned front end and our phrase as served assets, and is the Stack side of ROBOT-ASSETS-01's single store.** The `wakeword` role's "installed only" stance becomes real: the openWakeWord front end (v0.5.1, Apache-2.0) and `trained_hey_maipai_v2` (our model, from the Bot release) are pinned, checksummed downloads fetched by the Stack's `model_download_jobs`, the one downloader; Home's ROBOT-ASSETS-01 serves them to robots and fetches nothing itself for these files, so there is no second store. Their privacy page rows (GitHub releases) land in the same commit. No inference on the hub in this item. Exit: `bash scripts/check.sh`.
+
 - [x] **STACK-07: the role declaration and the wire.** Thirteen roles
   in `backend/src/roles.ts` with wire, residency, endpoints and quality;
   the router resolves `model` to a role or an installed model; identity
