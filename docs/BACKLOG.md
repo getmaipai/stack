@@ -720,3 +720,7 @@ Rules: `home/docs/design/RULES.md` chat rules 4 and 11; record:
 - [x] **RF-02** covers `dev.md`, `integrations.md`, `AGENTS.md` and
   `README.md`. The user tier is gone; Home's docs describe what a person
   sees. Landed date unrecorded (no commit names this ID; ticked before 2026-09-21).
+
+## SearXNG settings
+
+- [ ] **SEARXNG-SET-02 (M): the Stack configures its own SearXNG from the catalog** (2026-10-06; after STACK-SEARCH-01's service module and SEARXNG-SET-01). Objective: an admin chooses engine groups in Home and the Stack writes, restarts and verifies its own SearXNG. Files: `backend/src/settings.ts` (`stack.search.groups.{news,images,video,science}`, `stack.search.engines.{yandex,baidu}`, boolean, `needs_restart`), the search service module, `backend/src/lib/privacy.ts`, `backend/src/routes/v1.ts` (`GET /stack/v1/search/preview`, `POST /stack/v1/search/revert`), `docs/integrations.md`. Writes with the `yaml` package: `use_default_settings`, `keep_only` union, formats html and json, `safe_search: 2`, limiter off on loopback, secret kept. Acceptance: golden files per combination; a failing restart restores the last good file; revert works; privacy rows follow the groups; the pinned version's `/config` holds every catalog name and a `disabled` engine can be named per request (proves the UNVERIFIED fact). Out of scope: installing SearXNG (STACK-SEARCH-01). Exit: `bash scripts/check.sh`.
