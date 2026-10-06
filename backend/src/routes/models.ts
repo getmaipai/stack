@@ -3,19 +3,22 @@
 // and unpin actions. Nothing installs without url, sha256, licence and
 // revision (goal 4).
 import { createRoute, z } from "@hono/zod-openapi";
-import { existsSync } from "node:fs";
-import { basename, join } from "node:path";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { basename, join, resolve, sep } from "node:path";
 import { apiRouter, ErrorSchema, idParamSchema } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { installCatalogModel, listModels, ModelSourceSchema, refuseUnsafeModelId, removeModel, upsertModel, type CatalogModelLike, type ModelRecord } from "@/lib/modelStore";
 import { readModelManifest } from "@/lib/store/manifests";
+import { modelsRoot } from "@/lib/store/layout";
+import { raise } from "@/lib/health";
 import { importPath } from "@/lib/store/importScan";
 import { modelsDir } from "@/lib/paths";
 import { RoleIdSchema } from "@/roles";
 import { createJob, finishJob, jobSignal, updateJob } from "@/lib/jobs";
 import { catalogModelForId } from "@/updates/catalog";
 import { getProcess, isModelPinned, loadedRoleForModel, pinModel, preferModel, restartRole, unloadRole, EngineUnavailableError } from "@/lib/supervisor";
-import { STACK_MODELS } from "@/lib/modelCatalog";
+import { STACK_MODELS, STACK_WAKEWORD_MODELS } from "@/lib/modelCatalog";
 
 const ModelSchema = z.object({
   id: z.string(), roles: z.array(z.string()), state: z.enum(["notInstalled", "installed"]), runtimeState: z.enum(["loaded", "ready"]), pinned: z.boolean(),
@@ -32,6 +35,7 @@ const importRoute = createRoute({ method: "post", path: "/import", tags: ["Model
 const removeRoute = createRoute({ method: "delete", path: "/{id}", tags: ["Models"], summary: "Remove a model", request: { params: idParamSchema("id") }, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.literal(true) }) } }, description: "Removed." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown model." } } });
 const actionRoute = createRoute({ method: "post", path: "/{id}/actions", tags: ["Models"], summary: "Load, unload, pin or unpin a model", request: { params: idParamSchema("id"), body: { content: { "application/json": { schema: ActionSchema } } } }, responses: { 200: { content: { "application/json": { schema: z.object({ modelId: z.string(), ok: z.boolean(), reason: z.string().optional() }) } }, description: "The outcome." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown model." } } });
 const catalogRoute = createRoute({ method: "get", path: "/catalog", tags: ["Models"], summary: "The pinned models this build ships", responses: { 200: { content: { "application/json": { schema: z.object({ models: z.array(z.record(z.string(), z.unknown())) }) } }, description: "The Stack's own pins (the Catalog index adds more once fetched)." } } });
+const wakewordFileRoute = createRoute({ method: "get", path: "/{id}/file", tags: ["Models"], summary: "Read a verified installed wakeword asset for Home", request: { params: idParamSchema("id") }, responses: { 200: { content: { "application/octet-stream": { schema: z.string() } }, description: "Verified bytes of an installed pinned wakeword asset." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "The id is not a wakeword asset or it is not installed." }, 503: { content: { "application/json": { schema: ErrorSchema } }, description: "The installed bytes failed checksum verification." } } });
 
 export function modelView(model: ModelRecord) {
   const fileMissing = model.modelPath !== null && !existsSync(model.modelPath);
@@ -59,10 +63,33 @@ export function pullSpec(body: z.infer<typeof PullSchema>): CatalogModelLike & {
 export const modelsRoutes = apiRouter<AppEnv>();
 modelsRoutes.openapi(listRoute, (c) => c.json({ models: listModels().map(modelView) }, 200));
 modelsRoutes.openapi(catalogRoute, (c) => c.json({ models: STACK_MODELS as unknown as Record<string, unknown>[] }, 200));
+modelsRoutes.openapi(wakewordFileRoute, (c) => {
+  const id = c.req.valid("param").id;
+  const pin = STACK_WAKEWORD_MODELS.find((model) => model.id === id);
+  const record = listModels().find((model) => model.id === id);
+  const manifest = readModelManifest(id);
+  const blob = manifest?.blobs.length === 1 ? manifest.blobs[0] : null;
+  if (!pin?.download || !record || !manifest || !blob || !record.verifiedAt || !record.roles.includes("wakeword") || record.engineRequirements.component !== "wakeword_asset" || !manifest.roles.includes("wakeword") || !existsSync(blob.path)) return c.json({ error: "Wakeword asset is not installed" }, 404);
+  const expected = pin.download.sha256.toLowerCase();
+  const path = resolve(blob.path);
+  if (!path.startsWith(`${resolve(modelsRoot)}${sep}`) || record.sha256?.toLowerCase() !== expected || blob.digest.toLowerCase() !== expected) return c.json({ error: "Wakeword asset provenance is incomplete" }, 404);
+  const bytes = readFileSync(path);
+  const actual = createHash("sha256").update(bytes).digest("hex");
+  if (actual !== expected) {
+    raise({ code: "wakeword-asset-checksum-mismatch", severity: "error", title: "A wakeword asset failed verification", text: `The stored wakeword asset ${id} was not served because its checksum changed.`, cause: "The stored bytes no longer match the pinned SHA-256.", fix: { label: "Download again", action: "retry_download" } });
+    return c.json({ error: "Wakeword asset failed checksum verification" }, 503);
+  }
+  return c.body(bytes, 200, { "content-type": "application/octet-stream", "content-length": String(bytes.byteLength), "content-disposition": `attachment; filename="${basename(new URL(pin.download.url).pathname)}"`, etag: `"${actual}"` });
+});
 modelsRoutes.openapi(pullRoute, (c) => {
   const body = c.req.valid("json");
   // The id names the model's directory under the store.
   try { refuseUnsafeModelId(body.id); } catch (error) { return c.json({ error: (error as Error).message }, 400); }
+  const wakewordPin = STACK_WAKEWORD_MODELS.find((pin) => pin.id === body.id);
+  if (wakewordPin) {
+    const pin = wakewordPin;
+    if (!pin.download || body.role !== pin.role || body.url !== pin.download.url || body.sha256.toLowerCase() !== pin.download.sha256.toLowerCase() || body.licence !== pin.license || body.revision !== pin.revision || (body.repo !== undefined && body.repo !== pin.repo) || (body.approx_bytes !== undefined && body.approx_bytes !== pin.download.approx_bytes) || (body.component !== undefined && body.component !== pin.component)) return c.json({ error: "Wakeword assets must be installed using the shipped pin." }, 400);
+  }
   const model = pullSpec(body);
   // An MLX model is a directory; a pull that resolved no file list for
   // one would install a lone weights file no engine can launch.

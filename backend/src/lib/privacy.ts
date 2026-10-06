@@ -34,6 +34,15 @@ export const PRIVACY_ROWS: PrivacyRow[] = [
     hosts: ["huggingface.co", "github.com"],
   },
   {
+    id: "wakeword-assets",
+    what: "Downloading pinned wakeword assets for Home to serve to a robot",
+    when: "Only when Home asks the Stack to install a wakeword asset using a model download job",
+    carries: "The pinned asset filename; no household or person data",
+    receiver: "GitHub releases for openWakeWord and MaiPai Bot, straight from this computer",
+    setting: null,
+    hosts: ["github.com"],
+  },
+  {
     id: "provenance",
     what: "Reading a model's provenance before install",
     when: "Only when Home asks to install a model by repository",

@@ -232,9 +232,44 @@ export const STACK_MLX_CHAT_MODEL: CatalogModelLike = {
   },
 };
 
+// Wakeword assets are installed through the same model job and verified
+// store as every other pinned file. Home serves these bytes to paired
+// robots; the Stack does not run wakeword inference. The openWakeWord
+// front end is Apache-2.0; the phrase model is our Bot release asset.
+const OPEN_WAKE_WORD_RELEASE = "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1";
+export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
+  {
+    id: "openwakeword-melspectrogram",
+    role: "wakeword",
+    repo: "dscripka/openWakeWord",
+    license: "Apache-2.0",
+    revision: "v0.5.1",
+    component: "wakeword_asset",
+    download: { url: `${OPEN_WAKE_WORD_RELEASE}/melspectrogram.onnx`, sha256: "ba2b0e0f8b7b875369a2c89cb13360ff53bac436f2895cced9f479fa65eb176f", approx_bytes: 1_087_958 },
+  },
+  {
+    id: "openwakeword-embedding",
+    role: "wakeword",
+    repo: "dscripka/openWakeWord",
+    license: "Apache-2.0",
+    revision: "v0.5.1",
+    component: "wakeword_asset",
+    download: { url: `${OPEN_WAKE_WORD_RELEASE}/embedding_model.onnx`, sha256: "70d164290c1d095d1d4ee149bc5e00543250a7316b59f31d056cff7bd3075c1f", approx_bytes: 1_326_578 },
+  },
+  {
+    id: "trained-hey-maipai-v2",
+    role: "wakeword",
+    repo: "getmaipai/bot",
+    license: "AGPL-3.0",
+    revision: "v0.1.0",
+    component: "wakeword_asset",
+    download: { url: "https://github.com/getmaipai/bot/releases/download/v0.1.0/trained_hey_maipai_v2.onnx", sha256: "6fbff74699801dabf931166badcc51fd655570469fb6d10da1ee5f64b4cba190", approx_bytes: 937_243 },
+  },
+];
+
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_IMAGE_MODEL, STACK_EMBED_MODEL];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_IMAGE_MODEL, STACK_EMBED_MODEL, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

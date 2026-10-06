@@ -2163,6 +2163,56 @@
         }
       }
     },
+    "/stack/v1/models/{id}/file": {
+      "get": {
+        "tags": [
+          "Models"
+        ],
+        "summary": "Read a verified installed wakeword asset for Home",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Verified bytes of an installed pinned wakeword asset.",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The id is not a wakeword asset or it is not installed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The installed bytes failed checksum verification.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/models/import": {
       "post": {
         "tags": [

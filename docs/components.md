@@ -211,6 +211,8 @@ Engines per platform:
 | p64 | installed only |  |  |  |  |  |  |  | not yet |
 | p128 | installed only |  |  |  |  |  |  |  | not yet |
 
+Installed beside the model, never selected on its own: `openwakeword-melspectrogram` (wakeword_asset, 1.0 MB, Apache-2.0, dscripka/openWakeWord @ v0.5.1); `openwakeword-embedding` (wakeword_asset, 1.3 MB, Apache-2.0, dscripka/openWakeWord @ v0.5.1); `trained-hey-maipai-v2` (wakeword_asset, 0.9 MB, AGPL-3.0, getmaipai/bot @ v0.1.0).
+
 ## image (Images)
 
 Engines per platform:
