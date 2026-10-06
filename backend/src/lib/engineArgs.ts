@@ -14,6 +14,9 @@ export interface LlamaServerArgsOptions {
   kvCacheType?: KvCacheType;
   /** Serve `/v1/embeddings` instead of chat: the `embed` role's launch. */
   embeddings?: boolean;
+  /** The multimodal projector a vision model loads beside its weights
+   * (`--mmproj`, VISION-01b): the `vision` role's launch, one slot. */
+  projectorPath?: string;
 }
 
 export type KvCacheType = "f16" | "q8_0" | "q4_0";
@@ -82,12 +85,15 @@ export function llamaServerArgs(options: LlamaServerArgsOptions): string[] {
     // calling; pinned explicitly so a binary upgrade cannot silently
     // drop the default (hub, 2026-09-07).
     "--jinja",
-    // Prefix cache reuse: stable system messages are not re-prefilled
-    // on every turn (hub, FAST-01).
-    "--cache-reuse", "256",
   ];
+  // Prefix cache reuse: stable system messages are not re-prefilled on
+  // every turn (hub, FAST-01). The multimodal path does not take it.
+  if (!options.projectorPath) args.push("--cache-reuse", "256");
   const slots = typeof config.slots === "number" ? config.slots : 1;
-  if (slots > 1) args.push("--parallel", String(slots));
+  // A vision process is one slot: one picture is described at a time,
+  // and the engine's automatic slot count would split its short context.
+  if (options.projectorPath) args.push("--mmproj", options.projectorPath, "--parallel", "1");
+  else if (slots > 1) args.push("--parallel", String(slots));
   const threads = typeof config.threads === "number" ? config.threads : 0;
   if (threads > 0) args.push("--threads", String(threads));
   const cacheRamMb = typeof config.cacheRamMb === "number" ? config.cacheRamMb : 0;

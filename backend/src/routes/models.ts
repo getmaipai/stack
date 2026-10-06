@@ -57,7 +57,11 @@ export function pullSpec(body: z.infer<typeof PullSchema>): CatalogModelLike & {
   // The shipped list stands in only for the same revision: another
   // revision's files would be verified against hashes that are not theirs.
   const directoryPin = catalogEntry?.download?.files ? catalogEntry : shipped?.download?.files && body.revision === shipped.revision ? shipped : null;
-  return { id: body.id, role: body.role, repo: body.repo ?? indexed?.repo, license: body.licence, revision: body.revision, engine: body.engine ?? indexed?.engine, sizing: indexed?.sizing, component: body.component ?? indexed?.component, download: { url: body.url, sha256: body.sha256, approx_bytes: body.approx_bytes ?? indexed?.download?.approx_bytes ?? 0, archive: body.archive ?? indexed?.download?.archive, hub_file: body.hub_file ?? indexed?.download?.hub_file, directory: directoryPin?.download?.directory, files: directoryPin?.download?.files } };
+  // What a record declares about itself (picture input, its own launch,
+  // its card's sampling) comes only from the pin whose file this is: a
+  // caller's body never declares image input for a file nobody proved.
+  const samePin = [catalogEntry, shipped].find((pin) => pin?.download?.sha256?.toLowerCase() === body.sha256.toLowerCase() && pin?.revision === body.revision && (pin.imageInput || pin.launch || pin.sampling)) ?? null;
+  return { id: body.id, role: body.role, repo: body.repo ?? indexed?.repo, license: body.licence, revision: body.revision, engine: body.engine ?? indexed?.engine, sizing: indexed?.sizing, component: body.component ?? indexed?.component, ...(samePin?.imageInput ? { imageInput: samePin.imageInput } : {}), ...(samePin?.launch ? { launch: samePin.launch } : {}), ...(samePin?.sampling ? { sampling: samePin.sampling } : {}), download: { url: body.url, sha256: body.sha256, approx_bytes: body.approx_bytes ?? indexed?.download?.approx_bytes ?? 0, archive: body.archive ?? indexed?.download?.archive, hub_file: body.hub_file ?? indexed?.download?.hub_file, directory: directoryPin?.download?.directory, files: directoryPin?.download?.files } };
 }
 
 export const modelsRoutes = apiRouter<AppEnv>();

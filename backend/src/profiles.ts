@@ -25,6 +25,9 @@ export const PROFILE_TIERS: ProfileTier[] = [
     resident: ["chat", "coding", "judge", "router", "stt", "tts"],
     onDemand: ["embed"],
     installedOnly: ["wakeword"],
+    // vision stays here: measured 2026-10-06 on a 24 GB machine, it does
+    // not fit beside the 8B chat under the governor's margin (docs/dev.md,
+    // "The vision role").
     notAvailable: ["rerank", "vision", "image", "video", "music"],
     speedRange: { min: 15, max: 80 },
   },

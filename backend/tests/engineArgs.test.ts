@@ -106,3 +106,17 @@ test("llama-server args spell q4_0 and omit the default f16 flags", () => {
   const f16 = llamaServerArgs({ modelPath, port: 8771, config: declaredDefaults, contextLength: 4096, kvCacheType: "f16" });
   expect(f16).not.toContain("-ctk");
 });
+
+test("a vision launch loads its projector with one slot and no cache reuse (VISION-01b)", () => {
+  const args = llamaServerArgs({ modelPath: "/models/vision.gguf", port: 8772, config: { ...declaredDefaults, slots: 4 }, contextLength: 8192, kvCacheType: "q8_0", projectorPath: "/models/mmproj.gguf" });
+  const mmproj = args.indexOf("--mmproj");
+  expect(args[mmproj + 1]).toBe("/models/mmproj.gguf");
+  expect(args.slice(args.indexOf("--parallel"), args.indexOf("--parallel") + 2)).toEqual(["--parallel", "1"]);
+  expect(args.filter((arg) => arg === "--parallel")).toHaveLength(1);
+  expect(args).not.toContain("--cache-reuse");
+  expect(args.slice(args.indexOf("-c"), args.indexOf("-c") + 2)).toEqual(["-c", "8192"]);
+});
+
+test("a text launch never names a projector (VISION-01b)", () => {
+  expect(llamaServerArgs({ modelPath, port: 8771, config: declaredDefaults, contextLength: 4096, kvCacheType: "q8_0" })).not.toContain("--mmproj");
+});

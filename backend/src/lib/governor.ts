@@ -46,6 +46,7 @@ export interface GovernorHandle {
   id: string;
   kind: GovernorKind;
   requestedBytes: number;
+  token?: number;
 }
 
 export interface GovernorLoadedModel {
@@ -75,6 +76,10 @@ export interface GovernorStatus {
 export interface GovernorDecision { at: string; decision: string; reason: string; model: string; }
 
 interface LoadedInternal extends GovernorLoadedModel {
+  /** Which admission this entry is: a release or an eviction removes
+   * only its own entry, never a newer admission under the same id. */
+  token: number;
+  evicting: boolean;
   peakBaselineBytes: number | null;
   processBreaches: number;
   keepAliveSeconds: number;
@@ -139,9 +144,12 @@ export function setGovernorMemorySettings(values: { modelBudgetBytes?: number; s
 }
 export function getGovernorDecisions(): GovernorDecision[] { return [...decisions]; }
 
+let nextToken = 1;
 function loadedItemFor(request: GovernorRequest): LoadedInternal {
   const peak = peakFor(request);
   return {
+    token: nextToken++,
+    evicting: false,
     id: request.id,
     kind: request.kind,
     peakBytes: peak.bytes,
@@ -212,7 +220,13 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
   const item = loadedItemFor(request);
   loaded.set(request.id, item);
   decide("Admitted", "The current memory budget has room.", request.id);
-  return { id: request.id, kind: request.kind, requestedBytes: peak.bytes };
+  return { id: request.id, kind: request.kind, requestedBytes: peak.bytes, token: item.token };
+}
+
+/** A request on a loaded item: its idle clock starts again. */
+export function touch(id: string): void {
+  const item = loaded.get(id);
+  if (item) item.lastUsedAt = nowIso();
 }
 
 /** A spawned process's pid is known only after admission; the resident
@@ -243,10 +257,13 @@ function settleAdmission(entry: QueuedEntry): void {
   loaded.set(entry.request.id, item);
   decide("Admitted", "The current memory budget has room.", entry.request.id);
   entry.settled = true;
-  entry.resolve({ id: entry.request.id, kind: entry.request.kind, requestedBytes: item.peakBytes });
+  entry.resolve({ id: entry.request.id, kind: entry.request.kind, requestedBytes: item.peakBytes, token: item.token });
 }
 
 export function release(handle: GovernorHandle): void {
+  const item = loaded.get(handle.id);
+  // An older admission's handle frees nothing, so it admits nothing.
+  if (!item || (handle.token !== undefined && item.token !== handle.token)) return;
   loaded.delete(handle.id);
   if (memoryReadingDegraded) return;
   const next = queue.shift();
@@ -281,7 +298,7 @@ export function getGovernorStatus(): GovernorStatus {
     memoryReadingDegraded,
     tier: activeTier,
     marginBytes: workingMargin(),
-    loaded: [...loaded.values()].map(({ peakBaselineBytes: _baseline, processBreaches: _breaches, keepAliveSeconds: _keepAlive, ...item }) => item),
+    loaded: [...loaded.values()].map(({ peakBaselineBytes: _baseline, processBreaches: _breaches, keepAliveSeconds: _keepAlive, token: _token, evicting: _evicting, ...item }) => item),
     queue: queue.map((entry, index) => ({ id: entry.request.id, position: index + 1, kind: entry.request.kind })),
   };
 }
@@ -295,7 +312,9 @@ export interface StartGovernorOptions {
   processMemory?: (pid: number) => Promise<number | null>;
   memoryReader?: MemoryReader;
   loadInFlight?: () => boolean;
-  unload?: (id: string) => Promise<void> | void;
+  /** Evicts a jit item; resolves false when nothing was unloaded (the
+   * item stays counted and may be evicted on a later poll). */
+  unload?: (id: string) => Promise<boolean | void> | boolean | void;
   restart?: (id: string) => Promise<void> | void;
   abort?: (id: string) => Promise<void> | void;
   now?: () => number;
@@ -367,9 +386,21 @@ export function startGovernor(options: StartGovernorOptions): () => void {
         await options.abort?.(item.id);
         emit({ id: "pressure", data: { reason: "critical kernel memory pressure aborted a generator", id: item.id, pressure } });
       }
-      if (item.kind === "jit" && !item.pinned && (idle || pressure !== "normal")) {
-        await options.unload?.(item.id); decide("Unloaded", pressure !== "normal" ? `Memory pressure is ${pressure}.` : "The model was idle.", item.id);
-        loaded.delete(item.id);
+      // Only a watch that can unload evicts: forgetting a jit item whose
+      // process still runs would hide its memory from every admission.
+      if (item.kind === "jit" && options.unload && !item.evicting && !item.pinned && (idle || pressure !== "normal")) {
+        // Not awaited: an unload drains requests in flight, and this poll
+        // (another process's RSS watch among them) never waits on it. The
+        // entry goes when its own process is gone, never a newer one.
+        item.evicting = true;
+        const unload = options.unload;
+        decide("Unloaded", pressure !== "normal" ? `Memory pressure is ${pressure}.` : "The model was idle.", item.id);
+        void (async () => {
+          let unloaded: boolean | void = undefined;
+          try { unloaded = await unload(item.id); } catch { unloaded = false; }
+          if (unloaded === false) { item.evicting = false; return; }
+          if (loaded.get(item.id) === item) loaded.delete(item.id);
+        })();
       }
     }
     if (memoryReadingDegraded) return;

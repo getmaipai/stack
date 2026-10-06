@@ -1417,6 +1417,9 @@
                               },
                               "estimated": {
                                 "type": "boolean"
+                              },
+                              "imageInput": {
+                                "type": "boolean"
                               }
                             },
                             "required": [
@@ -2796,6 +2799,8 @@
                           "enum": [
                             "queued",
                             "running",
+                            "waiting_for_you",
+                            "paused",
                             "done",
                             "failed",
                             "cancelled"
@@ -2917,6 +2922,8 @@
                             "enum": [
                               "queued",
                               "running",
+                              "waiting_for_you",
+                              "paused",
                               "done",
                               "failed",
                               "cancelled"
@@ -3039,6 +3046,8 @@
                           "enum": [
                             "queued",
                             "running",
+                            "waiting_for_you",
+                            "paused",
                             "done",
                             "failed",
                             "cancelled"
@@ -3168,6 +3177,8 @@
                           "enum": [
                             "queued",
                             "running",
+                            "waiting_for_you",
+                            "paused",
                             "done",
                             "failed",
                             "cancelled"

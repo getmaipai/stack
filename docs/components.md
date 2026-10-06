@@ -135,8 +135,6 @@ Engines per platform:
 
 ## vision (Vision)
 
-Shares `chat`'s model and process unless bound elsewhere; the rows below are `chat`'s pins seen from this role.
-
 Engines per platform:
 
 | Engine | Build | Platform | Status |
@@ -147,15 +145,16 @@ Engines per platform:
 | `gguf-parser-v0.26.4-win-x64` | v0.26.4 | win32 x64 | pinned, not yet verified |
 | `llama-server-b10797-macos-arm64` | b10797 | darwin arm64 | pinned, verified |
 | `llama-server-b10797-win-cuda-x64` | b10797 | win32 x64 (NVIDIA) | pinned, not yet verified |
-| `mlx-serve-v26.9.4-macos-arm64` | v26.9.4 | darwin arm64 | pinned, verified (the second chat engine, chosen by `stack.engines.chat.engine`) |
-| oMLX | | | candidate (the named alternative the Studio bench can call for: dev.md, The second chat engine; STACK-14) |
+| `mlx-serve-v26.9.4-macos-arm64` | v26.9.4 | darwin arm64 | pinned, verified (the second chat engine; the vision role stays on llama-server, which loads its projector) |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
 | p16 | not available |  |  |  |  |  |  |  | not available |
 | p32 | not available |  |  |  |  |  |  |  | not available |
 | p64 | not available |  |  |  |  |  |  |  | not available |
-| p128 | on demand | `qwen3-8b-instruct-q4-k-m` | Q4_K_M | 4.68 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-8B-GGUF @ 7c41481f57cb95916b40956ab2f0b139b296d974 | pinned |
+| p128 | on demand | `qwen3-vl-4b-instruct-q4-k-m` | Q4_K_M | 2.33 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-VL-4B-Instruct-GGUF @ 1cd86afb9a95c410a6038ab3b40d8b578c892266 | pinned |
+
+Installed beside the model, never selected on its own: `qwen3-vl-4b-instruct-mmproj-q8-0` (projector, 0.42 GB, Apache-2.0, Qwen/Qwen3-VL-4B-Instruct-GGUF @ 1cd86afb9a95c410a6038ab3b40d8b578c892266).
 
 ## stt (Voice in)
 

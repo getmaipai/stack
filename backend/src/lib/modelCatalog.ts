@@ -57,6 +57,54 @@ export const STACK_JUDGE_MODEL: CatalogModelLike = {
   },
 };
 
+// The `vision` pins (VISION-01b): Qwen's own GGUF of Qwen3-VL-4B-Instruct,
+// the language model at Q4_K_M and its multimodal projector at Q8_0 (the
+// smaller of the two projector files the repository publishes). Licence
+// Apache-2.0, read from the pinned revision's model card. The projector
+// is a component of the vision model, loaded with --mmproj and never
+// selectable alone; the model declares image input by naming it
+// (spec ModelCapabilities.image_input), so picture support follows the
+// record, never the model id. The engine build b10797 carries the
+// qwen3vl text architecture and its mtmd projector graph.
+const QWEN3_VL_REPO = "Qwen/Qwen3-VL-4B-Instruct-GGUF";
+const QWEN3_VL_REVISION = "1cd86afb9a95c410a6038ab3b40d8b578c892266";
+export const STACK_VISION_PROJECTOR: CatalogModelLike = {
+  id: "qwen3-vl-4b-instruct-mmproj-q8-0",
+  role: "vision",
+  component: "projector",
+  repo: QWEN3_VL_REPO,
+  license: "Apache-2.0",
+  revision: QWEN3_VL_REVISION,
+  engine: "llama-server",
+  sizing: { profile: "p16", quantization: "Q8_0" },
+  download: {
+    url: hfUrl(`${QWEN3_VL_REPO}/resolve/${QWEN3_VL_REVISION}/mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf`),
+    sha256: "30ba2c7dd3127a4561b6cba9d13d0f711c91bdb38742e2f56d73c8cb596bd06d",
+    approx_bytes: 453_974_304,
+  },
+};
+export const STACK_VISION_MODEL: CatalogModelLike = {
+  id: "qwen3-vl-4b-instruct-q4-k-m",
+  role: "vision",
+  repo: QWEN3_VL_REPO,
+  license: "Apache-2.0",
+  revision: QWEN3_VL_REVISION,
+  engine: "llama-server",
+  sizing: { profile: "p16", quantization: "Q4_K_M" },
+  download: {
+    url: hfUrl(`${QWEN3_VL_REPO}/resolve/${QWEN3_VL_REVISION}/Qwen3VL-4B-Instruct-Q4_K_M.gguf`),
+    sha256: "66358cb18bb6b3b1b6675aa412c7a88ef01d228f481184d13668e5201c730a0a",
+    approx_bytes: 2_497_281_664,
+  },
+  imageInput: { projector: STACK_VISION_PROJECTOR.id },
+  // A picture turn needs a short context: one picture is at most the
+  // engine's per-image token cap, plus the question and the description.
+  launch: { contextLength: 8192 },
+  // Sampling from the model card's recommended settings for the Instruct
+  // edition (rule 3: the source is named).
+  sampling: { temperature: 0.7, top_p: 0.8, top_k: 20, presence_penalty: 1.5, source: "Qwen/Qwen3-VL-4B-Instruct model card, Generation Hyperparameters, VL" },
+};
+
 // The `stt` pins (STACK-94b): sherpa-onnx's Moonshine tiny English
 // package and the Silero voice activity detector, from k2-fsa's rolling
 // `asr-models` release. A rolling tag can replace an asset under the
@@ -269,7 +317,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_IMAGE_MODEL, STACK_EMBED_MODEL, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_IMAGE_MODEL, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

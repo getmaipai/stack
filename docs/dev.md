@@ -1809,6 +1809,71 @@ Verified live, not just "the daemon started": `scripts/build-binary.sh`'s own ve
 
 Files: `scripts/build-binary.sh` (new, platform-agnostic - it compiles for whichever machine runs it, matching HOME-STACK-01's own design of a local build at install time, never a cross-compiled/central one; ships `migrations/` and `backend-src/`), `backend/src/db/index.ts` and `backend/src/lib/paths.ts` (the two migrations/data-dir fixes, `isCompiledBinary` exported from the latter), `backend/src/lib/supervisor.ts` (`speechWorkerCommand()`'s compiled-vs-bun-run branch), `backend/src/service/launchd.ts` + `systemd.ts` (`STACK_BUN_BIN` passthrough), `backend/package.json` (`sherpa-onnx-darwin-arm64` added as a direct dependency - previously only a transitive optional dependency of `sherpa-onnx-node`; no longer required for the fix itself now that the worker runs via a real `bun run`, but still useful so `bun install` alone proves the native package is present rather than discovering that live). Tests: `speech.test.ts` (the worker-command test rewritten for the new signature, the compiled-with-no-`STACK_BUN_BIN` error), `service.test.ts` + `systemd.test.ts` (`STACK_BUN_BIN` present and absent). Out of scope: Home's own `install.sh`/`uninstall.sh` wiring (HOME-STACK-01's home-side half, a separate item, which now also has to keep `backend-src/` beside the binary and set `STACK_BUN_BIN`, not just place a single file); an actual Linux build (`sherpa-onnx-darwin-arm64` only, for now - the robot's own speech process never goes through this file at all, so nothing here blocks it).
 
+## The vision role (VISION-01b, 2026-10-06)
+
+`vision` is its own model and process. It no longer shares chat's
+text-only process, which cannot read a picture. The pin is Qwen's own
+GGUF of Qwen3-VL-4B-Instruct (`Qwen/Qwen3-VL-4B-Instruct-GGUF` at
+revision `1cd86afb9a95c410a6038ab3b40d8b578c892266`): the language model
+at Q4_K_M (2,497,281,664 bytes) and its multimodal projector at Q8_0
+(453,974,304 bytes), both Apache-2.0 from the pinned revision's card.
+The projector is a `component: "projector"` record, installed and
+verified through the same model job, never selectable alone. The model
+names it in `imageInput` (the spec's `ModelCapabilities.image_input`,
+spec-v0.1.83), and the vision role selects only a record that declares
+picture input, never a model id. `scripts/install-pin.ts` installs a
+shipped pin on a running Stack through its own model job.
+
+The launch is llama-server b10797 (its `qwen3vl` text architecture and
+mtmd projector graph are in the build) with `--mmproj`, one slot, the
+record's own 8,192-token context whatever the chat settings say, and no
+`--cache-reuse` (the multimodal path does not take it). The post-load
+check and the readiness probe send a 16 by 16 red PNG, so ready means
+the projector reads a picture. Sampling comes from the model card's VL
+settings on the pin (temperature 0.7, top_p 0.8, top_k 20, presence
+penalty 1.5), filled in only where a request said nothing.
+
+Residency: the governor admits vision as `jit`, its peak the fit tool's
+dry run plus the projector (or a measured whole-machine peak on the
+pin once one exists), and a request restarts its idle clock. Only a
+watch that can unload evicts a `jit` item, only once its process runs,
+and without blocking the watch while requests drain; an entry is removed
+by its own admission's token, never a newer one under the same id. An
+admission never evicts a resident. A resident role about to start
+unloads any `jit` role first: a picture start still queued for memory
+is withdrawn at once, one already admitted and loading is retired
+before the resident is sized, and no picture request starts while a
+resident starts. So chat is never sized with a picture model counted and
+never starts at a smaller context because of one (rule 4).
+
+### Measured on the 24 GB machine, 2026-10-06
+
+Apple silicon laptop, 24 GB unified memory; the live chat
+(Qwen3-8B Q4_K_M, context 40,960, about 7.9 GB resident) plus the
+owner's usual desktop apps; a scratch Stack on another port with its
+own data directory.
+
+- The governor's available reading (free, inactive and speculative
+  pages) was 3.3 to 5.5 GB across the session.
+- Through the scratch Stack, a picture request was refused: "It needs
+  about 4.5 GB with 5.5 GB free, after the working margin the machine's
+  tier keeps back." 4.5 GB is the dry run plus the projector, and p16
+  keeps 4 GB back, so admission needs about 8.5 GB available.
+- The same launch run once outside the governor, with a watchdog: the
+  available reading fell from 4.1 GB to 2.1 GB while it loaded, the
+  kernel reported warn pressure (level 2) before the first picture, and
+  the watchdog stopped it at 2.76 GB resident with both files loaded.
+  Chat's context stayed 40,960.
+
+So the vision role does not fit beside the 8B chat on this machine as
+it is used today under the governor's rules, and p16 keeps `vision` in
+`notAvailable`. No whole-machine peak with a picture encoded was
+recorded, so the pin carries no `measured` entry. The levers are the
+owner's: a vision-capable chat model, so one resident process reads
+pictures (VISION-01f's last arm, a change to the chat model's settings
+and tool bench); the per-role allocation (`engines.<role>.choice`); or
+a machine with more memory. A smaller chat context is not one.
+
 ## Measured so far
 
 On an Apple silicon Mac (2026-09-18, a temporary copy of the owner's

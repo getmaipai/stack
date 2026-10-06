@@ -92,13 +92,15 @@ export const ROLES = {
     endpoints: [],
     quality: [],
   },
+  // VISION-01b: its own model and process (a vision-language model with
+  // its projector), loaded on a picture request and evicted when idle;
+  // never chat's text-only process, which cannot read a picture.
   vision: {
     label: "Vision",
     wire: "chat",
     residency: "jit",
     endpoints: ["/v1/chat/completions"],
     quality: ["fast", "everyday", "best"],
-    sharesModelWith: "chat",
   },
   stt: {
     label: "Voice in",
@@ -157,5 +159,5 @@ export const RoleRecordSchema = RoleDefinitionSchema.extend({
   id: RoleIdSchema,
   state: RoleStateRecordSchema,
   reason: z.string().nullable(),
-  model: z.object({ id: z.string(), sizeBytes: z.number().int().nullable(), measuredFootprintBytes: z.number().int().nullable(), measuredContextLength: z.number().int().nullable(), estimated: z.boolean() }).nullable().optional(),
+  model: z.object({ id: z.string(), sizeBytes: z.number().int().nullable(), measuredFootprintBytes: z.number().int().nullable(), measuredContextLength: z.number().int().nullable(), estimated: z.boolean(), imageInput: z.boolean().optional() }).nullable().optional(),
 });

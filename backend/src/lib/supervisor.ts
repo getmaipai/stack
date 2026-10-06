@@ -15,7 +15,7 @@ import { defaultKvCacheType, llamaServerArgs, mlxKvQuantFor, mlxServeArgs } from
 import { currentEngineBinary, currentEngineTag, engineBinaryPath, engineDir } from "@/lib/engineInstall";
 import { detectHardware, primaryBudgetBytes } from "@/lib/hardware";
 import { identityHeaders, modelFileName, readEngineIdentity, type EngineIdentity } from "@/lib/identity";
-import { isComponent, isModelSelectable, listModels, recordMeasuredFootprint, type ModelRecord } from "@/lib/modelStore";
+import { getModel, isComponent, isModelSelectable, listModels, recordMeasuredFootprint, type ModelRecord } from "@/lib/modelStore";
 import { readFileSync } from "node:fs";
 // Imported as a file, so a compiled binary embeds the clip and the probe
 // reads it there too, not only from a checkout.
@@ -25,7 +25,7 @@ import { loadedWeightsRepo, pocketTtsCommand, pocketTtsEnv, pocketTtsInstalled, 
 import { ensureCloningWeights, POCKET_TTS_PRESET_VOICES, voiceCloningOn } from "@/speech/voices";
 import { comfyuiCommand, comfyuiEnv, comfyuiInstalled, COMFYUI_VERSION, linkCheckpoint, probeGenerator } from "@/generators/comfyui";
 import { basename } from "node:path";
-import { getRunState, release, setGovernorPid, startGovernor, type GovernorHandle, type GovernorTier } from "@/lib/governor";
+import { getRunState, release, setGovernorPid, startGovernor, touch as touchGovernor, withdraw as withdrawAdmission, type GovernorHandle, type GovernorTier } from "@/lib/governor";
 import { PROFILE_MODEL_BINDINGS, proposeProfile } from "@/profiles";
 import { AdmissionRefusedError, waitForAdmission, waitingReason } from "@/lib/admission";
 import { emit } from "@/lib/events";
@@ -110,7 +110,7 @@ export class EngineUnavailableError extends Error {
 // post-load check sends. Roles that share chat's model run on chat's
 // process; embed has its own model and its own launch flag.
 const CHAT_WIRE_ROLES: RoleId[] = ROLE_IDS.filter((role) => ROLES[role].wire === "chat");
-const SPAWNABLE_ROLES: RoleId[] = ["chat", "judge", "embed", "stt", "tts", "image"];
+const SPAWNABLE_ROLES: RoleId[] = ["chat", "judge", "embed", "vision", "stt", "tts", "image"];
 /** The roles the speech worker serves: their runtime ships with the
  * Stack (sherpa-onnx-node in package.json), never as an engine build. */
 const SPEECH_ROLES: RoleId[] = ["stt"];
@@ -120,10 +120,14 @@ const MANAGED_ROLES: RoleId[] = ["tts", "image"];
 /** The generator roles: their process is admitted as `jit` (evicted
  * when idle) and each render is a job the queue admits on top. */
 const GENERATOR_ROLES: RoleId[] = ["image"];
+/** The roles loaded on a request and evicted when idle (VISION-01b): the
+ * governor admits them as `jit`, they yield to a resident role's start,
+ * and an admission never evicts or shrinks a resident. */
+const JIT_ROLES: RoleId[] = ["vision"];
 export const SPEECH_PATH = "/tts";
 
-/** The role whose process serves this role: `coding`, `judge`, `router`
- * and `vision` share chat's model and process unless bound elsewhere. */
+/** The role whose process serves this role: `coding`, `judge` and
+ * `router` share chat's model and process unless bound elsewhere. */
 export function processRoleFor(role: RoleId): RoleId {
   const definition = ROLES[role] as { sharesModelWith?: RoleId };
   if (role === "judge" && machineTier && PROFILE_MODEL_BINDINGS[machineTier]?.judge) return role;
@@ -264,6 +268,10 @@ export function bundledClipBase64(): string {
   return bundledClip;
 }
 
+/** A 16 by 16 solid red PNG, the vision probe's picture: no person, no
+ * household content, nothing fetched. */
+export const VISION_PROBE_IMAGE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFklEQVR42mP4z8BAEmIY1TCqYfhqAACQ+f8B8u7oVwAAAABJRU5ErkJggg==";
+
 export function probeRequest(role: RoleId): { path: string; body: Record<string, unknown> } {
   if (ROLES[role].wire === "embeddings") return { path: "/v1/embeddings", body: { model: role, input: "OK" } };
   if (ROLES[role].wire === "transcription") return { path: TRANSCRIBE_PATH, body: { model: role, audio_base64: bundledClipBase64() } };
@@ -273,6 +281,9 @@ export function probeRequest(role: RoleId): { path: string; body: Record<string,
   // The job wire's probe asks the engine which checkpoints it can load,
   // sent by `probeGenerator`; a render is a job, never a probe.
   if (ROLES[role].wire === "job") return { path: "/object_info/CheckpointLoaderSimple", body: { model: role } };
+  // The vision role's probe carries a picture, so "ready" means the
+  // projector reads one, not only that the language model answers.
+  if (role === "vision") return { path: "/v1/chat/completions", body: { model: role, messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: VISION_PROBE_IMAGE } }, { type: "text", text: "What colour fills this picture? Reply with one word." }] }], max_tokens: 16 } };
   // `enable_thinking: false` asks the template to answer in content; a
   // thinking model that answers in reasoning_content is still alive.
   return { path: "/v1/chat/completions", body: { model: role, messages: [{ role: "user", content: "Reply with just the word OK." }], max_tokens: 32, chat_template_kwargs: { enable_thinking: false } } };
@@ -369,6 +380,8 @@ async function acquireRequestProcess(requested: RoleId, modelId?: string): Promi
   try {
     const processRecord = await getProcess(role, modelId);
     processRecord.activeRequests++;
+    // A request keeps a jit role's idle clock at zero.
+    if (JIT_ROLES.includes(role)) touchGovernor(role);
     const current = runtime(role);
     current.status = { ...current.status, state: "busy", kind: processRecord.kind, identity: processRecord.identity };
     return processRecord;
@@ -398,6 +411,9 @@ export function chatEngine(): ChatEngine {
   return chosen === "mlx-serve" ? "mlx-serve" : "llama-server";
 }
 function engineForRole(role: RoleId): string | null {
+  // The vision projector is a llama-server feature (mtmd); the MLX
+  // engine choice for chat never moves it.
+  if (role === "vision") return "llama-server";
   if (CHAT_WIRE_ROLES.includes(role)) return chatEngine();
   if (role === "embed") return "llama-server";
   return null;
@@ -422,6 +438,10 @@ function engineInstalledFor(role: RoleId): boolean {
   if (SPEECH_ROLES.includes(role)) return componentModel(role, "vad") !== null;
   if (role === "tts") return pocketTtsInstalled() && componentModel(role, "tokenizer") !== null && componentModel(role, "voice") !== null;
   if (role === "image") return comfyuiInstalled();
+  if (role === "vision") {
+    const model = selectedModel(role);
+    return !!model && projectorFor(model) !== null && engineInstalled("llama-server");
+  }
   return engineInstalled(engineForRole(role) === "mlx-serve" ? "mlx-serve" : "llama-server");
 }
 
@@ -480,13 +500,35 @@ export function componentModel(role: RoleId, component: string): ModelRecord | n
   return listModels().find((model) => model.roles.includes(role) && model.engineRequirements.component === component && isModelSelectable(model) && model.modelPath) ?? null;
 }
 
+/** Whether a model record declares picture input (the spec's
+ * ModelCapabilities.image_input): the one test for the vision role,
+ * never a model id (Home rule 8). */
+export function declaresImageInput(model: ModelRecord): boolean {
+  const declared = model.engineRequirements.imageInput as { projector?: unknown } | undefined;
+  return typeof declared?.projector === "string" && declared.projector.length > 0;
+}
+
+/** The installed, verified projector a vision model names, or null. */
+export function projectorFor(model: ModelRecord): ModelRecord | null {
+  if (!declaresImageInput(model)) return null;
+  const id = (model.engineRequirements.imageInput as { projector: string }).projector;
+  return listModels().find((candidate) => candidate.id === id && candidate.engineRequirements.component === "projector" && isModelSelectable(candidate) && !!candidate.modelPath) ?? null;
+}
+
+/** A record the role can run: its own role, not a component, verified,
+ * on disk, for the role's engine, and for `vision` declaring picture
+ * input. */
+function servesRole(model: ModelRecord, role: RoleId, engine: string | null): boolean {
+  return model.roles.includes(role) && !isComponent(model) && isModelSelectable(model) && !!model.modelPath && (!engine || !model.engineRequirements.engine || model.engineRequirements.engine === engine) && (role !== "vision" || declaresImageInput(model));
+}
+
 export function selectedModel(role: RoleId): ModelRecord | null {
   if (role === "judge" && (!machineTier || !PROFILE_MODEL_BINDINGS[machineTier]?.judge)) return selectedModel("chat");
   // A record names the engine it is for; the chat wire's chosen engine
   // decides which records can serve it (a GGUF for llama-server, an MLX
   // directory for mlx-serve), both installed side by side.
   const engine = engineForRole(role);
-  const selectable = listModels().filter((model) => model.roles.includes(role) && !isComponent(model) && isModelSelectable(model) && model.modelPath && (!engine || !model.engineRequirements.engine || model.engineRequirements.engine === engine));
+  const selectable = listModels().filter((model) => servesRole(model, role, engine));
   const preferred = preferredModels.get(role);
   const profileModel = machineTier ? PROFILE_MODEL_BINDINGS[machineTier]?.[role] : undefined;
   return selectable.find((model) => model.id === preferred) ?? selectable.find((model) => model.id === profileModel) ?? selectable[0] ?? null;
@@ -498,13 +540,13 @@ export function selectedModel(role: RoleId): ModelRecord | null {
 export function selectableModels(role: RoleId): Array<{ id: string; name: string }> {
   const engine = engineForRole(role);
   return listModels()
-    .filter((model) => model.roles.includes(role) && !isComponent(model) && isModelSelectable(model) && !!model.modelPath && (!engine || !model.engineRequirements.engine || model.engineRequirements.engine === engine))
+    .filter((model) => servesRole(model, role, engine))
     .map(({ id }) => ({ id, name: id }));
 }
 
 function selectableModel(role: RoleId, modelId: string): ModelRecord | null {
   const engine = engineForRole(role);
-  return listModels().find((model) => model.id === modelId && model.roles.includes(role) && !isComponent(model) && isModelSelectable(model) && model.modelPath && (!engine || !model.engineRequirements.engine || model.engineRequirements.engine === engine)) ?? null;
+  return listModels().find((model) => model.id === modelId && servesRole(model, role, engine)) ?? null;
 }
 
 // ---- starting a process ---------------------------------------------------
@@ -590,6 +632,43 @@ async function contextForLaunch(model: ModelRecord, config: Record<string, numbe
   return result.contextTokens;
 }
 
+/** The whole-machine peak a vision pin carries from a real load on a
+ * named machine, or null. */
+function measuredPeakFromPin(model: ModelRecord): number | null {
+  const measured = model.engineRequirements.measured as { footprintBytes?: unknown } | undefined;
+  return typeof measured?.footprintBytes === "number" && measured.footprintBytes > 0 ? measured.footprintBytes : null;
+}
+
+/** The context a record's own launch declares (the vision role's short
+ * one), which the chat settings never move. */
+function declaredLaunchContext(model: ModelRecord): number | null {
+  const launch = model.engineRequirements.launch as { contextLength?: unknown } | undefined;
+  return typeof launch?.contextLength === "number" && launch.contextLength > 0 ? launch.contextLength : null;
+}
+
+/** A resident role about to start yields nothing: every loaded `jit`
+ * role is unloaded first, so the resident's context is sized against
+ * the residents alone and is never shrunk by a picture model (rule 4). */
+async function yieldJitRolesTo(role: RoleId): Promise<void> {
+  for (const jit of JIT_ROLES) {
+    const current = runtimes.get(jit);
+    const launch = current?.starting ?? null;
+    // The generation moves first, so a start in flight is no longer
+    // wanted: still queued for memory, it is withdrawn at once (chat never
+    // waits on a picture model's admission); already admitted and loading,
+    // its memory is counted, so chat waits for it to be retired before it
+    // is sized (rule 4).
+    if (current?.process || launch) await unloadRole(jit, `Unloaded so ${role} starts at its full context.`);
+    if (!launch) continue;
+    if (getGovernorStatus().loaded.some((item) => item.id === jit)) await launch.catch(() => undefined);
+    else { withdrawAdmission(jit); void launch.catch(() => undefined); }
+  }
+}
+
+/** Resident starts in progress: while any runs, a jit role does not
+ * start, so nothing new is admitted beside a resident being sized. */
+let residentStarts = 0;
+
 /** What to run for a role: llama-server from the `current` link for the
  * chat and embeddings wires, the speech worker for `stt`. */
 /** What to run for a role, exported for the suite; the supervisor calls it after admission. */
@@ -619,8 +698,9 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
   }
   const declared = engineSettingValues("engines.llama_server");
   const config = { contextLength: declared.context_length, slots: declared.slots, threads: declared.threads, cacheRamMb: declared.cache_ram_mb, flashAttention: declared.flash_attention } as Record<string, number | boolean | string | string[]>;
-  const slots = typeof config.slots === "number" && config.slots > 0 ? config.slots : 1;
-  const contextLength = resolvedContextLength ?? (typeof config.contextLength === "number" && config.contextLength > 0 ? config.contextLength : await contextForLaunch(model, config, slots));
+  // A record with its own launch (vision) runs one slot, as its args say.
+  const slots = declaredLaunchContext(model) !== null ? 1 : typeof config.slots === "number" && config.slots > 0 ? config.slots : 1;
+  const contextLength = resolvedContextLength ?? declaredLaunchContext(model) ?? (typeof config.contextLength === "number" && config.contextLength > 0 ? config.contextLength : await contextForLaunch(model, config, slots));
   if (engineForRole(role) === "mlx-serve") {
     // mlx-serve: one model pinned for the life of the process, loopback
     // only, the context length the llama-server settings declare (one
@@ -635,7 +715,9 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
   const pin = installedEnginePin();
   if (!pin || !engineInstalled()) throw new EngineUnavailableError("No installed llama-server build is available for this machine.");
   const binary = launchBinary(pin);
-  const args = llamaServerArgs({ modelPath: model.modelPath!, port, config, contextLength, kvCacheType: defaultKvCacheType(), embeddings: role === "embed" });
+  const projector = role === "vision" ? projectorFor(model) : null;
+  if (role === "vision" && !projector?.modelPath) throw new EngineUnavailableError(`The ${model.id} projector is not installed.`);
+  const args = llamaServerArgs({ modelPath: model.modelPath!, port, config, contextLength, kvCacheType: defaultKvCacheType(), embeddings: role === "embed", projectorPath: projector?.modelPath ?? undefined });
   return { command: [binary, ...args], engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength, slots, contextScope: "per slot", kind: "spawned" };
 }
 
@@ -652,8 +734,9 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   }
   if (!model?.modelPath) throw new EngineUnavailableError(`No verified and installed ${role} model is available.`);
   const launchConfig = engineSettingValues("engines.llama_server") as Record<string, number | boolean | string | string[]>;
-  const declaredContextLength = launchConfig.context_length;
-  const slots = typeof launchConfig.slots === "number" && launchConfig.slots > 0 ? launchConfig.slots : 1;
+  const ownContext = declaredLaunchContext(model);
+  const declaredContextLength = ownContext ?? launchConfig.context_length;
+  const slots = ownContext !== null ? 1 : typeof launchConfig.slots === "number" && launchConfig.slots > 0 ? launchConfig.slots : 1;
   const contextLength = typeof declaredContextLength === "number" && declaredContextLength > 0 ? declaredContextLength : await contextForLaunch(model, { ...launchConfig, contextLength: 0 }, slots);
   // The voice engine starts offline; what it may need beyond the pins
   // (the gated cloning weights, with a token and cloning turned on) the
@@ -686,12 +769,19 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     throw new EngineUnavailableError("The fit plan could not estimate the launched context for the memory governor; install the GGUF parser or set an explicit context length.");
   }
   logger.appendLine(JSON.stringify({ event: "governor.peak-source", role, source: dryRunPeakBytes ? "dry-run" : "none", bytes: dryRunPeakBytes }));
+  // A vision model's projector loads beside it: its bytes count too. The
+  // fit tool sizes the language model alone, so the projector is added.
+  const projectorBytes = role === "vision" ? projectorFor(model)?.sizeBytes ?? 0 : 0;
+  const pinMeasured = measuredPeakFromPin(model);
   const request = {
-    id: role, kind: "resident" as const,
-    requestedBytes: managed && !generator ? (model.measuredFootprintBytes ?? POCKET_TTS_ESTIMATED_FOOTPRINT) : model.sizeBytes ?? 0,
-    modelFileBytes: managed && !generator ? null : model.sizeBytes,
-    measuredPeakBytes: model.measuredFootprintBytes,
-    dryRunPeakBytes,
+    id: role, kind: JIT_ROLES.includes(role) ? "jit" as const : "resident" as const,
+    requestedBytes: managed && !generator ? (model.measuredFootprintBytes ?? POCKET_TTS_ESTIMATED_FOOTPRINT) : (model.sizeBytes ?? 0) + projectorBytes,
+    modelFileBytes: managed && !generator ? null : (model.sizeBytes ?? 0) + projectorBytes || null,
+    // A jit role's pin carries the whole-machine cost measured on a real
+    // load (weights the engine maps are not in the process footprint),
+    // and the larger of that and the store's own reading is the peak.
+    measuredPeakBytes: JIT_ROLES.includes(role) && pinMeasured !== null ? Math.max(pinMeasured, model.measuredFootprintBytes ?? 0) : model.measuredFootprintBytes,
+    dryRunPeakBytes: dryRunPeakBytes === null ? null : dryRunPeakBytes + projectorBytes,
     headroomBytes: engineForRole(role) === "mlx-serve" && !managed && !generator && !SPEECH_ROLES.includes(role) ? mlxHeadroomBytes({ modelDir: model.modelPath!, contextTokens: contextLength }) : null,
     engine: generator ? "comfyui" : managed ? "pocket-tts" : SPEECH_ROLES.includes(role) ? "sherpa-onnx-node" : engineForRole(role) === "mlx-serve" ? "mlx-serve" : "llama-server",
     pinned: pinnedModels.has(model.id),
@@ -788,6 +878,16 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
 }
 
 async function startProcess(role: RoleId, modelId?: string): Promise<RoleProcess> {
+  const resident = !JIT_ROLES.includes(role) && !GENERATOR_ROLES.includes(role);
+  if (!resident) return startOne(role, modelId);
+  residentStarts++;
+  try {
+    await yieldJitRolesTo(role);
+    return await startOne(role, modelId);
+  } finally { residentStarts--; }
+}
+
+async function startOne(role: RoleId, modelId?: string): Promise<RoleProcess> {
   if (testFactory) return testFactory(role, modelId);
   const bound = urlBindingFor(role);
   if (bound) return startUrlProcess(role, bound.url);
@@ -802,6 +902,7 @@ export async function getProcess(requested: RoleId, modelId?: string): Promise<R
   if (getRunState() !== "running") throw new EngineUnavailableError("The Stack is paused.");
   const current = runtime(role);
   if (current.manuallyStopped) throw new EngineUnavailableError(`The ${role} engine was stopped.`);
+  if (!current.process && !current.starting && JIT_ROLES.includes(role) && residentStarts > 0) throw new EngineUnavailableError(`The ${role} engine waits while a resident engine starts.`);
   if (current.process) {
     if (!modelId || current.process.kind === "url" || current.process.modelId === modelId) return current.process;
     const previous = current.process;
@@ -814,11 +915,12 @@ export async function getProcess(requested: RoleId, modelId?: string): Promise<R
     const generation = current.generation;
     current.status = { ...current.status, state: "loading", reason: null };
     emit({ id: "role.state", data: { role, state: "loaded", since: new Date().toISOString() } });
-    current.starting = startProcess(role, modelId).then(async (started) => {
+    const launch: Promise<RoleProcess> = startProcess(role, modelId).then(async (started) => {
       if (generation !== current.generation) {
-        started.retired = true;
-        await started.stop();
-        current.starting = null;
+        // Stopped or restarted while it loaded: its admission and memory
+        // watch go with it, never left counted in the governor.
+        await retire(started);
+        if (current.starting === launch) current.starting = null;
         return getProcess(role, modelId);
       }
       current.process = started;
@@ -836,6 +938,7 @@ export async function getProcess(requested: RoleId, modelId?: string): Promise<R
       }
       throw error;
     });
+    current.starting = launch;
   }
   const starting = await current.starting;
   if (modelId && starting.kind !== "url" && starting.modelId !== modelId) return getProcess(role, modelId);
@@ -922,7 +1025,14 @@ export async function setMachineTierFromHardware(): Promise<{ tier: GovernorTier
 /** The governor's watch on a spawned process (its RSS against the
  * measured peak, a restart on a breach), carrying the machine's tier. */
 export function watchProcessMemory(role: RoleId, pid: number): () => void {
-  return startGovernor({ pid, tier: machineTier, restart: async () => { await restartRole(role); } });
+  // `unload` is the governor's way to evict a `jit` role (idle, or under
+  // pressure): it drains and stops that role's process, never chat's.
+  return startGovernor({ pid, tier: machineTier, restart: async () => { await restartRole(role); }, unload: async (id) => {
+    // Only a running jit process is evicted here; one still starting is
+    // left to its own start, so its admission stays counted.
+    if (!JIT_ROLES.includes(id as RoleId) || !runtimes.get(id as RoleId)?.process) return false;
+    return unloadRole(id as RoleId, "Unloaded by the memory governor.");
+  } });
 }
 
 /** A pid is the proof that this process was launched by this Stack. */
@@ -1085,6 +1195,18 @@ export async function speakRole(requested: RoleId, form: FormData, signal?: Abor
   }
 }
 
+const SAMPLING_KEYS = ["temperature", "top_p", "top_k", "presence_penalty"] as const;
+/** The sampling a model's own card recommends (rule 3, the source named
+ * on the pin), filled in only where the request said nothing. */
+export function withPinSampling(modelId: string | null, body: Record<string, unknown>): Record<string, unknown> {
+  if (!modelId) return body;
+  const sampling = getModel(modelId)?.engineRequirements.sampling as Partial<Record<(typeof SAMPLING_KEYS)[number], unknown>> | undefined;
+  if (!sampling) return body;
+  const filled = { ...body };
+  for (const key of SAMPLING_KEYS) if (filled[key] === undefined && typeof sampling[key] === "number") filled[key] = sampling[key];
+  return filled;
+}
+
 export async function requestRole(requested: RoleId, path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<RoleReply> {
   const role = processRoleFor(requested);
   const requestedModel = typeof body.model === "string" && body.model !== requested ? body.model : undefined;
@@ -1092,7 +1214,7 @@ export async function requestRole(requested: RoleId, path: string, body: Record<
   const current = runtime(role);
   try {
     const completionMs = typeof body.timeout_ms === "number" && body.timeout_ms > 0 ? body.timeout_ms : (timeoutOverrides.completionMs ?? DEFAULT_COMPLETION_TIMEOUT_MS);
-    const dispatchBody = requestedModel && processRecord.kind !== "url" ? { ...body, model: role } : body;
+    const dispatchBody = withPinSampling(path === "/v1/chat/completions" ? processRecord.modelId : null, requestedModel && processRecord.kind !== "url" ? { ...body, model: role } : body);
     const result = await withTimeout(
       processRecord.client.request(path, dispatchBody, signal),
       completionMs,
@@ -1156,7 +1278,7 @@ export async function streamRole(requested: RoleId, path: string, body: Record<s
   const current = runtime(role);
   try {
     if (!processRecord.client.stream) throw new EngineUnavailableError("The engine does not support streaming.");
-    const dispatchBody = requestedModel && processRecord.kind !== "url" ? { ...body, model: role } : body;
+    const dispatchBody = withPinSampling(processRecord.modelId, requestedModel && processRecord.kind !== "url" ? { ...body, model: role } : body);
     const response = await processRecord.client.stream(path, { ...dispatchBody, stream: true }, signal);
     if (response.status >= 500 && !await processRecord.client.health()) throw new EngineUnavailableError(`Engine returned HTTP ${response.status} and is no longer healthy.`);
     if (!response.body) { finishStream(role, processRecord); return { status: response.status, body: null, headers: identityHeaders(processRecord.identity, processRecord.modelRevision) }; }

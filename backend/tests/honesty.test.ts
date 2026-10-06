@@ -153,9 +153,19 @@ test("roles sharing a process whose owner failed to start in this run are skippe
   upsertModel({ id: "chat-a", roles: ["chat"], ...verified });
   let attempts = 0;
   setSupervisorFactoryForTests(async () => { attempts += 1; throw new Error("llama-server exited during load"); });
-  const run = await runCheck({ roleIds: ["coding", "chat", "judge", "router", "vision"] });
+  const run = await runCheck({ roleIds: ["coding", "chat", "judge", "router"] });
   expect(attempts).toBe(1);
   expect(run.ok).toBe(false);
-  expect(run.results.map((result) => [result.role, result.ok, result.skipped ?? false])).toEqual([["chat", false, false], ["coding", false, true], ["judge", false, true], ["router", false, true], ["vision", false, true]]);
+  expect(run.results.map((result) => [result.role, result.ok, result.skipped ?? false])).toEqual([["chat", false, false], ["coding", false, true], ["judge", false, true], ["router", false, true]]);
   expect(run.results[1]?.reason).toMatch(/runs on chat's process, which failed: llama-server exited during load/);
+});
+
+test("vision runs its own process: chat's failed start is not its result (VISION-01b)", async () => {
+  upsertModel({ id: "chat-a", roles: ["chat"], ...verified });
+  const started: string[] = [];
+  setSupervisorFactoryForTests(async (role) => { started.push(role); throw new Error(`${role} exited during load`); });
+  const run = await runCheck({ roleIds: ["chat", "vision"] });
+  expect(started).toEqual(["chat", "vision"]);
+  expect(run.results.map((result) => [result.role, result.skipped ?? false])).toEqual([["chat", false], ["vision", false]]);
+  expect(run.results[1]?.reason).toMatch(/vision exited during load/);
 });

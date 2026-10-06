@@ -94,6 +94,17 @@ export interface CatalogModelLike {
   /** Recorded on the pin by a bench (STACK-74), with a sanitized hardware
    * line, never a hostname: the inventory prints these, and only these. */
   measured?: { footprintBytes: number; contextLength: number; hardware: string };
+  /** VISION-01b, the spec's ModelCapabilities.image_input: present only
+   * on a model proven to read pictures, naming the id of the projector
+   * component pinned beside it. Picture support follows this field,
+   * never a model id. */
+  imageInput?: { projector: string };
+  /** A launch the role needs regardless of the chat settings: the vision
+   * role's short context. */
+  launch?: { contextLength: number };
+  /** Sampling defaults from the model's own card, with the source named;
+   * a request's own values win. */
+  sampling?: { temperature?: number; top_p?: number; top_k?: number; presence_penalty?: number; source: string };
 }
 
 export interface HuggingFaceModelInput {
@@ -255,7 +266,7 @@ export function registerCatalogModel(model: CatalogModelLike, now = new Date().t
     sha256: model.download?.sha256 ?? null,
     sizeBytes: model.download?.approx_bytes ?? null,
     licence: model.license ?? null,
-    engineRequirements: { engine: model.engine ?? null, sizing: model.sizing ?? null, ...(model.component ? { component: model.component } : {}) },
+    engineRequirements: { engine: model.engine ?? null, sizing: model.sizing ?? null, ...(model.component ? { component: model.component } : {}), ...(model.imageInput ? { imageInput: model.imageInput } : {}), ...(model.launch ? { launch: model.launch } : {}), ...(model.sampling ? { sampling: model.sampling } : {}), ...(model.imageInput && model.measured ? { measured: model.measured } : {}) },
   }, now);
 }
 

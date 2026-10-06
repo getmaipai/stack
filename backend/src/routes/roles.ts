@@ -3,8 +3,8 @@ import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { resolveRoleState } from "@/lib/router";
 import { ROLE_IDS, RoleRecordSchema, ROLES } from "@/roles";
-import { listModels } from "@/lib/modelStore";
-import { getRoleStatus, identityCheck, selectableModels, selectedModel } from "@/lib/supervisor";
+import { isComponent, listModels } from "@/lib/modelStore";
+import { declaresImageInput, getRoleStatus, identityCheck, selectableModels, selectedModel } from "@/lib/supervisor";
 import { roleCheck } from "@/lib/readiness";
 
 const CheckSchema = z.object({ state: z.enum(["not checked", "passed", "failed", "skipped"]), at: z.string().nullable(), reason: z.string().nullable(), stale: z.boolean() });
@@ -16,12 +16,12 @@ export const rolesRoutes = apiRouter<AppEnv>();
 rolesRoutes.openapi(rolesRoute, (c) => c.json({
   roles: ROLE_IDS.map((id) => {
     const state = resolveRoleState(id);
-    const model = selectedModel(id) ?? listModels().find((candidate) => candidate.roles.includes(id)) ?? null;
+    const model = selectedModel(id) ?? listModels().find((candidate) => candidate.roles.includes(id) && !isComponent(candidate)) ?? null;
     const status = getRoleStatus(id);
     const contextLength = status.contextLength ?? null;
     const slots = status.slots ?? null;
     const perSlot = contextLength;
     const total = perSlot === null ? null : perSlot * (slots ?? 1);
-    return { id, ...ROLES[id], state, reason: state.reason ?? null, model: model ? { id: model.id, sizeBytes: model.sizeBytes, measuredFootprintBytes: model.measuredFootprintBytes, measuredContextLength: model.measuredContextLength, estimated: model.measuredFootprintBytes === null } : null, check: roleCheck(id), identity: identityCheck(id), ...(id === "chat" ? { context_length: contextLength, context_per_slot: perSlot, context_total: total, slots, context_scope: status.contextScope ?? null, models: selectableModels(id) } : {}) };
+    return { id, ...ROLES[id], state, reason: state.reason ?? null, model: model ? { id: model.id, sizeBytes: model.sizeBytes, measuredFootprintBytes: model.measuredFootprintBytes, measuredContextLength: model.measuredContextLength, estimated: model.measuredFootprintBytes === null, imageInput: declaresImageInput(model) } : null, check: roleCheck(id), identity: identityCheck(id), ...(id === "chat" ? { context_length: contextLength, context_per_slot: perSlot, context_total: total, slots, context_scope: status.contextScope ?? null, models: selectableModels(id) } : {}) };
   }),
 }, 200));
