@@ -11,7 +11,7 @@ import { withTimeout } from "@maipai/core/src/withTimeout";
 import { isCompiledBinary } from "@/lib/paths";
 import { ENGINE_READY_MARKER, installedEnginePin, selectEngineBinary, type ChatEngine, type EngineBinaryPin } from "@/lib/engineCatalog";
 import { managedEnv } from "@/lib/uvEnvironment";
-import { defaultKvCacheType, llamaServerArgs, mlxKvQuantFor, mlxServeArgs } from "@/lib/engineArgs";
+import { defaultKvCacheType, llamaServerArgs, mlxKvQuantFor, mlxServeArgs, type KvCacheType } from "@/lib/engineArgs";
 import { currentEngineBinary, currentEngineTag, engineBinaryPath, engineDir } from "@/lib/engineInstall";
 import { detectHardware, primaryBudgetBytes } from "@/lib/hardware";
 import { identityHeaders, modelFileName, readEngineIdentity, type EngineIdentity } from "@/lib/identity";
@@ -38,7 +38,7 @@ import { engineSettingValues, settingValues } from "@/settings";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
 import { logger } from "@/lib/log";
 import { readGgufFacts } from "@/lib/gguf";
-import { largestAdmittedContext, runGgufParser } from "@/lib/fitPlan";
+import { largestAdmittedContext, runGgufParser, type GgufEstimate } from "@/lib/fitPlan";
 import { getGovernorStatus } from "@/lib/governor";
 import { readMlxKvBytesPerToken } from "@/lib/mlxMemory";
 
@@ -89,6 +89,12 @@ export interface RoleProcess {
   modelId: string | null;
   /** The pinned revision of the model the process serves, for the reply headers. */
   modelRevision: string | null;
+  /** VISION-02b: the process was launched with its projector and reads
+   * pictures; false for a text-only launch. */
+  imageInput?: boolean;
+  /** The most tokens one picture takes in this process (the record's
+   * declared --image-max-tokens), when it reads pictures. */
+  pictureTokensMax?: number | null;
   pid: number | null;
   port: number | null;
   activeRequests: number;
@@ -321,6 +327,20 @@ export async function postLoadCheck(role: RoleId, client: EngineClient, pid: num
   return { replyOk: true, actualBytes: await measureProcessMemoryBytes(pid), estimatedBytes: null, firstTokenMs: Math.round(performance.now() - startedAt) };
 }
 
+/** VISION-02b: a chat process launched with its projector reads the
+ * vision probe's picture once after load. A failure leaves chat serving
+ * text (a picture reader never stops chat, rule 6) and the role row says
+ * it does not read pictures. */
+export async function picturesProbeOk(client: EngineClient): Promise<boolean> {
+  const probe = probeRequest("vision");
+  try {
+    const result = await withTimeout(client.request(probe.path, { ...probe.body, model: "chat" }), timeoutOverrides.postLoadMs ?? DEFAULT_POST_LOAD_TIMEOUT_MS, () => new EngineUnavailableError("The picture check timed out."));
+    return probeReplyOk("vision", result);
+  } catch {
+    return false;
+  }
+}
+
 export function parseFitRows(output: string): { rows: { name: string; modelMiB: number; contextMiB: number; computeMiB: number }[] } | null {
   const rows: { name: string; modelMiB: number; contextMiB: number; computeMiB: number }[] = [];
   for (const line of output.split(/\r?\n/)) {
@@ -335,12 +355,19 @@ export function fitTotalBytes(parsed: NonNullable<ReturnType<typeof parseFitRows
   return parsed.rows.reduce((sum, row) => sum + row.modelMiB + row.contextMiB + row.computeMiB, 0) * 1_048_576;
 }
 
-export async function dryRunFootprint(modelPath: string, contextLength: number): Promise<number | null> {
+/** The engine's own dry run of a launch: llama-fit-params at the context
+ * and with the KV cache type and flash attention the launch itself uses
+ * (VISION-02b: without them the tool sized an f16 cache, about twice the
+ * q8_0 cache a macOS launch runs, and refused a chat the fit plan had
+ * admitted). */
+export async function dryRunFootprint(modelPath: string, contextLength: number, opts: { kvCacheType?: KvCacheType; flashAttention?: boolean } = {}): Promise<number | null> {
   try {
     const hardware = await detectHardware(); const pin = selectEngineBinary(hardware);
     const fit = process.env.STACK_FIT_BINARY ?? (pin ? join(engineDir(pin), "llama-fit-params") : "");
     if (!fit || !existsSync(fit)) return null;
-    const processHandle = Bun.spawn([fit, "--model", modelPath, "--ctx-size", String(contextLength), "--fit", "on", "--fit-print", "on"], { stdout: "pipe", stderr: "pipe" });
+    const kv = opts.kvCacheType && opts.kvCacheType !== "f16" ? ["-ctk", opts.kvCacheType, "-ctv", opts.kvCacheType] : [];
+    const fa = opts.flashAttention === undefined ? [] : ["-fa", opts.flashAttention ? "on" : "off"];
+    const processHandle = Bun.spawn([fit, "--model", modelPath, "--ctx-size", String(contextLength), ...kv, ...fa, "--fit", "on", "--fit-print", "on"], { stdout: "pipe", stderr: "pipe" });
     const outputPromise = (async () => `${await new Response(processHandle.stdout).text()}\n${processHandle.stderr ? await new Response(processHandle.stderr).text() : ""}`)();
     const combined = Promise.all([outputPromise, processHandle.exited]);
     try {
@@ -522,6 +549,44 @@ export function declaresImageInput(model: ModelRecord): boolean {
   return typeof declared?.projector === "string" && declared.projector.length > 0;
 }
 
+/** The projector a launch loads beside the model: the vision role's, or
+ * a chat model's own when its record declares picture input (VISION-02b:
+ * one resident process reads pictures). A chat model whose projector is
+ * not installed starts text-only and says so on its role row; a missing
+ * picture reader never stops chat. */
+export function launchProjectorFor(role: RoleId, model: ModelRecord): ModelRecord | null {
+  if (role !== "vision" && role !== "chat") return null;
+  return projectorFor(model);
+}
+
+/** Whether a role reads pictures (VISION-02b): its running process was
+ * launched with a projector, or, with nothing running, its selected
+ * model declares picture input and the projector is installed; a url
+ * binding never. Never a model id (Home rule 8). */
+export function roleReadsPictures(requested: RoleId, model: ModelRecord | null): boolean {
+  const role = processRoleFor(requested);
+  // A url binding is an engine the Stack did not launch: nothing proves
+  // it reads pictures, so it does not claim to.
+  if (urlBindingFor(role)) return false;
+  const running = runtime(role).process;
+  if (running && !running.retired) return running.imageInput === true;
+  return !!model && projectorFor(model) !== null;
+}
+
+/** The most tokens one picture takes in the role's running process, or
+ * null when it reads no pictures or declares no bound. */
+export function pictureTokensMax(requested: RoleId): number | null {
+  const running = runtime(processRoleFor(requested)).process;
+  return running && !running.retired && running.imageInput ? running.pictureTokensMax ?? null : null;
+}
+
+/** Whether a launch's memory reading is stored for its model: always,
+ * except a model that reads pictures launched without its projector,
+ * whose reading leaves the projector out (a review, VISION-02b). */
+export function keepsMeasuredFootprint(model: ModelRecord, launchedWithProjector: boolean): boolean {
+  return !declaresImageInput(model) || launchedWithProjector;
+}
+
 /** The installed, verified projector a vision model names, or null. */
 export function projectorFor(model: ModelRecord): ModelRecord | null {
   if (!declaresImageInput(model)) return null;
@@ -606,7 +671,7 @@ export function speechWorkerCommand(
   return [runtime.execPath, ...(viaBun ? [runtime.main] : []), ...workerArgs];
 }
 
-export interface LaunchPlan { command: string[]; engine: string; build: string; stdin: "pipe" | "ignore"; contextLength: number; slots?: number; contextScope?: "total across slots" | "per slot"; kind: "spawned" | "managed"; env?: Record<string, string>; healthPath?: string; }
+export interface LaunchPlan { command: string[]; engine: string; build: string; stdin: "pipe" | "ignore"; contextLength: number; slots?: number; contextScope?: "total across slots" | "per slot"; kind: "spawned" | "managed"; env?: Record<string, string>; healthPath?: string; /** A projector was loaded: the process reads pictures. */ imageInput?: boolean; /** The most tokens one picture takes in this process, when the record declares it. */ pictureTokensMax?: number | null; }
 
 async function contextForLaunch(model: ModelRecord, config: Record<string, number | boolean | string | string[]>, slots = 1): Promise<number> {
   const configured = config.contextLength;
@@ -622,11 +687,19 @@ async function contextForLaunch(model: ModelRecord, config: Record<string, numbe
       catch { return 4096; }
     })();
   const max = Math.min(modelContextTokens || 4096, 262_144);
+  // A chat model that reads pictures loads its projector beside it
+  // (VISION-02b): the fit tool sizes the language model alone, so the
+  // projector's bytes are added to every estimate the plan reads.
+  const projectorBytes = projectorFor(model)?.sizeBytes ?? 0;
+  const withProjector = async (estimate: Promise<GgufEstimate | null>): Promise<GgufEstimate | null> => {
+    const value = await estimate;
+    return value && projectorBytes > 0 ? { ...value, vramNonumaBytes: value.vramNonumaBytes + projectorBytes, ramNonumaBytes: value.ramNonumaBytes + projectorBytes } : value;
+  };
   const estimateAt = (contextTokens: number) => model.modelPath?.endsWith(".gguf")
-    ? runGgufParser({ target: { path: model.modelPath }, contextTokens: contextTokens * slots, kvCacheType: defaultKvCacheType(), gpuLayers: "all" })
+    ? withProjector(runGgufParser({ target: { path: model.modelPath }, contextTokens: contextTokens * slots, kvCacheType: defaultKvCacheType(), gpuLayers: "all" }))
     : null;
   const cpuEstimateAt = (contextTokens: number) => model.modelPath?.endsWith(".gguf")
-    ? runGgufParser({ target: { path: model.modelPath }, contextTokens: contextTokens * slots, kvCacheType: defaultKvCacheType(), gpuLayers: 0 })
+    ? withProjector(runGgufParser({ target: { path: model.modelPath }, contextTokens: contextTokens * slots, kvCacheType: defaultKvCacheType(), gpuLayers: 0 }))
     : null;
   if (!model.modelPath?.endsWith(".gguf")) {
     const mlxFacts = readMlxKvBytesPerToken(model.modelPath!) === null ? null : { weightsBytes: model.sizeBytes ?? 0, config: JSON.parse(readFileSync(join(model.modelPath!, "config.json"), "utf8")) };
@@ -637,7 +710,7 @@ async function contextForLaunch(model: ModelRecord, config: Record<string, numbe
     }
     return result.contextTokens;
   }
-  const result = await largestAdmittedContext({ modelId: model.id, modelFileBytes: model.sizeBytes ?? undefined, measuredPeakBytes: model.measuredFootprintBytes, modelContextTokens: Math.floor(max / slots), estimate: null, estimateAt, cpuEstimateAt, memoryContextMultiplier: slots, kvCacheType: defaultKvCacheType(), unifiedMemory: hardware.isAppleSilicon, deviceBudgetsBytes: gpuBudgets, capBytes: modelCapBytes, workingMarginBytes: status.marginBytes, loaded: status.loaded.map((item) => ({ role: item.id, kind: item.kind, peakBytes: item.peakBytes, measured: item.measured })), asOf: new Date().toISOString().slice(0, 10), tool: { name: "gguf-parser", version: "launch" } });
+  const result = await largestAdmittedContext({ modelId: model.id, modelFileBytes: model.sizeBytes === null ? undefined : model.sizeBytes + projectorBytes, measuredPeakBytes: model.measuredFootprintBytes, measuredContextTokens: model.measuredContextLength, modelContextTokens: Math.floor(max / slots), estimate: null, estimateAt, cpuEstimateAt, memoryContextMultiplier: slots, kvCacheType: defaultKvCacheType(), unifiedMemory: hardware.isAppleSilicon, deviceBudgetsBytes: gpuBudgets, capBytes: modelCapBytes, workingMarginBytes: status.marginBytes, loaded: status.loaded.map((item) => ({ role: item.id, kind: item.kind, peakBytes: item.peakBytes, measured: item.measured })), asOf: new Date().toISOString().slice(0, 10), tool: { name: "gguf-parser", version: "launch" } });
   if (result.plan.verdict !== "yes" && result.plan.verdict !== "slow") {
     const peak = result.plan.roles[0]?.peak.high;
     const memoryReason = `The fit plan cannot admit the minimum 8,192 token context for ${model.id}; estimated peak ${peak === null || peak === undefined ? "unknown" : `${(peak / 1_073_741_824).toFixed(1)} GB`} against a ${(modelCapBytes / 1_073_741_824).toFixed(1)} GB model budget.`;
@@ -658,6 +731,13 @@ function measuredPeakFromPin(model: ModelRecord): number | null {
 function declaredLaunchContext(model: ModelRecord): number | null {
   const launch = model.engineRequirements.launch as { contextLength?: unknown } | undefined;
   return typeof launch?.contextLength === "number" && launch.contextLength > 0 ? launch.contextLength : null;
+}
+
+/** The most tokens one picture may take in a model that reads pictures,
+ * as its record declares (VISION-02b), or null. */
+function declaredPictureTokensMax(model: ModelRecord): number | null {
+  const launch = model.engineRequirements.launch as { imageMaxTokens?: unknown } | undefined;
+  return typeof launch?.imageMaxTokens === "number" && launch.imageMaxTokens > 0 ? launch.imageMaxTokens : null;
 }
 
 /** A resident role about to start yields nothing: every loaded `jit`
@@ -729,10 +809,11 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
   const pin = installedEnginePin();
   if (!pin || !engineInstalled()) throw new EngineUnavailableError("No installed llama-server build is available for this machine.");
   const binary = launchBinary(pin);
-  const projector = role === "vision" ? projectorFor(model) : null;
+  const projector = launchProjectorFor(role, model);
   if (role === "vision" && !projector?.modelPath) throw new EngineUnavailableError(`The ${model.id} projector is not installed.`);
-  const args = llamaServerArgs({ modelPath: model.modelPath!, port, config, contextLength, kvCacheType: defaultKvCacheType(), embeddings: role === "embed", projectorPath: projector?.modelPath ?? undefined });
-  return { command: [binary, ...args], engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength, slots, contextScope: "per slot", kind: "spawned" };
+  const pictureTokensMax = projector?.modelPath ? declaredPictureTokensMax(model) : null;
+  const args = llamaServerArgs({ modelPath: model.modelPath!, port, config, contextLength, kvCacheType: defaultKvCacheType(), embeddings: role === "embed", projectorPath: projector?.modelPath ?? undefined, onePictureSlot: role === "vision", imageMaxTokens: pictureTokensMax ?? undefined });
+  return { command: [binary, ...args], engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength, slots, contextScope: "per slot", kind: "spawned", imageInput: !!projector?.modelPath, pictureTokensMax };
 }
 
 async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<RoleProcess> {
@@ -777,15 +858,16 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   const managed = MANAGED_ROLES.includes(role);
   const generator = GENERATOR_ROLES.includes(role);
   const dryRunPeakBytes = engineForRole(role) === "llama-server" && !managed && !generator && !SPEECH_ROLES.includes(role) && model.modelPath.endsWith(".gguf")
-    ? await dryRunFootprint(model.modelPath, contextLength * slots)
+    ? await dryRunFootprint(model.modelPath, contextLength * slots, { kvCacheType: defaultKvCacheType(), flashAttention: launchConfig.flash_attention !== false })
     : null;
   if (engineForRole(role) === "llama-server" && !managed && !generator && !SPEECH_ROLES.includes(role) && model.modelPath.endsWith(".gguf") && !dryRunPeakBytes && !model.measuredFootprintBytes && !(typeof declaredContextLength === "number" && declaredContextLength > 0)) {
     throw new EngineUnavailableError("The fit plan could not estimate the launched context for the memory governor; install the GGUF parser or set an explicit context length.");
   }
   logger.appendLine(JSON.stringify({ event: "governor.peak-source", role, source: dryRunPeakBytes ? "dry-run" : "none", bytes: dryRunPeakBytes }));
-  // A vision model's projector loads beside it: its bytes count too. The
-  // fit tool sizes the language model alone, so the projector is added.
-  const projectorBytes = role === "vision" ? projectorFor(model)?.sizeBytes ?? 0 : 0;
+  // A projector loads beside the model (the vision role's, or a chat
+  // model's that reads pictures): its bytes count too. The fit tool sizes
+  // the language model alone, so the projector is added.
+  const projectorBytes = launchProjectorFor(role, model)?.sizeBytes ?? 0;
   const pinMeasured = measuredPeakFromPin(model);
   const request = {
     id: role, kind: JIT_ROLES.includes(role) ? "jit" as const : "resident" as const,
@@ -856,9 +938,16 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     // is the pin's tag, the model the directory the Stack launched.
     if (plan.engine === "mlx-serve") identity = { ...identity, build: identity.build ?? `mlx-serve-${plan.build}`, model: identity.model ?? basename(model.modelPath!) };
     const check = await postLoadCheck(role, client, handle.pid);
+    const keepsFootprint = keepsMeasuredFootprint(model, plan.imageInput === true);
+    const readsPictures = plan.imageInput === true && (role === "vision" || await picturesProbeOk(client));
+    if (plan.imageInput === true && !readsPictures) raise({ code: `picture-check-failed.${role}`, severity: "warning", title: "Chat cannot read pictures right now", text: `The ${model.id} projector loaded but did not read the check picture; chat answers text only until it restarts.`, cause: "picture check failed", fix: { label: "Restart engine", action: "restart_engine" } });
+    else resolveHealth(`picture-check-failed.${role}`);
     check.loadMs = Math.round(performance.now() - loadStartedAt);
     if (check.actualBytes !== null) {
-      recordMeasuredFootprint(model.id, check.actualBytes, contextLength);
+      // A model that reads pictures, launched without its projector (not
+      // installed yet), is not its usual footprint: that reading is not
+      // stored, so a later launch with the projector never plans on it.
+      if (keepsFootprint) recordMeasuredFootprint(model.id, check.actualBytes, contextLength);
       refreshMeasuredPeak(admission, check.actualBytes);
     }
     runtime(role).status.postLoadCheck = check;
@@ -866,9 +955,9 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     resolveHealth(`post-load-check-failed.${role}`);
     const loadedRevision = plan.kind === "managed" && !GENERATOR_ROLES.includes(role) ? loadedWeightsRepo()?.revision ?? null : null;
     const processRecord: RoleProcess = {
-      role, kind: plan.kind, client, identity, engine: plan.engine, contextLength: plan.contextLength, slots: plan.slots, contextScope: plan.contextScope, modelId: model.id, modelRevision: loadedRevision ?? model.revision, pid: handle.pid, port, activeRequests: 0, retired: false,
+      role, kind: plan.kind, client, identity, engine: plan.engine, contextLength: plan.contextLength, slots: plan.slots, contextScope: plan.contextScope, modelId: model.id, modelRevision: loadedRevision ?? model.revision, imageInput: readsPictures, pictureTokensMax: readsPictures ? plan.pictureTokensMax ?? null : null, pid: handle.pid, port, activeRequests: 0, retired: false,
       governorHandle: admission,
-      stopGovernor: watchProcessMemory(role, handle.pid, { modelId: model.id, contextLength }),
+      stopGovernor: watchProcessMemory(role, handle.pid, keepsFootprint ? { modelId: model.id, contextLength } : undefined),
       stop: async () => { handle.kill(); await handle.exited; },
     };
     void handle.exited.then(() => {

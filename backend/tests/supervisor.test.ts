@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { app } from "@/app";
@@ -47,6 +47,15 @@ test("dryRunFootprint reads the fake fit binary output and returns null on a fai
     writeFileSync(binary, "#!/bin/sh\nprintf 'MTL0 1743 448 304\\nHost 315 0 24\\n'\n"); chmodSync(binary, 0o755);
     process.env.STACK_FIT_BINARY = binary;
     expect(await dryRunFootprint("/tmp/model.gguf", 4096)).toBe(2834 * 1_048_576);
+    // VISION-02b: the dry run is asked at the launch's own KV cache type
+    // and flash attention, never the tool's f16 default.
+    const echo = join(dir, "fit-args");
+    writeFileSync(echo, `#!/bin/sh\necho "$@" > ${join(dir, "args.txt")}\nprintf 'MTL0 1 1 1\\nHost 1 0 1\\n'\n`); chmodSync(echo, 0o755);
+    process.env.STACK_FIT_BINARY = echo;
+    await dryRunFootprint("/tmp/model.gguf", 40960, { kvCacheType: "q8_0", flashAttention: true });
+    expect(readFileSync(join(dir, "args.txt"), "utf8").trim()).toBe("--model /tmp/model.gguf --ctx-size 40960 -ctk q8_0 -ctv q8_0 -fa on --fit on --fit-print on");
+    await dryRunFootprint("/tmp/model.gguf", 4096, { kvCacheType: "f16" });
+    expect(readFileSync(join(dir, "args.txt"), "utf8").trim()).toBe("--model /tmp/model.gguf --ctx-size 4096 --fit on --fit-print on");
     const empty = join(dir, "fit-empty");
     writeFileSync(empty, "#!/bin/sh\nexit 1\n"); chmodSync(empty, 0o755);
     process.env.STACK_FIT_BINARY = empty;

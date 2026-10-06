@@ -108,7 +108,7 @@ test("llama-server args spell q4_0 and omit the default f16 flags", () => {
 });
 
 test("a vision launch loads its projector with one slot and no cache reuse (VISION-01b)", () => {
-  const args = llamaServerArgs({ modelPath: "/models/vision.gguf", port: 8772, config: { ...declaredDefaults, slots: 4 }, contextLength: 8192, kvCacheType: "q8_0", projectorPath: "/models/mmproj.gguf" });
+  const args = llamaServerArgs({ modelPath: "/models/vision.gguf", port: 8772, config: { ...declaredDefaults, slots: 4 }, contextLength: 8192, kvCacheType: "q8_0", projectorPath: "/models/mmproj.gguf", onePictureSlot: true });
   const mmproj = args.indexOf("--mmproj");
   expect(args[mmproj + 1]).toBe("/models/mmproj.gguf");
   expect(args.slice(args.indexOf("--parallel"), args.indexOf("--parallel") + 2)).toEqual(["--parallel", "1"]);

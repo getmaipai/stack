@@ -100,8 +100,9 @@ export interface CatalogModelLike {
    * never a model id. */
   imageInput?: { projector: string };
   /** A launch the role needs regardless of the chat settings: the vision
-   * role's short context. */
-  launch?: { contextLength: number };
+   * role's short context; the most tokens one picture may take in a model
+   * that reads pictures (llama-server's --image-max-tokens, VISION-02b). */
+  launch?: { contextLength?: number; imageMaxTokens?: number };
   /** Sampling defaults from the model's own card, with the source named;
    * a request's own values win. */
   sampling?: { temperature?: number; top_p?: number; top_k?: number; presence_penalty?: number; source: string };

@@ -1923,6 +1923,82 @@ pictures (VISION-01f's last arm, a change to the chat model's settings
 and tool bench); the per-role allocation (`engines.<role>.choice`); or
 a machine with more memory. A smaller chat context is not one.
 
+## The chat model reads pictures (VISION-02b, 2026-10-06)
+
+The owner chose one resident process that reads pictures over a second
+vision model (Home's VISION-02). The Stack ships Qwen's own GGUF of
+Qwen3-VL-8B-Instruct as a selectable chat model
+(`Qwen/Qwen3-VL-8B-Instruct-GGUF` at revision
+`f982a07559d4a2f6c8744d840bf6fccab30eea96`, Apache-2.0 on that card): the
+language model at Q4_K_M (5,027,784,800 bytes) and its projector at Q8_0
+(752,289,728 bytes), a `component: "projector"` record of role `chat`
+that the model names in `imageInput`. Qwen3-8B stays pinned, installed
+and bound on every tier; p16's binding moves only on the owner's go
+after Home's VISION-02e report, and Qwen3-8B stays as the rollback for
+one release.
+
+**Launch.** A chat record that declares picture input loads its
+installed projector beside it (`--mmproj`). A missing projector starts
+chat text-only; a picture check after load (the vision probe's red
+square, sent to the chat process) decides whether the role row says
+`imageInput: true`; a failed check raises `picture-check-failed.chat`
+and chat keeps serving text. The pin declares `launch.imageMaxTokens:
+2560` (`--image-max-tokens`): the engine scales a larger photo down
+itself, so one picture costs at most 2,560 tokens of the window (a
+12-megapixel phone photo would otherwise take about 12,000), and the
+chat role row reports it as `picture_tokens_max` for Home's window. The
+pin's card sampling (the VL set: temperature 0.7, top_p 0.8, top_k 20,
+presence penalty 1.5) fills what a request leaves out; Home sends its
+own temperature 0.7 and samplers on every chat turn.
+
+**The two chat settings a projector used to drop.** VISION-01b's launch
+forced `--parallel 1` and left out `--cache-reuse 256` whenever a
+projector was passed. A chat process with a projector now keeps the
+slots its settings declare (the vision role alone is pinned to one
+slot). Chunk reuse is not asked for, because b10797 turns it off itself
+once a projector loads (`cache_reuse is not supported by multimodal, it
+will be disabled`, its own log). Measured on b10797 with the VL-8B:
+`n_slots = 2` held with `--parallel 2`; plain longest-prefix caching
+stays on (a second request with the same 926-token system prefix
+evaluated 10 tokens and took 916 from the cache; a repeated picture
+question evaluated 13 of 2,419 tokens). What is lost is only the
+shifted reuse of a prefix that moved (a window that dropped its oldest
+turn): those turns are evaluated again.
+
+**Sizing.** gguf-parser v0.26.4 gives byte-identical estimates for the
+qwen3vl and qwen3 Q4_K_M files at 40,960 and 65,536, so `qwen3vl` is a
+verified architecture; the fit plan adds the projector's bytes to every
+estimate. A measured footprint now holds only up to the context it was
+read at: the VL-8B's own maximum is 262,144, and a figure measured at
+40,960 read as the cost of 262,144 would have planned a launch the
+machine cannot hold. The admission dry run (`llama-fit-params`) is now
+asked at the launch's KV cache type and flash attention; it used to
+size an f16 cache, about twice the q8_0 cache a macOS launch runs (the
+VL-8B at 40,960: 8,312 MiB at q8_0 against 10,904 MiB at f16).
+
+### Measured on the 24 GB machine, 2026-10-06
+
+Apple silicon laptop, 24 GB unified memory, the owner's usual desktop
+apps and other sessions' gates running; llama-server b10797; the live
+Stack's chat was idle and unloaded during the run (never touched).
+
+| | Qwen3-8B Q4_K_M | Qwen3-VL-8B-Instruct Q4_K_M + Q8_0 projector |
+|---|---|---|
+| Resident at 40,960, q8_0 KV | 7.63 GB after a text turn (8.38 GB recorded live after use) | 8.43 GB after load; 9.73 GB after one picture |
+| Cold load (weights cached) | | 4.1 s |
+| Picture turn, first text | | 3.7 s cold (976 prompt tokens), 43 ms repeated |
+| Pressure at the peak | normal | normal (available 3.3 GB) |
+| Fit plan's chosen context (stt and tts resident) | 40,960 (its own maximum) | 108,544 (16.0 GB estimated peak) |
+
+The fit plan's 108,544 is a finding for the owner, not a launch: the
+plan sizes against the tier's 16 GB model budget, while admission also
+needs free memory minus the 4 GB working margin, so that context would
+need about 20 GB free and chat would wait and be refused on this
+machine. Qwen3-8B never shows this because its own maximum is 40,960.
+The p16 flip needs the owner's choice first (Home's VISION-02e report:
+a 40,960 ceiling for the chat record, or a launch plan that never picks
+a context admission cannot admit).
+
 ## Measured so far
 
 On an Apple silicon Mac (2026-09-18, a temporary copy of the owner's

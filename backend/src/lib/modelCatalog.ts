@@ -105,6 +105,58 @@ export const STACK_VISION_MODEL: CatalogModelLike = {
   sampling: { temperature: 0.7, top_p: 0.8, top_k: 20, presence_penalty: 1.5, source: "Qwen/Qwen3-VL-4B-Instruct model card, Generation Hyperparameters, VL" },
 };
 
+// The vision-capable chat pins (VISION-02b): Qwen's own GGUF of
+// Qwen3-VL-8B-Instruct, the language model at Q4_K_M and its projector
+// at Q8_0, so the one resident chat process reads pictures itself and
+// nothing extra loads. Licence Apache-2.0, read from the pinned
+// revision's card. The text architecture is Qwen3-8B's (36 layers, 8 KV
+// heads, head_dim 128), so its KV cache per token is the same; the
+// projector is the only extra weight. Selectable beside the Qwen3-8B
+// pin; the p16 binding is not moved here (that is the owner's go,
+// VISION-02e). The Instruct edition has no thinking mode.
+const QWEN3_VL_8B_REPO = "Qwen/Qwen3-VL-8B-Instruct-GGUF";
+const QWEN3_VL_8B_REVISION = "f982a07559d4a2f6c8744d840bf6fccab30eea96";
+export const STACK_CHAT_VL_8B_PROJECTOR: CatalogModelLike = {
+  id: "qwen3-vl-8b-instruct-mmproj-q8-0",
+  role: "chat",
+  component: "projector",
+  repo: QWEN3_VL_8B_REPO,
+  license: "Apache-2.0",
+  revision: QWEN3_VL_8B_REVISION,
+  engine: "llama-server",
+  sizing: { profile: "p16", quantization: "Q8_0" },
+  download: {
+    url: hfUrl(`${QWEN3_VL_8B_REPO}/resolve/${QWEN3_VL_8B_REVISION}/mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf`),
+    sha256: "c6ba85508d82f42590e6eb77d5340369ab6fecf107a7561d809523d8aa5f3bfd",
+    approx_bytes: 752_289_728,
+  },
+};
+export const STACK_CHAT_VL_8B_MODEL: CatalogModelLike = {
+  id: "qwen3-vl-8b-instruct-q4-k-m",
+  role: "chat",
+  repo: QWEN3_VL_8B_REPO,
+  license: "Apache-2.0",
+  revision: QWEN3_VL_8B_REVISION,
+  engine: "llama-server",
+  sizing: { profile: "p16", quantization: "Q4_K_M" },
+  download: {
+    url: hfUrl(`${QWEN3_VL_8B_REPO}/resolve/${QWEN3_VL_8B_REVISION}/Qwen3VL-8B-Instruct-Q4_K_M.gguf`),
+    sha256: "67d1659bfe71b89d50b45a4ad1a9e5b997e5bb16ce5da66a6a6167abd569e9e2",
+    approx_bytes: 5_027_784_800,
+  },
+  imageInput: { projector: STACK_CHAT_VL_8B_PROJECTOR.id },
+  // One picture takes at most 2,560 tokens (about 2.6 megapixels; the
+  // engine scales a larger photo down itself). Unbounded, a 12-megapixel
+  // phone photo would take about 12,000 of the window's tokens. Measured
+  // on b10797: a 1280 by 1918 photo is 2,400 tokens (VISION-02b).
+  launch: { imageMaxTokens: 2560 },
+  // The card publishes a VL set and a Text set; one set serves every
+  // turn of one process. The VL set is chosen (its temperature is the
+  // household's own 0.7, which Home sends on every chat turn), and the
+  // CHAT-AB-01 rerun measures it on text turns (VISION-02d).
+  sampling: { temperature: 0.7, top_p: 0.8, top_k: 20, presence_penalty: 1.5, source: "Qwen/Qwen3-VL-8B-Instruct-GGUF model card, Generation Hyperparameters, VL" },
+};
+
 // The `stt` pins (STACK-94b): sherpa-onnx's Moonshine tiny English
 // package and the Silero voice activity detector, from k2-fsa's rolling
 // `asr-models` release. A rolling tag can replace an asset under the
@@ -317,7 +369,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_IMAGE_MODEL, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_IMAGE_MODEL, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

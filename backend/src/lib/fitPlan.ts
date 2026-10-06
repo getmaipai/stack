@@ -7,7 +7,11 @@ import { MLX_IDLE_FACTOR, MLX_KV_PEAK_FACTOR, MLX_KV_PEAK_FACTOR_LOW, MLX_PREFIX
 import { GovernorRules } from "@/lib/governor";
 
 // qwen3 and llama were each agreed with real loads (SIZER-BAKE-03; SIZER-LLAMA-01 on Llama 3.2 3B Q4_K_M); dense files only.
-export const VERIFIED_ARCHITECTURES = ["qwen3", "llama"] as const;
+// qwen3vl (VISION-02b): Qwen3-VL-8B-Instruct's text model is Qwen3-8B's
+// shape, and gguf-parser v0.26.4 gives byte-identical estimates for the
+// two Q4_K_M files at 40,960 and 65,536 (2026-10-06); the projector is
+// added by the caller.
+export const VERIFIED_ARCHITECTURES = ["qwen3", "llama", "qwen3vl"] as const;
 
 export function estimatorAvailable(): boolean {
   const configured = process.env.STACK_GGUF_PARSER_BINARY;
@@ -224,18 +228,28 @@ export function buildFitPlan(input: PlanInput): StackFitPlanType {
 
 /** Select the largest context admitted by the same estimator used by the
  * fit-plan route. Unknown estimates never authorize a larger launch. */
-export async function largestAdmittedContext(input: Omit<PlanInput, "contextTokens" | "cpuEstimate"> & { modelContextTokens: number; minimumTokens?: number; stepTokens?: number; estimateAt: (contextTokens: number) => Promise<GgufEstimate | null> | GgufEstimate | null; cpuEstimateAt?: (contextTokens: number) => Promise<GgufEstimate | null> | GgufEstimate | null; memoryContextMultiplier?: number }): Promise<{ contextTokens: number; plan: StackFitPlanType }> {
+export async function largestAdmittedContext(input: Omit<PlanInput, "contextTokens" | "cpuEstimate"> & { modelContextTokens: number; minimumTokens?: number; stepTokens?: number; estimateAt: (contextTokens: number) => Promise<GgufEstimate | null> | GgufEstimate | null; cpuEstimateAt?: (contextTokens: number) => Promise<GgufEstimate | null> | GgufEstimate | null; memoryContextMultiplier?: number; measuredContextTokens?: number | null }): Promise<{ contextTokens: number; plan: StackFitPlanType }> {
   const maximum = Math.max(0, Math.floor(input.modelContextTokens / 512) * 512);
   const minimum = input.minimumTokens ?? 8192;
   const step = input.stepTokens ?? 512;
+  const { modelContextTokens: _modelContextTokens, minimumTokens: _minimumTokens, stepTokens: _stepTokens, estimateAt, cpuEstimateAt, memoryContextMultiplier: _memoryContextMultiplier, measuredContextTokens, measuredPeakBytes, ...planInput } = input;
+  const memoryContextMultiplier = input.memoryContextMultiplier ?? 1;
+  // A measured footprint holds only for the context it was read at and
+  // below (VISION-02b): a model whose own maximum is far above its last
+  // run (262,144 against 40,960) is never planned at that maximum on a
+  // figure that left out the larger KV cache. Above it, the estimate
+  // decides. A figure with no context of its own keeps its old reading.
+  const planAt = async (contextTokens: number) => buildFitPlan({
+    ...planInput,
+    measuredPeakBytes: measuredContextTokens && contextTokens > measuredContextTokens ? null : measuredPeakBytes,
+    contextTokens: contextTokens * memoryContextMultiplier,
+    estimate: await estimateAt(contextTokens),
+    cpuEstimate: await cpuEstimateAt?.(contextTokens) ?? null,
+  });
   for (let contextTokens = maximum; contextTokens >= minimum; contextTokens -= step) {
-    const { modelContextTokens: _modelContextTokens, minimumTokens: _minimumTokens, stepTokens: _stepTokens, estimateAt, cpuEstimateAt, memoryContextMultiplier: _memoryContextMultiplier, ...planInput } = input;
-    const memoryContextMultiplier = input.memoryContextMultiplier ?? 1;
-    const plan = buildFitPlan({ ...planInput, contextTokens: contextTokens * memoryContextMultiplier, estimate: await estimateAt(contextTokens), cpuEstimate: await cpuEstimateAt?.(contextTokens) ?? null });
+    const plan = await planAt(contextTokens);
     if (plan.verdict === "yes" || plan.verdict === "slow") return { contextTokens, plan };
   }
   const contextTokens = Math.min(minimum, maximum);
-  const { modelContextTokens: _modelContextTokens, minimumTokens: _minimumTokens, stepTokens: _stepTokens, estimateAt, cpuEstimateAt, memoryContextMultiplier: _memoryContextMultiplier, ...planInput } = input;
-  const memoryContextMultiplier = input.memoryContextMultiplier ?? 1;
-  return { contextTokens, plan: buildFitPlan({ ...planInput, contextTokens: contextTokens * memoryContextMultiplier, estimate: await estimateAt(contextTokens), cpuEstimate: await cpuEstimateAt?.(contextTokens) ?? null }) };
+  return { contextTokens, plan: await planAt(contextTokens) };
 }

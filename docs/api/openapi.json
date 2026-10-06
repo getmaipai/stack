@@ -1529,6 +1529,10 @@
                                 "name"
                               ]
                             }
+                          },
+                          "picture_tokens_max": {
+                            "type": "integer",
+                            "nullable": true
                           }
                         },
                         "required": [

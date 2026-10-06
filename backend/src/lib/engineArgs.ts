@@ -14,9 +14,17 @@ export interface LlamaServerArgsOptions {
   kvCacheType?: KvCacheType;
   /** Serve `/v1/embeddings` instead of chat: the `embed` role's launch. */
   embeddings?: boolean;
-  /** The multimodal projector a vision model loads beside its weights
-   * (`--mmproj`, VISION-01b): the `vision` role's launch, one slot. */
+  /** The multimodal projector a model loads beside its weights
+   * (`--mmproj`): the `vision` role's launch (VISION-01b), or a chat model
+   * that reads pictures itself (VISION-02b). */
   projectorPath?: string;
+  /** The `vision` role's own process: one slot, whatever the chat
+   * settings say. A chat process with a projector keeps its slots. */
+  onePictureSlot?: boolean;
+  /** The most tokens one picture may take (`--image-max-tokens`): the
+   * engine scales a larger picture down itself, so a picture's cost in the
+   * context is bounded by a declared number, never guessed. */
+  imageMaxTokens?: number;
 }
 
 export type KvCacheType = "f16" | "q8_0" | "q4_0";
@@ -87,12 +95,20 @@ export function llamaServerArgs(options: LlamaServerArgsOptions): string[] {
     "--jinja",
   ];
   // Prefix cache reuse: stable system messages are not re-prefilled on
-  // every turn (hub, FAST-01). The multimodal path does not take it.
+  // every turn (hub, FAST-01). llama-server b10797 turns chunk reuse off
+  // itself once a projector is loaded ("cache_reuse is not supported by
+  // multimodal"; plain longest-prefix caching stays on), so it is not
+  // asked for there; the measured cost is in docs/dev.md, "The chat
+  // model reads pictures".
   if (!options.projectorPath) args.push("--cache-reuse", "256");
   const slots = typeof config.slots === "number" ? config.slots : 1;
+  if (options.projectorPath) args.push("--mmproj", options.projectorPath);
+  if (options.projectorPath && options.imageMaxTokens) args.push("--image-max-tokens", String(options.imageMaxTokens));
   // A vision process is one slot: one picture is described at a time,
   // and the engine's automatic slot count would split its short context.
-  if (options.projectorPath) args.push("--mmproj", options.projectorPath, "--parallel", "1");
+  // A chat process keeps the slots its settings declare (the judge's
+  // shared slot on p16), projector or not.
+  if (options.onePictureSlot) args.push("--parallel", "1");
   else if (slots > 1) args.push("--parallel", String(slots));
   const threads = typeof config.threads === "number" ? config.threads : 0;
   if (threads > 0) args.push("--threads", String(threads));
