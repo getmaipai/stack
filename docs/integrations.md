@@ -37,6 +37,7 @@ OpenAI-shaped, so an existing client library works unchanged.
 | Path | Roles | Wire |
 |---|---|---|
 | `POST /v1/chat/completions` | `chat`, `coding`, `judge`, `router`, `vision` | chat completions; `stream: true` passes the engine's SSE bytes through unchanged including `[DONE]`; `tools`, `tool_choice`, `response_format` and `chat_template_kwargs` pass through |
+| `POST /v1/tokenize` | `chat`, `coding`, `judge`, `router`, `vision` | the engine's own token count, `{ count }`: send `messages` (with `tools` and `chat_template_kwargs` when the turn carries them, rendered with the engine's chat template, no generation prompt, then tokenized) or a raw `content` string, exactly one; an image part counts as the template's media marker only, not the image's own tokens; an engine with no token-count route is a 501 that says so, never an estimate |
 | `POST /v1/embeddings` | `embed` | embeddings |
 | `POST /v1/audio/transcriptions` | `stt` | transcription (multipart audio) |
 | `POST /v1/audio/speech` | `tts` | speech; phrase-level streaming and cancel |

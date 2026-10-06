@@ -1202,6 +1202,11 @@ export function scriptedProcess(role: RoleId, overrides: Partial<RoleProcess> = 
   const client: EngineClient = {
     baseUrl: "in-process://scripted",
     async request(path, body) {
+      // The token-count wires (STACK-TOKENIZE-01): a template that wraps
+      // each message in two marker tokens, a tokenizer that counts
+      // whitespace-separated pieces.
+      if (path === "/apply-template") return { status: 200, body: { prompt: (Array.isArray(body.messages) ? body.messages as Array<{ content?: unknown }> : []).map((m) => `<m> ${String(m.content ?? "")} </m>`).join(" ") + (Array.isArray(body.tools) ? ` <tools> ${(body.tools as unknown[]).map(() => "tool").join(" ")} </tools>` : "") } };
+      if (path === "/tokenize") return { status: 200, body: { tokens: String(body.content ?? "").split(/\s+/).filter(Boolean).map((_, i) => i) } };
       if (path === "/v1/embeddings") return { status: 200, body: { object: "list", data: [{ object: "embedding", index: 0, embedding: [0.1, 0.2, 0.3] }], model: role, usage: { prompt_tokens: 1, total_tokens: 1 } } };
       // The transcription wire: the bundled clip's sentence for any WAV
       // with bytes in it, an empty transcript for an empty one.

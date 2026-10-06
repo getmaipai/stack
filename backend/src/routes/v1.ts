@@ -16,6 +16,7 @@ import { ensureCloningWeights, prepareVoice, voiceNeedsCloning, VoiceRefusedErro
 import { hasJobRunner, submitJob, waitForJob } from "@/lib/jobs";
 import { RoleRequest } from "@maipai/spec/stack/ts/role-request.js";
 import { RoleReplyHeaders } from "@maipai/spec/stack/ts/role-reply-headers.js";
+import { TokenCountRequest, TokenCountResponse } from "@maipai/spec/stack/ts/token-count.js";
 
 const MessageSchema = z.object({ role: z.string(), content: z.unknown() }).passthrough();
 const ChatRequestSchema = RoleRequest.extend({ messages: z.array(MessageSchema) });
@@ -39,6 +40,15 @@ const SpeechFormSchema = z.object({
   timeout_ms: z.coerce.number().int().positive().optional(),
 });
 const ImageRequestSchema = RoleRequest.extend({ prompt: z.string() });
+// STACK-TOKENIZE-01: the engine's own token count, for Home's chat window
+// (Home rule 2: Home never estimates what the engine can count). Either
+// `messages`, rendered with the engine's own chat template first, or a
+// raw `content` string; exactly one.
+// The shapes are the spec's (TokenCountRequest, TokenCountResponse), never
+// a second copy here.
+const TokenizeRequestSchema = TokenCountRequest;
+const TokenizeResponseSchema = TokenCountResponse;
+const CannotCountSchema = z.object({ error: z.string(), role: z.string() });
 
 const UnknownModelSchema = z.object({ error: z.string(), roles: z.array(z.string()) });
 const NoEngineSchema = z.object({ error: z.string(), role: z.string(), state: z.string(), offline_reason: z.string() });
@@ -112,8 +122,46 @@ async function reply<T extends Context>(c: T, wire: Wire, body: Record<string, u
   }
 }
 
+/** STACK-TOKENIZE-01: llama-server's own /apply-template and /tokenize,
+ * passed through on a chat-wire role with the same resolution, identity
+ * headers and engine checks as a completion. An engine without those
+ * routes (404) is a 501 that says so; the Stack never estimates. */
+async function tokenizeReply<T extends Context>(c: T, body: TokenCountRequest) {
+  const modelField = String(body.model);
+  try {
+    const role = resolveRole(modelField).role;
+    if (ROLES[role].wire !== "chat") return jsonReply(c, { error: `Role '${role}' does not count tokens.`, roles: ROLE_IDS.filter((id) => ROLES[id].wire === "chat") }, 400, identityHeaders(null));
+    if ((body.messages === undefined) === (body.content === undefined)) return jsonReply(c, { error: "Send exactly one of `messages` or `content`.", roles: ROLE_IDS.filter((id) => ROLES[id].wire === "chat") }, 400, identityHeaders(null));
+    const cannotCount = (headers: Record<string, string>) => jsonReply(c, { error: `This ${role} engine does not report token counts.`, role }, 501, headers);
+    let content = body.content;
+    if (body.messages !== undefined) {
+      // The tools block and template switches render into the real prompt,
+      // so they are counted too (a review); image parts are not (below).
+      const rendered = await requestRole(role, "/apply-template", { model: body.model, messages: body.messages, add_generation_prompt: false, ...(body.tools !== undefined ? { tools: body.tools } : {}), ...(body.chat_template_kwargs !== undefined ? { chat_template_kwargs: body.chat_template_kwargs } : {}), ...(body.timeout_ms !== undefined ? { timeout_ms: body.timeout_ms } : {}) }, c.req.raw.signal);
+      if (rendered.status === 404) return cannotCount(rendered.headers);
+      const prompt = (rendered.body as { prompt?: unknown } | null)?.prompt;
+      if (rendered.status < 200 || rendered.status >= 300 || typeof prompt !== "string") return jsonReply(c, rendered.body, rendered.status >= 400 ? rendered.status : 502, rendered.headers);
+      content = prompt;
+    }
+    const counted = await requestRole(role, "/tokenize", { model: body.model, content, add_special: true, ...(body.timeout_ms !== undefined ? { timeout_ms: body.timeout_ms } : {}) }, c.req.raw.signal);
+    if (counted.status === 404) return cannotCount(counted.headers);
+    const tokens = (counted.body as { tokens?: unknown } | null)?.tokens;
+    if (counted.status < 200 || counted.status >= 300 || !Array.isArray(tokens)) return jsonReply(c, counted.body, counted.status >= 400 ? counted.status : 502, counted.headers);
+    return jsonReply(c, { count: tokens.length }, 200, counted.headers);
+  } catch (error) {
+    if (error instanceof EngineUnavailableError) {
+      const role = (() => { try { return resolveRole(modelField).role; } catch { return "chat" as RoleId; } })();
+      const result = noEngineResponse(role, error.reason);
+      return jsonReply(c, result.body, result.status, result.headers);
+    }
+    if (error instanceof UnverifiedModelError) return jsonReply(c, { error: error.message, model: error.modelId, reason: "unverified", missing: error.missing }, 409, identityHeaders(null));
+    return jsonReply(c, { error: error instanceof UnknownRoleError ? error.message : "Unknown role or model.", roles: ROLE_IDS }, 400, identityHeaders(null));
+  }
+}
+
 const modelsRoute = createRoute({ method: "get", path: "/models", tags: ["Roles"], summary: "Role ids and installed model ids", responses: { 200: { content: { "application/json": { schema: ModelsResponseSchema } }, description: "OpenAI's model-list shape." } } });
 const chatRoute = createRoute({ method: "post", path: "/chat/completions", tags: ["Roles"], summary: "Chat completions by role", request: { body: { content: { "application/json": { schema: ChatRequestSchema } } } }, responses: inferenceResponses });
+const tokenizeRoute = createRoute({ method: "post", path: "/tokenize", tags: ["Roles"], summary: "Token count by role, from the engine's own template and tokenizer", request: { body: { content: { "application/json": { schema: TokenizeRequestSchema } } } }, responses: { ...inferenceResponses, 200: { content: { "application/json": { schema: TokenizeResponseSchema } }, description: "The engine's token count: `messages` (with `tools` and `chat_template_kwargs` when sent) rendered with its chat template, no generation prompt, or `content` as given, with the identity headers. Image parts count as the template's media marker only, not the image's own tokens." }, 501: { content: { "application/json": { schema: CannotCountSchema } }, description: "The engine bound to the role has no token-count route." } } });
 const embeddingsRoute = createRoute({ method: "post", path: "/embeddings", tags: ["Roles"], summary: "Embeddings by role", request: { body: { content: { "application/json": { schema: EmbeddingsRequestSchema } } } }, responses: inferenceResponses });
 const transcriptionsRoute = createRoute({ method: "post", path: "/audio/transcriptions", tags: ["Roles"], summary: "Speech to text (one WAV file, spec/voice's transcribe form)", request: { body: { content: { "multipart/form-data": { schema: TranscriptionFormSchema } } } }, responses: { ...inferenceResponses, 200: { content: { "application/json": { schema: TranscriptionResponseSchema } }, description: "SttTranscribeResponse: the transcript, empty when the file holds no speech, with the identity headers." } } });
 const speechRoute = createRoute({ method: "post", path: "/audio/speech", tags: ["Roles"], summary: "Text to speech (spec/voice's form, the WAV streamed as it is generated)", request: { body: { content: { "multipart/form-data": { schema: SpeechFormSchema } } } }, responses: { ...inferenceResponses, 400: { content: { "application/json": { schema: z.union([UnknownModelSchema, VoiceRefusedSchema]) } }, description: "Unknown role or model id, or a voice the Stack cannot pin and verify (reason voice-not-pinnable)." }, 409: { content: { "application/json": { schema: z.union([UnverifiedModelSchema, VoiceRefusedSchema]) } }, description: "The named model's provenance is incomplete, or the voice needs voice cloning that is off or has no token (reason voice-cloning-unavailable)." }, 200: { content: { "audio/wav": { schema: z.string().openapi({ format: "binary" }) } }, description: "TtsSynthesizeResult: a chunked audio/wav body whose header carries the format and a placeholder data size, with the identity headers. Abort the request to cancel." } } });
@@ -124,6 +172,7 @@ const imagesRoute = createRoute({ method: "post", path: "/images/generations", t
 export const v1Routes = apiRouter<AppEnv>();
 v1Routes.openapi(modelsRoute, (c) => c.json({ object: "list" as const, data: [...new Set([...ROLE_IDS, ...listModels().map((model) => model.id)])].map((id) => ({ id, object: "model" as const, created: 0, owned_by: "maipai-stack" as const })) }, 200));
 v1Routes.openapi(chatRoute, (c) => reply(c, "chat", c.req.valid("json")) as never);
+v1Routes.openapi(tokenizeRoute, (c) => tokenizeReply(c, c.req.valid("json")) as never);
 v1Routes.openapi(embeddingsRoute, (c) => reply(c, "embeddings", c.req.valid("json")) as never);
 v1Routes.openapi(transcriptionsRoute, async (c) => {
   const form = c.req.valid("form");

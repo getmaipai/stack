@@ -41,6 +41,36 @@ test("streaming passes the SSE bytes through with the headers", async () => {
   expect(await response.text()).toContain("data: [DONE]");
 });
 
+test("a token count by role renders the messages with the engine's own template, then counts them with the engine's tokenizer", async () => {
+  const counted = await app.request("/v1/tokenize", json({ model: "chat", messages: [{ role: "system", content: "Be kind." }, { role: "user", content: "hello there" }] }));
+  expect(counted.status).toBe(200);
+  expect(counted.headers.get("x-maipai-model")).toBe("scripted-chat");
+  // The scripted engine's template wraps each message in two marker tokens
+  // and its tokenizer counts whitespace-separated pieces: 2 + 2 words, 2 + 2.
+  expect(await counted.json()).toEqual({ count: 8 });
+  // The tools block renders into the prompt, so it is counted (a review):
+  // the scripted template adds two markers and one piece per tool.
+  const withTools = await app.request("/v1/tokenize", json({ model: "chat", messages: [{ role: "user", content: "hello there" }], tools: [{ type: "function", function: { name: "web_search" } }] }));
+  expect(await withTools.json()).toEqual({ count: 7 });
+  const raw = await app.request("/v1/tokenize", json({ model: "chat", content: "one two three" }));
+  expect(await raw.json()).toEqual({ count: 3 });
+  const both = await app.request("/v1/tokenize", json({ model: "chat" }));
+  expect(both.status).toBe(400);
+  const wrong = await app.request("/v1/tokenize", json({ model: "embed", content: "x" }));
+  expect(wrong.status).toBe(400);
+});
+
+test("a token count from an engine that cannot count is a 501 with the reason, and no engine is the usual 503", async () => {
+  setSupervisorFactoryForTests(async (role) => scriptedProcess(role, { client: { ...scriptedProcess(role).client, request: async () => ({ status: 404, body: { error: "Not found" } }) } }));
+  const refused = await app.request("/v1/tokenize", json({ model: "chat", content: "hello" }));
+  expect(refused.status).toBe(501);
+  expect(await refused.json()).toMatchObject({ error: "This chat engine does not report token counts.", role: "chat" });
+  setSupervisorFactoryForTests(async () => { throw new EngineUnavailableError("No verified and installed chat model is available."); });
+  const offline = await app.request("/v1/tokenize", json({ model: "chat", content: "hello" }));
+  expect(offline.status).toBe(503);
+  expect(await offline.json()).toMatchObject({ role: "chat", state: "offline" });
+});
+
 test("embeddings by role answer on their own endpoint; a role on the wrong endpoint is a 400", async () => {
   const embed = await app.request("/v1/embeddings", json({ model: "embed", input: "OK" }));
   expect(embed.status).toBe(200);
@@ -223,7 +253,7 @@ test("an unknown path is a JSON 404 and there is no console to fall back to", as
 
 test("the generated document covers the contract table's surfaces", async () => {
   const document = await (await app.request("/api/openapi.json")).json() as { paths: Record<string, unknown> };
-  for (const path of ["/v1/chat/completions", "/v1/embeddings", "/v1/models", "/stack/v1/roles", "/stack/v1/engines", "/stack/v1/models", "/stack/v1/jobs", "/stack/v1/health", "/stack/v1/check", "/stack/v1/updates", "/stack/v1/events", "/stack/v1/hardware", "/stack/v1/hardware/budget", "/stack/v1/settings", "/stack/v1/storage/sweep", "/stack/v1/privacy", "/stack/v1/backup", "/healthz"]) {
+  for (const path of ["/v1/chat/completions", "/v1/tokenize", "/v1/embeddings", "/v1/models", "/stack/v1/roles", "/stack/v1/engines", "/stack/v1/models", "/stack/v1/jobs", "/stack/v1/health", "/stack/v1/check", "/stack/v1/updates", "/stack/v1/events", "/stack/v1/hardware", "/stack/v1/hardware/budget", "/stack/v1/settings", "/stack/v1/storage/sweep", "/stack/v1/privacy", "/stack/v1/backup", "/healthz"]) {
     expect(Object.keys(document.paths), `missing ${path}`).toContain(path);
   }
   await getProcess("chat");

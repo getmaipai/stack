@@ -19,6 +19,9 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Added
 
+- `POST /v1/tokenize` gives the chat engine's own token count for a
+  list of messages (rendered with the engine's chat template) or a raw
+  string, so Home sizes its chat window with real counts (2026-10-06).
 - The voice engine runs offline always; the Stack fetches a voice a
   request names, or the voice-cloning weights when voice cloning is
   turned on with a token, once and verified, before the engine uses

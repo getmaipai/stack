@@ -570,6 +570,16 @@ Rules: `home/docs/design/RULES.md` chat rules 4 and 11; record:
   note: it answers each question above and lists the chunked items.
   Out of scope: page reading (Home's `THIN-4A`), the hosted-key option
   (`THIN-4H`). Exit: the note, then `bash scripts/check.sh --docs`.
+- [x] **STACK-TOKENIZE-01 (S): the chat engine's own token count by
+  role.** Home's `THIN-3B` needs the engine's count on rendered messages
+  (Home rules 2 and 4). `POST /v1/tokenize` passes llama-server's own
+  `/apply-template` (no generation prompt) and `/tokenize` through on a
+  chat-wire role, with the same role resolution, identity headers and
+  engine checks as a completion, and answers `{ count }`; an engine
+  without those routes is a 501 that says so, never an estimate. Files:
+  `backend/src/routes/v1.ts`, the scripted process in
+  `backend/src/lib/supervisor.ts`, `docs/integrations.md`. Tests in
+  `backend/tests/routes.test.ts`. Done 2026-10-06.
 
 ## Home adoption
 

@@ -295,6 +295,206 @@
         }
       }
     },
+    "/v1/tokenize": {
+      "post": {
+        "tags": [
+          "Roles"
+        ],
+        "summary": "Token count by role, from the engine's own template and tokenizer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "timeout_ms": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "messages": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "role"
+                      ],
+                      "additionalProperties": {
+                        "nullable": true
+                      }
+                    }
+                  },
+                  "content": {
+                    "type": "string"
+                  },
+                  "tools": {
+                    "type": "array",
+                    "items": {
+                      "nullable": true
+                    }
+                  },
+                  "chat_template_kwargs": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "nullable": true
+                    }
+                  }
+                },
+                "required": [
+                  "model"
+                ],
+                "additionalProperties": {
+                  "nullable": true
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The engine's token count: `messages` (with `tools` and `chat_template_kwargs` when sent) rendered with its chat template, no generation prompt, or `content` as given, with the identity headers. Image parts count as the template's media marker only, not the image's own tokens.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "count"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown role or model id; the body lists the declared roles.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "roles"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The named model's provenance is incomplete.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "unverified"
+                      ]
+                    },
+                    "missing": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "model",
+                    "reason",
+                    "missing"
+                  ]
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "The engine bound to the role has no token-count route.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "role"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No engine is ready for the role; offline_reason says why.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "offline_reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "role",
+                    "state",
+                    "offline_reason"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/embeddings": {
       "post": {
         "tags": [
