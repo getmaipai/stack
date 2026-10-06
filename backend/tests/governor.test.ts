@@ -9,6 +9,7 @@ import {
   setMetalCapBytes,
   defaultModelBudgetBytes,
   release,
+  refreshMeasuredPeak,
   startGovernor,
   withdraw,
   type GovernorHandle,
@@ -97,6 +98,22 @@ test("the process watcher includes headroom in its measured resident baseline", 
   __setGovernorTuningForTestsOnly({ pollMs: 1, processSustainedPolls: 2 });
   let restarts = 0;
   const stop = startGovernor({ pid: 42, freeMemory: () => 32 * GB, totalMemory: () => 64 * GB, processMemory: async () => base + headroom, restart: () => { restarts++; } });
+  stops.push(stop);
+  await Bun.sleep(15);
+  expect(restarts).toBe(0);
+});
+
+test("a successful post-load measurement refreshes the active admission baseline", async () => {
+  const stale = 3_379_206_840;
+  const latest = 11_500_000_000;
+  const admission = await admit({ id: "resident-chat", kind: "resident", requestedBytes: stale, measuredPeakBytes: stale, pid: 42 });
+  expect("id" in admission).toBe(true);
+  if (!("id" in admission)) throw new Error("expected an admission");
+  refreshMeasuredPeak(admission, latest);
+  expect(getGovernorStatus().loaded[0]).toMatchObject({ id: "resident-chat", peakBytes: latest, measured: true });
+  __setGovernorTuningForTestsOnly({ pollMs: 1, processSustainedPolls: 2 });
+  let restarts = 0;
+  const stop = startGovernor({ pid: 42, freeMemory: () => 32 * GB, totalMemory: () => 64 * GB, processMemory: async () => latest, restart: () => { restarts++; } });
   stops.push(stop);
   await Bun.sleep(15);
   expect(restarts).toBe(0);

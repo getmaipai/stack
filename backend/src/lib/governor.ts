@@ -81,6 +81,7 @@ interface LoadedInternal extends GovernorLoadedModel {
   token: number;
   evicting: boolean;
   peakBaselineBytes: number | null;
+  headroomBytes: number;
   processBreaches: number;
   keepAliveSeconds: number;
 }
@@ -159,6 +160,7 @@ function loadedItemFor(request: GovernorRequest): LoadedInternal {
     pinned: request.pinned ?? false,
     pid: request.pid ?? null,
     peakBaselineBytes: request.measuredPeakBytes == null ? null : request.measuredPeakBytes + (request.headroomBytes ?? 0),
+    headroomBytes: request.headroomBytes ?? 0,
     processBreaches: 0,
     keepAliveSeconds: request.kind === "generator" ? 0 : request.keepAliveSeconds ?? 0,
   };
@@ -175,6 +177,17 @@ export function peakFor(request: GovernorRequest): { bytes: number; measured: bo
     base = Math.ceil(request.modelFileBytes * multiplier);
   }
   return { bytes: base + (request.headroomBytes ?? 0), measured };
+}
+
+/** Replace a provisional admission baseline with the footprint measured
+ * after this exact process passed its post-load check. */
+export function refreshMeasuredPeak(handle: GovernorHandle, footprintBytes: number): void {
+  if (!Number.isFinite(footprintBytes) || footprintBytes <= 0) return;
+  const item = loaded.get(handle.id);
+  if (!item || (handle.token !== undefined && item.token !== handle.token)) return;
+  item.peakBytes = Math.ceil(footprintBytes);
+  item.measured = true;
+  item.peakBaselineBytes = Math.ceil(footprintBytes) + item.headroomBytes;
 }
 
 function loadedBytes(): number {

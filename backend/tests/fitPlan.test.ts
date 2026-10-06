@@ -183,9 +183,39 @@ test("unknown architectures and absent estimates stay unknown", () => {
   }
 });
 
-test("unverified architecture plans retain a known model file size and omit an unknown one", () => {
+test("admits the installed Nomic embed model from its measured footprint when parser estimate is absent", () => {
+  const measuredBytes = 132_039_496;
+  const modelFileBytes = 84_106_624;
+  const plan = broken({
+    ...base,
+    modelId: "nomic-embed-text-v1-5-q4-k-m",
+    contextTokens: 8192,
+    capBytes: 16 * 1024 ** 3,
+    estimate: null,
+    modelFileBytes,
+    measuredPeakBytes: measuredBytes,
+  });
+  expect(plan.verdict).toBe("yes");
+  expect(plan.roles[0]?.peak).toMatchObject({ low: measuredBytes, high: measuredBytes, source: "measured" });
+});
+
+test("uses the documented governor catalog estimate when an installed model has size but no measurement", () => {
+  const modelFileBytes = 84_106_624;
+  const expected = Math.ceil(modelFileBytes * GovernorRules.engineMultipliers["llama-server"]);
+  const plan = broken({
+    ...base,
+    modelId: "nomic-embed-text-v1-5-q4-k-m",
+    contextTokens: 8192,
+    estimate: null,
+    modelFileBytes,
+  });
+  expect(plan.verdict).toBe("yes");
+  expect(plan.roles[0]?.peak).toMatchObject({ low: expected, high: expected, source: "estimated" });
+});
+
+test("known model file size gets a catalog estimate even for an unverified architecture", () => {
   const withBytes = broken({ ...base, estimate: { ...estimate, architecture: "gemma3", modelFileBytes: 1834426016 }, modelFileBytes: 1834426016 });
-  expect(withBytes).toMatchObject({ verdict: "unknown", model_file_bytes: 1834426016 });
+  expect(withBytes).toMatchObject({ verdict: "yes", model_file_bytes: 1834426016, roles: [{ peak: { source: "estimated", high: Math.ceil(1834426016 * GovernorRules.engineMultipliers["llama-server"]) } }] });
   expect(() => StackFitPlan.parse(withBytes)).not.toThrow();
   const withoutBytes = broken({ ...base, estimate: { ...estimate, architecture: "gemma3" } });
   expect(withoutBytes).not.toHaveProperty("model_file_bytes");

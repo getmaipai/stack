@@ -133,7 +133,7 @@ test("a bad value in one key leaves every other key in the same request unwritte
   expect(settingValues()["stack.runtime.idle_unload_minutes"]).toBe(30);
 });
 
-test("an offline chat group is probed once per check run, not once per role that shares chat's process", async () => {
+test("an offline chat group honors failed-start backoff during readiness checks", async () => {
   upsertModel({ id: "chat-a", roles: ["chat"], ...verified });
   let attempts = 0;
   setSupervisorFactoryForTests(async () => { attempts += 1; throw new Error("llama-server exited during load"); });
@@ -144,9 +144,9 @@ test("an offline chat group is probed once per check run, not once per role that
   const run = await runCheck();
   expect(run.ok).toBe(false);
   expect(run.results.map((result) => result.role)).toEqual(["chat"]);
-  // One start attempt for the probe; the fit-together generator does not
-  // try chat again after its probe failed.
-  expect(attempts).toBe(1);
+  // The prior failed start remains in backoff, so readiness reports the
+  // role's existing reason without launching the same refused process.
+  expect(attempts).toBe(0);
 });
 
 test("roles sharing a process whose owner failed to start in this run are skipped with the owner's reason, not started again", async () => {

@@ -243,6 +243,19 @@ test("a process that fails to start leaves the role offline with the reason", as
   expect(getRoleStatus("chat")).toMatchObject({ state: "offline", reason: "No verified and installed chat model is available." });
 });
 
+test("a refused start backs off and does not emit another loaded/offline flap on each request", async () => {
+  let attempts = 0;
+  setSupervisorFactoryForTests(async () => { attempts++; throw new EngineUnavailableError("Fit plan cannot admit embed."); });
+  await expect(getProcess("embed")).rejects.toThrow(/Fit plan cannot admit embed/);
+  await expect(getProcess("embed")).rejects.toThrow(/Fit plan cannot admit embed/);
+  expect(attempts).toBe(1);
+  const transitions = eventsAfter(0).filter((event) => event.id === "role.state").map((event) => (event.data as { state: string }).state);
+  expect(transitions).toEqual(["loaded", "offline"]);
+  await restartRole("embed");
+  await expect(getProcess("embed")).rejects.toThrow(/Fit plan cannot admit embed/);
+  expect(attempts).toBe(2);
+});
+
 test("a living engine's 5xx is returned as is and does not retire the process", async () => {
   setSupervisorFactoryForTests(async (role) => {
     const scripted = scriptedProcess(role);

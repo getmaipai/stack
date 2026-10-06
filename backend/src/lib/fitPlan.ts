@@ -70,6 +70,8 @@ export async function runGgufParser(input: { target: { path: string } | { url: s
 export interface PlanInput {
   modelId: string;
   modelFileBytes?: number;
+  /** Whole-process footprint recorded after the model's latest successful load. */
+  measuredPeakBytes?: number | null;
   contextTokens: number;
   kvCacheType: KvCacheType;
   estimate: GgufEstimate | null;
@@ -116,7 +118,29 @@ export function buildFitPlan(input: PlanInput): StackFitPlanType {
   let peak: Figure | UnknownFigure = unknown(date);
   let verdict: "yes" | "slow" | "no" | "unknown" = "unknown";
 
-  if (!input.estimate && input.mlx) {
+  if ((input.measuredPeakBytes ?? 0) > 0) {
+    const measured = input.measuredPeakBytes!;
+    peak = known(measured, measured, "measured", date);
+    if (input.unifiedMemory) {
+      const fits = measured <= available;
+      verdict = fits ? "yes" : "no";
+      const path: StackFitPlanType["paths"][number] = { path: "unified", fits, verdict: fits ? "yes" : "no" };
+      if (!fits) path.shortfall = known(measured - available, measured - available, "measured", date);
+      paths.push(path);
+    } else if (input.deviceBudgetsBytes.length) {
+      const fits = measured <= Math.max(...input.deviceBudgetsBytes) && measured <= available;
+      verdict = fits ? "yes" : "no";
+      const path: StackFitPlanType["paths"][number] = { path: "gpu", fits, verdict: fits ? "yes" : "no" };
+      if (!fits) path.shortfall = known(Math.max(0, measured - Math.min(available, Math.max(...input.deviceBudgetsBytes))), Math.max(0, measured - Math.min(available, Math.max(...input.deviceBudgetsBytes))), "measured", date);
+      paths.push(path);
+    } else {
+      const fits = measured <= available;
+      verdict = fits ? "slow" : "no";
+      const path: StackFitPlanType["paths"][number] = { path: "cpu", fits, verdict: fits ? "slow" : "no" };
+      if (!fits) path.shortfall = known(measured - available, measured - available, "measured", date);
+      paths.push(path);
+    }
+  } else if (!input.estimate && input.mlx) {
     const kvPerToken = parseMlxKvBytesPerToken(input.mlx.config);
     if (input.unifiedMemory && kvPerToken !== null) {
       const low = Math.ceil(MLX_IDLE_FACTOR * input.mlx.weightsBytes) + MLX_PREFIX_CACHE_BYTES + Math.ceil(MLX_KV_PEAK_FACTOR_LOW * kvPerToken * input.contextTokens);
@@ -160,6 +184,32 @@ export function buildFitPlan(input: PlanInput): StackFitPlanType {
       } else {
         paths.push({ path: "cpu", fits: false, verdict: "unknown" });
       }
+    }
+  } else if ((input.modelFileBytes ?? 0) > 0) {
+    // Installed models remain plannable when gguf-parser is absent or
+    // does not recognize their architecture. Prefer the latest measured
+    // footprint; otherwise mirror the governor's catalog estimate:
+    // model file bytes times its llama-server multiplier.
+    const high = Math.ceil(input.modelFileBytes! * GovernorRules.engineMultipliers["llama-server"]);
+    peak = known(high, high, "estimated", date);
+    if (input.unifiedMemory) {
+      const fits = high <= available;
+      verdict = fits ? "yes" : "no";
+      const path: StackFitPlanType["paths"][number] = { path: "unified", fits, verdict: fits ? "yes" : "no" };
+      if (!fits) path.shortfall = known(Math.max(0, high - available), Math.max(0, high - available), "estimated", date);
+      paths.push(path);
+    } else if (input.deviceBudgetsBytes.length) {
+      const fits = high <= Math.max(...input.deviceBudgetsBytes) && high <= available;
+      verdict = fits ? "yes" : "no";
+      const path: StackFitPlanType["paths"][number] = { path: "gpu", fits, verdict: fits ? "yes" : "no" };
+      if (!fits) path.shortfall = known(Math.max(0, high - Math.min(available, Math.max(...input.deviceBudgetsBytes))), Math.max(0, high - Math.min(available, Math.max(...input.deviceBudgetsBytes))), "estimated", date);
+      paths.push(path);
+    } else {
+      const fits = high <= available;
+      verdict = fits ? "slow" : "no";
+      const path: StackFitPlanType["paths"][number] = { path: "cpu", fits, verdict: fits ? "slow" : "no" };
+      if (!fits) path.shortfall = known(Math.max(0, high - available), Math.max(0, high - available), "estimated", date);
+      paths.push(path);
     }
   } else {
     paths.push(...allUnknownPaths(input));

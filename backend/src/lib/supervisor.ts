@@ -25,7 +25,7 @@ import { loadedWeightsRepo, pocketTtsCommand, pocketTtsEnv, pocketTtsInstalled, 
 import { ensureCloningWeights, POCKET_TTS_PRESET_VOICES, voiceCloningOn } from "@/speech/voices";
 import { comfyuiCommand, comfyuiEnv, comfyuiInstalled, COMFYUI_VERSION, linkCheckpoint, probeGenerator } from "@/generators/comfyui";
 import { basename } from "node:path";
-import { getRunState, release, setGovernorPid, startGovernor, touch as touchGovernor, withdraw as withdrawAdmission, type GovernorHandle, type GovernorTier } from "@/lib/governor";
+import { getRunState, refreshMeasuredPeak, release, setGovernorPid, startGovernor, touch as touchGovernor, withdraw as withdrawAdmission, type GovernorHandle, type GovernorTier } from "@/lib/governor";
 import { PROFILE_MODEL_BINDINGS, proposeProfile } from "@/profiles";
 import { AdmissionRefusedError, waitForAdmission, waitingReason } from "@/lib/admission";
 import { emit } from "@/lib/events";
@@ -189,6 +189,8 @@ const DEFAULT_POST_LOAD_TIMEOUT_MS = 120_000;
  * governor's numbers: long enough for a release in flight, short
  * enough that a request through the public route answers. */
 const START_WAIT_MS = 15_000;
+const START_RETRY_BASE_MS = 5_000;
+const START_RETRY_CAP_MS = 5 * 60_000;
 const DEFAULT_COMPLETION_TIMEOUT_MS = 10 * 60_000;
 const LOAD_FLOOR_MS = 60_000;
 const LOAD_PER_GB_MS = 60_000;
@@ -362,12 +364,24 @@ interface RoleRuntime {
   manuallyStopped: boolean;
   status: RoleStatus;
   lastRealRequestAt: number | null;
+  startFailureCount: number;
+  retryAfter: number;
 }
 
 type ProcessFactory = (role: RoleId, modelId?: string) => Promise<RoleProcess>;
 let testFactory: ProcessFactory | null = null;
 const runtimes = new Map<RoleId, RoleRuntime>();
+const lastRoleStateLog = new Map<RoleId, string>();
 const requestLocks = new Map<RoleId, Promise<void>>();
+
+function emitRoleState(role: RoleId, state: RoleState, reason?: string): void {
+  const signature = `${state}\n${reason ?? ""}`;
+  if (lastRoleStateLog.get(role) === signature) return;
+  lastRoleStateLog.set(role, signature);
+  const data = { role, state, since: new Date().toISOString(), ...(reason ? { reason } : {}) };
+  logger.appendLine(JSON.stringify({ event: "role.state", ...data }));
+  emit({ id: "role.state", data });
+}
 
 async function acquireRequestProcess(requested: RoleId, modelId?: string): Promise<RoleProcess> {
   const role = processRoleFor(requested);
@@ -453,7 +467,7 @@ function initialStatus(role: RoleId): RoleStatus {
 function runtime(role: RoleId): RoleRuntime {
   let current = runtimes.get(role);
   if (!current) {
-    current = { process: null, starting: null, generation: 0, manuallyStopped: false, status: initialStatus(role), lastRealRequestAt: null };
+    current = { process: null, starting: null, generation: 0, manuallyStopped: false, status: initialStatus(role), lastRealRequestAt: null, startFailureCount: 0, retryAfter: 0 };
     runtimes.set(role, current);
   }
   return current;
@@ -616,14 +630,14 @@ async function contextForLaunch(model: ModelRecord, config: Record<string, numbe
     : null;
   if (!model.modelPath?.endsWith(".gguf")) {
     const mlxFacts = readMlxKvBytesPerToken(model.modelPath!) === null ? null : { weightsBytes: model.sizeBytes ?? 0, config: JSON.parse(readFileSync(join(model.modelPath!, "config.json"), "utf8")) };
-    const result = await largestAdmittedContext({ modelId: model.id, modelContextTokens: max, mlx: mlxFacts, estimate: null, estimateAt: () => null, kvCacheType: defaultKvCacheType(), unifiedMemory: hardware.isAppleSilicon, deviceBudgetsBytes: gpuBudgets, capBytes: modelCapBytes, workingMarginBytes: status.marginBytes, loaded: status.loaded.map((item) => ({ role: item.id, kind: item.kind, peakBytes: item.peakBytes, measured: item.measured })), asOf: new Date().toISOString().slice(0, 10), tool: { name: "fit-plan", version: "launch" } });
+    const result = await largestAdmittedContext({ modelId: model.id, modelFileBytes: model.sizeBytes ?? undefined, measuredPeakBytes: model.measuredFootprintBytes, modelContextTokens: max, mlx: mlxFacts, estimate: null, estimateAt: () => null, kvCacheType: defaultKvCacheType(), unifiedMemory: hardware.isAppleSilicon, deviceBudgetsBytes: gpuBudgets, capBytes: modelCapBytes, workingMarginBytes: status.marginBytes, loaded: status.loaded.map((item) => ({ role: item.id, kind: item.kind, peakBytes: item.peakBytes, measured: item.measured })), asOf: new Date().toISOString().slice(0, 10), tool: { name: "fit-plan", version: "launch" } });
     if (result.plan.verdict !== "yes") {
       const peak = result.plan.roles[0]?.peak.high;
       throw new EngineUnavailableError(`The fit plan cannot admit the minimum 8,192 token context; estimated peak ${peak === null || peak === undefined ? "unknown" : `${(peak / 1_073_741_824).toFixed(1)} GB`} against a ${(modelCapBytes / 1_073_741_824).toFixed(1)} GB model budget.`);
     }
     return result.contextTokens;
   }
-  const result = await largestAdmittedContext({ modelId: model.id, modelContextTokens: Math.floor(max / slots), estimate: null, estimateAt, cpuEstimateAt, memoryContextMultiplier: slots, kvCacheType: defaultKvCacheType(), unifiedMemory: hardware.isAppleSilicon, deviceBudgetsBytes: gpuBudgets, capBytes: modelCapBytes, workingMarginBytes: status.marginBytes, loaded: status.loaded.map((item) => ({ role: item.id, kind: item.kind, peakBytes: item.peakBytes, measured: item.measured })), asOf: new Date().toISOString().slice(0, 10), tool: { name: "gguf-parser", version: "launch" } });
+  const result = await largestAdmittedContext({ modelId: model.id, modelFileBytes: model.sizeBytes ?? undefined, measuredPeakBytes: model.measuredFootprintBytes, modelContextTokens: Math.floor(max / slots), estimate: null, estimateAt, cpuEstimateAt, memoryContextMultiplier: slots, kvCacheType: defaultKvCacheType(), unifiedMemory: hardware.isAppleSilicon, deviceBudgetsBytes: gpuBudgets, capBytes: modelCapBytes, workingMarginBytes: status.marginBytes, loaded: status.loaded.map((item) => ({ role: item.id, kind: item.kind, peakBytes: item.peakBytes, measured: item.measured })), asOf: new Date().toISOString().slice(0, 10), tool: { name: "gguf-parser", version: "launch" } });
   if (result.plan.verdict !== "yes" && result.plan.verdict !== "slow") {
     const peak = result.plan.roles[0]?.peak.high;
     const memoryReason = `The fit plan cannot admit the minimum 8,192 token context for ${model.id}; estimated peak ${peak === null || peak === undefined ? "unknown" : `${(peak / 1_073_741_824).toFixed(1)} GB`} against a ${(modelCapBytes / 1_073_741_824).toFixed(1)} GB model budget.`;
@@ -843,7 +857,10 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     if (plan.engine === "mlx-serve") identity = { ...identity, build: identity.build ?? `mlx-serve-${plan.build}`, model: identity.model ?? basename(model.modelPath!) };
     const check = await postLoadCheck(role, client, handle.pid);
     check.loadMs = Math.round(performance.now() - loadStartedAt);
-    if (check.actualBytes !== null) recordMeasuredFootprint(model.id, check.actualBytes, contextLength);
+    if (check.actualBytes !== null) {
+      recordMeasuredFootprint(model.id, check.actualBytes, contextLength);
+      refreshMeasuredPeak(admission, check.actualBytes);
+    }
     runtime(role).status.postLoadCheck = check;
     resolveHealth(`engine.crashed.${role}`);
     resolveHealth(`post-load-check-failed.${role}`);
@@ -911,10 +928,13 @@ export async function getProcess(requested: RoleId, modelId?: string): Promise<R
     await retire(previous);
     return getProcess(role, modelId);
   }
+  if (!current.starting && current.retryAfter > Date.now()) {
+    throw new EngineUnavailableError(current.status.reason ?? `The ${role} engine start is backing off after a failed admission.`);
+  }
   if (!current.starting) {
     const generation = current.generation;
     current.status = { ...current.status, state: "loading", reason: null };
-    emit({ id: "role.state", data: { role, state: "loaded", since: new Date().toISOString() } });
+    emitRoleState(role, "loaded");
     const launch: Promise<RoleProcess> = startProcess(role, modelId).then(async (started) => {
       if (generation !== current.generation) {
         // Stopped or restarted while it loaded: its admission and memory
@@ -925,16 +945,22 @@ export async function getProcess(requested: RoleId, modelId?: string): Promise<R
       }
       current.process = started;
       current.starting = null;
+      current.startFailureCount = 0;
+      current.retryAfter = 0;
       current.lastRealRequestAt = Date.now();
       current.status = { kind: started.kind, state: "ready", reason: null, identity: started.identity, postLoadCheck: current.status.postLoadCheck, contextLength: started.contextLength ?? null, slots: started.slots ?? null, contextScope: started.contextScope ?? null };
       emit({ id: "engine.state", data: { engine: role, state: "ready" } });
-      emit({ id: "role.state", data: { role, state: "ready", since: new Date().toISOString() } });
+      emitRoleState(role, "ready");
       return started;
     }).catch((error) => {
       if (generation === current.generation) {
         current.starting = null;
-        current.status = { ...current.status, state: "offline", reason: (error as Error).message };
-        emit({ id: "role.state", data: { role, state: "offline", since: new Date().toISOString(), reason: (error as Error).message } });
+        const reason = (error as Error).message;
+        current.startFailureCount++;
+        const delay = Math.min(START_RETRY_CAP_MS, START_RETRY_BASE_MS * 2 ** Math.min(20, current.startFailureCount - 1));
+        current.retryAfter = Date.now() + delay;
+        current.status = { ...current.status, state: "offline", reason };
+        emitRoleState(role, "offline", reason);
       }
       throw error;
     });
@@ -1063,6 +1089,8 @@ export async function restartRole(requested: RoleId): Promise<void> {
   current.process = null;
   current.starting = null;
   current.manuallyStopped = false;
+  current.startFailureCount = 0;
+  current.retryAfter = 0;
   current.status = { ...current.status, state: "loading", reason: null };
   emit({ id: "engine.state", data: { engine: role, state: "loading" } });
   if (previous) await retire(previous);
@@ -1073,12 +1101,14 @@ export async function stopRole(requested: RoleId, reason = "Stopped by Home."): 
   const current = runtime(role);
   current.generation++;
   current.manuallyStopped = true;
+  current.startFailureCount = 0;
+  current.retryAfter = 0;
   const previous = current.process;
   current.process = null;
   current.starting = null;
   current.status = { ...current.status, state: "stopped", reason };
   emit({ id: "engine.state", data: { engine: role, state: "stopped", reason } });
-  emit({ id: "role.state", data: { role, state: "installed", since: new Date().toISOString(), reason } });
+  emitRoleState(role, "installed", reason);
   if (previous) await retire(previous);
 }
 
@@ -1303,6 +1333,7 @@ export function resetSupervisorForTests(): void {
   stoppingAll = false;
   for (const current of runtimes.values()) current.generation++;
   runtimes.clear();
+  lastRoleStateLog.clear();
   pinnedModels.clear();
   preferredModels.clear();
   scriptedHistoryLooks = 0;
