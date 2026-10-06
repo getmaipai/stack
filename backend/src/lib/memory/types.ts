@@ -4,6 +4,11 @@ export interface MemorySnapshot {
   totalBytes: number;
   availablePercent: number;
   pressure: MemoryPressure;
+  /** Memory available for a new load: free plus what the kernel gives
+   * back without compressing or swapping a working set. macOS: free
+   * pages plus the larger of the file-backed cache (with purgeable
+   * pages) and the inactive and speculative queues. Linux:
+   * `MemAvailable`. The name predates that definition. */
   freeBytes: number;
   degraded: boolean;
   probeError?: string;

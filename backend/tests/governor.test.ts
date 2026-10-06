@@ -15,6 +15,9 @@ import {
   type GovernorHandle,
 } from "@/lib/governor";
 import { scriptedMemoryReader } from "@/lib/memory/scripted";
+import { availableBytesFromVmStatistics } from "@/lib/memory/darwin";
+import type { MemoryPressure } from "@/lib/memory";
+import { EVENT_2026_10_06, PAGE_BYTES, vmStatistics } from "./fixtures/vmStatistics";
 import { __resetHealthForTests, list as listHealth } from "@/lib/health";
 
 const GB = 1_073_741_824;
@@ -505,4 +508,41 @@ test("a peak that cannot be stored keeps the watch running", async () => {
   reading = 4 * GB;
   for (let index = 0; index < 40 && restarts === 0; index++) await Bun.sleep(5);
   expect(restarts).toBeGreaterThan(0);
+});
+
+// The 2026-10-06 event on the p16 laptop: the honest 8B chat figure
+// (STACK-PROCMEM-01) against the machine's memory as the reader reads it.
+const HONEST_CHAT_BYTES = 8_436_858_360;
+const P16_TOTAL_BYTES = 25_769_803_776;
+const eventReading = (pressure: MemoryPressure) => ({ totalBytes: P16_TOTAL_BYTES, freeBytes: availableBytesFromVmStatistics(vmStatistics(EVENT_2026_10_06), PAGE_BYTES), availablePercent: 69, pressure, degraded: false });
+const honestChat = { id: "chat", kind: "resident" as const, requestedBytes: 5_027_783_488, modelFileBytes: 5_027_783_488, measuredPeakBytes: HONEST_CHAT_BYTES, engine: "llama-server" };
+
+test("the honest 8.4 GB chat is admitted on p16 when the file cache counts as available and pressure is normal", async () => {
+  // Before the fix the reader said 8,800,010,240 B (8.2 GiB) and the chat
+  // queued: "needs about 7.9 GB with 8.2 GB free".
+  const stop = startGovernor({ pid: 1, pollMs: 1, tier: "p16", memoryReader: scriptedMemoryReader([eventReading("normal")]) });
+  stops.push(stop);
+  await Bun.sleep(5);
+  expect(getGovernorStatus()).toMatchObject({ pressure: "normal", freeMemoryBytes: 16_449_994_752, marginBytes: 4 * GB });
+  expect(await admit(honestChat)).toMatchObject({ id: "chat", requestedBytes: HONEST_CHAT_BYTES });
+});
+
+test("the same reclaimable memory never admits the chat into kernel warn or critical pressure", async () => {
+  for (const pressure of ["warn", "critical"] as const) {
+    __resetGovernorForTests();
+    const stop = startGovernor({ pid: 1, pollMs: 1, tier: "p16", memoryReader: scriptedMemoryReader([eventReading(pressure)]) });
+    stops.push(stop);
+    await Bun.sleep(5);
+    expect(getGovernorStatus()).toMatchObject({ pressure, freeMemoryBytes: 16_449_994_752 });
+    expect(await admit(honestChat)).toMatchObject({ queued: true, position: 1 });
+    expect(getGovernorDecisions().find((decision) => decision.model === "chat")?.reason).toBe(`Memory pressure is ${pressure}.`);
+    expect(getGovernorStatus().loaded).toHaveLength(0);
+    stop();
+    await Bun.sleep(5);
+  }
+});
+
+test("the old free-plus-inactive figure from the event still refuses the honest chat at the p16 margin", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: P16_TOTAL_BYTES, freeMemoryBytes: 8_800_010_240, tier: "p16" });
+  expect(await admit(honestChat)).toMatchObject({ queued: true, position: 1 });
 });

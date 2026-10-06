@@ -54,14 +54,52 @@ function pressureFor(level: number): MemoryPressure {
   return level >= 4 ? "critical" : level >= 2 ? "warn" : "normal";
 }
 
-function hostFreeBytes(): number {
+// Word offsets in `vm_statistics64_data_t` (<mach/vm_statistics.h>):
+// 32-bit page counts, with 64-bit event counters taking two words each.
+const VM_FREE = 0;
+const VM_INACTIVE = 2;
+const VM_PURGEABLE = 22;
+const VM_SPECULATIVE = 23;
+const VM_EXTERNAL = 34;
+
+/** The one definition of available memory on macOS: what the kernel
+ * hands to a new process without compressing or swapping memory anyone
+ * is using. Two exact counts, each of pages that do not overlap:
+ *
+ * - free pages plus the file-backed cache (`external_page_count`, every
+ *   clean file page on the active, inactive or speculative queue, which
+ *   the kernel drops and can read back) plus purgeable pages (volatile
+ *   anonymous memory it discards). This is Activity Monitor's "Cached
+ *   Files" plus free, the figure XNU's own available-pages count is
+ *   built on, and the macOS twin of Linux's `MemAvailable`.
+ * - free pages plus the inactive and speculative queues: the next pages
+ *   the kernel reclaims under pressure, file-backed or not.
+ *
+ * Available is the larger of the two. Adding them would count twice the
+ * file pages on the inactive and speculative queues (speculative pages
+ * are always file-backed: active + inactive + speculative equals
+ * internal + external page for page). Active anonymous memory and the
+ * compressor are never counted, so admission never plans on compressing
+ * a working set; the kernel's pressure level guards the rest.
+ * Measured 2026-10-06 on the p16 laptop: before this, the reader added
+ * free plus inactive plus word 13 (the high half of the faults counter,
+ * meant to be purgeable) and reported 8.2 GiB while about 16 GB of file
+ * cache was reclaimable. */
+export function availableBytesFromVmStatistics(stats: ArrayLike<number>, pageSize: number): number {
+  const free = stats[VM_FREE]!;
+  const fileCache = stats[VM_EXTERNAL]! + stats[VM_PURGEABLE]!;
+  const reclaimQueues = stats[VM_INACTIVE]! + stats[VM_SPECULATIVE]!;
+  return (free + Math.max(fileCache, reclaimQueues)) * pageSize;
+}
+
+function hostAvailableBytes(): number {
   const native = loadSymbols();
   const stats = new Uint32Array(HOST_VM_INFO64_COUNT); const count = new Uint32Array([HOST_VM_INFO64_COUNT]);
   const host = native.mach_host_self();
   if (native.host_statistics64(host, HOST_VM_INFO64, ptr(stats), ptr(count)) !== 0) throw new Error("host_statistics64 failed");
   const pageSize = new Uint32Array([PAGE_SIZE_FALLBACK]);
   if (native.host_page_size(host, ptr(pageSize)) !== 0) throw new Error("host_page_size failed");
-  return (stats[0]! + stats[2]! + stats[13]!) * (pageSize[0] || PAGE_SIZE_FALLBACK);
+  return availableBytesFromVmStatistics(stats, pageSize[0] || PAGE_SIZE_FALLBACK);
 }
 
 /** The one definition of a process's memory on macOS, from the two
@@ -111,7 +149,7 @@ export function createDarwinMemoryReader(): MemoryReader {
         const totalBytes = sysctlNumber("hw.memsize");
         const availablePercent = Math.max(0, Math.min(100, sysctlNumber("kern.memorystatus_level")));
         const pressure = pressureFor(sysctlNumber("kern.memorystatus_vm_pressure_level"));
-        const freeBytes = hostFreeBytes();
+        const freeBytes = hostAvailableBytes();
         previous = { totalBytes, availablePercent, pressure, freeBytes, degraded: false };
       } catch (error) {
         const detail = `The macOS memory ledger probe failed: ${(error as Error).message}`;

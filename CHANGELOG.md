@@ -36,6 +36,13 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Changed
 
+- On macOS the governor counts memory the system can reclaim (the file
+  cache, purgeable memory, the inactive and speculative queues) as
+  available, the way Activity Monitor does, instead of free plus
+  inactive pages alone, so the 8B chat starts on a 24 GB Mac with
+  normal memory pressure. Kernel warn or critical pressure still holds
+  every new load. A waiting load's reason now says "available" and names
+  the margin the machine keeps back. (STACK-AVAIL-MEM-01)
 - The Stack is MaiPai Home's engine foundation, not a product
   (2026-09-20, `.github/docs/DECISIONS.md`). The backend was started
   fresh on that design: the governor, the kernel memory readers, the

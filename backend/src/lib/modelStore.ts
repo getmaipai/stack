@@ -204,19 +204,29 @@ function markMeasuredMemoryDefinition(): void {
   db.insert(meta).values({ key: MEASURED_MEMORY_DEFINITION_KEY, value: MEASURED_MEMORY_DEFINITION }).onConflictDoUpdate({ target: meta.key, set: { value: MEASURED_MEMORY_DEFINITION } }).run();
 }
 
-/** Run once at start on a store whose figures carry no mark (or an older
- * one). A GGUF model's figure gains its file size, the mapped weights the
- * old figure left out (the 8B chat: 3,379,206,840 + 5,027,783,488 bytes,
- * against 8,382,824,448 read live), so its next admission is close to the
- * truth rather than falling back to the much larger dry run; any other
- * figure is kept (those engines load weights into their own memory, which
- * the footprint already counted). Every figure is measured again at the
- * model's next load. Every new figure writes the mark, so a fresh store
- * holds no mark until its first measurement. */
-export function upgradeMeasuredFiguresFromOlderDefinition(): number {
+/** Runs at every start. On a store whose figures carry no mark (or an
+ * older one), a GGUF model's figure gains its file size, the mapped
+ * weights the old figure left out (the 8B chat: 3,379,206,840 +
+ * 5,027,783,488 bytes, against 8,382,824,448 read live), so its next
+ * admission is close to the truth rather than falling back to the much
+ * larger dry run; any other figure is kept (those engines load weights
+ * into their own memory, which the footprint already counted). On a
+ * marked macOS store, a GGUF figure below its own file size gains it too:
+ * this definition's figure holds the mapped weights, so a smaller one was
+ * written by an older build after the mark (a rollback; on 2026-10-06 the
+ * rolled-back Stack stored 3,406,895,800 bytes for the 8B chat under the
+ * mark). Linux's `VmRSS` always counted mapped files, so a Linux figure is
+ * never second-guessed. Every figure is measured again at the model's
+ * next load. Every new figure writes the mark, so a fresh store holds no
+ * mark until its first measurement. */
+export function upgradeMeasuredFiguresFromOlderDefinition(platform: NodeJS.Platform = process.platform): number {
   const current = db.select({ value: meta.value }).from(meta).where(eq(meta.key, MEASURED_MEMORY_DEFINITION_KEY)).get()?.value;
-  if (current === MEASURED_MEMORY_DEFINITION) return 0;
-  const upgraded = sqlite.prepare("UPDATE models SET measured_footprint_bytes = measured_footprint_bytes + size_bytes WHERE measured_footprint_bytes IS NOT NULL AND size_bytes IS NOT NULL AND lower(model_path) LIKE '%.gguf'").run().changes;
+  const gguf = "measured_footprint_bytes IS NOT NULL AND size_bytes IS NOT NULL AND lower(model_path) LIKE '%.gguf'";
+  if (current === MEASURED_MEMORY_DEFINITION) {
+    if (platform !== "darwin") return 0;
+    return sqlite.prepare(`UPDATE models SET measured_footprint_bytes = measured_footprint_bytes + size_bytes WHERE ${gguf} AND measured_footprint_bytes < size_bytes`).run().changes;
+  }
+  const upgraded = sqlite.prepare(`UPDATE models SET measured_footprint_bytes = measured_footprint_bytes + size_bytes WHERE ${gguf}`).run().changes;
   const measured = (sqlite.prepare("SELECT count(*) AS n FROM models WHERE measured_footprint_bytes IS NOT NULL").get() as { n: number }).n;
   if (measured > 0) markMeasuredMemoryDefinition();
   return upgraded;

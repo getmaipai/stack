@@ -30,7 +30,7 @@ export function governorReasonFor(id: string, since: string): string {
 export function waitingReason(id: string, request: GovernorRequest): string {
   const why = getGovernorDecisions().find((decision) => decision.model === id)?.reason ?? "The current memory budget cannot admit the request.";
   const status = getGovernorStatus();
-  return `${why} It needs about ${gb(governorPeak(request))} GB with ${gb(status.freeMemoryBytes)} GB free, after the working margin the machine's tier keeps back; memory pressure is ${status.pressure}.`;
+  return `${why} It needs about ${gb(governorPeak(request))} GB with ${gb(status.freeMemoryBytes)} GB available (free memory plus cache the system can reclaim), and the machine's tier keeps ${gb(status.marginBytes)} GB of that back; memory pressure is ${status.pressure}.`;
 }
 
 export function gb(bytes: number): string { return (bytes / 1_073_741_824).toFixed(1); }

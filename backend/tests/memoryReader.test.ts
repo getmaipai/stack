@@ -2,8 +2,9 @@ import { afterEach, expect, test } from "bun:test";
 import os from "node:os";
 import { getMemoryReader, __setMemoryReaderForTests } from "@/lib/memory";
 import { scriptedMemoryReader } from "@/lib/memory/scripted";
-import { processMemoryFromRusage } from "@/lib/memory/darwin";
+import { availableBytesFromVmStatistics, processMemoryFromRusage } from "@/lib/memory/darwin";
 import type { MemorySnapshot } from "@/lib/memory/types";
+import { EVENT_2026_10_06, LIVE_CHAT_LOADED_2026_10_06, PAGE_BYTES, vmStatistics } from "./fixtures/vmStatistics";
 
 const restoreScriptedDefault = () => __setMemoryReaderForTests(scriptedMemoryReader([{ totalBytes: 128 * 1_073_741_824, freeBytes: 64 * 1_073_741_824, availablePercent: 50, pressure: "normal", degraded: false }]));
 
@@ -64,4 +65,28 @@ test("the Darwin reader's process memory is at least the process's own resident 
   // ps and the probe are two reads a moment apart; a quarter of slack
   // covers this test process's own allocation between them.
   expect(measured).toBeGreaterThan(psBytes * 0.75);
+});
+
+test("macOS available memory counts the file cache the kernel gives back, not free plus inactive alone", () => {
+  // The 2026-10-06 event: 8.2 GiB "free" (free plus inactive) against about
+  // 16 GB of file-backed cache, so the honest 8B chat could not start.
+  const event = EVENT_2026_10_06;
+  const available = availableBytesFromVmStatistics(vmStatistics(event), PAGE_BYTES);
+  expect(available).toBe((event.free + event.external + event.purgeable) * PAGE_BYTES);
+  expect(available).toBe(16_449_994_752);
+  // At least the old free-plus-inactive figure, and enough for the 8.4 GB
+  // chat plus the 4 GiB p16 working margin.
+  expect(available).toBeGreaterThan((event.free + event.inactive) * PAGE_BYTES);
+  expect(available).toBeGreaterThanOrEqual(8_436_858_360 + 4 * 1_073_741_824);
+});
+
+test("macOS available memory takes the inactive and speculative queues when they beat the file cache, never both", () => {
+  // Live with the chat loaded: its weights are wired by Metal, so the
+  // file cache is small and the inactive queue is the larger figure.
+  const live = LIVE_CHAT_LOADED_2026_10_06;
+  expect(availableBytesFromVmStatistics(vmStatistics(live), PAGE_BYTES)).toBe((live.free + live.inactive + live.speculative) * PAGE_BYTES);
+  // Speculative pages are file-backed, so they are never counted twice,
+  // and the high word of the faults counter is not memory.
+  const onlySpeculative = { ...live, inactive: 0, external: 100_000, speculative: 100_000, purgeable: 0, faultsHighWord: 7 };
+  expect(availableBytesFromVmStatistics(vmStatistics(onlySpeculative), PAGE_BYTES)).toBe((live.free + 100_000) * PAGE_BYTES);
 });

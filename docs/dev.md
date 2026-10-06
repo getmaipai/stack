@@ -372,9 +372,10 @@ until the first measured load, a model's peak is estimated as file size
 times the engine's multiplier (1.3 for llama-server, 1.4 for the MLX
 servers) and labelled estimated.
 
-Admission reads free memory now and the requested peak. A load starts
-only when free memory minus the requested peak leaves the profile's
-working margin (4 GB on p16, 8 GB on p32, 12 GB on p64, 20 GB on p128)
+Admission reads available memory now (free memory plus what the kernel
+gives back without compressing a working set; one definition, below)
+and the requested peak. A load starts only when available memory minus
+the requested peak leaves the profile's working margin (4 GB on p16, 8 GB on p32, 12 GB on p64, 20 GB on p128)
 and the loaded total stays under the cap (total memory minus the OS
 margin, 8 GB by default, declared as `stack.memory.model_budget_bytes`). Only one
 generator runs at a time; a request that cannot be admitted enters a
@@ -419,8 +420,8 @@ served on the budget route; nothing about decisions is persisted.
 `{ totalBytes, availablePercent, pressure: normal | warn | critical,
 freeBytes, processMemoryBytes(pid) }`. On macOS, `hw.memsize`,
 `kern.memorystatus_level`, `kern.memorystatus_vm_pressure_level` (1
-normal, 2 warn, 4 critical) and `host_statistics64` (free plus inactive
-plus purgeable pages) through `bun:ffi` against `libSystem.B.dylib`,
+normal, 2 warn, 4 critical) and `host_statistics64` (available memory,
+defined below) through `bun:ffi` against `libSystem.B.dylib`,
 and `proc_pid_rusage` with `RUSAGE_INFO_V4` for process memory (below);
 every failure keeps the previous reading and raises a warning health
 item. On Linux, `MemAvailable` from `/proc/meminfo`, PSI memory `some
@@ -479,6 +480,66 @@ so its next admission is near the truth instead of falling back to the
 weights in their own memory, which the footprint counted). Each model is
 measured again at its next load. The 1.7B chat pin's 414,550,392-byte
 figure was withdrawn for the same reason.
+
+**Available memory, one definition (STACK-AVAIL-MEM-01, 2026-10-06).**
+`MemorySnapshot.freeBytes` (the name is older than the definition) is the
+memory a new load can have without the kernel compressing or swapping
+memory something is using. On macOS it is computed from one
+`host_statistics64` call as free pages plus the larger of two exact counts:
+
+- the file-backed cache (`external_page_count`: clean file pages on the
+  active, inactive or speculative queue, which the kernel drops and can
+  read back) plus purgeable pages (volatile anonymous memory it
+  discards). This is Activity Monitor's "Cached Files", the count XNU's
+  own available-pages figure is built on, and the macOS twin of the
+  `MemAvailable` the Linux reader uses;
+- the inactive and speculative queues, the next pages the kernel
+  reclaims under pressure, file-backed or not.
+
+The two are not added, since file pages on the inactive and speculative
+queues are in both (speculative pages are always file-backed: on the live
+machine active + inactive + speculative was 506,226 pages and internal +
+external 506,226). Active anonymous memory and the compressor are never
+counted: admitting against them means compressing a working set, which is
+memory pressure. `kern.memorystatus_level`, the "free percentage" that
+`memory_pressure` prints, counts active memory too (free + active +
+inactive + speculative, checked page for page), so it is shown as
+`availablePercent` and never used to admit. The pressure guard is unchanged:
+kernel warn or critical, or the arithmetic watermark, queues every
+admission whatever the figure says.
+
+The reader before this date added free, inactive and word 13 of
+`vm_statistics64_data_t`, which is the high half of the 64-bit `faults`
+counter (purgeable is word 22, speculative word 23), so it missed the file
+cache on the active queue and all speculative pages. On 2026-10-06, with
+the honest 8B chat figure from STACK-PROCMEM-01 (8,436,858,360 bytes), the
+p16 laptop could not start chat: "needs about 7.9 GB with 8.2 GB free",
+while `memory_pressure` said 69 percent free, pressure was normal and about
+16 GB of file cache was reclaimable. The chat needs 8,436,858,360 bytes
+plus the 4 GiB p16 margin, 12.73 GB available, to start.
+
+| Reading on the p16 laptop, 2026-10-06 | Old figure (free + inactive + word 13) | Available (this definition) | `memory_pressure` free |
+|---|---|---|---|
+| The event (chat stopped, sums from the coordinator's reading) | 8,800,010,240 B (8.2 GiB): chat queued | 16,449,994,752 B: chat admitted, 7.5 GiB left after it, 3.5 GiB over the margin | 69 percent |
+| Live, chat (8B) and embed loaded, Home's gate running | 4,832,559,104 B | 4,867,653,632 B (the inactive queue is larger: the file cache, 2.8 GB, is smaller than the 4.7 GiB of weights the chat holds resident, so Metal has wired them out of it) | 35 percent |
+| Live, 20 minutes later, same load | 4,154,212,352 B | 4,370,923,520 B | 30 percent |
+
+Figures stored by an older build after the definition mark (a rollback)
+are caught at start too: on macOS a GGUF model's figure below its own file
+size cannot be a process-memory figure (the resident set holds the mapped
+weights), so it gains its file size. The rolled-back Stack stored
+3,406,895,800 bytes for the 8B chat under the mark; the next start on this
+build reads 8,434,679,288. A Linux figure is never second-guessed, since
+`VmRSS` always counted mapped files.
+
+Both rules lean on one fact of the Apple silicon launch: llama-server runs
+with `-ngl all`, so Metal wires a loaded model's weights and they leave the
+file cache. An engine whose mapped weights stay unwired (a CPU-only or
+partial-offload launch on a Mac) would leave them in the file cache, where
+available memory counts them as room for another load, and its resident
+figure could sit below the file size and be raised at the next start.
+Neither path runs on a supported Mac today; STACK-AVAIL-MEM-02 holds the
+fix for when one does.
 
 On the robot, the body's power and thermal budget is an additional
 admission input with the same thresholds and actions (Bot's GOV-01).

@@ -53,7 +53,7 @@ test("a queued start is admitted when the holder releases, and a start that time
   expect(gaveUp).toBe(true);
   expect(getGovernorStatus().queue.length).toBe(0);
   expect(getGovernorStatus().loaded.map((item) => item.id)).toEqual(["chat"]);
-  expect(waitingReason("image", { id: "image", kind: "resident", requestedBytes: 5 * GB })).toMatch(/needs about 5\.0 GB with 10\.0 GB free/);
+  expect(waitingReason("image", { id: "image", kind: "resident", requestedBytes: 5 * GB })).toMatch(/needs about 5\.0 GB with 10\.0 GB available \(free memory plus cache the system can reclaim\), and the machine's tier keeps 8\.0 GB of that back/);
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 32 * GB, freeMemoryBytes: 24 * GB, tier: "p32" });
   release(holder2);
   await new Promise((resolve) => setTimeout(resolve, 600));

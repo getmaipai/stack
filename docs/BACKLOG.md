@@ -277,6 +277,34 @@ are never copied. Nothing migrates Home until STACK-16.
   `backend/src/lib/memory/`, `backend/src/lib/governor.ts`,
   `backend/src/lib/supervisor.ts`, `backend/src/lib/modelStore.ts`,
   tests. Exit: `bash scripts/check.sh`. Landed on `main` with this line.
+- [x] **STACK-AVAIL-MEM-01 (S): available memory counts what the kernel reclaims, not free plus inactive.**
+  On 2026-10-06, after STACK-PROCMEM-01 made the 8B chat's figure honest
+  (8,436,858,360 bytes), the p16 laptop could not start chat: the macOS
+  reader reported 8.2 GiB free (free plus inactive plus word 13 of
+  `vm_statistics64_data_t`, the high half of the faults counter, meant
+  as purgeable) while `memory_pressure` said 69 percent free, pressure
+  was normal and about 16 GB of file cache was reclaimable. Fix: one
+  definition, free pages plus the larger of the file-backed cache with
+  purgeable pages and the inactive and speculative queues
+  (`availableBytesFromVmStatistics`); active anonymous memory and the
+  compressor are never counted, and kernel warn or critical still queues
+  every admission. On macOS a GGUF figure stored below its own file size
+  (an older build's write after the definition mark, as in the rollback
+  that day) gains its file size at start. Files:
+  `backend/src/lib/memory/darwin.ts`, `backend/src/lib/modelStore.ts`,
+  `backend/src/lib/admission.ts`, tests. Exit: `bash scripts/check.sh`.
+  Landed on `main` with this line.
+- [ ] **STACK-AVAIL-MEM-02 (S): unwired mapped weights on macOS.**
+  STACK-AVAIL-MEM-01's available figure counts every file-backed page,
+  and its start-up repair raises a GGUF figure below the file size. Both
+  are right only while Metal wires the weights (`-ngl all` on Apple
+  silicon). Before any Mac launch leaves mapped weights unwired (CPU-only
+  or partial offload): subtract the loaded engines' resident mapped-file
+  bytes from the file-cache count, and repair a figure only when it was
+  written by an older build (a per-row definition stamp). Found in the
+  STACK-AVAIL-MEM-01 review. Files: `backend/src/lib/memory/darwin.ts`,
+  `backend/src/lib/governor.ts`, `backend/src/lib/modelStore.ts`.
+  Exit: `bash scripts/check.sh`.
 - [ ] **STACK-FIT-CTX-01 (S): a measured peak counts only at the context it was measured at.**
   `buildFitPlan` uses `measuredPeakBytes` for every context it tries,
   though the record keeps `measuredContextLength`; a figure measured at

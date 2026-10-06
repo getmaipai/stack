@@ -366,3 +366,21 @@ test("a footprint-only figure for a GGUF gains its mapped weights once; other fi
   expect(upgradeMeasuredFiguresFromOlderDefinition()).toBe(0);
   expect(getModel("chat-8b")).toMatchObject({ measuredFootprintBytes: 8_382_824_448, measuredContextLength: 40_960 });
 });
+
+test("a marked macOS store upgrades a GGUF figure an older build wrote below its file size, and only that", () => {
+  // 2026-10-06: the new build marked the store, the Stack was rolled back,
+  // and the old build stored the 8B chat's footprint again, 3,406,895,800
+  // bytes, under the mark. The next start on the new build must not admit
+  // the chat at that figure.
+  upsertModel({ id: "chat-8b", roles: ["chat"], source: "catalog", provenance: { package: "model:chat-8b" }, revision: "rev-a", sizeBytes: 5_027_783_488, modelPath: "/models/chat-8b/Qwen3-8B-Q4_K_M.gguf", measuredFootprintBytes: 8_382_824_448, measuredContextLength: 40_960 }, "2026-10-06T13:00:00.000Z");
+  upsertModel({ id: "judge-4b", roles: ["judge"], source: "catalog", provenance: { package: "model:judge-4b" }, revision: "rev-a", sizeBytes: 2_497_280_256, modelPath: "/models/judge-4b/Qwen3-4B-Q4_K_M.gguf", measuredFootprintBytes: 2_987_967_672, measuredContextLength: 4096 }, "2026-10-06T13:00:00.000Z");
+  recordMeasuredFootprint("chat-8b", 3_406_895_800, 40_960);
+  expect(db.select().from(meta).where(eq(meta.key, "models.measured_memory_definition")).get()?.value).toBe(MEASURED_MEMORY_DEFINITION);
+  expect(upgradeMeasuredFiguresFromOlderDefinition("linux")).toBe(0);
+  expect(getModel("chat-8b")).toMatchObject({ measuredFootprintBytes: 3_406_895_800 });
+  expect(upgradeMeasuredFiguresFromOlderDefinition("darwin")).toBe(1);
+  expect(getModel("chat-8b")).toMatchObject({ measuredFootprintBytes: 8_434_679_288, measuredContextLength: 40_960 });
+  expect(getModel("judge-4b")).toMatchObject({ measuredFootprintBytes: 2_987_967_672 });
+  // The upgraded figure is above the file size, so the next start keeps it.
+  expect(upgradeMeasuredFiguresFromOlderDefinition("darwin")).toBe(0);
+});
