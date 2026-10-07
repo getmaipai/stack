@@ -12,6 +12,7 @@ import { __resetGovernorForTests, __setGovernorTuningForTestsOnly } from "@/lib/
 import { __setMemoryReaderForTests } from "@/lib/memory";
 import { scriptedMemoryReader } from "@/lib/memory/scripted";
 import { __resetSettingsForTests } from "@/settings";
+import { dataDir } from "@/lib/paths";
 
 const GB = 1_073_741_824;
 
@@ -31,6 +32,30 @@ test("a chat completion by role answers with the engine's reply and the identity
   expect(response.headers.get("x-maipai-model")).toBe("scripted-chat");
   expect(response.headers.get("x-maipai-revision")).toBe("scripted");
   expect((await response.json() as { choices: Array<{ message: { content: string } }> }).choices[0]!.message.content).toBe("Scripted Stack reply.");
+});
+
+test("a canary request and reply leave no text in the isolated Stack data folder", async () => {
+  const canary = "sec11-request-text-canary-7b2c61";
+  const replyCanary = "sec11-completion-text-canary-38a4de";
+  setSupervisorFactoryForTests(async (role) => {
+    const scripted = scriptedProcess(role);
+    return scriptedProcess(role, { client: { ...scripted.client, request: async () => ({ status: 200, body: { id: "canary-completion", choices: [{ index: 0, message: { role: "assistant", content: replyCanary }, finish_reason: "stop" }] } }) } });
+  });
+  const response = await app.request("/v1/chat/completions", json({ model: "chat", messages: [{ role: "user", content: canary }] }));
+  expect(response.status).toBe(200);
+  expect((await response.text())).toContain(replyCanary);
+  const pending = [dataDir];
+  const contents: string[] = [];
+  while (pending.length) {
+    const dir = pending.pop()!;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const path = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) pending.push(path);
+      else contents.push(fs.readFileSync(path, "utf8"));
+    }
+  }
+  expect(contents.join("\n")).not.toContain(canary);
+  expect(contents.join("\n")).not.toContain(replyCanary);
 });
 
 test("streaming passes the SSE bytes through with the headers", async () => {

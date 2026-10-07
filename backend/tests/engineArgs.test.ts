@@ -48,6 +48,18 @@ test("a Mac spawn gets the hub's full launch list over the declared defaults", (
   ]);
 });
 
+test("llama-server does not enable request logging or slot saves by default", () => {
+  const args = llamaServerArgs({ modelPath, port: 8771, config: declaredDefaults, contextLength: 4096, kvCacheType: "q8_0" });
+  expect(args).not.toContain("--slot-save-path");
+  expect(args).not.toContain("--slot-save");
+  expect(args).not.toContain("--log-file");
+  expect(args).not.toContain("--log-verbosity");
+  expect(args).not.toContain("--verbose");
+  expect(args).toContain("--cache-reuse");
+  expect(args).not.toContain("--cache_prompt");
+  expect(args).not.toContain("--cache-prompt");
+});
+
 test("flashAttention false spells -fa off", () => {
   const args = llamaServerArgs({ modelPath, port: 8771, config: { ...declaredDefaults, flashAttention: false }, contextLength: 4096, kvCacheType: "q8_0" });
   const fa = args.indexOf("-fa");
