@@ -31,7 +31,7 @@ export MAIPAI_STANDARDS_DIR="$STANDARDS_DIR"
 # bun's content-addressed store).
 if [ "${1:-}" != "--docs" ]; then
   CORE_TAG="core-v0.1.0"
-  SPEC_TAG="spec-v0.1.84"
+  SPEC_TAG="spec-v0.1.94"
   COMMONS_DIR="${MAIPAI_COMMONS_DIR:-../commons}"
   if [ ! -d "$COMMONS_DIR" ]; then
     echo "getmaipai/commons is missing at $COMMONS_DIR (set MAIPAI_COMMONS_DIR); backend imports @maipai/core and @maipai/spec from its workspaces."

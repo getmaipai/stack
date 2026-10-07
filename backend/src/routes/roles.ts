@@ -1,5 +1,6 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@maipai/core/src/openapi";
+import { ChatRoleContextSchema } from "@maipai/spec/stack/ts/role-context.js";
 import type { AppEnv } from "@/types";
 import { resolveRoleState } from "@/lib/router";
 import { ROLE_IDS, RoleRecordSchema, ROLES } from "@/roles";
@@ -9,7 +10,7 @@ import { roleCheck } from "@/lib/readiness";
 
 const CheckSchema = z.object({ state: z.enum(["not checked", "passed", "failed", "skipped"]), at: z.string().nullable(), reason: z.string().nullable(), stale: z.boolean() });
 const IdentitySchema = z.object({ ok: z.boolean(), expected: z.string().nullable(), actual: z.string().nullable(), reason: z.string().nullable() });
-const RoleViewSchema = RoleRecordSchema.extend({ check: CheckSchema, identity: IdentitySchema, context_length: z.number().nullable().optional(), context_per_slot: z.number().nullable().optional(), context_total: z.number().nullable().optional(), slots: z.number().nullable().optional(), context_scope: z.enum(["total across slots", "per slot"]).nullable().optional(), models: z.array(z.object({ id: z.string(), name: z.string() })).optional(), picture_tokens_max: z.number().int().nullable().optional() });
+const RoleViewSchema = RoleRecordSchema.extend({ check: CheckSchema, identity: IdentitySchema, ...ChatRoleContextSchema.shape, models: z.array(z.object({ id: z.string(), name: z.string() })).optional(), picture_tokens_max: z.number().int().nullable().optional() });
 const rolesRoute = createRoute({ method: "get", path: "/", tags: ["Roles"], summary: "Every declared role and its current state", responses: { 200: { content: { "application/json": { schema: z.object({ roles: z.array(RoleViewSchema) }) } }, description: "Declaration; derived state with since, checkedAt on ready and the reason a role is only loaded; the bound model; the launched context length, slot count and whether context is per slot or total; what the last readiness run said; the identity check." } } });
 
 export const rolesRoutes = apiRouter<AppEnv>();
