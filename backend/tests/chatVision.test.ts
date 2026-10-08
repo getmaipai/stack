@@ -213,3 +213,21 @@ test("the components inventory shows the bound chat model per tier and lists the
   expect(chat).toContain("| p16 | resident | `qwen3-8b-instruct-q4-k-m` |");
   expect(chat).toMatch(/Also pinned, started only when chosen[^\n]*`qwen3-vl-8b-instruct-q4-k-m` \([^)]*reads pictures\)/);
 });
+
+test("the chat and vision role rows say whether they read pictures, and no other row does", async () => {
+  type Row = { id: string; reads_pictures?: boolean };
+  const rows = async () => ((await (await app.request("/stack/v1/roles")).json()) as { roles: Row[] }).roles;
+  const find = async (id: string) => (await rows()).find((role) => role.id === id)!;
+  // The p16 chat binding is the text-only Qwen3-8B: it reads no pictures.
+  install(STACK_CHAT_8B_MODEL);
+  expect((await find("chat")).reads_pictures).toBe(false);
+  // A launched process with a projector reads pictures, on chat and on vision.
+  setSupervisorFactoryForTests(async (role) => scriptedProcess(role, { kind: "spawned", imageInput: true }));
+  await getProcess("chat");
+  expect((await find("chat")).reads_pictures).toBe(true);
+  resetSupervisorForTests();
+  setSupervisorFactoryForTests(async (role) => scriptedProcess(role, { kind: "spawned", imageInput: true }));
+  await getProcess("vision");
+  expect((await find("vision")).reads_pictures).toBe(true);
+  expect((await find("embed")).reads_pictures).toBeUndefined();
+});
