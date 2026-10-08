@@ -28,6 +28,7 @@ export const SETTING_SECTIONS = [
   { id: "engines.llama_server", label: "llama-server" },
   { id: "engines.chat", label: "Chat engine" },
   { id: "engines.embed", label: "Embeddings engine" },
+  { id: "engines.vision", label: "Vision engine" },
   { id: "engines.stt", label: "Voice in engine" },
   { id: "engines.tts", label: "Voice out engine" },
 ] as const;
@@ -35,7 +36,7 @@ export const SETTING_SECTIONS = [
 // A `url` binding: a server the person already runs, bound read-only to
 // one role. Empty means no binding; the Stack then spawns its own engine
 // for the role where it can.
-export const URL_BINDING_ROLES = ["chat", "embed", "stt", "tts"] as const;
+export const URL_BINDING_ROLES = ["chat", "embed", "vision", "stt", "tts"] as const;
 export type UrlBindingRole = typeof URL_BINDING_ROLES[number];
 
 const stack = { scope: "device" as const, lives_in: "stack" as const, honoured_by: ["home", "bot"] as Array<"home" | "bot"> };
@@ -68,6 +69,7 @@ export const SETTINGS: SettingDeclaration[] = [
   { ...stack, key: "stack.engines.llama_server.flash_attention", selector: "boolean", default: true, label: "Flash attention", help: "Use the faster attention implementation when supported.", section: { id: "engines.llama_server", order: 50 }, level: "advanced", needs_restart: true },
   ...urlBinding("chat", 10),
   ...urlBinding("embed", 10),
+  ...urlBinding("vision", 10),
   ...urlBinding("stt", 10),
   ...urlBinding("tts", 10),
   // Secret: encrypted at rest, never returned by the settings route, and

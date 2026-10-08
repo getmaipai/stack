@@ -12,6 +12,7 @@ import { STACK_MODELS, STACK_VISION_MODEL, STACK_VISION_PROJECTOR } from "@/lib/
 import { declaresImageInput, getProcess, getRoleStatus, probeRequest, processRoleFor, projectorFor, resetSupervisorForTests, restartRole, scriptedProcess, selectedModel, setSupervisorFactoryForTests, VISION_PROBE_IMAGE, withPinSampling } from "@/lib/supervisor";
 import { pullSpec } from "@/routes/models";
 import { app } from "@/app";
+import { __resetSettingsForTests, applyPendingSettings, updateSettings } from "@/settings";
 import type { RoleId } from "@/roles";
 
 const GB = 1_073_741_824;
@@ -26,6 +27,7 @@ let started: RoleId[] = [];
 beforeEach(() => {
   started = [];
   clearModelsForTests();
+  __resetSettingsForTests();
   __resetHealthForTests();
   __resetGovernorForTests();
   setSupervisorFactoryForTests(async (role) => { started.push(role); return scriptedProcess(role); });
@@ -168,6 +170,14 @@ test("the roles route says whether the bound vision model reads pictures", async
   const vision = body.roles.find((role) => role.id === "vision")!;
   expect(vision.sharesModelWith).toBeUndefined();
   expect(vision.model).toMatchObject({ id: STACK_VISION_MODEL.id, imageInput: true });
+});
+
+test("the roles route reports picture capability for a URL-bound vision engine", async () => {
+  install(STACK_VISION_MODEL);
+  updateSettings({ "stack.engines.vision.host_url": "http://127.0.0.1:9999" });
+  applyPendingSettings();
+  const body = await (await app.request("/stack/v1/roles")).json() as { roles: Array<{ id: string; model: { imageInput?: boolean } | null }> };
+  expect(body.roles.find((role) => role.id === "vision")!.model?.imageInput).toBe(true);
 });
 
 // Review regressions (VISION-01b, medium review pass 1).

@@ -561,12 +561,15 @@ export function launchProjectorFor(role: RoleId, model: ModelRecord): ModelRecor
 
 /** Whether a role reads pictures (VISION-02b): its running process was
  * launched with a projector, or, with nothing running, its selected
- * model declares picture input and the projector is installed; a url
- * binding never. Never a model id (Home rule 8). */
+ * model declares picture input and the projector is installed. A bound
+ * vision URL is itself the configured vision engine. Never a model id
+ * (Home rule 8). */
 export function roleReadsPictures(requested: RoleId, model: ModelRecord | null): boolean {
   const role = processRoleFor(requested);
-  // A url binding is an engine the Stack did not launch: nothing proves
-  // it reads pictures, so it does not claim to.
+  // The vision role's URL is explicitly bound as the vision engine, so
+  // capability reporting follows that binding without claiming for any
+  // other role's remote server.
+  if (role === "vision" && urlBindingFor(role)) return true;
   if (urlBindingFor(role)) return false;
   const running = runtime(role).process;
   if (running && !running.retired) return running.imageInput === true;
