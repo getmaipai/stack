@@ -9,10 +9,15 @@ describe("GET /healthz", () => {
   test("returns a healthy semver response", async () => {
     const response = await app.request("/healthz");
     expect(response.status).toBe(200);
-    const body = await response.json() as { ok: boolean; version: string; uptimeSeconds: number };
+    const body = await response.json() as { ok: boolean; version: string; uptimeSeconds: number; contract: number };
     expect(body.ok).toBe(true);
     expect(body.version).toMatch(/^\d+\.\d+\.\d+$/);
     expect(body.uptimeSeconds).toBeGreaterThanOrEqual(0);
+  });
+
+  test("reports contract 1 as an integer beside ok and version", async () => {
+    const body = await (await app.request("/healthz")).json() as { contract: number };
+    expect(body.contract).toBe(1);
   });
 });
 

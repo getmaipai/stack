@@ -115,7 +115,7 @@ Each item has one fix action that Home renders as a button.
 | Backup | `GET /stack/v1/backup` | the precious-state declaration for Home's backup, below |
 | Diagnostics | `GET /stack/v1/diagnostics` | a redacted zip (log tail, health, hardware without the computer name, settings, versions) Home hands to the person; nothing is sent anywhere |
 | Voices | `GET /stack/v1/voices` | every voice the `tts` role can render with its declared metadata (id, name, description, language, country, gender, source, `onDisk`, licence, revision); Home's voice picker reads it |
-| Liveness | `GET /healthz` | `{ ok, version, uptimeSeconds }`; Home checks its pinned minimum Stack version here at boot |
+| Liveness | `GET /healthz` | `{ ok, version, contract, uptimeSeconds }`; Home checks its pinned minimum Stack version and the `contract` number here at boot. `contract` is one integer, starting at 1, bumped only when a route or field is removed or repurposed; additive changes never bump it, so a Home on another computer refuses a Stack whose number it does not know |
 
 Home calls every maintenance action; the Stack keeps no schedule of its
 own. Every route is Zod-typed and the generated `docs/api/openapi.json`

@@ -29,7 +29,7 @@
         "summary": "Stack process liveness",
         "responses": {
           "200": {
-            "description": "The daemon is running; Home checks its pinned minimum version here.",
+            "description": "The daemon is running; Home checks its pinned minimum version and the contract number here.",
             "content": {
               "application/json": {
                 "schema": {
@@ -44,6 +44,9 @@
                     "version": {
                       "type": "string"
                     },
+                    "contract": {
+                      "type": "integer"
+                    },
                     "uptimeSeconds": {
                       "type": "number"
                     }
@@ -51,6 +54,7 @@
                   "required": [
                     "ok",
                     "version",
+                    "contract",
                     "uptimeSeconds"
                   ]
                 }

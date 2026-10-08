@@ -30,6 +30,9 @@ import { SESSION_PATH } from "@/speech/server";
 export { websocket };
 
 export const version = packageJson.version;
+/** The wire contract number Home compares before it talks to this Stack.
+ * Bumped only when a route or field is removed or repurposed. */
+export const CONTRACT = 1;
 export const app = apiRouter<AppEnv>();
 // The generator runners exist from the first request; a role with no
 // engine still answers the honest 503 through the route's bound check.
@@ -37,9 +40,9 @@ registerGenerators();
 
 const livenessRoute = createRoute({
   method: "get", path: "/healthz", tags: ["Health"], summary: "Stack process liveness",
-  responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.literal(true), version: z.string(), uptimeSeconds: z.number() }) } }, description: "The daemon is running; Home checks its pinned minimum version here." } },
+  responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.literal(true), version: z.string(), contract: z.number().int(), uptimeSeconds: z.number() }) } }, description: "The daemon is running; Home checks its pinned minimum version and the contract number here." } },
 });
-app.openapi(livenessRoute, (c) => c.json({ ok: true as const, version, uptimeSeconds: process.uptime() }, 200));
+app.openapi(livenessRoute, (c) => c.json({ ok: true as const, version, contract: CONTRACT, uptimeSeconds: process.uptime() }, 200));
 
 app.doc("/api/openapi.json", { openapi: "3.0.0", info: { title: "MaiPai Stack API", version } });
 app.get("/api/docs", apiReference({ url: "/api/openapi.json" }));
