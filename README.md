@@ -11,7 +11,7 @@ engines and models behind Home, and gives Home one stable address by
 role. It has no interface and no users of its own; Home is its only
 caller.
 
-[MaiPai Home](https://github.com/getmaipai/home)'s installer installs the Stack; a person never installs the Stack by itself.
+a person installs the Stack only through Home's installer, on Home's computer or, with `--engine-computer`, on a second computer at home.
 It updates with Home's releases.
 
 Local AI is a pile of parts. One program runs the chat model, a

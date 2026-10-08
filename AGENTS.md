@@ -57,16 +57,13 @@ what is missing.
 6. **Same shape on every OS, Mac first, Linux for the robot.** One
    config, one API; service manager and engine builds differ per OS as
    org `SERVICES.md` lists.
-7. **Nothing leaves the house.** Loopback only. Update checks and model
-   downloads are the only outbound calls, opt-in, declared as data for
-   Home's privacy page.
+7. **Nothing leaves the house.** When Home runs on another computer at home, requests cross the home network, or the owner's own Tailscale network when an admin allows it, only inside that encrypted link.
 
 ## Limits (what the Stack is not, and never grows into)
 
 No user interface of any kind (Home's admin renders the Stack's state
-from its declarations). No people, no clients, no keys, no LAN
-exposure: the one caller is the Home process on the same machine. No
-second copy of any Home fundamental. No apps, packages or extension
+from its declarations). No people, no clients, no keys, no LAN exposure: the Stack listens on loopback only. Its one caller is the household's paired Home, on the same machine or on another computer in the same home that reaches this machine's loopback through the SSH link Home's installer sets up, with a key that can open this one port and nothing else. That other computer is on the household's home network or, only when an admin turns it on, on the owner's own Tailscale network; the SSH key and the pinned host key are the only authentication either way, never Tailscale access rules. Those keys belong to the operating system's SSH service and to Home, never to the Stack.
+No second copy of any Home fundamental. No apps, packages or extension
 system. No general model search as an install promise. No public
 release, standalone installer, docs site or brand pitch. No control of
 other tools (Ollama, LM Studio, Msty are never governed, updated or

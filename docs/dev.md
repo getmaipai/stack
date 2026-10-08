@@ -72,11 +72,7 @@ Linux for the robot; the same config and the same API on both.
   app, no palette, no try-it studio, no showroom, no library. Home's
   admin renders the Stack's state on one Engines page from the Stack's
   own declarations.
-- **No people, no clients, no keys.** The Stack knows one caller: the
-  Home process on the same machine. No operator login, no per-client
-  keys, no role-scoped tokens, no LAN exposure. A developer's own tool
-  reaching the engines is a Home feature; Home owns identity and
-  permissions.
+- **No people, no clients, no keys.** The Stack listens on loopback only. Its one caller is the household's paired Home, on the same machine or on another computer in the same home that reaches this machine's loopback through the SSH link Home's installer sets up, with a key that can open this one port and nothing else. That other computer is on the household's home network or, only when an admin turns it on, on the owner's own Tailscale network; the SSH key and the pinned host key are the only authentication either way, never Tailscale access rules. Those keys belong to the operating system's SSH service and to Home, never to the Stack.
 - **No second copy of any Home fundamental.** Notifications, the
   updates page, repairs, settings rendering, backups, the privacy page,
   log viewing and identity are Home's. The Stack declares its facts as
