@@ -39,6 +39,13 @@ describe("selectEngineBinary", () => {
     expect(result?.verified).toBe(false);
   });
 
+  test("Linux x64 with CUDA selects the pinned CUDA 12 build", () => {
+    const result = selectEngineBinary(hw({ platform: "linux", arch: "x64", isAppleSilicon: false, unifiedMemoryGb: 0, cudaDevices: [{ index: 0, name: "RTX 3070", vramBytes: 8_000_000_000 }] }));
+    expect(result?.id).toBe("llama-server-b11476-linux-cuda-x64");
+    expect(result?.archive.sha256).toBe("1a854ea10d271145a731f1f7e91119d85c3a93ea4a4015b1d4375860465d1379");
+    expect(result?.extraArchives?.[0]?.sha256).toBe("768e0ed4089b76642c8111556c8a8bb6521fc4171e88c1ae850e3d661370d0f3");
+  });
+
   test("a platform with no pinned build returns null", () => {
     expect(selectEngineBinary(hw({ platform: "linux", arch: "x64" }))).toBeNull();
   });

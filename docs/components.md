@@ -14,6 +14,7 @@ Engines per platform:
 | `gguf-parser-v0.26.4-linux-x64` | v0.26.4 | linux x64 | pinned, not yet verified |
 | `gguf-parser-v0.26.4-win-x64` | v0.26.4 | win32 x64 | pinned, not yet verified |
 | `llama-server-b10797-macos-arm64` | b10797 | darwin arm64 | pinned, verified |
+| `llama-server-b11476-linux-cuda-x64` | b11476 | linux x64 (NVIDIA) | pinned, not yet verified |
 | `llama-server-b10797-win-cuda-x64` | b10797 | win32 x64 (NVIDIA) | pinned, not yet verified |
 | `mlx-serve-v26.9.4-macos-arm64` | v26.9.4 | darwin arm64 | pinned, verified (the second chat engine, chosen by `stack.engines.chat.engine`) |
 | oMLX | | | candidate (the named alternative the Studio bench can call for: dev.md, The second chat engine; STACK-14) |
@@ -42,6 +43,7 @@ Engines per platform:
 | `gguf-parser-v0.26.4-linux-x64` | v0.26.4 | linux x64 | pinned, not yet verified |
 | `gguf-parser-v0.26.4-win-x64` | v0.26.4 | win32 x64 | pinned, not yet verified |
 | `llama-server-b10797-macos-arm64` | b10797 | darwin arm64 | pinned, verified |
+| `llama-server-b11476-linux-cuda-x64` | b11476 | linux x64 (NVIDIA) | pinned, not yet verified |
 | `llama-server-b10797-win-cuda-x64` | b10797 | win32 x64 (NVIDIA) | pinned, not yet verified |
 | `mlx-serve-v26.9.4-macos-arm64` | v26.9.4 | darwin arm64 | pinned, verified (the second chat engine, chosen by `stack.engines.chat.engine`) |
 | oMLX | | | candidate (the named alternative the Studio bench can call for: dev.md, The second chat engine; STACK-14) |
@@ -70,6 +72,7 @@ Engines per platform:
 | `gguf-parser-v0.26.4-linux-x64` | v0.26.4 | linux x64 | pinned, not yet verified |
 | `gguf-parser-v0.26.4-win-x64` | v0.26.4 | win32 x64 | pinned, not yet verified |
 | `llama-server-b10797-macos-arm64` | b10797 | darwin arm64 | pinned, verified |
+| `llama-server-b11476-linux-cuda-x64` | b11476 | linux x64 (NVIDIA) | pinned, not yet verified |
 | `llama-server-b10797-win-cuda-x64` | b10797 | win32 x64 (NVIDIA) | pinned, not yet verified |
 | `mlx-serve-v26.9.4-macos-arm64` | v26.9.4 | darwin arm64 | pinned, verified (the second chat engine, chosen by `stack.engines.chat.engine`) |
 | oMLX | | | candidate (the named alternative the Studio bench can call for: dev.md, The second chat engine; STACK-14) |
@@ -98,6 +101,7 @@ Engines per platform:
 | `gguf-parser-v0.26.4-linux-x64` | v0.26.4 | linux x64 | pinned, not yet verified |
 | `gguf-parser-v0.26.4-win-x64` | v0.26.4 | win32 x64 | pinned, not yet verified |
 | `llama-server-b10797-macos-arm64` | b10797 | darwin arm64 | pinned, verified |
+| `llama-server-b11476-linux-cuda-x64` | b11476 | linux x64 (NVIDIA) | pinned, not yet verified |
 | `llama-server-b10797-win-cuda-x64` | b10797 | win32 x64 (NVIDIA) | pinned, not yet verified |
 | `mlx-serve-v26.9.4-macos-arm64` | v26.9.4 | darwin arm64 | pinned, verified (the second chat engine, chosen by `stack.engines.chat.engine`) |
 | oMLX | | | candidate (the named alternative the Studio bench can call for: dev.md, The second chat engine; STACK-14) |
@@ -124,6 +128,7 @@ Engines per platform:
 | `gguf-parser-v0.26.4-linux-x64` | v0.26.4 | linux x64 | pinned, not yet verified |
 | `gguf-parser-v0.26.4-win-x64` | v0.26.4 | win32 x64 | pinned, not yet verified |
 | `llama-server-b10797-macos-arm64` | b10797 | darwin arm64 | pinned, verified |
+| `llama-server-b11476-linux-cuda-x64` | b11476 | linux x64 (NVIDIA) | pinned, not yet verified |
 | `llama-server-b10797-win-cuda-x64` | b10797 | win32 x64 (NVIDIA) | pinned, not yet verified |
 | `mlx-serve-v26.9.4-macos-arm64` | v26.9.4 | darwin arm64 | pinned, verified (the second chat engine; the embed role stays on llama-server) |
 
@@ -160,6 +165,7 @@ Engines per platform:
 | `gguf-parser-v0.26.4-linux-x64` | v0.26.4 | linux x64 | pinned, not yet verified |
 | `gguf-parser-v0.26.4-win-x64` | v0.26.4 | win32 x64 | pinned, not yet verified |
 | `llama-server-b10797-macos-arm64` | b10797 | darwin arm64 | pinned, verified |
+| `llama-server-b11476-linux-cuda-x64` | b11476 | linux x64 (NVIDIA) | pinned, not yet verified |
 | `llama-server-b10797-win-cuda-x64` | b10797 | win32 x64 (NVIDIA) | pinned, not yet verified |
 | `mlx-serve-v26.9.4-macos-arm64` | v26.9.4 | darwin arm64 | pinned, verified (the second chat engine; the vision role stays on llama-server, which loads its projector) |
 
