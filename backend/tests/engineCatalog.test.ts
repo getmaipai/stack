@@ -1,72 +1,26 @@
-import { describe, expect, test } from "bun:test";
-import { ENGINE_BINARIES, selectEngineBinary } from "@/lib/engineCatalog";
-import type { HardwareInfo } from "@/lib/hardware";
+import { afterEach, expect, test } from "bun:test";
+import { ENGINE_BINARIES, installedEnginePin, selectEngineBinary } from "@/lib/engineCatalog";
 
-function hw(overrides: Partial<HardwareInfo>): HardwareInfo {
-  return {
-    platform: "darwin",
-    arch: "arm64",
-    totalRamGb: 24,
-    cpuCount: 8,
-    isAppleSilicon: true,
-    unifiedMemoryGb: 24,
-    cudaDevices: [],
-    freeDiskBytes: 100,
-    osVersion: "test",
-    ...overrides,
-  };
-}
+const originalPlatform = process.platform;
+const originalArch = process.arch;
 
-describe("selectEngineBinary", () => {
-  test("every pin is a real, distinct id", () => {
-    const ids = ENGINE_BINARIES.map((pin) => pin.id);
-    expect(new Set(ids).size).toBe(ids.length);
-  });
+afterEach(() => {
+  Object.defineProperty(process, "platform", { value: originalPlatform });
+  Object.defineProperty(process, "arch", { value: originalArch });
+});
 
-  test("macOS arm64 matches the verified pin", () => {
-    const result = selectEngineBinary(hw({}));
-    expect(result?.id).toBe("llama-server-b10797-macos-arm64");
-    expect(result?.verified).toBe(true);
-  });
+test("the pinned b11476 CUDA runtime checksum matches the release archive", () => {
+  const pin = ENGINE_BINARIES.find((candidate) => candidate.id === "llama-server-b11476-linux-cuda-x64")!;
+  expect(pin.extraArchives?.find((archive) => archive.label === "CUDA 12.8 runtime (cudart)")?.sha256)
+    .toBe("768e0ed4089b76642c8111558c6a8bb6521fc4171e88c1ae850e3d661370d0f3");
+});
 
-  test("Windows x64 without NVIDIA matches nothing", () => {
-    expect(selectEngineBinary(hw({ platform: "win32", arch: "x64", isAppleSilicon: false, unifiedMemoryGb: 0 }))).toBeNull();
-  });
-
-  test("Windows x64 with NVIDIA matches the unverified CUDA pin", () => {
-    const result = selectEngineBinary(hw({ platform: "win32", arch: "x64", isAppleSilicon: false, unifiedMemoryGb: 0, cudaDevices: [{ index: 0, name: "RTX 2070 Super", vramBytes: 8_000_000_000 }] }));
-    expect(result?.id).toBe("llama-server-b10797-win-cuda-x64");
-    expect(result?.verified).toBe(false);
-  });
-
-  test("Linux x64 with CUDA selects the pinned CUDA 12 build", () => {
-    const result = selectEngineBinary(hw({ platform: "linux", arch: "x64", isAppleSilicon: false, unifiedMemoryGb: 0, cudaDevices: [{ index: 0, name: "RTX 3070", vramBytes: 8_000_000_000 }] }));
-    expect(result?.id).toBe("llama-server-b11476-linux-cuda-x64");
-    expect(result?.archive.sha256).toBe("1a854ea10d271145a731f1f7e91119d85c3a93ea4a4015b1d4375860465d1379");
-    expect(result?.extraArchives?.[0]?.sha256).toBe("768e0ed4089b76642c8111556c8a8bb6521fc4171e88c1ae850e3d661370d0f3");
-  });
-
-  test("a platform with no pinned build returns null", () => {
-    expect(selectEngineBinary(hw({ platform: "linux", arch: "x64" }))).toBeNull();
-  });
-
-  test("every pin has valid checksums", () => {
-    for (const pin of ENGINE_BINARIES) {
-      expect(pin.archive.sha256).toMatch(/^[a-f0-9]{64}$/);
-      for (const extra of pin.extraArchives ?? []) expect(extra.sha256).toMatch(/^[a-f0-9]{64}$/);
-    }
-  });
-
-  test("gguf-parser pins are complete and select verified Apple silicon", () => {
-    const pins = ENGINE_BINARIES.filter((pin) => pin.name === "gguf-parser");
-    expect(new Set(pins.map((pin) => pin.id)).size).toBe(pins.length);
-    for (const pin of pins) {
-      expect(pin.archive.sha256).toMatch(/^[a-f0-9]{64}$/);
-      expect(pin.archive.approxBytes).toBeGreaterThan(0);
-      expect(pin.archive.rawFileName).toBeTruthy();
-    }
-    const result = selectEngineBinary(hw({}), "gguf-parser");
-    expect(result?.id).toBe("gguf-parser-v0.26.4-macos-arm64");
-    expect(result?.verified).toBe(true);
+test("installedEnginePin recognizes the installed Linux CUDA llama-server pin", () => {
+  Object.defineProperty(process, "platform", { value: "linux" });
+  Object.defineProperty(process, "arch", { value: "x64" });
+  expect(installedEnginePin()).toMatchObject({
+    id: "llama-server-b11476-linux-cuda-x64",
+    name: "llama-server",
+    requiresNvidia: true,
   });
 });

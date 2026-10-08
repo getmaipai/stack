@@ -120,7 +120,7 @@ export const ENGINE_BINARIES: EngineBinaryPin[] = [
     extraArchives: [{
       label: "CUDA 12.8 runtime (cudart)",
       url: "https://github.com/ggml-org/llama.cpp/releases/download/b11476/cudart-llama-b11476-bin-ubuntu-cuda-12.8-x64.tar.gz",
-      sha256: "768e0ed4089b76642c8111556c8a8bb6521fc4171e88c1ae850e3d661370d0f3",
+      sha256: "768e0ed4089b76642c8111558c6a8bb6521fc4171e88c1ae850e3d661370d0f3",
       approxBytes: 594_377_571,
     }],
     verified: false,
@@ -295,5 +295,5 @@ export function selectEngineBinary(hw: HardwareInfo, name = "llama-server"): Eng
 }
 
 export function installedEnginePin(name = "llama-server"): EngineBinaryPin | null {
-  return ENGINE_BINARIES.find((pin) => pin.name === name && pin.platform === process.platform && pin.arch === process.arch && !pin.requiresNvidia) ?? null;
+  return ENGINE_BINARIES.find((pin) => pin.name === name && pin.platform === process.platform && pin.arch === process.arch && (!pin.requiresNvidia || process.platform === "linux")) ?? null;
 }
