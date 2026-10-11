@@ -314,6 +314,21 @@ are never copied. Nothing migrates Home until STACK-16.
   `backend/src/lib/supervisor.ts`, `backend/tests/fitPlan.test.ts`.
   Exit: `bash scripts/check.sh`.
 
+- [x] **STACK-EMBED-02 (M): the embed role runs on the processor when graphics memory is too small.**
+  The embed role was offline with "estimated peak unknown against a
+  1.9 GB model budget": the budget was free graphics memory, `nomic-bert`
+  is not a verified graphics-side architecture so its estimate was dropped,
+  and the installed record's size was 0. Adds `stack.engines.<role>.gpu_layers`
+  (chat, embed, vision; default `all`, embed settable to `0`) passed to
+  `llamaServerArgs`; a processor-placed role is planned against system
+  memory with its estimate kept; the size is filled on install and
+  `reconcileModelSizes()` repairs null and 0 at start; fit refusals say
+  what went wrong and what to do. Apple/Metal keeps `-ngl all` by default
+  (see STACK-AVAIL-MEM-02). Files: `backend/src/settings.ts`,
+  `backend/src/lib/{engineArgs,fitPlan,modelStore,supervisor}.ts`, tests.
+  Landed on branch `stack-embed-02`; the box still needs the setting set
+  to `0` after the deploy.
+
 ## Store and provenance
 
 - [x] **STACK-04: the model store.** Provenance-gated records, the HF

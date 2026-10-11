@@ -5,7 +5,7 @@ import { downloadUrl, DownloadVerificationError, sha256OfFile, type DownloadOpti
 import { dataDir, modelsDir } from "@/lib/paths";
 import { hfUrl } from "@/lib/hf";
 import type { RoleId } from "@/roles";
-import { existsSync, mkdirSync, realpathSync, renameSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, realpathSync, renameSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { extractArchive } from "@maipai/core/src/archive";
@@ -172,18 +172,34 @@ export function listModels(): ModelRecord[] {
   return db.select().from(models).all().map(toRecord);
 }
 
+/** The bytes a model's files take: a file's size, or a directory's total. */
+function bytesOnDisk(path: string): number {
+  const stat = statSync(path);
+  return stat.isDirectory() ? readdirSync(path).reduce((sum, name) => sum + bytesOnDisk(join(path, name)), 0) : stat.size;
+}
+
 /** Reconcile old records that predate recorded file sizes without treating a
- * missing file as a zero-byte model.  The value is persisted once. */
+ * missing file as a zero-byte model.  A size that is missing (null) or zero
+ * is read from the file on disk and persisted once; STACK-EMBED-02: an
+ * installed record with 0 left the fit plan with no size to estimate from. */
 export function reconcileModelSize(record: ModelRecord): ModelRecord {
-  if (record.sizeBytes !== null || !record.modelPath) return record;
+  if ((record.sizeBytes ?? 0) > 0 || !record.modelPath) return record;
   try {
-    const sizeBytes = statSync(record.modelPath).size;
+    const sizeBytes = bytesOnDisk(record.modelPath);
+    if (sizeBytes <= 0) return record;
     db.update(models).set({ sizeBytes }).where(eq(models.id, record.id)).run();
     return { ...record, sizeBytes };
   } catch {
     return record;
   }
 }
+
+/** Runs at every start: fills the size of every installed record that
+ * lacks one. Returns how many records changed. */
+export function reconcileModelSizes(): number {
+  return listModels().filter((record) => (record.sizeBytes ?? 0) <= 0 && reconcileModelSize(record).sizeBytes !== record.sizeBytes).length;
+}
+reconcileModelSizes();
 
 /** Stores a model's measured process memory (the one definition in
  * `MemoryReader.processMemoryBytes`) at the context it ran with. The
@@ -459,8 +475,12 @@ async function installRegisteredModel(
   }
   const now = options.now?.() ?? new Date().toISOString();
   const current = getModel(record.id) ?? record;
+  // The size is the catalog's figure when it gave one, else what is really
+  // on disk, so no installed record keeps 0 bytes (STACK-EMBED-02).
+  const sizeBytes = (current.sizeBytes ?? 0) > 0 ? current.sizeBytes : (() => { try { return bytesOnDisk(modelPath); } catch { return current.sizeBytes; } })();
   const installed = upsertModel({
     ...current,
+    sizeBytes,
     installedAt: now,
     verifiedAt: now,
     modelPath,

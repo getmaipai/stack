@@ -12,6 +12,9 @@ export interface LlamaServerArgsOptions {
   contextLength: number;
   /** KV cache type; defaults to q8_0 on macOS and f16 elsewhere. */
   kvCacheType?: KvCacheType;
+  /** Where the layers live: every layer on the accelerator (the default,
+   * `-ngl all`) or none (`-ngl 0`, the processor), STACK-EMBED-02. */
+  gpuLayers?: "all" | 0;
   /** Serve `/v1/embeddings` instead of chat: the `embed` role's launch. */
   embeddings?: boolean;
   /** The multimodal projector a model loads beside its weights
@@ -72,8 +75,9 @@ export function llamaServerArgs(options: LlamaServerArgsOptions): string[] {
     "-c", String(contextLength),
     // Flash attention: declared on by default; spelled off when not.
     ...(config.flashAttention === false ? ["-fa", "off"] : ["-fa", "on"]),
-    // All layers on the accelerator: nothing stays on the CPU.
-    "-ngl", "all",
+    // All layers on the accelerator unless the role is set to run on the
+    // processor (`gpuLayers: 0`).
+    "-ngl", String(options.gpuLayers ?? "all"),
     // Thinking mode off by default (hub, 2026-09-04): without this a
     // Qwen3-style model answers in reasoning_content with empty content,
     // which is exactly what broke the post-load check on this Mac.

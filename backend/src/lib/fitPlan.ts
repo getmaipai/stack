@@ -81,6 +81,11 @@ export interface PlanInput {
   estimate: GgufEstimate | null;
   mlx?: { weightsBytes: number; config: unknown } | null;
   cpuEstimate?: GgufEstimate | null;
+  /** The role runs on the processor by the person's choice (0 GPU layers):
+   * the plan reads system memory, never graphics memory, and takes the
+   * estimate of any dense architecture, since no graphics-side figure is
+   * in play (STACK-EMBED-02). */
+  placement?: "cpu";
   unifiedMemory: boolean;
   deviceBudgetsBytes: number[];
   capBytes: number;
@@ -95,7 +100,18 @@ type UnknownFigure = { low: null; high: null; source: "unknown"; as_of: string }
 const specRoles = new Set<string>(StackFitPlan.shape.roles.element.shape.role.options);
 const known = (low: number, high: number, source: Figure["source"], as_of: string): Figure => ({ low, high, source, as_of });
 const unknown = (as_of: string): UnknownFigure => ({ low: null, high: null, source: "unknown", as_of });
-const verified = (estimate: GgufEstimate | null | undefined): estimate is GgufEstimate => !!estimate && estimate.expertCount === 0 && (VERIFIED_ARCHITECTURES as readonly string[]).includes(estimate.architecture);
+// A processor-placed role has only the system-memory figure (weights plus
+// KV cache plus buffers), which gguf-parser computes the same way for every
+// dense architecture, so it is not held to the list of architectures whose
+// graphics-side figure was agreed with a real load.
+const verified = (estimate: GgufEstimate | null | undefined, onProcessor = false): estimate is GgufEstimate => !!estimate && estimate.expertCount === 0 && (onProcessor || (VERIFIED_ARCHITECTURES as readonly string[]).includes(estimate.architecture));
+
+/** The inputs of a role the person placed on the processor: the system
+ * memory budget stands in for graphics memory, and the processor-side
+ * estimate is the one the plan reads. */
+export function placedOnProcessor<T extends Pick<PlanInput, "deviceBudgetsBytes" | "unifiedMemory">>(input: T): T & { placement: "cpu" } {
+  return { ...input, placement: "cpu", deviceBudgetsBytes: [], unifiedMemory: false };
+}
 
 function allUnknownPaths(input: PlanInput): StackFitPlanType["paths"] {
   if (input.unifiedMemory) return [{ path: "unified", fits: false, verdict: "unknown" }];
@@ -158,7 +174,7 @@ export function buildFitPlan(input: PlanInput): StackFitPlanType {
     } else {
       paths.push(...allUnknownPaths(input));
     }
-  } else if (verified(input.estimate)) {
+  } else if (verified(input.estimate, input.placement === "cpu")) {
     const estimate = input.estimate;
     if (input.unifiedMemory) {
       peak = known(estimate.vramNonumaBytes, estimate.vramNonumaBytes + estimate.ramUmaBytes, "estimated", date);
@@ -179,12 +195,14 @@ export function buildFitPlan(input: PlanInput): StackFitPlanType {
       paths.push({ path: "cpu-offload", fits: false, verdict: "unknown" });
       verdict = gpuFits ? "yes" : cpuFits ? "slow" : "no";
     } else {
-      const cpu = verified(input.cpuEstimate) ? input.cpuEstimate : null;
+      const cpu = verified(input.cpuEstimate, input.placement === "cpu") ? input.cpuEstimate : null;
       if (cpu) {
         peak = known(cpu.ramNonumaBytes, cpu.ramNonumaBytes, "estimated", date);
         const fits = cpu.ramNonumaBytes <= available;
         verdict = fits ? "slow" : "no";
-        paths.push({ path: "cpu", fits, verdict: fits ? "slow" : "no" });
+        const path: StackFitPlanType["paths"][number] = { path: "cpu", fits, verdict: fits ? "slow" : "no" };
+        if (!fits) path.shortfall = known(cpu.ramNonumaBytes - available, cpu.ramNonumaBytes - available, "estimated", date);
+        paths.push(path);
       } else {
         paths.push({ path: "cpu", fits: false, verdict: "unknown" });
       }

@@ -1,6 +1,6 @@
 import { beforeEach, expect, test } from "bun:test";
 import { app } from "@/app";
-import { __resetSettingsForTests, applyPendingSettings, engineSettingValues, readSettings, SETTINGS, settingValues, updateSettings } from "@/settings";
+import { __resetSettingsForTests, applyPendingSettings, engineSettingValues, gpuLayersFor, readSettings, SETTINGS, settingValues, updateSettings } from "@/settings";
 import { getGovernorStatus } from "@/lib/governor";
 
 beforeEach(() => __resetSettingsForTests());
@@ -57,4 +57,21 @@ test("a value stored under a pre-spec key name is renamed once, never orphaned",
   expect(settingValues()["stack.engines.chat.host_url"]).toBe("http://127.0.0.1:9999");
   expect(readSettings().find((setting) => setting.key === "stack.runtime.port")!.pending).toBe(8790);
   expect(migrateRenamedSettingKeys()).toBe(0);
+});
+
+test("each llama-server role declares where it runs once, defaulting to all layers on the accelerator, and embed can move to the processor", () => {
+  for (const role of ["chat", "embed", "vision"]) {
+    const record = readSettings().find((setting) => setting.key === `stack.engines.${role}.gpu_layers`)!;
+    expect(record).toMatchObject({ default: "all", in_effect: "all", needs_restart: true, selector: "select" });
+    expect(record.label.length).toBeGreaterThan(0);
+    expect((record.help ?? "").length).toBeGreaterThan(0);
+    expect(gpuLayersFor(role)).toBe("all");
+  }
+  updateSettings({ "stack.engines.embed.gpu_layers": "0" });
+  expect(gpuLayersFor("embed")).toBe("all");
+  applyPendingSettings();
+  expect(gpuLayersFor("embed")).toBe(0);
+  expect(gpuLayersFor("chat")).toBe("all");
+  expect(gpuLayersFor("stt")).toBe("all");
+  expect(() => updateSettings({ "stack.engines.embed.gpu_layers": "2" })).toThrow();
 });

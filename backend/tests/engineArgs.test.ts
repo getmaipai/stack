@@ -132,3 +132,11 @@ test("a vision launch loads its projector with one slot and no cache reuse (VISI
 test("a text launch never names a projector (VISION-01b)", () => {
   expect(llamaServerArgs({ modelPath, port: 8771, config: declaredDefaults, contextLength: 4096, kvCacheType: "q8_0" })).not.toContain("--mmproj");
 });
+
+test("a role set to the processor launches with no layers on the accelerator, and the default stays all (STACK-EMBED-02)", () => {
+  const options = { modelPath, port: 8771, config: declaredDefaults, contextLength: 8192, kvCacheType: "f16" as const, embeddings: true };
+  const ngl = (args: string[]) => args[args.indexOf("-ngl") + 1];
+  expect(ngl(llamaServerArgs(options))).toBe("all");
+  expect(ngl(llamaServerArgs({ ...options, gpuLayers: "all" }))).toBe("all");
+  expect(ngl(llamaServerArgs({ ...options, gpuLayers: 0 }))).toBe("0");
+});

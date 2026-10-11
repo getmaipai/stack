@@ -699,11 +699,33 @@ served on `GET /stack/v1/settings` for Home's generic renderer (org
 are stored in the Stack's `meta` table; a key marked `needs_restart` is
 held as pending until the next start. Per-engine settings
 (`stack.engines.llama_server.context_length`, `.slots`, `.threads`,
-`.cache_ram_mb`, `.flash_attention`; a `url` binding's
+`.cache_ram_mb`, `.flash_attention`; a llama-server role's
+`stack.engines.<role>.gpu_layers`; a `url` binding's
 `stack.engines.<role>.host_url` and `.expected_version`) are part of
 the same declaration under their engine's section. Home never
 duplicates a Stack setting; it renders the declaration and persists the
 person's choice through the Stack's route.
+
+#### Where a role runs: `gpu_layers` (STACK-EMBED-02)
+
+`stack.engines.chat.gpu_layers`, `.embed.gpu_layers` and
+`.vision.gpu_layers` are one declaration (`GPU_LAYER_ROLES` in
+`settings.ts`), a select of `all` (the default, `-ngl all`, which the
+Apple/Metal path keeps) or `0` (`-ngl 0`, the processor). A restart key.
+A role set to `0` is planned against system memory (the governor's model
+budget), never against the graphics card's free memory: `placedOnProcessor`
+in `fitPlan.ts` clears the device budgets and `contextForLaunch` reads the
+processor-side gguf-parser estimate. That estimate is taken for any dense
+architecture, because the `VERIFIED_ARCHITECTURES` list vouches for the
+graphics-side figure only (the embed model is `nomic-bert`, which is not on
+it). The governor's dry-run peak for such a role is the same processor-side
+figure. Cause of the original refusal on the Stack box: free graphics memory
+(1.9 GB) was the budget, the architecture was unlisted so the estimate was
+dropped, and the installed record's `size_bytes` was 0 so the file-size
+fallback had nothing to read. The size is now filled on install (the
+catalog's figure, else the file on disk) and `reconcileModelSizes()` repairs
+a null or 0 record at every start. Refusals come from `fitRefusalMessage`:
+what went wrong, then the next step.
 
 ### Sizing and profiles
 

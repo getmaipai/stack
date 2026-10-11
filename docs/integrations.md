@@ -184,7 +184,9 @@ Keys as declared today, all under `stack.`: `memory.model_budget_bytes`,
 `runtime.idle_unload_minutes`, `runtime.idle_unload_on_battery_minutes`,
 `runtime.download_cap_mbps`, `runtime.port`;
 `engines.llama_server.context_length`, `.slots`, `.threads`,
-`.cache_ram_mb`, `.flash_attention`; and per role a `url` binding,
+`.cache_ram_mb`, `.flash_attention`; per llama-server role (`chat`, `embed`,
+`vision`) `engines.<role>.gpu_layers` (`all` or `0`, where the model runs);
+and per role a `url` binding,
 `engines.<role>.host_url` and `engines.<role>.expected_version`, for a
 server the person already runs.
 

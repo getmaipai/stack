@@ -11,6 +11,8 @@ import {
   isModelSelectable,
   MEASURED_MEMORY_DEFINITION,
   recordMeasuredFootprint,
+  reconcileModelSize,
+  reconcileModelSizes,
   registerCatalogModel,
   upgradeMeasuredFiguresFromOlderDefinition,
   upsertModel,
@@ -383,4 +385,33 @@ test("a marked macOS store upgrades a GGUF figure an older build wrote below its
   expect(getModel("judge-4b")).toMatchObject({ measuredFootprintBytes: 2_987_967_672 });
   // The upgraded figure is above the file size, so the next start keeps it.
   expect(upgradeMeasuredFiguresFromOlderDefinition("darwin")).toBe(0);
+});
+
+test("an installed record with size 0 gets its real file size at startup, and null does too (STACK-EMBED-02)", () => {
+  mkdirSync(fixtureDir, { recursive: true });
+  const file = join(fixtureDir, "nomic-embed.gguf");
+  writeFileSync(file, Buffer.alloc(4096));
+  const record = (id: string, sizeBytes: number | null) => upsertModel({ id, roles: ["embed"], source: "catalog", provenance: { package: `model:${id}` }, revision: "rev-a", sizeBytes, modelPath: file }, "2026-10-11T10:00:00.000Z");
+  record("embed-zero", 0);
+  record("embed-null", null);
+  record("embed-known", 7);
+  expect(getModel("embed-zero")!.sizeBytes).toBe(0);
+  expect(reconcileModelSizes()).toBe(2);
+  expect(getModel("embed-zero")!.sizeBytes).toBe(4096);
+  expect(getModel("embed-null")!.sizeBytes).toBe(4096);
+  expect(getModel("embed-known")!.sizeBytes).toBe(7);
+  expect(reconcileModelSizes()).toBe(0);
+  // A missing file never becomes a zero-byte model.
+  const gone = upsertModel({ id: "embed-gone", roles: ["embed"], source: "catalog", provenance: {}, revision: "r", sizeBytes: 0, modelPath: join(fixtureDir, "nope.gguf") });
+  expect(reconcileModelSize(gone).sizeBytes).toBe(0);
+});
+
+test("an install whose catalog gave no size records the real file size", async () => {
+  const bytes = Buffer.from("embedding weights");
+  const digest = createHash("sha256").update(bytes).digest("hex");
+  mkdirSync(fixtureDir, { recursive: true });
+  const destination = join(fixtureDir, "size-fill.gguf");
+  const installed = await installCatalogModel({ id: "size-fill", role: "embed", revision: "rev-a", license: "Apache-2.0", download: { url: "https://example.com/size-fill.gguf", sha256: digest, approx_bytes: 0 } } as never, { destination, download: async (_url, to) => { writeFileSync(to, bytes); } });
+  expect(installed.sizeBytes).toBe(bytes.length);
+  expect(getModel("size-fill")!.sizeBytes).toBe(bytes.length);
 });

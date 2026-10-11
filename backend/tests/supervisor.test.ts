@@ -374,3 +374,18 @@ test("Home's load names the model: the preferred selectable model wins over the 
   expect(selectedModel("chat")?.id).toBe("chat-a");
   clearModelsForTests();
 });
+
+test("a fit refusal says what went wrong and what to do (STACK-EMBED-02)", async () => {
+  const { fitRefusalMessage } = await import("@/lib/supervisor");
+  const base = { modelId: "nomic-embed-text-v1-5-q4-k-m", budgetBytes: 1.9 * 1024 ** 3, onProcessor: false, sizeKnown: true, sizerInstalled: true };
+  const unsized = fitRefusalMessage({ ...base, peakBytes: null, sizeKnown: false });
+  expect(unsized).toContain("cannot tell how much memory");
+  expect(unsized).toContain("size of its file is not recorded");
+  expect(unsized).toMatch(/Restart the Stack/);
+  expect(unsized).not.toContain("unknown");
+  expect(fitRefusalMessage({ ...base, peakBytes: null, sizerInstalled: false })).toMatch(/Install the size checker/);
+  const tooBig = fitRefusalMessage({ ...base, peakBytes: 3 * 1024 ** 3 });
+  expect(tooBig).toContain("3.0 GB of graphics memory");
+  expect(tooBig).toContain("set where this model runs to the processor");
+  expect(fitRefusalMessage({ ...base, peakBytes: 3 * 1024 ** 3, onProcessor: true })).toContain("Memory for models");
+});

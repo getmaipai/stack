@@ -48,6 +48,23 @@ function urlBinding(role: UrlBindingRole, order: number): SettingDeclaration[] {
   ];
 }
 
+// Which roles the llama-server engine runs, and so which can choose where
+// their layers live (STACK-EMBED-02). Declared once here; the launch, the
+// fit plan and the settings page all read this one declaration.
+export const GPU_LAYER_ROLES = ["chat", "embed", "vision"] as const;
+export type GpuLayerRole = typeof GPU_LAYER_ROLES[number];
+export type GpuLayers = "all" | 0;
+
+function gpuLayersSetting(role: GpuLayerRole): SettingDeclaration {
+  return { ...stack, key: `stack.engines.${role}.gpu_layers`, selector: "select", range: { options: [{ value: "all", label: "Graphics chip (fastest)" }, { value: "0", label: "Processor (uses system memory, not graphics memory)" }] }, default: "all", label: "Where this model runs", help: "Choose the graphics chip for speed. Choose the processor when the graphics memory is too small or busy: the model then loads into the computer's regular memory and answers a little slower.", section: { id: `engines.${role}`, order: 7 }, level: "advanced", needs_restart: true };
+}
+
+/** Where a role's llama-server layers live, as the person chose it:
+ * every layer on the accelerator (the default), or none (the processor). */
+export function gpuLayersFor(role: string, values: Record<string, SettingValue> = settingValues()): GpuLayers {
+  return (GPU_LAYER_ROLES as readonly string[]).includes(role) && String(values[`stack.engines.${role}.gpu_layers`]) === "0" ? 0 : "all";
+}
+
 export const SETTINGS: SettingDeclaration[] = [
   { ...stack, key: "stack.memory.model_budget_bytes", selector: "number", range: { min: 0, max: defaultModelBudgetBytes() + 8 * 1_073_741_824 }, default: defaultModelBudgetBytes(), label: "Memory for models", help: "The maximum memory the Stack may use for loaded models. The rest stays available for the computer.", section: { id: "memory", order: 10 }, level: "basic", needs_restart: false },
   { ...stack, key: "stack.memory.low_water_pct", selector: "number", range: { min: 1, max: 99 }, default: 10, label: "Low memory percentage", help: "Warn when available memory falls below this percentage.", section: { id: "memory", order: 20 }, level: "advanced", needs_restart: false },
@@ -67,6 +84,7 @@ export const SETTINGS: SettingDeclaration[] = [
   { ...stack, key: "stack.engines.llama_server.threads", selector: "number", range: { min: 0, max: 256 }, default: 0, label: "CPU threads", help: "CPU threads used by the engine. Zero lets the engine choose.", section: { id: "engines.llama_server", order: 30 }, level: "expert", needs_restart: true },
   { ...stack, key: "stack.engines.llama_server.cache_ram_mb", selector: "number", range: { min: 0, max: 1_048_576 }, default: 0, label: "Cache RAM", help: "Optional cache reservation in megabytes.", section: { id: "engines.llama_server", order: 40 }, level: "expert", needs_restart: true },
   { ...stack, key: "stack.engines.llama_server.flash_attention", selector: "boolean", default: true, label: "Flash attention", help: "Use the faster attention implementation when supported.", section: { id: "engines.llama_server", order: 50 }, level: "advanced", needs_restart: true },
+  ...GPU_LAYER_ROLES.map(gpuLayersSetting),
   ...urlBinding("chat", 10),
   ...urlBinding("embed", 10),
   ...urlBinding("vision", 10),

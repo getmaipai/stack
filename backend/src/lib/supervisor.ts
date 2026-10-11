@@ -34,11 +34,11 @@ import { raise, resolve as resolveHealth } from "@/lib/health";
 import { ROLES, ROLE_IDS, type RoleId, type RoleState } from "@/roles";
 import { getMemoryReader } from "@/lib/memory";
 import { hfHubRoot } from "@/lib/store/layout";
-import { engineSettingValues, settingValues } from "@/settings";
+import { engineSettingValues, gpuLayersFor, settingValues, type GpuLayers } from "@/settings";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
 import { logger } from "@/lib/log";
 import { readGgufFacts } from "@/lib/gguf";
-import { largestAdmittedContext, runGgufParser, type GgufEstimate } from "@/lib/fitPlan";
+import { estimatorAvailable, largestAdmittedContext, placedOnProcessor, runGgufParser, type GgufEstimate } from "@/lib/fitPlan";
 import { getGovernorStatus } from "@/lib/governor";
 import { readMlxKvBytesPerToken } from "@/lib/mlxMemory";
 
@@ -676,13 +676,32 @@ export function speechWorkerCommand(
 
 export interface LaunchPlan { command: string[]; engine: string; build: string; stdin: "pipe" | "ignore"; contextLength: number; slots?: number; contextScope?: "total across slots" | "per slot"; kind: "spawned" | "managed"; env?: Record<string, string>; healthPath?: string; /** A projector was loaded: the process reads pictures. */ imageInput?: boolean; /** The most tokens one picture takes in this process, when the record declares it. */ pictureTokensMax?: number | null; }
 
-async function contextForLaunch(model: ModelRecord, config: Record<string, number | boolean | string | string[]>, slots = 1): Promise<number> {
+/** The refusal text when the fit plan cannot admit the minimum context:
+ * what went wrong in the person's terms, then the next step (org STYLE.md,
+ * "Error messages"). `peakBytes` null means the plan could not size the model. */
+export function fitRefusalMessage(input: { modelId: string; peakBytes: number | null | undefined; budgetBytes: number; onProcessor: boolean; sizeKnown: boolean; sizerInstalled: boolean }): string {
+  const gb = (bytes: number) => `${(bytes / 1_073_741_824).toFixed(1)} GB`;
+  const memory = input.onProcessor ? "system memory" : "graphics memory";
+  if (input.peakBytes === null || input.peakBytes === undefined) {
+    const cause = !input.sizeKnown ? "the size of its file is not recorded" : !input.sizerInstalled ? "the model size checker is not installed" : "its architecture is not one the size checker can estimate";
+    const fix = !input.sizeKnown ? "Restart the Stack, which reads the file size again, or install the model again from Models." : !input.sizerInstalled ? "Install the size checker from the Stack's repairs list, then start this engine again." : "Set a context length under the llama-server settings, which skips the estimate, then start this engine again.";
+    return `${input.modelId} was not started because the Stack cannot tell how much memory it needs: ${cause}. ${fix}`;
+  }
+  const choice = input.onProcessor ? "Free some memory or raise \"Memory for models\" in the Memory settings" : "Free some graphics memory, or set where this model runs to the processor in its engine settings";
+  return `${input.modelId} was not started: it needs about ${gb(input.peakBytes)} of ${memory} to run its smallest context (8,192 tokens), and ${gb(input.budgetBytes)} is available. ${choice}, then start this engine again.`;
+}
+
+async function contextForLaunch(model: ModelRecord, config: Record<string, number | boolean | string | string[]>, slots = 1, gpuLayers: GpuLayers = "all"): Promise<number> {
+  const onProcessor = gpuLayers === 0;
   const configured = config.contextLength;
   if (typeof configured === "number" && configured > 0) return configured;
   const status = getGovernorStatus();
   const hardware = await detectHardware();
   const gpuBudgets = hardware.cudaDevices.map((device) => device.vramBytes - (device.usedVramBytes ?? 0));
-  const modelCapBytes = Math.min(status.capBytes, primaryBudgetBytes(hardware) || status.capBytes);
+  // A role on the processor is held to system memory (the governor's
+  // model budget), never to the graphics card's free memory.
+  const modelCapBytes = onProcessor ? status.capBytes : Math.min(status.capBytes, primaryBudgetBytes(hardware) || status.capBytes);
+  const placement = <T extends { deviceBudgetsBytes: number[]; unifiedMemory: boolean }>(input: T) => onProcessor ? placedOnProcessor(input) : input;
   const modelContextTokens = model.modelPath?.endsWith(".gguf")
     ? (await readGgufFacts(model.modelPath, { allowLocalFile: true })).contextLength
     : (() => {
@@ -698,25 +717,31 @@ async function contextForLaunch(model: ModelRecord, config: Record<string, numbe
     const value = await estimate;
     return value && projectorBytes > 0 ? { ...value, vramNonumaBytes: value.vramNonumaBytes + projectorBytes, ramNonumaBytes: value.ramNonumaBytes + projectorBytes } : value;
   };
-  const estimateAt = (contextTokens: number) => model.modelPath?.endsWith(".gguf")
-    ? withProjector(runGgufParser({ target: { path: model.modelPath }, contextTokens: contextTokens * slots, kvCacheType: defaultKvCacheType(), gpuLayers: "all" }))
-    : null;
   const cpuEstimateAt = (contextTokens: number) => model.modelPath?.endsWith(".gguf")
     ? withProjector(runGgufParser({ target: { path: model.modelPath }, contextTokens: contextTokens * slots, kvCacheType: defaultKvCacheType(), gpuLayers: 0 }))
     : null;
+  // On the processor the one estimate is the processor-side one, run once per context.
+  const processorEstimates = new Map<number, ReturnType<typeof cpuEstimateAt>>();
+  const estimateAt = (contextTokens: number) => {
+    if (!onProcessor) return model.modelPath?.endsWith(".gguf")
+      ? withProjector(runGgufParser({ target: { path: model.modelPath }, contextTokens: contextTokens * slots, kvCacheType: defaultKvCacheType(), gpuLayers: "all" }))
+      : null;
+    if (!processorEstimates.has(contextTokens)) processorEstimates.set(contextTokens, cpuEstimateAt(contextTokens));
+    return processorEstimates.get(contextTokens)!;
+  };
   if (!model.modelPath?.endsWith(".gguf")) {
     const mlxFacts = readMlxKvBytesPerToken(model.modelPath!) === null ? null : { weightsBytes: model.sizeBytes ?? 0, config: JSON.parse(readFileSync(join(model.modelPath!, "config.json"), "utf8")) };
-    const result = await largestAdmittedContext({ modelId: model.id, modelFileBytes: model.sizeBytes ?? undefined, measuredPeakBytes: model.measuredFootprintBytes, modelContextTokens: max, mlx: mlxFacts, estimate: null, estimateAt: () => null, kvCacheType: defaultKvCacheType(), unifiedMemory: hardware.isAppleSilicon, deviceBudgetsBytes: gpuBudgets, capBytes: modelCapBytes, workingMarginBytes: status.marginBytes, loaded: status.loaded.map((item) => ({ role: item.id, kind: item.kind, peakBytes: item.peakBytes, measured: item.measured })), asOf: new Date().toISOString().slice(0, 10), tool: { name: "fit-plan", version: "launch" } });
+    const result = await largestAdmittedContext({ modelId: model.id, modelFileBytes: model.sizeBytes ?? undefined, measuredPeakBytes: model.measuredFootprintBytes, modelContextTokens: max, mlx: mlxFacts, estimate: null, estimateAt: () => null, kvCacheType: defaultKvCacheType(), ...placement({ unifiedMemory: hardware.isAppleSilicon, deviceBudgetsBytes: gpuBudgets }), capBytes: modelCapBytes, workingMarginBytes: status.marginBytes, loaded: status.loaded.map((item) => ({ role: item.id, kind: item.kind, peakBytes: item.peakBytes, measured: item.measured })), asOf: new Date().toISOString().slice(0, 10), tool: { name: "fit-plan", version: "launch" } });
     if (result.plan.verdict !== "yes") {
       const peak = result.plan.roles[0]?.peak.high;
-      throw new EngineUnavailableError(`The fit plan cannot admit the minimum 8,192 token context; estimated peak ${peak === null || peak === undefined ? "unknown" : `${(peak / 1_073_741_824).toFixed(1)} GB`} against a ${(modelCapBytes / 1_073_741_824).toFixed(1)} GB model budget.`);
+      throw new EngineUnavailableError(fitRefusalMessage({ modelId: model.id, peakBytes: peak, budgetBytes: modelCapBytes, onProcessor, sizeKnown: (model.sizeBytes ?? 0) > 0, sizerInstalled: estimatorAvailable() }));
     }
     return result.contextTokens;
   }
-  const result = await largestAdmittedContext({ modelId: model.id, modelFileBytes: model.sizeBytes === null ? undefined : model.sizeBytes + projectorBytes, measuredPeakBytes: model.measuredFootprintBytes, measuredContextTokens: model.measuredContextLength, modelContextTokens: Math.floor(max / slots), estimate: null, estimateAt, cpuEstimateAt, memoryContextMultiplier: slots, kvCacheType: defaultKvCacheType(), unifiedMemory: hardware.isAppleSilicon, deviceBudgetsBytes: gpuBudgets, capBytes: modelCapBytes, workingMarginBytes: status.marginBytes, loaded: status.loaded.map((item) => ({ role: item.id, kind: item.kind, peakBytes: item.peakBytes, measured: item.measured })), asOf: new Date().toISOString().slice(0, 10), tool: { name: "gguf-parser", version: "launch" } });
+  const result = await largestAdmittedContext({ modelId: model.id, modelFileBytes: model.sizeBytes === null ? undefined : model.sizeBytes + projectorBytes, measuredPeakBytes: model.measuredFootprintBytes, measuredContextTokens: model.measuredContextLength, modelContextTokens: Math.floor(max / slots), estimate: null, estimateAt, cpuEstimateAt: onProcessor ? estimateAt : cpuEstimateAt, memoryContextMultiplier: slots, kvCacheType: defaultKvCacheType(), ...placement({ unifiedMemory: hardware.isAppleSilicon, deviceBudgetsBytes: gpuBudgets }), capBytes: modelCapBytes, workingMarginBytes: status.marginBytes, loaded: status.loaded.map((item) => ({ role: item.id, kind: item.kind, peakBytes: item.peakBytes, measured: item.measured })), asOf: new Date().toISOString().slice(0, 10), tool: { name: "gguf-parser", version: "launch" } });
   if (result.plan.verdict !== "yes" && result.plan.verdict !== "slow") {
     const peak = result.plan.roles[0]?.peak.high;
-    const memoryReason = `The fit plan cannot admit the minimum 8,192 token context for ${model.id}; estimated peak ${peak === null || peak === undefined ? "unknown" : `${(peak / 1_073_741_824).toFixed(1)} GB`} against a ${(modelCapBytes / 1_073_741_824).toFixed(1)} GB model budget.`;
+    const memoryReason = fitRefusalMessage({ modelId: model.id, peakBytes: peak, budgetBytes: modelCapBytes, onProcessor, sizeKnown: (model.sizeBytes ?? 0) > 0, sizerInstalled: estimatorAvailable() });
     throw new EngineUnavailableError(memoryReason);
   }
   return result.contextTokens;
@@ -797,7 +822,7 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
   const config = { contextLength: declared.context_length, slots: declared.slots, threads: declared.threads, cacheRamMb: declared.cache_ram_mb, flashAttention: declared.flash_attention } as Record<string, number | boolean | string | string[]>;
   // A record with its own launch (vision) runs one slot, as its args say.
   const slots = declaredLaunchContext(model) !== null ? 1 : typeof config.slots === "number" && config.slots > 0 ? config.slots : 1;
-  const contextLength = resolvedContextLength ?? declaredLaunchContext(model) ?? (typeof config.contextLength === "number" && config.contextLength > 0 ? config.contextLength : await contextForLaunch(model, config, slots));
+  const contextLength = resolvedContextLength ?? declaredLaunchContext(model) ?? (typeof config.contextLength === "number" && config.contextLength > 0 ? config.contextLength : await contextForLaunch(model, config, slots, gpuLayersFor(role)));
   if (engineForRole(role) === "mlx-serve") {
     // mlx-serve: one model pinned for the life of the process, loopback
     // only, the context length the llama-server settings declare (one
@@ -815,7 +840,7 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
   const projector = launchProjectorFor(role, model);
   if (role === "vision" && !projector?.modelPath) throw new EngineUnavailableError(`The ${model.id} projector is not installed.`);
   const pictureTokensMax = projector?.modelPath ? declaredPictureTokensMax(model) : null;
-  const args = llamaServerArgs({ modelPath: model.modelPath!, port, config, contextLength, kvCacheType: defaultKvCacheType(), embeddings: role === "embed", projectorPath: projector?.modelPath ?? undefined, onePictureSlot: role === "vision", imageMaxTokens: pictureTokensMax ?? undefined });
+  const args = llamaServerArgs({ modelPath: model.modelPath!, port, config, contextLength, kvCacheType: defaultKvCacheType(), gpuLayers: gpuLayersFor(role), embeddings: role === "embed", projectorPath: projector?.modelPath ?? undefined, onePictureSlot: role === "vision", imageMaxTokens: pictureTokensMax ?? undefined });
   return { command: [binary, ...args], engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength, slots, contextScope: "per slot", kind: "spawned", imageInput: !!projector?.modelPath, pictureTokensMax };
 }
 
@@ -835,7 +860,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   const ownContext = declaredLaunchContext(model);
   const declaredContextLength = ownContext ?? launchConfig.context_length;
   const slots = ownContext !== null ? 1 : typeof launchConfig.slots === "number" && launchConfig.slots > 0 ? launchConfig.slots : 1;
-  const contextLength = typeof declaredContextLength === "number" && declaredContextLength > 0 ? declaredContextLength : await contextForLaunch(model, { ...launchConfig, contextLength: 0 }, slots);
+  const contextLength = typeof declaredContextLength === "number" && declaredContextLength > 0 ? declaredContextLength : await contextForLaunch(model, { ...launchConfig, contextLength: 0 }, slots, gpuLayersFor(role));
   // The voice engine starts offline; what it may need beyond the pins
   // (the gated cloning weights, with a token and cloning turned on) the
   // Stack fetches first, once. A fetch that fails never stops the start:
@@ -860,8 +885,13 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   // the wait's watcher releases a late admission, so no phantom.
   const managed = MANAGED_ROLES.includes(role);
   const generator = GENERATOR_ROLES.includes(role);
+  // A role placed on the processor is sized by the processor-side
+  // estimate; the dry run (llama-fit-params) plans graphics-card layers.
+  const onProcessor = gpuLayersFor(role) === 0;
   const dryRunPeakBytes = engineForRole(role) === "llama-server" && !managed && !generator && !SPEECH_ROLES.includes(role) && model.modelPath.endsWith(".gguf")
-    ? await dryRunFootprint(model.modelPath, contextLength * slots, { kvCacheType: defaultKvCacheType(), flashAttention: launchConfig.flash_attention !== false })
+    ? onProcessor
+      ? (await runGgufParser({ target: { path: model.modelPath }, contextTokens: contextLength * slots, kvCacheType: defaultKvCacheType(), gpuLayers: 0 }))?.ramNonumaBytes ?? null
+      : await dryRunFootprint(model.modelPath, contextLength * slots, { kvCacheType: defaultKvCacheType(), flashAttention: launchConfig.flash_attention !== false })
     : null;
   if (engineForRole(role) === "llama-server" && !managed && !generator && !SPEECH_ROLES.includes(role) && model.modelPath.endsWith(".gguf") && !dryRunPeakBytes && !model.measuredFootprintBytes && !(typeof declaredContextLength === "number" && declaredContextLength > 0)) {
     throw new EngineUnavailableError("The fit plan could not estimate the launched context for the memory governor; install the GGUF parser or set an explicit context length.");

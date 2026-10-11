@@ -3,7 +3,7 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StackFitPlan } from "@maipai/spec/gen/ts/stack-fit-plan.js";
-import { buildFitPlan, largestAdmittedContext, parseGgufParserJson, runGgufParser, type GgufEstimate, type PlanInput } from "@/lib/fitPlan";
+import { buildFitPlan, largestAdmittedContext, placedOnProcessor, parseGgufParserJson, runGgufParser, type GgufEstimate, type PlanInput } from "@/lib/fitPlan";
 import { MLX_IDLE_FACTOR, MLX_KV_PEAK_FACTOR, MLX_KV_PEAK_FACTOR_LOW, MLX_PREFIX_CACHE_BYTES, mlxHeadroomBytes } from "@/lib/mlxMemory";
 import { peakFor, GovernorRules } from "@/lib/governor";
 
@@ -293,4 +293,40 @@ test("automatic context chooses the largest admitted size and respects the model
   expect(capped.contextTokens).toBe(32768);
   const refused = await choose(0, 8192);
   expect(refused.contextTokens).toBe(8192);
+});
+
+// STACK-EMBED-02: the embed role was offline on the Stack box with "estimated
+// peak unknown against a 1.9 GB model budget". Its inputs: the nomic-bert
+// architecture (not a verified graphics-side one), an installed record whose
+// size was 0, and 1.9 GB of free graphics memory.
+const GB = 1024 ** 3;
+const nomic: GgufEstimate = { architecture: "nomic-bert", expertCount: 0, name: "nomic-embed-text-v1.5", contextTokens: 8192, fullOffloaded: false, ramUmaBytes: 150_000_000, ramNonumaBytes: 420_000_000, vramUmaBytes: 0, vramNonumaBytes: 2_400_000_000 };
+const nomicInput = { ...base, modelId: "nomic-embed-text-v1-5-q4-k-m", contextTokens: 8192, unifiedMemory: false, deviceBudgetsBytes: [1.9 * GB], capBytes: 32 * GB, modelFileBytes: 0 as number | undefined };
+
+test("the exact failing embed inputs (nomic-bert, size 0, 1.9 GB free graphics memory) are unknown on the graphics path and admitted on the processor", () => {
+  const onGpu = buildFitPlan({ ...nomicInput, estimate: nomic, cpuEstimate: nomic });
+  expect(onGpu.verdict).toBe("unknown");
+  const placed = buildFitPlan({ ...placedOnProcessor(nomicInput), estimate: nomic, cpuEstimate: nomic });
+  expect(StackFitPlan.safeParse(placed).success).toBe(true);
+  expect(placed.verdict).toBe("slow");
+  expect(placed.paths).toEqual([{ path: "cpu", fits: true, verdict: "slow" }]);
+  expect(placed.roles[0]!.peak).toMatchObject({ low: 420_000_000, high: 420_000_000, source: "estimated" });
+});
+
+test("a processor-placed role is checked against system memory, not free graphics memory", async () => {
+  // 1.9 GB of graphics memory would refuse a 3 GB estimate; system memory of 32 GB admits it.
+  const big: GgufEstimate = { ...nomic, ramNonumaBytes: 3 * GB };
+  const placed = placedOnProcessor(nomicInput);
+  expect(placed.deviceBudgetsBytes).toEqual([]);
+  expect(buildFitPlan({ ...placed, estimate: big, cpuEstimate: big }).verdict).toBe("slow");
+  // Against a system budget that is too small it is refused, with a shortfall.
+  const refused = buildFitPlan({ ...placed, capBytes: 2 * GB, estimate: big, cpuEstimate: big });
+  expect(refused.verdict).toBe("no");
+  expect(refused.paths[0]).toMatchObject({ path: "cpu", fits: false });
+  expect(refused.paths[0]).toHaveProperty("shortfall");
+  // The launch search reaches the minimum context and admits it.
+  const result = await largestAdmittedContext({ ...placed, estimate: null, modelContextTokens: 8192, estimateAt: () => nomic, cpuEstimateAt: () => nomic });
+  expect(result).toMatchObject({ contextTokens: 8192, plan: { verdict: "slow" } });
+  // A mixed or sparse model is still not trusted for a processor estimate.
+  expect(buildFitPlan({ ...placed, estimate: { ...nomic, expertCount: 8 }, cpuEstimate: { ...nomic, expertCount: 8 } }).verdict).toBe("unknown");
 });
