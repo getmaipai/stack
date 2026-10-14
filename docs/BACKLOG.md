@@ -649,6 +649,22 @@ Rules: `home/docs/design/RULES.md` chat rules 4 and 11; record:
   the Stack installs and supervises an engine (`engineInstall.ts`,
   `supervisor.ts`) and Home's Kiwix sidecar. Acceptance for the design
   note: it answers each question above and lists the chunked items.
+  Additional acceptance criteria for Home's own SearXNG: enable JSON
+  output; enable the limiter and pass only the loopback caller; prefer
+  IPv4 when the machine has no global IPv6 route (UNVERIFIED: how
+  SearXNG exposes this); pin the curated engine set with `keep_only`;
+  send one warm-up query after each start and do not count its failure;
+  disable query logging and prove no query appears in logs by grepping
+  the logs after a query; update only to a pinned version, health-check
+  after update, and roll back automatically on failure; forward search
+  through the Stack's own API so the engine link uses one SSH port
+  forward (UNVERIFIED: design point); hash-lock SearXNG's Python
+  packages using `uv --require-hashes` or a `uv.lock` with hashes; and
+  add `/stack/v1/privacy` rows for every fetch host (the PyPI index and
+  file host, and the release host) in the same commit as code that
+  fetches from those hosts. Prove the no-query-logging behavior with a
+  test that greps the logs after a query (UNVERIFIED until that test
+  confirms SearXNG writes no queries at its configured log level).
   Out of scope: page reading (Home's `THIN-4A`), the hosted-key option
   (`THIN-4H`). Exit: the note, then `bash scripts/check.sh --docs`.
 - [x] **STACK-TOKENIZE-01 (S): the chat engine's own token count by
