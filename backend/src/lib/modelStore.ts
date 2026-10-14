@@ -419,7 +419,7 @@ async function installRegisteredModel(
     }
     const downloadOptions: DownloadOptions = {
       expectedSha256: verifiedDownload.sha256,
-      onProgress: directory ? (progress) => options.onProgress?.({ ...progress, totalBytes: directoryTotal }) : options.onProgress,
+      onProgress: directory ? (progress) => options.onProgress?.({ ...progress, totalBytes: directoryTotal, itemId: weights!.path, itemLabel: weights!.path, itemCompletedBytes: progress.completedBytes, itemTotalBytes: weights!.bytes }) : options.onProgress,
       signal: options.signal,
     };
     await downloader(verifiedDownload.url, destination, downloadOptions);
@@ -460,7 +460,7 @@ async function installRegisteredModel(
       if (!existsSync(target) || (await sha256OfFile(target)) !== file.sha256.toLowerCase()) {
         rmSync(target, { force: true });
         const before = landed;
-        await downloader(`${base}${file.path}`, target, { expectedSha256: file.sha256, signal: options.signal, onProgress: (progress) => options.onProgress?.({ ...progress, completedBytes: before + progress.completedBytes, totalBytes: directoryTotal }) });
+        await downloader(`${base}${file.path}`, target, { expectedSha256: file.sha256, signal: options.signal, onProgress: (progress) => options.onProgress?.({ ...progress, completedBytes: before + progress.completedBytes, totalBytes: directoryTotal, itemId: file.path, itemLabel: file.path, itemCompletedBytes: progress.completedBytes, itemTotalBytes: file.bytes }) });
       }
       const digest = await sha256OfFile(target);
       if (digest !== file.sha256.toLowerCase()) {

@@ -136,7 +136,7 @@ ids and what `data` carries:
 | `role.state` | `{ role, state, since, reason? }` | the Engines page live state |
 | `engine.state` | `{ engine, state, reason? }` | the Engines page; an `offline` becomes a Repairs entry |
 | `pressure` | `{ pressure, free_memory_bytes, floor_bytes, available_percent }`, or `{ pressure, reason, id }` when the governor acted on one process | a quiet admin status |
-| `job.progress` | `{ job, kind, state, percent, completed_bytes, total_bytes, status }` | the package's progress; also model and engine downloads |
+| `job.progress` | `{ job, kind, state, percent, completed_bytes, total_bytes, status, bytesPerSecond?, items? }` | the package's progress; also model and engine downloads (optional per-file state uses `completedBytes` and `totalBytes`) |
 | `job.done` | `{ job, kind, ok, reason? }` | the package's result |
 | `model.installed` | `{ model, path }` or `{ model, removed: true }` | an admin notification |
 | `update.available` | `{ kind: "engine" or "model", name, installed, available }` | an admin notification with the Updates link |

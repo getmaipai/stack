@@ -16,7 +16,7 @@ export type JobState = StackJobState;
 export const JobSchema = StackJob;
 export type Job = StackJob;
 
-export type JobProgress = (update: Partial<Pick<Job, "percent" | "completedBytes" | "totalBytes" | "status">>) => void;
+export type JobProgress = (update: Partial<Pick<Job, "percent" | "completedBytes" | "totalBytes" | "bytesPerSecond" | "items" | "status" | "state">>) => void;
 export type JobRunner = (job: Job, signal: AbortSignal, progress: JobProgress) => Promise<unknown>;
 
 /** What a generator runner needs the governor to hold for a job: the
@@ -45,7 +45,7 @@ export function hasJobRunner(kind: string): boolean { return runners.has(kind); 
 function touch(job: Job, patch: Partial<Job>): Job {
   const next = { ...job, ...patch, updatedAt: new Date().toISOString() };
   jobs.set(job.id, next);
-  emit({ id: "job.progress", data: { job: next.id, kind: next.kind, state: next.state, percent: next.percent, completed_bytes: next.completedBytes, total_bytes: next.totalBytes, status: next.status, position: next.position } });
+  emit({ id: "job.progress", data: { job: next.id, kind: next.kind, state: next.state, percent: next.percent, completed_bytes: next.completedBytes, total_bytes: next.totalBytes, status: next.status, position: next.position, ...(next.bytesPerSecond === undefined ? {} : { bytesPerSecond: next.bytesPerSecond }), ...(next.items === undefined ? {} : { items: next.items }) } });
   if (next.state === "done" || next.state === "failed" || next.state === "cancelled") {
     emit({ id: "job.done", data: { job: next.id, kind: next.kind, ok: next.state === "done", reason: next.reason } });
     prune();
@@ -54,18 +54,18 @@ function touch(job: Job, patch: Partial<Job>): Job {
 }
 
 function prune(): void {
-  const finished = [...jobs.values()].filter((job) => job.state !== "queued" && job.state !== "running").sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
+  const finished = [...jobs.values()].filter((job) => job.state !== "queued" && job.state !== "running" && job.state !== "stalled").sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
   while (finished.length > KEEP_FINISHED) { const oldest = finished.shift(); if (oldest) jobs.delete(oldest.id); }
 }
 
 /** Creates a job record for work another module drives (a download):
  * the caller reports progress with `updateJob` and finishes it. */
-export function createJob(input: { kind: string; role?: string | null; totalBytes?: number; status?: string; input?: Record<string, unknown> | null; id?: string; state?: JobState; position?: number | null }): Job {
+export function createJob(input: { kind: string; role?: string | null; totalBytes?: number; bytesPerSecond?: number; items?: Job["items"]; status?: string; input?: Record<string, unknown> | null; id?: string; state?: JobState; position?: number | null }): Job {
   const now = new Date().toISOString();
-  const job: Job = { id: input.id ?? `job-${crypto.randomUUID()}`, kind: input.kind, role: input.role ?? null, state: input.state ?? "running", percent: 0, completedBytes: 0, totalBytes: input.totalBytes ?? 0, status: input.status ?? "starting", position: input.position ?? null, input: input.input ?? null, result: null, reason: null, createdAt: now, updatedAt: now };
+  const job: Job = { id: input.id ?? `job-${crypto.randomUUID()}`, kind: input.kind, role: input.role ?? null, state: input.state ?? "running", percent: 0, completedBytes: 0, totalBytes: input.totalBytes ?? 0, ...(input.bytesPerSecond === undefined ? {} : { bytesPerSecond: input.bytesPerSecond }), ...(input.items === undefined ? {} : { items: input.items }), status: input.status ?? "starting", position: input.position ?? null, input: input.input ?? null, result: null, reason: null, createdAt: now, updatedAt: now };
   jobs.set(job.id, job);
   controllers.set(job.id, new AbortController());
-  emit({ id: "job.progress", data: { job: job.id, kind: job.kind, state: job.state, percent: 0, completed_bytes: 0, total_bytes: job.totalBytes, status: job.status, position: job.position } });
+  emit({ id: "job.progress", data: { job: job.id, kind: job.kind, state: job.state, percent: 0, completed_bytes: 0, total_bytes: job.totalBytes, status: job.status, position: job.position, ...(job.bytesPerSecond === undefined ? {} : { bytesPerSecond: job.bytesPerSecond }), ...(job.items === undefined ? {} : { items: job.items }) } });
   return job;
 }
 
@@ -73,9 +73,9 @@ export function createJob(input: { kind: string; role?: string | null; totalByte
  * cancel through the jobs route stops the bytes, not just the record. */
 export function jobSignal(id: string): AbortSignal | undefined { return controllers.get(id)?.signal; }
 
-export function updateJob(id: string, patch: Partial<Pick<Job, "percent" | "completedBytes" | "totalBytes" | "status">>): Job | null {
+export function updateJob(id: string, patch: Partial<Pick<Job, "percent" | "completedBytes" | "totalBytes" | "bytesPerSecond" | "items" | "status" | "state">>): Job | null {
   const job = jobs.get(id);
-  if (!job || job.state !== "running") return null;
+  if (!job || (job.state !== "running" && job.state !== "stalled")) return null;
   const totalBytes = patch.totalBytes ?? job.totalBytes;
   const completedBytes = patch.completedBytes ?? job.completedBytes;
   const percent = patch.percent ?? (totalBytes > 0 ? Math.min(100, Math.round((completedBytes / totalBytes) * 100)) : job.percent);
@@ -85,8 +85,8 @@ export function updateJob(id: string, patch: Partial<Pick<Job, "percent" | "comp
 export function finishJob(id: string, outcome: { ok: true; result?: unknown } | { ok: false; reason: string }): Job | null {
   const job = jobs.get(id);
   controllers.delete(id);
-  if (!job || (job.state !== "running" && job.state !== "queued")) return null;
-  return outcome.ok ? touch(job, { state: "done", percent: 100, status: "done", result: outcome.result ?? null, position: null }) : touch(job, { state: "failed", status: "failed", reason: outcome.reason, position: null });
+  if (!job || (job.state !== "running" && job.state !== "queued" && job.state !== "stalled")) return null;
+  return outcome.ok ? touch(job, { state: "done", percent: 100, status: "done", ...(job.items ? { items: job.items.map((item) => ({ ...item, completedBytes: item.totalBytes, state: "done" as const })) } : {}), result: outcome.result ?? null, position: null }) : touch(job, { state: "failed", status: "failed", ...(job.items ? { items: job.items.map((item) => item.state === "done" ? item : { ...item, state: "failed" as const }) } : {}), reason: outcome.reason, position: null });
 }
 
 /** Submits work to a registered runner. A generator kind is queued for
@@ -213,7 +213,7 @@ function gb(bytes: number): string { return (bytes / 1_073_741_824).toFixed(1); 
 export function cancelJob(id: string): Job | null {
   const job = jobs.get(id);
   if (!job) return null;
-  if (job.state !== "queued" && job.state !== "running") return job;
+  if (job.state !== "queued" && job.state !== "running" && job.state !== "stalled") return job;
   if (job.role && job.state === "queued") {
     const queue = queues.get(job.role);
     if (queue) { const index = queue.findIndex((queued) => queued.id === id); if (index >= 0) queue.splice(index, 1); renumber(job.role); }

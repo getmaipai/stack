@@ -7,11 +7,11 @@ const pin = selectEngineBinary(await detectHardware());
 if (!pin) throw new Error("No pinned engine matches this machine");
 
 let lastPercent = -1;
-await ensureEngine(pin, (completed, total, label) => {
-  const percent = total > 0 ? Math.floor((completed / total) * 100 / 10) * 10 : 0;
+await ensureEngine(pin, (progress) => {
+  const percent = progress.totalBytes > 0 ? Math.floor((progress.completedBytes / progress.totalBytes) * 100 / 10) * 10 : 0;
   if (percent !== lastPercent) {
     lastPercent = percent;
-    console.log(`${percent}% ${label}`);
+    console.log(`${percent}% ${progress.itemLabel ?? "engine download"}`);
   }
 });
 

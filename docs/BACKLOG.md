@@ -156,6 +156,9 @@ are never copied. Nothing migrates Home until STACK-16.
   flight per role, admitted through the governor (the governor's own
   queue waited on, an impossible peak or a governor refusal failing the
   job with the reason, the admission released however the run ends);
+  optional smoothed speed and per-file progress for model and engine
+  downloads, including a stalled state whose existing `.part` file
+  resumes on retry;
   `/v1/images/generations` as the job API with a wait answering in
   OpenAI's image shape, 202 with the id past its deadline. Driven by a
   scripted sidecar in `tests/generatorQueue.test.ts`. Landed on `main`

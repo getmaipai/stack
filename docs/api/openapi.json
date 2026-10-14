@@ -2812,6 +2812,7 @@
                             "running",
                             "waiting_for_you",
                             "paused",
+                            "stalled",
                             "done",
                             "failed",
                             "cancelled"
@@ -2829,6 +2830,54 @@
                         "totalBytes": {
                           "type": "integer",
                           "minimum": 0
+                        },
+                        "bytesPerSecond": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "label": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "completedBytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "totalBytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "state": {
+                                "type": "string",
+                                "enum": [
+                                  "queued",
+                                  "running",
+                                  "paused",
+                                  "stalled",
+                                  "verifying",
+                                  "failed",
+                                  "done"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "label",
+                              "completedBytes",
+                              "totalBytes",
+                              "state"
+                            ],
+                            "additionalProperties": false
+                          }
                         },
                         "status": {
                           "type": "string"
@@ -2935,6 +2984,7 @@
                               "running",
                               "waiting_for_you",
                               "paused",
+                              "stalled",
                               "done",
                               "failed",
                               "cancelled"
@@ -2952,6 +3002,54 @@
                           "totalBytes": {
                             "type": "integer",
                             "minimum": 0
+                          },
+                          "bytesPerSecond": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "label": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "completedBytes": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "totalBytes": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "state": {
+                                  "type": "string",
+                                  "enum": [
+                                    "queued",
+                                    "running",
+                                    "paused",
+                                    "stalled",
+                                    "verifying",
+                                    "failed",
+                                    "done"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "label",
+                                "completedBytes",
+                                "totalBytes",
+                                "state"
+                              ],
+                              "additionalProperties": false
+                            }
                           },
                           "status": {
                             "type": "string"
@@ -3059,6 +3157,7 @@
                             "running",
                             "waiting_for_you",
                             "paused",
+                            "stalled",
                             "done",
                             "failed",
                             "cancelled"
@@ -3076,6 +3175,54 @@
                         "totalBytes": {
                           "type": "integer",
                           "minimum": 0
+                        },
+                        "bytesPerSecond": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "label": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "completedBytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "totalBytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "state": {
+                                "type": "string",
+                                "enum": [
+                                  "queued",
+                                  "running",
+                                  "paused",
+                                  "stalled",
+                                  "verifying",
+                                  "failed",
+                                  "done"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "label",
+                              "completedBytes",
+                              "totalBytes",
+                              "state"
+                            ],
+                            "additionalProperties": false
+                          }
                         },
                         "status": {
                           "type": "string"
@@ -3190,6 +3337,7 @@
                             "running",
                             "waiting_for_you",
                             "paused",
+                            "stalled",
                             "done",
                             "failed",
                             "cancelled"
@@ -3207,6 +3355,54 @@
                         "totalBytes": {
                           "type": "integer",
                           "minimum": 0
+                        },
+                        "bytesPerSecond": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "label": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "completedBytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "totalBytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "state": {
+                                "type": "string",
+                                "enum": [
+                                  "queued",
+                                  "running",
+                                  "paused",
+                                  "stalled",
+                                  "verifying",
+                                  "failed",
+                                  "done"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "label",
+                              "completedBytes",
+                              "totalBytes",
+                              "state"
+                            ],
+                            "additionalProperties": false
+                          }
                         },
                         "status": {
                           "type": "string"

@@ -42,6 +42,18 @@ test("a download job created by another module reports bytes and finishes", () =
   expect(getJob(job.id)).toMatchObject({ state: "failed", reason: "checksum mismatch" });
 });
 
+test("download speed, files and stalled state are on the jobs API and feed; stalled jobs resume and can be cancelled", async () => {
+  const job = createJob({ kind: "model.install", totalBytes: 100, status: "downloading", items: [{ id: "weights", label: "model.gguf", completedBytes: 0, totalBytes: 100, state: "queued" }] });
+  const stalled = updateJob(job.id, { completedBytes: 50, bytesPerSecond: 10_000, items: [{ id: "weights", label: "model.gguf", completedBytes: 50, totalBytes: 100, state: "stalled" }], state: "stalled", status: "connection interrupted" });
+  expect(stalled).toMatchObject({ state: "stalled", bytesPerSecond: 10_000, items: [{ state: "stalled", completedBytes: 50 }] });
+  const api = await app.request(`/stack/v1/jobs/${job.id}`);
+  expect((await api.json() as { job: unknown }).job).toMatchObject({ state: "stalled", bytesPerSecond: 10_000, items: [{ id: "weights" }] });
+  const progress = eventsAfter(0).find((event) => event.id === "job.progress" && (event.data as { state: string }).state === "stalled");
+  expect(progress?.data).toMatchObject({ bytesPerSecond: 10_000, items: [{ state: "stalled", completedBytes: 50 }] });
+  expect(updateJob(job.id, { completedBytes: 60, state: "running", status: "downloading" })?.state).toBe("running");
+  expect(cancelJob(job.id)?.state).toBe("cancelled");
+});
+
 test("cancelling a download job aborts the signal the download was given", () => {
   const job = createJob({ kind: "engine.install", totalBytes: 10 });
   const signal = jobSignal(job.id)!;

@@ -15,7 +15,7 @@ import { raise } from "@/lib/health";
 import { importPath } from "@/lib/store/importScan";
 import { modelsDir } from "@/lib/paths";
 import { RoleIdSchema } from "@/roles";
-import { createJob, finishJob, jobSignal, updateJob } from "@/lib/jobs";
+import { createJob, finishJob, getJob, jobSignal, updateJob } from "@/lib/jobs";
 import { catalogModelForId } from "@/updates/catalog";
 import { getProcess, isModelPinned, loadedRoleForModel, pinModel, preferModel, restartRole, unloadRole, EngineUnavailableError } from "@/lib/supervisor";
 import { STACK_MODELS, STACK_WAKEWORD_MODELS } from "@/lib/modelCatalog";
@@ -98,11 +98,17 @@ modelsRoutes.openapi(pullRoute, (c) => {
   // An MLX model is a directory; a pull that resolved no file list for
   // one would install a lone weights file no engine can launch.
   if (model.engine === "mlx-serve" && !model.download.files) return c.json({ error: `${body.id} is an MLX model and needs its pinned file list; none is known for revision ${body.revision}.` }, 400);
-  const job = createJob({ kind: "model.install", role: body.role, totalBytes: model.download.approx_bytes, status: "downloading", input: { model: body.id } });
   // One directory per model id: two pins whose URLs end in the same file
   // name never share a path.
   const destination = join(modelsDir, body.id, basename(new URL(body.url).pathname) || `${body.id}.gguf`);
-  void installCatalogModel(model, { destination, signal: jobSignal(job.id), onProgress: (progress) => { updateJob(job.id, { completedBytes: progress.completedBytes, totalBytes: progress.totalBytes || model.download.approx_bytes, status: progress.status }); } })
+  const items = model.download.files?.map((file) => ({ id: file.path, label: file.path, completedBytes: 0, totalBytes: file.bytes, state: "queued" as const })) ?? [{ id: basename(destination), label: basename(destination), completedBytes: 0, totalBytes: model.download.approx_bytes, state: "queued" as const }];
+  const job = createJob({ kind: "model.install", role: body.role, totalBytes: items.reduce((sum, item) => sum + item.totalBytes, 0), items, status: "downloading", input: { model: body.id } });
+  void installCatalogModel(model, { destination, signal: jobSignal(job.id), onProgress: (progress) => {
+    const itemId = progress.itemId;
+    const nextItems = getJob(job.id)?.items?.map((item) => item.id !== itemId ? item : { ...item, completedBytes: progress.itemCompletedBytes ?? progress.completedBytes, totalBytes: progress.itemTotalBytes ?? item.totalBytes, state: progress.itemState ?? "running" });
+    const state = progress.itemState === "stalled" ? "stalled" : "running";
+    updateJob(job.id, { completedBytes: progress.completedBytes, totalBytes: progress.totalBytes || model.download.approx_bytes, ...(progress.bytesPerSecond === undefined ? {} : { bytesPerSecond: progress.bytesPerSecond }), ...(nextItems ? { items: nextItems } : {}), state, status: progress.status });
+  } })
     .then((installed) => finishJob(job.id, { ok: true, result: { model: installed.id } }))
     .catch((error) => finishJob(job.id, { ok: false, reason: error instanceof Error ? error.message : String(error) }));
   return c.json({ job: job.id, model: body.id }, 202);

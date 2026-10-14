@@ -568,8 +568,11 @@ fetched by id. ComfyUI's queue is the model and, for image editing, the
 engine. `/v1/images/generations` is the job API with a wait, for simple
 callers. The job shape is the spec's `StackJob`
 (`@maipai/spec`, STACK-13a): id, kind, role, state, percent, the
-byte counts, a status phrase, the queue position, the input, the
-result, the reason, the clocks.
+byte counts, optional smoothed bytes per second and per-file progress,
+a status phrase, the queue position, the input, the result, the reason,
+the clocks. Model and engine downloads report each pinned file through
+the same job and event feed; a stalled transfer keeps its `.part` file
+and can be resumed by restarting the download.
 
 The queue (STACK-13a, 2026-09-20): a generator kind registers its
 runner with its role and a memory estimate for a job; a submit for it

@@ -16,7 +16,7 @@ import { currentEngine, stagingPin, swapEngine } from "@/updates/engines";
 import { deriveEngineVersionState } from "@/lib/engineState";
 import { chatEngine, getProcess, getRoleStatus, restartRole, roleCanBeStartedByStack, runningEngine, stopRole, EngineUnavailableError } from "@/lib/supervisor";
 import { readSettings } from "@/settings";
-import { createJob, finishJob, jobSignal, updateJob } from "@/lib/jobs";
+import { createJob, finishJob, getJob, jobSignal, updateJob } from "@/lib/jobs";
 import { emit } from "@/lib/events";
 
 const EngineSchema = z.object({
@@ -101,9 +101,12 @@ enginesRoutes.openapi(installRoute, async (c) => {
     const hardware = await detectHardware();
     const pin = selectEngineBinary(hardware, COMFYUI_NAME);
     if (!pin) return c.json({ error: `No pinned ${name} build for this machine.` }, 404);
-    const job = createJob({ kind: "engine.install", totalBytes: pin.archive.approxBytes, status: "downloading", input: { engine: pin.id } });
+    const archives = [pin.archive, ...(pin.extraArchives ?? [])];
+    const items = archives.map((archive) => ({ id: archive.label, label: archive.label, completedBytes: 0, totalBytes: archive.approxBytes, state: "queued" as const }));
+    const totalBytes = items.reduce((sum, item) => sum + item.totalBytes, 0);
+    const job = createJob({ kind: "engine.install", totalBytes, items, status: "downloading", input: { engine: pin.id } });
     environmentJobs.set(COMFYUI_NAME, job.id);
-    void ensureEngine(pin, (completed, total) => { updateJob(job.id, { completedBytes: completed, totalBytes: total || pin.archive.approxBytes, status: "downloading" }); }, { signal: jobSignal(job.id), activate: true })
+    void ensureEngine(pin, (progress) => { const nextItems = getJob(job.id)?.items?.map((item) => item.id !== progress.itemId ? item : { ...item, completedBytes: progress.itemCompletedBytes ?? progress.completedBytes, state: progress.itemState ?? "running" }); updateJob(job.id, { completedBytes: progress.completedBytes, totalBytes: progress.totalBytes || totalBytes, ...(progress.bytesPerSecond === undefined ? {} : { bytesPerSecond: progress.bytesPerSecond }), ...(nextItems ? { items: nextItems } : {}), state: progress.itemState === "stalled" ? "stalled" : "running", status: progress.status }); }, { signal: jobSignal(job.id), activate: true })
       .then(() => ensureComfyuiEnvironment((phase) => updateJob(job.id, { status: `building ${phase}` }), { signal: jobSignal(job.id) }))
       .then(() => { finishJob(job.id, { ok: true, result: { engine: COMFYUI_NAME } }); emit({ id: "engine.state", data: { engine: COMFYUI_NAME, state: "installed" } }); })
       .catch((error) => finishJob(job.id, { ok: false, reason: error instanceof Error ? error.message : String(error) }))
@@ -122,8 +125,11 @@ enginesRoutes.openapi(installRoute, async (c) => {
     const existing = readEngineManifest(name, body.tag);
     if (existing && existing.sha256.toLowerCase() !== body.sha256.toLowerCase()) return c.json({ error: `Tag ${body.tag} is already installed with a different checksum.` }, 409);
   }
-  const job = createJob({ kind: staged ? "engine.stage" : "engine.install", totalBytes: pin.archive.approxBytes, status: "downloading", input: { engine: pin.id } });
-  void ensureEngine(pin, (completed, total) => { updateJob(job.id, { completedBytes: completed, totalBytes: total || pin.archive.approxBytes, status: "downloading" }); }, { signal: jobSignal(job.id), activate: !staged })
+  const archives = [pin.archive, ...(pin.extraArchives ?? [])];
+  const items = archives.map((archive) => ({ id: archive.label, label: archive.label, completedBytes: 0, totalBytes: archive.approxBytes, state: "queued" as const }));
+  const totalBytes = items.reduce((sum, item) => sum + item.totalBytes, 0);
+  const job = createJob({ kind: staged ? "engine.stage" : "engine.install", totalBytes, items, status: "downloading", input: { engine: pin.id } });
+  void ensureEngine(pin, (progress) => { const nextItems = getJob(job.id)?.items?.map((item) => item.id !== progress.itemId ? item : { ...item, completedBytes: progress.itemCompletedBytes ?? progress.completedBytes, state: progress.itemState ?? "running" }); updateJob(job.id, { completedBytes: progress.completedBytes, totalBytes: progress.totalBytes || totalBytes, ...(progress.bytesPerSecond === undefined ? {} : { bytesPerSecond: progress.bytesPerSecond }), ...(nextItems ? { items: nextItems } : {}), state: progress.itemState === "stalled" ? "stalled" : "running", status: progress.status }); }, { signal: jobSignal(job.id), activate: !staged })
     .then(() => { finishJob(job.id, { ok: true, result: { engine: pin.id } }); if (!staged) emit({ id: "engine.state", data: { engine: name, state: "installed" } }); })
     .catch((error) => finishJob(job.id, { ok: false, reason: error instanceof Error ? error.message : String(error) }));
   return c.json({ job: job.id, engine: pin.id, staged }, 202);
