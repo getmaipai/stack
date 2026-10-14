@@ -4346,6 +4346,14 @@
                             "p128"
                           ]
                         },
+                        "level": {
+                          "type": "string",
+                          "enum": [
+                            "minimal",
+                            "moderate",
+                            "recommended"
+                          ]
+                        },
                         "label": {
                           "type": "string"
                         },
@@ -4457,6 +4465,7 @@
                       },
                       "required": [
                         "id",
+                        "level",
                         "label",
                         "minUnifiedGb",
                         "minVramGb",
@@ -4479,6 +4488,14 @@
                               "p32",
                               "p64",
                               "p128"
+                            ]
+                          },
+                          "level": {
+                            "type": "string",
+                            "enum": [
+                              "minimal",
+                              "moderate",
+                              "recommended"
                             ]
                           },
                           "label": {
@@ -4592,6 +4609,7 @@
                         },
                         "required": [
                           "id",
+                          "level",
                           "label",
                           "minUnifiedGb",
                           "minVramGb",

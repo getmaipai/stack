@@ -732,8 +732,8 @@ what went wrong, then the next step.
 The hardware probe reports platform, arch, total RAM, CPU count, Apple
 silicon and unified memory, CUDA devices with VRAM, free disk and OS
 version, cached for five seconds. Four profile tiers (`p16`, `p32`,
-`p64`, `p128`, by unified memory on Apple silicon and by VRAM
-elsewhere) name each role as resident, on demand, installed only or not
+`p64`, `p128`, by unified memory on Apple silicon and summed total VRAM
+across supported CUDA cards elsewhere) name each role as resident, on demand, installed only or not
 available; `proposeProfile` picks the highest tier the machine clears.
 Home words the tier for a person; the Stack reports the facts. The
 tier is also the governor's: the daemon sets it from the hardware

@@ -6,6 +6,7 @@ export type { RoleId } from "@/roles";
 
 export interface ProfileTier {
   id: "p16" | "p32" | "p64" | "p128";
+  level: "minimal" | "moderate" | "recommended";
   label: string;
   minUnifiedGb: number;
   minVramGb: number;
@@ -19,9 +20,10 @@ export interface ProfileTier {
 export const PROFILE_TIERS: ProfileTier[] = [
   {
     id: "p16",
+    level: "minimal",
     label: "This computer can run chat and voice, with embeddings when needed. Images, video, and music are not available.",
     minUnifiedGb: 16,
-    minVramGb: 8,
+    minVramGb: 16,
     resident: ["chat", "coding", "judge", "router", "stt", "tts"],
     onDemand: ["embed"],
     installedOnly: ["wakeword"],
@@ -33,9 +35,10 @@ export const PROFILE_TIERS: ProfileTier[] = [
   },
   {
     id: "p32",
+    level: "moderate",
     label: "This computer can run chat, voice, and embeddings, with the judge when needed. Generators are not available.",
     minUnifiedGb: 32,
-    minVramGb: 16,
+    minVramGb: 32,
     resident: ["chat", "coding", "judge", "router", "embed", "stt", "tts"],
     onDemand: ["rerank"],
     installedOnly: ["wakeword"],
@@ -44,9 +47,10 @@ export const PROFILE_TIERS: ProfileTier[] = [
   },
   {
     id: "p64",
+    level: "recommended",
     label: "This computer can run chat, voice, and embeddings, plus one image job at a time. Video and music are not available.",
     minUnifiedGb: 64,
-    minVramGb: 24,
+    minVramGb: 64,
     resident: ["chat", "coding", "judge", "router", "embed", "rerank", "stt", "tts"],
     onDemand: ["image"],
     installedOnly: ["wakeword"],
@@ -55,9 +59,10 @@ export const PROFILE_TIERS: ProfileTier[] = [
   },
   {
     id: "p128",
+    level: "recommended",
     label: "This computer can run chat, voice, embeddings, coding, and one image, video, or music job at a time.",
     minUnifiedGb: 128,
-    minVramGb: 48,
+    minVramGb: 128,
     resident: ["chat", "judge", "router", "embed", "rerank", "stt", "tts"],
     onDemand: ["coding", "vision", "image", "video", "music"],
     installedOnly: ["wakeword"],
@@ -80,7 +85,8 @@ export function proposeProfile(hw: HardwareInfo): ProfileTier | null {
   if (availableGb <= 0) return null;
   for (let index = PROFILE_TIERS.length - 1; index >= 0; index -= 1) {
     const tier = PROFILE_TIERS[index];
-    if (tier && availableGb >= (hw.isAppleSilicon ? tier.minUnifiedGb : tier.minVramGb)) return tier;
+    if (tier && availableGb >= (hw.isAppleSilicon ? tier.minUnifiedGb : tier.minVramGb) &&
+      (hw.isAppleSilicon || hw.totalRamGb >= (tier.id === "p16" ? 16 : 32))) return tier;
   }
   return null;
 }

@@ -18,25 +18,43 @@ function hw(overrides: Partial<HardwareInfo>): HardwareInfo {
   };
 }
 
-test("proposes each Apple Silicon tier at its threshold", () => {
-  expect(proposeProfile(hw({ unifiedMemoryGb: 16 }))?.id).toBe("p16");
-  expect(proposeProfile(hw({ unifiedMemoryGb: 32 }))?.id).toBe("p32");
-  expect(proposeProfile(hw({ unifiedMemoryGb: 64 }))?.id).toBe("p64");
-  expect(proposeProfile(hw({ unifiedMemoryGb: 128 }))?.id).toBe("p128");
+test("a 24 GB Apple Mac is Minimal", () => {
+  expect(proposeProfile(hw({ unifiedMemoryGb: 24 }))?.level).toBe("minimal");
 });
 
-test("proposes CUDA tiers from free VRAM", () => {
-  const cuda = (freeGb: number): HardwareInfo => hw({
+test("a 32 GB Apple Mac is Moderate", () => {
+  expect(proposeProfile(hw({ unifiedMemoryGb: 32 }))?.level).toBe("moderate");
+});
+
+test("a 64 GB Apple Mac is Recommended", () => {
+  expect(proposeProfile(hw({ unifiedMemoryGb: 64 }))?.level).toBe("recommended");
+});
+
+test("a two-card box with 8 GB each is Minimal", () => {
+  expect(proposeProfile(hw({
     isAppleSilicon: false,
     unifiedMemoryGb: 0,
-    cudaDevices: [{ index: 0, name: "test", vramBytes: freeGb * 1_073_741_824 }],
-  });
-  expect(proposeProfile(cuda(8))?.id).toBe("p16");
-  expect(proposeProfile(cuda(24))?.id).toBe("p64");
+    totalRamGb: 16,
+    cudaDevices: [
+      { index: 0, name: "test-0", vramBytes: 8 * 1_073_741_824 },
+      { index: 1, name: "test-1", vramBytes: 8 * 1_073_741_824 },
+    ],
+  }))?.level).toBe("minimal");
 });
 
-test("does not propose a profile for CPU-only hardware", () => {
-  expect(proposeProfile(hw({ isAppleSilicon: false }))).toBeNull();
+test("a single 8 GB card is below Minimal", () => {
+  expect(proposeProfile(hw({ isAppleSilicon: false, unifiedMemoryGb: 0, totalRamGb: 16,
+    cudaDevices: [{ index: 0, name: "test", vramBytes: 8 * 1_073_741_824 }] }))).toBeNull();
+});
+
+test("a 12 GB card is refused", () => {
+  expect(proposeProfile(hw({ isAppleSilicon: false, unifiedMemoryGb: 0, totalRamGb: 16,
+    cudaDevices: [{ index: 0, name: "test", vramBytes: 12 * 1_073_741_824 }] }))).toBeNull();
+});
+
+test("an Intel Mac or PC with no supported graphics is refused", () => {
+  expect(proposeProfile(hw({ platform: "darwin", arch: "x64", isAppleSilicon: false, unifiedMemoryGb: 0 }))).toBeNull();
+  expect(proposeProfile(hw({ platform: "linux", arch: "x64", isAppleSilicon: false, unifiedMemoryGb: 0 }))).toBeNull();
 });
 
 test("each tier's role lists are disjoint and cover every role", () => {
