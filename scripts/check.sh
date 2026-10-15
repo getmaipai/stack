@@ -4,9 +4,21 @@
 # pinned @maipai/standards core (gitleaks, PII wordlist, prose lint,
 # licence check). The standards and commons pins each resolve their own
 # immutable per-tag worktree. With --docs it runs only the standards core,
-# the gate for a commit that touches only Markdown.
+# the gate for a commit that touches only Markdown. With --pre (tier T1,
+# `scripts/wt.sh check`) it runs the pin checks, install, typecheck, regenerates
+# the API and components docs without failing on drift, and the standards core;
+# the tests beside the changed files run from wt.sh, and the full gate (no flag)
+# stays the T2 gate.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+MODE=full
+case "${1:-}" in
+  --docs) MODE=docs ;;
+  --pre) MODE=pre; echo "== scope: pre (typecheck, regenerated docs, standards core)" ;;
+  "") ;;
+  *) echo "unknown option '$1'; use --docs (standards core only), --pre (cheap preflight) or no flag (full gate)."; exit 2 ;;
+esac
 
 STANDARDS_REPO="${MAIPAI_STANDARDS_DIR:-../.github}"
 STD_TAG="std-v0.3.0"
@@ -29,7 +41,7 @@ export MAIPAI_STANDARDS_DIR="$STANDARDS_DIR"
 # same tag in its own path) - then `bun install --force` in backend/ (a
 # plain `bun install` does not refresh a file: dependency's snapshot in
 # bun's content-addressed store).
-if [ "${1:-}" != "--docs" ]; then
+if [ "$MODE" != docs ]; then
   CORE_TAG="core-v0.1.0"
   SPEC_TAG="spec-v0.1.136"
   COMMONS_DIR="${MAIPAI_COMMONS_DIR:-../commons}"
@@ -67,7 +79,7 @@ if [ "${1:-}" != "--docs" ]; then
   SPEC_DIR="$(ensure_pin spec "$SPEC_TAG")"
 fi
 
-if [ "${1:-}" != "--docs" ]; then
+if [ "$MODE" != docs ]; then
   echo "== backend: install"
   (cd backend && bun install --silent)
   echo "== backend: typecheck"
@@ -80,7 +92,7 @@ if [ "${1:-}" != "--docs" ]; then
   if ! cmp -s "$before" docs/api/openapi.json; then
     rm -f "$before"
     echo "docs/api/openapi.json was out of date with the route registrations in backend/src/app.ts and its route files; it has been regenerated. Review and commit it."
-    exit 1
+    [ "$MODE" = pre ] || exit 1
   fi
   rm -f "$before"
 
@@ -91,12 +103,14 @@ if [ "${1:-}" != "--docs" ]; then
   if ! cmp -s "$before" docs/components.md; then
     rm -f "$before"
     echo "docs/components.md was out of date with roles.ts, engineCatalog.ts, profiles.ts and modelCatalog.ts; it has been regenerated. Review and commit it (bun run gen:components-doc in backend/)."
-    exit 1
+    [ "$MODE" = pre ] || exit 1
   fi
   rm -f "$before"
 
-  echo "== backend: tests"
-  (cd backend && bun test)
+  if [ "$MODE" = full ]; then
+    echo "== backend: tests"
+    (cd backend && bun test)
+  fi
 fi
 
 if [ "$(cat "$STANDARDS_DIR/standards/VERSION")" != "${STD_TAG#std-v}" ]; then
