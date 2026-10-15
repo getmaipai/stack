@@ -19,6 +19,7 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Added
 
+- `GET /stack/v1/install-plan` returns the pinned models to install for this computer's tier, ready to post to the pull route, starter chat model first, with sizes, what is already installed and whether they fit the disk. Sizing now follows one rule: system plus graphics memory on unified-memory computers, graphics memory only otherwise, and an unreadable graphics memory is unknown (the optional `vram_gb` query supplies it) instead of a guess.
 - `POST /v1/tokenize` gives the chat engine's own token count for a
   list of messages (rendered with the engine's chat template) or a raw
   string, so Home sizes its chat window with real counts (2026-10-06).

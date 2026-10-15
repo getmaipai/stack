@@ -5029,6 +5029,182 @@
         }
       }
     },
+    "/stack/v1/install-plan": {
+      "get": {
+        "tags": [
+          "Install plan"
+        ],
+        "summary": "The models to install on this computer",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 512
+            },
+            "required": false,
+            "name": "vram_gb",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The proposed level and tier, the memory they were judged on, and the pinned models (starter first) shaped as pull bodies. With no detectable graphics memory on a computer without unified memory, level is null and memory_source is unknown until the person's total VRAM is passed as vram_gb.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "level": {
+                      "type": "string",
+                      "nullable": true,
+                      "enum": [
+                        "minimal",
+                        "moderate",
+                        "recommended",
+                        null
+                      ]
+                    },
+                    "tier": {
+                      "type": "string",
+                      "nullable": true,
+                      "enum": [
+                        "p16",
+                        "p32",
+                        "p64",
+                        "p128",
+                        null
+                      ]
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "memory_gb": {
+                      "type": "number"
+                    },
+                    "memory_source": {
+                      "type": "string",
+                      "enum": [
+                        "unified",
+                        "graphics",
+                        "override",
+                        "unknown"
+                      ]
+                    },
+                    "models": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string",
+                            "enum": [
+                              "chat",
+                              "coding",
+                              "judge",
+                              "router",
+                              "embed",
+                              "rerank",
+                              "vision",
+                              "stt",
+                              "tts",
+                              "wakeword",
+                              "image",
+                              "video",
+                              "music"
+                            ]
+                          },
+                          "repo": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string",
+                            "format": "uri"
+                          },
+                          "sha256": {
+                            "type": "string",
+                            "minLength": 64,
+                            "maxLength": 64
+                          },
+                          "approx_bytes": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "licence": {
+                            "type": "string"
+                          },
+                          "revision": {
+                            "type": "string"
+                          },
+                          "engine": {
+                            "type": "string"
+                          },
+                          "archive": {
+                            "type": "boolean"
+                          },
+                          "hub_file": {
+                            "type": "string"
+                          },
+                          "component": {
+                            "type": "string"
+                          },
+                          "starter": {
+                            "type": "boolean"
+                          },
+                          "installed": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "role",
+                          "url",
+                          "sha256",
+                          "approx_bytes",
+                          "licence",
+                          "revision",
+                          "starter",
+                          "installed"
+                        ]
+                      }
+                    },
+                    "total_bytes": {
+                      "type": "integer"
+                    },
+                    "remaining_bytes": {
+                      "type": "integer"
+                    },
+                    "free_disk_bytes": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "fits_disk": {
+                      "type": "boolean",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "level",
+                    "tier",
+                    "label",
+                    "memory_gb",
+                    "memory_source",
+                    "models",
+                    "total_bytes",
+                    "remaining_bytes",
+                    "free_disk_bytes",
+                    "fits_disk"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/fit-plan": {
       "post": {
         "tags": [

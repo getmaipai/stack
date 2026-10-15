@@ -1,5 +1,5 @@
 import type { HardwareInfo } from "@/lib/hardware";
-import { primaryBudgetBytes } from "@/lib/hardware";
+import { sizingMemory, type MemorySource } from "@/lib/hardware";
 import type { RoleId } from "@/roles";
 
 export type { RoleId } from "@/roles";
@@ -80,13 +80,21 @@ export const PROFILE_MODEL_BINDINGS: Partial<Record<ProfileTier["id"], Partial<R
   p128: { chat: "qwen3-8b-instruct-q4-k-m", judge: "qwen3-4b-q4-k-m" },
 };
 
-export function proposeProfile(hw: HardwareInfo): ProfileTier | null {
-  const availableGb = primaryBudgetBytes(hw) / 1_073_741_824;
-  if (availableGb <= 0) return null;
+/** The tier this machine's sizing memory (see `sizingMemory`) clears, and
+ * the memory it was judged on. The figure is rounded to a whole GB first,
+ * so a "16 GB" card that reports 15.99 GiB is a 16 GB card. */
+export function sizeMachine(hw: HardwareInfo, overrideGb?: number | null): { tier: ProfileTier | null; memoryGb: number; source: MemorySource } {
+  const { bytes, source } = sizingMemory(hw, overrideGb);
+  const memoryGb = Math.round((bytes / 1_073_741_824) * 10) / 10;
+  const wholeGb = Math.round(memoryGb);
+  const unified = source === "unified";
   for (let index = PROFILE_TIERS.length - 1; index >= 0; index -= 1) {
     const tier = PROFILE_TIERS[index];
-    if (tier && availableGb >= (hw.isAppleSilicon ? tier.minUnifiedGb : tier.minVramGb) &&
-      (hw.isAppleSilicon || hw.totalRamGb >= (tier.id === "p16" ? 16 : 32))) return tier;
+    if (tier && wholeGb > 0 && wholeGb >= (unified ? tier.minUnifiedGb : tier.minVramGb)) return { tier, memoryGb, source };
   }
-  return null;
+  return { tier: null, memoryGb, source };
+}
+
+export function proposeProfile(hw: HardwareInfo, overrideGb?: number | null): ProfileTier | null {
+  return sizeMachine(hw, overrideGb).tier;
 }
