@@ -31,10 +31,11 @@ import { ensureUvEnvironment, managedEnv, uvEnvironmentReady, uvVenvPath, uvVenv
 import darwinArm64Requirements from "./image-tools.darwin-arm64.requirements.txt" with { type: "file" };
 import workerScript from "./image_tools_worker.py" with { type: "file" };
 import helperSource from "./fgmask.swift" with { type: "file" };
+import peopleHelperSource from "./personmask.swift" with { type: "file" };
 
 export const IMAGE_TOOLS_NAME = "image-tools";
 export const IMAGE_TOOLS_VERSION = MANAGED_RUNTIMES.find((runtime) => runtime.name === IMAGE_TOOLS_NAME)?.version ?? "1.0.0";
-export const IMAGE_TOOLS_OPERATIONS = ["remove_background", "erase", "upscale", "resize"] as const;
+export const IMAGE_TOOLS_OPERATIONS = ["remove_background", "erase", "upscale", "resize", "find_people", "erase_people"] as const;
 export type ImageToolOperation = typeof IMAGE_TOOLS_OPERATIONS[number];
 
 /** The pinned model records the worker loads, by the name the worker uses. */
@@ -44,7 +45,7 @@ export const IMAGE_TOOLS_ESTIMATED_BYTES = 4 * 1_073_741_824;
 /** Megapixels each tool accepts; the worker enforces them and says them in words. Mirrored here so the status route and the docs state them once. */
 export const IMAGE_TOOL_LIMITS = { remove_background_in: 25, erase_in: 25, upscale_in: 6, upscale_out: 36, resize_out: 36 } as const;
 const idleMs = (): number => Number(process.env.IMAGE_TOOLS_IDLE_MS ?? 120_000);
-const DEADLINE_MS: Record<ImageToolOperation, number> = { remove_background: 120_000, erase: 120_000, upscale: 300_000, resize: 60_000 };
+const DEADLINE_MS: Record<ImageToolOperation, number> = { remove_background: 120_000, erase: 120_000, upscale: 300_000, resize: 60_000, find_people: 60_000, erase_people: 120_000 };
 const RESULT_KEEP = 6;
 const RESULT_TTL_MS = 10 * 60_000;
 
@@ -52,7 +53,7 @@ const RESULT_TTL_MS = 10 * 60_000;
 export class ImageToolError extends Error {
   constructor(readonly code: string, message: string, readonly status: number) { super(message); }
 }
-const STATUS_BY_CODE: Record<string, number> = { too_large: 413, bad_scale: 422, bad_operation: 422, mask_required: 422, mask_empty: 422, mask_too_big: 422, size_required: 422, no_subject: 422, model_missing: 503, engine_unavailable: 422, engine_failed: 500, out_of_memory: 507, failed: 500 };
+const STATUS_BY_CODE: Record<string, number> = { too_large: 413, bad_scale: 422, bad_operation: 422, mask_required: 422, mask_empty: 422, mask_too_big: 422, size_required: 422, no_subject: 422, no_people: 422, people_unavailable: 422, people_required: 422, model_missing: 503, engine_unavailable: 422, engine_failed: 500, out_of_memory: 507, failed: 500 };
 
 export function imageToolsRequirementsFileFor(platform = process.platform, arch = process.arch): string | null {
   if (platform === "darwin" && arch === "arm64") return darwinArm64Requirements;
@@ -61,6 +62,7 @@ export function imageToolsRequirementsFileFor(platform = process.platform, arch 
 export function imageToolsRoot(): string { return engineTagRoot(IMAGE_TOOLS_NAME, IMAGE_TOOLS_VERSION); }
 export function imageToolsProof(): string { return join(uvVenvPath(imageToolsRoot()), "lib", "python3.12", "site-packages", "onnxruntime", "__init__.py"); }
 export function imageToolsHelperPath(): string { return join(imageToolsRoot(), "fgmask"); }
+export function imageToolsPeopleHelperPath(): string { return join(imageToolsRoot(), "personmask"); }
 export function imageToolsTmpDir(): string { return join(dataDir, "tmp", "imagetools"); }
 function spec(): UvEnvironmentSpec { return { name: IMAGE_TOOLS_NAME, version: IMAGE_TOOLS_VERSION, root: imageToolsRoot(), requirements: imageToolsRequirementsFileFor(), proof: imageToolsProof() }; }
 
@@ -72,14 +74,22 @@ export function imageToolModelPath(id: string): string | null {
 
 /** Compiles Apple's foreground finder helper once, when the Mac has `swiftc` (the Xcode command line tools); null elsewhere, and the ONNX model is used. */
 export async function ensureHelper(): Promise<string | null> {
+  return compileHelper(imageToolsHelperPath(), "fgmask.swift", helperSource);
+}
+
+/** IMGEDIT-01: the same for the person finder (Apple's person instance mask, macOS 14 and later), the other half of "remove that person". */
+export async function ensurePeopleHelper(): Promise<string | null> {
+  return compileHelper(imageToolsPeopleHelperPath(), "personmask.swift", peopleHelperSource);
+}
+
+async function compileHelper(target: string, sourceName: string, bundled: string): Promise<string | null> {
   if (process.platform !== "darwin") return null;
-  const target = imageToolsHelperPath();
   if (existsSync(target)) return target;
   const swiftc = Bun.which("swiftc");
   if (!swiftc) return null;
   mkdirSync(imageToolsRoot(), { recursive: true });
-  const source = join(imageToolsRoot(), "fgmask.swift");
-  writeFileSync(source, await Bun.file(helperSource).text());
+  const source = join(imageToolsRoot(), sourceName);
+  writeFileSync(source, await Bun.file(bundled).text());
   const cache = join(imageToolsRoot(), "swift-cache");
   mkdirSync(cache, { recursive: true });
   const child = Bun.spawn([swiftc, "-O", source, "-o", target], { stdout: "pipe", stderr: "pipe", env: { ...managedEnv(), CLANG_MODULE_CACHE_PATH: cache } });
@@ -89,14 +99,17 @@ export async function ensureHelper(): Promise<string | null> {
   return target;
 }
 
-export interface WorkerRequest { id: string; op: ImageToolOperation; input: string; output: string; mask?: string; params: Record<string, unknown>; models: Record<string, string | null>; helper: string | null; }
-export interface WorkerReply { id: string | null; ok: boolean; code?: string; error?: string; width?: number; height?: number; engine?: string; model?: string; ms?: number; crop_px?: number; }
+export interface WorkerRequest { id: string; op: ImageToolOperation; input: string; output: string; mask?: string; params: Record<string, unknown>; models: Record<string, string | null>; helper: string | null; people_helper?: string | null; }
+/** One person Apple's on-device finder saw: a number (the order the finder gave), and a box as fractions of the picture. */
+export interface PersonBox { id: number; x: number; y: number; w: number; h: number; area: number }
+export interface WorkerReply { id: string | null; ok: boolean; code?: string; error?: string; width?: number; height?: number; engine?: string; model?: string; ms?: number; crop_px?: number; people?: PersonBox[]; }
 export interface WorkerHandle { send(request: WorkerRequest, deadlineMs: number): Promise<WorkerReply>; kill(): void; exited: Promise<number>; }
 
 export interface ImageToolsDeps {
   requirements: () => string | null;
   ensureEnvironment: (onProgress: (phase: string) => void) => Promise<void>;
   ensureHelper: () => Promise<string | null>;
+  ensurePeopleHelper?: () => Promise<string | null>;
   spawn: () => Promise<WorkerHandle>;
   modelPath: (id: string) => string | null;
   /** Holds the memory the worker may use; a string is a refusal. */
@@ -108,6 +121,7 @@ export const defaultImageToolsDeps: ImageToolsDeps = {
   requirements: () => imageToolsRequirementsFileFor(),
   ensureEnvironment: (onProgress) => ensureUvEnvironment(spec(), onProgress),
   ensureHelper,
+  ensurePeopleHelper,
   modelPath: imageToolModelPath,
   tmpDir: imageToolsTmpDir,
   hold: async (signal) => {
@@ -168,7 +182,7 @@ export function workerHandle(child: { stdin: { write(data: string): unknown; flu
 }
 
 export interface ImageToolInput { operation: ImageToolOperation; image: Uint8Array; mask?: Uint8Array; params?: Record<string, unknown>; }
-export interface ImageToolResult { png: Uint8Array; width: number; height: number; engine: string; model: string; ms: number; operation: ImageToolOperation; }
+export interface ImageToolResult { png: Uint8Array; width: number; height: number; engine: string; model: string; ms: number; operation: ImageToolOperation; people?: PersonBox[]; }
 export type ImageToolsState = "unsupported" | "needs-setup" | "building" | "idle" | "running";
 
 export class ImageToolsService {
@@ -179,13 +193,14 @@ export class ImageToolsService {
   private building: string | null = null;
   private busy = 0;
   private helper: string | null | undefined;
+  private peopleHelper: string | null | undefined;
   constructor(private readonly deps: ImageToolsDeps = defaultImageToolsDeps) {}
 
-  status(): { state: ImageToolsState; phase: string | null; vision: boolean; models: Record<string, boolean>; limits: typeof IMAGE_TOOL_LIMITS; operations: ImageToolOperation[]; reason: string | null } {
+  status(): { state: ImageToolsState; phase: string | null; vision: boolean; people: boolean; models: Record<string, boolean>; limits: typeof IMAGE_TOOL_LIMITS; operations: ImageToolOperation[]; reason: string | null } {
     const supported = !!this.deps.requirements();
     const models = Object.fromEntries(Object.entries(IMAGE_TOOL_MODEL_IDS).map(([name, id]) => [name, this.deps.modelPath(id) !== null]));
     const state: ImageToolsState = !supported ? "unsupported" : this.building ? "building" : this.busy > 0 ? "running" : this.worker ? "idle" : "needs-setup";
-    return { state, phase: this.building, vision: !!this.helper, models, limits: IMAGE_TOOL_LIMITS, operations: [...IMAGE_TOOLS_OPERATIONS], reason: supported ? null : `The image tools are not available on ${process.platform} ${process.arch} yet.` };
+    return { state, phase: this.building, vision: !!this.helper, people: !!this.peopleHelper, models, limits: IMAGE_TOOL_LIMITS, operations: [...IMAGE_TOOLS_OPERATIONS], reason: supported ? null : `The image tools are not available on ${process.platform} ${process.arch} yet.` };
   }
 
   /** Runs one edit, one at a time. Throws an ImageToolError that says what to do. */
@@ -205,6 +220,7 @@ export class ImageToolsService {
       throw new ImageToolError("setup_failed", `The image tools could not be set up: ${error instanceof Error ? error.message : String(error)}. Check this computer's internet connection and try again.`, 503);
     } finally { this.building = null; }
     if (this.helper === undefined) this.helper = await this.deps.ensureHelper().catch(() => null);
+    if (this.peopleHelper === undefined) this.peopleHelper = this.deps.ensurePeopleHelper ? await this.deps.ensurePeopleHelper().catch(() => null) : null;
     onStatus("making room");
     const held = await this.deps.hold(signal);
     if (typeof held === "string") throw new ImageToolError("no_memory", `There is not enough free memory for the image tools right now (${held}). Close something heavy or wait for a render to finish, then try again.`, 503);
@@ -248,7 +264,7 @@ export class ImageToolsService {
     const files = [`${stem}.in`, `${stem}.mask`, `${stem}.out.png`, `${stem}.out.png.prepared.png`];
     try {
       const worker = await this.ensureWorker(onStatus, options.signal);
-      const needed = input.operation === "erase" ? ["lama"] : input.operation === "upscale" ? ["esrgan"] : input.operation === "remove_background" ? ["isnet"] : [];
+      const needed = input.operation === "erase" || input.operation === "erase_people" ? ["lama"] : input.operation === "upscale" ? ["esrgan"] : input.operation === "remove_background" ? ["isnet"] : [];
       const models = Object.fromEntries(Object.entries(IMAGE_TOOL_MODEL_IDS).map(([name, id]) => [name, this.deps.modelPath(id)]));
       for (const name of needed) {
         // Apple's finder needs no model; the ONNX one is the fallback and is required only when no helper exists or the engine is forced.
@@ -259,10 +275,10 @@ export class ImageToolsService {
       if (input.mask) writeFileSync(files[1]!, input.mask);
       onStatus("working on the picture");
       const aborted = new Promise<never>((_, reject) => options.signal?.addEventListener("abort", () => { this.stopWorker(); reject(new ImageToolError("cancelled", "Cancelled.", 499)); }, { once: true }));
-      const reply = await Promise.race([worker.send({ id: crypto.randomUUID(), op: input.operation, input: files[0]!, output: files[2]!, ...(input.mask ? { mask: files[1]! } : {}), params: input.params ?? {}, models, helper: this.helper ?? null }, DEADLINE_MS[input.operation]), aborted]);
+      const reply = await Promise.race([worker.send({ id: crypto.randomUUID(), op: input.operation, input: files[0]!, output: files[2]!, ...(input.mask ? { mask: files[1]! } : {}), params: input.params ?? {}, models, helper: this.helper ?? null, people_helper: this.peopleHelper ?? null }, DEADLINE_MS[input.operation]), aborted]);
       if (!reply.ok) throw new ImageToolError(reply.code ?? "failed", reply.error ?? "The picture could not be processed.", STATUS_BY_CODE[reply.code ?? "failed"] ?? 500);
       const png = new Uint8Array(readFileSync(files[2]!));
-      return { png, width: reply.width ?? 0, height: reply.height ?? 0, engine: reply.engine ?? "unknown", model: reply.model ?? "unknown", ms: reply.ms ?? 0, operation: input.operation };
+      return { png, width: reply.width ?? 0, height: reply.height ?? 0, engine: reply.engine ?? "unknown", model: reply.model ?? "unknown", ms: reply.ms ?? 0, operation: input.operation, ...(reply.people ? { people: reply.people } : {}) };
     } finally {
       for (const file of files) rmSync(file, { force: true });
       this.busy -= 1;

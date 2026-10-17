@@ -450,6 +450,33 @@ test("edit operations are checked: instruction, mask or region, region shape, pi
   expect((await send({ operation: "edit", instruction: "x" })).code).toBe("not_installed");
 });
 
+test("IMGEDIT-01: reference pictures ride beside the main one, each declared; the worker gets their paths and a household photo needs the adult audience", async () => {
+  imageGen.useDeps(scripted());
+  const send = async (extra: Record<string, string | File>) => {
+    const form = new FormData();
+    form.set("operation", "edit"); form.set("instruction", "add the woman from the second picture to the bench"); form.set("image_source", "uploaded"); form.set("timeout_ms", "5000");
+    form.set("image", new File([pngBytes(800, 600)], "scene.png", { type: "image/png" }));
+    for (const [key, value] of Object.entries(extra)) form.set(key, value);
+    const response = await app.request("/v1/images/edits", { method: "POST", body: form });
+    return { status: response.status, body: await response.json() as { code?: string; data?: Pic[] } };
+  };
+  const ref = () => new File([pngBytes(500, 700)], "ref.png", { type: "image/png" });
+  // A reference with no declared source is refused, like the main picture.
+  expect((await send({ reference: ref() })).body.code).toBe("reference_source_required");
+  // A photo of a household adult is only for an adult's own screen, and needs Home's proof.
+  expect((await send({ reference: ref(), reference_source: "household_photo" })).body.code).toBe("likeness_adult_only");
+  expect((await send({ reference: ref(), reference_source: "household_photo", audience: "adult" })).body.code).toBe("likeness_not_trusted");
+  expect(requests).toHaveLength(0);
+  // An uploaded reference with the scene as an upload: the worker gets both paths.
+  const ok = await send({ reference: ref(), reference_source: "uploaded", reference2: ref(), reference2_source: "uploaded" });
+  expect(ok.status).toBe(200);
+  expect(requests[0]!.references).toHaveLength(2);
+  expect(requests[0]!.references![0]).toContain(".ref0.bin");
+  expect(existsSync(requests[0]!.references![0]!)).toBe(false);
+  // A third picture is not taken (two at most): the form has no field for it.
+  expect(JSON.stringify(listJobs())).not.toContain("second picture");
+});
+
 test("the existing tools still answer: an unknown operation is refused by the form, the old results route is untouched", async () => {
   const form = new FormData();
   form.set("operation", "sharpen"); form.set("image", new File([pngBytes(10, 10)], "in.png"));

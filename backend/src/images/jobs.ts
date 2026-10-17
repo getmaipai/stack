@@ -34,6 +34,8 @@ export interface StashedImage {
   strength: number;
   image: Uint8Array | null;
   mask: Uint8Array | null;
+  /** IMGEDIT-01: more pictures an edit draws on, after the main one. */
+  references?: Uint8Array[];
   region: [number, number, number, number] | null;
   feather: number;
   /** LIKENESS-01: the proofs this job rests on, checked again when it starts. */
@@ -119,6 +121,7 @@ export function registerImageJobs(): void {
       const initImage = keep(write("init.bin", item.initImage));
       const image = keep(write("image.bin", item.image));
       const mask = keep(write("mask.bin", item.mask));
+      const references = (item.references ?? []).map((bytes, index) => keep(write(`ref${index}.bin`, bytes))!);
       const family = item.family as keyof typeof IMAGE_FAMILIES;
       const tracker = new GenTracker("image", historyKey("image", item.op === "edit" ? 0 : item.width, item.op === "edit" ? 0 : item.height, item.family), Date.now, (item.op === "edit" ? 1 : Math.max(0.25, (item.width * item.height) / (1024 * 1024))) * (item.family === "z-image-turbo" ? 3.2 : 1));
       tracker.nextUnit(0, item.op === "generate" ? item.count : 1);
@@ -129,7 +132,7 @@ export function registerImageJobs(): void {
           preview: item.op === "generate" && item.preview !== false,
           op: item.op, family, quantize: item.quantize, prompt: item.prompt, steps: item.steps, seed: item.seed, loras: item.loras, outDir: work,
           ...(item.op === "generate" ? { width: item.width, height: item.height, count: item.count } : {}),
-          ...(initImage ? { initImage, strength: item.strength } : {}), ...(image ? { image } : {}), ...(mask ? { mask } : {}), ...(item.region ? { region: item.region } : {}), ...(item.op === "edit" ? { feather: item.feather } : {}),
+          ...(initImage ? { initImage, strength: item.strength } : {}), ...(image ? { image } : {}), ...(mask ? { mask } : {}), ...(references.length > 0 ? { references } : {}), ...(item.region ? { region: item.region } : {}), ...(item.op === "edit" ? { feather: item.feather } : {}),
         }, {
           jobId: job.id, signal,
           onPhase: (phase, phasePercent) => { remember(progress, job.id, { phase, phasePercent }); update({ status: phase, percent: tracker.started ? Math.round(tracker.snapshot().fraction * 100) : overallPercent(phase, phasePercent) }); },

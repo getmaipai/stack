@@ -24,7 +24,7 @@ import { imageLoras, MAX_LORAS_PER_IMAGE } from "@/images/loras";
 import { deleteResult, isJobId, pngPath, readResult, thumbPath, type ImageResultMeta } from "@/images/results";
 import { imageGen, memoryVerdict } from "@/images/imageEngine";
 import {
-  DEFAULT_FAMILY, familyInstalled, IMAGE_DEFAULT_SIZE, IMAGE_FAMILIES, IMAGE_FEATHER_DEFAULT, IMAGE_FEATHER_MAX, IMAGE_MAX_COUNT, IMAGE_MAX_INPUT_BYTES, IMAGE_MAX_PROMPT_CHARS, IMAGE_QUEUE_MAX, imageAvailability, installedFamilies,
+  DEFAULT_FAMILY, familyInstalled, IMAGE_DEFAULT_SIZE, IMAGE_FAMILIES, IMAGE_FEATHER_DEFAULT, IMAGE_FEATHER_MAX, IMAGE_REFERENCES_MAX, IMAGE_MAX_COUNT, IMAGE_MAX_INPUT_BYTES, IMAGE_MAX_PROMPT_CHARS, IMAGE_QUEUE_MAX, imageAvailability, installedFamilies,
   isFamilyId, parseSize, peakBytes, quantizeFor, type ImageFamilyId,
 } from "@/images/models";
 import { IMAGE_EDIT_JOB_KIND, IMAGE_JOB_KIND, imageFailure, imagePreviewPath, imageProgress, imageTracker, stashImage, unstashImage } from "@/images/jobs";
@@ -277,7 +277,7 @@ export async function generateImages<T extends Context>(c: T, body: ImageGenerat
 }
 
 export interface EditForm {
-  image: File; mask?: File; operation: "edit" | "edit_masked"; instruction?: string; prompt?: string; region?: string; feather?: number; seed?: number; steps?: number; timeout_ms?: number; image_source?: Source; consent_proof?: string; audience?: "all-ages" | "adult";
+  image: File; mask?: File; operation: "edit" | "edit_masked"; instruction?: string; prompt?: string; region?: string; feather?: number; seed?: number; steps?: number; timeout_ms?: number; image_source?: Source; consent_proof?: string; audience?: "all-ages" | "adult"; /** IMGEDIT-01: up to two more pictures the edit may draw on (a person to add, an object to copy). Each is declared like the main picture. */ references?: Array<{ file: File; source?: Source; proof?: string }>;
 }
 
 /** Normalized x,y,w,h from "0.1,0.2,0.3,0.3", or the sentence to return. */
@@ -308,6 +308,21 @@ export async function editImages<T extends Context>(c: T, form: EditForm) {
   const checked = checkSource(c, image, form.image_source, form.consent_proof, "picture");
   if (checked instanceof Response) return checked;
   if (checked && form.audience !== "adult") return fail(c, 403, "likeness_adult_only", "A picture that looks like a person is only made for an adult on their own screen. Ask Home to make it from a signed-in adult's chat.");
+  // IMGEDIT-01: reference pictures ride beside the main one. Each is checked the way the main picture is (where it came from; a photo of a
+  // household adult needs Home's proof bound to those bytes), and a photo that looks like a person is only for an adult's own screen.
+  const refs: Uint8Array[] = [];
+  const checks: LikenessCheck[] = checked ? [checked] : [];
+  let derived = form.image_source !== "generated";
+  for (const ref of (form.references ?? []).slice(0, IMAGE_REFERENCES_MAX)) {
+    const bytes = new Uint8Array(await ref.file.arrayBuffer());
+    if (!looksLikePicture(bytes)) return fail(c, 422, "bad_image", "A reference picture could not be read. Send a PNG, JPEG or WebP.");
+    if (ref.source === "household_photo" && form.audience !== "adult") return fail(c, 403, "likeness_adult_only", "A picture that looks like a person is only made for an adult on their own screen. Ask Home to make it from a signed-in adult's chat.");
+    const refChecked = checkSource(c, bytes, ref.source, ref.proof, "reference picture");
+    if (refChecked instanceof Response) return refChecked;
+    if (refChecked) { if (form.audience !== "adult") return fail(c, 403, "likeness_adult_only", "A picture that looks like a person is only made for an adult on their own screen. Ask Home to make it from a signed-in adult's chat."); checks.push(refChecked); }
+    if (ref.source !== "generated") derived = true;
+    refs.push(bytes);
+  }
   const mask = form.mask ? new Uint8Array(await form.mask.arrayBuffer()) : null;
   if (mask && !looksLikePicture(mask)) return fail(c, 422, "bad_image", "The mask could not be read. Send a PNG, JPEG or WebP.");
   const family: ImageFamilyId = "flux2-klein-4b";
@@ -320,8 +335,8 @@ export async function editImages<T extends Context>(c: T, form: EditForm) {
   const steps = form.steps ?? IMAGE_FAMILIES[family].stepsDefault;
   const seed = form.seed ?? Math.floor(Math.random() * 2 ** 32);
   const token = crypto.randomUUID();
-  stashImage(token, { op: "edit", prompt: instruction, negativePrompt: null, family, quantize: null, width: 0, height: 0, steps, seed, count: 1, loras: [], loraIds: [], initImage: null, strength: 0, image, mask, region: region ?? null, feather, likeness: checked ? [checked] : [], derived: form.image_source !== "generated" });
-  const submitted = submitJob({ kind: IMAGE_EDIT_JOB_KIND, role: "image", input: { token, family, mode: "edit", quantize: null, steps, seed, count: 1, lora_ids: [], masked: mask !== null || region !== null, likeness: checked !== null } });
+  stashImage(token, { op: "edit", prompt: instruction, negativePrompt: null, family, quantize: null, width: 0, height: 0, steps, seed, count: 1, loras: [], loraIds: [], initImage: null, strength: 0, image, mask, region: region ?? null, feather, references: refs, likeness: checks, derived });
+  const submitted = submitJob({ kind: IMAGE_EDIT_JOB_KIND, role: "image", input: { token, family, mode: "edit", quantize: null, steps, seed, count: 1, lora_ids: [], masked: mask !== null || region !== null, likeness: checks.length > 0, references: refs.length } });
   if ("refused" in submitted) return fail(c, 503, "unsupported", submitted.reason);
   return waitAndReply(c, submitted.job.id, submitted.job.createdAt, form.timeout_ms ?? DEFAULT_WAIT_MS);
 }

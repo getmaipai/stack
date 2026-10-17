@@ -18,7 +18,7 @@ import { modelView } from "@/routes/models";
 import { getGovernorStatus } from "@/lib/governor";
 import { LORA_CLASSES, LoraError, MAX_LORA_BYTES, MAX_LORA_STRENGTH, isLoraId } from "@/lib/media/loraLibrary";
 import { IMAGE_LORA_BASES, imageLoras, MAX_LORAS_PER_IMAGE, startLoraInstall } from "@/images/loras";
-import { IMAGE_FAMILIES, IMAGE_FEATHER_DEFAULT, IMAGE_FEATHER_MAX, IMAGE_MAX_COUNT, IMAGE_MAX_EDIT_MEGAPIXELS, IMAGE_MAX_INPUT_BYTES, IMAGE_MAX_PROMPT_CHARS, IMAGE_MAX_SIDE, IMAGE_MIN_SIDE, IMAGE_QUEUE_MAX, IMAGE_SIZE_STEP, DEFAULT_FAMILY, familyInstalled, imageAvailability, isFamilyId, peakBytes, quantizeFor, type ImageFamilyId } from "@/images/models";
+import { IMAGE_FAMILIES, IMAGE_FEATHER_DEFAULT, IMAGE_FEATHER_MAX, IMAGE_REFERENCES_MAX, IMAGE_MAX_COUNT, IMAGE_MAX_EDIT_MEGAPIXELS, IMAGE_MAX_INPUT_BYTES, IMAGE_MAX_PROMPT_CHARS, IMAGE_MAX_SIDE, IMAGE_MIN_SIDE, IMAGE_QUEUE_MAX, IMAGE_SIZE_STEP, DEFAULT_FAMILY, familyInstalled, imageAvailability, isFamilyId, peakBytes, quantizeFor, type ImageFamilyId } from "@/images/models";
 import { IMAGE_GEN_NAME, IMAGE_GEN_VERSION, imageGen, imageGenEnvironmentReady, memoryVerdict } from "@/images/imageEngine";
 import { startImageInstall } from "@/images/install";
 
@@ -44,7 +44,7 @@ const StatusSchema = z.object({
   default_model: z.string().nullable().openapi({ description: "The family an unspecified request uses (FLUX.2 Klein 4B when installed)." }),
   models: z.array(ModelSchema),
   loras_supported: z.boolean(), lora_count: z.number().int(),
-  edit: z.object({ generative: z.boolean(), masked: z.boolean(), model: z.string() }),
+  edit: z.object({ generative: z.boolean(), masked: z.boolean(), references: z.number().int().describe("How many extra pictures an edit takes beside the one it changes (IMGEDIT-01); absent on an older Stack."), model: z.string() }),
   limits: z.record(z.string(), z.union([z.number(), z.string()])),
   negative_prompt: z.string(),
   idle_unload_s: z.number().int(),
@@ -121,8 +121,8 @@ imageRoutes.openapi(statusRoute, (c) => {
   return c.json({ image: {
     state: status.state, phase: status.phase, available: availability.available, code: availability.code, reason: availability.reason, tier: availability.tier,
     default_model: defaultModel, models, loras_supported: true, lora_count: imageLoras.list().length,
-    edit: { generative: installed.includes("flux2-klein-4b") && availability.available, masked: installed.includes("flux2-klein-4b") && availability.available, model: "flux2-klein-4b" },
-    limits: { min_side: IMAGE_MIN_SIDE, max_side: IMAGE_MAX_SIDE, size_step: IMAGE_SIZE_STEP, max_n: IMAGE_MAX_COUNT, max_prompt_chars: IMAGE_MAX_PROMPT_CHARS, max_loras: MAX_LORAS_PER_IMAGE, max_input_bytes: IMAGE_MAX_INPUT_BYTES, max_edit_megapixels: IMAGE_MAX_EDIT_MEGAPIXELS, queue_max: IMAGE_QUEUE_MAX, feather_default: IMAGE_FEATHER_DEFAULT, feather_max: IMAGE_FEATHER_MAX, default_size: "1024x1024" },
+    edit: { generative: installed.includes("flux2-klein-4b") && availability.available, masked: installed.includes("flux2-klein-4b") && availability.available, references: installed.includes("flux2-klein-4b") && availability.available ? IMAGE_REFERENCES_MAX : 0, model: "flux2-klein-4b" },
+    limits: { min_side: IMAGE_MIN_SIDE, max_side: IMAGE_MAX_SIDE, size_step: IMAGE_SIZE_STEP, max_n: IMAGE_MAX_COUNT, max_prompt_chars: IMAGE_MAX_PROMPT_CHARS, max_loras: MAX_LORAS_PER_IMAGE, max_input_bytes: IMAGE_MAX_INPUT_BYTES, max_edit_megapixels: IMAGE_MAX_EDIT_MEGAPIXELS, queue_max: IMAGE_QUEUE_MAX, feather_default: IMAGE_FEATHER_DEFAULT, feather_max: IMAGE_FEATHER_MAX, max_references: IMAGE_REFERENCES_MAX, default_size: "1024x1024" },
     negative_prompt: "accepted, no effect: the distilled models run without guidance",
     idle_unload_s: Math.round(Number(process.env.IMAGE_IDLE_MS ?? 600_000) / 1000),
     memory: { fits: verdict.ok, reason: verdict.ok ? null : verdict.reason, peak_gb: Math.round(peakBytes(defaultModel ?? DEFAULT_FAMILY, "generate", quantizeFor(defaultModel ?? DEFAULT_FAMILY, "generate", tier), 0) / 1e8) / 10 },

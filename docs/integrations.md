@@ -504,7 +504,14 @@ to remove): `edit` (field `instruction`, one picture; the whole picture may chan
 up to 1024 px on the long side, and composites the result through the feathered mask, so the original pixels outside the mask and its feather ring are
 unchanged bit for bit (0 feather: exactly the mask). `seed`, `steps`, `timeout_ms` as above. The reply is the generation reply (200 or 202, `Pic` with `mode`
 `edit` or `edit-masked`, files under `/v1/images/generations/{job}/0.png`); extra codes: 422 `instruction_required` `mask_required` `bad_region` `mask_empty`.
-The non-generative operations (`remove_background`, `erase`, `upscale`, `resize`) are unchanged.
+IMGEDIT-01 additions (additive): `edit` and `edit_masked` take up to two extra pictures, `reference` and `reference2`, that the edit draws on ("add the woman from the
+second picture to the bench"). Each is declared like the main picture (`reference_source`, `reference2_source`: `generated`, `uploaded` or `household_photo`) and a
+`household_photo` reference needs its own signed likeness proof (`reference_proof`, `reference2_proof`, bound to that picture's hash, used once) and `audience: adult`.
+With a reference the whole scene goes to the model (no crop). `GET /stack/v1/image` reports `edit.references` (0 on a Stack that cannot).
+Two more tool operations, Apple's on-device person finder (macOS 14 and later, a small helper compiled once like the foreground finder): `find_people` answers `data[0].people`
+(numbered boxes as fractions of the picture, each person's main blob only) and a copy of the picture with the boxes drawn and numbered; `erase_people` (field `people`: `1,3` or `all`)
+erases those people and fills the place with LaMa. Codes: 422 `no_people`, `people_unavailable` (no helper: paint over the person with `erase`), `people_required`.
+The other non-generative operations (`remove_background`, `erase`, `upscale`, `resize`) are unchanged.
 
 **LoRA library.** `data/images/loras/` holds one `.safetensors` per record (named by its sha256) and `manifest.json`: `GET /stack/v1/image/loras`;
 `POST /stack/v1/image/loras` (multipart: `file`, or `path` for a file already on the Stack's computer; `name`, `licence`, `licence_acknowledged`,

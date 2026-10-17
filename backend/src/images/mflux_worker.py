@@ -284,6 +284,10 @@ def edit(request):
         if (bounds[2] - bounds[0]) * (bounds[3] - bounds[1]) < 0.25 * width * height:
             pad = int(max(bounds[2] - bounds[0], bounds[3] - bounds[1]) * 0.25) + 32
             box = (max(0, bounds[0] - pad), max(0, bounds[1] - pad), min(width, bounds[2] + pad), min(height, bounds[3] + pad))
+    # IMGEDIT-01: with a reference picture (a person to add) the model needs the whole scene to place them, not a crop of it.
+    extra = request.get("references") or []
+    if extra:
+        box = (0, 0, width, height)
     crop = source.crop(box)
     cw, ch = crop.size
     scale = min(1.0, 1024.0 / max(cw, ch))
@@ -292,15 +296,23 @@ def edit(request):
     os.makedirs(work, exist_ok=True)
     reference = os.path.join(work, "reference.png")
     crop.resize((ew, eh), Image.LANCZOS).save(reference, "PNG")
+    reference_paths = [reference]
+    for index, path in enumerate(extra):
+        extra_image = Image.open(path).convert("RGB")
+        extra_scale = min(1.0, 1024.0 / max(extra_image.size))
+        extra_path = os.path.join(work, f"reference{index + 1}.png")
+        extra_image.resize((max(16, round16(extra_image.width * extra_scale)), max(16, round16(extra_image.height * extra_scale))), Image.LANCZOS).save(extra_path, "PNG")
+        reference_paths.append(extra_path)
 
     def on_step(done, total):
         phase(rid, "decoding" if done >= total else "rendering", done / total * 95)
 
     state["on_step"] = on_step
     state["preview"] = None
-    result = model.generate_image(seed=seed, prompt=request["prompt"], num_inference_steps=steps, width=ew, height=eh, image_paths=[reference])
+    result = model.generate_image(seed=seed, prompt=request["prompt"], num_inference_steps=steps, width=ew, height=eh, image_paths=reference_paths)
     state["on_step"] = None
-    os.remove(reference)
+    for path in reference_paths:
+        os.remove(path)
     edited = result.image.convert("RGB")
     if edited.size != crop.size:
         edited = edited.resize(crop.size, Image.LANCZOS)

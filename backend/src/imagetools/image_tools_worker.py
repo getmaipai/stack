@@ -186,6 +186,107 @@ def erase(request, params):
     return {"width": width, "height": height, "engine": "lama", "model": "big-lama-onnx", "crop_px": crop}
 
 
+def people_labels(request, rgb):
+    """Apple's person instance finder on the decoded, oriented pixels: a label image (0 none, 1..N a person) and a box for each."""
+    helper = request.get("people_helper")
+    if not helper or not os.path.exists(helper):
+        raise Refused("people_unavailable", "Finding people in a picture needs Apple's on-device person finder, which this computer does not have. Paint over the person with the eraser instead.")
+    prepared = request["output"] + ".people.png"
+    labels_path = request["output"] + ".labels.png"
+    Image.fromarray(rgb, "RGB").save(prepared, format="PNG")
+    try:
+        run = subprocess.run([helper, prepared, labels_path], capture_output=True, timeout=120)
+        if run.returncode == 5 or (run.returncode == 0 and not run.stdout.strip()):
+            raise Refused("no_people", "No people were found in this picture.")
+        if run.returncode != 0:
+            raise Refused("people_unavailable", "Apple's person finder failed on this picture. Paint over the person with the eraser instead.")
+        labels = np.asarray(Image.open(labels_path).convert("L"))
+        boxes = [json.loads(line) for line in run.stdout.decode().splitlines() if line.startswith("{")]
+    finally:
+        for path in (prepared, labels_path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+    if not boxes:
+        raise Refused("no_people", "No people were found in this picture.")
+    if labels.shape[:2] != rgb.shape[:2]:
+        labels = cv2.resize(labels, (rgb.shape[1], rgb.shape[0]), interpolation=cv2.INTER_NEAREST)
+    return clean_labels(labels, rgb.shape[1], rgb.shape[0])
+
+
+def clean_labels(labels, width, height):
+    """Apple's instance masks carry stray bits (a chair, a far-off figure, speckle). Keep each person's main blob (and any piece at least a quarter its size), then take the boxes from what is kept."""
+    kept = np.zeros_like(labels)
+    boxes = []
+    for pid in [int(v) for v in np.unique(labels) if v != 0]:
+        mask = (labels == pid).astype(np.uint8)
+        count, comp, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+        if count <= 1:
+            continue
+        areas = stats[1:, cv2.CC_STAT_AREA]
+        main = 1 + int(areas.argmax())
+        reach = cv2.dilate((comp == main).astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (max(5, int(max(width, height) * 0.03)) | 1,) * 2))
+        for index in range(1, count):
+            # The main blob, and a piece that touches its neighbourhood (a hand, a bag, a detached arm); not a chair across the room.
+            if index == main or (reach[comp == index].any() and stats[index, cv2.CC_STAT_AREA] >= 0.002 * width * height):
+                kept[comp == index] = pid
+        ys, xs = np.where(kept == pid)
+        if len(xs) < 0.0005 * width * height:
+            kept[kept == pid] = 0
+            continue
+        boxes.append({"id": pid, "x": float(xs.min()) / width, "y": float(ys.min()) / height, "w": float(xs.max() - xs.min() + 1) / width, "h": float(ys.max() - ys.min() + 1) / height, "area": float(len(xs)) / (width * height)})
+    if not boxes:
+        raise Refused("no_people", "No people were found in this picture.")
+    return kept, boxes
+
+
+def find_people(request, params):
+    """The people in the picture, numbered, with a boxed and numbered copy of it the caller can show a reader that picks one."""
+    src = load(request["input"], "erase_in")
+    rgb = np.ascontiguousarray(np.asarray(src.convert("RGB")))
+    height, width = rgb.shape[:2]
+    _, boxes = people_labels(request, rgb)
+    shown = rgb.copy()
+    thick = max(2, round(max(height, width) / 300))
+    for box in boxes:
+        x0, y0 = int(box["x"] * width), int(box["y"] * height)
+        x1, y1 = int((box["x"] + box["w"]) * width), int((box["y"] + box["h"]) * height)
+        cv2.rectangle(shown, (x0, y0), (x1, y1), (255, 0, 0), thick)
+        scale = max(1.0, max(height, width) / 700)
+        label = str(box["id"])
+        (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, scale, thick)
+        cv2.rectangle(shown, (x0, y0), (x0 + tw + 12, y0 + th + 14), (255, 0, 0), -1)
+        cv2.putText(shown, label, (x0 + 6, y0 + th + 6), cv2.FONT_HERSHEY_SIMPLEX, scale, (255, 255, 255), thick, cv2.LINE_AA)
+    save_png(shown, request["output"])
+    return {"width": width, "height": height, "engine": "apple-vision", "model": "VNGeneratePersonInstanceMaskRequest", "people": boxes}
+
+
+def erase_people(request, params):
+    """Erase the chosen people (params.people: a list of numbers from find_people, or "all"), filling with LaMa."""
+    src = load(request["input"], "erase_in")
+    rgba = np.asarray(src.convert("RGBA"))
+    rgb = np.ascontiguousarray(rgba[..., :3])
+    height, width = rgb.shape[:2]
+    labels, boxes = people_labels(request, rgb)
+    wanted = params.get("people", "all")
+    ids = [b["id"] for b in boxes] if wanted == "all" else [int(v) for v in wanted]
+    unknown = [v for v in ids if v not in [b["id"] for b in boxes]]
+    if not ids or unknown:
+        raise Refused("people_required", "Say which person to remove by the number from find_people, or all of them.")
+    person = np.isin(labels, ids).astype(np.uint8) * 255
+    # Cover the soft edge, hair, shadows at the feet and a hand-held object: a margin proportional to the picture.
+    k = max(5, int(round(max(height, width) * 0.018)) | 1)
+    mask = cv2.dilate(person, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
+    if mask.mean() / 255 > 0.5:
+        raise Refused("mask_too_big", "The people to remove cover more than half of the picture.")
+    sess = session("lama", request["models"].get("lama"))
+    filled, crop = lama_fill(sess, rgb, mask)
+    out = np.dstack([filled, rgba[..., 3]]) if "A" in src.getbands() else filled
+    save_png(out, request["output"])
+    return {"width": width, "height": height, "engine": "apple-vision+lama", "model": "VNGeneratePersonInstanceMaskRequest+big-lama-onnx", "crop_px": crop, "people": boxes}
+
+
 def tile_upscale(sess, array, tile=256, pad=12):
     height, width = array.shape[:2]
     name = sess.get_inputs()[0].name
@@ -250,7 +351,7 @@ def resize(request, params):
     return {"width": new_w, "height": new_h, "engine": "lanczos", "model": "none"}
 
 
-OPS = {"remove_background": remove_background, "erase": erase, "upscale": upscale, "resize": resize}
+OPS = {"remove_background": remove_background, "erase": erase, "upscale": upscale, "resize": resize, "find_people": find_people, "erase_people": erase_people}
 
 
 def main():
@@ -266,7 +367,7 @@ def main():
             reply["id"] = request.get("id")
             op = OPS.get(request.get("op"))
             if op is None:
-                raise Refused("bad_operation", "That operation is not one of remove_background, erase, upscale or resize.")
+                raise Refused("bad_operation", "That operation is not one of remove_background, erase, upscale, resize, find_people or erase_people.")
             reply.update(op(request, request.get("params") or {}))
             reply["ok"] = True
         except Refused as refused:

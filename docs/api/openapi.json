@@ -1395,6 +1395,8 @@
                       "erase",
                       "upscale",
                       "resize",
+                      "find_people",
+                      "erase_people",
                       "edit",
                       "edit_masked"
                     ],
@@ -1417,6 +1419,11 @@
                     "minimum": 0,
                     "maximum": 64,
                     "description": "edit_masked: pixels of soft edge on the mask (default 12). 0 changes exactly the mask."
+                  },
+                  "people": {
+                    "type": "string",
+                    "maxLength": 80,
+                    "description": "erase_people: the people to remove, numbers from a find_people answer joined by commas (\"1,3\"), or \"all\". find_people answers with `people` (numbered boxes as fractions of the picture) and a copy of the picture with the boxes drawn and numbered."
                   },
                   "seed": {
                     "type": "integer",
@@ -1474,6 +1481,39 @@
                     "type": "string",
                     "maxLength": 4096,
                     "description": "With `image_source: household_photo`: Home's signed proof, bound to this exact picture, valid for at most 30 minutes. Each proof is accepted once."
+                  },
+                  "reference": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "edit and edit_masked: a picture the edit draws on, like a person to add to the scene (\"add the woman from the second picture\"). Up to two (`reference`, `reference2`). Declare where each came from with `reference_source` and, for a household photo, `reference_proof`."
+                  },
+                  "reference_source": {
+                    "type": "string",
+                    "enum": [
+                      "generated",
+                      "uploaded",
+                      "household_photo"
+                    ]
+                  },
+                  "reference_proof": {
+                    "type": "string",
+                    "maxLength": 4096
+                  },
+                  "reference2": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "reference2_source": {
+                    "type": "string",
+                    "enum": [
+                      "generated",
+                      "uploaded",
+                      "household_photo"
+                    ]
+                  },
+                  "reference2_proof": {
+                    "type": "string",
+                    "maxLength": 4096
                   },
                   "audience": {
                     "type": "string",
@@ -10563,6 +10603,10 @@
                             "masked": {
                               "type": "boolean"
                             },
+                            "references": {
+                              "type": "integer",
+                              "description": "How many extra pictures an edit takes beside the one it changes (IMGEDIT-01); absent on an older Stack."
+                            },
                             "model": {
                               "type": "string"
                             }
@@ -10570,6 +10614,7 @@
                           "required": [
                             "generative",
                             "masked",
+                            "references",
                             "model"
                           ]
                         },

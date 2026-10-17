@@ -52,6 +52,8 @@ export const IMAGE_MAX_INPUT_BYTES = 40 * 1024 * 1024;
 export const IMAGE_MAX_EDIT_MEGAPIXELS = 25;
 export const IMAGE_QUEUE_MAX = 4;
 export const IMAGE_FEATHER_MAX = 64;
+/** IMGEDIT-01: extra pictures an edit may draw on (a person to add, an object to copy) beside the one it changes. */
+export const IMAGE_REFERENCES_MAX = 2;
 export const IMAGE_FEATHER_DEFAULT = 12;
 
 export const isFamilyId = (value: string): value is ImageFamilyId => (IMAGE_LORA_BASES as readonly string[]).includes(value);

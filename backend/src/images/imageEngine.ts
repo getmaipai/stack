@@ -67,7 +67,7 @@ export function ensureImageGenEnvironment(onProgress: (phase: string) => void = 
 export interface WorkerRequest {
   id: string; op: "generate" | "edit"; family: ImageFamilyId; quantize: number | null; model_dir: string; loras: Array<[string, number]>;
   prompt: string; width?: number; height?: number; steps: number; seed: number; count?: number; out_dir: string;
-  init_image?: string; strength?: number; image?: string; mask?: string; region?: [number, number, number, number]; feather?: number;
+  init_image?: string; strength?: number; image?: string; mask?: string; references?: string[]; region?: [number, number, number, number]; feather?: number;
   /** GENPREVIEW-01: write a small preview picture (`<out_dir>/preview.jpg`) after each denoising step. */
   preview?: boolean;
 }
@@ -160,7 +160,7 @@ export type ImageState = "unsupported" | "off" | "not-installed" | "needs-setup"
 export interface ImageRunInput {
   op: "generate" | "edit"; family: ImageFamilyId; quantize: number | null; prompt: string; width?: number; height?: number; steps: number; seed: number; count?: number;
   loras: Array<[string, number]>; outDir: string;
-  initImage?: string; strength?: number; image?: string; mask?: string; region?: [number, number, number, number]; feather?: number;
+  initImage?: string; strength?: number; image?: string; mask?: string; references?: string[]; region?: [number, number, number, number]; feather?: number;
   /** Ask the worker for per-step previews (generate only). */
   preview?: boolean;
 }
@@ -265,7 +265,7 @@ export class ImageGenService {
       const request: WorkerRequest = {
         id: options.jobId, op: input.op, family: input.family, quantize: input.quantize, model_dir: modelDir, loras: input.loras, prompt: input.prompt, steps: input.steps, seed: input.seed, out_dir: input.outDir,
         ...(input.width !== undefined ? { width: input.width, height: input.height } : {}), ...(input.count !== undefined ? { count: input.count } : {}),
-        ...(input.preview && input.op === "generate" ? { preview: true } : {}), ...(input.initImage ? { init_image: input.initImage, strength: input.strength } : {}), ...(input.image ? { image: input.image } : {}), ...(input.mask ? { mask: input.mask } : {}), ...(input.region ? { region: input.region } : {}), ...(input.feather !== undefined ? { feather: input.feather } : {}),
+        ...(input.preview && input.op === "generate" ? { preview: true } : {}), ...(input.initImage ? { init_image: input.initImage, strength: input.strength } : {}), ...(input.image ? { image: input.image } : {}), ...(input.mask ? { mask: input.mask } : {}), ...(input.references && input.references.length > 0 ? { references: input.references } : {}), ...(input.region ? { region: input.region } : {}), ...(input.feather !== undefined ? { feather: input.feather } : {}),
       };
       const aborted = new Promise<never>((_, reject) => {
         const stop = () => {

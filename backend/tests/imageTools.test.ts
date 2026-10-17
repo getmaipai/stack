@@ -149,6 +149,31 @@ test("every tier's install plan carries the image tools and the requirements fil
   expect(imageToolsRequirementsFileFor("linux", "x64")).toBeNull();
 });
 
+test("IMGEDIT-01: find_people and erase_people reach the worker with the person finder, needing the eraser model only for the erase, and the boxes come back", async () => {
+  const people = [{ id: 1, x: 0.1, y: 0.2, w: 0.3, h: 0.6, area: 0.1 }, { id: 2, x: 0.6, y: 0.2, w: 0.2, h: 0.5, area: 0.07 }];
+  const service = new ImageToolsService(deps({ ensurePeopleHelper: async () => "/helper/personmask", modelPath: () => null }, (request) => ({ id: request.id, ok: true, width: 10, height: 20, engine: "apple-vision", model: "m", ms: 5, people })));
+  const found = await service.run({ operation: "find_people", image: PNG });
+  expect(found.people).toEqual(people);
+  expect(requests[0]!.people_helper).toBe("/helper/personmask");
+  // The eraser needs its model; finding people does not.
+  const refused = await service.run({ operation: "erase_people", image: PNG, params: { people: [2] } }).catch((caught) => caught as ImageToolError);
+  expect((refused as ImageToolError).code).toBe("model_missing");
+  service.stop();
+  const withModel = new ImageToolsService(deps({ ensurePeopleHelper: async () => "/helper/personmask" }, (request) => ({ id: request.id, ok: true, width: 10, height: 20, engine: "apple-vision+lama", model: "m", ms: 5, people })));
+  await withModel.run({ operation: "erase_people", image: PNG, params: { people: [2] } });
+  expect(requests.at(-1)!.params).toEqual({ people: [2] });
+  expect(requests.at(-1)!.models.lama).toBe("/models/x.onnx");
+  withModel.stop();
+});
+
+test("IMGEDIT-01: a Mac without the person finder answers people_unavailable as a 422 that points to the eraser", async () => {
+  const service = new ImageToolsService(deps({ ensurePeopleHelper: async () => null }, (request) => ({ id: request.id, ok: false, code: "people_unavailable", error: "Finding people needs Apple's person finder. Paint over the person with the eraser instead." })));
+  const error = await service.run({ operation: "find_people", image: PNG }).catch((caught) => caught as ImageToolError);
+  expect((error as ImageToolError).status).toBe(422);
+  expect((error as ImageToolError).message).toContain("eraser");
+  service.stop();
+});
+
 // The real worker on real pixels, only where a prepared environment is named (the scratch run sets IMAGE_TOOLS_PYTHON).
 const python = process.env.IMAGE_TOOLS_PYTHON;
 test.skipIf(!python)("the real worker resizes, strips metadata and applies orientation", async () => {
@@ -168,4 +193,13 @@ test.skipIf(!python)("the real worker resizes, strips metadata and applies orien
   expect(bad.code).toBe("mask_required");
   expect(existsSync(`${dir}/o2.png`)).toBe(false);
   worker.kill();
+});
+
+test.skipIf(!python)("IMGEDIT-01: person labels keep each person's main blob and what touches it, drop a stray piece across the room, and the boxes follow what is kept", () => {
+  const script = join(import.meta.dir, "../src/imagetools");
+  const code = `import sys\nsys.path.insert(0, ${JSON.stringify(script)})\nimport numpy as np, image_tools_worker as w\nl=np.zeros((100,200),np.uint8)\nl[20:80,20:40]=1\nl[40:50,41:50]=1\nl[10:30,150:190]=1\nkept,boxes=w.clean_labels(l,200,100)\nprint(int((kept==1).sum()), len(boxes), round(boxes[0]['x'],3), round(boxes[0]['w'],3))`;
+  const run = Bun.spawnSync([python!, "-I", "-c", code]);
+  expect(run.exitCode).toBe(0);
+  // 60x20 main blob + the 10x9 piece that touches it; the 20x40 blob far away is dropped.
+  expect(String(run.stdout).trim()).toBe(`${60 * 20 + 10 * 9} 1 0.1 0.15`);
 });
