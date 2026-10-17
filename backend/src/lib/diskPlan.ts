@@ -123,8 +123,9 @@ const ENGINE_ROWS: Record<string, () => DiskRow> = {
   "engine:pictures": () => engineRow("engine:pictures", "image-gen", "Picture engine tools", "What making pictures runs on."),
   "engine:image-tools": () => engineRow("engine:image-tools", "image-tools", "Picture editing engine tools", "What removing a background, erasing and enlarging run on."),
   "engine:video": () => engineRow("engine:video", "video-gen", "Video engine tools", "What making videos runs on."),
+  "engine:chat-mlx": () => engineRow("engine:chat-mlx", "omlx", "Faster chat engine tools (oMLX)", "What the faster chat engine runs on. llama.cpp stays as the fallback."),
 };
-const PYTHON_ENGINES = ["engine:voice", "engine:voice-better", "engine:pictures", "engine:image-tools", "engine:video"];
+const PYTHON_ENGINES = ["engine:chat-mlx", "engine:voice", "engine:voice-better", "engine:pictures", "engine:image-tools", "engine:video"];
 
 function totals(rows: DiskRow[], selected: Set<string>): DiskTotals {
   const chosen = rows.filter((row) => selected.has(row.id));
@@ -154,7 +155,7 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   });
   if (chat.length) {
     const starter = chat.length > 1 ? " A small starter chat AI (Qwen3 1.7B) comes first so you can talk while the big one downloads." : "";
-    rows.push(modelRow({ id: "chat", label: `Chat AI (${chatName(bigChat!)})`, note: `The AI you talk to.${starter}`, need: "required", engines: [] }, chat));
+    rows.push(modelRow({ id: "chat", label: `Chat AI (${chatName(bigChat!)})`, note: `The AI you talk to.${starter}`, need: "required", engines: chat.some((pin) => pin.engine === "omlx") ? ["engine:chat-mlx", "engine:python"] : [] }, chat));
   }
   const reads = plannedWhere((pin) => projectors.has(pin.id));
   if (reads.length) rows.push(modelRow({ id: "reads-pictures", label: "Reads pictures (projector)", note: "Lets the chat AI look at a picture you send it.", need: "recommended", engines: [] }, reads));

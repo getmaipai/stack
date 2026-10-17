@@ -52,6 +52,12 @@
       "download_bytes": 494080819,
       "peak_temp_bytes": 1200000000,
       "basis": "estimate"
+    },
+    "omlx": {
+      "installed_bytes": 1269985280,
+      "download_bytes": 873749873,
+      "peak_temp_bytes": 873749873,
+      "basis": "measured"
     }
   },
   "pins": {
@@ -70,6 +76,10 @@
     "muse-glimmer-30b-q4-k-m": {
       "download_bytes": 16756683904,
       "installed_bytes": 16756683904
+    },
+    "muse-glimmer-30b-mlx-4bit": {
+      "download_bytes": 19443246692,
+      "installed_bytes": 19443246692
     },
     "muse-glimmer-30b-mmproj-q4-k-m": {
       "download_bytes": 1400328928,

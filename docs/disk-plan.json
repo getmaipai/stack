@@ -12,14 +12,14 @@
     "p32.minimum_required_free_bytes": 30802869180,
     "p32.everything_required_free_bytes": 33780738066,
     "p32.needed_bytes": 28503105738,
-    "p64.required_free_bytes": 63160716413,
-    "p64.minimum_required_free_bytes": 34279601493,
-    "p64.everything_required_free_bytes": 63160716413,
-    "p64.needed_bytes": 53177196982,
-    "p128.required_free_bytes": 63160716413,
-    "p128.minimum_required_free_bytes": 34279601493,
-    "p128.everything_required_free_bytes": 133703493672,
-    "p128.needed_bytes": 53177196982
+    "p64.required_free_bytes": 88890344653,
+    "p64.minimum_required_free_bytes": 60009229733,
+    "p64.everything_required_free_bytes": 88890344653,
+    "p64.needed_bytes": 74764178827,
+    "p128.required_free_bytes": 88890344653,
+    "p128.minimum_required_free_bytes": 60009229733,
+    "p128.everything_required_free_bytes": 159433121912,
+    "p128.needed_bytes": 74764178827
   },
   "tiers": {
     "p16": {
@@ -508,14 +508,18 @@
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 21488386848,
-          "installed_bytes": 21488386848,
+          "download_bytes": 40931633540,
+          "installed_bytes": 40931633540,
           "peak_temp_bytes": 0,
           "model_ids": [
             "qwen3-1.7b-q8-0",
-            "muse-glimmer-30b-q4-k-xl"
+            "muse-glimmer-30b-q4-k-xl",
+            "muse-glimmer-30b-mlx-4bit"
           ],
-          "engines": [],
+          "engines": [
+            "engine:chat-mlx",
+            "engine:python"
+          ],
           "installed": false,
           "basis": "pins"
         },
@@ -725,6 +729,21 @@
           "basis": "measured"
         },
         {
+          "id": "engine:chat-mlx",
+          "label": "Faster chat engine tools (oMLX)",
+          "note": "What the faster chat engine runs on. llama.cpp stays as the fallback.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 873749873,
+          "installed_bytes": 1269985280,
+          "peak_temp_bytes": 873749873,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
           "id": "engine:voice",
           "label": "Voice engine tools",
           "note": "What the voice runs on.",
@@ -786,25 +805,25 @@
         }
       ],
       "default": {
-        "download_bytes": 47753604073,
-        "installed_bytes": 49917597154,
-        "peak_temp_bytes": 3259599828,
-        "needed_bytes": 53177196982,
-        "required_free_bytes": 63160716413
+        "download_bytes": 68070600638,
+        "installed_bytes": 70630829126,
+        "peak_temp_bytes": 4133349701,
+        "needed_bytes": 74764178827,
+        "required_free_bytes": 88890344653
       },
       "minimum": {
-        "download_bytes": 25529840047,
-        "installed_bytes": 27043509565,
-        "peak_temp_bytes": 1827390015,
-        "needed_bytes": 28870899580,
-        "required_free_bytes": 34279601493
+        "download_bytes": 45846836612,
+        "installed_bytes": 47756741537,
+        "peak_temp_bytes": 2701139888,
+        "needed_bytes": 50457881425,
+        "required_free_bytes": 60009229733
       },
       "everything": {
-        "download_bytes": 47753604073,
-        "installed_bytes": 49917597154,
-        "peak_temp_bytes": 3259599828,
-        "needed_bytes": 53177196982,
-        "required_free_bytes": 63160716413
+        "download_bytes": 68070600638,
+        "installed_bytes": 70630829126,
+        "peak_temp_bytes": 4133349701,
+        "needed_bytes": 74764178827,
+        "required_free_bytes": 88890344653
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -849,14 +868,18 @@
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 21488386848,
-          "installed_bytes": 21488386848,
+          "download_bytes": 40931633540,
+          "installed_bytes": 40931633540,
           "peak_temp_bytes": 0,
           "model_ids": [
             "qwen3-1.7b-q8-0",
-            "muse-glimmer-30b-q4-k-xl"
+            "muse-glimmer-30b-q4-k-xl",
+            "muse-glimmer-30b-mlx-4bit"
           ],
-          "engines": [],
+          "engines": [
+            "engine:chat-mlx",
+            "engine:python"
+          ],
           "installed": false,
           "basis": "pins"
         },
@@ -1123,6 +1146,21 @@
           "basis": "measured"
         },
         {
+          "id": "engine:chat-mlx",
+          "label": "Faster chat engine tools (oMLX)",
+          "note": "What the faster chat engine runs on. llama.cpp stays as the fallback.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 873749873,
+          "installed_bytes": 1269985280,
+          "peak_temp_bytes": 873749873,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
           "id": "engine:voice",
           "label": "Voice engine tools",
           "note": "What the voice runs on.",
@@ -1199,25 +1237,25 @@
         }
       ],
       "default": {
-        "download_bytes": 47753604073,
-        "installed_bytes": 49917597154,
-        "peak_temp_bytes": 3259599828,
-        "needed_bytes": 53177196982,
-        "required_free_bytes": 63160716413
+        "download_bytes": 68070600638,
+        "installed_bytes": 70630829126,
+        "peak_temp_bytes": 4133349701,
+        "needed_bytes": 74764178827,
+        "required_free_bytes": 88890344653
       },
       "minimum": {
-        "download_bytes": 25529840047,
-        "installed_bytes": 27043509565,
-        "peak_temp_bytes": 1827390015,
-        "needed_bytes": 28870899580,
-        "required_free_bytes": 34279601493
+        "download_bytes": 45846836612,
+        "installed_bytes": 47756741537,
+        "peak_temp_bytes": 2701139888,
+        "needed_bytes": 50457881425,
+        "required_free_bytes": 60009229733
       },
       "everything": {
-        "download_bytes": 105562392430,
-        "installed_bytes": 108070925984,
-        "peak_temp_bytes": 4018382491,
-        "needed_bytes": 112089308475,
-        "required_free_bytes": 133703493672
+        "download_bytes": 125879388995,
+        "installed_bytes": 128784157956,
+        "peak_temp_bytes": 4892132364,
+        "needed_bytes": 133676290320,
+        "required_free_bytes": 159433121912
       },
       "measured_on": "2026-10-17",
       "default_selected": [

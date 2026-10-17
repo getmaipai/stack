@@ -69,7 +69,7 @@ export function imageInstallModels(family: "flux2-klein-4b" | "z-image-turbo", i
 }
 
 /** The pins a tier's first-run plan installs, in plan order, the starter chat first: the one list both the install plan and the disk plan read. */
-export function plannedPinsFor(tier: ProfileTier): Array<{ pin: CatalogModelLike; starter: boolean }> {
+export function plannedPinsFor(tier: ProfileTier, target: { platform: string; arch: string } = { platform: "darwin", arch: "arm64" }): Array<{ pin: CatalogModelLike; starter: boolean }> {
   const projectors = new Set(STACK_MODELS.flatMap((pin) => pin.imageInput ? [pin.imageInput.projector] : []));
   // Resident roles, plus embeddings where the tier loads them on demand:
   // search and memory need the model on disk either way. A role that
@@ -94,7 +94,7 @@ export function plannedPinsFor(tier: ProfileTier): Array<{ pin: CatalogModelLike
     add(projector ?? null);
     // The tiers whose default chat engine is oMLX carry its MLX build of the
     // same model beside the GGUF, which stays as the fallback (ENGINE-MLX-01).
-    if (role === "chat" && tierDefaultChatEngine(tier.id, hw.platform, hw.arch) === "omlx") add(STACK_CHAT_MUSE_30B_MLX_MODEL);
+    if (role === "chat" && tierDefaultChatEngine(tier.id, target.platform, target.arch) === "omlx") add(STACK_CHAT_MUSE_30B_MLX_MODEL);
     // The tier's expressive voice rides beside Pocket TTS, which stays as
     // the fallback (VOICE-STUDIO-01): only where the tier runs it by default.
     if (role === "tts" && tierDefaultTtsEngine(tier.id) === "chatterbox-turbo") { add(STACK_TTS_CHATTERBOX_MODEL); for (const part of STACK_TTS_CHATTERBOX_PARTS) add(part); }
@@ -111,7 +111,7 @@ export function buildInstallPlan(hw: HardwareInfo, options: { vramOverrideGb?: n
   const base = { memory_gb: memoryGb, memory_source: source, free_disk_bytes: free };
   if (!tier) return { level: null, tier: null, label: source === "unknown" ? UNKNOWN_LABEL : NO_TIER_LABEL, ...base, models: [], total_bytes: 0, remaining_bytes: 0, fits_disk: null };
   const installed = new Set(options.installedIds ?? []);
-  const planned = plannedPinsFor(tier);
+  const planned = plannedPinsFor(tier, hw);
   const models = planned.flatMap(({ pin, starter }) => view(pin, installed, starter) ?? []);
   const total = models.reduce((sum, model) => sum + model.approx_bytes, 0);
   const remaining = models.filter((model) => !model.installed).reduce((sum, model) => sum + model.approx_bytes, 0);

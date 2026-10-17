@@ -36,7 +36,7 @@ for (const pin of STACK_MODELS) {
 
 const engineDir = join(dataDirectory, "engines");
 const env = (name: string, version: string) => duBytes(join(engineDir, name, version));
-const envNames: Array<[string, string, string]> = [["pocket-tts", "pocket-tts", "3.1.0"], ["mlx-audio", "mlx-audio", "0.5.9"], ["image-gen", "image-gen", "0.23.0"], ["image-tools", "image-tools", "1.0.0"], ["video-gen", "video-gen", "87db56a"]];
+const envNames: Array<[string, string, string]> = [["pocket-tts", "pocket-tts", "3.1.0"], ["mlx-audio", "mlx-audio", "0.5.9"], ["image-gen", "image-gen", "0.23.0"], ["image-tools", "image-tools", "1.0.0"], ["video-gen", "video-gen", "87db56a"], ["omlx", "omlx", "0.7.0"]];
 const installed = Object.fromEntries(envNames.map(([key, name, version]) => [key, env(name, version)]));
 // uv keeps the wheels it downloaded in one cache; the cache over the environments it built is the share each environment downloads and keeps until the install ends.
 const cache = duBytes(join(engineDir, "uv", "cache"));
