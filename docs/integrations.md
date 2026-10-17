@@ -250,6 +250,21 @@ above it (org `SERVICES.md`). The Stack updates when Home's release
 ships a new binary; Home stops the service, replaces the binary, starts
 it, and reads `/healthz` for the new version.
 
+## Instant chat: the judge role (INSTANT-02, 2026-10-17)
+
+A chat model that reasons on every turn (Muse Glimmer 30B, STACK-MUSE-01) has no Instant mode, so Home sends an Instant turn to
+the `judge` role instead: `POST /v1/chat/completions` with `"model": "judge"` and `"chat_template_kwargs": {"enable_thinking":
+false}`. No new role, route or memory: from p32 up the judge is the resident Qwen3 4B Q4_K_M and answers on the same route,
+with its own identity headers (`x-maipai-model: Qwen3-4B-Q4_K_M.gguf`). Home decides whether a separate fast model exists by
+reading `GET /stack/v1/roles`: the judge's `model.id` differs from chat's (on p16 the judge is the chat model, so there is no
+Instant model and the 8B's own `enable_thinking` switch is the Instant mode). The engine runs several slots, so a turn does not
+queue behind background judge work.
+
+Measured 2026-10-17 on the Studio (live Stack, port 8770, Qwen3 4B judge, three trials each): time to first text for "hello" is
+0.03 to 0.04 s alone and 0.04 to 0.13 s during a 600-token background generation. During a cold 8,000-token prefill on another
+slot it was 1.5 s once and 0.05 to 0.15 s after that (prefix cached). Muse at the same moment took 2 to 6 s for short answers.
+Context: the judge launches with a 40960 window, so Home falls back to chat when an Instant turn's history would not fit.
+
 ## MaiPai Bot
 
 Bot runs Home's platform code on the robot, so it consumes the Stack
