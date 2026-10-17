@@ -344,6 +344,17 @@ are never copied. Nothing migrates Home until STACK-16.
   Muse runs at `reasoning_strength: low`. Tests: `profiles`,
   `engineArgs`, `modelStore`, `installPlan`. Measurement is Home's
   STUDIO-EVAL-01. Reasoning: dev.md "The chat pin above 24 GB".
+- [x] **VISION-03a (S): Muse Glimmer 30B reads pictures through its own projector.**
+  Home's design note `docs/design/vision-images-2026-10-17.md`. The
+  repository's `mmproj-Muse-Glimmer-30B-Q4_K_M.gguf` (1.4 GB, same
+  revision, sha256 `f48b4523...`) is pinned as `muse-glimmer-30b-mmproj-q4-k-m`
+  (component `projector`); both Muse pins declare `imageInput` and launch
+  with `--image-max-tokens 2560`. The projector loads in the one resident
+  chat process (no second role, nothing extra to keep warm), so p32, p64
+  and p128 read pictures once it is installed; the install plan now brings
+  the projector of any bound model that declares one. Nothing changes until
+  the file is pulled: without it the launch is text only, as before.
+  Tests: `museVision`, `installPlan`, `chatVision`, `modelStore`.
 - [x] **STACK-04: the model store.** Provenance-gated records, the HF
   cache layout, engine tag layout with the `current` link, manifests
   with blob references and orphan grace, ranged resumable downloads,

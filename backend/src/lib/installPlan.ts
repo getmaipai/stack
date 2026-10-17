@@ -77,7 +77,10 @@ export function buildInstallPlan(hw: HardwareInfo, options: { vramOverrideGb?: n
       const smaller = (pin.download?.approx_bytes ?? 0) > (STACK_CHAT_MODEL.download?.approx_bytes ?? 0);
       if (smaller) { add(STACK_CHAT_MODEL, true); add(pin); } else add(pin, true);
     } else add(pin);
+    // A bound model that reads pictures brings its projector (VISION-03a).
+    const projector = pin.imageInput ? STACK_MODELS.find((candidate) => candidate.id === pin.imageInput!.projector) : undefined;
     for (const part of STACK_MODELS.filter((candidate) => candidate.role === role && candidate.component && candidate.engine === pin.engine && !projectors.has(candidate.id))) add(part);
+    add(projector ?? null);
   }
   const models = planned.flatMap(({ pin, starter }) => view(pin, installed, starter) ?? []);
   const total = models.reduce((sum, model) => sum + model.approx_bytes, 0);

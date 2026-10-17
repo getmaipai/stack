@@ -55,7 +55,28 @@ export const STACK_CHAT_8B_MODEL: CatalogModelLike = {
 // from b10353 (the pinned b10797 does).
 const MUSE_30B_REPO = "meta-models/Muse-Glimmer-30B-GGUF";
 const MUSE_30B_REVISION = "70bf1b61ac09f91b24d39038091b41c582bc5d7a";
-const MUSE_30B_LAUNCH = { chatTemplateKwargs: { reasoning_strength: "low" } };
+// VISION-03a: the repository's own multimodal projector (one file for both
+// quantizations, 1.4 GB, Apache-2.0 repo) loads beside the model in the one
+// resident chat process, so Muse reads pictures itself and nothing extra
+// runs. One picture takes at most 2,560 tokens: measured on b10797, a
+// 1,440 by 900 screenshot is 1,704 prompt tokens and a 2,000 pixel photo
+// 2,551 to 2,567 (docs/design/vision-images-2026-10-17.md in Home).
+const MUSE_30B_LAUNCH = { chatTemplateKwargs: { reasoning_strength: "low" }, imageMaxTokens: 2560 };
+export const STACK_CHAT_MUSE_30B_PROJECTOR: CatalogModelLike = {
+  id: "muse-glimmer-30b-mmproj-q4-k-m",
+  role: "chat",
+  component: "projector",
+  repo: MUSE_30B_REPO,
+  license: "Apache-2.0",
+  revision: MUSE_30B_REVISION,
+  engine: "llama-server",
+  sizing: { profile: "p32", quantization: "Q4_K_M" },
+  download: {
+    url: hfUrl(`${MUSE_30B_REPO}/resolve/${MUSE_30B_REVISION}/mmproj-Muse-Glimmer-30B-Q4_K_M.gguf`),
+    sha256: "f48b452316f9b213758e8659444029b961a24a07f99a1abb2a9f88b06f7c00c6",
+    approx_bytes: 1_400_328_928,
+  },
+};
 const MUSE_30B_SAMPLING = { temperature: 1.0, top_p: 0.95, top_k: 64, source: "meta-models/Muse-Glimmer-30B-GGUF model card, recommended sampling" };
 export const STACK_CHAT_MUSE_30B_XL_MODEL: CatalogModelLike = {
   id: "muse-glimmer-30b-q4-k-xl",
@@ -70,6 +91,7 @@ export const STACK_CHAT_MUSE_30B_XL_MODEL: CatalogModelLike = {
     sha256: "ac7023d6a4c704eb9af54ab53e476a66b7f5b6c0ef2fc4a8dde5253c291a6c38",
     approx_bytes: 19_653_960_832,
   },
+  imageInput: { projector: STACK_CHAT_MUSE_30B_PROJECTOR.id },
   launch: MUSE_30B_LAUNCH,
   sampling: MUSE_30B_SAMPLING,
 };
@@ -86,6 +108,7 @@ export const STACK_CHAT_MUSE_30B_M_MODEL: CatalogModelLike = {
     sha256: "4cc57c0f51040a226e5a72cc47b7613f7772950e460a665f7083de89f183f60e",
     approx_bytes: 16_756_683_904,
   },
+  imageInput: { projector: STACK_CHAT_MUSE_30B_PROJECTOR.id },
   launch: MUSE_30B_LAUNCH,
   sampling: MUSE_30B_SAMPLING,
 };
@@ -419,7 +442,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_IMAGE_MODEL, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_IMAGE_MODEL, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a
