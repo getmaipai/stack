@@ -22,7 +22,7 @@ with Home's releases, so this file tracks what a Home release picks up.
 - Picture generation (IMGGEN-STACK-01 and 02, IMGGEN-EDIT-01, IMGGEN-LORA-01): FLUX.2 Klein 4B and Z-Image-Turbo on mflux in an on-demand worker, `POST /v1/images/generations` with LoRAs, image to image, n up to 4, progress, cancel and a result store, the `edit` and `edit_masked` operations on `/v1/images/edits`, the LoRA library with install by Hugging Face link, `GET /stack/v1/image`, `POST /stack/v1/image/install`.
 
 - Video generation (VIDEO-GEN-01 to 03): `POST /v1/videos/generations` makes a 5 s, 832 x 480, 24 fps clip (text to video, or picture to video) with
-  Wan2.2 TI2V-5B FastWan on mlx-video, in about 132 s on an M5 Max with a 44.1 GB peak, on tiers p64 and p128 only. A job API with progress by phase,
+  Wan2.2 TI2V-5B FastWan on mlx-video, in about 132 s on an M5 Max with a 44.1 GB peak, on tier p128 only (p64 cannot hold the 44.1 GB clip beside chat). A job API with progress by phase,
   cancel, 202 past the deadline, and the clip (H.264 mp4 and a JPEG poster) fetched by URL; one on-demand worker that exits after ten idle minutes;
   pinned weights, tokenizer and mlx-video source; a household LoRA library (`/stack/v1/video/loras`) with hash, licence and all-ages or adult-only
   class; a reference picture must be one this Stack generated. `GET /stack/v1/video` reports state, limits and what to install.

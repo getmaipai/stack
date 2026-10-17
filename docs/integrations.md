@@ -334,8 +334,8 @@ while it lives. Pictures, masks and results are never logged or written beyond t
 
 ## Video generation (VIDEO-GEN-01 to 03)
 
-Wan2.2 TI2V-5B with FastWan's 3-step distillation, run by mlx-video on the Apple GPU (a Mac with 64 GB or more: tiers `p64` and `p128`;
-`p16` and `p32` answer 503 `not_available_on_this_computer`). Text to video and picture to video, 24 fps, no sound. A 5 s clip
+Wan2.2 TI2V-5B with FastWan's 3-step distillation, run by mlx-video on the Apple GPU (a Mac with 128 GB: tier `p128` only, because a clip peaks at 44.1 GB beside the roughly 28 GB resident on a 64 GB Mac and every clip there would be refused with `no_memory`;
+`p16`, `p32` and `p64` answer 503 `not_available_on_this_computer`). Text to video and picture to video, 24 fps, no sound. A 5 s clip
 (121 frames) at 832 x 480 takes about two and a half minutes and peaks at 44.1 GB, so a clip holds one pinned governor admission of that size
 and chat is never evicted for it; a Mac that cannot hold the clip beside what is resident answers 503 `no_memory` at once. Design and the
 measurements: Home `docs/design/video-generation-2026-10-17.md`.

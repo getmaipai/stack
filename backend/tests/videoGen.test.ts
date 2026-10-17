@@ -183,25 +183,26 @@ test("a failed clip carries the worker's code and status; an out-of-memory failu
   expect(spawned).toBe(2);
 });
 
-test("video is off below 64 GB, not installed without the model, and refused with the numbers when it cannot fit beside what is resident", async () => {
+test("video is off below 128 GB, not installed without the model, and refused with the numbers when it cannot fit beside what is resident", async () => {
   videoGen.useDeps(scripted());
   __setGovernorTuningForTestsOnly({ tier: "p32", totalMemoryBytes: 32 * GB, freeMemoryBytes: 24 * GB });
   const off = await post({ prompt: "x" });
   expect(off.status).toBe(503);
-  expect(await off.json()).toMatchObject({ code: "not_available_on_this_computer", error: expect.stringContaining("64 GB of memory or more") });
+  expect(await off.json()).toMatchObject({ code: "not_available_on_this_computer", error: expect.stringContaining("128 GB of memory") });
   __setGovernorTuningForTestsOnly({ tier: "p128", totalMemoryBytes: 128 * GB, freeMemoryBytes: 90 * GB });
   videoGen.useDeps(scripted(okReply, { paths: () => null }));
   const missing = await post({ prompt: "x" });
   expect(missing.status).toBe(503);
   expect(((await missing.json()) as { code: string }).code).toBe("not_installed");
   videoGen.useDeps(scripted());
-  __setGovernorTuningForTestsOnly({ tier: "p64", totalMemoryBytes: 64 * GB, freeMemoryBytes: 60 * GB });
+  __setGovernorTuningForTestsOnly({ tier: "p128", totalMemoryBytes: 64 * GB, freeMemoryBytes: 60 * GB });
   await admit({ id: "chat", kind: "resident", requestedBytes: 28 * GB, pinned: true });
   const full = await post({ prompt: "x" });
   expect(full.status).toBe(503);
   expect(await full.json()).toMatchObject({ code: "no_memory", error: "Not enough free memory for video right now. Close other big jobs, or try again in a few minutes." });
   expect(memoryVerdict().ok).toBe(false);
-  expect(tierAvailability("p64").available).toBe(true);
+  expect(tierAvailability("p128").available).toBe(true);
+  expect(tierAvailability("p64")).toMatchObject({ available: false, code: "not_available_on_this_computer" });
   expect(tierAvailability("p16").available).toBe(false);
 });
 
@@ -517,7 +518,9 @@ test("the pins are exact: revisions, hashes, file lists that add up, Apache-2.0,
   expect(videoRequirementsFileFor("linux", "x64")).toBeNull();
   const p64 = PROFILE_TIERS.find((tier) => tier.id === "p64")!;
   const p32 = PROFILE_TIERS.find((tier) => tier.id === "p32")!;
-  expect(p64.onDemand).toContain("video");
+  expect(p64.onDemand).not.toContain("video");
+  expect(p64.notAvailable).toContain("video");
+  expect(PROFILE_TIERS.find((tier) => tier.id === "p128")!.onDemand).toContain("video");
   expect(p32.notAvailable).toContain("video");
   expect(PROFILE_TIERS.find((tier) => tier.id === "p16")!.notAvailable).toContain("video");
 });

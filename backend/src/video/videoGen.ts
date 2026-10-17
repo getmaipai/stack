@@ -13,8 +13,9 @@
 // tiling peaks near 112 GB) from the first byte loaded to the last frame
 // written. The job queue takes that admission before this service is called;
 // this file never talks to the governor for a run. The Stack keeps about 28 GB
-// resident, so a Mac of 64 GB cannot hold both and is refused with a plain
-// reason; chat is never evicted for a clip.
+// resident, so a Mac of 64 GB cannot hold both: the p64 tier does not offer video at
+// all (owner call, 2026-10-17), and a p128 Mac with too little free memory is
+// refused with a plain reason; chat is never evicted for a clip.
 //
 // Safety posture: the model has no filter and the Stack makes no decision
 // about who is in a picture or who is asking. The Stack enforces what it can
@@ -54,7 +55,7 @@ export const VIDEO_QUEUE_MAX = 4;
 /** The measured peak memory footprint of a whole clip (832 x 480, 121 frames, aggressive tiling), M5 Max, 2026-10-17. */
 export const VIDEO_PEAK_BYTES = 44_088_747_800;
 /** Tiers that run video; the others are off (the 44 GB peak does not fit beside chat). */
-export const VIDEO_TIERS = ["p64", "p128"] as const;
+export const VIDEO_TIERS = ["p128"] as const;
 const idleMs = (): number => Number(process.env.VIDEO_IDLE_MS ?? 10 * 60_000);
 const deadlineMs = (): number => Number(process.env.VIDEO_DEADLINE_MS ?? 15 * 60_000);
 
@@ -100,7 +101,7 @@ export interface Availability { available: boolean; code: string | null; reason:
 /** Whether this computer's tier runs video at all. */
 export function tierAvailability(tier = getGovernorStatus().tier, totalMemoryBytes = getGovernorStatus().totalMemoryBytes): Availability {
   if (!videoRequirementsFileFor()) return { available: false, code: "unsupported", reason: `Video generation is not available on ${process.platform} ${process.arch} yet.`, tier };
-  if (!(VIDEO_TIERS as readonly string[]).includes(tier)) return { available: false, code: "not_available_on_this_computer", reason: `Video needs a computer with 64 GB of memory or more; this one has ${Math.round(totalMemoryBytes / 1_073_741_824)} GB.`, tier };
+  if (!(VIDEO_TIERS as readonly string[]).includes(tier)) return { available: false, code: "not_available_on_this_computer", reason: `Video needs a computer with 128 GB of memory; this one has ${Math.round(totalMemoryBytes / 1_073_741_824)} GB.`, tier };
   return { available: true, code: null, reason: null, tier };
 }
 
