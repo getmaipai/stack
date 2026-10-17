@@ -8,7 +8,7 @@ import type { AppEnv } from "@/types";
 import { identityHeaders } from "@/lib/identity";
 import { noEngineResponse, resolveRole, UnknownRoleError, UnverifiedModelError } from "@/lib/router";
 import { ROLE_IDS, ROLES, type RoleId } from "@/roles";
-import { EngineUnavailableError, getRoleStatus, requestRole, restartRole, roleHasEngine, roleIsBound, speakRole, speechForm, streamRole } from "@/lib/supervisor";
+import { EngineUnavailableError, getRoleStatus, requestRole, restartRole, roleHasEngine, roleIsBound, speakRole, speechForm, streamRole, ttsEngineInEffect } from "@/lib/supervisor";
 import { listModels, ProvenanceIncompleteError } from "@/lib/modelStore";
 import { DownloadVerificationError } from "@/lib/download";
 import { POCKET_TTS_GATED_REPO } from "@/speech/pocketTts";
@@ -191,8 +191,12 @@ v1Routes.openapi(speechRoute, async (c) => {
     // The voice the engine will read is on disk before the ask (fetched
     // by the Stack once, then served offline); a voice that needs the
     // cloning weights waits for them and for an engine that loaded them.
-    const voice = await prepareVoice(form.voice_url, { signal: controller.signal });
-    if (voiceNeedsCloning(voice)) await ensureCloningLoaded(resolution.role, controller.signal);
+    // Only Pocket TTS names its voices by preset or path; the MLX engine
+    // speaks its one built-in voice, so a voice Home saved from Pocket's
+    // list (or none) is not an error there (VOICE-STUDIO-01).
+    const pocket = ttsEngineInEffect() === "pocket";
+    const voice = pocket ? await prepareVoice(form.voice_url, { signal: controller.signal }) : undefined;
+    if (pocket && voiceNeedsCloning(voice)) await ensureCloningLoaded(resolution.role, controller.signal);
     const spoken = await speakRole(resolution.role, speechForm(form.text, voice), controller.signal);
     for (const [name, value] of Object.entries(spoken.headers)) c.header(name, value);
     if (!spoken.body) return new Response(JSON.stringify({ error: spoken.status === 499 ? "Request cancelled" : spoken.status === 504 ? "The engine timed out." : "The engine did not answer." }), { status: spoken.status, headers: { ...spoken.headers, "content-type": "application/json" } });

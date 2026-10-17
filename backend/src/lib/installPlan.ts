@@ -4,7 +4,8 @@
 // pins. Pure: the route supplies the hardware and the installed set.
 import { PROFILE_MODEL_BINDINGS, sizeMachine, type ProfileTier } from "@/profiles";
 import type { HardwareInfo, MemorySource } from "@/lib/hardware";
-import { STACK_CHAT_MODEL, STACK_MODELS } from "@/lib/modelCatalog";
+import { STACK_CHAT_MODEL, STACK_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
+import { tierDefaultTtsEngine } from "@/speech/ttsEngines";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import type { RoleId } from "@/roles";
 import { ROLES } from "@/roles";
@@ -81,6 +82,9 @@ export function buildInstallPlan(hw: HardwareInfo, options: { vramOverrideGb?: n
     const projector = pin.imageInput ? STACK_MODELS.find((candidate) => candidate.id === pin.imageInput!.projector) : undefined;
     for (const part of STACK_MODELS.filter((candidate) => candidate.role === role && candidate.component && candidate.engine === pin.engine && !projectors.has(candidate.id))) add(part);
     add(projector ?? null);
+    // The tier's expressive voice rides beside Pocket TTS, which stays as
+    // the fallback (VOICE-STUDIO-01): only where the tier runs it by default.
+    if (role === "tts" && tierDefaultTtsEngine(tier.id) === "chatterbox-turbo") { add(STACK_TTS_CHATTERBOX_MODEL); for (const part of STACK_TTS_CHATTERBOX_PARTS) add(part); }
   }
   const models = planned.flatMap(({ pin, starter }) => view(pin, installed, starter) ?? []);
   const total = models.reduce((sum, model) => sum + model.approx_bytes, 0);

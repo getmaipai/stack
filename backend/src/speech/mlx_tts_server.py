@@ -1,0 +1,223 @@
+#!/usr/bin/env python3
+"""The Stack's MLX voice engine (VOICE-STUDIO-01): one small server that speaks
+the same wire as Pocket TTS, so Home's voice session needs no change.
+
+  GET  /health   {"status": "ok"} once the model is loaded AND primed (the first
+                 synthesis compiles kernels and costs 6 to 14 s; "ok" never
+                 means a cold engine), {"status": "loading"} with 503 before.
+  GET  /tags     {"engine": ..., "tags": [...]} the tags the engine honors.
+  POST /tts      multipart form: text (required), voice_url (optional). The reply
+                 is chunked audio/wav, 24 kHz mono 16-bit, the header written with
+                 the placeholder data size Pocket TTS writes, then PCM as it is
+                 generated (first chunk about 0.45 s on an M5 Max).
+
+Engines are classes in ENGINES; a second MLX voice (Orpheus) is one more class
+with `load`, `stream` and the `tags` list. Runs offline: the Stack placed every
+file in the hub cache and sets HF_HUB_OFFLINE=1. All MLX work happens on one
+worker thread (MLX streams are per thread); the HTTP threads only queue jobs
+and write chunks, so /health answers while a synthesis runs.
+"""
+import argparse
+import json
+import os
+import queue
+import struct
+import sys
+import threading
+import time
+from email.parser import BytesParser
+from email.policy import HTTP
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+import numpy as np
+
+SAMPLE_RATE = 24000
+STREAM_INTERVAL_SECONDS = 1.0
+PRIME_TEXT = "Hello there. This is the voice, warming up."
+
+
+def wav_header(sample_rate: int) -> bytes:
+    """A streaming WAV header: the data size is a placeholder, as Pocket TTS writes."""
+    return (b"RIFF" + struct.pack("<I", 2_000_000_036) + b"WAVEfmt " + struct.pack("<IHHIIHH", 16, 1, 1, sample_rate, sample_rate * 2, 2, 16)
+            + b"data" + struct.pack("<I", 2_000_000_000))
+
+
+def to_pcm16(samples) -> bytes:
+    audio = np.asarray(samples, dtype=np.float32).reshape(-1)
+    return (np.clip(audio, -1.0, 1.0) * 32767.0).astype("<i2").tobytes()
+
+
+class ChatterboxTurbo:
+    """Chatterbox Turbo 350M through the mlx-audio port (MIT code; the weights card
+    says Apache-2.0, upstream MIT). Tags are plain bracketed words in the text."""
+    id = "chatterbox-turbo"
+    # The tags the tokenizer knows AND the model renders as sound (measured, see
+    # docs/design/studio-voice-2026-10-17.md); the Stack reads this list, never guesses.
+    tags = ["[laugh]", "[chuckle]", "[cough]", "[sigh]", "[clear throat]", "[gasp]"]
+
+    def load(self, repo: str) -> None:
+        from mlx_audio.tts.utils import load_model
+        self.model = load_model(repo)
+        self.sample_rate = int(getattr(self.model, "sample_rate", SAMPLE_RATE))
+
+    def stream(self, text: str, voice: str | None):
+        # The repo's own conditioning is the default voice; a reference clip (cloning)
+        # arrives in a later slice with the S3 tokenizer pinned beside it.
+        for result in self.model.generate(text=text, stream=True, streaming_interval=STREAM_INTERVAL_SECONDS):
+            yield np.array(result.audio).reshape(-1)
+
+
+ENGINES = {ChatterboxTurbo.id: ChatterboxTurbo}
+
+
+class Job:
+    def __init__(self, text: str, voice: str | None):
+        self.text = text
+        self.voice = voice
+        self.out: "queue.Queue" = queue.Queue()
+        self.cancelled = threading.Event()
+
+
+JOBS: "queue.Queue[Job | None]" = queue.Queue()
+STATE = {"ready": False, "engine": None, "error": None}
+
+
+def release_cache() -> None:
+    """Hand MLX's buffer cache back after a synthesis so the process footprint the
+    Stack's governor watches stays near the weights, not the largest request seen."""
+    try:
+        import mlx.core as mx
+        mx.clear_cache()
+    except Exception:
+        pass
+
+
+def worker(engine_id: str, repo: str) -> None:
+    try:
+        engine = ENGINES[engine_id]()
+        started = time.time()
+        engine.load(repo)
+        loaded = time.time()
+        for _ in engine.stream(PRIME_TEXT, None):
+            pass
+        print(f"mlx-tts: {engine_id} loaded in {loaded - started:.1f}s, primed in {time.time() - loaded:.1f}s", file=sys.stderr, flush=True)
+        STATE["engine"] = engine
+        STATE["ready"] = True
+    except Exception as error:  # the Stack reads stderr when the process exits before health
+        STATE["error"] = f"{type(error).__name__}: {error}"
+        print(f"mlx-tts: could not start: {STATE['error']}", file=sys.stderr, flush=True)
+        os._exit(3)  # the Stack sees the exit before health and reads this line
+    while True:
+        job = JOBS.get()
+        if job is None:
+            return
+        try:
+            for chunk in engine.stream(job.text, job.voice):
+                if job.cancelled.is_set():
+                    break
+                job.out.put(to_pcm16(chunk))
+            job.out.put(None)
+        except Exception as error:
+            job.out.put(error)
+        release_cache()
+
+
+def read_form(handler: BaseHTTPRequestHandler) -> dict:
+    length = int(handler.headers.get("Content-Length") or 0)
+    body = handler.rfile.read(length) if length else b""
+    kind = handler.headers.get("Content-Type", "")
+    if kind.startswith("application/json"):
+        return json.loads(body or b"{}")
+    if kind.startswith("multipart/form-data"):
+        message = BytesParser(policy=HTTP).parsebytes(b"Content-Type: " + kind.encode() + b"\r\nMIME-Version: 1.0\r\n\r\n" + body)
+        fields = {}
+        for part in message.iter_parts():
+            name = part.get_param("name", header="content-disposition")
+            if name:
+                fields[name] = part.get_payload(decode=True).decode("utf-8", "replace")
+        return fields
+    from urllib.parse import parse_qs
+    return {key: values[0] for key, values in parse_qs(body.decode("utf-8", "replace")).items()}
+
+
+class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, *_args) -> None:
+        pass
+
+    def reply_json(self, status: int, payload: dict) -> None:
+        body = json.dumps(payload).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.wfile.write(body)
+        self.close_connection = True
+
+    def do_GET(self) -> None:
+        if self.path == "/health":
+            if STATE["ready"]:
+                return self.reply_json(200, {"status": "ok"})
+            return self.reply_json(503, {"status": "loading" if not STATE["error"] else "failed", "error": STATE["error"]})
+        if self.path == "/tags":
+            engine = STATE["engine"]
+            return self.reply_json(200, {"engine": engine.id if engine else None, "tags": engine.tags if engine else []})
+        self.reply_json(404, {"detail": "Not found."})
+
+    def do_POST(self) -> None:
+        if self.path != "/tts":
+            return self.reply_json(404, {"detail": "Not found."})
+        if not STATE["ready"]:
+            return self.reply_json(503, {"detail": "The voice engine is still loading."})
+        try:
+            form = read_form(self)
+        except Exception as error:
+            return self.reply_json(400, {"detail": f"The request could not be read: {error}"})
+        text = str(form.get("text") or "").strip()
+        if not text:
+            return self.reply_json(400, {"detail": "text is required."})
+        job = Job(text, form.get("voice_url") or None)
+        JOBS.put(job)
+        first = job.out.get()
+        if isinstance(first, Exception):
+            return self.reply_json(500, {"detail": f"{type(first).__name__}: {first}"})
+        self.send_response(200)
+        self.send_header("Content-Type", "audio/wav")
+        self.send_header("Transfer-Encoding", "chunked")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.close_connection = True
+
+        def write(data: bytes) -> None:
+            self.wfile.write(f"{len(data):x}\r\n".encode() + data + b"\r\n")
+            self.wfile.flush()
+
+        try:
+            write(wav_header(STATE["engine"].sample_rate))
+            item = first
+            while item is not None and not isinstance(item, Exception):
+                write(item)
+                item = job.out.get()
+            self.wfile.write(b"0\r\n\r\n")
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            job.cancelled.set()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, required=True)
+    parser.add_argument("--engine", default=ChatterboxTurbo.id, choices=sorted(ENGINES))
+    parser.add_argument("--repo", required=True, help="the Hugging Face repository the Stack placed in the hub cache")
+    args = parser.parse_args()
+    threading.Thread(target=worker, args=(args.engine, args.repo), daemon=True).start()
+    server = ThreadingHTTPServer((args.host, args.port), Handler)
+    server.daemon_threads = True
+    server.serve_forever()
+
+
+if __name__ == "__main__":
+    main()

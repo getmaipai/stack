@@ -15,5 +15,10 @@ export const Voice = z.object({
   onDisk: z.boolean(),
   licence: z.string().nullable(),
   revision: z.string().min(1),
+  /** The engine that renders this voice (`pocket-tts`, `chatterbox-turbo`); Home's StackVoice reads it. */
+  engine: z.string().min(1).optional(),
+  /** The tts capability flag (VOICE-STUDIO-01): the tags this voice's engine renders as sounds, written by
+   * Home's composer into `reply.speech`. An engine with none gives an empty array. */
+  tts: z.object({ engine: z.string().min(1), tags: z.array(z.string()) }).strict().optional(),
 }).strict();
 export type Voice = z.infer<typeof Voice>;

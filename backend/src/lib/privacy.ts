@@ -62,7 +62,7 @@ export const PRIVACY_ROWS: PrivacyRow[] = [
   },
   {
     id: "tts-environment",
-    what: "Building a Python engine's environment (the packages Pocket TTS and ComfyUI run on)",
+    what: "Building a Python engine's environment (the packages the voice engines, Pocket TTS and the MLX voice, and ComfyUI run on)",
     when: "Only when Home installs the voice or image engine, and again when the Stack updates it",
     carries: "The names of the pinned packages and their hashes; uv, the tool that fetches them, comes from GitHub and sends nothing else",
     receiver: "The Python Package Index, straight from this computer, and GitHub for the uv build",

@@ -334,6 +334,57 @@ export const STACK_TTS_VOICE: CatalogModelLike = {
   },
 };
 
+// The second `tts` engine (VOICE-STUDIO-01): Chatterbox Turbo 350M through
+// the mlx-audio port, pinned as the mlx-community fp16 conversion at one
+// commit, every file by sha256 and size. Placed in the hub cache like
+// Pocket's files; the engine runs offline and reads them there. The
+// weights card says Apache-2.0 (the upstream ResembleAI card says MIT;
+// both permit this use); the mlx-audio code is MIT; the MLX port carries
+// no watermark code. The reference-clip tokenizer (S3TokenizerV2, 472 MB)
+// is not pinned: the default voice is the repository's own conditioning
+// file, and cloning waits for its slice. Measured 2026-10-17, M5 Max
+// 128 GB: first audio 0.45 s, real-time factor 0.27, 4.8 GB peak.
+const CHATTERBOX_REPO = "mlx-community/chatterbox-turbo-fp16";
+const CHATTERBOX_REVISION = "b2d0a13aa7cfff0a06d9acb247ae91c8f19a6d75";
+export const CHATTERBOX_ENGINE = "chatterbox-turbo";
+const CHATTERBOX_FILES: Array<{ file: string; sha256: string; bytes: number }> = [
+  { file: "config.json", sha256: "aacce8af47c9c930636e47da981339fe0d30e08623d19226aa9a43bd3425b736", bytes: 2_059 },
+  { file: "added_tokens.json", sha256: "72e4ab6acb0d9309ac3df4b526ae5fd80a2da5bc5ab7bb02d85096a374f69193", bytes: 418 },
+  { file: "merges.txt", sha256: "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5", bytes: 456_318 },
+  { file: "special_tokens_map.json", sha256: "92ba8063bf40aa163eadebbfe0de07c2aebe44cf0d4a9e8726580b0781fd2640", bytes: 470 },
+  { file: "tokenizer_config.json", sha256: "bca16a2ac1ddbd78b8d6228f0031884cc74b6ea54b967d6f6d2ebae9ccde23e6", bytes: 3_878 },
+  { file: "vocab.json", sha256: "f6bd25a65e4e63ca31360e9fb11c7e4f9a391a78385d640acd814092dd6eee4f", bytes: 999_186 },
+  { file: "conds.safetensors", sha256: "df9ad2c54848027d94cf01f9fc0ed22bc5d3165df6e6a85c903c1124b8a78a4a", bytes: 164_884 },
+];
+export const STACK_TTS_CHATTERBOX_MODEL: CatalogModelLike = {
+  id: "chatterbox-turbo-fp16",
+  role: "tts",
+  repo: CHATTERBOX_REPO,
+  license: "Apache-2.0",
+  revision: CHATTERBOX_REVISION,
+  engine: CHATTERBOX_ENGINE,
+  sizing: { profile: "p64", quantization: "fp16" },
+  download: {
+    url: hfUrl(`${CHATTERBOX_REPO}/resolve/${CHATTERBOX_REVISION}/model.safetensors`),
+    sha256: "9f70328a3f6c5257257aea76e9b14c34d8225745d133e4c1e83aa31f3f72a80b",
+    approx_bytes: 2_985_990_960,
+    hub_file: "model.safetensors",
+  },
+  // The post-warm peak of the MLX arrays (mx.get_peak_memory) on the Studio.
+  measured: { footprintBytes: 4_800_000_000, contextLength: 0, hardware: "Apple M5 Max, 128 GB unified memory" },
+};
+export const STACK_TTS_CHATTERBOX_PARTS: CatalogModelLike[] = CHATTERBOX_FILES.map((part) => ({
+  id: `chatterbox-turbo-fp16-${part.file.replace(/\.[^.]+$/, "").replace(/_/g, "-")}`,
+  role: "tts" as const,
+  component: `chatterbox-${part.file.replace(/\.[^.]+$/, "").replace(/_/g, "-")}`,
+  repo: CHATTERBOX_REPO,
+  license: "Apache-2.0",
+  revision: CHATTERBOX_REVISION,
+  engine: CHATTERBOX_ENGINE,
+  sizing: { profile: "p64", quantization: "n/a" },
+  download: { url: hfUrl(`${CHATTERBOX_REPO}/resolve/${CHATTERBOX_REVISION}/${part.file}`), sha256: part.sha256, approx_bytes: part.bytes, hub_file: part.file },
+}));
+
 // The `image` pin (STACK-13b): Stable Diffusion 1.5, the EMA-only
 // single-file checkpoint, the smallest mainstream file ComfyUI's plain
 // checkpoint loader takes, from the maintained mirror of the original
@@ -442,7 +493,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_IMAGE_MODEL, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

@@ -1540,6 +1540,33 @@
                           },
                           "reads_pictures": {
                             "type": "boolean"
+                          },
+                          "tts": {
+                            "type": "object",
+                            "properties": {
+                              "engine": {
+                                "type": "string"
+                              },
+                              "requested": {
+                                "type": "string"
+                              },
+                              "tags": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "fallback_reason": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "engine",
+                              "requested",
+                              "tags",
+                              "fallback_reason"
+                            ]
                           }
                         },
                         "required": [
@@ -6679,6 +6706,30 @@
                           "revision": {
                             "type": "string",
                             "minLength": 1
+                          },
+                          "engine": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "tts": {
+                            "type": "object",
+                            "properties": {
+                              "engine": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "tags": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "engine",
+                              "tags"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [

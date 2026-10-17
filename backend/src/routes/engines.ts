@@ -9,6 +9,7 @@ import type { AppEnv } from "@/types";
 import { detectHardware } from "@/lib/hardware";
 import { CHAT_ENGINES, ENGINE_BINARIES, ENGINE_READY_MARKER, engineRole, MANAGED_RUNTIMES, selectEngineBinary, type ChatEngine } from "@/lib/engineCatalog";
 import { ensurePocketTtsEnvironment, pocketTtsInstalled, pocketTtsRoot, POCKET_TTS_NAME } from "@/speech/pocketTts";
+import { ensureMlxAudioEnvironment, mlxAudioInstalled, mlxAudioRoot, MLX_AUDIO_NAME } from "@/speech/mlxAudio";
 import { comfyuiInstalled, comfyuiRoot, COMFYUI_NAME, ensureComfyuiEnvironment } from "@/generators/comfyui";
 import { engineDir, engineIsBound, ensureEngine, removeEngine } from "@/lib/engineInstall";
 import { readEngineManifest } from "@/lib/store/manifests";
@@ -66,9 +67,9 @@ enginesRoutes.openapi(listRoute, async (c) => {
   // on every platform, installed when the environment is built.
   const managed = MANAGED_RUNTIMES.map((runtime) => {
     const status = getRoleStatus(engineRole(runtime.name));
-    const installed = runtime.name === POCKET_TTS_NAME ? pocketTtsInstalled() : runtime.name === COMFYUI_NAME ? comfyuiInstalled() : false;
+    const installed = runtime.name === POCKET_TTS_NAME ? pocketTtsInstalled() : runtime.name === MLX_AUDIO_NAME ? mlxAudioInstalled() : runtime.name === COMFYUI_NAME ? comfyuiInstalled() : false;
     const version = deriveEngineVersionState({ running: status.identity?.build ?? null, currentTag: installed ? runtime.version : null, newestTag: runtime.version, needsRestart: false });
-    return { id: `${runtime.name}-${runtime.version}`, name: runtime.name, label: `${runtime.name} ${runtime.version}, an environment the Stack assembles through uv`, platform: process.platform, arch: process.arch, verified: true, installed, matchesThisMachine: true, ...version, directory: runtime.name === POCKET_TTS_NAME ? pocketTtsRoot() : runtime.name === COMFYUI_NAME ? comfyuiRoot() : "", roleState: status.state, roleReason: status.reason };
+    return { id: `${runtime.name}-${runtime.version}`, name: runtime.name, label: `${runtime.name} ${runtime.version}, an environment the Stack assembles through uv`, platform: process.platform, arch: process.arch, verified: true, installed, matchesThisMachine: true, ...version, directory: runtime.name === POCKET_TTS_NAME ? pocketTtsRoot() : runtime.name === MLX_AUDIO_NAME ? mlxAudioRoot() : runtime.name === COMFYUI_NAME ? comfyuiRoot() : "", roleState: status.state, roleReason: status.reason };
   });
   return c.json({ engines: [...pins, ...managed] }, 200);
 });
@@ -91,6 +92,22 @@ enginesRoutes.openapi(installRoute, async (c) => {
       .catch((error) => finishJob(job.id, { ok: false, reason: error instanceof Error ? error.message : String(error) }))
       .finally(() => { environmentJobs.delete(POCKET_TTS_NAME); });
     return c.json({ job: job.id, engine: POCKET_TTS_NAME, staged: false }, 202);
+  }
+  if (name === MLX_AUDIO_NAME) {
+    // Not a download but a build: uv (a pinned build, fetched first if
+    // missing), a managed Python, the hashed requirements synced. One
+    // build at a time: a second request joins the job in flight.
+    const inFlight = environmentJobs.get(MLX_AUDIO_NAME);
+    if (inFlight) return c.json({ job: inFlight, engine: MLX_AUDIO_NAME, staged: false }, 202);
+    const job = createJob({ kind: "engine.install", totalBytes: 0, status: "downloading", input: { engine: `${MLX_AUDIO_NAME}-env` } });
+    // The status is the phase (uv, python, packages): uv reports no byte
+    // counts the job could show.
+    environmentJobs.set(MLX_AUDIO_NAME, job.id);
+    void ensureMlxAudioEnvironment((phase) => updateJob(job.id, { status: `building ${phase}` }), { signal: jobSignal(job.id) })
+      .then(() => { finishJob(job.id, { ok: true, result: { engine: MLX_AUDIO_NAME } }); emit({ id: "engine.state", data: { engine: MLX_AUDIO_NAME, state: "installed" } }); })
+      .catch((error) => finishJob(job.id, { ok: false, reason: error instanceof Error ? error.message : String(error) }))
+      .finally(() => { environmentJobs.delete(MLX_AUDIO_NAME); });
+    return c.json({ job: job.id, engine: MLX_AUDIO_NAME, staged: false }, 202);
   }
   if (!ENGINE_BINARIES.some((candidate) => candidate.name === name)) return c.json({ error: `Unknown engine ${name}.` }, 404);
   if (name === COMFYUI_NAME && !staged) {

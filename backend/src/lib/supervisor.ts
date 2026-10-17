@@ -21,8 +21,11 @@ import { readFileSync } from "node:fs";
 // reads it there too, not only from a checkout.
 import bundledClipFile from "../speech/fixtures/clover-two-seconds.wav" with { type: "file" };
 import { TRANSCRIBE_PATH } from "@/speech/server";
-import { loadedWeightsRepo, pocketTtsCommand, pocketTtsEnv, pocketTtsInstalled, POCKET_TTS_ESTIMATED_FOOTPRINT, POCKET_TTS_VERSION } from "@/speech/pocketTts";
+import { loadedWeightsRepo, pocketTtsCommand, pocketTtsEnv, pocketTtsInstalled, POCKET_TTS_VERSION } from "@/speech/pocketTts";
 import { ensureCloningWeights, POCKET_TTS_PRESET_VOICES, voiceCloningOn } from "@/speech/voices";
+import { materializeServerScript, mlxAudioCommand, mlxAudioEnv, mlxAudioInstalled, MLX_AUDIO_VERSION } from "@/speech/mlxAudio";
+import { clearTtsEngineFailures, markTtsEngineFailed, resolveTtsEngine, TTS_ENGINE_SETTING, TTS_ENGINES, type TtsEngineChoice, type TtsEngineId } from "@/speech/ttsEngines";
+import { STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
 import { comfyuiCommand, comfyuiEnv, comfyuiInstalled, COMFYUI_VERSION, linkCheckpoint, probeGenerator } from "@/generators/comfyui";
 import { basename } from "node:path";
 import { getRunState, refreshMeasuredPeak, release, setGovernorPid, startGovernor, touch as touchGovernor, withdraw as withdrawAdmission, type GovernorHandle, type GovernorTier } from "@/lib/governor";
@@ -457,7 +460,42 @@ function engineForRole(role: RoleId): string | null {
   if (role === "vision") return "llama-server";
   if (CHAT_WIRE_ROLES.includes(role)) return chatEngine();
   if (role === "embed") return "llama-server";
+  // The voice role's records name the engine they are for; the engine in
+  // effect (the setting, the tier, what is installed) decides which.
+  if (role === "tts") return TTS_ENGINES[activeTtsChoice().engine].catalogEngine;
   return null;
+}
+
+// ---- the voice engine in effect (VOICE-STUDIO-01) ---------------------------
+
+/** Whether an engine can start here: its environment is built and every
+ * file it loads is a verified record on disk. */
+export function ttsEngineInstalled(id: TtsEngineId): boolean {
+  if (id === "pocket") return pocketTtsInstalled() && componentModel("tts", "tokenizer") !== null && componentModel("tts", "voice") !== null;
+  if (id === "chatterbox-turbo") {
+    if (!mlxAudioInstalled()) return false;
+    const have = new Set(listModels().filter((model) => model.roles.includes("tts") && isModelSelectable(model) && !!model.modelPath).map((model) => model.id));
+    return [STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS].every((pin) => have.has(pin.id));
+  }
+  return false;
+}
+
+/** Which voice engine answers: the setting (`auto` is the tier's
+ * default), then what is installed and what failed to start this run. */
+export function activeTtsChoice(): TtsEngineChoice {
+  return resolveTtsEngine({ setting: settingValues()[TTS_ENGINE_SETTING], tier: machineTier, installed: ttsEngineInstalled });
+}
+
+/** The engine a request is served by right now: the running process's
+ * when there is one (a setting change waits for the engine's restart),
+ * otherwise the one a start would choose. */
+export function ttsEngineInEffect(): TtsEngineId {
+  const running = runtime("tts").process;
+  if (running && !running.retired) {
+    if (running.engine === TTS_ENGINES["chatterbox-turbo"].catalogEngine) return "chatterbox-turbo";
+    if (running.engine === TTS_ENGINES.pocket.catalogEngine) return "pocket";
+  }
+  return activeTtsChoice().engine;
 }
 
 // The binary to launch: the `current` link's build; the machine pin's own
@@ -477,7 +515,7 @@ export function engineInstalledFor(role: RoleId): boolean {
   // A scripted engine stands in for an installed one, as it does at launch.
   if (testFactory) return true;
   if (SPEECH_ROLES.includes(role)) return componentModel(role, "vad") !== null;
-  if (role === "tts") return pocketTtsInstalled() && componentModel(role, "tokenizer") !== null && componentModel(role, "voice") !== null;
+  if (role === "tts") return ttsEngineInstalled(activeTtsChoice().engine);
   if (role === "image") return comfyuiInstalled();
   if (role === "vision") {
     const model = selectedModel(role);
@@ -823,6 +861,11 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
     linkCheckpoint(model.modelPath!);
     return { command: comfyuiCommand(port), engine: "comfyui", build: COMFYUI_VERSION, stdin: "ignore", contextLength: 0, kind: "managed", env: comfyuiEnv(), healthPath: "/system_stats" };
   }
+  if (role === "tts" && activeTtsChoice().engine === "chatterbox-turbo") {
+    if (!mlxAudioInstalled()) throw new EngineUnavailableError("The MLX voice environment is not built on this machine.");
+    const script = await materializeServerScript();
+    return { command: mlxAudioCommand(script, port, "chatterbox-turbo", TTS_ENGINES["chatterbox-turbo"].repo!), engine: "chatterbox-turbo", build: MLX_AUDIO_VERSION, stdin: "ignore", contextLength: 0, kind: "managed", env: mlxAudioEnv() };
+  }
   if (role === "tts") {
     if (!pocketTtsInstalled()) throw new EngineUnavailableError("The Pocket TTS environment is not built on this machine.");
     // Offline always; the token never travels (STACK-94d).
@@ -861,7 +904,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     const reason = SPEECH_ROLES.includes(role) ? `The ${role} voice activity detector is not installed.`
       : role === "image" ? "The ComfyUI environment is not built on this machine."
       : engineForRole(role) === "mlx-serve" ? "No installed mlx-serve build is available for this machine."
-      : role === "tts" ? (pocketTtsInstalled() ? "The tts tokenizer or default voice is not installed." : "The Pocket TTS environment is not built on this machine.")
+      : role === "tts" ? (activeTtsChoice().engine === "chatterbox-turbo" ? "The Chatterbox Turbo files are not all installed." : pocketTtsInstalled() ? "The tts tokenizer or default voice is not installed." : "The Pocket TTS environment is not built on this machine.")
       : "No installed llama-server build is available for this machine.";
     throw new EngineUnavailableError(reason);
   }
@@ -914,7 +957,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   const pinMeasured = measuredPeakFromPin(model);
   const request = {
     id: role, kind: JIT_ROLES.includes(role) ? "jit" as const : "resident" as const,
-    requestedBytes: managed && !generator ? (model.measuredFootprintBytes ?? POCKET_TTS_ESTIMATED_FOOTPRINT) : (model.sizeBytes ?? 0) + projectorBytes,
+    requestedBytes: managed && !generator ? (model.measuredFootprintBytes ?? TTS_ENGINES[activeTtsChoice().engine].estimatedFootprintBytes) : (model.sizeBytes ?? 0) + projectorBytes,
     modelFileBytes: managed && !generator ? null : (model.sizeBytes ?? 0) + projectorBytes || null,
     // A jit role's pin carries the whole-machine cost measured on a real
     // load (weights the engine maps are not in the process footprint),
@@ -922,7 +965,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     measuredPeakBytes: JIT_ROLES.includes(role) && pinMeasured !== null ? Math.max(pinMeasured, model.measuredFootprintBytes ?? 0) : model.measuredFootprintBytes,
     dryRunPeakBytes: dryRunPeakBytes === null ? null : dryRunPeakBytes + projectorBytes,
     headroomBytes: engineForRole(role) === "mlx-serve" && !managed && !generator && !SPEECH_ROLES.includes(role) ? mlxHeadroomBytes({ modelDir: model.modelPath!, contextTokens: contextLength }) : null,
-    engine: generator ? "comfyui" : managed ? "pocket-tts" : SPEECH_ROLES.includes(role) ? "sherpa-onnx-node" : engineForRole(role) === "mlx-serve" ? "mlx-serve" : "llama-server",
+    engine: generator ? "comfyui" : managed ? TTS_ENGINES[activeTtsChoice().engine].catalogEngine : SPEECH_ROLES.includes(role) ? "sherpa-onnx-node" : engineForRole(role) === "mlx-serve" ? "mlx-serve" : "llama-server",
     pinned: pinnedModels.has(model.id),
   };
   let timedOut = false;
@@ -974,7 +1017,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     // checkpoint file for ComfyUI; for Pocket TTS the weights the hub
     // cache holds, read after health and never assumed from the config).
     if (plan.kind === "managed") {
-      const model_ = GENERATOR_ROLES.includes(role) ? basename(model.modelPath!) : loadedWeightsRepo()?.repo ?? null;
+      const model_ = GENERATOR_ROLES.includes(role) ? basename(model.modelPath!) : plan.engine === "chatterbox-turbo" ? TTS_ENGINES["chatterbox-turbo"].repo : loadedWeightsRepo()?.repo ?? null;
       identity = { ...identity, build: `${plan.engine}-${plan.build}`, model: model_ };
     }
     // mlx-serve's /props carries no build_info or model_path: the build
@@ -996,7 +1039,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     runtime(role).status.postLoadCheck = check;
     resolveHealth(`engine.crashed.${role}`);
     resolveHealth(`post-load-check-failed.${role}`);
-    const loadedRevision = plan.kind === "managed" && !GENERATOR_ROLES.includes(role) ? loadedWeightsRepo()?.revision ?? null : null;
+    const loadedRevision = plan.kind === "managed" && !GENERATOR_ROLES.includes(role) ? (plan.engine === "chatterbox-turbo" ? model.revision : loadedWeightsRepo()?.revision) ?? null : null;
     const processRecord: RoleProcess = {
       role, kind: plan.kind, client, identity, engine: plan.engine, contextLength: plan.contextLength, slots: plan.slots, contextScope: plan.contextScope, modelId: model.id, modelRevision: loadedRevision ?? model.revision, imageInput: readsPictures, pictureTokensMax: readsPictures ? plan.pictureTokensMax ?? null : null, pid: handle.pid, port, activeRequests: 0, retired: false,
       governorHandle: admission,
@@ -1040,7 +1083,29 @@ async function startOne(role: RoleId, modelId?: string): Promise<RoleProcess> {
   if (testFactory) return testFactory(role, modelId);
   const bound = urlBindingFor(role);
   if (bound) return startUrlProcess(role, bound.url);
+  if (role === "tts") return startVoiceWithFallback(modelId);
   return startSpawnedProcess(role, modelId);
+}
+
+/** A voice engine other than Pocket TTS that cannot start (a crash, a
+ * memory refusal, a load that never finished) falls back to Pocket TTS
+ * for the rest of this run, with a warning that says why; a failed
+ * voice engine never fails the Stack or chat. A restart of the voice
+ * engine clears the memory and tries the chosen engine again. */
+async function startVoiceWithFallback(modelId?: string): Promise<RoleProcess> {
+  const choice = activeTtsChoice();
+  if (choice.engine === "pocket") return startSpawnedProcess("tts", modelId);
+  try {
+    const started = await startSpawnedProcess("tts", modelId);
+    resolveHealth("tts.engine-fallback");
+    return started;
+  } catch (error) {
+    if (stoppingAll) throw error;
+    const reason = error instanceof Error ? error.message : String(error);
+    markTtsEngineFailed(choice.engine, reason);
+    raise({ code: "tts.engine-fallback", severity: "warning", title: `${TTS_ENGINES[choice.engine].label} did not start; the voice is on Pocket TTS`, text: reason, cause: reason, fix: { label: "Restart engine", action: "restart_engine" } });
+    return startSpawnedProcess("tts");
+  }
 }
 
 /** The running process for a role, starting it under the generation
@@ -1221,6 +1286,7 @@ async function retire(processRecord: RoleProcess): Promise<void> {
 
 export async function restartRole(requested: RoleId): Promise<void> {
   const role = processRoleFor(requested);
+  if (role === "tts") clearTtsEngineFailures();
   const current = runtime(role);
   current.generation++;
   const previous = current.process;
@@ -1470,6 +1536,7 @@ export async function streamRole(requested: RoleId, path: string, body: Record<s
 
 export function resetSupervisorForTests(): void {
   stoppingAll = false;
+  clearTtsEngineFailures();
   for (const current of runtimes.values()) current.generation++;
   runtimes.clear();
   lastRoleStateLog.clear();
