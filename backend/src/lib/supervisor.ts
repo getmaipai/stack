@@ -40,6 +40,8 @@ import { MLX_PREFIX_CACHE_FLAG, mlxHeadroomBytes } from "@/lib/mlxMemory";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { ROLES, ROLE_IDS, type RoleId, type RoleState } from "@/roles";
 import { getMemoryReader } from "@/lib/memory";
+import { classifyCrash, type CrashVerdict } from "@/lib/crashClassifier";
+import { memoryLevel } from "@/lib/memoryState";
 import { hfHubRoot } from "@/lib/store/layout";
 import { engineSettingValues, gpuLayersFor, settingValues, type GpuLayers } from "@/settings";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
@@ -969,6 +971,89 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
   return { command: [binary, ...args], engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength, slots, contextScope: "per slot", kind: "spawned", imageInput: !!projector?.modelPath, pictureTokensMax };
 }
 
+// ---- unexpected exits (ROBUST-01) -----------------------------------------
+
+export interface EngineExit { exitCode: number | null; signal: string | null; stderrTail: string[]; ranMs: number; }
+export interface CrashReport extends EngineExit { role: RoleId; kind: EngineKind; engine: string | null; modelId: string | null; wasBusy: boolean; verdict: CrashVerdict; }
+let crashListener: ((report: CrashReport) => void) | null = null;
+/** The self-heal controller's hook: called once for every engine that
+ * exited without the Stack asking it to. */
+export function setCrashListener(listener: ((report: CrashReport) => void) | null): void { crashListener = listener; }
+
+/** An engine that exited on its own: the role goes offline, the Repairs
+ * item names the classified cause, the governor lets go of its memory,
+ * and the self-heal listener hears about it. A process the Stack retired
+ * (a stop, a restart, an unload) is not a crash and is ignored. */
+export function reportEngineExit(role: RoleId, processRecord: RoleProcess, exit: EngineExit, check?: PostLoadCheck | null): boolean {
+  const current = runtime(role);
+  if (processRecord.retired || current.process !== processRecord) return false;
+  const wasBusy = processRecord.activeRequests > 0;
+  current.process = null;
+  current.starting = null;
+  const verdict = classifyCrash({ exitCode: exit.exitCode, signal: exit.signal, stderrTail: exit.stderrTail, memoryLevel: memoryLevel() });
+  current.status = { kind: processRecord.kind, state: "offline", reason: "The spawned engine exited unexpectedly.", identity: processRecord.identity, postLoadCheck: check ?? current.status.postLoadCheck };
+  emit({ id: "engine.state", data: { engine: role, state: "offline", reason: "The spawned engine exited unexpectedly." } });
+  logger.appendLine(JSON.stringify({ event: "engine.exit", role, exitCode: exit.exitCode, signal: exit.signal, ranMs: exit.ranMs, cause: verdict.kind, memoryLevel: memoryLevel(), stderrTail: exit.stderrTail.slice(-20) }));
+  raise({ code: `engine.crashed.${role}`, severity: "error", title: `The ${role} engine crashed`, text: `${verdict.cause} ${verdict.fix}`, cause: verdict.cause, fix: { label: "Restart engine", action: "restart_engine" } });
+  processRecord.stopGovernor?.();
+  if (processRecord.governorHandle) release(processRecord.governorHandle);
+  if (crashListener && !stoppingAll) {
+    try { crashListener({ ...exit, role, kind: processRecord.kind, engine: processRecord.engine, modelId: processRecord.modelId, wasBusy, verdict }); } catch (error) { logger.appendLine(JSON.stringify({ event: "self-heal.error", role, error: (error as Error).message })); }
+  }
+  return true;
+}
+
+/** Roles with a process the Stack could start, that report offline and
+ * have nothing running or starting: the state a crash leaves when
+ * nothing asks the role for a request (Home pauses chat while it is
+ * offline, so no request ever restarts it). */
+export function offlineRolesWithoutProcess(): RoleId[] {
+  const found: RoleId[] = [];
+  for (const [role, current] of runtimes) {
+    if (current.status.state === "offline" && !current.process && !current.starting && !current.manuallyStopped && SPAWNABLE_ROLES.includes(role) && !urlBindingFor(role) && (testFactory !== null || (engineInstalledFor(role) && selectedModel(role) !== null))) found.push(role);
+  }
+  return found;
+}
+
+export function roleGeneration(role: RoleId): number { return runtime(processRoleFor(role)).generation; }
+export function roleHasProcess(role: RoleId): boolean { const current = runtime(processRoleFor(role)); return !!current.process || !!current.starting; }
+export function roleManuallyStopped(role: RoleId): boolean { return runtime(processRoleFor(role)).manuallyStopped; }
+export function isStoppingAll(): boolean { return stoppingAll; }
+
+/** The self-heal start: the role's process again, then proof it works.
+ * The start's own post-load check already sent one request; this adds the
+ * identity check and a second one-token request, so "ready" is claimed
+ * only for a role that answers as the model the Stack selected. */
+export async function healStart(requested: RoleId): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const role = processRoleFor(requested);
+  const current = runtime(role);
+  current.startFailureCount = 0;
+  current.retryAfter = 0;
+  try {
+    const started = await getProcess(role);
+    const identity = identityCheck(role);
+    const wire = ROLES[role].wire;
+    let failure: string | null = identity.ok ? null : identity.reason ?? "The restarted engine did not report the selected model.";
+    if (!failure) {
+      const probe = wire === "speech" ? await probeSpeech(started.client) : wire === "job" ? null : await started.client.request(probeRequest(role).path, probeRequest(role).body);
+      if (probe && !probeReplyOk(role, probe)) failure = "The restarted engine did not answer a one-token check.";
+    }
+    if (failure) {
+      // Never leave a process the check refused standing as "ready".
+      if (current.process === started) {
+        current.process = null;
+        current.status = { ...current.status, state: "offline", reason: failure };
+        emitRoleState(role, "offline", failure);
+        void retire(started);
+      }
+      return { ok: false, reason: failure };
+    }
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, reason: error instanceof EngineUnavailableError ? error.reason : (error as Error).message };
+  }
+}
+
 async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<RoleProcess> {
   if (!SPAWNABLE_ROLES.includes(role)) throw new EngineUnavailableError(`No engine can be started for ${role} on this machine yet.`);
   const model = modelId ? selectableModel(role, modelId) : selectedModel(role);
@@ -1119,17 +1204,12 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
       stopGovernor: watchProcessMemory(role, handle.pid, keepsFootprint ? { modelId: model.id, contextLength } : undefined),
       stop: async () => { handle.kill(); await handle.exited; },
     };
-    void handle.exited.then(() => {
-      const current = runtime(role);
-      if (!processRecord.retired && current.process === processRecord) {
-        current.process = null;
-        current.starting = null;
-        current.status = { kind: plan.kind, state: "offline", reason: "The spawned engine exited unexpectedly.", identity, postLoadCheck: check };
-        emit({ id: "engine.state", data: { engine: role, state: "offline", reason: "The spawned engine exited unexpectedly." } });
-        raise({ code: `engine.crashed.${role}`, severity: "error", title: `The ${role} engine crashed`, text: "The spawned engine exited unexpectedly.", cause: "The engine process exited.", fix: { label: "Restart engine", action: "restart_engine" } });
-        processRecord.stopGovernor?.();
-        if (processRecord.governorHandle) release(processRecord.governorHandle);
-      }
+    const spawnedAt = Date.now();
+    void handle.exited.then(async (exitCode) => {
+      // The last stderr lines say why it died (the memory manager's kill
+      // leaves none); read with a short bound so a held pipe never stalls the report.
+      const tail = await Promise.race([stderrText, new Promise<string>((resolve) => setTimeout(() => resolve(""), 500))]).catch(() => "");
+      reportEngineExit(role, processRecord, { exitCode: typeof exitCode === "number" ? exitCode : null, signal: handle.signalCode ?? null, stderrTail: tail.trim().split("\n").filter(Boolean).slice(-20), ranMs: Date.now() - spawnedAt }, check);
     });
     return processRecord;
   } catch (error) {
@@ -1416,7 +1496,18 @@ export async function restartForNewChatEngine(): Promise<boolean> {
   return true;
 }
 
+/** Called when a person or a setting restarts a role by hand: the
+ * self-heal controller forgets its failures and any retry it had pending. */
+let restartListener: ((role: RoleId) => void) | null = null;
+export function setRestartListener(listener: ((role: RoleId) => void) | null): void { restartListener = listener; }
+
 export async function restartRole(requested: RoleId): Promise<void> {
+  restartListener?.(processRoleFor(requested));
+  await recycleRole(requested);
+}
+
+/** Retires the role's process and leaves the next start to the caller, without telling the self-heal controller a person did it (a canary's restart request counts toward the breaker). */
+export async function recycleRole(requested: RoleId): Promise<void> {
   const role = processRoleFor(requested);
   if (role === "tts") clearTtsEngineFailures();
   if (role === "chat") clearChatEngineFailures();

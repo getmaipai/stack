@@ -23,6 +23,8 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Added
 
+- Self-heal (ROBUST-01): an engine that exits on its own is restarted by the Stack (2 s, 10 s, 30 s, 2 min; 5 failures in 30 minutes stops it and leaves the Repairs item with the last 20 log lines), after an identity check and a one-token request, never during an install, an update, a graphics job or low memory. The crash item names the cause in plain words (out of memory, killed by the system, missing file, port in use, bad config). `GET /stack/v1/engines/self-heal` reports crashes per day and restart events; setting `stack.runtime.self_heal`. <!-- prose-lint: allow -->
+
 - Video clips are made messaging-ready: the stored mp4 carries a silent AAC track and a title (picture copied untouched), and
   `GET /v1/videos/generations/{job}/messages.mp4` and the stateless `POST /v1/videos/messages` prepare any clip for a text message (H.264
   yuv420p, 1280 pixel edge, 20 MB cap). Uses the ffmpeg bundled with the video environment (VIDEOSHARE-01).

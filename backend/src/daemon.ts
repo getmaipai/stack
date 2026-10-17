@@ -16,6 +16,7 @@ import { reconcilePinDeclarations } from "@/lib/modelStore";
 import { pullMissingDeclaredParts } from "@/lib/installJobs";
 import { ensureChatEngineAssets } from "@/lib/chatEngineAssets";
 import { STACK_MODELS } from "@/lib/modelCatalog";
+import { startSelfHeal } from "@/lib/selfHeal";
 import { ddgsSupervisor } from "@/search/ddgsSidecar";
 import { imageTools, sweepImageToolsTmp } from "@/imagetools/imageTools";
 import { videoGen } from "@/video/videoGen";
@@ -69,6 +70,8 @@ async function serve(): Promise<void> {
   void warmUp("daemon-start").catch(() => {});
   // The DuckDuckGo search service Home's web search uses: built, started and restarted here; it never fails the Stack.
   ddgsSupervisor.start();
+  // An engine that stops on its own is restarted here (ROBUST-01); the first look at startup finds a role that is offline with no process.
+  const stopSelfHeal = startSelfHeal();
   // Pictures an earlier crash left in the image tools' temporary folder are removed; the worker itself starts on the first edit.
   sweepImageToolsTmp();
   // The memory watchdog (2026-10-17): samples the whole computer every 5 s, gates generative starts on real free memory, and acts on pressure.
@@ -93,6 +96,7 @@ async function serve(): Promise<void> {
     beginStopping();
     stopMemoryWatchdog();
     clearInterval(idle);
+    stopSelfHeal();
     // The watchdog keeps beating through the drain: a stop that takes
     // longer than WatchdogSec must not be mistaken for a hang.
     await ddgsSupervisor.stop().catch(() => {});

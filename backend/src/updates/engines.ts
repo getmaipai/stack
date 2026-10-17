@@ -13,6 +13,7 @@ import { currentEngineTag, ensureEngine } from "@/lib/engineInstall";
 import type { EngineBinaryPin } from "@/lib/engineCatalog";
 import { warmUp } from "@/lib/warmup";
 import { chatEngine, getProcess, restartRole, stopRole } from "@/lib/supervisor";
+import { holdSelfHeal } from "@/lib/selfHeal";
 import { pendingEngineUpdate } from "@/updates/catalog";
 
 export function resolveEnginePin(tag: string): string { return tag.match(/b\d+/)?.[0] ?? tag; }
@@ -30,6 +31,8 @@ export async function swapEngine(name: string, tag: string, options: EngineSwapO
   const current = engineCurrentPath(name);
   const previous = currentEngineTag(name);
   if (previous && previous !== tag) rememberPrevious(name, previous);
+  // A swap is a deliberate stop and start; the crash restarter waits it out.
+  const endHold = holdSelfHeal(`The ${name} update`);
   try {
     await options.drain?.();
     mkdirSync(resolve(current, ".."), { recursive: true, mode: 0o700 });
@@ -45,7 +48,7 @@ export async function swapEngine(name: string, tag: string, options: EngineSwapO
     }
     if (options.emitEvents !== false) failedSwap(error instanceof Error ? error.message : String(error), name);
     throw error;
-  }
+  } finally { endHold(); }
 }
 export async function rollbackEngine(name: string, tag: string): Promise<void> { await swapEngine(name, tag); }
 /** The tag the `current` link names; one read, defined with the store. */

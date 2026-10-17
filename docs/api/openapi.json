@@ -3509,6 +3509,32 @@
                               "estimated"
                             ]
                           },
+                          "pending_install": {
+                            "type": "object",
+                            "nullable": true,
+                            "properties": {
+                              "job": {
+                                "type": "string"
+                              },
+                              "model": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "purpose": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "percent": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "job",
+                              "model",
+                              "purpose",
+                              "percent"
+                            ]
+                          },
                           "check": {
                             "type": "object",
                             "properties": {
@@ -3653,6 +3679,7 @@
                           "id",
                           "state",
                           "reason",
+                          "pending_install",
                           "check",
                           "identity"
                         ]
@@ -3661,6 +3688,125 @@
                   },
                   "required": [
                     "roles"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/engines/self-heal": {
+      "get": {
+        "tags": [
+          "Engines"
+        ],
+        "summary": "Engine crashes and the Stack's own restarts",
+        "description": "Crashes per day, the recent crash, restart and gave-up events (each with a stable id so a caller notifies once), the roles whose retries stopped, and the roles being restarted now.",
+        "responses": {
+          "200": {
+            "description": "The record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "crashesByDay": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "day": {
+                            "type": "string"
+                          },
+                          "crashes": {
+                            "type": "number"
+                          },
+                          "healed": {
+                            "type": "number"
+                          },
+                          "gaveUp": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "day",
+                          "crashes",
+                          "healed",
+                          "gaveUp"
+                        ]
+                      }
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "crashed",
+                              "healed",
+                              "gave_up"
+                            ]
+                          },
+                          "at": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string"
+                          },
+                          "cause": {
+                            "type": "string"
+                          },
+                          "causeKind": {
+                            "type": "string"
+                          },
+                          "seconds": {
+                            "type": "number"
+                          },
+                          "crashedAt": {
+                            "type": "string"
+                          },
+                          "attempts": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "at",
+                          "role",
+                          "cause",
+                          "causeKind"
+                        ]
+                      }
+                    },
+                    "stopped": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "healing": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "crashesByDay",
+                    "events",
+                    "stopped",
+                    "healing"
                   ]
                 }
               }

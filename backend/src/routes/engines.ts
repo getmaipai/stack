@@ -22,6 +22,7 @@ import { chatEngine, getProcess, getRoleStatus, restartForNewChatEngine, restart
 import { readSettings } from "@/settings";
 import { createJob, finishJob, getJob, jobSignal, updateJob } from "@/lib/jobs";
 import { emit } from "@/lib/events";
+import { selfHealSummary } from "@/lib/selfHeal";
 
 const EngineSchema = z.object({
   id: z.string(), name: z.string(), label: z.string(), platform: z.string(), arch: z.string(), verified: z.boolean(),
@@ -46,6 +47,9 @@ export const enginesRoutes = apiRouter<AppEnv>();
 /** The environment build in flight per engine, so two installs never
  * race on one venv and one engine's build never answers for another. */
 const environmentJobs = new Map<string, string>();
+const HealEventSchema = z.object({ id: z.string(), kind: z.enum(["crashed", "healed", "gave_up"]), at: z.string(), role: z.string(), cause: z.string(), causeKind: z.string(), seconds: z.number().optional(), crashedAt: z.string().optional(), attempts: z.number().optional() });
+const selfHealRoute = createRoute({ method: "get", path: "/self-heal", tags: ["Engines"], summary: "Engine crashes and the Stack's own restarts", description: "Crashes per day, the recent crash, restart and gave-up events (each with a stable id so a caller notifies once), the roles whose retries stopped, and the roles being restarted now.", responses: { 200: { content: { "application/json": { schema: z.object({ enabled: z.boolean(), crashesByDay: z.array(z.object({ day: z.string(), crashes: z.number(), healed: z.number(), gaveUp: z.number() })), events: z.array(HealEventSchema), stopped: z.array(z.string()), healing: z.array(z.string()) }) } }, description: "The record." } } });
+enginesRoutes.openapi(selfHealRoute, (c) => c.json(selfHealSummary(), 200));
 enginesRoutes.openapi(listRoute, async (c) => {
   const hardware = await detectHardware();
   const needsRestart = readSettings().some((setting) => (setting.key.startsWith("stack.engines.llama_server.") || setting.key === "stack.engines.chat.engine") && setting.pending !== null);
