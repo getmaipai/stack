@@ -19,6 +19,10 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Added
 
+- Image tools (IMAGETOOLS-01): `POST /v1/images/edits` removes a background (Apple's on-device foreground finder on a Mac, IS-Net ONNX elsewhere),
+  erases an object under a mask (Big-LaMa), upscales 2x or 4x (Real-ESRGAN general x4v3) and resizes, on a picture the person already has. One
+  on-demand worker in a managed Python environment (onnxruntime, no torch) that exits when idle; three pinned ONNX models (389 MB) in the install
+  plan; `GET /stack/v1/image-tools` reports state, models and limits. Output is a fresh PNG with no metadata.
 - The Stack builds, starts and restarts the DuckDuckGo web search service Home's search uses (STACK-DDGS-01): a managed Python 3.12
   environment (pinned `ddgs==9.16.0`, hashed requirements) and a loopback sidecar, supervised with a growing pause between restarts.
   `GET /stack/v1/search` returns its address and state; a failed build or a service that keeps stopping is a `search.ddgs` health

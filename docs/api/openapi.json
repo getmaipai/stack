@@ -1273,6 +1273,321 @@
         }
       }
     },
+    "/v1/images/edits": {
+      "post": {
+        "tags": [
+          "Roles"
+        ],
+        "summary": "Image edits: remove background, erase, upscale, resize (the job API with a wait)",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "mask": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "operation": {
+                    "type": "string",
+                    "enum": [
+                      "remove_background",
+                      "erase",
+                      "upscale",
+                      "resize"
+                    ],
+                    "description": "remove_background (a transparent PNG), erase (needs `mask`: white is removed), upscale (`scale` 2 or 4), resize (`width` and/or `height`, or `factor`)."
+                  },
+                  "scale": {
+                    "type": "integer",
+                    "nullable": true
+                  },
+                  "width": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true
+                  },
+                  "height": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true
+                  },
+                  "factor": {
+                    "type": "number",
+                    "minimum": 0,
+                    "exclusiveMinimum": true
+                  },
+                  "engine": {
+                    "type": "string",
+                    "enum": [
+                      "auto",
+                      "vision",
+                      "isnet"
+                    ],
+                    "description": "remove_background only: auto uses Apple's on-device finder when this Mac has it, else the ONNX model."
+                  },
+                  "timeout_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true
+                  }
+                },
+                "required": [
+                  "image",
+                  "operation"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "`data` holds one `{ b64_json, width, height, content_type, operation, engine, model, ms }`: a PNG with no metadata.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "job",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Still running past timeout_ms; fetch the PNG from GET /v1/images/edits/{job} when /stack/v1/jobs/{job} says done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "nullable": true
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "job",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The form is incomplete.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The picture is bigger than the tool takes; `error` says the limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request cannot be done (an empty mask, no subject found, a bad scale); `error` says what to change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The tool failed on this picture.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The tools or a model file are not installed, or there is no free memory; `error` says what to do.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/images/edits/{job}": {
+      "get": {
+        "tags": [
+          "Roles"
+        ],
+        "summary": "The PNG a finished edit produced (kept in memory for a few minutes)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The edited picture.",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such result (it expired or was never made).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/roles": {
       "get": {
         "tags": [
@@ -6137,6 +6452,88 @@
                   },
                   "required": [
                     "ddgs"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/image-tools": {
+      "get": {
+        "tags": [
+          "Image tools"
+        ],
+        "summary": "The image tools' state, models and limits",
+        "responses": {
+          "200": {
+            "description": "Additive. Home enables Remove background, Erase and Upscale from this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "image_tools": {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "unsupported",
+                            "needs-setup",
+                            "building",
+                            "idle",
+                            "running"
+                          ],
+                          "description": "needs-setup: nothing is running; the first edit builds the environment (first time only) and starts the worker, which stops by itself when idle."
+                        },
+                        "phase": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "vision": {
+                          "type": "boolean",
+                          "description": "True once Apple's on-device foreground finder helper is built; background removal then uses it first."
+                        },
+                        "models": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "boolean"
+                          },
+                          "description": "isnet, lama and esrgan: whether each pinned model file is installed and verified."
+                        },
+                        "limits": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "number"
+                          },
+                          "description": "Megapixels each tool accepts."
+                        },
+                        "operations": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "reason": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "phase",
+                        "vision",
+                        "models",
+                        "limits",
+                        "operations",
+                        "reason"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "image_tools"
                   ]
                 }
               }

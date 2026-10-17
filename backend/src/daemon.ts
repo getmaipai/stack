@@ -15,6 +15,7 @@ import { migrateLegacyEngineTags } from "@/lib/engineInstall";
 import { reconcilePinDeclarations } from "@/lib/modelStore";
 import { STACK_MODELS } from "@/lib/modelCatalog";
 import { ddgsSupervisor } from "@/search/ddgsSidecar";
+import { imageTools, sweepImageToolsTmp } from "@/imagetools/imageTools";
 import { execFileSync } from "node:child_process";
 import { readMetalCapBytes } from "@/lib/metalCap";
 import { setMetalCapBytes, getGovernorStatus } from "@/lib/governor";
@@ -53,6 +54,8 @@ async function serve(): Promise<void> {
   void warmUp("daemon-start").catch(() => {});
   // The DuckDuckGo search service Home's web search uses: built, started and restarted here; it never fails the Stack.
   ddgsSupervisor.start();
+  // Pictures an earlier crash left in the image tools' temporary folder are removed; the worker itself starts on the first edit.
+  sweepImageToolsTmp();
   const idle = setInterval(() => {
     const values = settingValues();
     void unloadIdleRoles({ onBattery: onBattery(), idleMinutes: Number(values["stack.runtime.idle_unload_minutes"] ?? 30), batteryIdleMinutes: Number(values["stack.runtime.idle_unload_on_battery_minutes"] ?? 10), keep: keepWarmEnabled() ? warmedRoles() : [] }).catch(() => {});
@@ -67,6 +70,7 @@ async function serve(): Promise<void> {
     // The watchdog keeps beating through the drain: a stop that takes
     // longer than WatchdogSec must not be mistaken for a hang.
     await ddgsSupervisor.stop().catch(() => {});
+    imageTools.stop();
     await stopAllRoles("The Stack is stopping.");
     stopTierWatch();
     stopWatchdog();

@@ -24,6 +24,8 @@ import { voicesRoutes } from "@/routes/voices";
 import { fitPlanRoutes } from "@/routes/fitPlan";
 import { warmupRoutes } from "@/routes/warmup";
 import { searchRoutes } from "@/routes/search";
+import { imageToolsRoutes } from "@/routes/imageTools";
+import { registerImageToolJobs } from "@/imagetools/jobs";
 import { speechRoutes, websocket } from "@/routes/speech";
 import { registerGenerators } from "@/generators";
 import { SESSION_PATH } from "@/speech/server";
@@ -40,6 +42,7 @@ export const app = apiRouter<AppEnv>();
 // The generator runners exist from the first request; a role with no
 // engine still answers the honest 503 through the route's bound check.
 registerGenerators();
+registerImageToolJobs();
 
 const livenessRoute = createRoute({
   method: "get", path: "/healthz", tags: ["Health"], summary: "Stack process liveness",
@@ -67,6 +70,7 @@ app.route("/stack/v1/install-plan", installPlanRoutes);
 app.route("/stack/v1/fit-plan", fitPlanRoutes);
 app.route("/stack/v1/warmup", warmupRoutes);
 app.route("/stack/v1/search", searchRoutes);
+app.route("/stack/v1/image-tools", imageToolsRoutes);
 app.route("/stack/v1/settings", settingsRoutes);
 app.route("/stack/v1", declarationRoutes);
 app.route("/stack/v1/voices", voicesRoutes);

@@ -405,6 +405,32 @@ export const STACK_IMAGE_MODEL: CatalogModelLike = {
   },
 };
 
+// IMAGETOOLS-01: the three small ONNX models behind the image tools,
+// pinned by revision and sha256 and placed in the hub cache like every
+// `hub_file` pin. They are components of the `image` role (never selected
+// as the image generator) for the `image-tools` runtime. Benchmarked on
+// the Studio (M5 Max, CPU provider, 2026-10-17): IS-Net 0.8 s and 3.2 GB
+// peak per picture, LaMa 2 to 4 s and 1.9 GB, Real-ESRGAN general x4v3
+// 2.7 s for 1024 to 4096 and 1.4 GB. Licences: IS-Net general use is
+// Apache-2.0 upstream (DIS) and MIT on the imgly ONNX card; LaMa
+// (big-lama) is Apache-2.0; Real-ESRGAN is BSD-3-Clause. The ONNX files
+// are third-party conversions of those weights; the sha256 pins which
+// bytes are accepted.
+const IMAGE_TOOL_ENGINE = "image-tools";
+function imageToolPin(id: string, component: string, repo: string, revision: string, file: string, license: string, sha256: string, bytes: number, peak: number): CatalogModelLike {
+  return {
+    id, role: "image", component, repo, license, revision, engine: IMAGE_TOOL_ENGINE,
+    sizing: { profile: "p16", quantization: "fp32" },
+    download: { url: hfUrl(`${repo}/resolve/${revision}/${file}`), sha256, approx_bytes: bytes, hub_file: file },
+    measured: { footprintBytes: peak, contextLength: 0, hardware: "Apple M5 Max, 128 GB unified memory" },
+  };
+}
+export const STACK_IMAGE_TOOL_MODELS: CatalogModelLike[] = [
+  imageToolPin("image-tool-isnet-general", "tool-isnet-general", "imgly/isnet-general-onnx", "440dea96dd4a3b06bbbf5abec3e26569dd7ec49f", "onnx/model.onnx", "MIT", "cc2c9f5c1751b9737cb81e708ff0c5e9542c2205daed22418a4fd2ab5d4c481a", 176_149_806, 3_400_000_000),
+  imageToolPin("image-tool-lama-big", "tool-lama", "Carve/LaMa-ONNX", "c3c0c9e468934d62e79c329e35d82dd09ff8c444", "lama_fp32.onnx", "Apache-2.0", "1faef5301d78db7dda502fe59966957ec4b79dd64e16f03ed96913c7a4eb68d6", 208_044_816, 2_000_000_000),
+  imageToolPin("image-tool-realesrgan-general-x4v3", "tool-realesrgan", "Heliosoph/realesrgan-onnx", "488e5dda07333179f229a6205d92135eea4c25e9", "realesr-general-x4v3.onnx", "BSD-3-Clause", "09b757accd747d7e423c1d352b3e8f23e77cc5742d04bae958d4eb8082b76fa4", 4_871_181, 1_500_000_000),
+];
+
 // Nomic's official GGUF conversion, pinned to the Hub revision whose
 // Q4_K_M file matches the household's existing embedding model.
 export const STACK_EMBED_MODEL: CatalogModelLike = {
@@ -493,7 +519,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

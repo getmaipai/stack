@@ -245,6 +245,7 @@ Engines per platform:
 | `comfyui-v0.36.0-linux-arm64` | v0.36.0 | linux arm64 | pinned, not yet verified (the engine's source; its environment is the row below) |
 | `comfyui-v0.36.0-linux-x64` | v0.36.0 | linux x64 | pinned, not yet verified (the engine's source; its environment is the row below) |
 | `comfyui` | v0.36.0 | macOS 14 or later on arm64 (torch 2.13 ships macOS 14 wheels only; a hashed requirements file per platform, the source archive is the same on every platform) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
+| `image-tools` | 1.0.0 | macOS 14 or later on arm64 (onnxruntime, numpy, pillow, opencv; no torch; remove background, erase, upscale and resize on a picture the person has; the Linux file lands with the robot's first image run) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
@@ -252,6 +253,8 @@ Engines per platform:
 | p32 | not available |  |  |  |  |  |  |  | not available |
 | p64 | on demand | `sd-1-5-emaonly` | fp32 | 3.97 GB | not measured | not measured | CreativeML-OpenRAIL-M | stable-diffusion-v1-5/stable-diffusion-v1-5 @ 451f4fe16113bff5a5d2269ed5ad43b0592e9a14 | pinned |
 | p128 | on demand | `sd-1-5-emaonly` | fp32 | 3.97 GB | not measured | not measured | CreativeML-OpenRAIL-M | stable-diffusion-v1-5/stable-diffusion-v1-5 @ 451f4fe16113bff5a5d2269ed5ad43b0592e9a14 | pinned |
+
+Installed beside the model, never selected on its own: `image-tool-isnet-general` (tool-isnet-general, 0.16 GB, MIT, imgly/isnet-general-onnx @ 440dea96dd4a3b06bbbf5abec3e26569dd7ec49f); `image-tool-lama-big` (tool-lama, 0.19 GB, Apache-2.0, Carve/LaMa-ONNX @ c3c0c9e468934d62e79c329e35d82dd09ff8c444); `image-tool-realesrgan-general-x4v3` (tool-realesrgan, 4.6 MB, BSD-3-Clause, Heliosoph/realesrgan-onnx @ 488e5dda07333179f229a6205d92135eea4c25e9).
 
 ## video (Video)
 

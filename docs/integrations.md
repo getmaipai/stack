@@ -318,3 +318,15 @@ signature against the Catalog's release key waits on that key existing
 
 Go never talks to the Stack. It talks to Home (or to Bot when Home is
 unreachable), which owns identity and renders the UI schema.
+
+## Image tools (IMAGETOOLS-01)
+
+`POST /v1/images/edits` (multipart: `image`, `operation` = `remove_background` | `erase` | `upscale` | `resize`; `mask` for erase, white is
+removed; `scale` 2 or 4; `width`, `height` or `factor`; `engine` = `auto` | `vision` | `isnet`; `timeout_ms`) answers like
+`/v1/images/generations`: 200 `{ created, job, data: [{ b64_json, width, height, content_type, operation, engine, model, ms }] }`, or 202 with the
+job id when it runs past `timeout_ms`; `GET /v1/images/edits/{job}` returns the PNG (kept in memory about 10 minutes). Refusals carry `error` (what
+happened, what to do) and `code`: 413 `too_large`, 422 `mask_required` `mask_empty` `mask_too_big` `no_subject` `bad_scale`, 503 `model_missing`
+`no_memory` `setup_failed` `unsupported`, 500 `failed`. Limits in megapixels: remove background and erase 25 in, upscale 6 in and 36 out, resize 36 out.
+`GET /stack/v1/image-tools` returns `{ image_tools: { state, phase, vision, models: { isnet, lama, esrgan }, limits, operations, reason } }`.
+The worker is one Python process that starts on the first edit and exits after about two minutes idle; it holds a pinned 4 GB governor admission
+while it lives. Pictures, masks and results are never logged or written beyond the request. Design: Home `docs/design/image-tools-2026-10-17.md`.

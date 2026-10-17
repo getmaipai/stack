@@ -14,6 +14,8 @@ import { DownloadVerificationError } from "@/lib/download";
 import { POCKET_TTS_GATED_REPO } from "@/speech/pocketTts";
 import { ensureCloningWeights, prepareVoice, voiceNeedsCloning, VoiceRefusedError } from "@/speech/voices";
 import { hasJobRunner, submitJob, waitForJob } from "@/lib/jobs";
+import { IMAGE_TOOLS_OPERATIONS, stashInput, takeResult } from "@/imagetools/imageTools";
+import type { ImageEditResult } from "@/imagetools/jobs";
 import { RoleRequest } from "@maipai/spec/stack/ts/role-request.js";
 import { RoleReplyHeaders } from "@maipai/spec/stack/ts/role-reply-headers.js";
 import { TokenCountRequest, TokenCountResponse } from "@maipai/spec/stack/ts/token-count.js";
@@ -228,3 +230,59 @@ async function ensureCloningLoaded(role: RoleId, signal: AbortSignal): Promise<v
   }
 }
 v1Routes.openapi(imagesRoute, (c) => reply(c, "job", c.req.valid("json")) as never);
+
+// IMAGETOOLS-01: edits on a picture the person already has (additive). The
+// job API with a wait, like /images/generations; the picture and mask ride
+// as files in the form, never in the job record.
+const MAX_UPLOAD_BYTES = 40 * 1024 * 1024;
+const ImageEditFormSchema = z.object({
+  image: z.custom<File>((value) => value instanceof File, "The picture in the `image` field.").openapi({ type: "string", format: "binary" }),
+  mask: z.custom<File>((value) => value instanceof File, "The mask in the `mask` field.").openapi({ type: "string", format: "binary" }).optional(),
+  operation: z.enum(IMAGE_TOOLS_OPERATIONS).openapi({ description: "remove_background (a transparent PNG), erase (needs `mask`: white is removed), upscale (`scale` 2 or 4), resize (`width` and/or `height`, or `factor`)." }),
+  scale: z.coerce.number().int().optional(),
+  width: z.coerce.number().int().positive().optional(),
+  height: z.coerce.number().int().positive().optional(),
+  factor: z.coerce.number().positive().optional(),
+  engine: z.enum(["auto", "vision", "isnet"]).optional().openapi({ description: "remove_background only: auto uses Apple's on-device finder when this Mac has it, else the ONNX model." }),
+  timeout_ms: z.coerce.number().int().positive().optional(),
+});
+const ImageEditResponseSchema = z.object({ created: z.number().int(), job: z.string(), data: z.array(z.record(z.string(), z.unknown())) });
+const ImageEditErrorSchema = z.object({ error: z.string(), code: z.string().optional(), job: z.string().optional() });
+const imageEditsRoute = createRoute({ method: "post", path: "/images/edits", tags: ["Roles"], summary: "Image edits: remove background, erase, upscale, resize (the job API with a wait)", request: { body: { content: { "multipart/form-data": { schema: ImageEditFormSchema } } } }, responses: {
+  200: { content: { "application/json": { schema: ImageEditResponseSchema } }, description: "`data` holds one `{ b64_json, width, height, content_type, operation, engine, model, ms }`: a PNG with no metadata." },
+  202: { content: { "application/json": { schema: ImageEditResponseSchema } }, description: "Still running past timeout_ms; fetch the PNG from GET /v1/images/edits/{job} when /stack/v1/jobs/{job} says done." },
+  400: { content: { "application/json": { schema: ImageEditErrorSchema } }, description: "The form is incomplete." },
+  413: { content: { "application/json": { schema: ImageEditErrorSchema } }, description: "The picture is bigger than the tool takes; `error` says the limit." },
+  422: { content: { "application/json": { schema: ImageEditErrorSchema } }, description: "The request cannot be done (an empty mask, no subject found, a bad scale); `error` says what to change." },
+  500: { content: { "application/json": { schema: ImageEditErrorSchema } }, description: "The tool failed on this picture." },
+  503: { content: { "application/json": { schema: ImageEditErrorSchema } }, description: "The tools or a model file are not installed, or there is no free memory; `error` says what to do." },
+} });
+const imageEditResultRoute = createRoute({ method: "get", path: "/images/edits/{job}", tags: ["Roles"], summary: "The PNG a finished edit produced (kept in memory for a few minutes)", request: { params: z.object({ job: z.string() }) }, responses: { 200: { content: { "image/png": { schema: z.string().openapi({ format: "binary" }) } }, description: "The edited picture." }, 404: { content: { "application/json": { schema: ImageEditErrorSchema } }, description: "No such result (it expired or was never made)." } } });
+
+v1Routes.openapi(imageEditsRoute, async (c) => {
+  const form = c.req.valid("form");
+  if (form.image.size === 0 || form.image.size > MAX_UPLOAD_BYTES) return jsonReply(c, { error: `The picture must be between 1 byte and ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.`, code: "too_large" }, 413, identityHeaders(null)) as never;
+  if (form.mask && form.mask.size > MAX_UPLOAD_BYTES) return jsonReply(c, { error: "The mask is too big.", code: "too_large" }, 413, identityHeaders(null)) as never;
+  if (!hasJobRunner("image_edit")) return jsonReply(c, { error: "The image tools are not available on this machine.", code: "unsupported" }, 503, identityHeaders(null)) as never;
+  const token = crypto.randomUUID();
+  const params: Record<string, unknown> = { ...(form.scale !== undefined ? { scale: form.scale } : {}), ...(form.width !== undefined ? { width: form.width } : {}), ...(form.height !== undefined ? { height: form.height } : {}), ...(form.factor !== undefined ? { factor: form.factor } : {}), ...(form.engine ? { engine: form.engine } : {}) };
+  stashInput(token, { operation: form.operation, image: new Uint8Array(await form.image.arrayBuffer()), ...(form.mask ? { mask: new Uint8Array(await form.mask.arrayBuffer()) } : {}), params });
+  const submitted = submitJob({ kind: "image_edit", role: "image", input: { operation: form.operation, params, token } });
+  if ("refused" in submitted) return jsonReply(c, { error: submitted.reason, code: "unsupported" }, 503, identityHeaders(null)) as never;
+  const timeoutMs = typeof form.timeout_ms === "number" ? form.timeout_ms : DEFAULT_RENDER_WAIT_MS;
+  const settled = await waitForJob(submitted.job.id, timeoutMs);
+  const created = Math.floor(new Date(submitted.job.createdAt).getTime() / 1000);
+  if (!settled || settled.state === "queued" || settled.state === "running") return jsonReply(c, { created, job: submitted.job.id, data: [] }, 202, identityHeaders(null)) as never;
+  if (settled.state === "cancelled") return jsonReply(c, { error: "The edit was cancelled.", code: "cancelled", job: settled.id }, 499, identityHeaders(null)) as never;
+  if (settled.state !== "done") return jsonReply(c, { error: settled.reason ?? "The edit failed.", code: "failed", job: settled.id }, 500, identityHeaders(null)) as never;
+  const outcome = settled.result as ImageEditResult | null;
+  if (outcome?.rejected) return jsonReply(c, { error: outcome.rejected.message, code: outcome.rejected.code, job: settled.id }, outcome.rejected.status, identityHeaders(null)) as never;
+  const kept = takeResult(settled.id);
+  if (!kept) return jsonReply(c, { error: "The result is no longer held; run the edit again.", code: "expired", job: settled.id }, 500, identityHeaders(null)) as never;
+  return jsonReply(c, { created, job: settled.id, data: [{ b64_json: Buffer.from(kept.png).toString("base64"), width: kept.width, height: kept.height, content_type: "image/png", operation: kept.operation, engine: kept.engine, model: kept.model, ms: kept.ms }] }, 200, identityHeaders(null)) as never;
+});
+v1Routes.openapi(imageEditResultRoute, (c) => {
+  const kept = takeResult(c.req.valid("param").job);
+  if (!kept) return jsonReply(c, { error: "No such result: it expired after a few minutes or was never made. Run the edit again.", code: "expired" }, 404, identityHeaders(null)) as never;
+  return new Response(kept.png, { status: 200, headers: { "content-type": "image/png", "cache-control": "no-store" } }) as never;
+});

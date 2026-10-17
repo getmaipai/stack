@@ -15,3 +15,8 @@ declare module "*.py" {
   const path: string;
   export default path;
 }
+
+declare module "*.swift" {
+  const path: string;
+  export default path;
+}

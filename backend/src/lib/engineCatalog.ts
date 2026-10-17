@@ -262,6 +262,7 @@ export const MANAGED_RUNTIMES: ManagedRuntime[] = [
   { name: "pocket-tts", version: "3.1.0", roles: ["tts"], platforms: "macOS 14 or later on arm64 (torch 2.13 ships macOS 14 wheels only; a hashed requirements file per platform, the Linux files land with the first Linux tts run)" },
   { name: "mlx-audio", version: "0.5.9", roles: ["tts"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the Stack's second voice engine, Chatterbox Turbo, VOICE-STUDIO-01; no Linux file)" },
   { name: "comfyui", version: "v0.36.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (torch 2.13 ships macOS 14 wheels only; a hashed requirements file per platform, the source archive is the same on every platform)" },
+  { name: "image-tools", version: "1.0.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (onnxruntime, numpy, pillow, opencv; no torch; remove background, erase, upscale and resize on a picture the person has; the Linux file lands with the robot's first image run)" },
 ];
 
 export const ENGINE_READY_MARKER = ".engine-ready";

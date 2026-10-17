@@ -4,7 +4,7 @@
 // pins. Pure: the route supplies the hardware and the installed set.
 import { PROFILE_MODEL_BINDINGS, sizeMachine, type ProfileTier } from "@/profiles";
 import type { HardwareInfo, MemorySource } from "@/lib/hardware";
-import { STACK_CHAT_MODEL, STACK_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
+import { STACK_CHAT_MODEL, STACK_IMAGE_TOOL_MODELS, STACK_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
 import { tierDefaultTtsEngine } from "@/speech/ttsEngines";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import type { RoleId } from "@/roles";
@@ -86,6 +86,9 @@ export function buildInstallPlan(hw: HardwareInfo, options: { vramOverrideGb?: n
     // the fallback (VOICE-STUDIO-01): only where the tier runs it by default.
     if (role === "tts" && tierDefaultTtsEngine(tier.id) === "chatterbox-turbo") { add(STACK_TTS_CHATTERBOX_MODEL); for (const part of STACK_TTS_CHATTERBOX_PARTS) add(part); }
   }
+  // The image tools (remove background, erase, upscale; about 390 MB, one worker that loads on demand) are small enough for every tier
+  // that has a plan; the governor decides at the first edit whether memory allows it (IMAGETOOLS-01).
+  for (const pin of STACK_IMAGE_TOOL_MODELS) add(pin);
   const models = planned.flatMap(({ pin, starter }) => view(pin, installed, starter) ?? []);
   const total = models.reduce((sum, model) => sum + model.approx_bytes, 0);
   const remaining = models.filter((model) => !model.installed).reduce((sum, model) => sum + model.approx_bytes, 0);
