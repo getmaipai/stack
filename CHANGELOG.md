@@ -27,6 +27,12 @@ with Home's releases, so this file tracks what a Home release picks up.
   for that one thing (the picture's hash, or the style), checked on arrival and again when the job starts. New `household_photo` source for video and picture
   references, `likeness_subject` on both LoRA libraries, `PUT /stack/v1/likeness/trust`. A starting picture or edit now has to say where it came from.
 
+- Chat on oMLX (ENGINE-MLX-01): on Apple silicon at p64 and p128 (macOS 15 or later) chat now runs on oMLX 0.7.0 with the MLX build of Muse Glimmer 30B:
+  23 percent faster generation (32.5 against 26.1 tokens/s), 36 to 42 percent faster prompt processing, 2 GB less memory, level on tool calls and reasoning
+  (Home's `docs/design/chat-engine-comparison-2026-10-17.md`). `stack.engines.chat.engine` is `auto` by default (`omlx`, `llama-server` and `mlx-serve` still
+  name an engine); the environment (hashed requirements) and the pinned MLX model (11 files, sha256 each) are fetched in the background at start and chat moves
+  over once both are verified; llama-server stays installed and takes over if oMLX fails to start twice (`chat.engine-fallback`). Rollback: set the engine to
+  `llama-server`. The prompt cache lives on disk under the engine's state folder and is emptied at every launch.
 - Picture generation (IMGGEN-STACK-01 and 02, IMGGEN-EDIT-01, IMGGEN-LORA-01): FLUX.2 Klein 4B and Z-Image-Turbo on mflux in an on-demand worker, `POST /v1/images/generations` with LoRAs, image to image, n up to 4, progress, cancel and a result store, the `edit` and `edit_masked` operations on `/v1/images/edits`, the LoRA library with install by Hugging Face link, `GET /stack/v1/image`, `POST /stack/v1/image/install`.
 
 - Video generation (VIDEO-GEN-01 to 03): `POST /v1/videos/generations` makes a 5 s, 832 x 480, 24 fps clip (text to video, or picture to video) with

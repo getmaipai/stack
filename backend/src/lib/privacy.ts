@@ -27,7 +27,7 @@ export const PRIVACY_ROWS: PrivacyRow[] = [
   {
     id: "downloads",
     what: "Downloading a model, an engine build or a LoRA",
-    when: "Only when Home installs one or applies an update, or when an adult adds a LoRA by a Hugging Face link",
+    when: "Only when Home installs one or applies an update, when an adult adds a LoRA by a Hugging Face link, or, on a Mac whose chat engine is oMLX by default (Apple silicon, 64 GB or more) with the chat engine setting on automatic or oMLX, once in the background at start to fetch the pinned MLX build of the chat model (ENGINE-MLX-01; set the engine to llama-server and nothing is fetched)",
     carries: "The name of the pinned file (for a LoRA added by link, the address the adult pasted, and one request for the repository's licence and tags)",
     receiver: "Hugging Face or the mirror declared in stack.updates.model_host for models, and GitHub for engine archives, straight from this computer",
     setting: null,
@@ -62,9 +62,9 @@ export const PRIVACY_ROWS: PrivacyRow[] = [
   },
   {
     id: "tts-environment",
-    what: "Building a Python engine's environment (the packages the voice engines, Pocket TTS and the MLX voice, ComfyUI, the web search service, the image tools, the picture generator and the video engine run on)",
-    when: "Only when the Stack starts and the search service is not built yet, when Home installs the voice or image engine, on the first image edit (remove background, erase, upscale), when Home installs the video engine or the first clip is made, when Home installs the picture generator, and again when the Stack updates it",
-    carries: "The names of the pinned packages and their hashes; uv, the tool that fetches them, comes from GitHub and sends nothing else. The video engine's source (mlx-video, pinned by commit and checksum) comes from GitHub the same way",
+    what: "Building a Python engine's environment (the packages the voice engines, Pocket TTS and the MLX voice, ComfyUI, the web search service, the image tools, the picture generator, the video engine and the oMLX chat engine run on)",
+    when: "Only when the Stack starts and the search service is not built yet, when Home installs the voice or image engine, on the first image edit (remove background, erase, upscale), when Home installs the video engine or the first clip is made, when Home installs the picture generator, in the background at start on a Mac whose chat engine is oMLX by default and has no environment yet (ENGINE-MLX-01), and again when the Stack updates it",
+    carries: "The names of the pinned packages and their hashes; uv, the tool that fetches them, comes from GitHub and sends nothing else. The video engine's source (mlx-video, pinned by commit and checksum) and the oMLX release wheel (pinned by checksum) come from GitHub the same way",
     receiver: "The Python Package Index, straight from this computer, and GitHub for the uv build",
     setting: null,
     hosts: ["pypi.org", "files.pythonhosted.org", "github.com", "docs.astral.sh"],

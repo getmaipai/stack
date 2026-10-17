@@ -114,6 +114,53 @@ export const STACK_CHAT_MUSE_30B_M_MODEL: CatalogModelLike = {
   sampling: MUSE_30B_SAMPLING,
 };
 
+// ENGINE-MLX-01: the same Muse Glimmer 30B as an MLX 4-bit directory, for
+// the oMLX chat engine (docs/design/chat-engine-comparison-2026-10-17.md in
+// Home). mlx-community's conversion of meta-models/Muse-Glimmer-30B (the
+// vision tower is inside the weights, so there is no projector file),
+// affine 4-bit, group size 64, 19.44 GB. Every file is pinned by path,
+// size and sha256 at one repository revision; the sha256 of the four
+// weight shards are the repository's git-lfs oids, the rest were hashed
+// from the download. Measured on the Studio (M5 Max, 128 GB, 2026-10-17):
+// 19.4 GB resident idle, 19.9 GB after a 16,410-token prompt; the 22 GB
+// figure adds the 128k-token context's key and value cache (13 global
+// layers, 2 key-value heads, 128 wide, bf16: about 1.7 GB). The GGUF pins
+// stay installed beside it as the fallback. Sampling is the GGUF record's
+// (the card's); the reasoning strength is sent with each request.
+const MUSE_30B_MLX_REPO = "mlx-community/Muse-Glimmer-30B-4bit";
+const MUSE_30B_MLX_REVISION = "3e7677d7a40d348a3daba263a2b1c0aa41910710";
+export const STACK_CHAT_MUSE_30B_MLX_MODEL: CatalogModelLike = {
+  id: "muse-glimmer-30b-mlx-4bit",
+  role: "chat",
+  repo: MUSE_30B_MLX_REPO,
+  license: "Apache-2.0",
+  revision: MUSE_30B_MLX_REVISION,
+  engine: "omlx",
+  sizing: { profile: "p64", quantization: "MLX 4-bit (affine, group 64)" },
+  download: {
+    url: hfUrl(`${MUSE_30B_MLX_REPO}/resolve/${MUSE_30B_MLX_REVISION}/model-00001-of-00004.safetensors`),
+    sha256: "72c99dc670867308f70aab212331e4dd0e19d46bf409a134da1848b9dbe47c91",
+    approx_bytes: 19_443_246_692,
+    directory: "Muse-Glimmer-30B-4bit",
+    files: [
+      { path: "config.json", sha256: "c7f48468db2ef9c3de4cb912be24ecc9fbed36d83f3b8386a0b224ee7ba876ca", bytes: 6_796 },
+      { path: "generation_config.json", sha256: "b0e427c998641420eb4091cc85d4e15643fb57f89222834a14ec76430625b6fb", bytes: 148 },
+      { path: "chat_template.jinja", sha256: "114f55ebdc1804c1af371197b9fdf2d6bb925966c9dfe46b73782a71bc07965e", bytes: 7_167 },
+      { path: "model-00001-of-00004.safetensors", sha256: "72c99dc670867308f70aab212331e4dd0e19d46bf409a134da1848b9dbe47c91", bytes: 5_310_085_129 },
+      { path: "model-00002-of-00004.safetensors", sha256: "f2af4b82d578cee5eeeef3f0d3f139eae3adfc2fc2a27b52ec2ac5886e131cf4", bytes: 5_366_299_665 },
+      { path: "model-00003-of-00004.safetensors", sha256: "2892bb7971d20a7ecfd84a51404e0ae1f0863580562ccef58fdf444da25bc5a2", bytes: 5_343_216_475 },
+      { path: "model-00004-of-00004.safetensors", sha256: "6496c62ac6a229be31c784835c43077224e80750182c2693e29c08ddae455a31", bytes: 3_395_202_844 },
+      { path: "model.safetensors.index.json", sha256: "10e1f963a4dc827c303594d988c6d44711171eaa70eeb3e810c2ce321d4c0323", bytes: 218_191 },
+      { path: "processor_config.json", sha256: "cfa67148d85e40281b4a126253a1476a63b11137e21cb2422b7ccff46a11c1af", bytes: 395 },
+      { path: "tokenizer.json", sha256: "c9dbee66967b58f31a7c27f723c3760da3526ccd0427578e8905b0abb0031c4d", bytes: 28_129_897 },
+      { path: "tokenizer_config.json", sha256: "b2c352bba1d2ee25295aa84e7bdaa15a2b0305b79009926bcea72516ca200d42", bytes: 79_985 },
+    ],
+  },
+  launch: { chatTemplateKwargs: { reasoning_strength: "low" }, readsPictures: true },
+  sampling: MUSE_30B_SAMPLING,
+  measured: { footprintBytes: 22_000_000_000, contextLength: 131_072, hardware: "Apple M5 Max, 128 GB unified memory" },
+};
+
 // The household's background worker pin, exposed as Stack's distinct
 // judge role on machines with a known p16-or-larger profile.
 export const STACK_JUDGE_MODEL: CatalogModelLike = {
@@ -612,7 +659,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a
@@ -620,7 +667,6 @@ export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B
 export interface RoleCandidate { name: string; kind: "engine" | "model"; source: string; }
 export const ROLE_CANDIDATES: Partial<Record<string, RoleCandidate[]>> = {
   chat: [
-    { name: "oMLX", kind: "engine", source: "the named alternative the Studio bench can call for: dev.md, The second chat engine; STACK-14" },
   ],
   stt: [
     { name: "Whisper tiny.en or base.en on the same runtime, the named alternative", kind: "model", source: "dev.md, The speech roles" },

@@ -9,7 +9,7 @@ import { raise, resolve as resolveHealth } from "@/lib/health";
 import { getModel, installCatalogModel, isModelSelectable, reconcilePinDeclarations, type CatalogModelLike, type DownloadModelOptions } from "@/lib/modelStore";
 import { STACK_MODELS } from "@/lib/modelCatalog";
 import { modelsDir } from "@/lib/paths";
-import { restartForNewProjector } from "@/lib/supervisor";
+import { restartForNewChatEngine, restartForNewProjector } from "@/lib/supervisor";
 import { warmUp } from "@/lib/warmup";
 import type { RoleId } from "@/roles";
 
@@ -34,6 +34,8 @@ export function startModelInstall(model: Pin, role: RoleId, download?: DownloadM
       if (installed.engineRequirements.component === "projector") {
         try { reconcilePinDeclarations(STACK_MODELS); await restartForNewProjector(); } catch { /* a restart that fails leaves chat serving; the next start loads it */ }
       }
+      // An oMLX model that finishes installing moves an idle llama-server chat onto it once its environment is built too (ENGINE-MLX-01).
+      if (installed.engineRequirements.engine === "omlx") await restartForNewChatEngine().catch(() => false);
       await warmUp("model-install").catch(() => {});
     })
     .catch((error) => { finishJob(job.id, { ok: false, reason: error instanceof Error ? error.message : String(error) }); })

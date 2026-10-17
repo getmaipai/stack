@@ -105,7 +105,7 @@ export interface CatalogModelLike {
    * the chat-template variables the record pins (llama-server's
    * --chat-template-kwargs, STACK-MUSE-01: Muse Glimmer's reasoning
    * strength). A request's own chat_template_kwargs win key by key. */
-  launch?: { contextLength?: number; imageMaxTokens?: number; chatTemplateKwargs?: Record<string, string> };
+  launch?: { contextLength?: number; imageMaxTokens?: number; chatTemplateKwargs?: Record<string, string>; readsPictures?: boolean };
   /** Sampling defaults from the model's own card, with the source named;
    * a request's own values win. */
   sampling?: { temperature?: number; top_p?: number; top_k?: number; presence_penalty?: number; source: string };

@@ -37,7 +37,7 @@ OpenAI-shaped, so an existing client library works unchanged.
 | Path | Roles | Wire |
 |---|---|---|
 | `POST /v1/chat/completions` | `chat`, `coding`, `judge`, `router`, `vision` | chat completions; `stream: true` passes the engine's SSE bytes through unchanged including `[DONE]`; `tools`, `tool_choice`, `response_format` and `chat_template_kwargs` pass through |
-| `POST /v1/tokenize` | `chat`, `coding`, `judge`, `router`, `vision` | the engine's own token count, `{ count }`: send `messages` (with `tools` and `chat_template_kwargs` when the turn carries them, rendered with the engine's chat template, no generation prompt, then tokenized) or a raw `content` string, exactly one; an image part counts as the template's media marker only, not the image's own tokens; an engine with no token-count route is a 501 that says so, never an estimate |
+| `POST /v1/tokenize` | `chat`, `coding`, `judge`, `router`, `vision` | the engine's own token count, `{ count }`: send `messages` (with `tools` and `chat_template_kwargs` when the turn carries them, rendered with the engine's chat template, no generation prompt, then tokenized) or a raw `content` string, exactly one; an image part counts as the template's media marker only, not the image's own tokens; an engine with no token-count route is a 501 that says so, never an estimate (oMLX has none; the Stack asks it for one token and reads its own prompt size, which is exact) |
 | `POST /v1/embeddings` | `embed` | embeddings |
 | `POST /v1/audio/transcriptions` | `stt` | transcription (multipart audio) |
 | `POST /v1/audio/speech` | `tts` | speech; phrase-level streaming and cancel |
@@ -57,7 +57,7 @@ unchanged.
 
 | Header | Value |
 |---|---|
-| `x-maipai-engine` | the engine host and build that answered (`local b10797-832fd6f17`), or `none` |
+| `x-maipai-engine` | the engine host and build that answered (`local b10797-832fd6f17`, or `local omlx-0.7.0` when chat runs on oMLX), or `none` |
 | `x-maipai-model` | the model file that answered (`Qwen3-1.7B-Q8_0.gguf`), or `none` |
 | `x-maipai-revision` | the model's pinned revision (`90862c4b…`) when the process knows its model record, the engine build otherwise, or `none` |
 
@@ -195,6 +195,7 @@ Keys as declared today, all under `stack.`: `memory.model_budget_bytes`,
 `memory.sustained_polls`; `updates.enabled`, `updates.model_host`;
 `runtime.idle_unload_minutes`, `runtime.idle_unload_on_battery_minutes`,
 `runtime.download_cap_mbps`, `runtime.port`;
+`engines.chat.engine` (`auto`, the default, `omlx`, `llama-server` or `mlx-serve`: which engine answers the chat wire after a restart; `auto` is oMLX on Apple silicon at p64 and p128 once it and its model are installed, llama-server otherwise, and llama-server again if oMLX fails to start twice; ENGINE-MLX-01);
 `engines.llama_server.context_length`, `.slots`, `.threads`,
 `.cache_ram_mb`, `.flash_attention`; per llama-server role (`chat`, `embed`,
 `vision`) `engines.<role>.gpu_layers` (`all` or `0`, where the model runs);
@@ -212,11 +213,11 @@ own. The rows the Stack declares:
 | What | When it happens | What it carries | Who receives it | Setting |
 |---|---|---|---|---|
 | Checking for engine and model updates | Only when Home has switched update checks on, then when Home's schedule calls the check | A `GET` with `If-None-Match` and `User-Agent: maipai-stack/<version> (<os>-<arch>)`, no query string or identifier | The Catalog's signed index on GitHub | `stack.updates.enabled` |
-| Downloading a model or an engine build | Only when Home installs one or applies an update | The name of the pinned file | Hugging Face or the mirror declared in `stack.updates.model_host`, and GitHub for engine archives, straight from this computer | none: an explicit action |
+| Downloading a model or an engine build | Only when Home installs one or applies an update, or on a Mac whose chat engine is oMLX by default (Apple silicon, 64 GB or more) with `stack.engines.chat.engine` on `auto` or `omlx`: once in the background at start, for the pinned MLX build of the chat model (ENGINE-MLX-01) | The name of the pinned file | Hugging Face or the mirror declared in `stack.updates.model_host`, and GitHub for engine archives, straight from this computer | `stack.engines.chat.engine` for the background fetch (set it to `llama-server` and nothing is fetched); otherwise none: an explicit action |
 | Downloading pinned wakeword assets for a robot | Only when Home asks the Stack to install one through a model download job | The pinned asset filename; no household or person data | GitHub releases for openWakeWord and MaiPai Bot, straight from this computer | none: an explicit action |
 | Reading a model's provenance before install | Only when Home asks to install a model by repository | The repository name, then its immutable revision and file list | Hugging Face or the declared mirror | none: an explicit action |
 | The first part of a model file's header, or a model repository's file list and configuration file, read to size it before download | Only when a person asks whether a model will fit, before any download | The model file's address or repository name and revision; its file list and configuration file; nothing about the household or any person | Hugging Face (`huggingface.co`), with content redirected to `us.aws.cdn.hf.co` | none: an explicit action |
-| Building a Python engine's environment (the packages the voice engines, Pocket TTS and the MLX voice, and ComfyUI run on) | Only when Home installs the voice or image engine, and again when the Stack updates it | The names of the pinned packages and their hashes; uv, the tool that fetches them, comes from GitHub and sends nothing else | The Python Package Index, straight from this computer, and GitHub for the uv build | none: an explicit action |
+| Building a Python engine's environment (the packages the voice engines, Pocket TTS and the MLX voice, ComfyUI and the oMLX chat engine run on) | Only when Home installs the voice or image engine, in the background at start on a Mac whose chat engine is oMLX by default and has no environment yet (ENGINE-MLX-01), and again when the Stack updates it | The names of the pinned packages and their hashes; uv, the tool that fetches them, comes from GitHub and sends nothing else | The Python Package Index, straight from this computer, and GitHub for the uv build and the oMLX release wheel | none: an explicit action |
 | The voice engine asking Hugging Face for its weights and voices | Each time the voice engine starts (it asks for the voice-cloning weights, and reads the pinned copy on this computer when the ask is refused without a token), and when a person picks a voice the computer does not hold yet | The file's name, and the Hugging Face token from settings when one is set, so the cloning weights can be read | Hugging Face, straight from this computer | `stack.engines.tts.hf_token` |
 
 Nothing else leaves the machine. Adding or changing an outbound

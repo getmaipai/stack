@@ -25,6 +25,9 @@ import { TRANSCRIBE_PATH } from "@/speech/server";
 import { loadedWeightsRepo, pocketTtsCommand, pocketTtsEnv, pocketTtsInstalled, POCKET_TTS_VERSION } from "@/speech/pocketTts";
 import { ensureCloningWeights, POCKET_TTS_PRESET_VOICES, voiceCloningOn } from "@/speech/voices";
 import { materializeServerScript, mlxAudioCommand, mlxAudioEnv, mlxAudioInstalled, MLX_AUDIO_VERSION } from "@/speech/mlxAudio";
+import { newLaunchKey, omlxCommand, omlxEnv, omlxInstalled, omlxSupportedHere, OMLX_VERSION, prepareModelFolder, resetState as resetOmlxState } from "@/chat/omlx";
+import { OmlxEngineClient } from "@/chat/omlxClient";
+import { CHAT_ENGINE_SETTING, clearChatEngineFailures, FALLBACK_AFTER_FAILURES, markChatEngineFailed, resolveChatEngine, type ChatEngineChoice, type ChatEngineId } from "@/lib/chatEngines";
 import { clearTtsEngineFailures, markTtsEngineFailed, resolveTtsEngine, TTS_ENGINE_SETTING, TTS_ENGINES, type TtsEngineChoice, type TtsEngineId } from "@/speech/ttsEngines";
 import { STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
 import { comfyuiCommand, comfyuiEnv, comfyuiInstalled, COMFYUI_VERSION, linkCheckpoint, probeGenerator } from "@/generators/comfyui";
@@ -451,19 +454,44 @@ function engineInstalled(name: ChatEngine = "llama-server"): boolean {
   return !!pin && existsSync(join(engineDir(pin), ENGINE_READY_MARKER));
 }
 
-/** The chat wire's engine, from the setting (STACK-93): llama-server
- * unless the person chose mlx-serve; the embed role stays on
- * llama-server, whose embeddings wire the MLX engine does not serve
- * for the pinned models. */
-export function chatEngine(): ChatEngine {
-  const chosen = settingValues()["stack.engines.chat.engine"];
-  return chosen === "mlx-serve" ? "mlx-serve" : "llama-server";
+/** Whether a verified oMLX model record is on disk. */
+function omlxModelInstalled(): boolean {
+  return listModels().some((model) => model.roles.includes("chat") && model.engineRequirements.engine === "omlx" && isModelSelectable(model) && !!model.modelPath);
+}
+function chatEngineInstalled(id: ChatEngineId): boolean {
+  return id === "omlx" ? omlxInstalled() && omlxModelInstalled() : engineInstalled(id);
+}
+/** What the choice checks: oMLX falls back to llama-server until it and its model are installed; an explicit mlx-serve is honoured as before (its start says what is missing). */
+function chatEngineAvailableForChoice(id: ChatEngineId): boolean {
+  return id === "omlx" ? chatEngineInstalled("omlx") : true;
+}
+
+/** Which chat engine a start would choose: the setting (`auto` is the
+ * tier's default), then what is installed, then what failed to start
+ * this run (ENGINE-MLX-01). */
+export function activeChatChoice(): ChatEngineChoice {
+  return resolveChatEngine({
+    setting: settingValues()[CHAT_ENGINE_SETTING],
+    tier: machineTier,
+    installed: chatEngineAvailableForChoice,
+    unsupported: (id) => id === "omlx" ? omlxSupportedHere().reason : null,
+  });
+}
+
+/** The chat wire's engine the settings and the machine choose
+ * (STACK-93, ENGINE-MLX-01): the engine the next start runs. A running
+ * process keeps its own engine until it restarts (`runningEngine`). */
+export function chatEngine(): ChatEngineId {
+  return activeChatChoice().engine;
 }
 function engineForRole(role: RoleId): string | null {
   // The vision projector is a llama-server feature (mtmd); the MLX
   // engine choice for chat never moves it.
   if (role === "vision") return "llama-server";
-  if (CHAT_WIRE_ROLES.includes(role)) return chatEngine();
+  // A chat-wire role with a process of its own (the judge on the tiers that
+  // bind a 4B model to it) runs on llama-server whatever engine chat uses:
+  // the MLX pin is chat's model, not the judge's.
+  if (CHAT_WIRE_ROLES.includes(role)) return processRoleFor(role) === "chat" ? chatEngine() : "llama-server";
   if (role === "embed") return "llama-server";
   // The voice role's records name the engine they are for; the engine in
   // effect (the setting, the tier, what is installed) decides which.
@@ -528,7 +556,8 @@ export function engineInstalledFor(role: RoleId): boolean {
     const model = selectedModel(role);
     return !!model && projectorFor(model) !== null && engineInstalled("llama-server");
   }
-  return engineInstalled(engineForRole(role) === "mlx-serve" ? "mlx-serve" : "llama-server");
+  const engine = engineForRole(role);
+  return engine === "omlx" ? chatEngineInstalled("omlx") : engineInstalled(engine === "mlx-serve" ? "mlx-serve" : "llama-server");
 }
 
 function initialStatus(role: RoleId): RoleStatus {
@@ -719,7 +748,7 @@ export function speechWorkerCommand(
   return [runtime.execPath, ...(viaBun ? [runtime.main] : []), ...workerArgs];
 }
 
-export interface LaunchPlan { command: string[]; engine: string; build: string; stdin: "pipe" | "ignore"; contextLength: number; slots?: number; contextScope?: "total across slots" | "per slot"; kind: "spawned" | "managed"; env?: Record<string, string>; healthPath?: string; /** A projector was loaded: the process reads pictures. */ imageInput?: boolean; /** The most tokens one picture takes in this process, when the record declares it. */ pictureTokensMax?: number | null; }
+export interface LaunchPlan { command: string[]; engine: string; build: string; stdin: "pipe" | "ignore"; contextLength: number; slots?: number; contextScope?: "total across slots" | "per slot"; kind: "spawned" | "managed"; env?: Record<string, string>; healthPath?: string; /** A client of the engine's own (oMLX's wire differs a little from llama-server's). */ client?: (baseUrl: string) => EngineClient; /** What the engine cannot report about itself: the Stack knows both. */ identity?: { build: string; model: string }; /** A projector was loaded: the process reads pictures. */ imageInput?: boolean; /** The most tokens one picture takes in this process, when the record declares it. */ pictureTokensMax?: number | null; }
 
 /** The refusal text when the fit plan cannot admit the minimum context:
  * what went wrong in the person's terms, then the next step (org STYLE.md,
@@ -823,6 +852,24 @@ function declaredPictureTokensMax(model: ModelRecord): number | null {
   return typeof launch?.imageMaxTokens === "number" && launch.imageMaxTokens > 0 ? launch.imageMaxTokens : null;
 }
 
+/** The context an oMLX chat process serves: the Stack's context setting when it names one, else the model's own maximum (the engine allocates cache as a conversation grows, so the maximum costs nothing until used). */
+function omlxContextLength(model: ModelRecord, config: Record<string, number | boolean | string | string[]>): number {
+  const configured = config.context_length ?? config.contextLength;
+  if (typeof configured === "number" && configured > 0) return configured;
+  try {
+    const parsed = JSON.parse(readFileSync(join(model.modelPath!, "config.json"), "utf8")) as { max_position_embeddings?: unknown; text_config?: { max_position_embeddings?: unknown } };
+    const declared = parsed.text_config?.max_position_embeddings ?? parsed.max_position_embeddings;
+    if (typeof declared === "number" && declared > 0) return Math.min(declared, 262_144);
+  } catch { /* an unreadable config: the conservative default */ }
+  return 32_768;
+}
+
+/** Whether a record's launch says its weights read pictures themselves (an MLX build carries the vision tower; llama-server loads a projector file instead). */
+function declaredReadsPictures(model: ModelRecord): boolean {
+  const launch = model.engineRequirements.launch as { readsPictures?: unknown } | undefined;
+  return launch?.readsPictures === true;
+}
+
 /** A resident role about to start yields nothing: every loaded `jit`
  * role is unloaded first, so the resident's context is sized against
  * the residents alone and is never shrunk by a picture model (rule 4). */
@@ -882,7 +929,25 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
   const config = { contextLength: declared.context_length, slots: declared.slots, threads: declared.threads, cacheRamMb: declared.cache_ram_mb, flashAttention: declared.flash_attention } as Record<string, number | boolean | string | string[]>;
   // A record with its own launch (vision) runs one slot, as its args say.
   const slots = declaredLaunchContext(model) !== null ? 1 : typeof config.slots === "number" && config.slots > 0 ? config.slots : 1;
-  const contextLength = resolvedContextLength ?? declaredLaunchContext(model) ?? (typeof config.contextLength === "number" && config.contextLength > 0 ? config.contextLength : await contextForLaunch(model, config, slots, gpuLayersFor(role)));
+  const contextLength = resolvedContextLength ?? declaredLaunchContext(model) ?? (typeof config.contextLength === "number" && config.contextLength > 0 ? config.contextLength : engineForRole(role) === "omlx" ? omlxContextLength(model, config) : await contextForLaunch(model, config, slots, gpuLayersFor(role)));
+  if (engineForRole(role) === "omlx") {
+    // oMLX (ENGINE-MLX-01): an environment the Stack built, serving the one
+    // pinned MLX directory on loopback behind a random key. Offline, with
+    // its prompt cache emptied at every launch. The record's pinned
+    // template variables ride with every request (the client).
+    if (!omlxInstalled()) throw new EngineUnavailableError("The oMLX environment is not built on this machine.");
+    resetOmlxState();
+    const { folder, modelId } = prepareModelFolder(model.modelPath!);
+    const apiKey = newLaunchKey();
+    const kwargs = declaredChatTemplateKwargs(model) ?? undefined;
+    const command = omlxCommand({ port, modelFolder: folder, apiKey, concurrent: slots });
+    return {
+      command, engine: "omlx", build: `omlx-${OMLX_VERSION}`, stdin: "ignore", contextLength, slots, contextScope: "per slot", kind: "spawned", env: omlxEnv(),
+      imageInput: declaredReadsPictures(model), pictureTokensMax: null,
+      client: (baseUrl) => new OmlxEngineClient({ baseUrl, apiKey, modelId, templateKwargs: kwargs }),
+      identity: { build: `omlx-${OMLX_VERSION}`, model: basename(model.modelPath!) },
+    };
+  }
   if (engineForRole(role) === "mlx-serve") {
     // mlx-serve: one model pinned for the life of the process, loopback
     // only, the context length the llama-server settings declare (one
@@ -911,6 +976,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     const reason = SPEECH_ROLES.includes(role) ? `The ${role} voice activity detector is not installed.`
       : role === "image" ? "The ComfyUI environment is not built on this machine."
       : engineForRole(role) === "mlx-serve" ? "No installed mlx-serve build is available for this machine."
+      : engineForRole(role) === "omlx" ? "The oMLX environment or its model is not installed on this machine."
       : role === "tts" ? (activeTtsChoice().engine === "chatterbox-turbo" ? "The Chatterbox Turbo files are not all installed." : pocketTtsInstalled() ? "The tts tokenizer or default voice is not installed." : "The Pocket TTS environment is not built on this machine.")
       : "No installed llama-server build is available for this machine.";
     throw new EngineUnavailableError(reason);
@@ -920,7 +986,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   const ownContext = declaredLaunchContext(model);
   const declaredContextLength = ownContext ?? launchConfig.context_length;
   const slots = ownContext !== null ? 1 : typeof launchConfig.slots === "number" && launchConfig.slots > 0 ? launchConfig.slots : 1;
-  const contextLength = typeof declaredContextLength === "number" && declaredContextLength > 0 ? declaredContextLength : await contextForLaunch(model, { ...launchConfig, contextLength: 0 }, slots, gpuLayersFor(role));
+  const contextLength = typeof declaredContextLength === "number" && declaredContextLength > 0 ? declaredContextLength : engineForRole(role) === "omlx" ? omlxContextLength(model, launchConfig) : await contextForLaunch(model, { ...launchConfig, contextLength: 0 }, slots, gpuLayersFor(role));
   // The voice engine starts offline; what it may need beyond the pins
   // (the gated cloning weights, with a token and cloning turned on) the
   // Stack fetches first, once. A fetch that fails never stops the start:
@@ -972,7 +1038,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     measuredPeakBytes: JIT_ROLES.includes(role) && pinMeasured !== null ? Math.max(pinMeasured, model.measuredFootprintBytes ?? 0) : model.measuredFootprintBytes,
     dryRunPeakBytes: dryRunPeakBytes === null ? null : dryRunPeakBytes + projectorBytes,
     headroomBytes: engineForRole(role) === "mlx-serve" && !managed && !generator && !SPEECH_ROLES.includes(role) ? mlxHeadroomBytes({ modelDir: model.modelPath!, contextTokens: contextLength }) : null,
-    engine: generator ? "comfyui" : managed ? TTS_ENGINES[activeTtsChoice().engine].catalogEngine : SPEECH_ROLES.includes(role) ? "sherpa-onnx-node" : engineForRole(role) === "mlx-serve" ? "mlx-serve" : "llama-server",
+    engine: generator ? "comfyui" : managed ? TTS_ENGINES[activeTtsChoice().engine].catalogEngine : SPEECH_ROLES.includes(role) ? "sherpa-onnx-node" : engineForRole(role) === "mlx-serve" ? "mlx-serve" : engineForRole(role) === "omlx" ? "oMLX" : "llama-server",
     pinned: pinnedModels.has(model.id),
   };
   let timedOut = false;
@@ -1006,7 +1072,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   };
   const handle = spawnEngine();
   setGovernorPid(role, handle.pid);
-  const client = new OpenAIEngineClient(`http://127.0.0.1:${port}`, plan.healthPath);
+  const client = plan.client ? plan.client(`http://127.0.0.1:${port}`) : new OpenAIEngineClient(`http://127.0.0.1:${port}`, plan.healthPath);
   const stderrText = handle.stderr ? new Response(handle.stderr).text() : Promise.resolve("");
   let exited = false;
   const exitPromise = handle.exited.then((code) => { exited = true; return code; });
@@ -1018,7 +1084,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     void exitFailure.catch(() => {});
     const loadStartedAt = performance.now();
     await Promise.race([waitHealthy(client, loadTimeoutForModel(model.sizeBytes), () => !exited), exitFailure]);
-    let identity = await readEngineIdentity(client.baseUrl, undefined, plan.healthPath);
+    let identity = plan.identity ? { host: "local" as const, build: plan.identity.build, model: plan.identity.model, healthy: true } : await readEngineIdentity(client.baseUrl, undefined, plan.healthPath);
     // A managed engine exposes no build or model of its own; the Stack
     // knows both: the version it installed, and the model it linked (the
     // checkpoint file for ComfyUI; for Pocket TTS the weights the hub
@@ -1091,8 +1157,34 @@ async function startOne(role: RoleId, modelId?: string): Promise<RoleProcess> {
   const bound = urlBindingFor(role);
   if (bound) return startUrlProcess(role, bound.url);
   if (role === "tts") return startVoiceWithFallback(modelId);
+  if (role === "chat") return startChatWithFallback(modelId);
   return startSpawnedProcess(role, modelId);
 }
+
+/** oMLX that cannot start (a crash, a refusal, a load that never
+ * finished) is tried once more; the second failure sends chat to
+ * llama-server for the rest of this run, with a warning that says why. A
+ * failed chat engine never leaves the household without chat. A restart
+ * of the chat engine clears the memory and tries the chosen engine again. */
+async function startChatWithFallback(modelId?: string, start: (role: RoleId, modelId?: string) => Promise<RoleProcess> = startSpawnedProcess): Promise<RoleProcess> {
+  if (activeChatChoice().engine !== "omlx") return start("chat", modelId);
+  let reason = "";
+  for (let attempt = 1; attempt <= FALLBACK_AFTER_FAILURES; attempt++) {
+    try {
+      const started = await start("chat", modelId);
+      resolveHealth("chat.engine-fallback");
+      return started;
+    } catch (error) {
+      if (stoppingAll) throw error;
+      reason = error instanceof Error ? error.message : String(error);
+      markChatEngineFailed("omlx", reason);
+    }
+  }
+  raise({ code: "chat.engine-fallback", severity: "warning", title: "oMLX did not start; chat is on llama-server", text: reason, cause: reason, fix: { label: "Restart engine", action: "restart_engine" } });
+  return start("chat");
+}
+/** The fallback with the spawn replaced, for the suite. */
+export const startChatWithFallbackForTests = startChatWithFallback;
 
 /** A voice engine other than Pocket TTS that cannot start (a crash, a
  * memory refusal, a load that never finished) falls back to Pocket TTS
@@ -1311,9 +1403,23 @@ export async function restartForNewProjector(): Promise<RoleId[]> {
   return restarted;
 }
 
+/** ENGINE-MLX-01: a chat process still on llama-server once oMLX and its
+ * model are installed and verified is restarted onto oMLX, so the switch
+ * needs no one to restart the Stack. Only an idle process moves, and
+ * only when the engine in effect for a fresh start differs. Returns true
+ * when it restarted chat. */
+export async function restartForNewChatEngine(): Promise<boolean> {
+  const running = runtime("chat").process;
+  if (!running || running.retired || running.kind === "url" || running.activeRequests > 0) return false;
+  if (running.engine === activeChatChoice().engine) return false;
+  await restartRole("chat");
+  return true;
+}
+
 export async function restartRole(requested: RoleId): Promise<void> {
   const role = processRoleFor(requested);
   if (role === "tts") clearTtsEngineFailures();
+  if (role === "chat") clearChatEngineFailures();
   const current = runtime(role);
   current.generation++;
   const previous = current.process;

@@ -259,13 +259,13 @@ export const MLX_SERVE_PIN: EngineBinaryPin = {
 ENGINE_BINARIES.push(MLX_SERVE_PIN);
 
 /** The chat wire's engines, one chosen by `stack.engines.chat.engine`. */
-export const CHAT_ENGINES = ["llama-server", "mlx-serve"] as const;
+export const CHAT_ENGINES = ["llama-server", "mlx-serve", "omlx"] as const;
 export type ChatEngine = typeof CHAT_ENGINES[number];
 
 /** The role each engine name serves, for the routes that act on "the
  * engine's role" (start, stop, restart, the swap's drain). */
 export type EngineRole = "chat" | "tts" | "image" | "video";
-export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", "mlx-serve": "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", comfyui: "image", "video-gen": "video", "image-gen": "image" };
+export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", "mlx-serve": "chat", omlx: "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", comfyui: "image", "video-gen": "video", "image-gen": "image" };
 export function engineRole(name: string): EngineRole { return ENGINE_ROLE[name] ?? "chat"; }
 
 /** Runtimes the Stack assembles from pinned wheels through uv, in an
@@ -274,6 +274,7 @@ export interface ManagedRuntime { name: string; version: string; roles: string[]
 export const MANAGED_RUNTIMES: ManagedRuntime[] = [
   { name: "pocket-tts", version: "3.1.0", roles: ["tts"], platforms: "macOS 14 or later on arm64 (torch 2.13 ships macOS 14 wheels only; a hashed requirements file per platform, the Linux files land with the first Linux tts run)" },
   { name: "mlx-audio", version: "0.5.9", roles: ["tts"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the Stack's second voice engine, Chatterbox Turbo, VOICE-STUDIO-01; no Linux file)" },
+  { name: "omlx", version: "0.7.0", roles: ["chat"], platforms: "macOS 15 or later on arm64 (MLX is Apple silicon only; the chat engine on the p64 and p128 tiers by default, llama-server stays installed as the fallback, ENGINE-MLX-01; no Linux file)" },
   { name: "comfyui", version: "v0.36.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (torch 2.13 ships macOS 14 wheels only; a hashed requirements file per platform, the source archive is the same on every platform)" },
   { name: "video-gen", version: "87db56a", roles: ["video"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the mlx-video source archive plus a hashed requirements file; Wan2.2 TI2V-5B FastWan, text and picture to video, no sound; needs 64 GB or more; no Linux file)" },
   { name: "image-gen", version: "0.23.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; mflux 0.23.0 and a hashed requirements file; FLUX.2 Klein 4B and Z-Image-Turbo, text to picture, image to picture, LoRAs and reference edits; needs 32 GB of memory or more)" },

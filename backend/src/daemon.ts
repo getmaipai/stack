@@ -14,6 +14,7 @@ import { keepWarmEnabled, warmUp, warmedRoles } from "@/lib/warmup";
 import { migrateLegacyEngineTags } from "@/lib/engineInstall";
 import { reconcilePinDeclarations } from "@/lib/modelStore";
 import { pullMissingDeclaredParts } from "@/lib/installJobs";
+import { ensureChatEngineAssets } from "@/lib/chatEngineAssets";
 import { STACK_MODELS } from "@/lib/modelCatalog";
 import { ddgsSupervisor } from "@/search/ddgsSidecar";
 import { imageTools, sweepImageToolsTmp } from "@/imagetools/imageTools";
@@ -63,6 +64,8 @@ async function serve(): Promise<void> {
   // Load and prime the roles a first chat needs, now, so nobody meets a cold start.
   // An upgrade installs no plan: a part an installed model declares (its picture projector) is pulled now (VISION-03g), then chat restarts with it.
   void pullMissingDeclaredParts().catch(() => {});
+  // The chat engine this tier runs by default (oMLX) is built and its model pulled in the background; chat moves onto it once both are verified (ENGINE-MLX-01).
+  void ensureChatEngineAssets().catch(() => {});
   void warmUp("daemon-start").catch(() => {});
   // The DuckDuckGo search service Home's web search uses: built, started and restarted here; it never fails the Stack.
   ddgsSupervisor.start();

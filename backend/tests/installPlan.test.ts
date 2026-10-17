@@ -70,7 +70,7 @@ test("plan: the starter is first, then chat, stt, tts, embed, judge", () => {
   const plan = buildInstallPlan(hw({ unifiedMemoryGb: 64, totalRamGb: 64 }));
   expect(plan.models[0]).toMatchObject({ id: "qwen3-1.7b-q8-0", starter: true });
   expect(plan.models.filter((model) => model.starter)).toHaveLength(1);
-  expect(plan.models.filter((model) => !model.component).map((model) => model.role)).toEqual(["chat", "chat", "stt", "tts", "tts", "embed", "judge"]);
+  expect(plan.models.filter((model) => !model.component).map((model) => model.role)).toEqual(["chat", "chat", "chat", "stt", "tts", "tts", "embed", "judge"]);
   // STACK-MUSE-01: above 24 GB the bound chat is Muse Glimmer 30B, so the
   // 8B is not in this plan at all.
   expect(plan.models[1]).toMatchObject({ id: "muse-glimmer-30b-q4-k-xl", starter: false });
@@ -84,6 +84,18 @@ test("plan: the chat pull follows the tier (STACK-MUSE-01): 8B through 24 GB, Mu
   expect(chatOf(128)).toBe("muse-glimmer-30b-q4-k-xl");
   const p32 = buildInstallPlan(hw({ unifiedMemoryGb: 32, totalRamGb: 32 }));
   expect(p32.models.find((model) => model.id === "muse-glimmer-30b-q4-k-m")).toMatchObject({ approx_bytes: 16_756_683_904, role: "chat", starter: false });
+});
+test("plan: oMLX's MLX build of Muse rides beside the GGUF on p64 and p128 Apple silicon only (ENGINE-MLX-01)", () => {
+  const mlxIn = (plan: ReturnType<typeof buildInstallPlan>) => plan.models.find((model) => model.id === "muse-glimmer-30b-mlx-4bit");
+  for (const gb of [64, 128]) {
+    const plan = buildInstallPlan(hw({ unifiedMemoryGb: gb, totalRamGb: gb }));
+    expect(mlxIn(plan)).toMatchObject({ role: "chat", engine: "omlx", approx_bytes: 19_443_246_692, licence: "Apache-2.0", starter: false });
+    // The GGUF stays the chat pin and the fallback.
+    expect(plan.models.map((model) => model.id)).toContain("muse-glimmer-30b-q4-k-xl");
+  }
+  for (const gb of [16, 24, 32]) expect(mlxIn(buildInstallPlan(hw({ unifiedMemoryGb: gb, totalRamGb: gb })))).toBeUndefined();
+  expect(mlxIn(buildInstallPlan(pc([48, 48])))).toBeUndefined();
+  expect(mlxIn(buildInstallPlan(hw({ arch: "x64", isAppleSilicon: false, unifiedMemoryGb: 0, totalRamGb: 128 })))).toBeUndefined();
 });
 test("plan: p16 has the larger chat bound, so the small pin is still the starter; embeddings ride along", () => {
   const plan = buildInstallPlan(hw({}));

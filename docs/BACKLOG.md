@@ -131,6 +131,14 @@ are never copied. Nothing migrates Home until STACK-16.
   409 for incomplete provenance, 400 with the role list for an unknown
   id; streaming chat passes the engine's SSE bytes through. Kept
   through RF-04 at 58cae15 (the router rewritten without the client-key check).
+- [ ] **ENGINE-MLX-01 (M): oMLX is the chat engine on p64 and p128, llama-server the fallback and rollback.** Design and numbers:
+  Home's `docs/design/chat-engine-comparison-2026-10-17.md`; Stack design: `dev.md`, "The chat engine on Apple silicon: oMLX".
+  Built: `chat/omlx.ts` (managed uv environment, hashed requirements with the release wheel by checksum, launch, offline and keyed),
+  `chat/omlxClient.ts` (the wire adapter: model name, pinned template variables, `timings` from usage, token counts by one-token
+  requests), `lib/chatEngines.ts` (auto by tier, fallback after two failed starts, one-setting rollback),
+  `lib/chatEngineAssets.ts` (background environment build and model pull at start, then the switch), the MLX model record, the install-plan entry on p64
+  and p128, the engines routes, privacy rows, tests (`omlx.test.ts`; the real engine in `omlxSmoke.test.ts` with `OMLX_SMOKE=1`).
+  Open: Home's ENGINE-MLX-02 (the repo's quality benches against the MLX engine, on an installed release), and a Linux/Intel path (stays llama-server).
 - [x] **STACK-93 (M): the second engine adapter under the governor.**
   `mlx-serve` v26.9.4 (the pick by the prebuilt rule, `dev.md`, "The
   second chat engine"; oMLX the named alternative) as a second spawned

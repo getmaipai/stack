@@ -2200,6 +2200,43 @@ models (the GPU is idle between requests; a fan-less laptop will notice the RAM,
 ping, because the chat engine has one slot and a ping would replace the person's cached prompt prefix; the weights stay paged in
 by being resident and unloaded only by the idle rule.
 
+## The chat engine on Apple silicon: oMLX (ENGINE-MLX-01, 2026-10-17)
+
+**The pick: oMLX 0.7.0** (Apache-2.0, `jundot/omlx`) for the chat role at the tiers whose default it is (p64 and p128 on
+Apple silicon, macOS 15 or later), with llama-server kept installed as the fallback and as the engine everywhere else. Why, with
+the numbers, the alternative that lost (Rapid-MLX) and what was not verified: Home's
+`docs/design/chat-engine-comparison-2026-10-17.md`. In short, on the Studio with Muse Glimmer 30B at the same size, oMLX generates
+32.5 tokens/s against llama-server's 26.1 and reads a prompt 36 to 42 percent faster, 2 GB smaller resident, level on tool calls
+(136 of 160 against 137 sampled), on the 60 reasoning prompts (60 of 60) and in a 200-request soak.
+
+- **The setting is the existing one**, `stack.engines.chat.engine`, now `auto` (the default), `omlx`, `llama-server` or `mlx-serve`.
+  `auto` is the tier's default (`lib/chatEngines.ts`); a named engine wins. Rollback is `llama-server` and a restart; nothing is
+  deleted. The embed role, the vision role and a judge with a model of its own stay on llama-server.
+- **oMLX runs only when it can.** `resolveChatEngine` returns llama-server, with the reason, when the Mac is not Apple silicon on
+  macOS 15 or later, when the environment or the verified MLX model is missing, or when oMLX failed to start twice in a row this run
+  (`chat.engine-fallback` health row, one fix: restart the chat engine, which clears the memory). A start is tried twice before it
+  falls back; a failed chat engine never leaves the household without chat.
+- **Install.** The environment is `data/engines/omlx/0.7.0/venv`, built by the same uv builder as Pocket TTS and Chatterbox from one
+  hashed file (`chat/omlx.darwin-arm64.requirements.txt`: 112 PyPI packages and the oMLX release wheel by sha256). Not in it, on
+  purpose: torch (xgrammar declares it; oMLX ships a stub and never runs its torch paths) and oMLX's five git-pinned dependencies,
+  which cannot carry hashes. The model is `muse-glimmer-30b-mlx-4bit`, an 11-file directory pinned by path, size and sha256 at
+  `mlx-community/Muse-Glimmer-30B-4bit` revision `3e7677d7`. The install plan adds it beside the GGUF on p64 and p128; on an upgraded
+  Mac `ensureChatEngineAssets` (daemon start) builds the environment and pulls the model in the background, then moves an idle
+  llama-server chat onto oMLX (`restartForNewChatEngine`), retrying every 30 s while chat is busy. Chat answers on llama-server the whole time.
+- **Launch.** `omlx serve` on loopback, a random API key per launch (the engine also serves an admin dashboard on its port), `--no-hf-cache`,
+  offline and tokenless environment, a model folder holding one symlink to the pinned directory, and a prompt cache under
+  `data/engines/omlx/0.7.0/state/cache`, capped at 20 GB and **emptied at every launch**: the engine's cache reuse needs a disk cache, so
+  the promise is that a conversation's cached state never outlives the engine process, as with llama-server's RAM cache.
+- **The client adapts the wire** (`chat/omlxClient.ts`, tested): the role name in `model` becomes the folder name; the record's
+  `reasoning_strength: low` rides with every request under the request's own template variables; `cache_prompt` and `id_slot` are dropped;
+  the usage chunk gains llama-server's `timings` object (speed, cache share) so Home's turn stats are unchanged; `/v1/tokenize` is answered
+  by one-token requests that read the engine's own `usage.prompt_tokens` (exact, cheap with the prefix cache) because the engine has no
+  `/tokenize`.
+- **Memory.** One process, 19.4 GB resident idle, 19.9 GB after a 16k prompt; the record carries a measured 22 GB (adds the 128k context's
+  cache). The governor admits it at that figure, then at the first post-load reading.
+- **Not done here:** the repo's own quality benches against the engine (Home row ENGINE-MLX-02, to run once a release carries this), 5 and 6 bit weights, and
+  a Linux or Intel path (llama-server remains the engine there).
+
 ## Measured so far
 
 On an Apple silicon Mac (2026-09-18, a temporary copy of the owner's
@@ -2224,9 +2261,8 @@ measurement and the first with the full resident set.
    engine serving the `stt` and `tts` roles, which is how the speech
    design note (STACK-94a) reads it, and STACK-17 settles it. The
    robot design pass confirms or amends this in `bot/docs/dev.md`.
-2. **The second engine.** mlx-serve has the second adapter (STACK-93,
-   by the prebuilt rule); oMLX stays the named alternative the Studio
-   bench can call for when it measures both against llama-server.
+2. **The second engine.** Settled 2026-10-17 (ENGINE-MLX-01): oMLX is the chat engine on p64 and p128, llama-server the fallback and the
+   engine elsewhere; mlx-serve stays installable by name.
 
 ## Battle-tested checklist (for 1.0, empty until earned)
 

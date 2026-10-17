@@ -10,6 +10,7 @@ import { detectHardware } from "@/lib/hardware";
 import { CHAT_ENGINES, ENGINE_BINARIES, ENGINE_READY_MARKER, engineRole, MANAGED_RUNTIMES, selectEngineBinary, type ChatEngine } from "@/lib/engineCatalog";
 import { ensurePocketTtsEnvironment, pocketTtsInstalled, pocketTtsRoot, POCKET_TTS_NAME } from "@/speech/pocketTts";
 import { ensureMlxAudioEnvironment, mlxAudioInstalled, mlxAudioRoot, MLX_AUDIO_NAME } from "@/speech/mlxAudio";
+import { ensureOmlxEnvironment, omlxInstalled, omlxRoot, OMLX_NAME } from "@/chat/omlx";
 import { comfyuiInstalled, comfyuiRoot, COMFYUI_NAME, ensureComfyuiEnvironment } from "@/generators/comfyui";
 import { ensureImageGenEnvironment, IMAGE_GEN_NAME, imageGen, imageGenEnvironmentReady } from "@/images/imageEngine";
 import { ensureVideoGenEnvironment, videoGen, videoGenEnvironmentReady, videoGenRoot, VIDEO_GEN_NAME } from "@/video/videoGen";
@@ -17,7 +18,7 @@ import { engineDir, engineIsBound, ensureEngine, removeEngine } from "@/lib/engi
 import { readEngineManifest } from "@/lib/store/manifests";
 import { currentEngine, stagingPin, swapEngine } from "@/updates/engines";
 import { deriveEngineVersionState } from "@/lib/engineState";
-import { chatEngine, getProcess, getRoleStatus, restartRole, roleCanBeStartedByStack, runningEngine, stopRole, EngineUnavailableError } from "@/lib/supervisor";
+import { chatEngine, getProcess, getRoleStatus, restartForNewChatEngine, restartRole, roleCanBeStartedByStack, runningEngine, stopRole, EngineUnavailableError } from "@/lib/supervisor";
 import { readSettings } from "@/settings";
 import { createJob, finishJob, getJob, jobSignal, updateJob } from "@/lib/jobs";
 import { emit } from "@/lib/events";
@@ -69,9 +70,10 @@ enginesRoutes.openapi(listRoute, async (c) => {
   // on every platform, installed when the environment is built.
   const managed = MANAGED_RUNTIMES.map((runtime) => {
     const status = getRoleStatus(engineRole(runtime.name));
-    const installed = runtime.name === POCKET_TTS_NAME ? pocketTtsInstalled() : runtime.name === MLX_AUDIO_NAME ? mlxAudioInstalled() : runtime.name === COMFYUI_NAME ? comfyuiInstalled() : runtime.name === VIDEO_GEN_NAME ? videoGenEnvironmentReady() : runtime.name === IMAGE_GEN_NAME ? imageGenEnvironmentReady() : false;
-    const version = deriveEngineVersionState({ running: status.identity?.build ?? null, currentTag: installed ? runtime.version : null, newestTag: runtime.version, needsRestart: false });
-    return { id: `${runtime.name}-${runtime.version}`, name: runtime.name, label: `${runtime.name} ${runtime.version}, an environment the Stack assembles through uv`, platform: process.platform, arch: process.arch, verified: true, installed, matchesThisMachine: true, ...version, directory: runtime.name === POCKET_TTS_NAME ? pocketTtsRoot() : runtime.name === MLX_AUDIO_NAME ? mlxAudioRoot() : runtime.name === COMFYUI_NAME ? comfyuiRoot() : runtime.name === VIDEO_GEN_NAME ? videoGenRoot() : "", roleState: status.state, roleReason: status.reason };
+    const installed = runtime.name === POCKET_TTS_NAME ? pocketTtsInstalled() : runtime.name === MLX_AUDIO_NAME ? mlxAudioInstalled() : runtime.name === OMLX_NAME ? omlxInstalled() : runtime.name === COMFYUI_NAME ? comfyuiInstalled() : runtime.name === VIDEO_GEN_NAME ? videoGenEnvironmentReady() : runtime.name === IMAGE_GEN_NAME ? imageGenEnvironmentReady() : false;
+    const running = engineRole(runtime.name) === "chat" && runningEngine("chat") !== runtime.name ? null : status.identity?.build ?? null;
+    const version = deriveEngineVersionState({ running, currentTag: installed ? runtime.version : null, newestTag: runtime.version, needsRestart: false });
+    return { id: `${runtime.name}-${runtime.version}`, name: runtime.name, label: `${runtime.name} ${runtime.version}, an environment the Stack assembles through uv`, platform: process.platform, arch: process.arch, verified: true, installed, matchesThisMachine: true, ...version, directory: runtime.name === POCKET_TTS_NAME ? pocketTtsRoot() : runtime.name === MLX_AUDIO_NAME ? mlxAudioRoot() : runtime.name === OMLX_NAME ? omlxRoot() : runtime.name === COMFYUI_NAME ? comfyuiRoot() : runtime.name === VIDEO_GEN_NAME ? videoGenRoot() : "", roleState: status.state, roleReason: status.reason };
   });
   return c.json({ engines: [...pins, ...managed] }, 200);
 });
@@ -106,6 +108,20 @@ enginesRoutes.openapi(installRoute, async (c) => {
       .catch((error) => finishJob(job.id, { ok: false, reason: error instanceof Error ? error.message : String(error) }))
       .finally(() => { environmentJobs.delete(IMAGE_GEN_NAME); });
     return c.json({ job: job.id, engine: IMAGE_GEN_NAME, staged: false }, 202);
+  }
+  if (name === OMLX_NAME) {
+    // The chat engine's environment (ENGINE-MLX-01): uv, a managed Python,
+    // the hashed requirements synced. One build at a time: a second
+    // request joins the job in flight.
+    const inFlight = environmentJobs.get(OMLX_NAME);
+    if (inFlight) return c.json({ job: inFlight, engine: OMLX_NAME, staged: false }, 202);
+    const job = createJob({ kind: "engine.install", totalBytes: 0, status: "downloading", input: { engine: `${OMLX_NAME}-env` } });
+    environmentJobs.set(OMLX_NAME, job.id);
+    void ensureOmlxEnvironment((phase) => updateJob(job.id, { status: `building ${phase}` }), { signal: jobSignal(job.id) })
+      .then(async () => { finishJob(job.id, { ok: true, result: { engine: OMLX_NAME } }); emit({ id: "engine.state", data: { engine: OMLX_NAME, state: "installed" } }); await restartForNewChatEngine().catch(() => false); })
+      .catch((error) => finishJob(job.id, { ok: false, reason: error instanceof Error ? error.message : String(error) }))
+      .finally(() => { environmentJobs.delete(OMLX_NAME); });
+    return c.json({ job: job.id, engine: OMLX_NAME, staged: false }, 202);
   }
   if (name === MLX_AUDIO_NAME) {
     // Not a download but a build: uv (a pinned build, fetched first if

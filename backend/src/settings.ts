@@ -80,9 +80,12 @@ export const SETTINGS: SettingDeclaration[] = [
   { ...stack, key: "stack.runtime.keep_warm", selector: "boolean", default: true, label: "Keep models ready", help: "Load the chat, memory and voice models when the Stack starts and keep them in memory, so the first message is not slow. Costs the memory those models use all the time. Models that do not fit stay on-demand. On battery they still unload after the idle time.", section: { id: "runtime", order: 15 }, level: "basic", needs_restart: false },
   { ...stack, key: "stack.runtime.download_cap_mbps", selector: "number", range: { min: 0, max: 100_000 }, default: 0, label: "Download cap", help: "Maximum download speed in Mbps. Zero means no cap.", section: { id: "runtime", order: 30 }, level: "advanced", needs_restart: false },
   { ...stack, key: "stack.runtime.port", selector: "number", range: { min: 1, max: 65535 }, default: 8770, label: "Port", help: "The loopback port the Stack listens on after the next start.", section: { id: "runtime", order: 40 }, level: "expert", needs_restart: true },
-  // The chat wire's engine (STACK-93): llama-server or mlx-serve, both
-  // installed side by side; the switch is this setting plus a restart.
-  { ...stack, key: "stack.engines.chat.engine", selector: "select", range: { options: [{ value: "llama-server", label: "llama-server (GGUF, Metal)" }, { value: "mlx-serve", label: "mlx-serve (MLX, Apple silicon)" }] }, default: "llama-server", label: "Chat engine", help: "Which engine answers the chat roles after the next restart: llama-server runs GGUF models everywhere; mlx-serve runs MLX models on Apple silicon.", section: { id: "engines.chat", order: 5 }, level: "advanced", needs_restart: true },
+  // The chat wire's engine (STACK-93, ENGINE-MLX-01): `auto` is the tier's
+  // default (oMLX on Apple silicon at p64 and p128 once it and its model are
+  // installed, llama-server everywhere else); a name picks that engine. All are
+  // installed side by side; the switch is this setting plus a restart, and
+  // rollback is `llama-server`.
+  { ...stack, key: "stack.engines.chat.engine", selector: "select", range: { options: [{ value: "auto", label: "Automatic (the best engine this computer can run)" }, { value: "omlx", label: "oMLX (MLX, Apple silicon)" }, { value: "llama-server", label: "llama-server (GGUF, Metal)" }, { value: "mlx-serve", label: "mlx-serve (MLX, Apple silicon)" }] }, default: "auto", label: "Chat engine", help: "Which engine answers the chat roles after the next restart. Automatic uses oMLX on an Apple silicon Mac with 64 GB or more once oMLX and its model are installed, and llama-server otherwise. llama-server runs GGUF models everywhere and is the fallback if oMLX does not start.", section: { id: "engines.chat", order: 5 }, level: "advanced", needs_restart: true },
   { ...stack, key: "stack.engines.llama_server.context_length", selector: "number", range: { min: 0, max: 262_144 }, default: 0, label: "Context length", help: "Zero chooses the largest context that fits this computer and model; enter a positive value to set it explicitly.", section: { id: "engines.llama_server", order: 10 }, level: "advanced", needs_restart: true },
   { ...stack, key: "stack.engines.llama_server.slots", selector: "number", range: { min: 1, max: 16 }, default: 1, label: "Parallel slots", help: "How many requests the engine can serve concurrently.", section: { id: "engines.llama_server", order: 20 }, level: "advanced", needs_restart: true },
   { ...stack, key: "stack.engines.llama_server.threads", selector: "number", range: { min: 0, max: 256 }, default: 0, label: "CPU threads", help: "CPU threads used by the engine. Zero lets the engine choose.", section: { id: "engines.llama_server", order: 30 }, level: "expert", needs_restart: true },
@@ -201,7 +204,10 @@ function refuseUnservable(key: string, value: SettingValue): void {
   // A value already in effect (a client writing every setting back, the
   // default on a machine with no chat pin at all) is not a change to refuse.
   if (value === decode(read(metaKey(key, "in_effect")), declaration)) return;
-  const servable = ENGINE_BINARIES.some((pin) => pin.name === value && pin.platform === process.platform && pin.arch === process.arch);
+  // `auto` always resolves to an engine that can run; oMLX is a managed
+  // environment (no archive pin), served on Apple silicon only.
+  if (value === "auto") return;
+  const servable = value === "omlx" ? process.platform === "darwin" && process.arch === "arm64" : ENGINE_BINARIES.some((pin) => pin.name === value && pin.platform === process.platform && pin.arch === process.arch);
   if (!servable) throw new Error(`${value} has no pinned build for ${process.platform} ${process.arch}; the chat engine stays as it is.`);
 }
 export function updateSettings(values: Record<string, unknown>): StackSetting[] {

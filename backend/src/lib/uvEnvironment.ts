@@ -94,7 +94,7 @@ export function ensureUvEnvironment(spec: UvEnvironmentSpec, onProgress: (phase:
  * ships macOS 14 wheels only, so an older Mac is refused with the
  * reason before uv fails on a platform tag. */
 export const MACOS_FLOOR = 14;
-function macosMajor(): number | null {
+export function macosMajor(): number | null {
   if (process.platform !== "darwin") return null;
   const major = Number(String(Bun.spawnSync(["sw_vers", "-productVersion"]).stdout).trim().split(".")[0]);
   return Number.isFinite(major) ? major : null;
