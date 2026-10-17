@@ -103,6 +103,13 @@ test("a fetch runs FileTube's yt-dlp arguments: embedded metadata, thumbnail and
   expect(args).toContain("--sleep-interval");
 });
 
+test("a video fetch defaults to the 1080p household ceiling; best lifts it only when asked (owner ruling 2026-10-17)", () => {
+  const ceiling = fetchArgs(FetchInput.parse({ url: "http://127.0.0.1:1/clip.mp4" }), fetchContext);
+  expect(ceiling[ceiling.indexOf("-f") + 1] ?? ceiling.join(" ")).toContain("height<=1080");
+  const best = fetchArgs(FetchInput.parse({ url: "http://127.0.0.1:1/clip.mp4", quality: "best" }), fetchContext);
+  expect(best.join(" ")).not.toContain("height<=");
+});
+
 test("a person's own fetch does not pause; cookies and the archive are passed only when given", () => {
   const args = fetchArgs(FetchInput.parse({ url: "https://example.com/v", person_initiated: true, playlist: true, archive_key: "chan-1", max_items: 2, quality: "720", date_after: "20260101", min_duration_s: 61 }), { ...fetchContext, archiveFile: "/a/chan-1.txt", cookiesFile: "/c/cookies.txt" });
   expect(args).not.toContain("--sleep-interval");

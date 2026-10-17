@@ -12,8 +12,9 @@ export type ProbeInput = z.infer<typeof ProbeInput>;
 export const FetchInput = z.object({
   url: z.string().url().max(4096).refine((value) => /^https?:\/\//i.test(value), "Only http and https links can be fetched."),
   kind: z.enum(["video", "audio"]).default("video"),
-  /** The highest picture height to download; best means no ceiling. Ignored for audio. */
-  quality: z.enum(["best", "2160", "1440", "1080", "720", "480", "360"]).default("best"),
+  /** The highest picture height to download; best means no ceiling. Ignored for audio. Defaults to 1080, the household's
+   * saved-video ceiling (owner ruling 2026-10-17); Home passes a higher one only when an admin raised it. */
+  quality: z.enum(["best", "2160", "1440", "1080", "720", "480", "360"]).default("1080"),
   /** True for a channel or playlist link; false takes the one video the link names. */
   playlist: z.boolean().default(false),
   /** Names this source's download archive, so an item fetched before is never fetched again. Letters, digits, dot, dash, underscore. */
