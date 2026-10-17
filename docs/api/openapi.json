@@ -3840,6 +3840,10 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "blocker": {
+                      "type": "string",
+                      "nullable": true
                     }
                   },
                   "required": [
@@ -3847,7 +3851,8 @@
                     "crashesByDay",
                     "events",
                     "stopped",
-                    "healing"
+                    "healing",
+                    "blocker"
                   ]
                 }
               }

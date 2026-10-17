@@ -136,6 +136,8 @@ export interface SelfHealSummary {
   stopped: RoleId[];
   /** Roles with a restart scheduled or running right now. */
   healing: RoleId[];
+  /** Why a restart (or a canary, or a prewarm) must wait right now, or null: the same gate the restarter uses. */
+  blocker: string | null;
 }
 export function selfHealSummary(days = 14, now = clock.now()): SelfHealSummary {
   const events = readEvents();
@@ -146,7 +148,7 @@ export function selfHealSummary(days = 14, now = clock.now()): SelfHealSummary {
     if (!bucket) continue;
     if (event.kind === "crashed") bucket.crashes++; else if (event.kind === "healed") bucket.healed++; else bucket.gaveUp++;
   }
-  return { enabled: selfHealEnabled(), crashesByDay: [...buckets.values()], events: events.slice(-50), stopped: [...states].filter(([, s]) => s.open).map(([role]) => role), healing: [...states].filter(([, s]) => s.cancel !== null || s.attempting).map(([role]) => role) };
+  return { enabled: selfHealEnabled(), crashesByDay: [...buckets.values()], events: events.slice(-50), stopped: [...states].filter(([, s]) => s.open).map(([role]) => role), healing: [...states].filter(([, s]) => s.cancel !== null || s.attempting).map(([role]) => role), blocker: healBlocker() };
 }
 
 // ---- the item ---------------------------------------------------------------
