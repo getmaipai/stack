@@ -57,9 +57,9 @@ export const historyKey = (kind: GenKind, width: number, height: number, frames?
 const median = (values: number[]): number => { const sorted = [...values].sort((a, b) => a - b); return sorted[Math.floor(sorted.length / 2)]!; };
 
 /** Median seconds of a stage for this kind and size, or the typical number when there is no history yet. */
-export function stageSeconds(key: string, stage: StageDef): number {
+export function stageSeconds(key: string, stage: StageDef, scale = 1): number {
   const seen = loadHistory()[key]?.[stage.id];
-  return seen && seen.length > 0 ? median(seen) : stage.seconds;
+  return seen && seen.length > 0 ? median(seen) : stage.seconds * scale;
 }
 export function recordRun(key: string, seconds: Record<string, number>): void {
   const history = loadHistory();
@@ -105,7 +105,9 @@ export class GenTracker {
   /** The latest preview: a version that changes with every new file, and the step it shows. */
   preview: { version: number; step: number | null; steps: number | null } | null = null;
   private readonly stages: StageDef[];
-  constructor(readonly kind: GenKind, readonly key: string, private readonly now: () => number = Date.now) { this.stages = stagesFor(kind); }
+  /** `scale` stretches the built-in seconds for a job bigger or smaller than the sizes they were measured at (a picture of 2048 x 2048 is four 1024 x 1024 ones); history, once it exists for the size, replaces them. */
+  constructor(readonly kind: GenKind, readonly key: string, private readonly now: () => number = Date.now, private readonly scale = 1) { this.stages = stagesFor(kind); }
+  private seconds(stage: StageDef): number { return stageSeconds(this.key, stage, this.scale); }
 
   get started(): boolean { return this.seenStage; }
 
@@ -146,7 +148,7 @@ export class GenTracker {
     if (this.index < 0) return { stage: null, stage_label: null, step: null, steps: null, fraction: this.unit / this.units, eta_seconds: null };
     const stage = this.stages[this.index]!;
     const elapsed = (this.now() - this.stageStarted) / 1000;
-    const typical = Math.max(0.5, stageSeconds(this.key, stage));
+    const typical = Math.max(0.5, this.seconds(stage));
     // Inside a stage: the worker's own "n of m" when it gives one, else time against the stage's median, never reaching the end by itself.
     const reported = this.n !== null && this.of ? Math.max(0, Math.min(1, this.n / this.of)) : null;
     const inner = reported ?? Math.min(0.95, elapsed / typical);
@@ -154,9 +156,9 @@ export class GenTracker {
     const unitFraction = before + stage.weight * inner;
     const fraction = (this.high = Math.max(this.high, Math.min(0.99, (this.unit + unitFraction) / this.units)));
     // Remaining time: later stages at their medians, this stage by its own pace once it has shown 15 percent.
-    const later = this.stages.slice(this.index + 1).reduce((sum, item) => sum + stageSeconds(this.key, item), 0);
+    const later = this.stages.slice(this.index + 1).reduce((sum, item) => sum + this.seconds(item), 0);
     const here = reported !== null && reported >= 0.15 && elapsed > 0 ? (elapsed * (1 - reported)) / reported : Math.max(0.5, typical * (1 - inner));
-    const raw = here + later + (this.units - this.unit - 1) * this.stages.reduce((sum, item) => sum + stageSeconds(this.key, item), 0);
+    const raw = here + later + (this.units - this.unit - 1) * this.stages.reduce((sum, item) => sum + this.seconds(item), 0);
     const at = this.now();
     // The countdown runs down with the clock; it grows only once the stage's own measured pace says the run is slower than usual.
     const expected = this.lastEta ? this.lastEta.value - (at - this.lastEta.at) / 1000 : raw;

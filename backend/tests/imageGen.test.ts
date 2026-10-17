@@ -654,6 +654,17 @@ test("cancel in each stage stops the worker, removes the work folder and the pre
   }
 });
 
+test("a bigger picture without history gets a longer built-in estimate; history replaces it", () => {
+  __resetGenHistoryForTests();
+  rmSync(join(dataDir, "gen-history.json"), { force: true });
+  const small = new GenTracker("image", historyKey("image", 1024, 1024), () => 0, 1);
+  const big = new GenTracker("image", historyKey("image", 2048, 2048), () => 0, 4);
+  for (const tracker of [small, big]) tracker.enter("steps", 0, 4);
+  expect(big.snapshot().eta_seconds!).toBeGreaterThanOrEqual(small.snapshot().eta_seconds! * 3);
+  rmSync(join(dataDir, "gen-history.json"), { force: true });
+  __resetGenHistoryForTests();
+});
+
 test("several pictures in one job: the fraction covers all of them and never goes back when the next picture starts over", () => {
   __resetGenHistoryForTests();
   let at = 0;
