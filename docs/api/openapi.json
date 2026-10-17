@@ -1396,6 +1396,7 @@
                       "upscale",
                       "resize",
                       "find_people",
+                      "people_mask",
                       "erase_people",
                       "edit",
                       "edit_masked"

@@ -510,7 +510,7 @@ second picture to the bench"). Each is declared like the main picture (`referenc
 With a reference the whole scene goes to the model (no crop). `GET /stack/v1/image` reports `edit.references` (0 on a Stack that cannot).
 Two more tool operations, Apple's on-device person finder (macOS 14 and later, a small helper compiled once like the foreground finder): `find_people` answers `data[0].people`
 (numbered boxes as fractions of the picture, each person's main blob only) and a copy of the picture with the boxes drawn and numbered; `erase_people` (field `people`: `1,3` or `all`)
-erases those people and fills the place with LaMa. Codes: 422 `no_people`, `people_unavailable` (no helper: paint over the person with `erase`), `people_required`.
+erases those people and fills the place with LaMa; `people_mask` (same field) answers the grown mask of those people (white on black PNG) for `edit_masked` to fill with the picture model (2.6 s on the Studio, cleaner than LaMa). Codes: 422 `no_people`, `people_unavailable` (no helper: paint over the person with `erase`), `people_required`.
 The other non-generative operations (`remove_background`, `erase`, `upscale`, `resize`) are unchanged.
 
 **LoRA library.** `data/images/loras/` holds one `.safetensors` per record (named by its sha256) and `manifest.json`: `GET /stack/v1/image/loras`;

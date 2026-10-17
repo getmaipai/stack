@@ -262,11 +262,8 @@ def find_people(request, params):
     return {"width": width, "height": height, "engine": "apple-vision", "model": "VNGeneratePersonInstanceMaskRequest", "people": boxes}
 
 
-def erase_people(request, params):
-    """Erase the chosen people (params.people: a list of numbers from find_people, or "all"), filling with LaMa."""
-    src = load(request["input"], "erase_in")
-    rgba = np.asarray(src.convert("RGBA"))
-    rgb = np.ascontiguousarray(rgba[..., :3])
+def chosen_people_mask(request, params, rgb):
+    """The mask of the chosen people (params.people: numbers from find_people, or "all"), grown to cover the soft edge, hair, shadows at the feet and a hand-held object."""
     height, width = rgb.shape[:2]
     labels, boxes = people_labels(request, rgb)
     wanted = params.get("people", "all")
@@ -275,11 +272,29 @@ def erase_people(request, params):
     if not ids or unknown:
         raise Refused("people_required", "Say which person to remove by the number from find_people, or all of them.")
     person = np.isin(labels, ids).astype(np.uint8) * 255
-    # Cover the soft edge, hair, shadows at the feet and a hand-held object: a margin proportional to the picture.
     k = max(5, int(round(max(height, width) * 0.018)) | 1)
     mask = cv2.dilate(person, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
     if mask.mean() / 255 > 0.5:
         raise Refused("mask_too_big", "The people to remove cover more than half of the picture.")
+    return mask, boxes
+
+
+def people_mask(request, params):
+    """The chosen people as a mask picture (white), for the picture engine's masked edit to fill; nothing is erased here."""
+    src = load(request["input"], "erase_in")
+    rgb = np.ascontiguousarray(np.asarray(src.convert("RGB")))
+    mask, boxes = chosen_people_mask(request, params, rgb)
+    save_png(np.dstack([mask, mask, mask]), request["output"])
+    return {"width": rgb.shape[1], "height": rgb.shape[0], "engine": "apple-vision", "model": "VNGeneratePersonInstanceMaskRequest", "people": boxes}
+
+
+def erase_people(request, params):
+    """Erase the chosen people (params.people: a list of numbers from find_people, or "all"), filling with LaMa."""
+    src = load(request["input"], "erase_in")
+    rgba = np.asarray(src.convert("RGBA"))
+    rgb = np.ascontiguousarray(rgba[..., :3])
+    height, width = rgb.shape[:2]
+    mask, boxes = chosen_people_mask(request, params, rgb)
     sess = session("lama", request["models"].get("lama"))
     filled, crop = lama_fill(sess, rgb, mask)
     out = np.dstack([filled, rgba[..., 3]]) if "A" in src.getbands() else filled
@@ -351,7 +366,7 @@ def resize(request, params):
     return {"width": new_w, "height": new_h, "engine": "lanczos", "model": "none"}
 
 
-OPS = {"remove_background": remove_background, "erase": erase, "upscale": upscale, "resize": resize, "find_people": find_people, "erase_people": erase_people}
+OPS = {"remove_background": remove_background, "erase": erase, "upscale": upscale, "resize": resize, "find_people": find_people, "people_mask": people_mask, "erase_people": erase_people}
 
 
 def main():

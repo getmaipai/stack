@@ -166,6 +166,13 @@ test("IMGEDIT-01: find_people and erase_people reach the worker with the person 
   withModel.stop();
 });
 
+test("IMGEDIT-01: people_mask needs no model and reaches the worker with the chosen people", async () => {
+  const service = new ImageToolsService(deps({ ensurePeopleHelper: async () => "/helper/personmask", modelPath: () => null }));
+  await service.run({ operation: "people_mask", image: PNG, params: { people: [2] } });
+  expect(requests[0]).toMatchObject({ op: "people_mask", people_helper: "/helper/personmask", params: { people: [2] } });
+  service.stop();
+});
+
 test("IMGEDIT-01: a Mac without the person finder answers people_unavailable as a 422 that points to the eraser", async () => {
   const service = new ImageToolsService(deps({ ensurePeopleHelper: async () => null }, (request) => ({ id: request.id, ok: false, code: "people_unavailable", error: "Finding people needs Apple's person finder. Paint over the person with the eraser instead." })));
   const error = await service.run({ operation: "find_people", image: PNG }).catch((caught) => caught as ImageToolError);
