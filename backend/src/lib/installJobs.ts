@@ -15,6 +15,14 @@ import type { RoleId } from "@/roles";
 
 type Pin = CatalogModelLike & { download: NonNullable<CatalogModelLike["download"]> };
 
+/** What an install is for, in words the install strip can show. A role that
+ * is already serving keeps serving while this downloads. */
+export function installPurpose(model: Pick<CatalogModelLike, "engine" | "component">): string {
+  if (model.component === "projector") return "picture reading for chat";
+  if (model.engine === "omlx") return "faster chat engine";
+  return "model upgrade";
+}
+
 export const MISSING_PART_CODE = (id: string): string => `model-part-missing.${id}`;
 
 /** Starts the install job for a pin. `done` settles when the install ends. */
@@ -22,7 +30,7 @@ export function startModelInstall(model: Pin, role: RoleId, download?: DownloadM
   // One directory per model id: two pins whose URLs end in the same file name never share a path.
   const destination = join(modelsDir, model.id, basename(new URL(model.download.url).pathname) || `${model.id}.gguf`);
   const items = model.download.files?.map((file) => ({ id: file.path, label: file.path, completedBytes: 0, totalBytes: file.bytes, state: "queued" as const })) ?? [{ id: basename(destination), label: basename(destination), completedBytes: 0, totalBytes: model.download.approx_bytes, state: "queued" as const }];
-  const job = createJob({ kind: "model.install", role, totalBytes: items.reduce((sum, item) => sum + item.totalBytes, 0), items, status: "downloading", input: { model: model.id } });
+  const job = createJob({ kind: "model.install", role, totalBytes: items.reduce((sum, item) => sum + item.totalBytes, 0), items, status: "downloading", input: { model: model.id, purpose: installPurpose(model) } });
   const done = installCatalogModel(model, { destination, download, signal: jobSignal(job.id), onProgress: (progress) => {
     const itemId = progress.itemId;
     const nextItems = getJob(job.id)?.items?.map((item) => item.id !== itemId ? item : { ...item, completedBytes: progress.itemCompletedBytes ?? progress.completedBytes, totalBytes: progress.itemTotalBytes ?? item.totalBytes, state: progress.itemState ?? "running" });
