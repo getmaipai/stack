@@ -14,6 +14,8 @@ import { DownloadVerificationError } from "@/lib/download";
 import { POCKET_TTS_GATED_REPO } from "@/speech/pocketTts";
 import { ensureCloningWeights, prepareVoice, voiceNeedsCloning, VoiceRefusedError } from "@/speech/voices";
 import { hasJobRunner, submitJob, waitForJob } from "@/lib/jobs";
+import { editImages, generateImages, ImageGenerationBodySchema, type ImageGenerationBody } from "@/routes/imageGenerations";
+import { imageEngineActive } from "@/images/imageEngine";
 import { IMAGE_TOOLS_OPERATIONS, stashInput, takeResult } from "@/imagetools/imageTools";
 import type { ImageEditResult } from "@/imagetools/jobs";
 import { RoleRequest } from "@maipai/spec/stack/ts/role-request.js";
@@ -41,7 +43,8 @@ const SpeechFormSchema = z.object({
   model: z.string().min(1).optional().openapi({ example: "tts" }),
   timeout_ms: z.coerce.number().int().positive().optional(),
 });
-const ImageRequestSchema = RoleRequest.extend({ prompt: z.string() });
+// The picture request: the role request with every field the picture generator takes (IMGGEN-STACK-02); `model` is optional (`image` is the role).
+const ImageRequestSchema = ImageGenerationBodySchema;
 // STACK-TOKENIZE-01: the engine's own token count, for Home's chat window
 // (Home rule 2: Home never estimates what the engine can count). Either
 // `messages`, rendered with the engine's own chat template first, or a
@@ -229,7 +232,13 @@ async function ensureCloningLoaded(role: RoleId, signal: AbortSignal): Promise<v
     if (status.identity?.model !== POCKET_TTS_GATED_REPO) await restartRole(role);
   }
 }
-v1Routes.openapi(imagesRoute, (c) => reply(c, "job", c.req.valid("json")) as never);
+// When the picture generator's weights are installed the mflux path answers (images/imageEngine.ts); otherwise the supervised ComfyUI does.
+v1Routes.openapi(imagesRoute, (c) => {
+  const body = c.req.valid("json") as ImageGenerationBody;
+  const model = body.model ?? "image";
+  if (imageEngineActive() && (model === "image" || model === "flux2-klein-4b" || model === "z-image-turbo")) return generateImages(c, body) as never;
+  return reply(c, "job", { ...body, model }) as never;
+});
 
 // IMAGETOOLS-01: edits on a picture the person already has (additive). The
 // job API with a wait, like /images/generations; the picture and mask ride
@@ -238,7 +247,13 @@ const MAX_UPLOAD_BYTES = 40 * 1024 * 1024;
 const ImageEditFormSchema = z.object({
   image: z.custom<File>((value) => value instanceof File, "The picture in the `image` field.").openapi({ type: "string", format: "binary" }),
   mask: z.custom<File>((value) => value instanceof File, "The mask in the `mask` field.").openapi({ type: "string", format: "binary" }).optional(),
-  operation: z.enum(IMAGE_TOOLS_OPERATIONS).openapi({ description: "remove_background (a transparent PNG), erase (needs `mask`: white is removed), upscale (`scale` 2 or 4), resize (`width` and/or `height`, or `factor`)." }),
+  operation: z.enum([...IMAGE_TOOLS_OPERATIONS, "edit", "edit_masked"]).openapi({ description: "remove_background (a transparent PNG), erase (needs `mask`: white is removed), upscale (`scale` 2 or 4), resize (`width` and/or `height`, or `factor`); edit (change the picture as the `instruction` says) and edit_masked (the same, but only the painted `mask` or the `region` can change: the rest is the original, bit for bit, beyond a feathered edge) answer like /v1/images/generations: data[] has `url` and `b64_json`, and the files are under /v1/images/generations/{job}/0.png." }),
+  instruction: z.string().optional().openapi({ description: "edit and edit_masked: what to change, in words (`prompt` is accepted too)." }),
+  prompt: z.string().optional(),
+  region: z.string().optional().openapi({ description: "edit_masked: x,y,width,height as fractions of the picture, like 0.4,0.5,0.2,0.2; the area to change when no mask is sent." }),
+  feather: z.coerce.number().min(0).max(64).optional().openapi({ description: "edit_masked: pixels of soft edge on the mask (default 12). 0 changes exactly the mask." }),
+  seed: z.coerce.number().int().min(0).optional(),
+  steps: z.coerce.number().int().min(1).max(30).optional(),
   scale: z.coerce.number().int().optional(),
   width: z.coerce.number().int().positive().optional(),
   height: z.coerce.number().int().positive().optional(),
@@ -261,12 +276,17 @@ const imageEditResultRoute = createRoute({ method: "get", path: "/images/edits/{
 
 v1Routes.openapi(imageEditsRoute, async (c) => {
   const form = c.req.valid("form");
+  if (form.operation === "edit" || form.operation === "edit_masked") {
+    if (form.image.size === 0 || form.image.size > MAX_UPLOAD_BYTES) return jsonReply(c, { error: `The picture must be between 1 byte and ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.`, code: "too_large" }, 413, identityHeaders(null)) as never;
+    if (form.mask && form.mask.size > MAX_UPLOAD_BYTES) return jsonReply(c, { error: "The mask is too big.", code: "too_large" }, 413, identityHeaders(null)) as never;
+    return editImages(c, { image: form.image, mask: form.mask, operation: form.operation, instruction: form.instruction, prompt: form.prompt, region: form.region, feather: form.feather, seed: form.seed, steps: form.steps, timeout_ms: form.timeout_ms }) as never;
+  }
   if (form.image.size === 0 || form.image.size > MAX_UPLOAD_BYTES) return jsonReply(c, { error: `The picture must be between 1 byte and ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.`, code: "too_large" }, 413, identityHeaders(null)) as never;
   if (form.mask && form.mask.size > MAX_UPLOAD_BYTES) return jsonReply(c, { error: "The mask is too big.", code: "too_large" }, 413, identityHeaders(null)) as never;
   if (!hasJobRunner("image_edit")) return jsonReply(c, { error: "The image tools are not available on this machine.", code: "unsupported" }, 503, identityHeaders(null)) as never;
   const token = crypto.randomUUID();
   const params: Record<string, unknown> = { ...(form.scale !== undefined ? { scale: form.scale } : {}), ...(form.width !== undefined ? { width: form.width } : {}), ...(form.height !== undefined ? { height: form.height } : {}), ...(form.factor !== undefined ? { factor: form.factor } : {}), ...(form.engine ? { engine: form.engine } : {}) };
-  stashInput(token, { operation: form.operation, image: new Uint8Array(await form.image.arrayBuffer()), ...(form.mask ? { mask: new Uint8Array(await form.mask.arrayBuffer()) } : {}), params });
+  stashInput(token, { operation: form.operation as typeof IMAGE_TOOLS_OPERATIONS[number], image: new Uint8Array(await form.image.arrayBuffer()), ...(form.mask ? { mask: new Uint8Array(await form.mask.arrayBuffer()) } : {}), params });
   const submitted = submitJob({ kind: "image_edit", role: "image", input: { operation: form.operation, params, token } });
   if ("refused" in submitted) return jsonReply(c, { error: submitted.reason, code: "unsupported" }, 503, identityHeaders(null)) as never;
   const timeoutMs = typeof form.timeout_ms === "number" ? form.timeout_ms : DEFAULT_RENDER_WAIT_MS;

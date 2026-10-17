@@ -4,7 +4,7 @@
 // pins. Pure: the route supplies the hardware and the installed set.
 import { PROFILE_MODEL_BINDINGS, sizeMachine, type ProfileTier } from "@/profiles";
 import type { HardwareInfo, MemorySource } from "@/lib/hardware";
-import { STACK_CHAT_MODEL, STACK_IMAGE_TOOL_MODELS, STACK_MODELS, STACK_VIDEO_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
+import { STACK_CHAT_MODEL, STACK_IMAGE_ENGINE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_MODELS, STACK_VIDEO_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
 import { tierDefaultTtsEngine } from "@/speech/ttsEngines";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import type { RoleId } from "@/roles";
@@ -58,6 +58,13 @@ function view(pin: CatalogModelLike, installed: Set<string>, starter: boolean): 
 export function videoInstallModels(installedIds: Iterable<string> = []): PlanModel[] {
   const installed = new Set(installedIds);
   return STACK_VIDEO_MODELS.flatMap((pin) => view(pin, installed, false) ?? []);
+}
+
+/** The pins the picture generator needs, in the shape of a pull, for the image status route: Home installs a family when the person turns pictures on (FLUX.2 Klein 4B by default; Z-Image-Turbo is offered on the biggest computers). Not in the first-run plan, the way no generator is. */
+export function imageInstallModels(family: "flux2-klein-4b" | "z-image-turbo", installedIds: Iterable<string> = []): PlanModel[] {
+  const installed = new Set(installedIds);
+  const pins = family === "flux2-klein-4b" ? STACK_IMAGE_KLEIN_MODELS : STACK_IMAGE_ENGINE_MODELS.filter((pin) => !STACK_IMAGE_KLEIN_MODELS.includes(pin));
+  return pins.flatMap((pin) => view(pin, installed, false) ?? []);
 }
 
 export function buildInstallPlan(hw: HardwareInfo, options: { vramOverrideGb?: number | null; installedIds?: Iterable<string> } = {}): InstallPlan {

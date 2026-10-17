@@ -1,5 +1,6 @@
 import { hfUrl } from "@/lib/hf";
 import type { CatalogModelLike } from "@/lib/modelStore";
+import { KLEIN_4B_FILES, KLEIN_4B_PRIMARY, KLEIN_4B_REPO, KLEIN_4B_REVISION, ZIMAGE_TURBO_FILES, ZIMAGE_TURBO_PRIMARY, ZIMAGE_TURBO_REPO, ZIMAGE_TURBO_REVISION, type ImagePinFile } from "@/images/pins";
 
 // The first standalone Stack chat pin: an official Qwen GGUF, small enough
 // for p16 while retaining a useful local conversation experience. The
@@ -501,6 +502,28 @@ export const STACK_VIDEO_TOKENIZER: CatalogModelLike = {
 };
 export const STACK_VIDEO_MODELS: CatalogModelLike[] = [STACK_VIDEO_MODEL, STACK_VIDEO_TOKENIZER];
 
+// IMGGEN-STACK-01 (docs/design/image-engine-2026-10-17.md in Home): the
+// image generator's weights for the mflux worker. One family is a primary
+// record (the transformer, or its first shard) plus a component record for
+// every other file mflux reads, all placed in the hub cache at the pinned
+// revision; the worker is handed that snapshot folder and runs offline.
+// The same bf16 weights serve 8-bit generation (quantized in memory at
+// load, 2 s) and bf16 reference edits. Peaks are the MLX allocations
+// measured on the Studio (M5 Max, 128 GB), 1024 x 1024.
+export const IMAGE_ENGINE_NAME = "mflux";
+export const STACK_IMAGE_KLEIN_ID = "flux2-klein-4b";
+export const STACK_IMAGE_ZIMAGE_ID = "z-image-turbo";
+function imageFamily(id: string, repo: string, revision: string, primary: string, files: ImagePinFile[], profile: string, footprint: number): CatalogModelLike[] {
+  const pin = (file: ImagePinFile): CatalogModelLike["download"] => ({ url: hfUrl(`${repo}/resolve/${revision}/${file.file}`), sha256: file.sha256, approx_bytes: file.bytes, hub_file: file.file });
+  const main = files.find((file) => file.file === primary)!;
+  const head: CatalogModelLike = { id, role: "image", repo, license: "Apache-2.0", revision, engine: IMAGE_ENGINE_NAME, sizing: { profile, quantization: "bf16, run 8-bit" }, download: pin(main), measured: { footprintBytes: footprint, contextLength: 0, hardware: "Apple M5 Max, 128 GB unified memory" } };
+  const parts = files.filter((file) => file.file !== primary).map((file): CatalogModelLike => ({ id: `${id}-${file.file.replace(/\.[^.]+$/, "").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`, role: "image", component: `${id}:${file.file}`, repo, license: "Apache-2.0", revision, engine: IMAGE_ENGINE_NAME, sizing: { profile, quantization: "bf16" }, download: pin(file) }));
+  return [head, ...parts];
+}
+export const STACK_IMAGE_KLEIN_MODELS = imageFamily(STACK_IMAGE_KLEIN_ID, KLEIN_4B_REPO, KLEIN_4B_REVISION, KLEIN_4B_PRIMARY, KLEIN_4B_FILES, "p32", 13_500_000_000);
+export const STACK_IMAGE_ZIMAGE_MODELS = imageFamily(STACK_IMAGE_ZIMAGE_ID, ZIMAGE_TURBO_REPO, ZIMAGE_TURBO_REVISION, ZIMAGE_TURBO_PRIMARY, ZIMAGE_TURBO_FILES, "p128", 30_100_000_000);
+export const STACK_IMAGE_ENGINE_MODELS: CatalogModelLike[] = [...STACK_IMAGE_KLEIN_MODELS, ...STACK_IMAGE_ZIMAGE_MODELS];
+
 // Nomic's official GGUF conversion, pinned to the Hub revision whose
 // Q4_K_M file matches the household's existing embedding model.
 export const STACK_EMBED_MODEL: CatalogModelLike = {
@@ -589,7 +612,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_VIDEO_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

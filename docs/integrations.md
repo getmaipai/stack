@@ -41,7 +41,7 @@ OpenAI-shaped, so an existing client library works unchanged.
 | `POST /v1/embeddings` | `embed` | embeddings |
 | `POST /v1/audio/transcriptions` | `stt` | transcription (multipart audio) |
 | `POST /v1/audio/speech` | `tts` | speech; phrase-level streaming and cancel |
-| `POST /v1/images/generations` | `image` | the job API with a wait |
+| `POST /v1/images/generations` | `image` | the job API with a wait; on a Mac with the picture models installed the mflux worker answers (see Picture generation below), otherwise the supervised ComfyUI |
 | `POST /v1/videos/generations` | `video` | the job API with a wait; progress by phase, cancel, the clip fetched by URL (see Video generation below) |
 | `GET /v1/models` | all | role ids plus installed model ids in OpenAI's list shape |
 
@@ -389,3 +389,70 @@ tokenizer) shaped as install-plan models to post to `POST /stack/v1/models` (the
 `GET /stack/v1/roles` follows the same facts: `notInstalled`, `installed`, `loaded` (the worker is up), `ready` (a clip finished in the last hour).
 The tokenizer is the one file set the model would otherwise fetch from the Hub at run time; it is pinned, so the worker runs with `HF_HUB_OFFLINE=1` and
 makes no network request.
+
+## Picture generation (IMGGEN-STACK-01 and 02, IMGGEN-EDIT-01, IMGGEN-LORA-01)
+
+FLUX.2 Klein 4B (Apache-2.0) is the default; Z-Image-Turbo (Apache-2.0) is the second model on a 128 GB Mac. Both run on mflux 0.23.0 (MLX, Apple GPU)
+inside one managed Python 3.12 environment and one worker process that exists only while picture work does: it starts on the first request, waits ten
+minutes (`IMAGE_IDLE_MS`) for the next one, then exits and returns its memory. It is never started at boot and never kept warm. The weights are pinned
+model records (revision, sha256, bytes, licence per file; about 16 GB for Klein, 33 GB for Z-Image) placed in the hub cache, and the worker runs with
+`HF_HUB_OFFLINE=1`. When at least one family is installed on an Apple silicon Mac with 32 GB or more, this path answers `image`; with none installed the
+role stays on the supervised ComfyUI checkpoint exactly as before (`GET /stack/v1/roles` shows which). Design and the measurements: Home
+`docs/design/image-engine-2026-10-17.md`.
+
+Memory: a job holds one governor admission through the generator queue (one generator job at a time across pictures and video; the loser shows
+`waiting for memory`): Klein 8-bit 15 GB (13 GB at 4-bit on a 32 GB Mac, which is the only change a tier makes), Klein reference edit at bf16 18 GB,
+Z-Image-Turbo 34 GB (p128 only), plus 1 GB while LoRAs are applied (unbaked: about 0.6 s a picture slower, no rebuild to change a scale). A request that can
+never fit beside what is resident is 503 `no_memory` at once. Four jobs may be waiting (429 `queue_full`).
+
+`POST /v1/images/generations` (JSON) answers 200 `{ created, job, data: [Pic] }` within `timeout_ms` (two minutes unsaid, 30 minutes at most), or 202
+`{ created, job, data: [] }` past it; then poll. Fields: `prompt` (required, 4000 characters), `model` (`image` or unsaid for the default; `flux2-klein-4b`;
+`z-image-turbo`), `size` (`1024x1024` unsaid; 256 to 2048 a side, multiples of 16), `n` (1 to 4; seeds `seed`, `seed+1`, ...), `seed`, `steps` (4 for
+Klein, 9 for Z-Image; at most 12 and 20), `negative_prompt` (accepted, no effect: the distilled models run without guidance), `loras`
+(`[{ id | sha256, scale }]`, at most 4, scale 0 to 2, the record's default when left out), `audience` (`all-ages` unsaid, or `adult`), `init_image` (base64,
+at most 40 MB) with `strength` (0.05 to 1, default 0.6) for image to image, `preview` (accepted, ignored), `timeout_ms`. A LoRA selects the base model it
+was made for (a request that mixes bases is 422 `wrong_base_model`). `Pic` is `{ url, thumbnail_url, b64_json (the waiting reply only), content_type, seed,
+width, height, model, steps, ms, lora_ids, mode }`. Errors carry `error` (what happened, what to do) and `code`: 413 `too_large`; 422 `bad_size` `bad_steps`
+`bad_image` `unknown_lora` `wrong_base_model` `lora_not_allowed` `lora_changed` `lora_missing` `too_many_loras` `duplicate_lora` `bad_strength`; 429 `queue_full`;
+499 `cancelled`; 500 `failed` `worker_stopped`; 503 `not_available_on_this_computer` `unsupported` `not_installed` `no_memory` `setup_failed` `model_missing`;
+504 `timeout`; 507 `out_of_memory`. A body that breaks the schema is a plain 400.
+
+`GET /v1/images/generations/{job}` returns `{ job, state, phase, progress, phase_progress, position, error, code, data }`; `state` is `queued`, `running`,
+`done`, `failed` or `cancelled`; `phase` is `queued`, `waiting for memory`, `starting`, `setting up` (first picture only), `loading`, `rendering`, `decoding`,
+`ready`. `progress` is 0 to 100 over the whole job (5 percent loading, then the step and decode share, per picture of `n`). The job is also on
+`GET /stack/v1/jobs/{id}` (`percent`, `position`, `status`, and `result` `{ job, model, mode, ms, images: [{ index, seed, width, height }] }`). `GET
+/v1/images/generations/{job}/{index}.png` is the picture (a fresh PNG with no metadata) and `.../{index}.thumb.jpg` its 384 px JPEG. `DELETE
+/v1/images/generations/{job}` cancels a queued or running job (the worker stops between steps; one that does not answer in ten seconds is killed and its
+memory returns) or deletes a finished job's files; Home calls it once it has stored them. Results are kept a day and the newest 48 under
+`data/images/results/<job>/`. No prompt and no input picture is written there, logged, or put in a job record or on the event feed. Every picture the Stack
+generates is recorded by hash for the video reference-picture gate (VIDEO-GEN-12).
+
+**Edits.** `POST /v1/images/edits` (multipart) gains two operations that run Klein's reference edit at bf16 (8-bit left a plant in the picture it was asked
+to remove): `edit` (field `instruction`, one picture; the whole picture may change) and `edit_masked` (also `mask`, white is changeable, and/or `region` as
+`x,y,w,h` fractions; `feather` 0 to 64 pixels, default 12). The Stack crops the changed area with context when it is under a quarter of the picture, edits at
+up to 1024 px on the long side, and composites the result through the feathered mask, so the original pixels outside the mask and its feather ring are
+unchanged bit for bit (0 feather: exactly the mask). `seed`, `steps`, `timeout_ms` as above. The reply is the generation reply (200 or 202, `Pic` with `mode`
+`edit` or `edit-masked`, files under `/v1/images/generations/{job}/0.png`); extra codes: 422 `instruction_required` `mask_required` `bad_region` `mask_empty`.
+The non-generative operations (`remove_background`, `erase`, `upscale`, `resize`) are unchanged.
+
+**LoRA library.** `data/images/loras/` holds one `.safetensors` per record (named by its sha256) and `manifest.json`: `GET /stack/v1/image/loras`;
+`POST /stack/v1/image/loras` (multipart: `file`, or `path` for a file already on the Stack's computer; `name`, `licence`, `licence_acknowledged`,
+`source_url`, `classification`, `strength_default`, `trigger_words`, `added_by`); `POST /stack/v1/image/loras/install` (JSON `{ url, name, licence?,
+... }`: a `huggingface.co` file link only, fetched by an install job, hashed on arrival, the repository's licence and tags read from the Hub; the job's
+`result.lora` is the record, a failed job's `reason` starts with the code); `PATCH` and `DELETE /stack/v1/image/loras/{id}`. The id is `lora-` and the first
+16 hex of the sha256. The base model (`flux2-klein-4b` or `z-image-turbo`) is read from the tensors; an SDXL or a Wan file is refused 422 `wrong_base_model`
+and says where it belongs. Open licences import as is; any other needs `licence_acknowledged=true`. `classification` defaults to `adult-only` (uncertain means
+adult-only); a file whose own metadata, name, tags or trigger words name adult content is adult-only whatever is asked. Refused outright (422
+`lora_refused`, no setting lifts it): a file that names a child or a minor in a sexual context, and a file that says it reproduces a real person's likeness
+(a celebrity or likeness tag; a consenting household member's own face is refused until the owner rules). The word lists are a tripwire in
+`lib/media/loraLibrary.ts`, not a judgement of the pictures. **Who may use which LoRA is Home's rule**: the request names the ids it may apply and
+`audience` is a second lock (an `all-ages` request naming an `adult-only` LoRA is 422 `lora_not_allowed`). The video library (`video/loras.ts`) keeps its
+own file; both read the same safetensors header.
+
+`GET /stack/v1/image` returns `{ image: { state, phase, available, code, reason, tier, default_model, models: [{ id, family, label, licence, installed,
+default, loras, edit, steps_default, peak_gb, warm_seconds, available, quantize, install }], loras_supported, lora_count, edit: { generative, masked, model },
+limits, negative_prompt, idle_unload_s, memory, worker, environment, install } }`: `state` is `unsupported`, `off` (under 32 GB), `not-installed`,
+`needs-setup`, `building`, `idle` (worker loaded) or `running`. `POST /stack/v1/image/install` (`{ family? }`) is one job: it downloads every pinned file of
+the family, then builds the environment; a second call joins it. `POST /stack/v1/engines/image-gen/install` builds only the environment. The `image` role in
+`GET /stack/v1/roles` follows the service when a family is installed: `notInstalled`, `installed`, `loaded` (the worker is up), `ready` (a picture finished
+in the last hour).

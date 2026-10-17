@@ -29,6 +29,9 @@ import { registerImageToolJobs } from "@/imagetools/jobs";
 import { videoRoutes } from "@/routes/video";
 import { videoV1Routes } from "@/routes/videoGenerations";
 import { registerVideoJobs } from "@/video/jobs";
+import { imageRoutes } from "@/routes/image";
+import { imageV1Routes } from "@/routes/imageGenerations";
+import { registerImageJobs } from "@/images/jobs";
 import { speechRoutes, websocket } from "@/routes/speech";
 import { registerGenerators } from "@/generators";
 import { SESSION_PATH } from "@/speech/server";
@@ -47,6 +50,7 @@ export const app = apiRouter<AppEnv>();
 registerGenerators();
 registerImageToolJobs();
 registerVideoJobs();
+registerImageJobs();
 
 const livenessRoute = createRoute({
   method: "get", path: "/healthz", tags: ["Health"], summary: "Stack process liveness",
@@ -62,6 +66,7 @@ app.get("/api/docs", apiReference({ url: "/api/openapi.json" }));
 app.route(SESSION_PATH, speechRoutes);
 app.route("/v1", v1Routes);
 app.route("/v1/videos", videoV1Routes);
+app.route("/v1/images", imageV1Routes);
 app.route("/stack/v1/roles", rolesRoutes);
 app.route("/stack/v1/engines", enginesRoutes);
 app.route("/stack/v1/models", modelsRoutes);
@@ -77,6 +82,7 @@ app.route("/stack/v1/warmup", warmupRoutes);
 app.route("/stack/v1/search", searchRoutes);
 app.route("/stack/v1/image-tools", imageToolsRoutes);
 app.route("/stack/v1/video", videoRoutes);
+app.route("/stack/v1/image", imageRoutes);
 app.route("/stack/v1/settings", settingsRoutes);
 app.route("/stack/v1", declarationRoutes);
 app.route("/stack/v1/voices", voicesRoutes);

@@ -1014,29 +1014,105 @@
                 "properties": {
                   "model": {
                     "type": "string",
-                    "minLength": 1
+                    "description": "`image` (the default), or a picture model id from GET /stack/v1/image (`flux2-klein-4b`, `z-image-turbo`). Choosing a LoRA selects the base model it was made for."
                   },
-                  "quality": {
+                  "prompt": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  },
+                  "negative_prompt": {
+                    "type": "string",
+                    "maxLength": 4000,
+                    "description": "Accepted. The distilled models run without guidance, so it has no effect on the picture."
+                  },
+                  "size": {
+                    "type": "string",
+                    "pattern": "^\\d{3,4}x\\d{3,4}$",
+                    "description": "<width>x<height>, each 256 to 2048 and a multiple of 16. Default 1024x1024.",
+                    "example": "1024x1024"
+                  },
+                  "n": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4,
+                    "description": "Pictures to make, 1 to 4, seeds seed, seed+1, and so on. Default 1."
+                  },
+                  "seed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295
+                  },
+                  "steps": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 30,
+                    "description": "Denoising steps. Default 4 for Klein, 9 for Z-Image-Turbo (the distilled models need no more)."
+                  },
+                  "loras": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "maxLength": 40,
+                          "description": "The library id (`lora-` and the first 16 hex of the sha256)."
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "minLength": 64,
+                          "maxLength": 64,
+                          "description": "Or the file's full sha256."
+                        },
+                        "scale": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 2,
+                          "description": "Strength, 0 to 2; the record's default when left out."
+                        },
+                        "strength": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 2,
+                          "description": "Alias of `scale`."
+                        }
+                      }
+                    },
+                    "maxItems": 4,
+                    "description": "LoRAs from the household library (GET /stack/v1/image/loras), by id or sha256, with a scale. Home decides which ids this caller may name."
+                  },
+                  "audience": {
                     "type": "string",
                     "enum": [
-                      "fast",
-                      "everyday",
-                      "best"
-                    ]
+                      "all-ages",
+                      "adult"
+                    ],
+                    "description": "Who the picture is for, set by Home from the person's age band and the surface. Default all-ages. An adult-only LoRA in the list with audience all-ages is refused (422 lora_not_allowed)."
                   },
-                  "stream": {
-                    "type": "boolean"
+                  "init_image": {
+                    "type": "string",
+                    "description": "Image to image: the starting picture, base64 (a data: URL is fine), PNG, JPEG or WebP, at most 40 MB."
+                  },
+                  "strength": {
+                    "type": "number",
+                    "minimum": 0.05,
+                    "maximum": 1,
+                    "description": "Image to image only: how far the result may move from `init_image` (1 is a new picture). Default 0.6."
+                  },
+                  "preview": {
+                    "type": "boolean",
+                    "description": "Accepted and ignored in this build: no preview frame is produced."
                   },
                   "timeout_ms": {
                     "type": "integer",
-                    "minimum": 1
-                  },
-                  "prompt": {
-                    "type": "string"
+                    "minimum": 0,
+                    "exclusiveMinimum": true,
+                    "maximum": 1800000,
+                    "description": "How long this request waits for the picture before answering 202 with the job id. Default 120000."
                   }
                 },
                 "required": [
-                  "model",
                   "prompt"
                 ],
                 "additionalProperties": {
@@ -1299,9 +1375,39 @@
                       "remove_background",
                       "erase",
                       "upscale",
-                      "resize"
+                      "resize",
+                      "edit",
+                      "edit_masked"
                     ],
-                    "description": "remove_background (a transparent PNG), erase (needs `mask`: white is removed), upscale (`scale` 2 or 4), resize (`width` and/or `height`, or `factor`)."
+                    "description": "remove_background (a transparent PNG), erase (needs `mask`: white is removed), upscale (`scale` 2 or 4), resize (`width` and/or `height`, or `factor`); edit (change the picture as the `instruction` says) and edit_masked (the same, but only the painted `mask` or the `region` can change: the rest is the original, bit for bit, beyond a feathered edge) answer like /v1/images/generations: data[] has `url` and `b64_json`, and the files are under /v1/images/generations/{job}/0.png."
+                  },
+                  "instruction": {
+                    "type": "string",
+                    "description": "edit and edit_masked: what to change, in words (`prompt` is accepted too)."
+                  },
+                  "prompt": {
+                    "type": "string"
+                  },
+                  "region": {
+                    "type": "string",
+                    "description": "edit_masked: x,y,width,height as fractions of the picture, like 0.4,0.5,0.2,0.2; the area to change when no mask is sent."
+                  },
+                  "feather": {
+                    "type": "number",
+                    "nullable": true,
+                    "minimum": 0,
+                    "maximum": 64,
+                    "description": "edit_masked: pixels of soft edge on the mask (default 12). 0 changes exactly the mask."
+                  },
+                  "seed": {
+                    "type": "integer",
+                    "nullable": true,
+                    "minimum": 0
+                  },
+                  "steps": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 30
                   },
                   "scale": {
                     "type": "integer",
@@ -2434,6 +2540,324 @@
           },
           "404": {
             "description": "The poster is gone.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/images/generations/{job}": {
+      "get": {
+        "tags": [
+          "Images"
+        ],
+        "summary": "A picture job's state, progress and files",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Poll this every second or two while state is queued or running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "done",
+                        "failed",
+                        "cancelled"
+                      ]
+                    },
+                    "phase": {
+                      "type": "string",
+                      "description": "queued, waiting for memory, starting, setting up (first picture only), loading, rendering, decoding, ready; failed or cancelled when it ended so."
+                    },
+                    "progress": {
+                      "type": "integer",
+                      "description": "0 to 100 over the whole job."
+                    },
+                    "phase_progress": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "position": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Place in line while queued (1 is next)."
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "code": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "description": "GET this for the PNG (no metadata)."
+                          },
+                          "thumbnail_url": {
+                            "type": "string",
+                            "description": "GET this for the 384 px JPEG."
+                          },
+                          "b64_json": {
+                            "type": "string",
+                            "description": "The PNG, base64, on the reply that waited for it."
+                          },
+                          "content_type": {
+                            "type": "string",
+                            "enum": [
+                              "image/png"
+                            ]
+                          },
+                          "seed": {
+                            "type": "integer"
+                          },
+                          "width": {
+                            "type": "integer"
+                          },
+                          "height": {
+                            "type": "integer"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "steps": {
+                            "type": "integer"
+                          },
+                          "ms": {
+                            "type": "integer"
+                          },
+                          "lora_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "generate",
+                              "image-to-image",
+                              "edit",
+                              "edit-masked"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "thumbnail_url",
+                          "content_type",
+                          "seed",
+                          "width",
+                          "height",
+                          "model",
+                          "steps",
+                          "ms",
+                          "lora_ids",
+                          "mode"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "state",
+                    "phase",
+                    "progress",
+                    "phase_progress",
+                    "position",
+                    "error",
+                    "code",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such job (it expired or never existed).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Images"
+        ],
+        "summary": "Cancel a picture job, or delete a finished one's files",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A queued or running job is cancelled (the worker stops between steps and its memory returns); a finished job's files are deleted (Home calls this once it has stored them).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "cancelled",
+                        "deleted",
+                        "failed"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "state"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such job.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/images/generations/{job}/{file}": {
+      "get": {
+        "tags": [
+          "Images"
+        ],
+        "summary": "A finished picture (`0.png`) or its thumbnail (`0.thumb.jpg`)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "file",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The picture.",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The picture is gone: results are kept for a day, or Home deleted them.",
             "content": {
               "application/json": {
                 "schema": {
@@ -8266,6 +8690,1224 @@
       "delete": {
         "tags": [
           "Video"
+        ],
+        "summary": "Remove a LoRA and its file",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Removed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such LoRA.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/image": {
+      "get": {
+        "tags": [
+          "Images"
+        ],
+        "summary": "The picture generator's state, models, limits and what to install",
+        "responses": {
+          "200": {
+            "description": "Additive. Home enables the picture tools and its settings page from this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "image": {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "unsupported",
+                            "off",
+                            "not-installed",
+                            "needs-setup",
+                            "building",
+                            "idle",
+                            "running"
+                          ],
+                          "description": "off: this computer's tier does not run pictures. not-installed: no model family is installed. needs-setup: installed; the first picture builds the environment if it is missing and starts the worker. idle: the worker is loaded and exits after idle_unload_s. running: a job is in the worker."
+                        },
+                        "phase": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "available": {
+                          "type": "boolean"
+                        },
+                        "code": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "reason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "tier": {
+                          "type": "string"
+                        },
+                        "default_model": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "The family an unspecified request uses (FLUX.2 Klein 4B when installed)."
+                        },
+                        "models": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "family": {
+                                "type": "string"
+                              },
+                              "label": {
+                                "type": "string"
+                              },
+                              "licence": {
+                                "type": "string"
+                              },
+                              "installed": {
+                                "type": "boolean"
+                              },
+                              "default": {
+                                "type": "boolean"
+                              },
+                              "loras": {
+                                "type": "boolean"
+                              },
+                              "edit": {
+                                "type": "boolean"
+                              },
+                              "steps_default": {
+                                "type": "integer"
+                              },
+                              "peak_gb": {
+                                "type": "number"
+                              },
+                              "warm_seconds": {
+                                "type": "number"
+                              },
+                              "available": {
+                                "type": "boolean",
+                                "description": "Whether this computer's tier runs it."
+                              },
+                              "quantize": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "install": {
+                                "type": "object",
+                                "properties": {
+                                  "models": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string"
+                                        },
+                                        "role": {
+                                          "type": "string"
+                                        },
+                                        "repo": {
+                                          "type": "string"
+                                        },
+                                        "url": {
+                                          "type": "string"
+                                        },
+                                        "sha256": {
+                                          "type": "string"
+                                        },
+                                        "approx_bytes": {
+                                          "type": "integer"
+                                        },
+                                        "licence": {
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "string"
+                                        },
+                                        "engine": {
+                                          "type": "string"
+                                        },
+                                        "archive": {
+                                          "type": "boolean"
+                                        },
+                                        "hub_file": {
+                                          "type": "string"
+                                        },
+                                        "component": {
+                                          "type": "string"
+                                        },
+                                        "starter": {
+                                          "type": "boolean"
+                                        },
+                                        "installed": {
+                                          "type": "boolean"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "role",
+                                        "url",
+                                        "sha256",
+                                        "approx_bytes",
+                                        "licence",
+                                        "revision",
+                                        "starter",
+                                        "installed"
+                                      ]
+                                    }
+                                  },
+                                  "remaining_bytes": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "models",
+                                  "remaining_bytes"
+                                ],
+                                "description": "The pinned files to pull (POST /stack/v1/models, shaped as an install-plan model), or call POST /stack/v1/image/install once."
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "family",
+                              "label",
+                              "licence",
+                              "installed",
+                              "default",
+                              "loras",
+                              "edit",
+                              "steps_default",
+                              "peak_gb",
+                              "warm_seconds",
+                              "available",
+                              "quantize",
+                              "install"
+                            ]
+                          }
+                        },
+                        "loras_supported": {
+                          "type": "boolean"
+                        },
+                        "lora_count": {
+                          "type": "integer"
+                        },
+                        "edit": {
+                          "type": "object",
+                          "properties": {
+                            "generative": {
+                              "type": "boolean"
+                            },
+                            "masked": {
+                              "type": "boolean"
+                            },
+                            "model": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "generative",
+                            "masked",
+                            "model"
+                          ]
+                        },
+                        "limits": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              }
+                            ]
+                          }
+                        },
+                        "negative_prompt": {
+                          "type": "string"
+                        },
+                        "idle_unload_s": {
+                          "type": "integer"
+                        },
+                        "memory": {
+                          "type": "object",
+                          "properties": {
+                            "fits": {
+                              "type": "boolean"
+                            },
+                            "reason": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "peak_gb": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "fits",
+                            "reason",
+                            "peak_gb"
+                          ],
+                          "description": "Whether a default picture could be admitted next to what is resident now."
+                        },
+                        "worker": {
+                          "type": "object",
+                          "properties": {
+                            "alive": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "alive"
+                          ]
+                        },
+                        "environment": {
+                          "type": "object",
+                          "properties": {
+                            "engine": {
+                              "type": "string"
+                            },
+                            "version": {
+                              "type": "string"
+                            },
+                            "ready": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "engine",
+                            "version",
+                            "ready"
+                          ]
+                        },
+                        "install": {
+                          "type": "object",
+                          "properties": {
+                            "models": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "role": {
+                                    "type": "string"
+                                  },
+                                  "repo": {
+                                    "type": "string"
+                                  },
+                                  "url": {
+                                    "type": "string"
+                                  },
+                                  "sha256": {
+                                    "type": "string"
+                                  },
+                                  "approx_bytes": {
+                                    "type": "integer"
+                                  },
+                                  "licence": {
+                                    "type": "string"
+                                  },
+                                  "revision": {
+                                    "type": "string"
+                                  },
+                                  "engine": {
+                                    "type": "string"
+                                  },
+                                  "archive": {
+                                    "type": "boolean"
+                                  },
+                                  "hub_file": {
+                                    "type": "string"
+                                  },
+                                  "component": {
+                                    "type": "string"
+                                  },
+                                  "starter": {
+                                    "type": "boolean"
+                                  },
+                                  "installed": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "role",
+                                  "url",
+                                  "sha256",
+                                  "approx_bytes",
+                                  "licence",
+                                  "revision",
+                                  "starter",
+                                  "installed"
+                                ]
+                              }
+                            },
+                            "remaining_bytes": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "models",
+                            "remaining_bytes"
+                          ],
+                          "description": "What turning pictures on pulls: the default family's pinned files."
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "phase",
+                        "available",
+                        "code",
+                        "reason",
+                        "tier",
+                        "default_model",
+                        "models",
+                        "loras_supported",
+                        "lora_count",
+                        "edit",
+                        "limits",
+                        "negative_prompt",
+                        "idle_unload_s",
+                        "memory",
+                        "worker",
+                        "environment",
+                        "install"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "image"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/image/install": {
+      "post": {
+        "tags": [
+          "Images"
+        ],
+        "summary": "Install a picture model family and the engine (one job)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "family": {
+                    "type": "string",
+                    "description": "flux2-klein-4b (the default) or z-image-turbo."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The install job (downloads, then builds the environment). A second call while one runs joins it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    },
+                    "family": {
+                      "type": "string"
+                    },
+                    "joined": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "family",
+                    "joined"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown family.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Pictures are not available on this computer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/image/loras": {
+      "get": {
+        "tags": [
+          "Images"
+        ],
+        "summary": "The household LoRA library",
+        "responses": {
+          "200": {
+            "description": "Every record. Who may use which is Home's rule; a request names the LoRAs it is allowed to apply.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "loras": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "file": {
+                            "type": "string"
+                          },
+                          "sha256": {
+                            "type": "string"
+                          },
+                          "bytes": {
+                            "type": "integer"
+                          },
+                          "rank": {
+                            "type": "integer"
+                          },
+                          "modules": {
+                            "type": "integer"
+                          },
+                          "base_model": {
+                            "type": "string"
+                          },
+                          "licence": {
+                            "type": "string"
+                          },
+                          "licence_class": {
+                            "type": "string",
+                            "enum": [
+                              "free",
+                              "acknowledged"
+                            ]
+                          },
+                          "source_url": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "classification": {
+                            "type": "string",
+                            "enum": [
+                              "all-ages",
+                              "adult-only"
+                            ]
+                          },
+                          "classification_note": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "strength_default": {
+                            "type": "number"
+                          },
+                          "trigger_words": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "added_by": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "added_at": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "file",
+                          "sha256",
+                          "bytes",
+                          "rank",
+                          "modules",
+                          "base_model",
+                          "licence",
+                          "licence_class",
+                          "source_url",
+                          "classification",
+                          "classification_note",
+                          "strength_default",
+                          "trigger_words",
+                          "added_by",
+                          "added_at"
+                        ]
+                      }
+                    },
+                    "base_models": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "max_per_picture": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "loras",
+                    "base_models",
+                    "max_per_picture"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Images"
+        ],
+        "summary": "Add a LoRA to the library (a file)",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "Instead of `file`: a .safetensors file already on the Stack's own computer."
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "licence": {
+                    "type": "string",
+                    "description": "The licence as the source states it (apache-2.0, mit, cc0-1.0 import freely; any other needs licence_acknowledged)."
+                  },
+                  "licence_acknowledged": {
+                    "type": "string",
+                    "enum": [
+                      "true",
+                      "false"
+                    ]
+                  },
+                  "source_url": {
+                    "type": "string"
+                  },
+                  "classification": {
+                    "type": "string",
+                    "enum": [
+                      "all-ages",
+                      "adult-only"
+                    ],
+                    "description": "Default adult-only (uncertain means adult-only). A file whose own metadata names adult content is adult-only whatever is asked."
+                  },
+                  "strength_default": {
+                    "type": "number",
+                    "nullable": true,
+                    "minimum": 0,
+                    "maximum": 2
+                  },
+                  "trigger_words": {
+                    "type": "string",
+                    "description": "Comma separated, or a JSON array."
+                  },
+                  "added_by": {
+                    "type": "string",
+                    "description": "An opaque label Home keeps for who added it."
+                  }
+                },
+                "required": [
+                  "name",
+                  "licence"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Added; the id is `lora-` and the first 16 hex of the sha256. `base_model` was read from the tensors.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "file": {
+                      "type": "string"
+                    },
+                    "sha256": {
+                      "type": "string"
+                    },
+                    "bytes": {
+                      "type": "integer"
+                    },
+                    "rank": {
+                      "type": "integer"
+                    },
+                    "modules": {
+                      "type": "integer"
+                    },
+                    "base_model": {
+                      "type": "string"
+                    },
+                    "licence": {
+                      "type": "string"
+                    },
+                    "licence_class": {
+                      "type": "string",
+                      "enum": [
+                        "free",
+                        "acknowledged"
+                      ]
+                    },
+                    "source_url": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "classification": {
+                      "type": "string",
+                      "enum": [
+                        "all-ages",
+                        "adult-only"
+                      ]
+                    },
+                    "classification_note": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "strength_default": {
+                      "type": "number"
+                    },
+                    "trigger_words": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "added_by": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "added_at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "file",
+                    "sha256",
+                    "bytes",
+                    "rank",
+                    "modules",
+                    "base_model",
+                    "licence",
+                    "licence_class",
+                    "source_url",
+                    "classification",
+                    "classification_note",
+                    "strength_default",
+                    "trigger_words",
+                    "added_by",
+                    "added_at"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already in the library (already_added).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Larger than 2 GB.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not usable: not_safetensors, not_a_lora, wrong_base_model, licence_acknowledgement_required, lora_refused (a minor in a sexual context, or a real person's likeness: never allowed), bad_name, bad_strength.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/image/loras/install": {
+      "post": {
+        "tags": [
+          "Images"
+        ],
+        "summary": "Add a LoRA from a Hugging Face link (an install job)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "description": "https://huggingface.co/<owner>/<repo>/resolve/<revision>/<file>.safetensors (a /blob/ link works too). No other host is fetched."
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "licence": {
+                    "type": "string",
+                    "description": "Left out: read from the repository's card; \"unknown\" when it has none."
+                  },
+                  "licence_acknowledged": {
+                    "type": "boolean"
+                  },
+                  "classification": {
+                    "type": "string",
+                    "enum": [
+                      "all-ages",
+                      "adult-only"
+                    ]
+                  },
+                  "strength_default": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 2
+                  },
+                  "trigger_words": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "added_by": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "url",
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The install job (/stack/v1/jobs/{id}); when done its `result.lora` is the record, when failed its `reason` starts with the code (licence_acknowledgement_required, lora_refused, wrong_base_model, ...).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "job"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "bad_url: not a huggingface.co file link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/image/loras/{id}": {
+      "patch": {
+        "tags": [
+          "Images"
+        ],
+        "summary": "Edit a LoRA's name, class, default strength or trigger words",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "classification": {
+                    "type": "string",
+                    "enum": [
+                      "all-ages",
+                      "adult-only"
+                    ]
+                  },
+                  "strength_default": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 2
+                  },
+                  "trigger_words": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "source_url": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "file": {
+                      "type": "string"
+                    },
+                    "sha256": {
+                      "type": "string"
+                    },
+                    "bytes": {
+                      "type": "integer"
+                    },
+                    "rank": {
+                      "type": "integer"
+                    },
+                    "modules": {
+                      "type": "integer"
+                    },
+                    "base_model": {
+                      "type": "string"
+                    },
+                    "licence": {
+                      "type": "string"
+                    },
+                    "licence_class": {
+                      "type": "string",
+                      "enum": [
+                        "free",
+                        "acknowledged"
+                      ]
+                    },
+                    "source_url": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "classification": {
+                      "type": "string",
+                      "enum": [
+                        "all-ages",
+                        "adult-only"
+                      ]
+                    },
+                    "classification_note": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "strength_default": {
+                      "type": "number"
+                    },
+                    "trigger_words": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "added_by": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "added_at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "file",
+                    "sha256",
+                    "bytes",
+                    "rank",
+                    "modules",
+                    "base_model",
+                    "licence",
+                    "licence_class",
+                    "source_url",
+                    "classification",
+                    "classification_note",
+                    "strength_default",
+                    "trigger_words",
+                    "added_by",
+                    "added_at"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such LoRA.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "classification_locked: the file's own description names adult content, so it cannot be all-ages.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A value is out of range.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Images"
         ],
         "summary": "Remove a LoRA and its file",
         "parameters": [

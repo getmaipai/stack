@@ -466,6 +466,8 @@ function engineForRole(role: RoleId): string | null {
   // The voice role's records name the engine they are for; the engine in
   // effect (the setting, the tier, what is installed) decides which.
   if (role === "tts") return TTS_ENGINES[activeTtsChoice().engine].catalogEngine;
+  // The supervisor's image process is ComfyUI; the mflux worker's records (IMGGEN-STACK-01) belong to the image service, not to a spawned engine.
+  if (role === "image") return "comfyui";
   return null;
 }
 

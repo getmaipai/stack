@@ -7,6 +7,7 @@ import { identityHeaders } from "@/lib/identity";
 import { getModel, isModelSelectable } from "@/lib/modelStore";
 import { getRoleStatus, identityCheck, lastRealRequestAt, processRoleFor, selectedModel } from "@/lib/supervisor";
 import { videoRoleState } from "@/video/videoGen";
+import { imageEngineActive, imageRoleState } from "@/images/imageEngine";
 
 export interface RoleResolution { role: RoleId; modelId: string | null; }
 
@@ -59,6 +60,8 @@ function flatState(role: RoleId): RoleState {
 export function resolveRoleState(role: RoleId): RoleStateRecord {
   // The video role has no process the supervisor spawns: its worker lives in the video service.
   if (role === "video") return videoRoleState();
+  // The image role runs on the picture worker when its weights are installed (IMGGEN-STACK-01); otherwise on the supervised ComfyUI.
+  if (role === "image" && imageEngineActive()) return imageRoleState();
   const flat = flatState(role);
   const now = new Date().toISOString();
   if (flat === "ready") {

@@ -11,6 +11,7 @@ import { CHAT_ENGINES, ENGINE_BINARIES, ENGINE_READY_MARKER, engineRole, MANAGED
 import { ensurePocketTtsEnvironment, pocketTtsInstalled, pocketTtsRoot, POCKET_TTS_NAME } from "@/speech/pocketTts";
 import { ensureMlxAudioEnvironment, mlxAudioInstalled, mlxAudioRoot, MLX_AUDIO_NAME } from "@/speech/mlxAudio";
 import { comfyuiInstalled, comfyuiRoot, COMFYUI_NAME, ensureComfyuiEnvironment } from "@/generators/comfyui";
+import { ensureImageGenEnvironment, IMAGE_GEN_NAME, imageGen, imageGenEnvironmentReady } from "@/images/imageEngine";
 import { ensureVideoGenEnvironment, videoGen, videoGenEnvironmentReady, videoGenRoot, VIDEO_GEN_NAME } from "@/video/videoGen";
 import { engineDir, engineIsBound, ensureEngine, removeEngine } from "@/lib/engineInstall";
 import { readEngineManifest } from "@/lib/store/manifests";
@@ -68,7 +69,7 @@ enginesRoutes.openapi(listRoute, async (c) => {
   // on every platform, installed when the environment is built.
   const managed = MANAGED_RUNTIMES.map((runtime) => {
     const status = getRoleStatus(engineRole(runtime.name));
-    const installed = runtime.name === POCKET_TTS_NAME ? pocketTtsInstalled() : runtime.name === MLX_AUDIO_NAME ? mlxAudioInstalled() : runtime.name === COMFYUI_NAME ? comfyuiInstalled() : runtime.name === VIDEO_GEN_NAME ? videoGenEnvironmentReady() : false;
+    const installed = runtime.name === POCKET_TTS_NAME ? pocketTtsInstalled() : runtime.name === MLX_AUDIO_NAME ? mlxAudioInstalled() : runtime.name === COMFYUI_NAME ? comfyuiInstalled() : runtime.name === VIDEO_GEN_NAME ? videoGenEnvironmentReady() : runtime.name === IMAGE_GEN_NAME ? imageGenEnvironmentReady() : false;
     const version = deriveEngineVersionState({ running: status.identity?.build ?? null, currentTag: installed ? runtime.version : null, newestTag: runtime.version, needsRestart: false });
     return { id: `${runtime.name}-${runtime.version}`, name: runtime.name, label: `${runtime.name} ${runtime.version}, an environment the Stack assembles through uv`, platform: process.platform, arch: process.arch, verified: true, installed, matchesThisMachine: true, ...version, directory: runtime.name === POCKET_TTS_NAME ? pocketTtsRoot() : runtime.name === MLX_AUDIO_NAME ? mlxAudioRoot() : runtime.name === COMFYUI_NAME ? comfyuiRoot() : runtime.name === VIDEO_GEN_NAME ? videoGenRoot() : "", roleState: status.state, roleReason: status.reason };
   });
@@ -93,6 +94,18 @@ enginesRoutes.openapi(installRoute, async (c) => {
       .catch((error) => finishJob(job.id, { ok: false, reason: error instanceof Error ? error.message : String(error) }))
       .finally(() => { environmentJobs.delete(POCKET_TTS_NAME); });
     return c.json({ job: job.id, engine: POCKET_TTS_NAME, staged: false }, 202);
+  }
+  if (name === IMAGE_GEN_NAME) {
+    // The picture generator is an environment with no source archive (mflux comes from PyPI by hash): one build at a time, a second request joins it. Its models are pulled by POST /stack/v1/image/install or one by one.
+    const inFlight = environmentJobs.get(IMAGE_GEN_NAME);
+    if (inFlight) return c.json({ job: inFlight, engine: IMAGE_GEN_NAME, staged: false }, 202);
+    const job = createJob({ kind: "engine.install", totalBytes: 0, status: "downloading", input: { engine: `${IMAGE_GEN_NAME}-env` } });
+    environmentJobs.set(IMAGE_GEN_NAME, job.id);
+    void ensureImageGenEnvironment((phase) => updateJob(job.id, { status: `building ${phase}` }), { signal: jobSignal(job.id) })
+      .then(() => { finishJob(job.id, { ok: true, result: { engine: IMAGE_GEN_NAME } }); emit({ id: "engine.state", data: { engine: IMAGE_GEN_NAME, state: "installed" } }); })
+      .catch((error) => finishJob(job.id, { ok: false, reason: error instanceof Error ? error.message : String(error) }))
+      .finally(() => { environmentJobs.delete(IMAGE_GEN_NAME); });
+    return c.json({ job: job.id, engine: IMAGE_GEN_NAME, staged: false }, 202);
   }
   if (name === MLX_AUDIO_NAME) {
     // Not a download but a build: uv (a pinned build, fetched first if
@@ -168,6 +181,11 @@ function unchosenChatEngine(name: string, options: { stoppable?: boolean } = {})
 for (const action of ["start", "stop", "restart"] as const) enginesRoutes.openapi(controlRoute(action), async (c) => {
   const { name } = c.req.valid("param");
   if (!ENGINE_BINARIES.some((pin) => pin.name === name) && !MANAGED_RUNTIMES.some((runtime) => runtime.name === name)) return c.json({ error: "Unknown engine" }, 404);
+  // The picture worker is the picture service's, started by the first picture and stopped after ten idle minutes.
+  if (name === IMAGE_GEN_NAME) {
+    if (action === "stop" || action === "restart") { imageGen.stop(); return c.json({ ok: true }, 200); }
+    return c.json({ ok: true, reason: "The picture engine starts by itself when a picture is made." }, 200);
+  }
   // The video worker is the video service's, started by the first clip and stopped after ten idle minutes.
   if (name === VIDEO_GEN_NAME) {
     if (action === "stop" || action === "restart") { videoGen.stop(); return c.json({ ok: true }, 200); }

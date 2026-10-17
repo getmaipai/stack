@@ -18,6 +18,8 @@ import { STACK_MODELS } from "@/lib/modelCatalog";
 import { ddgsSupervisor } from "@/search/ddgsSidecar";
 import { imageTools, sweepImageToolsTmp } from "@/imagetools/imageTools";
 import { videoGen } from "@/video/videoGen";
+import { imageGen } from "@/images/imageEngine";
+import { sweepImageTmp, sweepResults as sweepImageResults } from "@/images/results";
 import { sweepResults, sweepVideoTmp } from "@/video/results";
 import { execFileSync } from "node:child_process";
 import { readMetalCapBytes } from "@/lib/metalCap";
@@ -67,6 +69,9 @@ async function serve(): Promise<void> {
   // Clips an earlier run left half-made are removed and old results swept; the video worker itself starts on the first clip and exits after ten idle minutes.
   sweepVideoTmp();
   sweepResults();
+  // The same for pictures (IMGGEN-STACK-02): half-made work removed, old results swept; the picture worker starts on the first request and exits after ten idle minutes.
+  sweepImageTmp();
+  sweepImageResults();
   const idle = setInterval(() => {
     const values = settingValues();
     void unloadIdleRoles({ onBattery: onBattery(), idleMinutes: Number(values["stack.runtime.idle_unload_minutes"] ?? 30), batteryIdleMinutes: Number(values["stack.runtime.idle_unload_on_battery_minutes"] ?? 10), keep: keepWarmEnabled() ? warmedRoles() : [] }).catch(() => {});
@@ -83,6 +88,7 @@ async function serve(): Promise<void> {
     await ddgsSupervisor.stop().catch(() => {});
     imageTools.stop();
     videoGen.stop();
+    imageGen.stop();
     await stopAllRoles("The Stack is stopping.");
     stopTierWatch();
     stopWatchdog();
