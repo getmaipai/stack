@@ -11,6 +11,7 @@ import { getProcess, resetSupervisorForTests, scriptedProcess, setSupervisorFact
 import { __resetGovernorForTests, __setGovernorTuningForTestsOnly } from "@/lib/governor";
 import { __setMemoryReaderForTests } from "@/lib/memory";
 import { scriptedMemoryReader } from "@/lib/memory/scripted";
+import { GOVERNOR_MEMORY_DEFAULT } from "./governorMemoryDefault";
 import { __resetSettingsForTests } from "@/settings";
 import { dataDir } from "@/lib/paths";
 
@@ -263,7 +264,7 @@ test("the budget route reports the active tier, its margin and a degraded readin
     expect(degraded.margin_bytes).toBe(4 * GB);
   } finally {
     stop();
-    __setMemoryReaderForTests(scriptedMemoryReader([]));
+    __setMemoryReaderForTests(scriptedMemoryReader([GOVERNOR_MEMORY_DEFAULT]));
     __resetGovernorForTests();
   }
 });

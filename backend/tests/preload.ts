@@ -18,6 +18,7 @@
 import { existsSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
+import { afterEach } from "bun:test";
 import { GOVERNOR_MEMORY_DEFAULT } from "./governorMemoryDefault";
 
 const tmpRoot = realpathSync(tmpdir());
@@ -114,3 +115,13 @@ __setGovernorTuningForTestsOnly({ totalMemoryBytes: GOVERNOR_MEMORY_DEFAULT.tota
 // __setMemoryReaderForTests(null) and restores this same reading
 // afterward.
 __setMemoryReaderForTests(scriptedMemoryReader([GOVERNOR_MEMORY_DEFAULT]));
+
+// 2026-10-17: routes.test.ts restored the reader to an empty script (a
+// fixed 8 GB fallback), and every later file in the same process then
+// failed to admit models (ttsEngines.test.ts in a 21-file run). A
+// preload-level afterEach puts the suite default back after every test,
+// so a test that stubs the reader and forgets to restore it cannot leak
+// into the next one. A test that needs another reading sets it inside
+// the test or its beforeEach, as before. tests/memoryReaderLeak.test.ts
+// fails by name if this stops working.
+afterEach(() => { __setMemoryReaderForTests(scriptedMemoryReader([GOVERNOR_MEMORY_DEFAULT])); });
