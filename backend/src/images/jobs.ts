@@ -120,7 +120,7 @@ export function registerImageJobs(): void {
       const image = keep(write("image.bin", item.image));
       const mask = keep(write("mask.bin", item.mask));
       const family = item.family as keyof typeof IMAGE_FAMILIES;
-      const tracker = new GenTracker("image", historyKey("image", item.op === "edit" ? 0 : item.width, item.op === "edit" ? 0 : item.height), Date.now, item.op === "edit" ? 1 : Math.max(0.25, (item.width * item.height) / (1024 * 1024)));
+      const tracker = new GenTracker("image", historyKey("image", item.op === "edit" ? 0 : item.width, item.op === "edit" ? 0 : item.height, item.family), Date.now, (item.op === "edit" ? 1 : Math.max(0.25, (item.width * item.height) / (1024 * 1024))) * (item.family === "z-image-turbo" ? 3.2 : 1));
       tracker.nextUnit(0, item.op === "generate" ? item.count : 1);
       remember(trackers, job.id, tracker);
       const tick = () => { if (tracker.started) update({ percent: Math.round(tracker.snapshot().fraction * 100) }); };

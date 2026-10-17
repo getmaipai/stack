@@ -495,7 +495,7 @@ line, so the point at sigma 0 is a linear extrapolation), average-pools the late
 (`v` rises with each new file) and answers 404 `no_preview` before the first step finishes, when `preview` was false, for edits, and after the job ends (the
 folder is removed with the job; a cancelled or failed job leaves nothing, and a Stack restart sweeps strays). `preview_step` is the step it shows. With `n` above
 1 the preview is of the picture being made now. Measured on the Studio: the previews add about 3 percent to the worker's time for a 1024 x 1024 Klein picture
-(4.25 s to 4.39 s median of 12 pairs).
+(4.25 s to 4.39 s median of 12 pairs), and about 1.5 percent for Z-Image-Turbo (13.29 s to 13.49 s median of 6 pairs, nine previews a picture). The ETA history is kept per size and picture model.
 
 **Edits.** `POST /v1/images/edits` (multipart) gains two operations that run Klein's reference edit at bf16 (8-bit left a plant in the picture it was asked
 to remove): `edit` (field `instruction`, one picture; the whole picture may change) and `edit_masked` (also `mask`, white is changeable, and/or `region` as

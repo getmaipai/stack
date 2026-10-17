@@ -53,7 +53,8 @@ function loadHistory(): History {
   return cache!;
 }
 export function __resetGenHistoryForTests(): void { cache = null; }
-export const historyKey = (kind: GenKind, width: number, height: number, frames?: number): string => `${kind}:${width}x${height}${frames ? `x${frames}` : ""}`;
+/** One history per kind and size, and per clip length (video) or picture model (image): the same size takes three times as long on Z-Image-Turbo as on Klein. */
+export const historyKey = (kind: GenKind, width: number, height: number, extra?: number | string): string => `${kind}:${width}x${height}${extra ? `${typeof extra === "number" ? "x" : ":"}${extra}` : ""}`;
 const median = (values: number[]): number => { const sorted = [...values].sort((a, b) => a - b); return sorted[Math.floor(sorted.length / 2)]!; };
 
 /** Median seconds of a stage for this kind and size, or the typical number when there is no history yet. */

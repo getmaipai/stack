@@ -665,6 +665,13 @@ test("cancel in each stage stops the worker, removes the work folder and the pre
   }
 });
 
+test("history is kept per kind, size and picture model or clip length", () => {
+  expect(historyKey("image", 1024, 1024, "z-image-turbo")).toBe("image:1024x1024:z-image-turbo");
+  expect(historyKey("image", 1024, 1024, "flux2-klein-4b")).not.toBe(historyKey("image", 1024, 1024, "z-image-turbo"));
+  expect(historyKey("video", 832, 480, 121)).toBe("video:832x480x121");
+  expect(historyKey("video", 832, 480)).toBe("video:832x480");
+});
+
 test("a bigger picture without history gets a longer built-in estimate; history replaces it", () => {
   __resetGenHistoryForTests();
   rmSync(join(dataDir, "gen-history.json"), { force: true });
