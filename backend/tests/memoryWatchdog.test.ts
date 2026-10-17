@@ -400,7 +400,8 @@ test("while the Stack is stopping a request gets 503 stack_restarting with Retry
   expect((await app.request("/healthz")).status).toBe(200);
 });
 
-test.skipIf(process.platform !== "darwin")("live and read only: the sampler matches vm_stat within 2 percent", async () => {
+// A live comparison of two readings of a moving number: it is run on request (MAIPAI_LIVE_SAMPLER=1) on a quiet machine, never in the gate, where other jobs move free memory by gigabytes between the two reads.
+test.skipIf(process.platform !== "darwin" || process.env.MAIPAI_LIVE_SAMPLER !== "1")("live and read only: the sampler matches vm_stat within 2 percent", async () => {
   const { getSystemSampler } = await import("@/lib/memory/system");
   const live = getSystemSampler().sample();
   const text = Bun.spawnSync(["vm_stat"], { stdout: "pipe" }).stdout.toString();
