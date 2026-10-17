@@ -244,7 +244,7 @@ test("a canary's restart request recycles a live engine, counts as one failure, 
   expect((await requestEngineRestart("chat", "again")).accepted).toBe(false);
   expect(await fire()).toBe(2_000);
   expect(getRoleStatus("chat").state).toBe("ready");
-  for (let i = 0; i < 4; i++) { await crash("chat"); await fire(); }
+  for (let i = 0; i < 3; i++) { await crash("chat"); await fire(); }
   await crash("chat");
   expect(await requestEngineRestart("chat", "x")).toMatchObject({ accepted: false });
 });
