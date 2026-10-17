@@ -96,7 +96,7 @@ const messagesFileRoute = createRoute({ method: "get", path: "/generations/{job}
   422: { content: { "application/json": { schema: ErrorBody } }, description: "The clip cannot be prepared (too_large)." },
   503: { content: { "application/json": { schema: ErrorBody } }, description: "The video tools are not installed (no_ffmpeg)." },
 } });
-const messagesConvertRoute = createRoute({ method: "post", path: "/messages", tags: ["Video"], summary: "Prepare any mp4 for messaging apps (stateless; nothing is kept)", request: { query: MessagesTitle, body: { content: { "video/mp4": { schema: z.string().openapi({ format: "binary" }) } }, required: true } }, responses: {
+const messagesConvertRoute = createRoute({ method: "post", path: "/messages", tags: ["Video"], summary: "Prepare any mp4 for messaging apps (stateless; nothing is kept)", request: { headers: z.object({ "x-title": z.string().max(400).optional().openapi({ description: "The title written into the file, percent-encoded (default: MaiPai video). A header, never the URL: it comes from a prompt." }) }), body: { content: { "video/mp4": { schema: z.string().openapi({ format: "binary" }) } }, required: true } }, responses: {
   200: { content: { "video/mp4": { schema: z.string().openapi({ format: "binary" }) } }, description: "The same picture as an H.264 yuv420p mp4 with a silent AAC track (kept when it has one), the moov box first, a title, at most 20 MB. For a clip Home stored before the Stack made them this way." },
   413: { content: { "application/json": { schema: ErrorBody } }, description: "The upload is larger than 100 MB." },
   422: { content: { "application/json": { schema: ErrorBody } }, description: "Not a video (bad_clip) or still over 20 MB (too_large)." },
@@ -263,6 +263,7 @@ function messagesFailure<T extends Context>(c: T, error: unknown) {
   if (error instanceof MessagesError) return fail(c, error.code === "no_ffmpeg" ? 503 : error.code === "failed" ? 500 : 422, error.code, error.message);
   throw error;
 }
+function safeDecode(value: string | undefined): string | undefined { try { return value === undefined ? undefined : decodeURIComponent(value); } catch { return value; } }
 const cleanTitle = (title: string | undefined): string => (title ?? "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, 120) || "MaiPai video";
 const MESSAGES_UPLOAD_MAX = 100 * 1024 * 1024;
 const messagesInFlight = new Map<string, Promise<unknown>>();
@@ -289,7 +290,7 @@ videoV1Routes.openapi(messagesConvertRoute, async (c) => {
   mkdirSync(work, { recursive: true, mode: 0o700 });
   try {
     writeFileSync(join(work, "in.mp4"), bytes);
-    await makeMessagesCopy(join(work, "in.mp4"), join(work, "out.mp4"), cleanTitle(c.req.valid("query").title), videoGenRoot());
+    await makeMessagesCopy(join(work, "in.mp4"), join(work, "out.mp4"), cleanTitle(safeDecode(c.req.valid("header")["x-title"])), videoGenRoot());
     const out = new Uint8Array(await Bun.file(join(work, "out.mp4")).arrayBuffer());
     for (const [name, value] of Object.entries(RoleReplyHeaders.parse(identityHeaders(null)))) c.header(name, value);
     return c.body(out, 200, { "content-type": "video/mp4", "cache-control": "no-store" }) as never;

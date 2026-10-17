@@ -2770,13 +2770,13 @@
           {
             "schema": {
               "type": "string",
-              "maxLength": 120,
-              "description": "The title written into the file (the clip's name in a share sheet). Default: MaiPai video."
+              "maxLength": 400,
+              "description": "The title written into the file, percent-encoded (default: MaiPai video). A header, never the URL: it comes from a prompt."
             },
             "required": false,
-            "description": "The title written into the file (the clip's name in a share sheet). Default: MaiPai video.",
-            "name": "title",
-            "in": "query"
+            "description": "The title written into the file, percent-encoded (default: MaiPai video). A header, never the URL: it comes from a prompt.",
+            "name": "x-title",
+            "in": "header"
           }
         ],
         "requestBody": {

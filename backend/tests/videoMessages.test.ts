@@ -83,10 +83,11 @@ test.skipIf(!real)("real conversion: the silent clip gets one video and one audi
 
 test.skipIf(!real)("the routes: POST /v1/videos/messages converts, GET .../messages.mp4 makes and keeps one, the original stays", async () => {
   process.env.VIDEO_FFMPEG = FFMPEG;
-  const post = await app.request("/v1/videos/messages?title=boat", { method: "POST", headers: { "content-type": "video/mp4" }, body: readFileSync(CLIP) });
+  const post = await app.request("/v1/videos/messages", { method: "POST", headers: { "content-type": "video/mp4", "x-title": "boat%20in%20rain" }, body: readFileSync(CLIP) });
   expect(post.status).toBe(200);
   expect(post.headers.get("content-type")).toBe("video/mp4");
   const converted = new Uint8Array(await post.arrayBuffer());
+  expect(Buffer.from(converted).includes("boat in rain")).toBe(true);
   const probeFile = join(tmpdir(), `vmsg-route-${process.pid}.mp4`);
   writeFileSync(probeFile, converted);
   try { expect((await probeClip(FFMPEG, probeFile)).hasAudio).toBe(true); } finally { rmSync(probeFile, { force: true }); }
