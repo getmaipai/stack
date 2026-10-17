@@ -8,6 +8,10 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ## [Unreleased]
 
+### Changed
+
+- The chat engine `auto` is now llama-server on every tier (ENGINE-MLX-02), even where oMLX is installed. oMLX stays available: set `stack.engines.chat.engine` to `omlx`, and only then are its environment and the 19 GB MLX model fetched. On our benches oMLX got the tool name right 58 of 70 times against 65 of 70, made fewer tool calls on math and conversions, and leaked raw tool markup once in 60 replies. The first-run plan and the default disk totals on p64 and p128 no longer include the MLX weights (`required_free_bytes` 88.9 GB to 63.2 GB), and the disk plan lists "Faster chat engine (oMLX)" as an optional row. A Mac that already runs oMLX under `auto` returns to llama-server after the next restart; set the engine to `omlx` to keep it.
+
 ### Security
 
 - The Python environments the Stack builds for Pocket TTS and ComfyUI

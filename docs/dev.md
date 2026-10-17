@@ -2202,15 +2202,22 @@ by being resident and unloaded only by the idle rule.
 
 ## The chat engine on Apple silicon: oMLX (ENGINE-MLX-01, 2026-10-17)
 
-**The pick: oMLX 0.7.0** (Apache-2.0, `jundot/omlx`) for the chat role at the tiers whose default it is (p64 and p128 on
-Apple silicon, macOS 15 or later), with llama-server kept installed as the fallback and as the engine everywhere else. Why, with
+**Verdict (ENGINE-MLX-02, owner ruling 2026-10-17): llama-server is the default chat engine on every tier; oMLX is opt-in.**
+`auto` resolves to llama-server even when oMLX and its model are installed; `stack.engines.chat.engine` = `omlx` is the only way to
+run it, and only then does the Stack build its environment and pull the 19.4 GB model (the first-run plan and the default disk
+totals no longer carry them; the Models and storage page offers "Faster chat engine (oMLX)" as an optional row on p64 and p128).
+Why: the quality benches against Home's tool turns. Tool-name defect 15 of 70 right on oMLX against 65 of 70 on llama-server before the
+namespace fix, 58 of 70 after it; fewer tool calls on math and unit conversion; 1 of 60 replies leaked raw tool markup into the visible
+text; search 26 of 30 against 28 of 30. Speed does not outweigh that. The text below is the oMLX design, still true for the opt-in.
+
+**The oMLX pick: oMLX 0.7.0** (Apache-2.0, `jundot/omlx`) for the chat role when chosen (Apple silicon, macOS 15 or later, best at p64 and p128), with llama-server kept installed as the fallback and as the engine everywhere else. Why, with
 the numbers, the alternative that lost (Rapid-MLX) and what was not verified: Home's
 `docs/design/chat-engine-comparison-2026-10-17.md`. In short, on the Studio with Muse Glimmer 30B at the same size, oMLX generates
 32.5 tokens/s against llama-server's 26.1 and reads a prompt 36 to 42 percent faster, 2 GB smaller resident, level on tool calls
 (136 of 160 against 137 sampled), on the 60 reasoning prompts (60 of 60) and in a 200-request soak.
 
 - **The setting is the existing one**, `stack.engines.chat.engine`, now `auto` (the default), `omlx`, `llama-server` or `mlx-serve`.
-  `auto` is the tier's default (`lib/chatEngines.ts`); a named engine wins. Rollback is `llama-server` and a restart; nothing is
+  `auto` is llama-server on every tier (`lib/chatEngines.ts`); a named engine wins. Rollback is `llama-server` and a restart; nothing is
   deleted. The embed role, the vision role and a judge with a model of its own stay on llama-server.
 - **oMLX runs only when it can.** `resolveChatEngine` returns llama-server, with the reason, when the Mac is not Apple silicon on
   macOS 15 or later, when the environment or the verified MLX model is missing, or when oMLX failed to start twice in a row this run
@@ -2220,8 +2227,8 @@ the numbers, the alternative that lost (Rapid-MLX) and what was not verified: Ho
   hashed file (`chat/omlx.darwin-arm64.requirements.txt`: 112 PyPI packages and the oMLX release wheel by sha256). Not in it, on
   purpose: torch (xgrammar declares it; oMLX ships a stub and never runs its torch paths) and oMLX's five git-pinned dependencies,
   which cannot carry hashes. The model is `muse-glimmer-30b-mlx-4bit`, an 11-file directory pinned by path, size and sha256 at
-  `mlx-community/Muse-Glimmer-30B-4bit` revision `3e7677d7`. The install plan adds it beside the GGUF on p64 and p128; on an upgraded
-  Mac `ensureChatEngineAssets` (daemon start) builds the environment and pulls the model in the background, then moves an idle
+  `mlx-community/Muse-Glimmer-30B-4bit` revision `3e7677d7`. The install plan no longer adds it (ENGINE-MLX-02); with the setting on `omlx`,
+  `ensureChatEngineAssets` (daemon start) builds the environment and pulls the model in the background, then moves an idle
   llama-server chat onto oMLX (`restartForNewChatEngine`), retrying every 30 s while chat is busy. Chat answers on llama-server the whole time.
 - **Launch.** `omlx serve` on loopback, a random API key per launch (the engine also serves an admin dashboard on its port), `--no-hf-cache`,
   offline and tokenless environment, a model folder holding one symlink to the pinned directory, and a prompt cache under

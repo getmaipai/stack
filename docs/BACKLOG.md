@@ -131,14 +131,18 @@ are never copied. Nothing migrates Home until STACK-16.
   409 for incomplete provenance, 400 with the role list for an unknown
   id; streaming chat passes the engine's SSE bytes through. Kept
   through RF-04 at 58cae15 (the router rewritten without the client-key check).
-- [ ] **ENGINE-MLX-01 (M): oMLX is the chat engine on p64 and p128, llama-server the fallback and rollback.** Design and numbers:
+- [x] **ENGINE-MLX-01 (M): oMLX as a chat engine on Apple silicon; since ENGINE-MLX-02 opt-in, llama-server the default everywhere.** Design and numbers:
   Home's `docs/design/chat-engine-comparison-2026-10-17.md`; Stack design: `dev.md`, "The chat engine on Apple silicon: oMLX".
   Built: `chat/omlx.ts` (managed uv environment, hashed requirements with the release wheel by checksum, launch, offline and keyed),
   `chat/omlxClient.ts` (the wire adapter: model name, pinned template variables, `timings` from usage, token counts by one-token
   requests), `lib/chatEngines.ts` (auto by tier, fallback after two failed starts, one-setting rollback),
   `lib/chatEngineAssets.ts` (background environment build and model pull at start, then the switch), the MLX model record, the install-plan entry on p64
   and p128, the engines routes, privacy rows, tests (`omlx.test.ts`; the real engine in `omlxSmoke.test.ts` with `OMLX_SMOKE=1`).
-  Open: Home's ENGINE-MLX-02 (the repo's quality benches against the MLX engine, on an installed release), and a Linux/Intel path (stays llama-server).
+  **ENGINE-MLX-02 verdict (owner ruling 2026-10-17): llama-server is the default on every tier, oMLX is opt-in** (`stack.engines.chat.engine` = `omlx`).
+  Benches: tool-name defect 15 of 70 right on oMLX against 65 of 70 on llama-server before the namespace fix, 58 of 70 after; fewer tool calls
+  on math and convert; 1 of 60 replies leaked raw tool markup; search 26 of 30 against 28 of 30. `auto` never fetches the 19 GB model or the
+  engine; the install plan and default disk totals dropped them (p64 and p128 `required_free_bytes` 88.9 GB to 63.2 GB), and `chat-mlx` is an
+  optional disk-plan row. Home mirrors `docs/disk-plan.json`.
 - [x] **STACK-93 (M): the second engine adapter under the governor.**
   `mlx-serve` v26.9.4 (the pick by the prebuilt rule, `dev.md`, "The
   second chat engine"; oMLX the named alternative) as a second spawned

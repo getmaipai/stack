@@ -131,3 +131,18 @@ test("route: the install plan carries the disk plan for its tier", async () => {
     for (const modelId of row.model_ids) expect(full.models.map((m) => m.id)).not.toContain(modelId);
   }
 });
+
+test("oMLX is an optional row on p64 and p128 only, off by default, and its 19 GB is not in the default totals (ENGINE-MLX-02)", () => {
+  for (const tier of PROFILE_TIERS) {
+    const plan = buildDiskPlan(tier);
+    const row = plan.rows.find((candidate) => candidate.id === "chat-mlx");
+    if (tier.id === "p64" || tier.id === "p128") {
+      expect(row).toMatchObject({ need: "optional", selectable: true, model_ids: ["muse-glimmer-30b-mlx-4bit"], engines: ["engine:chat-mlx", "engine:python"] });
+      expect(plan.default_selected).not.toContain("chat-mlx");
+      expect(plan.rows.find((candidate) => candidate.id === "engine:chat-mlx")).toBeDefined();
+      const without = diskTotalsFor(plan, plan.default_selected);
+      expect(diskTotalsFor(plan, [...plan.default_selected, "chat-mlx"]).download_bytes).toBeGreaterThanOrEqual(without.download_bytes + 19_443_246_692);
+      expect(plan.default.download_bytes).toBe(without.download_bytes);
+    } else expect(row).toBeUndefined();
+  }
+});

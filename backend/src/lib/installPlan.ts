@@ -4,9 +4,8 @@
 // pins. Pure: the route supplies the hardware and the installed set.
 import { PROFILE_MODEL_BINDINGS, sizeMachine, type ProfileTier } from "@/profiles";
 import type { HardwareInfo, MemorySource } from "@/lib/hardware";
-import { STACK_CHAT_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_IMAGE_ENGINE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
+import { STACK_CHAT_MODEL, STACK_IMAGE_ENGINE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
 import { tierDefaultTtsEngine } from "@/speech/ttsEngines";
-import { tierDefaultChatEngine } from "@/lib/chatEngines";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import type { RoleId } from "@/roles";
 import { ROLES } from "@/roles";
@@ -103,9 +102,10 @@ export function plannedPinsFor(tier: ProfileTier, target: { platform: string; ar
     const projector = pin.imageInput ? STACK_MODELS.find((candidate) => candidate.id === pin.imageInput!.projector) : undefined;
     for (const part of STACK_MODELS.filter((candidate) => candidate.role === role && candidate.component && candidate.engine === pin.engine && !projectors.has(candidate.id))) add(part);
     add(projector ?? null);
-    // The tiers whose default chat engine is oMLX carry its MLX build of the
-    // same model beside the GGUF, which stays as the fallback (ENGINE-MLX-01).
-    if (role === "chat" && tierDefaultChatEngine(tier.id, target.platform, target.arch) === "omlx") add(STACK_CHAT_MUSE_30B_MLX_MODEL);
+    // oMLX's MLX build of the model is not in the first-run plan: llama-server
+    // is the default on every tier (ENGINE-MLX-02), and the 19 GB MLX weights
+    // are fetched only when the admin chooses oMLX (an optional disk-plan row,
+    // or the engine setting set to `omlx`).
     // The tier's expressive voice rides beside Pocket TTS, which stays as
     // the fallback (VOICE-STUDIO-01): only where the tier runs it by default.
     if (role === "tts" && tierDefaultTtsEngine(tier.id) === "chatterbox-turbo") { add(STACK_TTS_CHATTERBOX_MODEL); for (const part of STACK_TTS_CHATTERBOX_PARTS) add(part); }

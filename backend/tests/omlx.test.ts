@@ -16,6 +16,8 @@ import { __resetHealthForTests, list as listHealth } from "@/lib/health";
 import { clearModelsForTests, upsertModel } from "@/lib/modelStore";
 import { STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_MODELS } from "@/lib/modelCatalog";
 import { activeChatChoice, chatEngine, engineInstalledFor, launchPlan, resetSupervisorForTests, scriptedProcess, selectedModel, setMachineTier, setSupervisorFactoryForTests, startChatWithFallbackForTests, EngineUnavailableError } from "@/lib/supervisor";
+import { ensureChatEngineAssets } from "@/lib/chatEngineAssets";
+import { __resetJobsForTests, listJobs } from "@/lib/jobs";
 import { ENV_READY_MARKER } from "@/lib/uvEnvironment";
 import { __resetSettingsForTests, applyPendingSettings, readSettings, updateSettings } from "@/settings";
 
@@ -45,23 +47,28 @@ function installRecords(): string {
   return dir;
 }
 
+/** oMLX is opt-in (ENGINE-MLX-02): a test that wants it names it, as the admin does. */
+function chooseOmlx() { updateSettings({ "stack.engines.chat.engine": "omlx" }); applyPendingSettings(); }
+
 // ---- the choice -----------------------------------------------------------
 
-test("oMLX is the default chat engine on Apple silicon at p64 and p128 and nowhere else; a named engine is honoured", () => {
-  expect(tierDefaultChatEngine("p64", "darwin", "arm64")).toBe("omlx");
-  expect(tierDefaultChatEngine("p128", "darwin", "arm64")).toBe("omlx");
-  for (const tier of ["p16", "p32", undefined, null] as const) expect(tierDefaultChatEngine(tier, "darwin", "arm64")).toBe("llama-server");
+test("llama-server is the default chat engine on every tier and platform, oMLX or not; a named engine is honoured (ENGINE-MLX-02)", () => {
+  for (const tier of ["p16", "p32", "p64", "p128", undefined, null] as const) {
+    expect(tierDefaultChatEngine(tier, "darwin", "arm64")).toBe("llama-server");
+    expect(requestedChatEngine("auto", tier, "darwin", "arm64")).toBe("llama-server");
+  }
   expect(tierDefaultChatEngine("p128", "linux", "arm64")).toBe("llama-server");
   expect(tierDefaultChatEngine("p128", "darwin", "x64")).toBe("llama-server");
-  expect(requestedChatEngine("auto", "p128", "darwin", "arm64")).toBe("omlx");
   expect(requestedChatEngine("llama-server", "p128", "darwin", "arm64")).toBe("llama-server");
   expect(requestedChatEngine("omlx", "p16", "darwin", "arm64")).toBe("omlx");
   expect(requestedChatEngine("mlx-serve", "p128", "darwin", "arm64")).toBe("mlx-serve");
-  expect(requestedChatEngine("anything-else", "p128", "darwin", "arm64")).toBe("omlx");
+  expect(requestedChatEngine("anything-else", "p128", "darwin", "arm64")).toBe("llama-server");
+  // `auto` stays on llama-server even when oMLX and its model are installed.
+  expect(resolveChatEngine({ setting: "auto", tier: "p128", installed: () => true, platform: "darwin", arch: "arm64" })).toEqual({ engine: "llama-server", requested: "llama-server", reason: null });
 });
 
 test("resolving: oMLX needs its environment and model, falls back to llama-server with the reason, and stays there after two failed starts until a restart", () => {
-  const ready = { setting: "auto", tier: "p128" as const, installed: () => true, platform: "darwin", arch: "arm64" };
+  const ready = { setting: "omlx", tier: "p128" as const, installed: () => true, platform: "darwin", arch: "arm64" };
   expect(resolveChatEngine(ready)).toEqual({ engine: "omlx", requested: "omlx", reason: null });
   const missing = resolveChatEngine({ ...ready, installed: () => false });
   expect(missing.engine).toBe("llama-server");
@@ -100,6 +107,7 @@ test.skipIf(!APPLE_SILICON)("the setting: auto is the default, omlx and auto are
 test.skipIf(!APPLE_SILICON)("chat runs on oMLX only when the tier, the environment and the verified model are all there; otherwise llama-server and the model that serves it", () => {
   installRecords();
   setMachineTier("p128");
+  chooseOmlx();
   // No environment yet: llama-server, and its GGUF is the selected model.
   expect(activeChatChoice().engine).toBe("llama-server");
   expect(chatEngine()).toBe("llama-server");
@@ -110,16 +118,32 @@ test.skipIf(!APPLE_SILICON)("chat runs on oMLX only when the tier, the environme
   expect(engineInstalledFor("chat")).toBe(true);
   // The judge with its own bound model, embeddings and vision stay on llama-server.
   expect(engineInstalledFor("embed")).toBe(false);
-  // A smaller tier never takes it by default; a person who names it still can.
+  // `auto` stays on llama-server on the biggest tier even with oMLX and its model installed; a person who names oMLX gets it on any tier.
+  updateSettings({ "stack.engines.chat.engine": "auto" });
+  applyPendingSettings();
+  expect(chatEngine()).toBe("llama-server");
+  expect(selectedModel("chat")?.id).toBe(STACK_CHAT_MUSE_30B_XL_MODEL.id);
   setMachineTier("p32");
   expect(chatEngine()).toBe("llama-server");
-  updateSettings({ "stack.engines.chat.engine": "omlx" });
-  applyPendingSettings();
+  chooseOmlx();
   expect(chatEngine()).toBe("omlx");
   // The rollback is one setting.
   updateSettings({ "stack.engines.chat.engine": "llama-server" });
   applyPendingSettings();
   expect(chatEngine()).toBe("llama-server");
+});
+
+test.skipIf(!APPLE_SILICON)("under auto (and llama-server) nothing of oMLX is built or downloaded, even on p128 with a chat model installed (ENGINE-MLX-02)", async () => {
+  __resetJobsForTests();
+  upsertModel({ id: STACK_CHAT_MUSE_30B_XL_MODEL.id, roles: ["chat"], ...verified, sizeBytes: 19_653_960_832, modelPath: "/tmp/never/muse.gguf", engineRequirements: { engine: "llama-server" } });
+  setMachineTier("p128");
+  for (const value of ["auto", "llama-server"]) {
+    updateSettings({ "stack.engines.chat.engine": value });
+    applyPendingSettings();
+    await ensureChatEngineAssets();
+    expect(listJobs()).toEqual([]);
+    expect(existsSync(join(omlxRoot(), "venv"))).toBe(false);
+  }
 });
 
 // ---- the pins -------------------------------------------------------------
@@ -181,6 +205,7 @@ test("the launch is oMLX on loopback behind a random key, offline, with its prom
   mkdirSync(omlxCacheDir(), { recursive: true });
   writeFileSync(join(omlxCacheDir(), "block-1"), "old conversation state");
   setMachineTier("p128");
+  chooseOmlx();
   const model = selectedModel("chat")!;
   expect(model.id).toBe(STACK_CHAT_MUSE_30B_MLX_MODEL.id);
   const plan = await launchPlan("chat", model, 8797);
@@ -342,6 +367,7 @@ test.skipIf(!APPLE_SILICON)("a chat start that fails twice runs on llama-server 
   installRecords();
   fakeEnvironment();
   setMachineTier("p128");
+  chooseOmlx();
   expect(chatEngine()).toBe("omlx");
   const attempts: string[] = [];
   const fails = async () => { attempts.push(chatEngine()); throw new EngineUnavailableError("Engine exited before becoming healthy (code 1): No module named 'mlx'"); };
@@ -373,6 +399,7 @@ test.skipIf(!APPLE_SILICON)("one failure then success starts oMLX and does not f
   installRecords();
   fakeEnvironment();
   setMachineTier("p128");
+  chooseOmlx();
   let calls = 0;
   const flaky = async (role: "chat") => { calls++; if (calls === 1) throw new EngineUnavailableError("The post-load check timed out."); return scriptedProcess(role, { engine: "omlx" }); };
   expect((await startChatWithFallbackForTests(undefined, flaky as never)).engine).toBe("omlx");

@@ -16,18 +16,18 @@
     "p32.needed_bytes": 28503105738,
     "p32.home_required_free_bytes": 3176323277,
     "p32.ai_required_free_bytes": 30604414790,
-    "p64.required_free_bytes": 88890344653,
-    "p64.minimum_required_free_bytes": 60009229733,
+    "p64.required_free_bytes": 63160716413,
+    "p64.minimum_required_free_bytes": 34279601493,
     "p64.everything_required_free_bytes": 104887962219,
-    "p64.needed_bytes": 74764178827,
+    "p64.needed_bytes": 53177196982,
     "p64.home_required_free_bytes": 3176323277,
-    "p64.ai_required_free_bytes": 85714021376,
-    "p128.required_free_bytes": 88890344653,
-    "p128.minimum_required_free_bytes": 60009229733,
+    "p64.ai_required_free_bytes": 59984393136,
+    "p128.required_free_bytes": 63160716413,
+    "p128.minimum_required_free_bytes": 34279601493,
     "p128.everything_required_free_bytes": 263718711966,
-    "p128.needed_bytes": 74764178827,
+    "p128.needed_bytes": 53177196982,
     "p128.home_required_free_bytes": 3176323277,
-    "p128.ai_required_free_bytes": 85714021376
+    "p128.ai_required_free_bytes": 59984393136
   },
   "tiers": {
     "p16": {
@@ -516,12 +516,28 @@
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 40931633540,
-          "installed_bytes": 40931633540,
+          "download_bytes": 21488386848,
+          "installed_bytes": 21488386848,
           "peak_temp_bytes": 0,
           "model_ids": [
             "qwen3-1.7b-q8-0",
-            "muse-glimmer-30b-q4-k-xl",
+            "muse-glimmer-30b-q4-k-xl"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "chat-mlx",
+          "label": "Faster chat engine (oMLX, Apple silicon)",
+          "note": "The chat AI as an MLX build, about 20 percent faster to answer but less reliable with tools in our tests. Optional; llama.cpp stays the default.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 19443246692,
+          "installed_bytes": 19443246692,
+          "peak_temp_bytes": 0,
+          "model_ids": [
             "muse-glimmer-30b-mlx-4bit"
           ],
           "engines": [
@@ -849,18 +865,18 @@
         }
       ],
       "default": {
-        "download_bytes": 68070600638,
-        "installed_bytes": 70630829126,
-        "peak_temp_bytes": 4133349701,
-        "needed_bytes": 74764178827,
-        "required_free_bytes": 88890344653
+        "download_bytes": 47753604073,
+        "installed_bytes": 49917597154,
+        "peak_temp_bytes": 3259599828,
+        "needed_bytes": 53177196982,
+        "required_free_bytes": 63160716413
       },
       "minimum": {
-        "download_bytes": 45846836612,
-        "installed_bytes": 47756741537,
-        "peak_temp_bytes": 2701139888,
-        "needed_bytes": 50457881425,
-        "required_free_bytes": 60009229733
+        "download_bytes": 25529840047,
+        "installed_bytes": 27043509565,
+        "peak_temp_bytes": 1827390015,
+        "needed_bytes": 28870899580,
+        "required_free_bytes": 34279601493
       },
       "everything": {
         "download_bytes": 80335281943,
@@ -912,12 +928,28 @@
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 40931633540,
-          "installed_bytes": 40931633540,
+          "download_bytes": 21488386848,
+          "installed_bytes": 21488386848,
           "peak_temp_bytes": 0,
           "model_ids": [
             "qwen3-1.7b-q8-0",
-            "muse-glimmer-30b-q4-k-xl",
+            "muse-glimmer-30b-q4-k-xl"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "chat-mlx",
+          "label": "Faster chat engine (oMLX, Apple silicon)",
+          "note": "The chat AI as an MLX build, about 20 percent faster to answer but less reliable with tools in our tests. Optional; llama.cpp stays the default.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 19443246692,
+          "installed_bytes": 19443246692,
+          "peak_temp_bytes": 0,
+          "model_ids": [
             "muse-glimmer-30b-mlx-4bit"
           ],
           "engines": [
@@ -1338,18 +1370,18 @@
         }
       ],
       "default": {
-        "download_bytes": 68070600638,
-        "installed_bytes": 70630829126,
-        "peak_temp_bytes": 4133349701,
-        "needed_bytes": 74764178827,
-        "required_free_bytes": 88890344653
+        "download_bytes": 47753604073,
+        "installed_bytes": 49917597154,
+        "peak_temp_bytes": 3259599828,
+        "needed_bytes": 53177196982,
+        "required_free_bytes": 63160716413
       },
       "minimum": {
-        "download_bytes": 45846836612,
-        "installed_bytes": 47756741537,
-        "peak_temp_bytes": 2701139888,
-        "needed_bytes": 50457881425,
-        "required_free_bytes": 60009229733
+        "download_bytes": 25529840047,
+        "installed_bytes": 27043509565,
+        "peak_temp_bytes": 1827390015,
+        "needed_bytes": 28870899580,
+        "required_free_bytes": 34279601493
       },
       "everything": {
         "download_bytes": 211717380707,

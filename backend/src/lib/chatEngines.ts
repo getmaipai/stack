@@ -6,23 +6,26 @@
 // the household without chat. Pure except for the failure memory, which a
 // restart of the chat engine clears (the voice engine's rule, VOICE-STUDIO-01).
 //
-// Why oMLX is the default where it fits: docs/design/chat-engine-comparison-2026-10-17.md
-// in Home (23 percent faster generation and 36 to 42 percent faster prompt
-// processing than llama-server on Muse Glimmer 30B, level on tool calls and
-// reasoning). Rollback is one setting: `llama-server`.
+// `auto` is llama-server on every tier and platform (owner ruling 2026-10-17,
+// ENGINE-MLX-02): oMLX is faster, but on the quality benches it lost on tool
+// names (15 of 70 right before the namespace fix, 58 of 70 after, llama-server
+// 65 of 70), made fewer tool calls on math and conversions, leaked raw tool
+// markup once in 60 replies and searched 26 of 30 against 28 of 30. oMLX stays
+// available as an opt-in: set `stack.engines.chat.engine` to `omlx`.
 import type { GovernorTier } from "@/lib/governor";
 
 export type ChatEngineId = "llama-server" | "mlx-serve" | "omlx";
 export const CHAT_ENGINE_SETTING = "stack.engines.chat.engine";
 export const CHAT_ENGINE_CHOICES = ["auto", "llama-server", "mlx-serve", "omlx"] as const;
 
-/** Tiers with room for the 19.4 GB MLX weights beside the 4B judge, embeddings, a voice and the tier's working margin (the voice engine's rule, p64 and p128). */
-export const OMLX_DEFAULT_TIERS: GovernorTier[] = ["p64", "p128"];
+/** Tiers with room for the 19.4 GB MLX weights beside the 4B judge, embeddings, a voice and the tier's working margin (the voice engine's rule, p64 and p128). oMLX is offered there as an optional install; it is never the default. */
+export const OMLX_OPTIONAL_TIERS: GovernorTier[] = ["p64", "p128"];
 /** A chat engine start that fails this many times in a row falls back to llama-server for the run. */
 export const FALLBACK_AFTER_FAILURES = 2;
 
-export function tierDefaultChatEngine(tier: GovernorTier | undefined | null, platform: string = process.platform, arch: string = process.arch): ChatEngineId {
-  return tier && OMLX_DEFAULT_TIERS.includes(tier) && platform === "darwin" && arch === "arm64" ? "omlx" : "llama-server";
+/** What `auto` means: llama-server on every tier and platform, whether or not oMLX is installed. The arguments stay so a tier can get another default later without touching the callers. */
+export function tierDefaultChatEngine(_tier?: GovernorTier | undefined | null, _platform: string = process.platform, _arch: string = process.arch): ChatEngineId {
+  return "llama-server";
 }
 
 /** What the setting asks for: a named engine, or the tier's default for `auto` (and for any unknown value). */

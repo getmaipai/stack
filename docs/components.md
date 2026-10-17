@@ -17,7 +17,7 @@ Engines per platform:
 | `llama-server-b11476-linux-cuda-x64` | b11476 | linux x64 (NVIDIA) | pinned, not yet verified |
 | `llama-server-b10797-win-cuda-x64` | b10797 | win32 x64 (NVIDIA) | pinned, not yet verified |
 | `mlx-serve-v26.9.4-macos-arm64` | v26.9.4 | darwin arm64 | pinned, verified (the second chat engine, chosen by `stack.engines.chat.engine`) |
-| `omlx` | 0.7.0 | macOS 15 or later on arm64 (MLX is Apple silicon only; the chat engine on the p64 and p128 tiers by default, llama-server stays installed as the fallback, ENGINE-MLX-01; no Linux file) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
+| `omlx` | 0.7.0 | macOS 15 or later on arm64 (MLX is Apple silicon only; opt-in chat engine (`stack.engines.chat.engine` = `omlx`), never the default: llama-server is the default on every tier, ENGINE-MLX-02; no Linux file) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
@@ -46,7 +46,7 @@ Engines per platform:
 | `llama-server-b11476-linux-cuda-x64` | b11476 | linux x64 (NVIDIA) | pinned, not yet verified |
 | `llama-server-b10797-win-cuda-x64` | b10797 | win32 x64 (NVIDIA) | pinned, not yet verified |
 | `mlx-serve-v26.9.4-macos-arm64` | v26.9.4 | darwin arm64 | pinned, verified (the second chat engine, chosen by `stack.engines.chat.engine`) |
-| `omlx` | 0.7.0 | macOS 15 or later on arm64 (MLX is Apple silicon only; the chat engine on the p64 and p128 tiers by default, llama-server stays installed as the fallback, ENGINE-MLX-01; no Linux file) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
+| `omlx` | 0.7.0 | macOS 15 or later on arm64 (MLX is Apple silicon only; opt-in chat engine (`stack.engines.chat.engine` = `omlx`), never the default: llama-server is the default on every tier, ENGINE-MLX-02; no Linux file) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
@@ -75,7 +75,7 @@ Engines per platform:
 | `llama-server-b11476-linux-cuda-x64` | b11476 | linux x64 (NVIDIA) | pinned, not yet verified |
 | `llama-server-b10797-win-cuda-x64` | b10797 | win32 x64 (NVIDIA) | pinned, not yet verified |
 | `mlx-serve-v26.9.4-macos-arm64` | v26.9.4 | darwin arm64 | pinned, verified (the second chat engine, chosen by `stack.engines.chat.engine`) |
-| `omlx` | 0.7.0 | macOS 15 or later on arm64 (MLX is Apple silicon only; the chat engine on the p64 and p128 tiers by default, llama-server stays installed as the fallback, ENGINE-MLX-01; no Linux file) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
+| `omlx` | 0.7.0 | macOS 15 or later on arm64 (MLX is Apple silicon only; opt-in chat engine (`stack.engines.chat.engine` = `omlx`), never the default: llama-server is the default on every tier, ENGINE-MLX-02; no Linux file) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
@@ -104,7 +104,7 @@ Engines per platform:
 | `llama-server-b11476-linux-cuda-x64` | b11476 | linux x64 (NVIDIA) | pinned, not yet verified |
 | `llama-server-b10797-win-cuda-x64` | b10797 | win32 x64 (NVIDIA) | pinned, not yet verified |
 | `mlx-serve-v26.9.4-macos-arm64` | v26.9.4 | darwin arm64 | pinned, verified (the second chat engine, chosen by `stack.engines.chat.engine`) |
-| `omlx` | 0.7.0 | macOS 15 or later on arm64 (MLX is Apple silicon only; the chat engine on the p64 and p128 tiers by default, llama-server stays installed as the fallback, ENGINE-MLX-01; no Linux file) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
+| `omlx` | 0.7.0 | macOS 15 or later on arm64 (MLX is Apple silicon only; opt-in chat engine (`stack.engines.chat.engine` = `omlx`), never the default: llama-server is the default on every tier, ENGINE-MLX-02; no Linux file) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|

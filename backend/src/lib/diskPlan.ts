@@ -10,9 +10,10 @@
 import measured from "@/lib/diskPlanMeasured.json";
 import { PROFILE_TIERS, type ProfileTier } from "@/profiles";
 import {
-  CHATTERBOX_ENGINE, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS,
+  CHATTERBOX_ENGINE, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS,
   STACK_MODELS, STACK_MUSIC_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_DETAILED_MODELS,
 } from "@/lib/modelCatalog";
+import { OMLX_OPTIONAL_TIERS } from "@/lib/chatEngines";
 import { plannedPinsFor } from "@/lib/installPlan";
 import type { CatalogModelLike } from "@/lib/modelStore";
 
@@ -159,6 +160,8 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
     const starter = chat.length > 1 ? " A small starter chat AI (Qwen3 1.7B) comes first so you can talk while the big one downloads." : "";
     rows.push(modelRow({ id: "chat", label: `Chat AI (${chatName(bigChat!)})`, note: `The AI you talk to.${starter}`, need: "required", engines: chat.some((pin) => pin.engine === "omlx") ? ["engine:chat-mlx", "engine:python"] : [] }, chat));
   }
+  // oMLX is an optional install on the tiers that have room (ENGINE-MLX-02: llama-server is the default everywhere).
+  if (OMLX_OPTIONAL_TIERS.includes(tier.id)) rows.push(modelRow({ id: "chat-mlx", label: "Faster chat engine (oMLX, Apple silicon)", note: "The chat AI as an MLX build, about 20 percent faster to answer but less reliable with tools in our tests. Optional; llama.cpp stays the default.", need: "optional", engines: ["engine:chat-mlx", "engine:python"] }, [STACK_CHAT_MUSE_30B_MLX_MODEL]));
   const reads = plannedWhere((pin) => projectors.has(pin.id));
   if (reads.length) rows.push(modelRow({ id: "reads-pictures", label: "Reads pictures (projector)", note: "Lets the chat AI look at a picture you send it.", need: "recommended", engines: [] }, reads));
   const judge = plannedWhere((pin) => pin.role === "judge");

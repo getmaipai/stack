@@ -1,11 +1,11 @@
-// What the chat engine in effect needs on disk (ENGINE-MLX-01). When the
-// setting is `auto` on a tier whose default is oMLX (or names oMLX), the
-// Stack builds its environment and pulls the pinned MLX weights in the
-// background at start, the way it pulls a declared part of an installed
-// model (VISION-03g), and moves chat onto oMLX once both are verified.
-// Until then chat keeps answering on llama-server, and a person who set
-// the engine to `llama-server` downloads nothing. Never throws: a missing
-// engine never stops chat (a Repairs item says what is missing).
+// What the chat engine in effect needs on disk (ENGINE-MLX-01). Only when
+// the setting names oMLX does the Stack build its environment and pull the
+// pinned MLX weights in the background at start, the way it pulls a declared
+// part of an installed model (VISION-03g), and move chat onto oMLX once both
+// are verified. `auto` is llama-server (ENGINE-MLX-02), so under `auto` and
+// `llama-server` nothing is fetched. Until the pieces are verified chat keeps
+// answering on llama-server. Never throws: a missing engine never stops chat
+// (a Repairs item says what is missing).
 import { existsSync } from "node:fs";
 import { ensureOmlxEnvironment, omlxInstalled, omlxSupportedHere } from "@/chat/omlx";
 import { CHAT_ENGINE_SETTING, requestedChatEngine } from "@/lib/chatEngines";
