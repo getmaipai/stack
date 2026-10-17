@@ -16,6 +16,7 @@ import { commitResult, workDir, type ImageResultMeta } from "@/images/results";
 import { ImageError, imageGen, overallPercent } from "@/images/imageEngine";
 import { IMAGE_FAMILIES, isFamilyId, peakBytes } from "@/images/models";
 import { LikenessError, recheck, type LikenessCheck } from "@/lib/likeness";
+import { GenTracker, historyKey, previewExists, previewFile, recordRun } from "@/lib/genProgress";
 
 export const IMAGE_JOB_KIND = "image_generation";
 export const IMAGE_EDIT_JOB_KIND = "image_edit_generative";
@@ -39,6 +40,8 @@ export interface StashedImage {
   likeness?: LikenessCheck[];
   /** The starting picture was a photo someone brought, not one this Stack made: the output is not recorded as a free starting picture. */
   derived?: boolean;
+  /** GENPREVIEW-01: draw a small preview after each step (default on). */
+  preview?: boolean;
 }
 const pending = new Map<string, StashedImage & { at: number }>();
 const STASH_TTL_MS = 30 * 60_000;
@@ -61,6 +64,14 @@ const progress = new Map<string, { phase: string; phasePercent: number }>();
 const failures = new Map<string, { code: string; message: string; status: number }>();
 export function imageProgress(job: string): { phase: string; phasePercent: number } | null { return progress.get(job) ?? null; }
 export function imageFailure(job: string): { code: string; message: string; status: number } | null { return failures.get(job) ?? null; }
+/** Stages, steps and previews of the jobs in flight, for the status route. */
+const trackers = new Map<string, GenTracker>();
+export function imageTracker(job: string): GenTracker | null { return trackers.get(job) ?? null; }
+/** The latest preview file of a running job, or null (the work folder goes with the job). */
+export function imagePreviewPath(job: string): string | null {
+  const path = previewFile(workDir(job));
+  return trackers.has(job) && previewExists(workDir(job)) ? path : null;
+}
 function remember<T>(map: Map<string, T>, key: string, value: T): void {
   map.set(key, value);
   while (map.size > 200) map.delete(map.keys().next().value as string);
@@ -109,15 +120,24 @@ export function registerImageJobs(): void {
       const image = keep(write("image.bin", item.image));
       const mask = keep(write("mask.bin", item.mask));
       const family = item.family as keyof typeof IMAGE_FAMILIES;
+      const tracker = new GenTracker("image", historyKey("image", item.op === "edit" ? 0 : item.width, item.op === "edit" ? 0 : item.height));
+      tracker.nextUnit(0, item.op === "generate" ? item.count : 1);
+      remember(trackers, job.id, tracker);
+      const tick = () => { if (tracker.started) update({ percent: Math.round(tracker.snapshot().fraction * 100) }); };
       try {
         const result = await imageGen.run({
+          preview: item.op === "generate" && item.preview !== false,
           op: item.op, family, quantize: item.quantize, prompt: item.prompt, steps: item.steps, seed: item.seed, loras: item.loras, outDir: work,
           ...(item.op === "generate" ? { width: item.width, height: item.height, count: item.count } : {}),
           ...(initImage ? { initImage, strength: item.strength } : {}), ...(image ? { image } : {}), ...(mask ? { mask } : {}), ...(item.region ? { region: item.region } : {}), ...(item.op === "edit" ? { feather: item.feather } : {}),
         }, {
           jobId: job.id, signal,
-          onPhase: (phase, phasePercent) => { remember(progress, job.id, { phase, phasePercent }); update({ status: phase, percent: overallPercent(phase, phasePercent) }); },
+          onPhase: (phase, phasePercent) => { remember(progress, job.id, { phase, phasePercent }); update({ status: phase, percent: tracker.started ? Math.round(tracker.snapshot().fraction * 100) : overallPercent(phase, phasePercent) }); },
+          onStage: (stage, n, of) => { tracker.enter(stage, n, of); tick(); },
+          onPreview: (step, steps) => tracker.setPreview(step, steps),
+          onImage: (index) => { if (item.op === "generate") tracker.nextUnit(index + 1, item.count); },
         });
+        if (item.op === "generate" && item.count === 1) recordRun(tracker.key, tracker.finish());
         const count = item.op === "edit" ? 1 : item.count;
         const images = [] as ImageResultMeta["images"];
         for (let index = 0; index < count; index += 1) {

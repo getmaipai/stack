@@ -13,6 +13,7 @@ import { STACK_VIDEO_MODEL_ID } from "@/lib/modelCatalog";
 import { workDir, commitResult, type VideoResultMeta } from "./results";
 import { recordGeneratedImage } from "./provenance";
 import { LikenessError, recheck, type LikenessCheck } from "@/lib/likeness";
+import { GenTracker, historyKey, previewExists, previewFile, recordRun } from "@/lib/genProgress";
 import { overallPercent, VideoError, videoGen, VIDEO_PEAK_BYTES } from "./videoGen";
 
 export const VIDEO_JOB_KIND = "video_generation";
@@ -26,6 +27,8 @@ export interface StashedClip {
   loraIds: string[];
   /** LIKENESS-01: the proofs this clip rests on, checked again when it starts. */
   likeness?: LikenessCheck[];
+  /** GENPREVIEW-01: draw the first-frame preview when the motion is done (default on). */
+  preview?: boolean;
 }
 const pending = new Map<string, StashedClip & { at: number }>();
 const STASH_TTL_MS = 30 * 60_000;
@@ -48,6 +51,13 @@ const progress = new Map<string, { phase: string; phasePercent: number }>();
 const failures = new Map<string, { code: string; message: string; status: number }>();
 export function videoProgress(job: string): { phase: string; phasePercent: number } | null { return progress.get(job) ?? null; }
 export function videoFailure(job: string): { code: string; message: string; status: number } | null { return failures.get(job) ?? null; }
+/** Stages and previews of the clips in flight, for the status route. */
+const trackers = new Map<string, GenTracker>();
+export function videoTracker(job: string): GenTracker | null { return trackers.get(job) ?? null; }
+/** The first-frame preview of a running clip, or null (the work folder goes with the job). */
+export function videoPreviewPath(job: string): string | null {
+  return trackers.has(job) && previewExists(join(workDir(job), "out")) ? previewFile(join(workDir(job), "out")) : null;
+}
 function remember<T>(map: Map<string, T>, key: string, value: T): void {
   map.set(key, value);
   while (map.size > 200) map.delete(map.keys().next().value as string);
@@ -74,10 +84,15 @@ export function registerVideoJobs(): void {
       if (clip.image) { imagePath = join(work, "reference.bin"); writeFileSync(imagePath, clip.image, { mode: 0o600 }); }
       const outputDir = join(work, "out");
       const started = Date.now();
-      const result = await videoGen.run({ prompt: clip.prompt, negativePrompt: clip.negativePrompt, imagePath, width: clip.width, height: clip.height, frames: clip.frames, seed: clip.seed, loras: clip.loras, outputDir }, {
+      const tracker = new GenTracker("video", historyKey("video", clip.width, clip.height, clip.frames));
+      remember(trackers, job.id, tracker);
+      const result = await videoGen.run({ ...(clip.preview !== false ? { previewPath: previewFile(outputDir) } : {}), prompt: clip.prompt, negativePrompt: clip.negativePrompt, imagePath, width: clip.width, height: clip.height, frames: clip.frames, seed: clip.seed, loras: clip.loras, outputDir }, {
         jobId: job.id, signal,
-        onPhase: (phase, phasePercent) => { remember(progress, job.id, { phase, phasePercent }); update({ status: phase, percent: overallPercent(phase, phasePercent) }); },
+        onPhase: (phase, phasePercent) => { remember(progress, job.id, { phase, phasePercent }); update({ status: phase, percent: tracker.started ? Math.round(tracker.snapshot().fraction * 100) : overallPercent(phase, phasePercent) }); },
+        onStage: (stage, n, of) => { tracker.enter(stage, n, of); update({ percent: Math.round(tracker.snapshot().fraction * 100) }); },
+        onPreview: () => tracker.setPreview(null, null),
       });
+      recordRun(tracker.key, tracker.finish());
       const video = join(outputDir, "video.mp4");
       const poster = join(outputDir, "poster.jpg");
       const meta: VideoResultMeta = {

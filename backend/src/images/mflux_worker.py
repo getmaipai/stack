@@ -40,8 +40,9 @@ from mflux.models.common.config.model_config import ModelConfig  # noqa: E402
 from mflux.utils.exceptions import StopImageGenerationException  # noqa: E402
 
 THUMB_SIDE = 384
+PREVIEW_SIDE = 256
 
-state = {"key": None, "model": None, "family": None, "steps": 0, "on_step": None}
+state = {"key": None, "model": None, "family": None, "steps": 0, "on_step": None, "preview": None, "prev": None}
 inbox: "queue.Queue[dict]" = queue.Queue()
 running = {"id": None}
 
@@ -50,13 +51,71 @@ class Cancelled(Exception):
     pass
 
 
+def pooled_preview(model, family, x0, config):
+    """A small RGB array (uint8) of an estimate of the finished picture, decoded from latents pooled down so the
+    decoder works on about a 256 px picture: a few milliseconds, not a full-size decode."""
+    import numpy as np
+
+    height, width = int(config.height), int(config.width)
+    k = max(1, int(round(max(height, width) / float(PREVIEW_SIDE))))
+    if family == "flux2-klein-4b":
+        lh, lw = height // 16, width // 16
+        grid = x0.reshape(x0.shape[0], lh, lw, x0.shape[-1])
+        lh2, lw2 = (lh // k) * k, (lw // k) * k
+        grid = grid[:, :lh2, :lw2, :]
+        grid = grid.reshape(grid.shape[0], lh2 // k, k, lw2 // k, k, grid.shape[-1]).mean(axis=(2, 4))
+        packed = grid.transpose(0, 3, 1, 2)
+        decoded = model.vae.decode_packed_latents(packed, tiling_config=None)
+    else:
+        from mflux.models.z_image.latent_creator.z_image_latent_creator import ZImageLatentCreator
+        from mflux.models.common.vae.vae_util import VAEUtil
+
+        plain = ZImageLatentCreator.unpack_latents(x0, config.height, config.width)
+        lh, lw = plain.shape[-2], plain.shape[-1]
+        lh2, lw2 = (lh // k) * k, (lw // k) * k
+        plain = plain[..., :lh2, :lw2]
+        plain = plain.reshape(plain.shape[0], plain.shape[1], lh2 // k, k, lw2 // k, k).mean(axis=(3, 5))
+        decoded = VAEUtil.decode(vae=model.vae, latent=plain, tiling_config=None)
+    array = np.array(mx.clip(decoded[0] / 2 + 0.5, 0, 1).transpose(1, 2, 0).astype(mx.float32))
+    return (array * 255).astype(np.uint8)
+
+
+def write_preview(out_dir, array):
+    path = os.path.join(out_dir, "preview.jpg")
+    temp = path + ".tmp"
+    Image.fromarray(array).save(temp, "JPEG", quality=72)
+    os.replace(temp, path)
+
+
 class Progress:
-    """An mflux in-loop callback: reports the step to whoever is listening."""
+    """An mflux in-loop callback: reports the step, and (when the request asks) a small preview of where the picture is heading.
+
+    The preview is the straight-line estimate of the finished picture: mflux's schedulers are Euler steps along
+    x(s) = (1 - s) * picture + s * noise, so two consecutive latents and their sigmas give the point at sigma 0.
+    """
+
+    def call_before_loop(self, seed, prompt, latents, config, **_):
+        state["prev"] = latents
+        started = state.get("on_start")
+        if started:
+            started(int(config.num_inference_steps))
 
     def call_in_loop(self, t, seed, prompt, latents, config, time_steps):
+        previous, state["prev"] = state.get("prev"), latents
+        total = config.num_inference_steps
+        settings = state.get("preview")
+        if settings and previous is not None:
+            try:
+                sigmas = config.scheduler.sigmas
+                s_now, s_next = float(sigmas[t]), float(sigmas[t + 1])
+                x0 = previous - s_now * (latents - previous) / (s_next - s_now) if s_next != s_now else latents
+                write_preview(settings["dir"], pooled_preview(settings["model"], state["family"], x0, config))
+                settings["on_preview"](t + 1, total)
+            except Exception:  # noqa: BLE001 - a preview never fails a picture
+                state["preview"] = None
         callback = state.get("on_step")
         if callback:
-            callback(t + 1, config.num_inference_steps)
+            callback(t + 1, total)
 
 
 def reader():
@@ -136,16 +195,27 @@ def phase(request_id, name, percent):
     send({"id": request_id, "event": "phase", "phase": name, "percent": int(percent)})
 
 
+def stage(request_id, name, n=None, of=None):
+    """Where the request is, for the progress bar: load, plan, steps (n of of) or decode."""
+    event = {"id": request_id, "event": "stage", "stage": name}
+    if n is not None:
+        event["n"] = int(n)
+        event["of"] = int(of)
+    send(event)
+
+
 def generate(request):
     rid = request["id"]
     count = int(request.get("count", 1))
     steps = int(request["steps"])
     width, height = int(request["width"]), int(request["height"])
     phase(rid, "loading", 0)
+    stage(rid, "load")
     model = build(request, "gen")
     phase(rid, "loading", 100)
     mx.reset_peak_memory()
     started = time.time()
+    want_preview = bool(request.get("preview"))
     seeds = []
     for index in range(count):
         seed = int(request["seed"]) + index
@@ -154,8 +224,18 @@ def generate(request):
         def on_step(done, total, index=index):
             overall = (index + (done / total) * 0.97) / count * 100
             phase(rid, "decoding" if done >= total else "rendering", overall)
+            stage(rid, "decode" if done >= total else "steps", *(() if done >= total else (done, total)))
 
         state["on_step"] = on_step
+        state["on_start"] = lambda total: stage(rid, "steps", 0, total)
+        if want_preview:
+            def on_preview(step, total, index=index):
+                send({"id": rid, "event": "preview", "index": index, "step": step, "steps": total})
+
+            state["preview"] = {"dir": request["out_dir"], "model": model, "on_preview": on_preview}
+        else:
+            state["preview"] = None
+        stage(rid, "plan")
         kwargs = dict(seed=seed, prompt=request["prompt"], num_inference_steps=steps, width=width, height=height)
         if request.get("init_image"):
             kwargs["image_path"] = request["init_image"]
@@ -164,6 +244,9 @@ def generate(request):
         save_pair(result.image, request["out_dir"], index)
         send({"id": rid, "event": "image", "index": index, "seed": seed})
     state["on_step"] = None
+    state["on_start"] = None
+    state["preview"] = None
+    state["prev"] = None
     return {"seeds": seeds, "ms": int((time.time() - started) * 1000), "peak_bytes": int(mx.get_peak_memory())}
 
 
@@ -214,6 +297,7 @@ def edit(request):
         phase(rid, "decoding" if done >= total else "rendering", done / total * 95)
 
     state["on_step"] = on_step
+    state["preview"] = None
     result = model.generate_image(seed=seed, prompt=request["prompt"], num_inference_steps=steps, width=ew, height=eh, image_paths=[reference])
     state["on_step"] = None
     os.remove(reference)
@@ -248,12 +332,14 @@ def handle(request):
         send({"id": rid, "ok": True, **body})
     except (KeyboardInterrupt, StopImageGenerationException):
         state["on_step"] = None
+        state["preview"] = None
         send({"id": rid, "ok": False, "code": "cancelled", "error": "Cancelled."})
     except MemoryError:
         free_model()
         send({"id": rid, "ok": False, "code": "out_of_memory", "error": "There was not enough memory for that picture. Try a smaller size."})
     except Exception as error:  # noqa: BLE001
         state["on_step"] = None
+        state["preview"] = None
         text = str(error)
         code = CODES.get(text)
         if code is None and ("memory" in text.lower() or "metal" in text.lower() and "alloc" in text.lower()):
@@ -263,6 +349,7 @@ def handle(request):
         send({"id": rid, "ok": False, "code": code or "failed", "error": text if code else "The picture engine failed on that request."})
     finally:
         running["id"] = None
+        state.update(on_step=None, on_start=None, preview=None, prev=None)
         gc.collect()
         mx.clear_cache()
 

@@ -24,7 +24,7 @@ import { LikenessError, photoBind, verifyProof, type LikenessCheck } from "@/lib
 import { wasGeneratedHere } from "@/video/provenance";
 import { deleteResult, isJobId, messagesPath, posterPath, readResult, videoPath, type VideoResultMeta } from "@/video/results";
 import { memoryVerdict, tierAvailability, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, videoGen, videoGenRoot } from "@/video/videoGen";
-import { stashClip, unstashClip, videoFailure, videoProgress, VIDEO_JOB_KIND } from "@/video/jobs";
+import { stashClip, unstashClip, videoFailure, videoPreviewPath, videoProgress, videoTracker, VIDEO_JOB_KIND } from "@/video/jobs";
 
 const DEFAULT_WAIT_MS = 30_000;
 const MAX_WAIT_MS = 30 * 60_000;
@@ -38,6 +38,7 @@ const VideoRequestSchema = z.object({
   image_source: z.enum(["generated", "uploaded", "household_photo"]).optional().openapi({ description: "Where the picture came from, as Home knows it. `generated`: a picture this Stack's own image generator produced (or the poster of one of its clips); the Stack checks the picture's hash. `household_photo`: a photo of a consenting household adult, accepted only with `consent_proof`. `uploaded` (any other photo) is refused for everyone: a photo that may show a real person needs the household proof (VIDEO-GEN-12, LIKENESS-01)." }),
   consent_proof: z.string().max(4096).optional().openapi({ description: "With `image_source: household_photo`: Home's signed proof that the person in the photo is a household adult who agreed, bound to this exact picture (its sha256) and valid for at most 30 minutes. Checked when the request arrives and again when the clip starts." }),
   size: z.string().regex(/^\d{3,4}x\d{3,4}$/).optional().openapi({ description: `<width>x<height>, multiples of ${VIDEO_SIZE_STEP}, each side at least ${VIDEO_MIN_SIDE}, area at most ${VIDEO_MAX_PIXELS} pixels (832x480; 480x832 also fits). Default ${VIDEO_DEFAULT_SIZE}.`, example: VIDEO_DEFAULT_SIZE }),
+  preview: z.boolean().optional().openapi({ description: "Default true. While the clip runs, the status carries `preview_url`: the first frame of the clip (JPEG, up to 480 px on the long side), drawn from the finished motion the moment the long frame-building stage starts. Pass false to skip it (it costs about a second)." }),
   seconds: z.number().int().min(1).max(VIDEO_MAX_SECONDS).optional().openapi({ description: `Whole seconds, 1 to ${VIDEO_MAX_SECONDS} per tier (24 frames a second plus the first frame). Default ${VIDEO_MAX_SECONDS}.` }),
   seed: z.number().int().min(0).max(4_294_967_295).optional(),
   loras: z.array(LoraEntry).max(4).optional().openapi({ description: "LoRAs from the household library (GET /stack/v1/video/loras) to apply, by id, with a strength of 0 to 2 (the record's default when left out). Home decides which ids this caller may name." }),
@@ -59,6 +60,13 @@ const JobStatusSchema = z.object({
   phase: z.string().openapi({ description: "queued, waiting for memory, starting, setting up (first clip only), loading, rendering, decoding, encoding, ready; failed or cancelled when it ended so." }),
   progress: z.number().int().openapi({ description: "0 to 100 over the whole clip, weighted by where the time goes (decoding is most of it)." }),
   phase_progress: z.number().int().nullable().openapi({ description: "0 to 100 inside the current phase, when the phase has one." }),
+  progress_fraction: z.number().nullable().openapi({ description: "0 to 1 over the whole clip, weighted by measured stage times; it moves inside a stage even when the engine reports no count." }),
+  stage: z.string().nullable().openapi({ description: "load_text, plan, load_model, motion, frames or save while running; null otherwise." }),
+  stage_label: z.string().nullable().openapi({ description: "The stage in words a person reads (\"Putting the frames together, part 5 of 12\")." }),
+  step: z.number().int().nullable().openapi({ description: "Motion steps finished, while the stage is `motion`." }),
+  steps: z.number().int().nullable().openapi({ description: "Motion steps in all, while the stage is `motion`." }),
+  eta_seconds: z.number().int().nullable().openapi({ description: "Whole seconds left, from the medians of earlier clips of the same size and length (a built-in 130 s total until there are some); null until a stage is known." }),
+  preview_url: z.string().nullable().openapi({ description: "GET this for the first-frame preview JPEG while running; null until the motion is done, when the request asked for none, or after the job ended (the finished clip has `poster_url`)." }),
   position: z.number().int().nullable().openapi({ description: "Place in line while queued (1 is next)." }),
   error: z.string().nullable(), code: z.string().nullable(),
   data: z.array(VideoDataSchema),
@@ -84,6 +92,10 @@ const videoFileRoute = createRoute({ method: "get", path: "/generations/{job}/vi
   200: { content: { "video/mp4": { schema: z.string().openapi({ format: "binary" }) } }, description: "The mp4." },
   206: { content: { "video/mp4": { schema: z.string().openapi({ format: "binary" }) } }, description: "A byte range of the mp4." },
   404: { content: { "application/json": { schema: ErrorBody } }, description: "The clip is gone: results are kept for a day, or Home deleted it." },
+} });
+const previewFileRoute = createRoute({ method: "get", path: "/generations/{job}/preview.jpg", tags: ["Video"], summary: "The first-frame preview while a clip is being made", request: { params: z.object({ job: z.string() }) }, responses: {
+  200: { content: { "image/jpeg": { schema: z.string().openapi({ format: "binary" }) } }, description: "The preview." },
+  404: { content: { "application/json": { schema: ErrorBody } }, description: "No preview: the motion is not done yet, none was asked for, or the clip finished." },
 } });
 const posterFileRoute = createRoute({ method: "get", path: "/generations/{job}/poster.jpg", tags: ["Video"], summary: "The poster frame", request: { params: z.object({ job: z.string() }) }, responses: {
   200: { content: { "image/jpeg": { schema: z.string().openapi({ format: "binary" }) } }, description: "The JPEG of frame 0." },
@@ -143,6 +155,18 @@ function looksLikePicture(bytes: Uint8Array): boolean {
 
 function activeClips(): number { return listJobs().filter((job) => job.kind === VIDEO_JOB_KIND && (job.state === "queued" || job.state === "running" || job.state === "stalled")).length; }
 
+/** The stage, ETA and preview of a running clip; all null otherwise. */
+function liveFields(id: string, running: boolean) {
+  const tracker = running ? videoTracker(id) : null;
+  const snap = tracker?.snapshot();
+  const preview = tracker?.preview && videoPreviewPath(id) ? tracker.preview : null;
+  return {
+    progress_fraction: snap && tracker!.started ? Math.round(snap.fraction * 1000) / 1000 : null,
+    stage: snap?.stage ?? null, stage_label: snap?.stage_label ?? null, step: snap?.step ?? null, steps: snap?.steps ?? null, eta_seconds: snap?.eta_seconds ?? null,
+    preview_url: preview ? `/v1/videos/generations/${id}/preview.jpg?v=${preview.version}` : null,
+  };
+}
+
 function statusOf(job: Job) {
   const detail = videoProgress(job.id);
   const failure = videoFailure(job.id);
@@ -151,6 +175,7 @@ function statusOf(job: Job) {
   const result = job.state === "done" ? readResult(job.id) : null;
   return {
     job: job.id, state, phase, progress: Math.round(job.percent), phase_progress: state === "running" && detail ? Math.round(detail.phasePercent) : null, position: job.state === "queued" ? job.position : null,
+    ...liveFields(job.id, state === "running"),
     error: job.state === "failed" ? failure?.message ?? job.reason ?? "The clip failed." : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? job.reason ?? "Paused: this computer is low on memory." : "The clip was cancelled.") : null,
     code: job.state === "failed" ? (job.status === "no_memory" ? "no_memory" : failure?.code ?? "failed") : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? "no_memory" : "cancelled") : null,
     data: result ? [entry(result)] : [],
@@ -204,7 +229,7 @@ videoV1Routes.openapi(postRoute, async (c) => {
   const frames = seconds * VIDEO_FPS + 1;
   const token = crypto.randomUUID();
   const loraIds = loras.map((lora) => lora.record.id);
-  stashClip(token, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, likeness: checks });
+  stashClip(token, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, likeness: checks, preview: body.preview !== false });
   const submitted = submitJob({ kind: VIDEO_JOB_KIND, role: "video", input: { token, size: `${size.width}x${size.height}`, seconds, seed, mode: image ? "image-to-video" : "text-to-video", lora_ids: loraIds, likeness: checks.length > 0 } });
   if ("refused" in submitted) return fail(c, 503, "unsupported", submitted.reason);
   const settled = await waitForJob(submitted.job.id, body.timeout_ms ?? DEFAULT_WAIT_MS);
@@ -229,7 +254,7 @@ videoV1Routes.openapi(getRoute, (c) => {
   if (job && job.kind === VIDEO_JOB_KIND && !(job.state === "done" && !readResult(id))) return reply(c, statusOf(job), 200);
   // After a restart the job record is gone but a finished clip is still on disk.
   const meta = readResult(id);
-  if (meta) return reply(c, { job: id, state: "done", phase: "ready", progress: 100, phase_progress: null, position: null, error: null, code: null, data: [entry(meta)] }, 200);
+  if (meta) return reply(c, { job: id, state: "done", phase: "ready", progress: 100, phase_progress: null, ...liveFields(id, false), position: null, error: null, code: null, data: [entry(meta)] }, 200);
   return fail(c, 404, "unknown_job", "No such clip: it expired after a day, was deleted, or never existed.");
 });
 
@@ -252,6 +277,12 @@ videoV1Routes.openapi(videoFileRoute, (c) => {
   const id = c.req.valid("param").job;
   if (!isJobId(id) || !existsSync(videoPath(id))) return fail(c, 404, "expired", "That clip is gone: results are kept for a day, or Home deleted it. Make it again.") as never;
   return fileResponse(c, videoPath(id), "video/mp4", c.req.header("range")) as never;
+});
+videoV1Routes.openapi(previewFileRoute, (c) => {
+  const id = c.req.valid("param").job;
+  const path = isJobId(id) ? videoPreviewPath(id) : null;
+  if (!path || !existsSync(path)) return fail(c, 404, "no_preview", "There is no preview for that clip: the motion is not finished yet, none was asked for, or the clip is done.") as never;
+  return fileResponse(c, path, "image/jpeg", undefined) as never;
 });
 videoV1Routes.openapi(posterFileRoute, (c) => {
   const id = c.req.valid("param").job;

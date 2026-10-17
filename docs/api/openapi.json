@@ -1121,7 +1121,7 @@
                   },
                   "preview": {
                     "type": "boolean",
-                    "description": "Accepted and ignored in this build: no preview frame is produced."
+                    "description": "Default true. While the job runs, the status carries `preview_url`: a small JPEG (about 256 px on the long side) of where the picture is heading, redrawn after every denoising step. Pass false to skip it. Edits never make previews."
                   },
                   "timeout_ms": {
                     "type": "integer",
@@ -1786,6 +1786,10 @@
                     "description": "<width>x<height>, multiples of 32, each side at least 256, area at most 399360 pixels (832x480; 480x832 also fits). Default 832x480.",
                     "example": "832x480"
                   },
+                  "preview": {
+                    "type": "boolean",
+                    "description": "Default true. While the clip runs, the status carries `preview_url`: the first frame of the clip (JPEG, up to 480 px on the long side), drawn from the finished motion the moment the long frame-building stage starts. Pass false to skip it (it costs about a second)."
+                  },
                   "seconds": {
                     "type": "integer",
                     "minimum": 1,
@@ -2311,6 +2315,41 @@
                       "nullable": true,
                       "description": "0 to 100 inside the current phase, when the phase has one."
                     },
+                    "progress_fraction": {
+                      "type": "number",
+                      "nullable": true,
+                      "description": "0 to 1 over the whole clip, weighted by measured stage times; it moves inside a stage even when the engine reports no count."
+                    },
+                    "stage": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "load_text, plan, load_model, motion, frames or save while running; null otherwise."
+                    },
+                    "stage_label": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "The stage in words a person reads (\"Putting the frames together, part 5 of 12\")."
+                    },
+                    "step": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Motion steps finished, while the stage is `motion`."
+                    },
+                    "steps": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Motion steps in all, while the stage is `motion`."
+                    },
+                    "eta_seconds": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Whole seconds left, from the medians of earlier clips of the same size and length (a built-in 130 s total until there are some); null until a stage is known."
+                    },
+                    "preview_url": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "GET this for the first-frame preview JPEG while running; null until the motion is done, when the request asked for none, or after the job ended (the finished clip has `poster_url`)."
+                    },
                     "position": {
                       "type": "integer",
                       "nullable": true,
@@ -2413,6 +2452,13 @@
                     "phase",
                     "progress",
                     "phase_progress",
+                    "progress_fraction",
+                    "stage",
+                    "stage_label",
+                    "step",
+                    "steps",
+                    "eta_seconds",
+                    "preview_url",
                     "position",
                     "error",
                     "code",
@@ -2561,6 +2607,62 @@
           },
           "404": {
             "description": "The clip is gone: results are kept for a day, or Home deleted it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/videos/generations/{job}/preview.jpg": {
+      "get": {
+        "tags": [
+          "Video"
+        ],
+        "summary": "The first-frame preview while a clip is being made",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The preview.",
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No preview: the motion is not done yet, none was asked for, or the clip finished.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2929,6 +3031,46 @@
                       "type": "integer",
                       "nullable": true
                     },
+                    "progress_fraction": {
+                      "type": "number",
+                      "nullable": true,
+                      "description": "0 to 1 over the whole job, weighted by where the time goes. Moves smoothly inside a stage."
+                    },
+                    "stage": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "load, plan, steps or decode while running; null otherwise."
+                    },
+                    "stage_label": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "The stage in words a person reads (\"Drawing, step 2 of 4\")."
+                    },
+                    "step": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Denoising steps finished for the picture being made."
+                    },
+                    "steps": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Denoising steps in all."
+                    },
+                    "eta_seconds": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Whole seconds left, from the medians of earlier pictures of the same size; null until a stage is known."
+                    },
+                    "preview_url": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "GET this for the latest preview JPEG while running (the `v` query changes with every new one); null when none exists yet, the request asked for none, or the job ended."
+                    },
+                    "preview_step": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "The step the preview shows."
+                    },
                     "position": {
                       "type": "integer",
                       "nullable": true,
@@ -3021,6 +3163,14 @@
                     "phase",
                     "progress",
                     "phase_progress",
+                    "progress_fraction",
+                    "stage",
+                    "stage_label",
+                    "step",
+                    "steps",
+                    "eta_seconds",
+                    "preview_url",
+                    "preview_step",
                     "position",
                     "error",
                     "code",
@@ -3133,7 +3283,7 @@
         "tags": [
           "Images"
         ],
-        "summary": "A finished picture (`0.png`) or its thumbnail (`0.thumb.jpg`)",
+        "summary": "A finished picture (`0.png`), its thumbnail (`0.thumb.jpg`) or, while the job runs, its latest preview (`preview.jpg`)",
         "parameters": [
           {
             "schema": {

@@ -21,6 +21,7 @@ import { __resetProvenanceForTests, wasGeneratedHere } from "@/video/provenance"
 import { LoraError, scanWords } from "@/lib/media/loraLibrary";
 import { parseRegion } from "@/routes/imageGenerations";
 import { dataDir } from "@/lib/paths";
+import { __resetGenHistoryForTests, GenTracker, historyKey, IMAGE_STAGES } from "@/lib/genProgress";
 
 const GB = 1_073_741_824;
 
@@ -580,4 +581,89 @@ test("a service with no environment support says so", () => {
   const none = new ImageGenService(scripted(okReply, { supported: () => false }));
   expect(none.status().state).toBe("unsupported");
   expect(none.supported()).toBe(false);
+});
+
+// ---- GENPREVIEW-01: steps, stages and the per-step preview ----
+
+type Live = { state: string; progress: number; progress_fraction: number | null; stage: string | null; stage_label: string | null; step: number | null; steps: number | null; eta_seconds: number | null; preview_url: string | null; preview_step: number | null };
+const live = async (job: string) => await (await get(`/v1/images/generations/${job}`)).json() as Live;
+const stage = (request: WorkerRequest, name: string, n?: number, of?: number): WorkerEvent => ({ id: request.id, event: "stage", stage: name, ...(n !== undefined ? { n, of } : {}) });
+
+test("a running picture reports its step and stage, serves each new preview, and the preview is gone when the picture is done", async () => {
+  __resetGenHistoryForTests();
+  let next!: () => void;
+  const turn = (): Promise<void> => new Promise((resolve) => { next = resolve; });
+  let step = turn();
+  imageGen.useDeps(scripted(async (request, emit) => {
+    emit(stage(request, "load")); emit(stage(request, "plan")); emit(stage(request, "steps", 0, 4));
+    for (let n = 1; n <= 4; n++) {
+      await step; step = turn();
+      writeFileSync(join(request.out_dir, "preview.jpg"), `PREVIEW-${n}`);
+      emit({ id: request.id, event: "preview", index: 0, step: n, steps: 4 });
+      emit(stage(request, n === 4 ? "decode" : "steps", n === 4 ? undefined : n, n === 4 ? undefined : 4));
+    }
+    await step;
+    return okReply(request);
+  }));
+  const { job } = await (await post({ prompt: "a boat", timeout_ms: 20 })).json() as { job: string };
+  await Bun.sleep(30);
+  const first = await live(job);
+  expect(first).toMatchObject({ state: "running", stage: "steps", stage_label: "Drawing, step 1 of 4", step: 0, steps: 4, preview_url: null, preview_step: null });
+  expect(requests[0]!.preview).toBe(true);
+  expect((await get(`/v1/images/generations/${job}/preview.jpg`)).status).toBe(404);
+  let last = first.progress_fraction!;
+  for (let n = 1; n <= 2; n++) {
+    next(); await Bun.sleep(20);
+    const status = await live(job);
+    expect(status).toMatchObject({ step: n, steps: 4, preview_step: n });
+    expect(status.preview_url).toMatch(new RegExp(`preview\\.jpg\\?v=${n}$`));
+    expect(status.progress_fraction!).toBeGreaterThan(last); last = status.progress_fraction!;
+    expect(await (await get(status.preview_url!)).text()).toBe(`PREVIEW-${n}`);
+    expect(status.eta_seconds).toBeGreaterThanOrEqual(1);
+  }
+  next(); await Bun.sleep(20); next(); await Bun.sleep(20);
+  expect(await live(job)).toMatchObject({ stage: "decode", stage_label: "Finishing the picture", preview_step: 4 });
+  next(); await Bun.sleep(80);
+  expect(await live(job)).toMatchObject({ state: "done", stage: null, step: null, preview_url: null, preview_step: null, eta_seconds: null });
+  expect((await get(`/v1/images/generations/${job}/preview.jpg`)).status).toBe(404);
+  expect(existsSync(workDir(job))).toBe(false);
+});
+
+test("preview false is passed to the worker as no preview; edits never ask for one", async () => {
+  imageGen.useDeps(scripted());
+  expect((await post({ prompt: "x", preview: false, timeout_ms: 5000 })).status).toBe(200);
+  expect(requests[0]!.preview).toBeUndefined();
+  expect((await post({ prompt: "y", timeout_ms: 5000 })).status).toBe(200);
+  expect(requests[1]!.preview).toBe(true);
+});
+
+test("cancel in each stage stops the worker, removes the work folder and the preview, and clears the live fields", async () => {
+  for (const name of ["load", "plan", "steps", "decode"]) {
+    cancelled.length = 0; requests.length = 0;
+    imageGen.useDeps(scripted((request, emit) => { emit(stage(request, name, name === "steps" ? 2 : undefined, name === "steps" ? 4 : undefined)); writeFileSync(join(request.out_dir, "preview.jpg"), "P"); emit({ id: request.id, event: "preview", index: 0, step: 2, steps: 4 }); return new Promise<WorkerReply>(() => {}); }));
+    const { job } = await (await post({ prompt: `cancel ${name}`, timeout_ms: 20 })).json() as { job: string };
+    await Bun.sleep(30);
+    expect((await live(job)).stage).toBe(name);
+    expect((await get(`/v1/images/generations/${job}/preview.jpg`)).status).toBe(200);
+    await app.request(`/v1/images/generations/${job}`, { method: "DELETE" });
+    await Bun.sleep(30);
+    expect(cancelled).toEqual([job]);
+    expect(existsSync(workDir(job))).toBe(false);
+    expect((await get(`/v1/images/generations/${job}/preview.jpg`)).status).toBe(404);
+    expect(await live(job)).toMatchObject({ state: "cancelled", stage: null, preview_url: null });
+  }
+});
+
+test("several pictures in one job: the fraction covers all of them and never goes back when the next picture starts over", () => {
+  __resetGenHistoryForTests();
+  let at = 0;
+  const tracker = new GenTracker("image", historyKey("image", 1024, 1024), () => at);
+  tracker.nextUnit(0, 2);
+  const seen: number[] = [];
+  const pass = () => { for (const [name, n, of] of [["load"], ["plan"], ["steps", 0, 4], ["steps", 2, 4], ["decode"]] as Array<[string, number?, number?]>) { tracker.enter(name, n ?? null, of ?? null); at += 500; seen.push(tracker.snapshot().fraction); } };
+  pass(); tracker.nextUnit(1, 2); seen.push(tracker.snapshot().fraction); pass();
+  expect(seen).toEqual([...seen].sort((a, b) => a - b));
+  expect(seen[seen.length - 1]!).toBeLessThan(1);
+  expect(seen[4]!).toBeLessThan(0.5 + 1e-9);
+  expect(IMAGE_STAGES.reduce((sum, item) => sum + item.weight, 0)).toBeCloseTo(1, 5);
 });

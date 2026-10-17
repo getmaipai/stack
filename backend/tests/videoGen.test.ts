@@ -19,6 +19,7 @@ import { __resetProvenanceForTests, recordGeneratedImage, wasGeneratedHere } fro
 import { commitResult, deleteResult, readResult, resultsRoot, sweepResults, workDir, type VideoResultMeta } from "@/video/results";
 import { memoryVerdict, overallPercent, tierAvailability, VideoError, videoGen, videoRequirementsFileFor, videoRoleState, VideoGenService, workerHandle, type VideoGenDeps, type WorkerEvent, type WorkerHandle, type WorkerReply, type WorkerRequest } from "@/video/videoGen";
 import { dataDir } from "@/lib/paths";
+import { __resetGenHistoryForTests, GenTracker, historyKey, recordRun, VIDEO_STAGES } from "@/lib/genProgress";
 
 const GB = 1_073_741_824;
 const PNG = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]);
@@ -425,7 +426,7 @@ test("the line protocol: ready, phase events for this job only, one reply, a sto
   const worker = workerHandle(fake.child as never);
   await fake.send({ ready: true });
   const events: string[] = [];
-  const sending = worker.send({ id: "j1" } as WorkerRequest, { deadlineMs: 5000, onEvent: (event) => events.push(`${event.phase}:${event.percent}`) });
+  const sending = worker.send({ id: "j1" } as WorkerRequest, { deadlineMs: 5000, onEvent: (event) => { if (event.event === "phase") events.push(`${event.phase}:${event.percent}`); } });
   await Bun.sleep(10);
   expect(JSON.parse(fake.input[0]!).id).toBe("j1");
   await fake.send("log noise that is not json");
@@ -547,4 +548,118 @@ test.skipIf(!python)("the real worker refuses a clip above the limits and a mode
   const missing = await worker.send({ id: "3", ...base, width: 832, height: 480, num_frames: 121 } as WorkerRequest, { deadlineMs: 60_000, onEvent: () => {} });
   expect(missing).toMatchObject({ ok: false, code: "model_missing" });
   worker.kill();
+});
+
+// ---- GENPREVIEW-01: stages, ETA and the first-frame preview ----
+
+type Live = { state: string; phase: string; progress: number; progress_fraction: number | null; stage: string | null; stage_label: string | null; step: number | null; steps: number | null; eta_seconds: number | null; preview_url: string | null; data: unknown[] };
+const live = async (job: string) => await (await get(`/v1/videos/generations/${job}`)).json() as Live;
+const stageEvent = (request: WorkerRequest, stage: string, n?: number, of?: number): WorkerEvent => ({ id: request.id, event: "stage", stage, ...(n !== undefined ? { n, of } : {}) });
+
+test("a running clip reports its stage in words, a fraction that only rises, and an ETA; the first-frame preview appears when the motion is done and is gone when the clip ends", async () => {
+  __resetGenHistoryForTests();
+  let release!: (reply: WorkerReply) => void;
+  const gate = new Promise<WorkerReply>((resolve) => { release = resolve; });
+  videoGen.useDeps(scripted((request, emit) => {
+    emit(stageEvent(request, "load_text")); emit(stageEvent(request, "plan")); emit(stageEvent(request, "load_model"));
+    emit(stageEvent(request, "motion", 1, 3));
+    return gate.then((reply) => reply);
+  }));
+  const { job } = await (await post({ prompt: "waves", timeout_ms: 20 })).json() as { job: string };
+  await Bun.sleep(40);
+  const motion = await live(job);
+  expect(motion).toMatchObject({ state: "running", stage: "motion", stage_label: "Making the motion, step 2 of 3", step: 1, steps: 3, preview_url: null });
+  expect(motion.eta_seconds).toBeGreaterThan(60);
+  expect(motion.progress_fraction!).toBeGreaterThan(0.05);
+  expect(motion.progress).toBe(Math.round(motion.progress_fraction! * 100));
+  expect((await get(`/v1/videos/generations/${job}/preview.jpg`)).status).toBe(404);
+  // the worker draws the first frame, then starts the tiled decode
+  const asked = requests[0]!.preview!;
+  expect(asked).toContain(`${job}`);
+  writeFileSync(asked, "FIRSTFRAME");
+  const tracker = (await import("@/video/jobs")).videoTracker(job)!;
+  tracker.enter("frames", 3, 12);
+  tracker.setPreview(null, null);
+  const decoding = await live(job);
+  expect(decoding).toMatchObject({ stage: "frames", stage_label: "Putting the frames together, 4 of 12" });
+  expect(decoding.progress_fraction!).toBeGreaterThan(motion.progress_fraction!);
+  expect(decoding.preview_url).toMatch(/preview\.jpg\?v=1$/);
+  const served = await get(decoding.preview_url!);
+  expect(served.status).toBe(200);
+  expect(served.headers.get("content-type")).toBe("image/jpeg");
+  expect(await served.text()).toBe("FIRSTFRAME");
+  release(okReply(requests[0]!));
+  await Bun.sleep(80);
+  const done = await live(job);
+  expect(done).toMatchObject({ state: "done", stage: null, preview_url: null, eta_seconds: null });
+  expect((await get(`/v1/videos/generations/${job}/preview.jpg`)).status).toBe(404);
+  expect(existsSync(workDir(job))).toBe(false);
+});
+
+test("preview false asks the worker for no preview; a worker that only sends phase events keeps the old percent", async () => {
+  videoGen.useDeps(scripted((request, emit) => { emit({ id: request.id, event: "phase", phase: "decoding", percent: 50 }); return new Promise<WorkerReply>(() => {}); }));
+  const { job } = await (await post({ prompt: "x", preview: false, timeout_ms: 20 })).json() as { job: string };
+  await Bun.sleep(40);
+  expect(requests[0]!.preview).toBeUndefined();
+  const status = await live(job);
+  expect(status).toMatchObject({ phase: "decoding", stage: null, stage_label: null, progress_fraction: null, eta_seconds: null, preview_url: null });
+  expect(status.progress).toBe(overallPercent("decoding", 50));
+});
+
+test("cancel in each stage stops the worker, removes the work folder and its preview, and clears the live fields", async () => {
+  for (const stage of ["load_text", "plan", "load_model", "motion", "frames", "save"]) {
+    killed = 0; requests.length = 0;
+    videoGen.useDeps(scripted((request, emit) => { emit(stageEvent(request, stage)); writeFileSync(request.preview!, "P"); return new Promise<WorkerReply>(() => {}); }));
+    const { job } = await (await post({ prompt: `cancel in ${stage}`, timeout_ms: 20 })).json() as { job: string };
+    await Bun.sleep(30);
+    expect((await live(job)).stage).toBe(stage);
+    await app.request(`/v1/videos/generations/${job}`, { method: "DELETE" });
+    await Bun.sleep(30);
+    expect(killed).toBe(1);
+    expect(existsSync(workDir(job))).toBe(false);
+    expect((await get(`/v1/videos/generations/${job}/preview.jpg`)).status).toBe(404);
+    expect(await live(job)).toMatchObject({ state: "cancelled", stage: null, preview_url: null, eta_seconds: null });
+  }
+});
+
+test("the tracker: fractions only rise, a stage that is skipped counts as done, a late earlier stage is ignored, and the ETA follows the medians of past runs", () => {
+  __resetGenHistoryForTests();
+  rmSync(join(dataDir, "gen-history.json"), { force: true });
+  let at = 0;
+  const key = historyKey("video", 832, 480, 121);
+  const tracker = new GenTracker("video", key, () => at);
+  expect(tracker.snapshot()).toMatchObject({ stage: null, fraction: 0, eta_seconds: null });
+  const seen: number[] = [];
+  for (const [stage, n, of] of [["load_text"], ["plan"], ["load_model"], ["motion", 0, 3], ["motion", 2, 3], ["frames", 0, 12], ["frames", 6, 12], ["frames", 12, 12], ["save"]] as Array<[string, number?, number?]>) {
+    tracker.enter(stage, n ?? null, of ?? null);
+    at += 4000;
+    seen.push(tracker.snapshot().fraction);
+  }
+  expect(seen).toEqual([...seen].sort((a, b) => a - b));
+  tracker.enter("plan");
+  expect(tracker.snapshot().stage).toBe("save");
+  // the bar creeps by time inside a stage with no count, then the engine reports "0 of 60": it holds, never steps back
+  const creep = new GenTracker("video", key, () => at);
+  creep.enter("frames");
+  at += 20_000;
+  const crept = creep.snapshot();
+  creep.enter("frames", 0, 60);
+  expect(creep.snapshot().fraction).toBeGreaterThanOrEqual(crept.fraction);
+  // and the countdown runs down with the clock instead of jumping up
+  at += 5_000;
+  expect(creep.snapshot().eta_seconds!).toBeLessThanOrEqual(crept.eta_seconds!);
+  const total = VIDEO_STAGES.reduce((sum, stage) => sum + stage.weight, 0);
+  expect(total).toBeCloseTo(1, 5);
+  // with no history the total is the built-in 130 s; with three fast runs the ETA shrinks
+  const fresh = new GenTracker("video", key, () => 0);
+  fresh.enter("load_text");
+  expect(fresh.snapshot().eta_seconds).toBeGreaterThanOrEqual(120);
+  expect(fresh.snapshot().eta_seconds).toBeLessThanOrEqual(135);
+  for (let i = 0; i < 3; i++) recordRun(key, { load_text: 3, plan: 1, load_model: 3, motion: 6, frames: 40, save: 2 });
+  const quick = new GenTracker("video", key, () => 0);
+  quick.enter("load_text");
+  expect(quick.snapshot().eta_seconds!).toBeLessThan(60);
+  expect(JSON.parse(readFileSync(join(dataDir, "gen-history.json"), "utf8"))[key].frames).toEqual([40, 40, 40]);
+  rmSync(join(dataDir, "gen-history.json"), { force: true });
+  __resetGenHistoryForTests();
 });

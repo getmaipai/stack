@@ -38,6 +38,7 @@ MAX_FRAMES = 121
 FPS = 24
 MAX_PIXELS = 832 * 480
 MAX_REFERENCE_PIXELS = 40_000_000
+PREVIEW_SIDE = 480
 
 _real_out = sys.stdout
 _current = {"id": None, "dmd_sigmas": [1.0, 0.757, 0.522, 0.0], "tokenizer_dir": None, "poster": None, "t": 0.0}
@@ -46,6 +47,16 @@ _current = {"id": None, "dmd_sigmas": [1.0, 0.757, 0.522, 0.0], "tokenizer_dir":
 def emit(obj):
     _real_out.write(json.dumps(obj, separators=(",", ":")) + "\n")
     _real_out.flush()
+
+
+def stage(name, n=None, of=None):
+    """Where the clip is, for the progress bar: load_text, plan, load_model, motion, frames or save, with "n of of" inside a stage
+    (n counts what is already done)."""
+    event = {"id": _current["id"], "event": "stage", "stage": name}
+    if n is not None and of:
+        event["n"] = int(n)
+        event["of"] = int(of)
+    emit(event)
 
 
 def phase(name, percent=None):
@@ -67,10 +78,18 @@ class _Sink(io.TextIOBase):
         while "\n" in self._line:
             line, self._line = self._line.split("\n", 1)
             line = re.sub(r"\x1b\[[0-9;]*m", "", line).strip()
-            if line.startswith("Loading T5") or line.startswith("Encoding input image") or line.startswith("Loading transformer"):
+            if line.startswith("Loading T5"):
                 phase("loading")
+                stage("load_text")
+            elif line.startswith("Encoding text") or line.startswith("Encoding input image"):
+                phase("loading")
+                stage("plan")
+            elif line.startswith("Loading transformer"):
+                phase("loading")
+                stage("load_model")
             elif line.startswith("Decoding with VAE"):
                 phase("decoding", 0)
+                stage("frames")
         return len(text)
 
     def flush(self):
@@ -115,6 +134,7 @@ def _install_patches():
         total = max(1, len(items))
         for index, item in enumerate(items):
             phase("rendering", 100.0 * index / total)
+            stage("motion", index, total)
             yield item
         phase("rendering", 100)
 
@@ -150,6 +170,8 @@ def _install_patches():
         except Exception:
             total = 0
         state = {"n": 0}
+        if total:
+            stage("frames", 0, total)
 
         def counting(tile, **kw):
             out = decoder_fn(tile, **kw)
@@ -157,6 +179,7 @@ def _install_patches():
             state["n"] += 1
             if total:
                 phase("decoding", min(99, 100.0 * state["n"] / total))
+                stage("frames", min(state["n"], total), total)
             return out
 
         if "decoder_fn" in kwargs:
@@ -169,6 +192,7 @@ def _install_patches():
 
     def save_video(frames, output_path, fps=FPS):
         phase("encoding", 0)
+        stage("save")
         import imageio
         from PIL import Image
 
@@ -194,6 +218,45 @@ def _install_patches():
         _current["frames_written"] = total
 
     gen.save_video = save_video
+
+    original_load_vae_decoder = gen.load_vae_decoder
+
+    def load_vae_decoder_with_preview(*args, **kwargs):
+        """The moment the motion is finished and the long decode is about to start, draw the first frame of the clip on its own
+        (one latent frame through the same decoder: a picture-sized decode, not a clip-sized one) and write it where the Stack
+        serves it as the card's preview. A preview that cannot be drawn is skipped; the clip never depends on it."""
+        decoder = original_load_vae_decoder(*args, **kwargs)
+        target = _current.get("preview")
+        if not target:
+            return decoder
+        original_tiled = decoder.decode_tiled
+
+        def decode_tiled(z, *a, **k):
+            try:
+                from PIL import Image
+
+                started = time.time()
+                frame = decoder(z[:, :1])
+                mx.eval(frame)
+                import numpy as np
+
+                array = np.array(frame[0][0])
+                array = np.clip((array + 1.0) / 2.0 * 255.0, 0, 255).astype(np.uint8)
+                image = Image.fromarray(array)
+                image.thumbnail((PREVIEW_SIDE, PREVIEW_SIDE), Image.LANCZOS)
+                temp = target + ".tmp"
+                image.save(temp, format="JPEG", quality=80)
+                os.replace(temp, target)
+                emit({"id": _current["id"], "event": "preview", "ms": int((time.time() - started) * 1000)})
+                mx.clear_cache()
+            except Exception:  # noqa: BLE001
+                pass
+            return original_tiled(z, *a, **k)
+
+        decoder.decode_tiled = decode_tiled
+        return decoder
+
+    gen.load_vae_decoder = load_vae_decoder_with_preview
 
     from transformers import AutoTokenizer
 
@@ -245,6 +308,7 @@ def generate(request):
     _current["dmd_sigmas"] = [float(s) for s in sigmas]
     _current["tokenizer_dir"] = request["tokenizer_dir"]
     _current["poster"] = request["poster"]
+    _current["preview"] = request.get("preview")
     started = time.time()
     phase("loading", 0)
     if _gen is None:

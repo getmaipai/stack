@@ -122,8 +122,13 @@ export function memoryVerdict(): { ok: true } | { ok: false; reason: string } {
 export interface WorkerRequest {
   id: string; op: "generate"; model_dir: string; tokenizer_dir: string; prompt: string; negative_prompt: string | null; image: string | null;
   width: number; height: number; num_frames: number; seed: number; loras: Array<[string, number]>; output: string; poster: string;
+  /** GENPREVIEW-01: where the worker writes the first-frame preview once the motion is done. */
+  preview?: string;
 }
-export interface WorkerEvent { id: string | null; event: "phase"; phase: "loading" | "rendering" | "decoding" | "encoding"; percent?: number; }
+export type WorkerEvent =
+  | { id: string | null; event: "phase"; phase: "loading" | "rendering" | "decoding" | "encoding"; percent?: number }
+  | { id: string | null; event: "stage"; stage: string; n?: number; of?: number }
+  | { id: string | null; event: "preview"; ms?: number };
 export interface WorkerReply { id: string | null; ok: boolean; code?: string; error?: string; width?: number; height?: number; frames?: number; fps?: number; seed?: number; ms?: number; peak_bytes?: number; }
 export interface WorkerHandle { send(request: WorkerRequest, options: { onEvent: (event: WorkerEvent) => void; deadlineMs: number }): Promise<WorkerReply>; kill(): void; exited: Promise<number>; }
 
@@ -169,7 +174,7 @@ export function workerHandle(child: { stdin: { write(data: string): unknown; flu
         try {
           const message = JSON.parse(line) as (WorkerReply & { ready?: boolean; event?: string }) | WorkerEvent;
           if ("ready" in message && message.ready) ready();
-          else if ("event" in message && message.event === "phase") { if (slot.current && message.id === slot.current.id) slot.current.onEvent(message as WorkerEvent); }
+          else if ("event" in message && message.event) { if (slot.current && message.id === slot.current.id) slot.current.onEvent(message as WorkerEvent); }
           else if (slot.current && message.id === slot.current.id) slot.current.resolve(message as WorkerReply);
         } catch { /* not a message */ }
       }
@@ -200,6 +205,8 @@ export type VideoState = "unsupported" | "off" | "not-installed" | "needs-setup"
 export interface VideoRunInput {
   prompt: string; negativePrompt: string | null; imagePath: string | null; width: number; height: number; frames: number; seed: number;
   loras: Array<[string, number]>; outputDir: string;
+  /** Where the worker writes the first-frame preview (a file the job's runner serves while the clip runs). */
+  previewPath?: string;
 }
 export interface VideoRunResult { width: number; height: number; frames: number; fps: number; seed: number; ms: number; peakBytes: number | null; }
 
@@ -211,6 +218,13 @@ export function overallPercent(phase: string, phasePercent: number): number {
   if (phase === "decoding") return Math.round(13 + 84 * p);
   if (phase === "encoding") return Math.round(97 + 3 * p);
   return 0;
+}
+
+export interface VideoRunOptions {
+  signal?: AbortSignal; jobId: string;
+  onPhase?: (phase: string, phasePercent: number) => void;
+  onStage?: (stage: string, n: number | null, of: number | null) => void;
+  onPreview?: () => void;
 }
 
 export class VideoGenService {
@@ -242,7 +256,7 @@ export class VideoGenService {
   }
 
   /** Runs one clip, one at a time. The caller (the job runner) holds the governor admission. Throws a VideoError that says what to do. */
-  run(input: VideoRunInput, options: { signal?: AbortSignal; onPhase?: (phase: string, phasePercent: number) => void; jobId: string } ): Promise<VideoRunResult> {
+  run(input: VideoRunInput, options: VideoRunOptions): Promise<VideoRunResult> {
     const next = this.chain.then(() => this.execute(input, options), () => this.execute(input, options));
     this.chain = next.catch(() => {});
     return next;
@@ -283,7 +297,7 @@ export class VideoGenService {
     return true;
   }
 
-  private async execute(input: VideoRunInput, options: { signal?: AbortSignal; onPhase?: (phase: string, phasePercent: number) => void; jobId: string }): Promise<VideoRunResult> {
+  private async execute(input: VideoRunInput, options: VideoRunOptions): Promise<VideoRunResult> {
     const onPhase = (phase: string, percent: number) => { this.lastPhase = phase; options.onPhase?.(phase, percent); };
     if (options.signal?.aborted) throw new VideoError("cancelled", "Cancelled.", 499);
     const paths = this.deps.paths();
@@ -295,13 +309,17 @@ export class VideoGenService {
       mkdirSync(input.outputDir, { recursive: true, mode: 0o700 });
       const output = join(input.outputDir, "video.mp4");
       const poster = join(input.outputDir, "poster.jpg");
-      const request: WorkerRequest = { id: options.jobId, op: "generate", model_dir: paths.modelDir, tokenizer_dir: paths.tokenizerDir, prompt: input.prompt, negative_prompt: input.negativePrompt, image: input.imagePath, width: input.width, height: input.height, num_frames: input.frames, seed: input.seed, loras: input.loras, output, poster };
+      const request: WorkerRequest = { id: options.jobId, op: "generate", model_dir: paths.modelDir, tokenizer_dir: paths.tokenizerDir, prompt: input.prompt, negative_prompt: input.negativePrompt, image: input.imagePath, width: input.width, height: input.height, num_frames: input.frames, seed: input.seed, loras: input.loras, output, poster, ...(input.previewPath ? { preview: input.previewPath } : {}) };
       const aborted = new Promise<never>((_, reject) => {
         const stop = () => { this.stopWorker(); reject(new VideoError("cancelled", "Cancelled.", 499)); };
         if (options.signal?.aborted) stop(); else options.signal?.addEventListener("abort", stop, { once: true });
       });
       onPhase("loading", 0);
-      const reply = await Promise.race([worker.send(request, { deadlineMs: deadlineMs(), onEvent: (event) => onPhase(event.phase, event.percent ?? 0) }), aborted]);
+      const reply = await Promise.race([worker.send(request, { deadlineMs: deadlineMs(), onEvent: (event) => {
+        if (event.event === "phase") onPhase(event.phase, event.percent ?? 0);
+        else if (event.event === "stage") options.onStage?.(event.stage, event.n ?? null, event.of ?? null);
+        else if (event.event === "preview") options.onPreview?.();
+      } }), aborted]);
       if (!reply.ok) {
         // A worker that failed mid-clip may hold a half-built graph; start the next clip from a fresh process.
         if (reply.code === "out_of_memory" || reply.code === "timeout" || reply.code === "worker_stopped") this.stopWorker();

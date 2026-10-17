@@ -68,9 +68,13 @@ export interface WorkerRequest {
   id: string; op: "generate" | "edit"; family: ImageFamilyId; quantize: number | null; model_dir: string; loras: Array<[string, number]>;
   prompt: string; width?: number; height?: number; steps: number; seed: number; count?: number; out_dir: string;
   init_image?: string; strength?: number; image?: string; mask?: string; region?: [number, number, number, number]; feather?: number;
+  /** GENPREVIEW-01: write a small preview picture (`<out_dir>/preview.jpg`) after each denoising step. */
+  preview?: boolean;
 }
 export type WorkerEvent =
   | { id: string | null; event: "phase"; phase: "loading" | "rendering" | "decoding"; percent?: number }
+  | { id: string | null; event: "stage"; stage: string; n?: number; of?: number }
+  | { id: string | null; event: "preview"; index: number; step: number; steps: number }
   | { id: string | null; event: "image"; index: number; seed: number };
 export interface WorkerReply { id: string | null; ok: boolean; code?: string; error?: string; seeds?: number[]; ms?: number; peak_bytes?: number; width?: number; height?: number; }
 export interface WorkerHandle {
@@ -157,6 +161,8 @@ export interface ImageRunInput {
   op: "generate" | "edit"; family: ImageFamilyId; quantize: number | null; prompt: string; width?: number; height?: number; steps: number; seed: number; count?: number;
   loras: Array<[string, number]>; outDir: string;
   initImage?: string; strength?: number; image?: string; mask?: string; region?: [number, number, number, number]; feather?: number;
+  /** Ask the worker for per-step previews (generate only). */
+  preview?: boolean;
 }
 export interface ImageRunResult { seeds: number[]; ms: number; peakBytes: number | null; width: number | null; height: number | null; }
 
@@ -165,6 +171,14 @@ export function overallPercent(phase: string, phasePercent: number): number {
   const p = Math.max(0, Math.min(100, phasePercent)) / 100;
   if (phase === "loading" || phase === "setting up") return Math.round(5 * p);
   return Math.round(5 + 94 * p);
+}
+
+export interface ImageRunOptions {
+  signal?: AbortSignal; jobId: string;
+  onPhase?: (phase: string, phasePercent: number) => void;
+  onStage?: (stage: string, n: number | null, of: number | null) => void;
+  onPreview?: (step: number, steps: number) => void;
+  onImage?: (index: number) => void;
 }
 
 export class ImageGenService {
@@ -196,7 +210,7 @@ export class ImageGenService {
   }
 
   /** Runs one request, one at a time. The caller (the job runner) holds the governor admission. Throws an ImageError that says what to do. */
-  run(input: ImageRunInput, options: { signal?: AbortSignal; onPhase?: (phase: string, phasePercent: number) => void; onImage?: (index: number) => void; jobId: string }): Promise<ImageRunResult> {
+  run(input: ImageRunInput, options: ImageRunOptions): Promise<ImageRunResult> {
     const next = this.chain.then(() => this.execute(input, options), () => this.execute(input, options));
     this.chain = next.catch(() => {});
     return next;
@@ -237,7 +251,7 @@ export class ImageGenService {
     return true;
   }
 
-  private async execute(input: ImageRunInput, options: { signal?: AbortSignal; onPhase?: (phase: string, phasePercent: number) => void; onImage?: (index: number) => void; jobId: string }): Promise<ImageRunResult> {
+  private async execute(input: ImageRunInput, options: ImageRunOptions): Promise<ImageRunResult> {
     const onPhase = (phase: string, percent: number) => { this.lastPhase = phase; options.onPhase?.(phase, percent); };
     if (options.signal?.aborted) throw new ImageError("cancelled", "Cancelled.", 499);
     const modelDir = this.deps.snapshot(input.family);
@@ -251,7 +265,7 @@ export class ImageGenService {
       const request: WorkerRequest = {
         id: options.jobId, op: input.op, family: input.family, quantize: input.quantize, model_dir: modelDir, loras: input.loras, prompt: input.prompt, steps: input.steps, seed: input.seed, out_dir: input.outDir,
         ...(input.width !== undefined ? { width: input.width, height: input.height } : {}), ...(input.count !== undefined ? { count: input.count } : {}),
-        ...(input.initImage ? { init_image: input.initImage, strength: input.strength } : {}), ...(input.image ? { image: input.image } : {}), ...(input.mask ? { mask: input.mask } : {}), ...(input.region ? { region: input.region } : {}), ...(input.feather !== undefined ? { feather: input.feather } : {}),
+        ...(input.preview && input.op === "generate" ? { preview: true } : {}), ...(input.initImage ? { init_image: input.initImage, strength: input.strength } : {}), ...(input.image ? { image: input.image } : {}), ...(input.mask ? { mask: input.mask } : {}), ...(input.region ? { region: input.region } : {}), ...(input.feather !== undefined ? { feather: input.feather } : {}),
       };
       const aborted = new Promise<never>((_, reject) => {
         const stop = () => {
@@ -264,7 +278,12 @@ export class ImageGenService {
       });
       aborted.catch(() => {});
       onPhase("loading", 0);
-      const sent = worker.send(request, { deadlineMs: deadlineMs(input.family, input.count ?? 1), onEvent: (event) => { if (event.event === "phase") onPhase(event.phase, event.percent ?? 0); else options.onImage?.(event.index); } });
+      const sent = worker.send(request, { deadlineMs: deadlineMs(input.family, input.count ?? 1), onEvent: (event) => {
+        if (event.event === "phase") onPhase(event.phase, event.percent ?? 0);
+        else if (event.event === "stage") options.onStage?.(event.stage, event.n ?? null, event.of ?? null);
+        else if (event.event === "preview") options.onPreview?.(event.step, event.steps);
+        else options.onImage?.(event.index);
+      } });
       const reply = await Promise.race([sent, aborted]);
       if (!reply.ok) {
         // A worker that failed mid-picture may hold a half-built graph; start the next one from a fresh process.

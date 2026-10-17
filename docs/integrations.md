@@ -387,6 +387,19 @@ is 404 `unknown_job`. `GET .../{job}/video.mp4` serves the clip (H.264, yuv420p,
 memory returns) or, for a finished one, deletes its files; Home calls it once it has stored the file. Results are otherwise kept for a day and the
 newest 24 under `data/video/results/<job>/`. No prompt and no reference picture is written there, logged, or put in a job record or on the event feed.
 
+GENPREVIEW-01 (stages, ETA, preview). While a clip runs the same status also carries `progress_fraction` (0 to 1, never goes back), `stage`
+(`load_text`, `plan`, `load_model`, `motion`, `frames`, `save`), `stage_label` (the stage in words: "Making the motion, step 2 of 3", "Putting the frames
+together, 24 of 60"), `step` and `steps` (motion steps finished and in all, only in the `motion` stage), `eta_seconds` (whole seconds left; the countdown only
+runs down unless the stage's own measured pace says the run is slower) and `preview_url`. `progress` is `progress_fraction` as a whole percent whenever the
+worker reports stages; a worker that reports only phases keeps the old weights. Stage weights are the measured shares of a clip (load 3 percent, plan 1, model
+2, motion 9, frames 83, save 2). The ETA comes from the median seconds of each stage over the last seven clips of the same size and length, kept as numbers in
+`data/gen-history.json` (a built-in total of about 130 s until there is history). `preview` in the request body (default true) asks for the first-frame
+preview: the moment the motion is finished and the long frame-building stage starts, the worker decodes the first latent frame alone (about a second) and writes
+`preview.jpg` (up to 480 px on the long side) into the job's work folder; `GET /v1/videos/generations/{job}/preview.jpg` serves it while the job runs, and
+`preview_url` is null before then, when `preview` was false, and after the job ends (the clip's own `poster_url` takes over). The preview is deleted with the
+job's work folder (done, failed, cancelled, or a Stack restart). Per-step previews of the noisy motion were not built: they need the frame decoder loaded for the
+whole motion stage, which is only 9 percent of the clip.
+
 **Reference pictures (VIDEO-GEN-12, owner ruling 2026-10-17).** `image` is a PNG, JPEG or WebP as base64 (a `data:` URL is fine), at most 20 MB,
 and needs `image_source`. Only `generated` is accepted, and only for a picture this Stack's own image generator returned (or the poster of one of its own
 clips): the Stack records the sha256 of every picture it generates (hash and time only, 30 days, the newest 2,000) and checks the bytes it is given, so the
@@ -457,7 +470,7 @@ never fit beside what is resident is 503 `no_memory` at once. Four jobs may be w
 `z-image-turbo`), `size` (`1024x1024` unsaid; 256 to 2048 a side, multiples of 16), `n` (1 to 4; seeds `seed`, `seed+1`, ...), `seed`, `steps` (4 for
 Klein, 9 for Z-Image; at most 12 and 20), `negative_prompt` (accepted, no effect: the distilled models run without guidance), `loras`
 (`[{ id | sha256, scale }]`, at most 4, scale 0 to 2, the record's default when left out), `audience` (`all-ages` unsaid, or `adult`), `init_image` (base64,
-at most 40 MB, needs `image_source` and, for a household photo, `consent_proof`) with `strength` (0.05 to 1, default 0.6) for image to image, `preview` (accepted, ignored), `timeout_ms`. A LoRA selects the base model it
+at most 40 MB, needs `image_source` and, for a household photo, `consent_proof`) with `strength` (0.05 to 1, default 0.6) for image to image, `preview` (default true: the status carries a small preview picture while the job runs, see below; false skips it), `timeout_ms`. A LoRA selects the base model it
 was made for (a request that mixes bases is 422 `wrong_base_model`). `Pic` is `{ url, thumbnail_url, b64_json (the waiting reply only), content_type, seed,
 width, height, model, steps, ms, lora_ids, mode }`. Errors carry `error` (what happened, what to do) and `code`: 413 `too_large`; 422 `bad_size` `bad_steps`
 `bad_image` `unknown_lora` `wrong_base_model` `lora_not_allowed` `lora_changed` `lora_missing` `too_many_loras` `duplicate_lora` `bad_strength`; 429 `queue_full`;
@@ -473,6 +486,16 @@ width, height, model, steps, ms, lora_ids, mode }`. Errors carry `error` (what h
 memory returns) or deletes a finished job's files; Home calls it once it has stored them. Results are kept a day and the newest 48 under
 `data/images/results/<job>/`. No prompt and no input picture is written there, logged, or put in a job record or on the event feed. Every picture the Stack
 generates is recorded by hash for the video reference-picture gate (VIDEO-GEN-12).
+
+GENPREVIEW-01 (steps and preview). While a picture runs the status also carries `progress_fraction` (0 to 1, never goes back), `stage` (`load`, `plan`,
+`steps`, `decode`), `stage_label` ("Drawing, step 2 of 4"), `step` and `steps` (denoising steps finished and in all), `eta_seconds`, `preview_url` and
+`preview_step`. After each denoising step the worker estimates the finished picture from the last two latents (the schedulers are Euler steps along a straight
+line, so the point at sigma 0 is a linear extrapolation), average-pools the latents to a grid that decodes to about 256 px, runs the VAE on that, and writes
+`preview.jpg` (JPEG, about 5 KB) into the job's work folder; `GET /v1/images/generations/{job}/preview.jpg?v=<n>` serves the newest one while the job runs
+(`v` rises with each new file) and answers 404 `no_preview` before the first step finishes, when `preview` was false, for edits, and after the job ends (the
+folder is removed with the job; a cancelled or failed job leaves nothing, and a Stack restart sweeps strays). `preview_step` is the step it shows. With `n` above
+1 the preview is of the picture being made now. Measured on the Studio: the previews add about 3 percent to the worker's time for a 1024 x 1024 Klein picture
+(4.25 s to 4.39 s median of 12 pairs).
 
 **Edits.** `POST /v1/images/edits` (multipart) gains two operations that run Klein's reference edit at bf16 (8-bit left a plant in the picture it was asked
 to remove): `edit` (field `instruction`, one picture; the whole picture may change) and `edit_masked` (also `mask`, white is changeable, and/or `region` as

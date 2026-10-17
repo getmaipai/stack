@@ -27,7 +27,7 @@ import {
   DEFAULT_FAMILY, familyInstalled, IMAGE_DEFAULT_SIZE, IMAGE_FAMILIES, IMAGE_FEATHER_DEFAULT, IMAGE_FEATHER_MAX, IMAGE_MAX_COUNT, IMAGE_MAX_INPUT_BYTES, IMAGE_MAX_PROMPT_CHARS, IMAGE_QUEUE_MAX, imageAvailability, installedFamilies,
   isFamilyId, parseSize, peakBytes, quantizeFor, type ImageFamilyId,
 } from "@/images/models";
-import { IMAGE_EDIT_JOB_KIND, IMAGE_JOB_KIND, imageFailure, imageProgress, stashImage, unstashImage } from "@/images/jobs";
+import { IMAGE_EDIT_JOB_KIND, IMAGE_JOB_KIND, imageFailure, imagePreviewPath, imageProgress, imageTracker, stashImage, unstashImage } from "@/images/jobs";
 import { getGovernorStatus } from "@/lib/governor";
 
 const DEFAULT_WAIT_MS = 120_000;
@@ -54,7 +54,7 @@ export const ImageGenerationBodySchema = z.object({
   image_source: z.enum(["generated", "uploaded", "household_photo"]).optional().openapi({ description: "Needed with `init_image`: where the starting picture came from, as Home knows it. `generated`: a picture this Stack made (its hash is checked). `household_photo`: a photo of a consenting household adult, accepted only with `consent_proof`. `uploaded`: a photo Home checked and found to show no person. Anything else is refused." }),
   consent_proof: z.string().max(4096).optional().openapi({ description: "With `image_source: household_photo`: Home's signed proof that the person in the photo is a household adult who agreed, bound to this exact picture and valid for at most 30 minutes. Checked when the request arrives and again when the job starts." }),
   strength: z.number().min(0.05).max(1).optional().openapi({ description: "Image to image only: how far the result may move from `init_image` (1 is a new picture). Default 0.6." }),
-  preview: z.boolean().optional().openapi({ description: "Accepted and ignored in this build: no preview frame is produced." }),
+  preview: z.boolean().optional().openapi({ description: "Default true. While the job runs, the status carries `preview_url`: a small JPEG (about 256 px on the long side) of where the picture is heading, redrawn after every denoising step. Pass false to skip it. Edits never make previews." }),
   timeout_ms: z.number().int().positive().max(MAX_WAIT_MS).optional().openapi({ description: `How long this request waits for the picture before answering 202 with the job id. Default ${DEFAULT_WAIT_MS}.` }),
 }).passthrough();
 export type ImageGenerationBody = z.infer<typeof ImageGenerationBodySchema>;
@@ -75,6 +75,14 @@ const JobStatusSchema = z.object({
   phase: z.string().openapi({ description: "queued, waiting for memory, starting, setting up (first picture only), loading, rendering, decoding, ready; failed or cancelled when it ended so." }),
   progress: z.number().int().openapi({ description: "0 to 100 over the whole job." }),
   phase_progress: z.number().int().nullable(),
+  progress_fraction: z.number().nullable().openapi({ description: "0 to 1 over the whole job, weighted by where the time goes. Moves smoothly inside a stage." }),
+  stage: z.string().nullable().openapi({ description: "load, plan, steps or decode while running; null otherwise." }),
+  stage_label: z.string().nullable().openapi({ description: "The stage in words a person reads (\"Drawing, step 2 of 4\")." }),
+  step: z.number().int().nullable().openapi({ description: "Denoising steps finished for the picture being made." }),
+  steps: z.number().int().nullable().openapi({ description: "Denoising steps in all." }),
+  eta_seconds: z.number().int().nullable().openapi({ description: "Whole seconds left, from the medians of earlier pictures of the same size; null until a stage is known." }),
+  preview_url: z.string().nullable().openapi({ description: "GET this for the latest preview JPEG while running (the `v` query changes with every new one); null when none exists yet, the request asked for none, or the job ended." }),
+  preview_step: z.number().int().nullable().openapi({ description: "The step the preview shows." }),
   position: z.number().int().nullable().openapi({ description: "Place in line while queued (1 is next)." }),
   error: z.string().nullable(), code: z.string().nullable(),
   data: z.array(PicSchema),
@@ -84,7 +92,7 @@ const getRoute = createRoute({ method: "get", path: "/generations/{job}", tags: 
   200: { content: { "application/json": { schema: JobStatusSchema } }, description: "Poll this every second or two while state is queued or running." },
   404: { content: { "application/json": { schema: ImageErrorBody } }, description: "No such job (it expired or never existed)." },
 } });
-const pngRoute = createRoute({ method: "get", path: "/generations/{job}/{file}", tags: ["Images"], summary: "A finished picture (`0.png`) or its thumbnail (`0.thumb.jpg`)", request: { params: z.object({ job: z.string(), file: z.string() }) }, responses: {
+const pngRoute = createRoute({ method: "get", path: "/generations/{job}/{file}", tags: ["Images"], summary: "A finished picture (`0.png`), its thumbnail (`0.thumb.jpg`) or, while the job runs, its latest preview (`preview.jpg`)", request: { params: z.object({ job: z.string(), file: z.string() }) }, responses: {
   200: { content: { "image/png": { schema: z.string().openapi({ format: "binary" }) }, "image/jpeg": { schema: z.string().openapi({ format: "binary" }) } }, description: "The picture." },
   404: { content: { "application/json": { schema: ImageErrorBody } }, description: "The picture is gone: results are kept for a day, or Home deleted them." },
 } });
@@ -123,6 +131,18 @@ export function looksLikePicture(bytes: Uint8Array): boolean {
 function activeJobs(): number { return listJobs().filter((job) => (job.kind === IMAGE_JOB_KIND || job.kind === IMAGE_EDIT_JOB_KIND) && (job.state === "queued" || job.state === "running" || job.state === "stalled")).length; }
 const isImageKind = (job: Job): boolean => job.kind === IMAGE_JOB_KIND || job.kind === IMAGE_EDIT_JOB_KIND;
 
+/** The stage, step, ETA and preview of a running job; all null otherwise. */
+function liveFields(id: string, running: boolean) {
+  const tracker = running ? imageTracker(id) : null;
+  const snap = tracker?.snapshot();
+  const preview = tracker?.preview && imagePreviewPath(id) ? tracker.preview : null;
+  return {
+    progress_fraction: snap && tracker!.started ? Math.round(snap.fraction * 1000) / 1000 : null,
+    stage: snap?.stage ?? null, stage_label: snap?.stage_label ?? null, step: snap?.step ?? null, steps: snap?.steps ?? null, eta_seconds: snap?.eta_seconds ?? null,
+    preview_url: preview ? `/v1/images/generations/${id}/preview.jpg?v=${preview.version}` : null, preview_step: preview?.step ?? null,
+  };
+}
+
 function statusOf(job: Job) {
   const detail = imageProgress(job.id);
   const failure = imageFailure(job.id);
@@ -131,6 +151,7 @@ function statusOf(job: Job) {
   const result = job.state === "done" ? readResult(job.id) : null;
   return {
     job: job.id, state, phase, progress: Math.round(job.percent), phase_progress: state === "running" && detail ? Math.round(detail.phasePercent) : null, position: job.state === "queued" ? job.position : null,
+    ...liveFields(job.id, state === "running"),
     error: job.state === "failed" ? failure?.message ?? job.reason ?? "The picture failed." : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? job.reason ?? "Paused: this computer is low on memory." : "The picture was cancelled.") : null,
     code: job.state === "failed" ? (job.status === "no_memory" ? "no_memory" : failure?.code ?? "failed") : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? "no_memory" : "cancelled") : null,
     data: result ? entries(result, false) : [],
@@ -248,7 +269,7 @@ export async function generateImages<T extends Context>(c: T, body: ImageGenerat
   const loraIds = loras.map((lora) => lora.record.id);
   stashImage(token, {
     op: "generate", prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, family, quantize, width: size.width, height: size.height, steps, seed, count,
-    loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, initImage, strength: body.strength ?? 0.6, image: null, mask: null, region: null, feather: 0, likeness: checks, derived,
+    loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, initImage, strength: body.strength ?? 0.6, image: null, mask: null, region: null, feather: 0, likeness: checks, derived, preview: body.preview !== false,
   });
   const submitted = submitJob({ kind: IMAGE_JOB_KIND, role: "image", input: { token, family, mode: "generate", quantize, size: `${size.width}x${size.height}`, steps, seed, count, lora_ids: loraIds, image_to_image: initImage !== null, likeness: checks.length > 0 } });
   if ("refused" in submitted) return fail(c, 503, "unsupported", submitted.reason);
@@ -314,12 +335,17 @@ imageV1Routes.openapi(getRoute, (c) => {
   if (job && isImageKind(job) && !(job.state === "done" && !readResult(id))) return reply(c, statusOf(job), 200);
   // After a restart the job record is gone but a finished job is still on disk.
   const meta = readResult(id);
-  if (meta) return reply(c, { job: id, state: "done", phase: "ready", progress: 100, phase_progress: null, position: null, error: null, code: null, data: entries(meta, false) }, 200);
+  if (meta) return reply(c, { job: id, state: "done", phase: "ready", progress: 100, phase_progress: null, ...liveFields(id, false), position: null, error: null, code: null, data: entries(meta, false) }, 200);
   return fail(c, 404, "unknown_job", "No such picture job: it expired after a day, was deleted, or never existed.");
 });
 
 imageV1Routes.openapi(pngRoute, (c) => {
   const { job, file } = c.req.valid("param");
+  if (file === "preview.jpg") {
+    const preview = isJobId(job) ? imagePreviewPath(job) : null;
+    if (!preview || !existsSync(preview)) return fail(c, 404, "no_preview", "There is no preview for that picture: it has finished, was never asked for one, or no step has finished yet.") as never;
+    return new Response(Bun.file(preview), { status: 200, headers: { "content-type": "image/jpeg", "cache-control": "no-store", "content-length": String(statSync(preview).size) } }) as never;
+  }
   const match = /^(\d{1,2})\.(png|thumb\.jpg)$/.exec(file);
   if (!match || !isJobId(job)) return fail(c, 404, "expired", "That picture is gone: results are kept for a day, or Home deleted them. Make it again.") as never;
   const index = Number(match[1]);
