@@ -13,6 +13,7 @@ import { setMachineTierFromHardware, stopAllRoles, unloadIdleRoles } from "@/lib
 import { keepWarmEnabled, warmUp, warmedRoles } from "@/lib/warmup";
 import { migrateLegacyEngineTags } from "@/lib/engineInstall";
 import { reconcilePinDeclarations } from "@/lib/modelStore";
+import { pullMissingDeclaredParts } from "@/lib/installJobs";
 import { STACK_MODELS } from "@/lib/modelCatalog";
 import { ddgsSupervisor } from "@/search/ddgsSidecar";
 import { imageTools, sweepImageToolsTmp } from "@/imagetools/imageTools";
@@ -51,6 +52,8 @@ async function serve(): Promise<void> {
   notifySystemd("READY=1");
   const stopWatchdog = startSystemdWatchdog();
   // Load and prime the roles a first chat needs, now, so nobody meets a cold start.
+  // An upgrade installs no plan: a part an installed model declares (its picture projector) is pulled now (VISION-03g), then chat restarts with it.
+  void pullMissingDeclaredParts().catch(() => {});
   void warmUp("daemon-start").catch(() => {});
   // The DuckDuckGo search service Home's web search uses: built, started and restarted here; it never fails the Stack.
   ddgsSupervisor.start();

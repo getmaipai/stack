@@ -370,6 +370,7 @@ are never copied. Nothing migrates Home until STACK-16.
   `--mmproj ... --image-max-tokens 2560`, the role row reads
   `imageInput: true`, `picture_tokens_max` 2560. Tests:
   `museProjectorReconcile`.
+- [x] **VISION-03g (S): an upgrade pulls the picture projector an installed model declares.** Found live 2026-10-17: Home v0.2.6 installed on the Studio but the Muse folder had no projector, because the install plan only runs in the setup wizard. At daemon start `pullMissingDeclaredParts` (`installJobs.ts`) finds each installed model whose pin declares `imageInput`, pulls the projector it names when it is not on disk (a job in the install strip, sha256 verified), and chat restarts with it (VISION-03f). A failed pull raises the Repairs item `model-part-missing.<id>` with Try again, cleared when it installs. The pull route and this repair share `startModelInstall`. Tests: `declaredParts`. Live: the 1.4 GB file was placed by hand and registered through the pull route; chat then read a chart (804 prompt tokens, 11.9 s).
 - [x] **STACK-04: the model store.** Provenance-gated records, the HF
   cache layout, engine tag layout with the `current` link, manifests
   with blob references and orphan grace, ranged resumable downloads,
