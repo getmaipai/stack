@@ -4790,7 +4790,8 @@
                             "enum": [
                               "crashed",
                               "healed",
-                              "gave_up"
+                              "gave_up",
+                              "requested_by_canary"
                             ]
                           },
                           "at": {
@@ -4850,6 +4851,72 @@
                     "healing",
                     "blocker"
                   ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/engines/self-heal/restart": {
+      "post": {
+        "tags": [
+          "Engines"
+        ],
+        "summary": "A health check asks for one engine restart",
+        "description": "Goes through the self-heal gate, backoff and circuit breaker like a crash and counts as one failure; it never resets the breaker. Answers 200 with accepted false when self-heal is off, the circuit is open or a retry is pending.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "role",
+                  "reason"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The outcome.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accepted": {
+                      "type": "boolean"
+                    },
+                    "why": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "accepted",
+                    "why"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }

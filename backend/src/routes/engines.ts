@@ -23,7 +23,8 @@ import { chatEngine, getProcess, getRoleStatus, restartForNewChatEngine, restart
 import { readSettings } from "@/settings";
 import { createJob, finishJob, getJob, jobSignal, updateJob } from "@/lib/jobs";
 import { emit } from "@/lib/events";
-import { selfHealSummary } from "@/lib/selfHeal";
+import { requestEngineRestart, selfHealSummary } from "@/lib/selfHeal";
+import { ROLE_IDS } from "@/roles";
 
 const EngineSchema = z.object({
   id: z.string(), name: z.string(), label: z.string(), platform: z.string(), arch: z.string(), verified: z.boolean(),
@@ -48,9 +49,15 @@ export const enginesRoutes = apiRouter<AppEnv>();
 /** The environment build in flight per engine, so two installs never
  * race on one venv and one engine's build never answers for another. */
 const environmentJobs = new Map<string, string>();
-const HealEventSchema = z.object({ id: z.string(), kind: z.enum(["crashed", "healed", "gave_up"]), at: z.string(), role: z.string(), cause: z.string(), causeKind: z.string(), seconds: z.number().optional(), crashedAt: z.string().optional(), attempts: z.number().optional() });
+const HealEventSchema = z.object({ id: z.string(), kind: z.enum(["crashed", "healed", "gave_up", "requested_by_canary"]), at: z.string(), role: z.string(), cause: z.string(), causeKind: z.string(), seconds: z.number().optional(), crashedAt: z.string().optional(), attempts: z.number().optional() });
 const selfHealRoute = createRoute({ method: "get", path: "/self-heal", tags: ["Engines"], summary: "Engine crashes and the Stack's own restarts", description: "Crashes per day, the recent crash, restart and gave-up events (each with a stable id so a caller notifies once), the roles whose retries stopped, and the roles being restarted now.", responses: { 200: { content: { "application/json": { schema: z.object({ enabled: z.boolean(), crashesByDay: z.array(z.object({ day: z.string(), crashes: z.number(), healed: z.number(), gaveUp: z.number() })), events: z.array(HealEventSchema), stopped: z.array(z.string()), healing: z.array(z.string()), blocker: z.string().nullable() }) } }, description: "The record." } } });
 enginesRoutes.openapi(selfHealRoute, (c) => c.json(selfHealSummary(), 200));
+const restartRequestRoute = createRoute({ method: "post", path: "/self-heal/restart", tags: ["Engines"], summary: "A health check asks for one engine restart", description: "Goes through the self-heal gate, backoff and circuit breaker like a crash and counts as one failure; it never resets the breaker. Answers 200 with accepted false when self-heal is off, the circuit is open or a retry is pending.", request: { body: { content: { "application/json": { schema: z.object({ role: z.string(), reason: z.string().max(200) }) } } } }, responses: { 200: { content: { "application/json": { schema: z.object({ accepted: z.boolean(), why: z.string().nullable() }) } }, description: "The outcome." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown role." } } });
+enginesRoutes.openapi(restartRequestRoute, async (c) => {
+  const { role, reason } = c.req.valid("json");
+  if (!(ROLE_IDS as readonly string[]).includes(role)) return c.json({ error: "Unknown role" }, 400);
+  return c.json(await requestEngineRestart(role as (typeof ROLE_IDS)[number], reason), 200);
+});
 enginesRoutes.openapi(listRoute, async (c) => {
   const hardware = await detectHardware();
   const needsRestart = readSettings().some((setting) => (setting.key.startsWith("stack.engines.llama_server.") || setting.key === "stack.engines.chat.engine") && setting.pending !== null);

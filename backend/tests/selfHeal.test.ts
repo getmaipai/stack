@@ -233,3 +233,18 @@ test("crash causes read in plain words", () => {
   expect(v({ exitCode: 2, signal: null, stderrTail: ["error: unknown argument: --frobnicate"] })).toMatchObject({ kind: "bad_config", retryHelps: false });
   expect(v({ exitCode: 3, signal: null, stderrTail: [] })).toMatchObject({ kind: "unknown", cause: expect.stringContaining("exit code 3") });
 });
+
+test("a canary's restart request recycles a live engine, counts as one failure, never resets the breaker, and is refused when the circuit is open", async () => {
+  const { requestEngineRestart } = await import("@/lib/selfHeal");
+  await getProcess("chat");
+  expect(await requestEngineRestart("chat", "chat_hello got no answer")).toEqual({ accepted: true, why: null });
+  expect(getRoleStatus("chat").state).toBe("loading");
+  expect(selfHealSummary().events.map((e) => e.kind)).toContain("requested_by_canary");
+  expect(selfHealSummary().crashesByDay.at(-1)!.gaveUp).toBe(0);
+  expect((await requestEngineRestart("chat", "again")).accepted).toBe(false);
+  expect(await fire()).toBe(2_000);
+  expect(getRoleStatus("chat").state).toBe("ready");
+  for (let i = 0; i < 4; i++) { await crash("chat"); await fire(); }
+  await crash("chat");
+  expect(await requestEngineRestart("chat", "x")).toMatchObject({ accepted: false });
+});

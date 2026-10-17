@@ -53,7 +53,7 @@ const realClock: Clock = {
 };
 let clock: Clock = realClock;
 
-export type HealEventKind = "crashed" | "healed" | "gave_up";
+export type HealEventKind = "crashed" | "healed" | "gave_up" | "requested_by_canary";
 export interface HealEvent {
   /** Stable per incident (role and crash time), so Home notifies once. */
   id: string;
@@ -146,7 +146,7 @@ export function selfHealSummary(days = 14, now = clock.now()): SelfHealSummary {
   for (const event of events) {
     const bucket = buckets.get(event.at.slice(0, 10));
     if (!bucket) continue;
-    if (event.kind === "crashed") bucket.crashes++; else if (event.kind === "healed") bucket.healed++; else bucket.gaveUp++;
+    if (event.kind === "crashed") bucket.crashes++; else if (event.kind === "healed") bucket.healed++; else if (event.kind === "gave_up") bucket.gaveUp++;
   }
   return { enabled: selfHealEnabled(), crashesByDay: [...buckets.values()], events: events.slice(-50), stopped: [...states].filter(([, s]) => s.open).map(([role]) => role), healing: [...states].filter(([, s]) => s.cancel !== null || s.attempting).map(([role]) => role), blocker: healBlocker() };
 }
@@ -251,15 +251,19 @@ async function attempt(role: RoleId): Promise<void> {
 
 /** A health canary asks for one engine restart (it answered wrongly or not at all while the process lives).
  * The request goes through the same gate, backoff and circuit breaker as a crash: it counts as a failure,
- * waits for installs and low memory, and is refused (false) when the circuit is open or self-heal is off. */
-export async function requestEngineRestart(role: RoleId, reason: string): Promise<boolean> {
-  if (!selfHealEnabled()) return false;
+ * waits for installs and low memory, and is refused (accepted false) when the circuit is open or self-heal is off. */
+export async function requestEngineRestart(role: RoleId, reason: string): Promise<{ accepted: boolean; why: string | null }> {
+  if (!selfHealEnabled()) return { accepted: false, why: "Self-heal is turned off." };
   const heal = state(role);
-  if (heal.open || heal.cancel || heal.attempting) return false;
-  const verdict: CrashVerdict = { kind: "unknown", cause: reason, fix: "The Stack restarts it; the check that failed is named above.", retryHelps: true };
+  if (heal.open) return { accepted: false, why: "The engine stopped too often and the Stack stopped restarting it; use Restart engine in Repairs." };
+  if (heal.cancel || heal.attempting) return { accepted: false, why: "A restart of this engine is already pending." };
+  const text = reason.replace(/\s+/g, " ").trim().slice(0, 200);
+  const verdict: CrashVerdict = { kind: "unknown", cause: text || "A health check failed.", fix: "The Stack restarts it; the check that failed is named above.", retryHelps: true };
+  record({ id: `${role}:${clock.now()}:canary`, kind: "requested_by_canary", at: new Date(clock.now()).toISOString(), role, cause: verdict.cause, causeKind: "canary" });
+  logger.appendLine(JSON.stringify({ event: "engine.restart_requested_by_canary", role, reason: verdict.cause }));
   await recycleRole(role);
-  onEngineCrash({ role, kind: "spawned", engine: null, modelId: null, exitCode: null, signal: null, stderrTail: [reason], ranMs: 0, wasBusy: false, verdict });
-  return true;
+  onEngineCrash({ role, kind: "spawned", engine: null, modelId: null, exitCode: null, signal: null, stderrTail: [verdict.cause], ranMs: 0, wasBusy: false, verdict });
+  return { accepted: true, why: null };
 }
 
 /** A person (or a setting) restarted the role by hand: the failures and the pending retry are forgotten. */
