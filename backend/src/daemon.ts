@@ -12,6 +12,7 @@ import { applyPendingSettings, settingValues } from "@/settings";
 import { setMachineTierFromHardware, stopAllRoles, unloadIdleRoles } from "@/lib/supervisor";
 import { keepWarmEnabled, warmUp, warmedRoles } from "@/lib/warmup";
 import { migrateLegacyEngineTags } from "@/lib/engineInstall";
+import { ddgsSupervisor } from "@/search/ddgsSidecar";
 import { execFileSync } from "node:child_process";
 import { readMetalCapBytes } from "@/lib/metalCap";
 import { setMetalCapBytes, getGovernorStatus } from "@/lib/governor";
@@ -46,6 +47,8 @@ async function serve(): Promise<void> {
   const stopWatchdog = startSystemdWatchdog();
   // Load and prime the roles a first chat needs, now, so nobody meets a cold start.
   void warmUp("daemon-start").catch(() => {});
+  // The DuckDuckGo search service Home's web search uses: built, started and restarted here; it never fails the Stack.
+  ddgsSupervisor.start();
   const idle = setInterval(() => {
     const values = settingValues();
     void unloadIdleRoles({ onBattery: onBattery(), idleMinutes: Number(values["stack.runtime.idle_unload_minutes"] ?? 30), batteryIdleMinutes: Number(values["stack.runtime.idle_unload_on_battery_minutes"] ?? 10), keep: keepWarmEnabled() ? warmedRoles() : [] }).catch(() => {});
@@ -59,6 +62,7 @@ async function serve(): Promise<void> {
     clearInterval(idle);
     // The watchdog keeps beating through the drain: a stop that takes
     // longer than WatchdogSec must not be mistaken for a hang.
+    await ddgsSupervisor.stop().catch(() => {});
     await stopAllRoles("The Stack is stopping.");
     stopTierWatch();
     stopWatchdog();

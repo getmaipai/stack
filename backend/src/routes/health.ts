@@ -10,6 +10,7 @@ import { rollbackEngine, currentEngine, engineOfFailedSwap, previousEngine } fro
 import { ROLE_IDS, type RoleId } from "@/roles";
 import { ensureEngine } from "@/lib/engineInstall";
 import { detectHardware } from "@/lib/hardware";
+import { DDGS_HEALTH_CODE, ddgsSupervisor } from "@/search/ddgsSidecar";
 
 import { HealthItem as HealthItemSchema } from "@maipai/spec/stack/ts/health-item.js";
 
@@ -58,6 +59,11 @@ export async function runFix(code: string): Promise<{ ok: boolean; result: strin
         resolve(code);
         return { ok: true, result: installedText(name) };
       } catch (error) { return { ok: false, result: (error as Error).message }; }
+    }
+    case "retry_download": {
+      if (code !== DDGS_HEALTH_CODE) return { ok: false, result: "This repair needs the matching engine or model installer; reinstall from Home's Engines page." };
+      ddgsSupervisor.retryNow();
+      return { ok: true, result: "The search service is being built or restarted again; this item clears when it answers." };
     }
     default: return { ok: false, result: "This repair needs the matching engine or model installer; reinstall from Home's Engines page." };
   }

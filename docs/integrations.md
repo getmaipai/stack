@@ -123,6 +123,15 @@ own. Every route is Zod-typed and the generated `docs/api/openapi.json`
 is the reference; a row above whose path is not yet in that document is
 not built, and BACKLOG.md carries its item.
 
+## The search service (STACK-DDGS-01)
+
+`GET /stack/v1/search` returns `{ ddgs: { state, url, phase, reason, restarts, library } }`. The Stack builds a managed Python 3.12
+environment (pinned `ddgs==9.16.0`, hashed requirements, the same uv builder as the voice engines) when it starts, runs the loopback
+sidecar (`backend/src/search/ddgs_sidecar.py`) and restarts it when it dies. `state` is `building`, `starting`, `ready`, `failed`,
+`unsupported` (no requirements file for this platform) or `disabled`; `url` is set only while `ready`, and Home searches that
+address itself (the Stack carries no searches and logs no words). A failed build or a service that keeps stopping is the health item
+`search.ddgs` whose fix `retry_download` restarts the attempt; `POST /stack/v1/search/retry` does the same. Adults-only gates stay in Home.
+
 ## The event feed
 
 `GET /stack/v1/events` is a server-sent stream that stays open. Each

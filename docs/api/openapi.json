@@ -5977,6 +5977,174 @@
         }
       }
     },
+    "/stack/v1/search": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "The DuckDuckGo search service's address and health",
+        "responses": {
+          "200": {
+            "description": "The ddgs service the Stack builds, starts and restarts. Additive: Home reads it to know DuckDuckGo search is ready.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ddgs": {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "unsupported",
+                            "disabled",
+                            "building",
+                            "starting",
+                            "ready",
+                            "failed"
+                          ],
+                          "description": "ready means the service answered its health check; building and starting are temporary; failed has a retry waiting and a health item with the reason."
+                        },
+                        "url": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "The loopback address of the DuckDuckGo search service, set only while it is ready."
+                        },
+                        "phase": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "reason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "restarts": {
+                          "type": "integer"
+                        },
+                        "library": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "ddgs"
+                              ]
+                            },
+                            "version": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "version"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "url",
+                        "phase",
+                        "reason",
+                        "restarts",
+                        "library"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ddgs"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/search/retry": {
+      "post": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Try the search service's build or start again now",
+        "responses": {
+          "202": {
+            "description": "A waiting retry was cut short; poll GET for the result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ddgs": {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "unsupported",
+                            "disabled",
+                            "building",
+                            "starting",
+                            "ready",
+                            "failed"
+                          ],
+                          "description": "ready means the service answered its health check; building and starting are temporary; failed has a retry waiting and a health item with the reason."
+                        },
+                        "url": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "The loopback address of the DuckDuckGo search service, set only while it is ready."
+                        },
+                        "phase": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "reason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "restarts": {
+                          "type": "integer"
+                        },
+                        "library": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "ddgs"
+                              ]
+                            },
+                            "version": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "version"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "url",
+                        "phase",
+                        "reason",
+                        "restarts",
+                        "library"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ddgs"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/settings": {
       "get": {
         "tags": [

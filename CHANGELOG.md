@@ -19,6 +19,10 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Added
 
+- The Stack builds, starts and restarts the DuckDuckGo web search service Home's search uses (STACK-DDGS-01): a managed Python 3.12
+  environment (pinned `ddgs==9.16.0`, hashed requirements) and a loopback sidecar, supervised with a growing pause between restarts.
+  `GET /stack/v1/search` returns its address and state; a failed build or a service that keeps stopping is a `search.ddgs` health
+  item with a Try again fix. A failing sidecar never fails the Stack.
 - Chatterbox Turbo on MLX as a second voice engine beside Pocket TTS (VOICE-STUDIO-01): laughs, coughs, sighs and other tags in
   speech; `stack.voice.engine` picks the engine (the default is Chatterbox Turbo on computers with 64 GB or more, Pocket TTS below),
   and a voice engine that will not start falls back to Pocket TTS with a health warning. The role and each voice carry `tts.tags`.
