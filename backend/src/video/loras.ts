@@ -28,6 +28,10 @@ import { LikenessError, verifyProof, type LikenessCheck } from "@/lib/likeness";
 import { realPersonReason } from "@/lib/media/loraLibrary";
 
 export const LORA_BASE_MODEL = "wan2.2-ti2v-5b";
+/** VIDEO-LTX-01: the two bases a LoRA can be made for: Quick's Wan2.2 5B, Detailed's LTX-2.3. */
+export const LORA_BASE_LTX = "ltx-2.3";
+export const LORA_BASE_MODELS = [LORA_BASE_MODEL, LORA_BASE_LTX] as const;
+export type LoraBase = typeof LORA_BASE_MODELS[number];
 export const LORA_CLASSES = ["all-ages", "adult-only"] as const;
 export type LoraClass = typeof LORA_CLASSES[number];
 export type Audience = "all-ages" | "adult";
@@ -45,7 +49,7 @@ export interface LoraRecord {
   mtime_ms: number;
   rank: number;
   modules: number;
-  base_model: typeof LORA_BASE_MODEL;
+  base_model: LoraBase;
   licence: string;
   /** "free" licences import without a question; anything else needs the adder's acknowledgement, which is recorded. */
   licence_class: "free" | "acknowledged";
@@ -94,7 +98,7 @@ function describedAs(parts: Array<string | null | undefined>, metadata: Record<s
   return strings.join("\n").replace(/[_\-.,/]+/g, " ");
 }
 
-export interface SafetensorsInfo { rank: number; modules: number; dims: number[]; metadata: Record<string, unknown> | undefined; }
+export interface SafetensorsInfo { rank: number; modules: number; dims: number[]; metadata: Record<string, unknown> | undefined; /** Tensors named the way LTX transformers name them (transformer_blocks), and the way Wan ones do (blocks, self_attn). */ ltxKeys?: number; wanKeys?: number; }
 
 /** Reads a safetensors header (the first 8 bytes say how long the JSON is) and
  * what it says about LoRA tensors; throws a LoraError that says what to do. */
@@ -113,9 +117,11 @@ export function readLoraHeader(path: string): SafetensorsInfo {
     const metadata = header.__metadata__ as Record<string, unknown> | undefined;
     const dataLength = size - 8 - headerLength;
     const dims = new Set<number>();
-    let rank = 0; let modules = 0;
+    let rank = 0; let modules = 0; let ltxKeys = 0; let wanKeys = 0;
     for (const [key, entry] of Object.entries(header)) {
       if (key === "__metadata__") continue;
+      if (/transformer_blocks\.\d+\.(?:audio_)?attn\d|transformer_blocks\.\d+\.ff\./.test(key)) ltxKeys += 1;
+      else if (/(?:^|\.)blocks\.\d+\.(?:self_attn|cross_attn|ffn)/.test(key)) wanKeys += 1;
       const tensor = entry as { shape?: number[]; data_offsets?: [number, number] };
       if (!tensor.shape || !tensor.data_offsets || tensor.data_offsets[1] > dataLength) throw new LoraError("not_safetensors", "That file looks cut short or damaged. Download it again.", 422);
       const down = /\.lora_(?:A|down)\.weight$/.test(key);
@@ -123,7 +129,7 @@ export function readLoraHeader(path: string): SafetensorsInfo {
       if (down && tensor.shape.length === 2) { modules += 1; rank = Math.max(rank, tensor.shape[0]!); dims.add(tensor.shape[1]!); }
       if (up && tensor.shape.length === 2) dims.add(tensor.shape[0]!);
     }
-    return { rank, modules, dims: [...dims], metadata };
+    return { rank, modules, dims: [...dims], metadata, ltxKeys, wanKeys };
   } finally { closeSync(fd); }
 }
 
@@ -131,6 +137,24 @@ export function readLoraHeader(path: string): SafetensorsInfo {
 export function assertWan5bLora(info: SafetensorsInfo): void {
   if (info.modules === 0) throw new LoraError("not_a_lora", "That file has no LoRA weights in a form this video model reads (it needs lora_A and lora_B, or lora_down and lora_up, tensors).", 422);
   if (info.dims.includes(5120) || info.dims.includes(1536) || !info.dims.includes(3072)) throw new LoraError("wrong_base_model", "This LoRA was made for a different video model. Only LoRAs made for Wan2.2 TI2V-5B work here.", 422);
+}
+
+/**
+ * Which model a LoRA was made for, read from its tensors (never its name). LTX transformers are 4096 wide with transformer_blocks
+ * keys; Wan2.2 5B is 3072 wide with blocks keys. A file that fits neither throws wrong_base_model. LTX-2.0 and LTX-2.3 share
+ * the key layout, so a 2.0 LoRA reads as LTX here; that uncertainty is why a LoRA of either base starts adult-only unless its
+ * importer says otherwise.
+ */
+export function detectLoraBase(info: SafetensorsInfo): LoraBase {
+  if (info.modules === 0) throw new LoraError("not_a_lora", "That file has no LoRA weights in a form this video model reads (it needs lora_A and lora_B, or lora_down and lora_up, tensors).", 422);
+  if ((info.ltxKeys ?? 0) > 0 && (info.wanKeys ?? 0) === 0 && info.dims.includes(4096)) {
+    // A trainer that writes the LTX version into the file says which one it was made for; a 2.0 file is not a 2.3 LoRA.
+    const version = String(info.metadata?.ss_ltx_version ?? "");
+    if (version && !version.startsWith("2.3")) throw new LoraError("wrong_base_model", `This LoRA was made for LTX ${version}, and Detailed videos use LTX 2.3. Pick a LoRA made for LTX 2.3.`, 422);
+    return LORA_BASE_LTX;
+  }
+  if ((info.wanKeys ?? 0) >= 0 && (info.ltxKeys ?? 0) === 0) { assertWan5bLora(info); return LORA_BASE_MODEL; }
+  throw new LoraError("wrong_base_model", "This LoRA was made for a different video model. Only LoRAs made for Wan2.2 TI2V-5B (Quick) or LTX-2.3 (Detailed) work here.", 422);
 }
 
 export interface ImportInput {
@@ -155,7 +179,7 @@ const ID_RE = /^lora-[0-9a-f]{16}$/;
 export const isLoraId = (value: string): boolean => ID_RE.test(value);
 
 function readManifest(): LoraRecord[] {
-  try { const parsed = JSON.parse(readFileSync(manifestPath(), "utf8")) as { loras?: LoraRecord[] }; return Array.isArray(parsed.loras) ? parsed.loras.map((record) => ({ ...record, likeness_subject: record.likeness_subject ?? null })) : []; } catch { return []; }
+  try { const parsed = JSON.parse(readFileSync(manifestPath(), "utf8")) as { loras?: LoraRecord[] }; return Array.isArray(parsed.loras) ? parsed.loras.map((record) => ({ ...record, base_model: record.base_model ?? LORA_BASE_MODEL, likeness_subject: record.likeness_subject ?? null })) : []; } catch { return []; }
 }
 function writeManifest(records: LoraRecord[]): void {
   mkdirSync(libraryDir(), { recursive: true, mode: 0o700 });
@@ -201,7 +225,7 @@ export async function importLora(input: ImportInput): Promise<LoraRecord> {
   if (!stat.isFile() || stat.size === 0) throw new LoraError("not_safetensors", "That is not a file.", 422);
   if (stat.size > MAX_LORA_BYTES) throw new LoraError("too_large", `That file is larger than ${MAX_LORA_BYTES / 1_073_741_824} GB, the most a LoRA can be here.`, 413);
   const info = readLoraHeader(input.path);
-  assertWan5bLora(info);
+  const base = detectLoraBase(info);
   const triggerWords = cleanWords(input.triggerWords);
   const text = describedAs([name, ...triggerWords, input.path.split("/").pop(), input.sourceUrl], info.metadata);
   const words = scanWords(text);
@@ -235,7 +259,7 @@ export async function importLora(input: ImportInput): Promise<LoraRecord> {
     const asked: LoraClass = input.classification ?? "adult-only";
     const classification: LoraClass = words.adult || likenessSubject ? "adult-only" : asked;
     const record: LoraRecord = {
-      id, name, file: `${id}.safetensors`, sha256, bytes: stat.size, mtime_ms: Math.floor(statSync(target).mtimeMs), rank: info.rank, modules: info.modules, base_model: LORA_BASE_MODEL,
+      id, name, file: `${id}.safetensors`, sha256, bytes: stat.size, mtime_ms: Math.floor(statSync(target).mtimeMs), rank: info.rank, modules: info.modules, base_model: base,
       licence, licence_class: klass, source_url: input.sourceUrl?.slice(0, 2000) ?? null, classification,
       classification_note: likenessSubject ? "A style that looks like a person is always adult-only." : words.adult && asked === "all-ages" ? "The file's own description names adult content, so it is adult-only." : null,
       strength_default: input.strengthDefault ?? 1, trigger_words: triggerWords, added_by: input.addedBy?.slice(0, 200) ?? null, added_at: new Date().toISOString(),
@@ -297,7 +321,7 @@ export interface ResolvedLora { record: LoraRecord; path: string; strength: numb
  * says what to change. `audience` is the second lock: an all-ages job never
  * applies an adult-only file, whatever Home's list says. The file is
  * re-hashed when its size or time changed since it was added. */
-export async function resolveLoras(requests: LoraRequest[] | undefined, audience: Audience): Promise<ResolvedLora[]> {
+export async function resolveLoras(requests: LoraRequest[] | undefined, audience: Audience, base: LoraBase = LORA_BASE_MODEL): Promise<ResolvedLora[]> {
   const list = requests ?? [];
   if (list.length > MAX_LORAS_PER_JOB) throw new LoraError("too_many_loras", `A clip can use at most ${MAX_LORAS_PER_JOB} LoRAs.`, 422);
   if (new Set(list.map((entry) => entry.id)).size !== list.length) throw new LoraError("duplicate_lora", "The same LoRA is listed twice.", 422);
@@ -306,6 +330,7 @@ export async function resolveLoras(requests: LoraRequest[] | undefined, audience
     if (!isLoraId(entry.id)) throw new LoraError("unknown_lora", `No LoRA with the id ${String(entry.id).slice(0, 40)} is in the library.`, 422);
     const record = getLora(entry.id);
     if (!record) throw new LoraError("unknown_lora", `No LoRA with the id ${entry.id} is in the library.`, 422);
+    if ((record.base_model ?? LORA_BASE_MODEL) !== base) throw new LoraError("wrong_base_model", `"${record.name}" was made for the ${record.base_model === LORA_BASE_LTX ? "Detailed" : "Quick"} video model and this clip is ${base === LORA_BASE_LTX ? "Detailed" : "Quick"}. Pick a style made for the same one.`, 422);
     const strength = entry.strength ?? record.strength_default;
     if (!(strength >= 0 && strength <= MAX_LORA_STRENGTH)) throw new LoraError("bad_strength", `A LoRA's strength must be between 0 and ${MAX_LORA_STRENGTH}.`, 422);
     if (record.classification === "adult-only" && audience !== "adult") throw new LoraError("lora_not_allowed", "That LoRA is adult-only and this clip is not for an adult audience.", 422);

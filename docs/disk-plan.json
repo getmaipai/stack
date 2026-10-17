@@ -24,7 +24,7 @@
     "p64.ai_required_free_bytes": 85714021376,
     "p128.required_free_bytes": 88890344653,
     "p128.minimum_required_free_bytes": 60009229733,
-    "p128.everything_required_free_bytes": 175430739478,
+    "p128.everything_required_free_bytes": 263718711966,
     "p128.needed_bytes": 74764178827,
     "p128.home_required_free_bytes": 3176323277,
     "p128.ai_required_free_bytes": 85714021376
@@ -1181,6 +1181,27 @@
           "basis": "pins"
         },
         {
+          "id": "video-detailed",
+          "label": "Detailed videos with sound (LTX-2.3)",
+          "note": "Longer clips with a sound track and spoken words, and a large library of styles. Slower than the quick clip. Optional; needs the licence accepted.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 73573310407,
+          "installed_bytes": 73573310407,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "ltx-2-3-distilled-mlx",
+            "video-gemma-3-12b-text-encoder"
+          ],
+          "engines": [
+            "engine:video",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -1331,11 +1352,11 @@
         "required_free_bytes": 60009229733
       },
       "everything": {
-        "download_bytes": 138144070300,
-        "installed_bytes": 141448839261,
+        "download_bytes": 211717380707,
+        "installed_bytes": 215022149668,
         "peak_temp_bytes": 5692132364,
-        "needed_bytes": 147140971625,
-        "required_free_bytes": 175430739478
+        "needed_bytes": 220714282032,
+        "required_free_bytes": 263718711966
       },
       "measured_on": "2026-10-17",
       "default_selected": [

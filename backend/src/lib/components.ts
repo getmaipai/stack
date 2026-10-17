@@ -15,7 +15,8 @@ import { createJob, finishJob, getJob, jobSignal, listJobs, updateJob } from "@/
 import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { getModel, installCatalogModel, removeModel, type CatalogModelLike, type DownloadModelOptions } from "@/lib/modelStore";
-import { STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
+import { STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, LTX_LICENCE_NOTICE, STACK_MODELS, STACK_MUSIC_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_VIDEO_DETAILED_MODEL_ID, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
+import { licenceAcceptance, recordLicenceAcceptance, type LicenceNotice } from "@/lib/licenceAcceptance";
 import { buildInstallPlan } from "@/lib/installPlan";
 import { diskPlanForTier, diskTotalsFor, engineDownloadBytes, type DiskPlan } from "@/lib/diskPlan";
 import { modelsDir } from "@/lib/paths";
@@ -48,7 +49,7 @@ type Tier = "p16" | "p32" | "p64" | "p128";
 const TIER_RANK: Record<Tier, number> = { p16: 0, p32: 1, p64: 2, p128: 3 };
 
 export class ComponentError extends Error {
-  constructor(readonly code: "unknown_component" | "not_available" | "not_enough_space" | "in_use" | "required" | "only_chat_model" | "chat_model_in_use" | "shared_by_others", message: string, readonly status: 404 | 409) { super(message); }
+  constructor(readonly code: "unknown_component" | "not_available" | "not_enough_space" | "in_use" | "required" | "only_chat_model" | "chat_model_in_use" | "shared_by_others" | "licence_required", message: string, readonly status: 404 | 409) { super(message); }
 }
 
 export interface EnvDef {
@@ -81,13 +82,15 @@ export interface UnitDef {
   serves?: string;
   usedBy: () => string[];
   busy: () => string | null;
+  /** A licence with terms beyond the open ones: the install waits for an admin to accept it once (Home sends the notice id). */
+  licenceNotice?: LicenceNotice;
 }
 
 const GB = 1_000_000_000;
 /** Environment downloads come from the disk plan's measured table (one definition with the wizard); the figures are a fallback only. */
 const ENV_BYTES = { image: engineDownloadBytes("image-gen") ?? 1.1 * GB, video: engineDownloadBytes("video-gen") ?? 1.0 * GB, music: engineDownloadBytes("music-gen") ?? 0.8 * GB, tools: engineDownloadBytes("image-tools") ?? 0.4 * GB, pocket: engineDownloadBytes("pocket-tts") ?? 0.72 * GB, mlxAudio: engineDownloadBytes("mlx-audio") ?? 0.47 * GB };
 /** The disk plan's row for a component, where the plan has one (its optional rows are the wizard's unchecked extras). */
-const DISK_ROW: Record<string, string> = { "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "image-tools": "image-tools", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "ace-step-1-5-turbo": "music" };
+const DISK_ROW: Record<string, string> = { "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "image-tools": "image-tools", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "ace-step-1-5-turbo": "music", "ltx-2-3-distilled-mlx": "video-detailed" };
 
 const envImage: EnvDef = { name: "image-gen", approxBytes: ENV_BYTES.image, root: imageGenRoot, ready: imageGenEnvironmentReady, build: (onPhase, signal) => ensureImageGenEnvironment(onPhase, { signal }), stop: () => imageGen.stop() };
 const envVideo: EnvDef = {
@@ -131,8 +134,9 @@ const LABELS: Record<string, { label: string; summary: string }> = {
   "image-tools": { label: "Picture tools", summary: "Remove a background, erase an object, upscale or resize a picture." },
   "flux2-klein-4b": { label: "Pictures: FLUX.2 Klein 4B", summary: "The everyday picture model. Makes and edits pictures in a few seconds." },
   "z-image-turbo": { label: "Pictures: Z-Image-Turbo", summary: "A higher-detail picture model for the largest computers. A big download." },
-  "fastwan2-2-ti2v-5b-mlx-bf16": { label: "Video: Wan 2.2 (FastWan 5B)", summary: "Makes short video clips from words or a picture." },
   "ace-step-1-5-turbo": { label: "Music: ACE-Step 1.5", summary: "Makes and changes songs in chat" },
+  "fastwan2-2-ti2v-5b-mlx-bf16": { label: "Video: Quick (Wan 2.2 FastWan 5B)", summary: "Makes short silent video clips from words or a picture." },
+  "ltx-2-3-distilled-mlx": { label: "Video: Detailed (LTX-2.3)", summary: "Makes longer clips with sound and spoken words. A very large download, and the maker's licence applies." },
 };
 
 function dedupe<T>(items: T[], key: (item: T) => string): T[] { const seen = new Set<string>(); return items.filter((item) => { const k = key(item); if (seen.has(k)) return false; seen.add(k); return true; }); }
@@ -194,7 +198,17 @@ export function componentDefs(): UnitDef[] {
   units.push({
     id: STACK_VIDEO_MODELS[0]!.id, ...LABELS[STACK_VIDEO_MODELS[0]!.id]!, group: "video", role: "video", pins: STACK_VIDEO_MODELS, envs: [envVideo], tiers: ["p128"],
     platformBlock: () => videoAvailability().code === "unsupported" ? videoAvailability().reason : null,
-    usedBy: () => { const count = listVideoLoras().length; return ["The Video app", ...(count ? [`${count} video style${count === 1 ? "" : "s"} (LoRAs)`] : [])]; },
+    usedBy: () => { const count = listVideoLoras().filter((lora) => lora.base_model !== "ltx-2.3").length; return ["The Video app", ...(count ? [`${count} video style${count === 1 ? "" : "s"} (LoRAs)`] : [])]; },
+    busy: () => {
+      const state = videoGen.status().state;
+      if (state === "running" || state === "building") return "A video clip is being made right now.";
+      return activeJobFor((kind) => kind.startsWith("video")) ? "A video clip is waiting or being made right now." : null;
+    },
+  });
+  units.push({
+    id: STACK_VIDEO_DETAILED_MODEL_ID, ...LABELS[STACK_VIDEO_DETAILED_MODEL_ID]!, group: "video", role: "video", pins: STACK_VIDEO_DETAILED_MODELS, envs: [envVideo], tiers: ["p128"], licenceNotice: LTX_LICENCE_NOTICE,
+    platformBlock: () => videoAvailability().code === "unsupported" ? videoAvailability().reason : null,
+    usedBy: () => { const count = listVideoLoras().filter((lora) => lora.base_model === "ltx-2.3").length; return ["Detailed videos in chat and the Video app", ...(count ? [`${count} Detailed video style${count === 1 ? "" : "s"} (LoRAs)`] : [])]; },
     busy: () => {
       const state = videoGen.status().state;
       if (state === "running" || state === "building") return "A video clip is being made right now.";
@@ -287,6 +301,8 @@ export interface ComponentView {
   job: string | null;
   percent: number | null;
   failure: string | null;
+  /** A licence the admin accepts once before this installs (null for every part without one). */
+  licence: { id: string; name: string; url: string; summary: string[]; accepted_at: string | null } | null;
   can_install: boolean;
   install_block: string | null;
   can_uninstall: boolean;
@@ -365,6 +381,7 @@ export async function listComponents(hw?: HardwareInfo): Promise<ComponentList> 
       size_bytes: present ? unitDiskBytes(unit, defs) : null, download_bytes: remaining, full_bytes: totals ? totals.download_bytes : totalDownload(unit), required_free_bytes: requiredFree, plan_need: row ? row.need : null,
       requirement, requirement_reason: reason, last_used_at: lastUsedOf([unit.id, ...unit.pins.map((pin) => pin.id)]), used_by: unit.usedBy(), depends_on: [],
       job: job?.id ?? null, percent: job ? job.percent : null, failure: state === "failed" ? failure : null,
+      licence: unit.licenceNotice ? { ...unit.licenceNotice, accepted_at: licenceAcceptance(unit.licenceNotice.id)?.accepted_at ?? null } : null,
       can_install: installBlock === null, install_block: installBlock,
       can_uninstall: present && !guard && !job, uninstall_block: !present ? "It is not installed." : job ? "It is still installing." : guard?.message ?? null,
     };
@@ -373,7 +390,7 @@ export async function listComponents(hw?: HardwareInfo): Promise<ComponentList> 
   const loraView = (kindLabel: "picture" | "video", id: string, name: string, bytes: number, lastBase: string, group: ComponentGroup): ComponentView => ({
     id: `lora.${kindLabel}.${id}`, label: `Style: ${name}`, summary: `A ${kindLabel} style (LoRA) the household added.`, group: "loras", kind: "lora", state: "installed",
     size_bytes: bytes, download_bytes: 0, full_bytes: bytes, required_free_bytes: 0, plan_need: null, requirement: "optional", requirement_reason: null, last_used_at: null, used_by: [group === "pictures" ? "Pictures" : "The Video app"], depends_on: [lastBase],
-    job: null, percent: null, failure: null, can_install: false, install_block: `Add it again from the ${kindLabel === "picture" ? "Pictures" : "Video"} page.`, can_uninstall: true, uninstall_block: null,
+    job: null, percent: null, failure: null, licence: null, can_install: false, install_block: `Add it again from the ${kindLabel === "picture" ? "Pictures" : "Video"} page.`, can_uninstall: true, uninstall_block: null,
   });
   const loras = [
     ...imageLoras.list().map((lora) => loraView("picture", lora.id, lora.name, lora.bytes, lora.base_model, "pictures")),
@@ -394,7 +411,7 @@ export function __setComponentDepsForTests(next: ComponentDeps | null): void { d
 export async function __settleComponentInstallsForTests(): Promise<void> { await Promise.all(settling); }
 const settling = new Set<Promise<void>>();
 
-export async function startComponentInstall(id: string, hw?: HardwareInfo): Promise<{ job: string | null; component: string; joined: boolean; already: boolean }> {
+export async function startComponentInstall(id: string, hw?: HardwareInfo, consent: { licence?: string; by?: string | null } = {}): Promise<{ job: string | null; component: string; joined: boolean; already: boolean }> {
   const unit = componentDefs().find((candidate) => candidate.id === id);
   if (!unit) throw new ComponentError("unknown_component", `There is no component called ${id.slice(0, 60)}.`, 404);
   const running = jobFor(id);
@@ -402,6 +419,11 @@ export async function startComponentInstall(id: string, hw?: HardwareInfo): Prom
   if (unitInstalled(unit)) return { job: null, component: id, joined: false, already: true };
   const list = await listComponents(hw);
   const view = list.components.find((candidate) => candidate.id === id)!;
+  // A licence with its own terms is accepted once, by an admin, before the first byte comes down.
+  if (unit.licenceNotice && !licenceAcceptance(unit.licenceNotice.id)) {
+    if (consent.licence !== unit.licenceNotice.id) throw new ComponentError("licence_required", `${unit.label} comes with the maker's licence (${unit.licenceNotice.name}). Read it and accept it, then install.`, 409);
+    recordLicenceAcceptance(unit.licenceNotice.id, consent.by ?? null);
+  }
   if (view.install_block) throw new ComponentError(view.requirement === "unsupported" ? "not_available" : view.install_block.startsWith("Not enough room") ? "not_enough_space" : "not_available", view.install_block, 409);
 
   const pins = unit.pins.filter((pin): pin is CatalogModelLike & { download: NonNullable<CatalogModelLike["download"]> } => !!pin.download);

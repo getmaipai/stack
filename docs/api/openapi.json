@@ -1962,8 +1962,8 @@
                 "properties": {
                   "model": {
                     "type": "string",
-                    "description": "Accepted for symmetry with the other job routes; this route always serves the video role.",
-                    "example": "video"
+                    "description": "Which video model: `video` or `quick` (the default, a silent clip of up to 5 s, which can start from a picture) or `detailed` (LTX-2.3: a sound track with speech made in the same pass, up to 15 s, from words only for now: a picture with `detailed` answers 422 reference_unsupported). A model's own id names it too. An unknown name is refused (unknown_model); a model that is not installed answers 503 not_installed.",
+                    "example": "quick"
                   },
                   "prompt": {
                     "type": "string",
@@ -1996,7 +1996,7 @@
                   "size": {
                     "type": "string",
                     "pattern": "^\\d{3,4}x\\d{3,4}$",
-                    "description": "<width>x<height>, multiples of 32, each side at least 256, area at most 399360 pixels (832x480; 480x832 also fits). Default 832x480.",
+                    "description": "<width>x<height>. Quick: multiples of 32, area at most 399360 pixels (832x480; 480x832 also fits), default 832x480. Detailed: multiples of 64, area at most 768 x 448 (448x768 also fits), default 768x448. Each side at least 256.",
                     "example": "832x480"
                   },
                   "preview": {
@@ -2006,8 +2006,8 @@
                   "seconds": {
                     "type": "integer",
                     "minimum": 1,
-                    "maximum": 5,
-                    "description": "Whole seconds, 1 to 5 per tier (24 frames a second plus the first frame). Default 5."
+                    "maximum": 10,
+                    "description": "Whole seconds (24 frames a second plus the first frame). Quick: 1 to 5, default 5. Detailed: 1 to 10, default 5. A number past the chosen model ceiling is refused (bad_seconds)."
                   },
                   "seed": {
                     "type": "integer",
@@ -2085,7 +2085,7 @@
                         "properties": {
                           "url": {
                             "type": "string",
-                            "description": "GET this for the mp4 (H.264, yuv420p, 24 fps, no sound). Supports Range requests."
+                            "description": "GET this for the mp4 (H.264, yuv420p, 24 fps; a Detailed clip has an AAC sound track the model made, a Quick clip a silent one). Supports Range requests."
                           },
                           "poster_url": {
                             "type": "string",
@@ -2117,6 +2117,17 @@
                           },
                           "model": {
                             "type": "string"
+                          },
+                          "quality": {
+                            "type": "string",
+                            "enum": [
+                              "quick",
+                              "detailed"
+                            ]
+                          },
+                          "audio": {
+                            "type": "boolean",
+                            "description": "The clip has a sound track the model made (Detailed). A Quick clip carries a silent track and answers false."
                           },
                           "mode": {
                             "type": "string",
@@ -2152,6 +2163,8 @@
                           "seconds",
                           "seed",
                           "model",
+                          "quality",
+                          "audio",
                           "mode",
                           "lora_ids",
                           "ms",
@@ -2190,7 +2203,7 @@
                         "properties": {
                           "url": {
                             "type": "string",
-                            "description": "GET this for the mp4 (H.264, yuv420p, 24 fps, no sound). Supports Range requests."
+                            "description": "GET this for the mp4 (H.264, yuv420p, 24 fps; a Detailed clip has an AAC sound track the model made, a Quick clip a silent one). Supports Range requests."
                           },
                           "poster_url": {
                             "type": "string",
@@ -2222,6 +2235,17 @@
                           },
                           "model": {
                             "type": "string"
+                          },
+                          "quality": {
+                            "type": "string",
+                            "enum": [
+                              "quick",
+                              "detailed"
+                            ]
+                          },
+                          "audio": {
+                            "type": "boolean",
+                            "description": "The clip has a sound track the model made (Detailed). A Quick clip carries a silent track and answers false."
                           },
                           "mode": {
                             "type": "string",
@@ -2257,6 +2281,8 @@
                           "seconds",
                           "seed",
                           "model",
+                          "quality",
+                          "audio",
                           "mode",
                           "lora_ids",
                           "ms",
@@ -2583,7 +2609,7 @@
                         "properties": {
                           "url": {
                             "type": "string",
-                            "description": "GET this for the mp4 (H.264, yuv420p, 24 fps, no sound). Supports Range requests."
+                            "description": "GET this for the mp4 (H.264, yuv420p, 24 fps; a Detailed clip has an AAC sound track the model made, a Quick clip a silent one). Supports Range requests."
                           },
                           "poster_url": {
                             "type": "string",
@@ -2615,6 +2641,17 @@
                           },
                           "model": {
                             "type": "string"
+                          },
+                          "quality": {
+                            "type": "string",
+                            "enum": [
+                              "quick",
+                              "detailed"
+                            ]
+                          },
+                          "audio": {
+                            "type": "boolean",
+                            "description": "The clip has a sound track the model made (Detailed). A Quick clip carries a silent track and answers false."
                           },
                           "mode": {
                             "type": "string",
@@ -2650,6 +2687,8 @@
                           "seconds",
                           "seed",
                           "model",
+                          "quality",
+                          "audio",
                           "mode",
                           "lora_ids",
                           "ms",
@@ -10394,6 +10433,39 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "licence": {
+                            "type": "object",
+                            "nullable": true,
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "url": {
+                                "type": "string"
+                              },
+                              "summary": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "accepted_at": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "url",
+                              "summary",
+                              "accepted_at"
+                            ],
+                            "description": "A licence with terms of its own (the Detailed video model). It is accepted once, by an admin, before the first install: POST the install with its `id` as `accepted_licence`. null for every other part."
+                          },
                           "can_install": {
                             "type": "boolean"
                           },
@@ -10429,6 +10501,7 @@
                           "job",
                           "percent",
                           "failure",
+                          "licence",
                           "can_install",
                           "install_block",
                           "can_uninstall",
@@ -10470,6 +10543,28 @@
             "in": "path"
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "accepted_licence": {
+                    "type": "string",
+                    "maxLength": 120,
+                    "description": "The id of the licence notice the admin accepted (from the component's `licence`). Needed only the first time, for a part that has one."
+                  },
+                  "accepted_by": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "An opaque label Home keeps for who accepted it."
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Already installed.",
@@ -10549,7 +10644,7 @@
             }
           },
           "409": {
-            "description": "not_available (this computer cannot run it) or not_enough_space (the data volume cannot hold it); the error is a sentence for the person.",
+            "description": "not_available (this computer cannot run it), not_enough_space (the data volume cannot hold it) or licence_required (the part has a licence an admin has not accepted yet); the error is a sentence for the person.",
             "content": {
               "application/json": {
                 "schema": {
@@ -10908,6 +11003,350 @@
                             "remaining_bytes"
                           ],
                           "description": "The pinned models to pull (POST /stack/v1/models, shaped as an install-plan model) and how many bytes are still to come."
+                        },
+                        "qualities": {
+                          "type": "object",
+                          "properties": {
+                            "quick": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "installed": {
+                                  "type": "boolean"
+                                },
+                                "available": {
+                                  "type": "boolean"
+                                },
+                                "audio": {
+                                  "type": "boolean"
+                                },
+                                "image_to_video": {
+                                  "type": "boolean",
+                                  "description": "A picture can start a clip of this model (Quick yes, Detailed not yet)."
+                                },
+                                "limits": {
+                                  "type": "object",
+                                  "additionalProperties": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "string"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "memory": {
+                                  "type": "object",
+                                  "properties": {
+                                    "fits": {
+                                      "type": "boolean"
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "nullable": true
+                                    },
+                                    "peak_gb": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "fits",
+                                    "reason",
+                                    "peak_gb"
+                                  ]
+                                },
+                                "install": {
+                                  "type": "object",
+                                  "properties": {
+                                    "models": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "role": {
+                                            "type": "string"
+                                          },
+                                          "repo": {
+                                            "type": "string"
+                                          },
+                                          "url": {
+                                            "type": "string"
+                                          },
+                                          "sha256": {
+                                            "type": "string"
+                                          },
+                                          "approx_bytes": {
+                                            "type": "integer"
+                                          },
+                                          "licence": {
+                                            "type": "string"
+                                          },
+                                          "revision": {
+                                            "type": "string"
+                                          },
+                                          "engine": {
+                                            "type": "string"
+                                          },
+                                          "archive": {
+                                            "type": "boolean"
+                                          },
+                                          "hub_file": {
+                                            "type": "string"
+                                          },
+                                          "component": {
+                                            "type": "string"
+                                          },
+                                          "starter": {
+                                            "type": "boolean"
+                                          },
+                                          "installed": {
+                                            "type": "boolean"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "role",
+                                          "url",
+                                          "sha256",
+                                          "approx_bytes",
+                                          "licence",
+                                          "revision",
+                                          "starter",
+                                          "installed"
+                                        ]
+                                      }
+                                    },
+                                    "remaining_bytes": {
+                                      "type": "integer"
+                                    },
+                                    "download_bytes": {
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "models",
+                                    "remaining_bytes",
+                                    "download_bytes"
+                                  ]
+                                },
+                                "licence": {
+                                  "type": "object",
+                                  "nullable": true,
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "url": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "name",
+                                    "url"
+                                  ],
+                                  "description": "Detailed only: the model licence. Home shows its summary (GET /stack/v1/components, the component's `licence`) and an admin accepts it once before this installs."
+                                },
+                                "lora_base_model": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "installed",
+                                "available",
+                                "audio",
+                                "image_to_video",
+                                "limits",
+                                "memory",
+                                "install",
+                                "licence",
+                                "lora_base_model"
+                              ]
+                            },
+                            "detailed": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "installed": {
+                                  "type": "boolean"
+                                },
+                                "available": {
+                                  "type": "boolean"
+                                },
+                                "audio": {
+                                  "type": "boolean"
+                                },
+                                "image_to_video": {
+                                  "type": "boolean",
+                                  "description": "A picture can start a clip of this model (Quick yes, Detailed not yet)."
+                                },
+                                "limits": {
+                                  "type": "object",
+                                  "additionalProperties": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "string"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "memory": {
+                                  "type": "object",
+                                  "properties": {
+                                    "fits": {
+                                      "type": "boolean"
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "nullable": true
+                                    },
+                                    "peak_gb": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "fits",
+                                    "reason",
+                                    "peak_gb"
+                                  ]
+                                },
+                                "install": {
+                                  "type": "object",
+                                  "properties": {
+                                    "models": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "role": {
+                                            "type": "string"
+                                          },
+                                          "repo": {
+                                            "type": "string"
+                                          },
+                                          "url": {
+                                            "type": "string"
+                                          },
+                                          "sha256": {
+                                            "type": "string"
+                                          },
+                                          "approx_bytes": {
+                                            "type": "integer"
+                                          },
+                                          "licence": {
+                                            "type": "string"
+                                          },
+                                          "revision": {
+                                            "type": "string"
+                                          },
+                                          "engine": {
+                                            "type": "string"
+                                          },
+                                          "archive": {
+                                            "type": "boolean"
+                                          },
+                                          "hub_file": {
+                                            "type": "string"
+                                          },
+                                          "component": {
+                                            "type": "string"
+                                          },
+                                          "starter": {
+                                            "type": "boolean"
+                                          },
+                                          "installed": {
+                                            "type": "boolean"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "role",
+                                          "url",
+                                          "sha256",
+                                          "approx_bytes",
+                                          "licence",
+                                          "revision",
+                                          "starter",
+                                          "installed"
+                                        ]
+                                      }
+                                    },
+                                    "remaining_bytes": {
+                                      "type": "integer"
+                                    },
+                                    "download_bytes": {
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "models",
+                                    "remaining_bytes",
+                                    "download_bytes"
+                                  ]
+                                },
+                                "licence": {
+                                  "type": "object",
+                                  "nullable": true,
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "url": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "name",
+                                    "url"
+                                  ],
+                                  "description": "Detailed only: the model licence. Home shows its summary (GET /stack/v1/components, the component's `licence`) and an admin accepts it once before this installs."
+                                },
+                                "lora_base_model": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "installed",
+                                "available",
+                                "audio",
+                                "image_to_video",
+                                "limits",
+                                "memory",
+                                "install",
+                                "licence",
+                                "lora_base_model"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "quick",
+                            "detailed"
+                          ],
+                          "description": "VIDEO-LTX-01: the two models. `quick` is the silent clip (the fields above describe it); `detailed` makes a sound track with speech in the same pass, longer clips, and takes LoRAs made for LTX-2.3. Each lists its own limits, install pieces and whether a clip of it could be admitted now."
                         }
                       },
                       "required": [
@@ -10927,7 +11366,8 @@
                         "reference_images",
                         "worker",
                         "environment",
-                        "install"
+                        "install",
+                        "qualities"
                       ]
                     }
                   },
@@ -10984,8 +11424,10 @@
                           "base_model": {
                             "type": "string",
                             "enum": [
-                              "wan2.2-ti2v-5b"
-                            ]
+                              "wan2.2-ti2v-5b",
+                              "ltx-2.3"
+                            ],
+                            "description": "The video model the LoRA was made for, read from its tensors: wan2.2-ti2v-5b is Quick, ltx-2.3 is Detailed. A clip applies only LoRAs of its own model."
                           },
                           "licence": {
                             "type": "string"
@@ -11059,6 +11501,12 @@
                     "base_model": {
                       "type": "string"
                     },
+                    "base_models": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "max_per_clip": {
                       "type": "integer"
                     }
@@ -11066,6 +11514,7 @@
                   "required": [
                     "loras",
                     "base_model",
+                    "base_models",
                     "max_per_clip"
                   ]
                 }
@@ -11183,8 +11632,10 @@
                     "base_model": {
                       "type": "string",
                       "enum": [
-                        "wan2.2-ti2v-5b"
-                      ]
+                        "wan2.2-ti2v-5b",
+                        "ltx-2.3"
+                      ],
+                      "description": "The video model the LoRA was made for, read from its tensors: wan2.2-ti2v-5b is Quick, ltx-2.3 is Detailed. A clip applies only LoRAs of its own model."
                     },
                     "licence": {
                       "type": "string"
@@ -11428,8 +11879,10 @@
                     "base_model": {
                       "type": "string",
                       "enum": [
-                        "wan2.2-ti2v-5b"
-                      ]
+                        "wan2.2-ti2v-5b",
+                        "ltx-2.3"
+                      ],
+                      "description": "The video model the LoRA was made for, read from its tensors: wan2.2-ti2v-5b is Quick, ltx-2.3 is Detailed. A clip applies only LoRAs of its own model."
                     },
                     "licence": {
                       "type": "string"

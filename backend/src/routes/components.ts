@@ -19,6 +19,7 @@ const ComponentSchema = z.object({
   requirement: z.enum(["required", "optional", "unsupported"]).openapi({ description: "For this computer's tier: required (Home installs it), optional, or unsupported (see requirement_reason)." }),
   requirement_reason: z.string().nullable(), last_used_at: z.string().nullable(), used_by: z.array(z.string()), depends_on: z.array(z.string()),
   job: z.string().nullable(), percent: z.number().nullable(), failure: z.string().nullable(),
+  licence: z.object({ id: z.string(), name: z.string(), url: z.string(), summary: z.array(z.string()), accepted_at: z.string().nullable() }).nullable().openapi({ description: "A licence with terms of its own (the Detailed video model). It is accepted once, by an admin, before the first install: POST the install with its `id` as `accepted_licence`. null for every other part." }),
   can_install: z.boolean(), install_block: z.string().nullable(), can_uninstall: z.boolean(), uninstall_block: z.string().nullable(),
 });
 const ErrorBody = z.object({ error: z.string(), code: z.string() });
@@ -29,12 +30,12 @@ const listRoute = createRoute({
   responses: { 200: { content: { "application/json": { schema: z.object({ tier: z.string().nullable(), free_disk_bytes: z.number().int().nullable(), disk_margin_bytes: z.number().int(), installed_bytes: z.number().int(), components: z.array(ComponentSchema) }) } }, description: "Additive. `free_disk_bytes` is the data volume's, the same figure the install plan uses." } },
 });
 const installRoute = createRoute({
-  method: "post", path: "/{id}/install", tags: ["Components"], summary: "Install a component (one job: the files, then its engine environment)", request: { params: idParam },
+  method: "post", path: "/{id}/install", tags: ["Components"], summary: "Install a component (one job: the files, then its engine environment)", request: { params: idParam, body: { required: false, content: { "application/json": { schema: z.object({ accepted_licence: z.string().max(120).optional().openapi({ description: "The id of the licence notice the admin accepted (from the component's `licence`). Needed only the first time, for a part that has one." }), accepted_by: z.string().max(200).optional().openapi({ description: "An opaque label Home keeps for who accepted it." }) }) } } } },
   responses: {
     202: { content: { "application/json": { schema: z.object({ job: z.string(), component: z.string(), joined: z.boolean() }) } }, description: "The install job (/stack/v1/jobs/{id}); a second call while one runs joins it." },
     200: { content: { "application/json": { schema: z.object({ job: z.null(), component: z.string(), already_installed: z.literal(true) }) } }, description: "Already installed." },
     404: { content: { "application/json": { schema: ErrorBody } }, description: "unknown_component." },
-    409: { content: { "application/json": { schema: ErrorBody } }, description: "not_available (this computer cannot run it) or not_enough_space (the data volume cannot hold it); the error is a sentence for the person." },
+    409: { content: { "application/json": { schema: ErrorBody } }, description: "not_available (this computer cannot run it), not_enough_space (the data volume cannot hold it) or licence_required (the part has a licence an admin has not accepted yet); the error is a sentence for the person." },
   },
 });
 const removeRoute = createRoute({
@@ -50,7 +51,8 @@ export const componentsRoutes = apiRouter<AppEnv>();
 componentsRoutes.openapi(listRoute, async (c) => c.json(await listComponents(), 200));
 componentsRoutes.openapi(installRoute, async (c) => {
   try {
-    const started = await startComponentInstall(c.req.valid("param").id);
+    const consent = await c.req.json().catch(() => ({})) as { accepted_licence?: unknown; accepted_by?: unknown };
+    const started = await startComponentInstall(c.req.valid("param").id, undefined, { ...(typeof consent.accepted_licence === "string" ? { licence: consent.accepted_licence } : {}), ...(typeof consent.accepted_by === "string" ? { by: consent.accepted_by } : {}) });
     return started.job ? c.json({ job: started.job, component: started.component, joined: started.joined }, 202) : c.json({ job: null, component: started.component, already_installed: true as const }, 200);
   } catch (error) {
     if (error instanceof ComponentError) return c.json({ error: error.message, code: error.code }, error.status as 404 | 409);

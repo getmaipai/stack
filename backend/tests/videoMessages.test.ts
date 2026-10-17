@@ -16,7 +16,7 @@ const PROBE_SOUND = `${PROBE_SILENT}\n  Stream #0:1[0x2](und): Audio: aac (LC) (
 const PROBE_HEVC = `  Stream #0:0[0x1](und): Video: hevc (Main) (hvc1 / 0x31637668), yuv420p10le(tv), 1920x1080, 9000 kb/s, 30 fps`;
 
 test("parseProbe reads codec, pixel format, size and whether there is sound", () => {
-  expect(parseProbe(PROBE_SILENT)).toEqual({ videoCodec: "h264", pixelFormat: "yuv420p", width: 832, height: 480, hasAudio: false });
+  expect(parseProbe(PROBE_SILENT)).toEqual({ videoCodec: "h264", pixelFormat: "yuv420p", width: 832, height: 480, hasAudio: false, audioCodec: null });
   expect(parseProbe(PROBE_SOUND).hasAudio).toBe(true);
   expect(parseProbe(PROBE_HEVC)).toMatchObject({ videoCodec: "hevc", pixelFormat: "yuv420p10le", width: 1920, height: 1080 });
   expect(parseProbe("nothing here").videoCodec).toBeNull();
@@ -29,6 +29,18 @@ test("a silent H.264 clip keeps its picture and gains a silent AAC track, moov f
   expect(args.join(" ")).toContain("-c:a aac");
   expect(args.join(" ")).toContain("-movflags +faststart");
   expect(args).toContain("title=paper boat");
+});
+
+test("a sound track the model made (AAC) is copied untouched, in both the picture-copy and the re-encode case", () => {
+  const withSound = messagesArgs("in.mp4", "out.mp4", parseProbe(PROBE_SOUND), "t").join(" ");
+  expect(withSound).toContain("-c:a copy");
+  expect(withSound).not.toContain("-c:a aac");
+  const reencoded = messagesArgs("in.mp4", "out.mp4", parseProbe(PROBE_SOUND), "t", true).join(" ");
+  expect(reencoded).toContain("-c:a copy");
+  expect(reencoded).toContain("libx264");
+  const pcm = messagesArgs("in.mp4", "out.mp4", parseProbe(PROBE_SOUND.replace("aac (LC)", "pcm_s16le")), "t").join(" ");
+  expect(pcm).toContain("-c:a aac");
+  expect(pcm).toContain("192k");
 });
 
 test("a clip that already has sound keeps its own track and a clip that is not yuv420p H.264 within the edge is re-encoded", () => {

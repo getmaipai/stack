@@ -19,6 +19,10 @@ export interface VideoResultMeta {
   seconds: number;
   seed: number;
   model: string;
+  /** Quick or Detailed (older results have none: Quick). */
+  quality?: "quick" | "detailed";
+  /** The clip has a sound track the model made (older results have none: no). */
+  audio?: boolean;
   mode: "text-to-video" | "image-to-video";
   lora_ids: string[];
   ms: number;

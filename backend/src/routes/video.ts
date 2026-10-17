@@ -14,21 +14,30 @@ import type { AppEnv } from "@/types";
 import { dataDir } from "@/lib/paths";
 import { installedEnginePin } from "@/lib/engineCatalog";
 import { listModels } from "@/lib/modelStore";
-import { videoInstallModels } from "@/lib/installPlan";
+import { videoDetailedInstallModels, videoInstallModels } from "@/lib/installPlan";
 import { modelView } from "@/routes/models";
-import { importLora, listLoras, LORA_BASE_MODEL, LORA_CLASSES, LoraError, MAX_LORA_BYTES, MAX_LORAS_PER_JOB, MAX_LORA_STRENGTH, removeLora, updateLora, isLoraId } from "@/video/loras";
-import { memoryVerdict, tierAvailability, videoGen, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_GEN_NAME, VIDEO_GEN_VERSION, VIDEO_MAX_FRAMES, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_PEAK_BYTES, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, videoGenEnvironmentReady, videoGenSourceInstalled } from "@/video/videoGen";
+import { importLora, listLoras, LORA_BASE_MODEL, LORA_BASE_MODELS, LORA_CLASSES, LoraError, MAX_LORA_BYTES, MAX_LORAS_PER_JOB, MAX_LORA_STRENGTH, removeLora, updateLora, isLoraId } from "@/video/loras";
+import { LTX_LICENCE_NOTICE } from "@/lib/modelCatalog";
+import { memoryVerdict, tierAvailability, videoGen, VIDEO_SPECS, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_GEN_NAME, VIDEO_GEN_VERSION, VIDEO_MAX_FRAMES, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_PEAK_BYTES, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, videoGenEnvironmentReady, videoGenSourceInstalled } from "@/video/videoGen";
 
 const PlanModelSchema = z.object({
   id: z.string(), role: z.string(), repo: z.string().optional(), url: z.string(), sha256: z.string(), approx_bytes: z.number().int(), licence: z.string(), revision: z.string(),
   engine: z.string().optional(), archive: z.boolean().optional(), hub_file: z.string().optional(), component: z.string().optional(), starter: z.boolean(), installed: z.boolean(),
 });
 const LoraSchema = z.object({
-  id: z.string(), name: z.string(), file: z.string(), sha256: z.string(), bytes: z.number().int(), rank: z.number().int(), modules: z.number().int(), base_model: z.literal(LORA_BASE_MODEL),
+  id: z.string(), name: z.string(), file: z.string(), sha256: z.string(), bytes: z.number().int(), rank: z.number().int(), modules: z.number().int(), base_model: z.enum(LORA_BASE_MODELS).openapi({ description: "The video model the LoRA was made for, read from its tensors: wan2.2-ti2v-5b is Quick, ltx-2.3 is Detailed. A clip applies only LoRAs of its own model." }),
   licence: z.string(), licence_class: z.enum(["free", "acknowledged"]), source_url: z.string().nullable(),
   classification: z.enum(LORA_CLASSES), classification_note: z.string().nullable(), strength_default: z.number(), trigger_words: z.array(z.string()), added_by: z.string().nullable(), added_at: z.string(), likeness_subject: z.string().nullable().openapi({ description: "The household adult this LoRA looks like (an opaque id Home gave), or null. A LoRA that looks like a person is always adult-only and every request that applies it needs Home's signed proof." }),
 });
 const ErrorBody = z.object({ error: z.string(), code: z.string().optional() });
+const QualitySchema = z.object({
+  id: z.string(), installed: z.boolean(), available: z.boolean(), audio: z.boolean(), image_to_video: z.boolean().openapi({ description: "A picture can start a clip of this model (Quick yes, Detailed not yet)." }),
+  limits: z.record(z.string(), z.union([z.number(), z.string()])),
+  memory: z.object({ fits: z.boolean(), reason: z.string().nullable(), peak_gb: z.number() }),
+  install: z.object({ models: z.array(PlanModelSchema), remaining_bytes: z.number().int(), download_bytes: z.number().int() }),
+  licence: z.object({ id: z.string(), name: z.string(), url: z.string() }).nullable().openapi({ description: "Detailed only: the model licence. Home shows its summary (GET /stack/v1/components, the component's `licence`) and an admin accepts it once before this installs." }),
+  lora_base_model: z.string(),
+});
 const StatusSchema = z.object({
   state: z.enum(["unsupported", "off", "not-installed", "needs-setup", "building", "idle", "running"]).openapi({ description: "off: this computer's tier does not run video. not-installed: the model files are missing. needs-setup: installed; the first clip builds the environment (first time only) and starts the worker. idle: the worker is up and waits ten minutes for the next clip, then exits. running: a clip is in progress." }),
   phase: z.string().nullable(),
@@ -42,10 +51,11 @@ const StatusSchema = z.object({
   worker: z.object({ alive: z.boolean(), idle_exit_seconds: z.number().int() }),
   environment: z.object({ engine: z.string(), version: z.string(), source: z.boolean(), ready: z.boolean() }),
   install: z.object({ models: z.array(PlanModelSchema), remaining_bytes: z.number().int() }).openapi({ description: "The pinned models to pull (POST /stack/v1/models, shaped as an install-plan model) and how many bytes are still to come." }),
+  qualities: z.object({ quick: QualitySchema, detailed: QualitySchema }).openapi({ description: "VIDEO-LTX-01: the two models. `quick` is the silent clip (the fields above describe it); `detailed` makes a sound track with speech in the same pass, longer clips, and takes LoRAs made for LTX-2.3. Each lists its own limits, install pieces and whether a clip of it could be admitted now." }),
 });
 const statusRoute = createRoute({ method: "get", path: "/", tags: ["Video"], summary: "The video role's state, limits, and what to install", responses: { 200: { content: { "application/json": { schema: z.object({ video: StatusSchema }) } }, description: "Additive. Home enables the video control from `available` and `state`." } } });
 
-const listRoute = createRoute({ method: "get", path: "/loras", tags: ["Video"], summary: "The household LoRA library", responses: { 200: { content: { "application/json": { schema: z.object({ loras: z.array(LoraSchema), base_model: z.string(), max_per_clip: z.number().int() }) } }, description: "Every LoRA with its hash, licence, classification and default strength." } } });
+const listRoute = createRoute({ method: "get", path: "/loras", tags: ["Video"], summary: "The household LoRA library", responses: { 200: { content: { "application/json": { schema: z.object({ loras: z.array(LoraSchema), base_model: z.string(), base_models: z.array(z.string()), max_per_clip: z.number().int() }) } }, description: "Every LoRA with its hash, licence, classification and default strength." } } });
 const importForm = z.object({
   file: z.custom<File>((value) => value instanceof File, "The .safetensors file in the `file` field.").openapi({ type: "string", format: "binary" }).optional(),
   path: z.string().optional().openapi({ description: "Instead of `file`: a .safetensors file already on the Stack's own computer." }),
@@ -77,6 +87,21 @@ const removeRoute = createRoute({ method: "delete", path: "/loras/{id}", tags: [
 
 export const videoRoutes = apiRouter<AppEnv>();
 
+type PlanModel = ReturnType<typeof videoInstallModels>[number];
+function qualityView(quality: "quick" | "detailed", models: PlanModel[], _installed: string[], available: boolean) {
+  const spec = VIDEO_SPECS[quality];
+  const verdict = memoryVerdict(quality);
+  const remaining = models.filter((model) => !model.installed).reduce((sum, model) => sum + model.approx_bytes, 0);
+  return {
+    id: spec.modelId, installed: models.every((model) => model.installed), available, audio: spec.audio, image_to_video: spec.imageToVideo,
+    limits: { max_seconds: available ? spec.maxSeconds : 0, fps: VIDEO_FPS, default_size: spec.defaultSize, max_pixels: spec.maxPixels, size_step: spec.sizeStep, min_side: spec.minSide, max_frames: spec.maxSeconds * VIDEO_FPS + 1 },
+    memory: { fits: verdict.ok, reason: verdict.ok ? null : verdict.reason, peak_gb: Math.round(spec.peakBytes / 1e8) / 10 },
+    install: { models, remaining_bytes: remaining, download_bytes: models.reduce((sum, model) => sum + model.approx_bytes, 0) },
+    licence: quality === "detailed" ? { id: LTX_LICENCE_NOTICE.id, name: LTX_LICENCE_NOTICE.name, url: LTX_LICENCE_NOTICE.url } : null,
+    lora_base_model: spec.loraBase,
+  };
+}
+
 videoRoutes.openapi(statusRoute, (c) => {
   const availability = tierAvailability();
   const status = videoGen.status();
@@ -95,10 +120,14 @@ videoRoutes.openapi(statusRoute, (c) => {
     worker: { alive: videoGen.workerAlive, idle_exit_seconds: Math.round(Number(process.env.VIDEO_IDLE_MS ?? 600_000) / 1000) },
     environment: { engine: pin ? `${pin.name} ${pin.tag}` : VIDEO_GEN_NAME, version: VIDEO_GEN_VERSION, source: videoGenSourceInstalled(), ready: videoGenEnvironmentReady() },
     install: { models, remaining_bytes: models.filter((model) => !model.installed).reduce((sum, model) => sum + model.approx_bytes, 0) },
+    qualities: {
+      quick: qualityView("quick", models, installed, availability.available),
+      detailed: qualityView("detailed", videoDetailedInstallModels(installed), installed, availability.available),
+    },
   } }, 200 as const);
 });
 
-videoRoutes.openapi(listRoute, (c) => c.json({ loras: listLoras(), base_model: LORA_BASE_MODEL, max_per_clip: MAX_LORAS_PER_JOB }, 200));
+videoRoutes.openapi(listRoute, (c) => c.json({ loras: listLoras(), base_model: LORA_BASE_MODEL, base_models: [...LORA_BASE_MODELS], max_per_clip: MAX_LORAS_PER_JOB }, 200));
 
 function triggerWords(value: string | undefined): string[] {
   if (!value) return [];

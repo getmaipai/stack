@@ -18,9 +18,11 @@ export interface StageDef {
   /** Typical seconds, used until the Stack has its own history. */
   seconds: number;
   label: (n: number | null, of: number | null) => string;
+  /** The seconds do not grow with the size of the job (loading a model reads the same files for a short clip and a long one). */
+  fixed?: boolean;
 }
 
-export type GenKind = "image" | "video" | "music";
+export type GenKind = "image" | "video" | "video_detailed" | "music";
 
 /** Video stages. Weights and seconds are the medians of measured runs (832x480, 5 s, 128 GB Mac); see the design note "Stack API as built". */
 export const VIDEO_STAGES: StageDef[] = [
@@ -30,6 +32,16 @@ export const VIDEO_STAGES: StageDef[] = [
   { id: "motion", weight: 0.09, seconds: 12, label: (n, of) => (n !== null && of ? `Making the motion, step ${Math.min(n + 1, of)} of ${of}` : "Making the motion") },
   { id: "frames", weight: 0.83, seconds: 112, label: (n, of) => (n !== null && of ? `Putting the frames together, ${Math.min(n + 1, of)} of ${of}` : "Putting the frames together") },
   { id: "save", weight: 0.02, seconds: 2, label: () => "Saving the video" },
+];
+
+/** VIDEO-LTX-01: the Detailed video's stages. Seconds are the medians of the first measured runs (Studio, 768 x 448, 5 s: text 3, prompt 11, model 5, motion 20, frames 11, save 1); motion and frames grow with the length. */
+export const VIDEO_DETAILED_STAGES: StageDef[] = [
+  { id: "load_text", weight: 0.04, seconds: 3, fixed: true, label: () => "Getting ready" },
+  { id: "plan", weight: 0.2, seconds: 11, fixed: true, label: () => "Planning the scene and the words" },
+  { id: "load_model", weight: 0.09, seconds: 5, fixed: true, label: () => "Loading the video model" },
+  { id: "motion", weight: 0.4, seconds: 20, label: (n, of) => (n !== null && of ? `Making the motion and the sound, step ${Math.min(n + 1, of)} of ${of}` : "Making the motion and the sound") },
+  { id: "frames", weight: 0.25, seconds: 11, label: (n, of) => (n !== null && of ? `Putting the frames together, ${Math.min(n + 1, of)} of ${of}` : "Putting the frames together") },
+  { id: "save", weight: 0.02, seconds: 1, fixed: true, label: () => "Saving the video" },
 ];
 
 export const IMAGE_STAGES: StageDef[] = [
@@ -48,7 +60,7 @@ export const MUSIC_STAGES: StageDef[] = [
   { id: "save", weight: 0.045, seconds: 1, label: () => "Saving" },
 ];
 
-export const stagesFor = (kind: GenKind): StageDef[] => (kind === "video" ? VIDEO_STAGES : kind === "music" ? MUSIC_STAGES : IMAGE_STAGES);
+export const stagesFor = (kind: GenKind): StageDef[] => (kind === "video" ? VIDEO_STAGES : kind === "video_detailed" ? VIDEO_DETAILED_STAGES : kind === "music" ? MUSIC_STAGES : IMAGE_STAGES);
 
 // ---- history: the last few stage durations per kind and size ----
 
@@ -117,7 +129,7 @@ export class GenTracker {
   private readonly stages: StageDef[];
   /** `scale` stretches the built-in seconds for a job bigger or smaller than the sizes they were measured at (a picture of 2048 x 2048 is four 1024 x 1024 ones); history, once it exists for the size, replaces them. */
   constructor(readonly kind: GenKind, readonly key: string, private readonly now: () => number = Date.now, private readonly scale = 1) { this.stages = stagesFor(kind); }
-  private seconds(stage: StageDef): number { return stageSeconds(this.key, stage, this.scale); }
+  private seconds(stage: StageDef): number { return stageSeconds(this.key, stage, stage.fixed ? 1 : this.scale); }
 
   get started(): boolean { return this.seenStage; }
 

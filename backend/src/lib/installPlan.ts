@@ -4,7 +4,7 @@
 // pins. Pure: the route supplies the hardware and the installed set.
 import { PROFILE_MODEL_BINDINGS, sizeMachine, type ProfileTier } from "@/profiles";
 import type { HardwareInfo, MemorySource } from "@/lib/hardware";
-import { STACK_CHAT_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_IMAGE_ENGINE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_VIDEO_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
+import { STACK_CHAT_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_IMAGE_ENGINE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
 import { tierDefaultTtsEngine } from "@/speech/ttsEngines";
 import { tierDefaultChatEngine } from "@/lib/chatEngines";
 import type { CatalogModelLike } from "@/lib/modelStore";
@@ -59,6 +59,11 @@ function view(pin: CatalogModelLike, installed: Set<string>, starter: boolean): 
 export function videoInstallModels(installedIds: Iterable<string> = []): PlanModel[] {
   const installed = new Set(installedIds);
   return STACK_VIDEO_MODELS.flatMap((pin) => view(pin, installed, false) ?? []);
+}
+/** VIDEO-LTX-01: the Detailed model's pins (the LTX weights and the Gemma text encoder), in the shape of a pull. */
+export function videoDetailedInstallModels(installedIds: Iterable<string> = []): PlanModel[] {
+  const installed = new Set(installedIds);
+  return STACK_VIDEO_DETAILED_MODELS.flatMap((pin) => view(pin, installed, false) ?? []);
 }
 
 /** The pins the music role needs (the shared pieces with the 1.7B planning LM, and the 0.6B planning LM), in the shape of a pull, for the music status route: Home installs them when the person turns music on. They are not in the first-run plan, the way no generator is. */

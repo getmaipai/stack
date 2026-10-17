@@ -17,6 +17,10 @@ with Home's releases, so this file tracks what a Home release picks up.
   only, so those two engines now need macOS 14 or later on an Apple
   silicon Mac; the build refuses an older Mac with the reason.
 
+### Added
+
+- Detailed video (VIDEO-LTX-01): LTX-2.3 on mlx-video, a sound track with speech made in the same pass, up to 10 seconds at 768 x 448. `POST /v1/videos/generations` takes `model` `quick` or `detailed`, answers `quality` and `audio`, and `GET /stack/v1/video` lists both kinds under `qualities`. An optional component (`ltx-2-3-distilled-mlx`, 73.6 GB with the Gemma text encoder, p128 only) installs only after an admin accepts the maker's licence once (`licence_required`, `accepted_licence`). Video LoRAs now name the model they are for (`ltx-2.3` or `wan2.2-ti2v-5b`) and a clip applies only its own kind's. A picture can start a Quick clip only (Detailed answers 422 `reference_unsupported`).
+
 ### Changed
 
 - LoRA base detection reads Civitai-style files (kohya `lora_unet_layers_N` names for Z-Image, a header that declares its base) and names Pony, Illustrious, NoobAI, FLUX.1 and Chroma files in the refusal. FLUX.2 Klein 4B stays the default picture model on every tier; Z-Image-Turbo is optional and selected by name or by a LoRA made for it.

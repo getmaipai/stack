@@ -646,6 +646,128 @@ export const STACK_MUSIC_LM_06: CatalogModelLike = {
   },
 };
 export const STACK_MUSIC_MODELS: CatalogModelLike[] = [STACK_MUSIC_MODEL, STACK_MUSIC_LM_06];
+// VIDEO-LTX-01: the Detailed video model. LTX-2.3 22B distilled (Lightricks), the MLX layout of prince-canuma's conversion
+// (an ungated Hugging Face repository: no account is needed), at one revision, every file by sha256 and size. It makes the
+// picture and its sound track in one pass (speech included), up to 10 s a clip at 768 x 448, with an 8 + 3 step distilled
+// schedule and the x2 spatial upscaler. The weights are NOT redistributed: an admin's own computer downloads them for
+// household use. Licence: LTX-2.x Community License Agreement (LICENSE-2_x, dated 2026-08-11): free for an entity under
+// $10,000,000 of annual revenue, a paid licence from Lightricks above that, and an acceptable use policy (no exploiting or
+// harming minors, no impersonation without consent, machine-made content disclosed; adult content is not barred). Home
+// shows that summary at install and the admin accepts it once. The text encoder is Gemma 3 12B (Gemma Terms of Use), its own
+// pin, which the model reads before the picture is drawn. Measured 2026-10-17, Apple M5 Max 128 GB, aggressive tiling.
+/** Admission for a Detailed clip: the largest MLX peak measured (43.5 GB, 15 s at 768 x 448 with the clay LoRA merged: 43.3 GB at 5 s) plus the Python process. The ceiling is 10 s (41.9 GB measured). */
+export const LTX_PEAK_BYTES = 46_000_000_000;
+const LTX_REPO = "prince-canuma/LTX-2.3-distilled";
+const LTX_REVISION = "65b104b9387fb173d8e4b92fc5effc47625baf2a";
+export const STACK_VIDEO_DETAILED_MODEL_ID = "ltx-2-3-distilled-mlx";
+export const STACK_VIDEO_TEXT_ENCODER_ID = "video-gemma-3-12b-text-encoder";
+export const LTX_LICENCE = "LTX-2.x Community License Agreement (2026-08-11)";
+export const LTX_LICENCE_URL = "https://github.com/Lightricks/LTX-2/blob/main/LICENSE-2_x";
+/** What an admin reads and accepts once before the Detailed video model installs (Home shows it; the Stack records the acceptance). */
+export const LTX_LICENCE_NOTICE = {
+  id: "ltx-2.x-community-2026-08-11",
+  name: LTX_LICENCE,
+  url: LTX_LICENCE_URL,
+  summary: [
+    "The Detailed video model is Lightricks' LTX-2.3. It is not part of MaiPai: this computer downloads it from the maker's published files, for your household's use.",
+    "It is free for a person or a business that earns under $10 million a year. A business at or above $10 million a year needs its own paid licence from Lightricks for any commercial use.",
+    "It may not be used to harm or exploit children, to make a video of a real person who has not agreed to it, to spread false information on purpose, or to break the law. Adult content is not on that list. MaiPai's own rules for who may make what still apply on top.",
+    "Anything you share must say it was made by a machine, and the markings the model puts in a clip are never removed.",
+    "Lightricks can update its use policy, and can end the licence if it is broken. The prompt reader is Google's Gemma 3, under the Gemma Terms of Use.",
+  ],
+};
+export const LTX_UPSCALER_FILE = "ltx-2.3-spatial-upscaler-x2-1.1.safetensors";
+const LTX_FILES = [
+  { path: "audio_vae/decoder/config.json", sha256: "08462df98b63ab119aceec75c1ff35686027409d2b97f9c01474468f162a5880", bytes: 508 },
+  { path: "audio_vae/decoder/model.safetensors", sha256: "919f03edd099c5393eb5889be8abd74bf283a98081bce9859cf5d49f57a5c7fa", bytes: 63836681 },
+  { path: "audio_vae/decoder/model.safetensors.index.json", sha256: "7b34bb20249af1e93f4970de3ad4f7b6a99af49a64446cceff77e48bfafe09a9", bytes: 3427 },
+  { path: "audio_vae/encoder/config.json", sha256: "8cbee91fbd78002880e5d265b81728155fc92bd6c3a541aaf97089d8eab2f580", bytes: 451 },
+  { path: "audio_vae/encoder/model.safetensors", sha256: "4653689ea1cd5f814e8b8ec630c1b94c6d027040ccafae9db19544b0abbf2d20", bytes: 42671257 },
+  { path: "ltx-2.3-spatial-upscaler-x2-1.1.safetensors", sha256: "5f416311fa8172b65af67530758964708d29a317b830d689a51143b7f91913ed", bytes: 995743560 },
+  { path: "text_projections/model.safetensors", sha256: "94565b15dc9019c2383f9dc3e2d26d89a7b231baf8960449d7de2574dff5c3a0", bytes: 6344492796 },
+  { path: "transformer/config.json", sha256: "a48117b641855fcc65996a84915932b461cef6fca9fa186f8f1e00eae5d50fec", bytes: 899 },
+  { path: "transformer/model-00000-of-00018.safetensors", sha256: "9213093a4bd4fc675a8d50404f0ed434aceb1ea1f8ce870698945a36fd4eb4d2", bytes: 2082912296 },
+  { path: "transformer/model-00001-of-00018.safetensors", sha256: "ca232148fc188b19c0bc158a0a9882cfaaf2c2f8fe71e53258cc5ee8b337253a", bytes: 2144029888 },
+  { path: "transformer/model-00002-of-00018.safetensors", sha256: "11ba2b546405155d1a2215f41d9b0b6dc113764398424fc076220321c9c21054", bytes: 2144171152 },
+  { path: "transformer/model-00003-of-00018.safetensors", sha256: "f97c23b4ad9b47bf0de089b61c33a93b0f64a53b8b2c5426e297108d4418fa1e", bytes: 2034806928 },
+  { path: "transformer/model-00004-of-00018.safetensors", sha256: "b5204bb7d011fcde3c6f6bfd16df183ba39811089d17d03b4c8567a37fe8f8db", bytes: 2144582280 },
+  { path: "transformer/model-00005-of-00018.safetensors", sha256: "d4d176110a3bcadb8ca2ace2f5f9a2fd396129d2466f7ef66f5ae9b6cefcedcc", bytes: 2143923080 },
+  { path: "transformer/model-00006-of-00018.safetensors", sha256: "a3222eeeba97da36ec38a56c66eb37c71afb229ab7803efd6fffee6e0b4364a2", bytes: 2119136960 },
+  { path: "transformer/model-00007-of-00018.safetensors", sha256: "c9928ebfb04a7457e39282d619a72239e006303cd197e69020db633d26ecf5f9", bytes: 2101932680 },
+  { path: "transformer/model-00008-of-00018.safetensors", sha256: "6568dcce0d5e115b5837f6439649a3a5b1f6c7ba9fccea1d9b6985307c857ee4", bytes: 2144582280 },
+  { path: "transformer/model-00009-of-00018.safetensors", sha256: "b1c4cd271aa2b0d956ccdc30764bd0c8b730d4a6a651ecbd076520eba4d27eee", bytes: 2143923080 },
+  { path: "transformer/model-00010-of-00018.safetensors", sha256: "a956731d2ce11b51a3b820227eea31aad92ceda811d0df66ac1bf293b069bf66", bytes: 2119136960 },
+  { path: "transformer/model-00011-of-00018.safetensors", sha256: "e1102c21c977addae2b152918e12b4134c7f6abcdca4a03be26fac58e67e8b70", bytes: 2101932680 },
+  { path: "transformer/model-00012-of-00018.safetensors", sha256: "5e677e3f428f6f217fbb4392a816cb6277af0568de50b54065be1bb3375e4153", bytes: 2144582280 },
+  { path: "transformer/model-00013-of-00018.safetensors", sha256: "455df8d3c56be982d5a6a831930766f01bdff5a271f65166a86f2fd64db400c7", bytes: 2143923080 },
+  { path: "transformer/model-00014-of-00018.safetensors", sha256: "5d24e1a8ad13d88c245678ad32411e15c095fa14ee5f835447dd23dcd29ae0ef", bytes: 2119136960 },
+  { path: "transformer/model-00015-of-00018.safetensors", sha256: "b357191a0c1ff8e1fe951d469d9141e8b122227aeda8d385f693e0b958ec0e51", bytes: 2101932680 },
+  { path: "transformer/model-00016-of-00018.safetensors", sha256: "7142f785ec9941f39f8b0cd430f7f707a5aa34fbb841d62fad61540df6f505eb", bytes: 2144582104 },
+  { path: "transformer/model-00017-of-00018.safetensors", sha256: "87f0947f7939d535334e6680c28eb713d906abb57c6cdaf7298d10a7987cf6ed", bytes: 1908416488 },
+  { path: "transformer/model.safetensors.index.json", sha256: "d0621b08dd20b510cd4dd331b71b771ccd7150109d1ced86ac15ab8c5f70642e", bytes: 378827 },
+  { path: "vae/decoder/config.json", sha256: "96dd67966852fff5eb7ddbeb8be6146a258a16d6d7597668357490c2259b2657", bytes: 253 },
+  { path: "vae/decoder/model.safetensors", sha256: "40fdcbae2dd2aa3576a3e6ae9e797b110e4b036c80e044f04f75fe5a3cee5451", bytes: 814348875 },
+  { path: "vae/decoder/model.safetensors.index.json", sha256: "7fdbe0e2304d5b4a89f8f0d2b9d55142760dde6f455e6f85bef01f7c16db2410", bytes: 6242 },
+  { path: "vae/encoder/config.json", sha256: "2aa542caf145a9443e2747af089f1cb9d238a8b77f0bdcadaf066d21266bd6e4", bytes: 1209 },
+  { path: "vae/encoder/model.safetensors", sha256: "e7972f1d06c8a8414f5d12df25689266bce3e288de3056b0760f9629f68afc9d", bytes: 637884773 },
+  { path: "vae/encoder/model.safetensors.index.json", sha256: "36d94841ea46c13cdd7cae1c02cf7ff6f91c5dd678940452cee4fd62839dad1c", bytes: 6022 },
+  { path: "vocoder/config.json", sha256: "7197b70ccfb95ef61e7d54a96282d273af30bee63081890a0c3a097425e05785", bytes: 1109 },
+  { path: "vocoder/model.safetensors", sha256: "1d9dcddb114eb1ab00e10e46de30a1d47708362bb9bee8b39c7c3c57fa4ba172", bytes: 258309247 },
+  { path: "vocoder/model.safetensors.index.json", sha256: "3758875a357dfe658ddba0cbf324ab66f73a1424b4fd515152c8fdbd8b9c1072", bytes: 87274 },
+];
+export const STACK_VIDEO_DETAILED_MODEL: CatalogModelLike = {
+  id: STACK_VIDEO_DETAILED_MODEL_ID,
+  role: "video",
+  repo: LTX_REPO,
+  license: LTX_LICENCE,
+  revision: LTX_REVISION,
+  engine: VIDEO_ENGINE,
+  sizing: { profile: "p128", quantization: "bf16" },
+  download: {
+    // The primary file is a top-level one (the downloader derives every other file's address from its folder).
+    url: hfUrl(`${LTX_REPO}/resolve/${LTX_REVISION}/${LTX_UPSCALER_FILE}`),
+    sha256: LTX_FILES.find((file) => file.path === LTX_UPSCALER_FILE)!.sha256,
+    approx_bytes: LTX_FILES.reduce((sum, file) => sum + file.bytes, 0),
+    directory: "LTX-2.3-distilled-MLX",
+    files: LTX_FILES,
+  },
+  measured: { footprintBytes: LTX_PEAK_BYTES, contextLength: 0, hardware: "Apple M5 Max, 128 GB unified memory" },
+};
+const GEMMA_REPO = "mlx-community/gemma-3-12b-it-bf16";
+const GEMMA_REVISION = "b8b9b412cb795bd6115fdce8c9a0ef0d1664db3a";
+const GEMMA_FILES = [
+  { path: "added_tokens.json", sha256: "50b2f405ba56a26d4913fd772089992252d7f942123cc0a034d96424221ba946", bytes: 35 },
+  { path: "chat_template.json", sha256: "fe16baf728db49457cde32802cd7efc0ac8a7a9877dbe22fe3322b2d9dc6ccd9", bytes: 1615 },
+  { path: "config.json", sha256: "16a876d6326c4762377a74118847bd3410b66a1875ba05aeb6b695ddbf64b21f", bytes: 1039 },
+  { path: "model-00001-of-00005.safetensors", sha256: "319b50ee905f2cfb3f2a9061ed4858ad77a31a73a35a119ea6b7492347069968", bytes: 5301386994 },
+  { path: "model-00002-of-00005.safetensors", sha256: "c6d569f73b66667ad5c4ad5d34f98a301868f2b98ca1c2deada9da9f002cc0d1", bytes: 5261631359 },
+  { path: "model-00003-of-00005.safetensors", sha256: "8038b2b0e059d3d7a3cdcc911dc3f499952341564526eb9b3b4e6036041b2b37", bytes: 5348137629 },
+  { path: "model-00004-of-00005.safetensors", sha256: "7211182ea44707e0857413691164fc146940cf6b3cdf85f7ff037c59a71d5ffa", bytes: 5363867587 },
+  { path: "model-00005-of-00005.safetensors", sha256: "71666d602253574a56bb07719d5d8a958baa9a1373c2c4255ebbec1fc796bc45", bytes: 5113526967 },
+  { path: "model.safetensors.index.json", sha256: "788cc42a1a92835df62d9a3791f47105f63504c7c404637a73288e9b11bc7b82", bytes: 108605 },
+  { path: "special_tokens_map.json", sha256: "2f7b0adf4fb469770bb1490e3e35df87b1dc578246c5e7e6fc76ecf33213a397", bytes: 662 },
+  { path: "tokenizer.json", sha256: "4667f2089529e8e7657cfb6d1c19910ae71ff5f28aa7ab2ff2763330affad795", bytes: 33384568 },
+  { path: "tokenizer.model", sha256: "1299c11d7cf632ef3b4e11937501358ada021bbdf7c47638d13c0ee982f2e79c", bytes: 4689074 },
+  { path: "tokenizer_config.json", sha256: "0d95398b39395e5cfb290683a78f3fb0551223c672d8b033333c1a5307473760", bytes: 1157007 },
+];
+export const STACK_VIDEO_TEXT_ENCODER: CatalogModelLike = {
+  id: STACK_VIDEO_TEXT_ENCODER_ID,
+  role: "video",
+  component: "text-encoder",
+  repo: GEMMA_REPO,
+  license: "Gemma Terms of Use",
+  revision: GEMMA_REVISION,
+  engine: VIDEO_ENGINE,
+  sizing: { profile: "p128", quantization: "bf16" },
+  download: {
+    url: hfUrl(`${GEMMA_REPO}/resolve/${GEMMA_REVISION}/model-00001-of-00005.safetensors`),
+    sha256: GEMMA_FILES.find((file) => file.path === "model-00001-of-00005.safetensors")!.sha256,
+    approx_bytes: GEMMA_FILES.reduce((sum, file) => sum + file.bytes, 0),
+    directory: "gemma-3-12b-it-bf16-text-encoder",
+    files: GEMMA_FILES,
+  },
+};
+export const STACK_VIDEO_DETAILED_MODELS: CatalogModelLike[] = [STACK_VIDEO_DETAILED_MODEL, STACK_VIDEO_TEXT_ENCODER];
 
 // IMGGEN-STACK-01 (docs/design/image-engine-2026-10-17.md in Home): the
 // image generator's weights for the mflux worker. One family is a primary
@@ -757,7 +879,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_MUSIC_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_DETAILED_MODELS, ...STACK_MUSIC_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

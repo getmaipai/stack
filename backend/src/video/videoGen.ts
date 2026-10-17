@@ -32,13 +32,14 @@ import { getGovernorStatus } from "@/lib/governor";
 import { log } from "@/lib/log";
 import { ffmpegPath, makeMessagesCopy } from "@/video/messages";
 import { getModel } from "@/lib/modelStore";
-import { STACK_VIDEO_MODEL_ID, STACK_VIDEO_TOKENIZER_ID } from "@/lib/modelCatalog";
+import { LTX_PEAK_BYTES, STACK_VIDEO_DETAILED_MODEL_ID, STACK_VIDEO_MODEL_ID, STACK_VIDEO_TEXT_ENCODER_ID, STACK_VIDEO_TOKENIZER_ID } from "@/lib/modelCatalog";
 import { engineTagRoot } from "@/lib/store/layout";
 import { ensureUvEnvironment, managedEnv, uvEnvironmentReady, uvVenvPath, uvVenvPython, type UvEnvironmentSpec } from "@/lib/uvEnvironment";
 import type { RoleStateRecord } from "@/roles";
 import { READY_TTL_MS } from "@/roles";
 import darwinArm64Requirements from "./video-gen.darwin-arm64.requirements.txt" with { type: "file" };
 import workerScript from "./video_worker.py" with { type: "file" };
+import ltxWorkerScript from "./ltx_worker.py" with { type: "file" };
 
 export const VIDEO_GEN_NAME = "video-gen";
 export const VIDEO_GEN_VERSION = MANAGED_RUNTIMES.find((runtime) => runtime.name === VIDEO_GEN_NAME)?.version ?? "87db56a";
@@ -58,6 +59,32 @@ export const VIDEO_QUEUE_MAX = 4;
 export const VIDEO_PEAK_BYTES = 44_088_747_800;
 /** Tiers that run video; the others are off (the 44 GB peak does not fit beside chat). */
 export const VIDEO_TIERS = ["p128"] as const;
+
+/**
+ * VIDEO-LTX-01: the two video models, named the way pictures name theirs. Quick is the FastWan clip (silent, up to 5 s);
+ * Detailed is LTX-2.3 (a sound track with speech made in the same pass, longer clips, a large community LoRA library).
+ * Every number is a hard ceiling in the Stack, measured on the Studio, never a setting.
+ */
+export type VideoQuality = "quick" | "detailed";
+export const VIDEO_QUALITIES: readonly VideoQuality[] = ["quick", "detailed"];
+export interface VideoSpec {
+  quality: VideoQuality; modelId: string; maxSeconds: number; frameStep: number; defaultSize: string; maxPixels: number; sizeStep: number; minSide: number;
+  /** A clip of this model has a sound track. */
+  audio: boolean; peakBytes: number; loraBase: string; worker: "video_worker.py" | "ltx_worker.py";
+  /** A picture can start a clip of this model. Detailed cannot yet: the pinned runtime's picture path fails on LTX-2.3 (measured 2026-10-17, a broadcast_shapes error), so it is off rather than half working. */
+  imageToVideo: boolean;
+}
+export const VIDEO_SPECS: Record<VideoQuality, VideoSpec> = {
+  quick: { quality: "quick", modelId: STACK_VIDEO_MODEL_ID, maxSeconds: VIDEO_MAX_SECONDS, frameStep: 4, defaultSize: VIDEO_DEFAULT_SIZE, maxPixels: VIDEO_MAX_PIXELS, sizeStep: VIDEO_SIZE_STEP, minSide: VIDEO_MIN_SIDE, audio: false, peakBytes: VIDEO_PEAK_BYTES, loraBase: "wan2.2-ti2v-5b", worker: "video_worker.py", imageToVideo: true },
+  detailed: { quality: "detailed", modelId: STACK_VIDEO_DETAILED_MODEL_ID, maxSeconds: 10, frameStep: 8, defaultSize: "768x448", maxPixels: 768 * 448, sizeStep: 64, minSide: 256, audio: true, peakBytes: LTX_PEAK_BYTES, loraBase: "ltx-2.3", worker: "ltx_worker.py", imageToVideo: false },
+};
+/** The quality a request's `model` names: "video" and the Quick pin's id are Quick, "detailed" and the LTX pin's id are Detailed, anything else is unknown. */
+export function qualityOfModelName(name: string | undefined): VideoQuality | null {
+  // Home's lane guard sends a teen or a child the Quick model by this id (Wan 2.2 FastWan); it names the same model.
+  if (name === undefined || name === "" || name === "video" || name === "quick" || name === VIDEO_SPECS.quick.modelId || name === "wan2.2-ti2v-5b-fastwan-mlx") return "quick";
+  if (name === "detailed" || name === VIDEO_SPECS.detailed.modelId) return "detailed";
+  return null;
+}
 const idleMs = (): number => Number(process.env.VIDEO_IDLE_MS ?? 10 * 60_000);
 const deadlineMs = (): number => Number(process.env.VIDEO_DEADLINE_MS ?? 15 * 60_000);
 
@@ -89,9 +116,16 @@ export async function ensureVideoGenEnvironment(onProgress: (phase: string) => v
   await ensureUvEnvironment(spec(), onProgress, options);
 }
 
-export interface VideoModelPaths { modelDir: string; tokenizerDir: string; }
-/** The installed, verified weights and tokenizer folders, or null when either is missing. */
-export function videoModelPaths(): VideoModelPaths | null {
+export interface VideoModelPaths { modelDir: string; tokenizerDir: string; /** Detailed only: the Gemma folder the model reads the prompt with. */ textEncoderDir?: string; }
+/** The installed, verified weights and text folders of one quality, or null when any is missing. */
+export function videoModelPaths(quality: VideoQuality = "quick"): VideoModelPaths | null {
+  if (quality === "detailed") {
+    const ltx = getModel(STACK_VIDEO_DETAILED_MODEL_ID);
+    const encoder = getModel(STACK_VIDEO_TEXT_ENCODER_ID);
+    if (!ltx?.modelPath || !ltx.verifiedAt || !existsSync(join(ltx.modelPath, "transformer", "model-00000-of-00018.safetensors")) || !existsSync(join(ltx.modelPath, "ltx-2.3-spatial-upscaler-x2-1.1.safetensors"))) return null;
+    if (!encoder?.modelPath || !encoder.verifiedAt || !existsSync(join(encoder.modelPath, "model-00001-of-00005.safetensors"))) return null;
+    return { modelDir: ltx.modelPath, tokenizerDir: encoder.modelPath, textEncoderDir: encoder.modelPath };
+  }
   const model = getModel(STACK_VIDEO_MODEL_ID);
   const tokenizer = getModel(STACK_VIDEO_TOKENIZER_ID);
   if (!model?.modelPath || !model.verifiedAt || !existsSync(join(model.modelPath, "model.safetensors"))) return null;
@@ -108,19 +142,19 @@ export function tierAvailability(tier = getGovernorStatus().tier, totalMemoryByt
 }
 
 /** Whether a clip's peak can ever fit beside what is resident right now. A clip that cannot is refused now with the numbers; one that only waits on another generator queues. */
-export function memoryVerdict(): { ok: true } | { ok: false; reason: string } {
+export function memoryVerdict(quality: VideoQuality = "quick"): { ok: true } | { ok: false; reason: string } {
   const lowMemory = lowMemoryRefusal();
   if (lowMemory) return { ok: false, reason: lowMemory };
   const status = getGovernorStatus();
   const resident = status.loaded.filter((item) => item.kind === "resident").reduce((sum, item) => sum + item.peakBytes, 0);
-  if (resident + VIDEO_PEAK_BYTES > status.capBytes) return { ok: false, reason: "Not enough free memory for video right now. Close other big jobs, or try again in a few minutes." };
+  if (resident + VIDEO_SPECS[quality].peakBytes > status.capBytes) return { ok: false, reason: "Not enough free memory for video right now. Close other big jobs, or try again in a few minutes." };
   return { ok: true };
 }
 
 // ---- the worker protocol ----
 
 export interface WorkerRequest {
-  id: string; op: "generate"; model_dir: string; tokenizer_dir: string; prompt: string; negative_prompt: string | null; image: string | null;
+  id: string; op: "generate"; model_dir: string; tokenizer_dir: string; /** Detailed: the Gemma folder, and the ffmpeg that joins sound to picture. */ text_encoder_dir?: string; ffmpeg?: string | null; prompt: string; negative_prompt: string | null; image: string | null;
   width: number; height: number; num_frames: number; seed: number; loras: Array<[string, number]>; output: string; poster: string;
   /** GENPREVIEW-01: where the worker writes the first-frame preview once the motion is done. */
   preview?: string;
@@ -129,24 +163,26 @@ export type WorkerEvent =
   | { id: string | null; event: "phase"; phase: "loading" | "rendering" | "decoding" | "encoding"; percent?: number }
   | { id: string | null; event: "stage"; stage: string; n?: number; of?: number }
   | { id: string | null; event: "preview"; ms?: number };
-export interface WorkerReply { id: string | null; ok: boolean; code?: string; error?: string; width?: number; height?: number; frames?: number; fps?: number; seed?: number; ms?: number; peak_bytes?: number; }
+export interface WorkerReply { id: string | null; ok: boolean; code?: string; error?: string; width?: number; height?: number; frames?: number; fps?: number; seed?: number; ms?: number; peak_bytes?: number; audio?: boolean; }
 export interface WorkerHandle { send(request: WorkerRequest, options: { onEvent: (event: WorkerEvent) => void; deadlineMs: number }): Promise<WorkerReply>; kill(): void; exited: Promise<number>; }
 
 export interface VideoGenDeps {
   supported: () => boolean;
   ensureEnvironment: (onProgress: (phase: string) => void, signal?: AbortSignal) => Promise<void>;
-  spawn: () => Promise<WorkerHandle>;
-  paths: () => VideoModelPaths | null;
+  spawn: (quality: VideoQuality) => Promise<WorkerHandle>;
+  paths: (quality: VideoQuality) => VideoModelPaths | null;
 }
 
 export const defaultVideoGenDeps: VideoGenDeps = {
   supported: () => !!videoRequirementsFileFor(),
   ensureEnvironment: (onProgress, signal) => ensureVideoGenEnvironment(onProgress, { signal }),
   paths: videoModelPaths,
-  spawn: async () => {
+  spawn: async (quality) => {
     const root = videoGenRoot();
-    const script = join(root, "video_worker.py");
-    writeFileSync(script, await Bun.file(workerScript).text());
+    // The Detailed worker imports the Quick worker's helpers (one definition of the protocol), so both files are written.
+    writeFileSync(join(root, "video_worker.py"), await Bun.file(workerScript).text());
+    writeFileSync(join(root, "ltx_worker.py"), await Bun.file(ltxWorkerScript).text());
+    const script = join(root, VIDEO_SPECS[quality].worker);
     const cwd = join(root, "run");
     mkdirSync(cwd, { recursive: true });
     const env = managedEnv({ PYTHONUNBUFFERED: "1", PYTHONDONTWRITEBYTECODE: "1", PYTHONPATH: root, HF_HUB_OFFLINE: "1", TRANSFORMERS_OFFLINE: "1", HF_HUB_DISABLE_PROGRESS_BARS: "1", TQDM_DISABLE: "1", TOKENIZERS_PARALLELISM: "false" });
@@ -205,10 +241,12 @@ export type VideoState = "unsupported" | "off" | "not-installed" | "needs-setup"
 export interface VideoRunInput {
   prompt: string; negativePrompt: string | null; imagePath: string | null; width: number; height: number; frames: number; seed: number;
   loras: Array<[string, number]>; outputDir: string;
+  /** Which model makes the clip (default Quick). */
+  quality?: VideoQuality;
   /** Where the worker writes the first-frame preview (a file the job's runner serves while the clip runs). */
   previewPath?: string;
 }
-export interface VideoRunResult { width: number; height: number; frames: number; fps: number; seed: number; ms: number; peakBytes: number | null; }
+export interface VideoRunResult { width: number; height: number; frames: number; fps: number; seed: number; ms: number; peakBytes: number | null; /** The clip has a sound track the model made. */ audio: boolean; }
 
 /** Overall progress of a clip from the phases, weighted by where the time goes (measured: load 3 percent, denoise 8, decode 85, encode 4). */
 export function overallPercent(phase: string, phasePercent: number): number {
@@ -229,6 +267,7 @@ export interface VideoRunOptions {
 
 export class VideoGenService {
   private worker: WorkerHandle | null = null;
+  private workerQuality: VideoQuality = "quick";
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private building: string | null = null;
   private busy = 0;
@@ -241,7 +280,7 @@ export class VideoGenService {
   /** The suite swaps in a scripted worker; null puts the real one back. */
   useDeps(deps: VideoGenDeps | null): void { this.stopWorker(); this.deps = deps ?? defaultVideoGenDeps; }
   /** Whether the weights and the tokenizer are installed and verified. */
-  hasModels(): boolean { return this.deps.paths() !== null; }
+  hasModels(quality: VideoQuality = "quick"): boolean { return this.deps.paths(quality) !== null; }
 
   /** The worker is alive (loaded) or building; for the role state and the status route. */
   get workerAlive(): boolean { return this.worker !== null; }
@@ -250,7 +289,8 @@ export class VideoGenService {
 
   status(): { state: VideoState; phase: string | null; building: string | null; models: boolean; environment: boolean } {
     const availability = tierAvailability();
-    const models = this.deps.paths() !== null;
+    // Either model counts: a computer with only Detailed installed can make a video.
+    const models = this.deps.paths("quick") !== null || this.deps.paths("detailed") !== null;
     const state: VideoState = !this.deps.supported() ? "unsupported" : !availability.available ? "off" : !models ? "not-installed" : this.building ? "building" : this.busy > 0 ? "running" : this.worker ? "idle" : "needs-setup";
     return { state, phase: this.busy > 0 ? this.lastPhase : null, building: this.building, models, environment: videoGenEnvironmentReady() };
   }
@@ -262,7 +302,9 @@ export class VideoGenService {
     return next;
   }
 
-  private async ensureWorker(onPhase: (phase: string, percent: number) => void, signal?: AbortSignal): Promise<WorkerHandle> {
+  private async ensureWorker(quality: VideoQuality, onPhase: (phase: string, percent: number) => void, signal?: AbortSignal): Promise<WorkerHandle> {
+    // One video model is in memory at a time: the other one's worker leaves before this one starts.
+    if (this.worker && this.workerQuality !== quality) this.stopWorker();
     if (this.worker) return this.worker;
     onPhase("setting up", 0);
     try {
@@ -272,8 +314,9 @@ export class VideoGenService {
       throw new VideoError("setup_failed", `The video engine could not be set up: ${error instanceof Error ? error.message : String(error)}. Check this computer's internet connection and try again.`, 503);
     } finally { this.building = null; }
     try {
-      const worker = await this.deps.spawn();
+      const worker = await this.deps.spawn(quality);
       this.worker = worker;
+      this.workerQuality = quality;
       void worker.exited.then(() => { if (this.worker === worker) this.stopWorker(); });
       return worker;
     } catch (error) {
@@ -300,16 +343,17 @@ export class VideoGenService {
   private async execute(input: VideoRunInput, options: VideoRunOptions): Promise<VideoRunResult> {
     const onPhase = (phase: string, percent: number) => { this.lastPhase = phase; options.onPhase?.(phase, percent); };
     if (options.signal?.aborted) throw new VideoError("cancelled", "Cancelled.", 499);
-    const paths = this.deps.paths();
-    if (!paths) throw new VideoError("model_missing", "The video model is not installed yet. Install it from Home's Engines page, then try again.", 503);
+    const quality = input.quality ?? "quick";
+    const paths = this.deps.paths(quality);
+    if (!paths) throw new VideoError("model_missing", quality === "detailed" ? "The Detailed video model is not installed yet. An admin can install it in Settings, Models and storage, then try again." : "The video model is not installed yet. Install it from Home's Engines page, then try again.", 503);
     this.busy += 1;
     if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
     try {
-      const worker = await this.ensureWorker(onPhase, options.signal);
+      const worker = await this.ensureWorker(quality, onPhase, options.signal);
       mkdirSync(input.outputDir, { recursive: true, mode: 0o700 });
       const output = join(input.outputDir, "video.mp4");
       const poster = join(input.outputDir, "poster.jpg");
-      const request: WorkerRequest = { id: options.jobId, op: "generate", model_dir: paths.modelDir, tokenizer_dir: paths.tokenizerDir, prompt: input.prompt, negative_prompt: input.negativePrompt, image: input.imagePath, width: input.width, height: input.height, num_frames: input.frames, seed: input.seed, loras: input.loras, output, poster, ...(input.previewPath ? { preview: input.previewPath } : {}) };
+      const request: WorkerRequest = { id: options.jobId, op: "generate", model_dir: paths.modelDir, tokenizer_dir: paths.tokenizerDir, ...(paths.textEncoderDir ? { text_encoder_dir: paths.textEncoderDir, ffmpeg: ffmpegPath(videoGenRoot()) } : {}), prompt: input.prompt, negative_prompt: input.negativePrompt, image: input.imagePath, width: input.width, height: input.height, num_frames: input.frames, seed: input.seed, loras: input.loras, output, poster, ...(input.previewPath ? { preview: input.previewPath } : {}) };
       const aborted = new Promise<never>((_, reject) => {
         const stop = () => { this.stopWorker(); reject(new VideoError("cancelled", "Cancelled.", 499)); };
         if (options.signal?.aborted) stop(); else options.signal?.addEventListener("abort", stop, { once: true });
@@ -331,7 +375,7 @@ export class VideoGenService {
         try { await makeMessagesCopy(output, output, "MaiPai video", videoGenRoot()); } catch (error) { log(`video: kept the plain clip, the messaging copy failed: ${error instanceof Error ? error.message : "unknown"}`); }
       }
       this.lastSuccessAt = Date.now();
-      return { width: reply.width ?? input.width, height: reply.height ?? input.height, frames: reply.frames ?? input.frames, fps: reply.fps ?? VIDEO_FPS, seed: reply.seed ?? input.seed, ms: reply.ms ?? 0, peakBytes: reply.peak_bytes ?? null };
+      return { width: reply.width ?? input.width, height: reply.height ?? input.height, frames: reply.frames ?? input.frames, fps: reply.fps ?? VIDEO_FPS, seed: reply.seed ?? input.seed, ms: reply.ms ?? 0, peakBytes: reply.peak_bytes ?? null, audio: reply.audio === true };
     } finally {
       this.busy -= 1;
       if (options.signal?.aborted) rmSync(input.outputDir, { recursive: true, force: true });

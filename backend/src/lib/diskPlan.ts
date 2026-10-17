@@ -11,7 +11,7 @@ import measured from "@/lib/diskPlanMeasured.json";
 import { PROFILE_TIERS, type ProfileTier } from "@/profiles";
 import {
   CHATTERBOX_ENGINE, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS,
-  STACK_MODELS, STACK_MUSIC_MODELS, STACK_VIDEO_MODELS,
+  STACK_MODELS, STACK_MUSIC_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_DETAILED_MODELS,
 } from "@/lib/modelCatalog";
 import { plannedPinsFor } from "@/lib/installPlan";
 import type { CatalogModelLike } from "@/lib/modelStore";
@@ -179,6 +179,7 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   }
   if (!tier.notAvailable.includes("video")) rows.push(modelRow({ id: "video", label: "Make videos (Wan2.2)", note: "Makes a short clip from a sentence or a picture. Optional.", need: "optional", engines: ["engine:video", "engine:python"] }, STACK_VIDEO_MODELS));
   if (!tier.notAvailable.includes("music")) rows.push(modelRow({ id: "music", label: "Make music (ACE-Step 1.5)", note: "Makes and changes songs in chat. Optional.", need: "optional", engines: ["engine:music", "engine:python"] }, STACK_MUSIC_MODELS));
+  if (!tier.notAvailable.includes("video") && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "video-detailed", label: "Detailed videos with sound (LTX-2.3)", note: "Longer clips with a sound track and spoken words, and a large library of styles. Slower than the quick clip. Optional; needs the licence accepted.", need: "optional", engines: ["engine:video", "engine:python"] }, STACK_VIDEO_DETAILED_MODELS));
   const search = table.engines["search-helper"]!;
   rows.push({ id: "search", label: "Search helper", note: "Looks up web search results for adults, when web search is turned on.", kind: "model", need: "recommended", selectable: false, download_bytes: search.download_bytes, installed_bytes: search.installed_bytes, peak_temp_bytes: search.peak_temp_bytes, model_ids: [], engines: [], installed: false, basis: search.basis });
   const used = new Set(rows.flatMap((row) => row.engines));

@@ -268,3 +268,60 @@ test("the real component ids are unique and every required one is a pin of the i
   const list = await listComponents(hw());
   for (const row of list.components.filter((c) => c.requirement === "required")) expect(row.requirement_reason).toBe("Home installs this on a computer of this size.");
 });
+
+// ---- VIDEO-LTX-01: the Detailed video model's licence, size and gate ----
+
+test("the real list offers Detailed video on a 128 GB computer only: optional, its plain size, and the licence it needs accepted", async () => {
+  __setComponentUnitsForTests(null);
+  const list = await listComponents(hw());
+  const detailed = list.components.find((c) => c.id === "ltx-2-3-distilled-mlx")!;
+  expect(detailed).toMatchObject({ label: "Video: Detailed (LTX-2.3)", group: "video", requirement: "optional", state: "notInstalled", can_install: true, plan_need: "optional" });
+  expect(detailed.full_bytes).toBeGreaterThan(70e9);
+  expect(detailed.licence).toMatchObject({ id: "ltx-2.x-community-2026-08-11", accepted_at: null });
+  expect(detailed.licence!.summary.join(" ")).toContain("$10 million");
+  expect(detailed.licence!.summary.join(" ")).toContain("children");
+  const quick = list.components.find((c) => c.id === "fastwan2-2-ti2v-5b-mlx-bf16")!;
+  expect(quick.licence).toBeNull();
+  expect(quick.label).toContain("Quick");
+  for (const tier of [{ unifiedMemoryGb: 64, totalRamGb: 64 }, { unifiedMemoryGb: 32, totalRamGb: 32 }]) {
+    const small = (await listComponents(hw(tier))).components.find((c) => c.id === "ltx-2-3-distilled-mlx")!;
+    expect(small.requirement).toBe("unsupported");
+    expect(small.can_install).toBe(false);
+  }
+});
+
+test("Detailed video does not install until the licence is accepted, then installs and asks no more", async () => {
+  const { LTX_LICENCE_NOTICE } = await import("@/lib/modelCatalog");
+  const { licenceAcceptance } = await import("@/lib/licenceAcceptance");
+  rmSync(join(dataDir, "licence-acceptances.json"), { force: true });
+  __setComponentUnitsForTests([unit({ id: "tiny-detailed", licenceNotice: LTX_LICENCE_NOTICE })]);
+  const view = (await listComponents(hw())).components.find((c) => c.id === "tiny-detailed")!;
+  expect(view.licence).toMatchObject({ id: LTX_LICENCE_NOTICE.id, accepted_at: null });
+  await expect(startComponentInstall("tiny-detailed", hw())).rejects.toMatchObject({ code: "licence_required", status: 409 });
+  await expect(startComponentInstall("tiny-detailed", hw(), { licence: "some-other-licence" })).rejects.toMatchObject({ code: "licence_required" });
+  expect(licenceAcceptance(LTX_LICENCE_NOTICE.id)).toBeNull();
+  expect(getJob("none")).toBeNull();
+  const started = await startComponentInstall("tiny-detailed", hw(), { licence: LTX_LICENCE_NOTICE.id, by: "an admin" });
+  expect(started.job).not.toBeNull();
+  await __settleComponentInstallsForTests();
+  expect(licenceAcceptance(LTX_LICENCE_NOTICE.id)).toMatchObject({ licence: LTX_LICENCE_NOTICE.id, by: "an admin" });
+  expect((await listComponents(hw())).components.find((c) => c.id === "tiny-detailed")!.licence!.accepted_at).not.toBeNull();
+  // After a removal, the next install does not ask again.
+  await uninstallComponent("tiny-detailed");
+  expect((await startComponentInstall("tiny-detailed", hw())).job).not.toBeNull();
+  await __settleComponentInstallsForTests();
+  rmSync(join(dataDir, "licence-acceptances.json"), { force: true });
+});
+
+test("the install route takes the accepted licence in its body and refuses without it", async () => {
+  const { LTX_LICENCE_NOTICE } = await import("@/lib/modelCatalog");
+  rmSync(join(dataDir, "licence-acceptances.json"), { force: true });
+  __setComponentUnitsForTests([unit({ id: "tiny-detailed", licenceNotice: LTX_LICENCE_NOTICE })]);
+  const refused = await app.request("/stack/v1/components/tiny-detailed/install", { method: "POST" });
+  expect(refused.status).toBe(409);
+  expect(await refused.json()).toMatchObject({ code: "licence_required" });
+  const accepted = await app.request("/stack/v1/components/tiny-detailed/install", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ accepted_licence: LTX_LICENCE_NOTICE.id, accepted_by: "an admin" }) });
+  expect(accepted.status).toBe(202);
+  await __settleComponentInstallsForTests();
+  rmSync(join(dataDir, "licence-acceptances.json"), { force: true });
+});

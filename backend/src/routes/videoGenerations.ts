@@ -23,7 +23,7 @@ import { LoraError, resolveLoras } from "@/video/loras";
 import { LikenessError, photoBind, verifyProof, type LikenessCheck } from "@/lib/likeness";
 import { wasGeneratedHere } from "@/video/provenance";
 import { deleteResult, isJobId, messagesPath, posterPath, readResult, videoPath, type VideoResultMeta } from "@/video/results";
-import { memoryVerdict, tierAvailability, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, videoGen, videoGenRoot } from "@/video/videoGen";
+import { memoryVerdict, qualityOfModelName, tierAvailability, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, VIDEO_SPECS, videoGen, videoGenRoot, type VideoQuality } from "@/video/videoGen";
 import { stashClip, unstashClip, videoFailure, videoPreviewPath, videoProgress, videoTracker, VIDEO_JOB_KIND } from "@/video/jobs";
 
 const DEFAULT_WAIT_MS = 30_000;
@@ -31,26 +31,26 @@ const MAX_WAIT_MS = 30 * 60_000;
 
 const LoraEntry = z.object({ id: z.string().max(40), strength: z.number().min(0).max(2).optional(), likeness_proof: z.string().max(4096).optional().openapi({ description: "Needed when the LoRA looks like a person (its record has a likeness_subject): Home's signed, short-lived proof that the person agreed, bound to this LoRA." }) });
 const VideoRequestSchema = z.object({
-  model: z.string().optional().openapi({ description: "Accepted for symmetry with the other job routes; this route always serves the video role.", example: "video" }),
+  model: z.string().optional().openapi({ description: "Which video model: `video` or `quick` (the default, a silent clip of up to 5 s, which can start from a picture) or `detailed` (LTX-2.3: a sound track with speech made in the same pass, up to 15 s, from words only for now: a picture with `detailed` answers 422 reference_unsupported). A model's own id names it too. An unknown name is refused (unknown_model); a model that is not installed answers 503 not_installed.", example: "quick" }),
   prompt: z.string().trim().min(1).max(VIDEO_MAX_PROMPT_CHARS),
   negative_prompt: z.string().max(VIDEO_MAX_PROMPT_CHARS).optional().openapi({ description: "Accepted. The distilled FastWan model runs without guidance, so it has no effect on the clip." }),
   image: z.string().optional().openapi({ description: "Image to video: the first frame, base64 (a data: URL is fine), PNG, JPEG or WebP, at most 20 MB. Needs image_source." }),
   image_source: z.enum(["generated", "uploaded", "household_photo"]).optional().openapi({ description: "Where the picture came from, as Home knows it. `generated`: a picture this Stack's own image generator produced (or the poster of one of its clips); the Stack checks the picture's hash. `household_photo`: a photo of a consenting household adult, accepted only with `consent_proof`. `uploaded` (any other photo) is refused for everyone: a photo that may show a real person needs the household proof (VIDEO-GEN-12, LIKENESS-01)." }),
   consent_proof: z.string().max(4096).optional().openapi({ description: "With `image_source: household_photo`: Home's signed proof that the person in the photo is a household adult who agreed, bound to this exact picture (its sha256) and valid for at most 30 minutes. Checked when the request arrives and again when the clip starts." }),
-  size: z.string().regex(/^\d{3,4}x\d{3,4}$/).optional().openapi({ description: `<width>x<height>, multiples of ${VIDEO_SIZE_STEP}, each side at least ${VIDEO_MIN_SIDE}, area at most ${VIDEO_MAX_PIXELS} pixels (832x480; 480x832 also fits). Default ${VIDEO_DEFAULT_SIZE}.`, example: VIDEO_DEFAULT_SIZE }),
+  size: z.string().regex(/^\d{3,4}x\d{3,4}$/).optional().openapi({ description: `<width>x<height>. Quick: multiples of ${VIDEO_SIZE_STEP}, area at most ${VIDEO_MAX_PIXELS} pixels (832x480; 480x832 also fits), default ${VIDEO_DEFAULT_SIZE}. Detailed: multiples of 64, area at most 768 x 448 (448x768 also fits), default 768x448. Each side at least ${VIDEO_MIN_SIDE}.`, example: VIDEO_DEFAULT_SIZE }),
   preview: z.boolean().optional().openapi({ description: "Default true. While the clip runs, the status carries `preview_url`: the first frame of the clip (JPEG, up to 480 px on the long side), drawn from the finished motion the moment the long frame-building stage starts. Pass false to skip it (it costs about a second)." }),
-  seconds: z.number().int().min(1).max(VIDEO_MAX_SECONDS).optional().openapi({ description: `Whole seconds, 1 to ${VIDEO_MAX_SECONDS} per tier (24 frames a second plus the first frame). Default ${VIDEO_MAX_SECONDS}.` }),
+  seconds: z.number().int().min(1).max(VIDEO_SPECS.detailed.maxSeconds).optional().openapi({ description: `Whole seconds (24 frames a second plus the first frame). Quick: 1 to ${VIDEO_MAX_SECONDS}, default ${VIDEO_MAX_SECONDS}. Detailed: 1 to ${VIDEO_SPECS.detailed.maxSeconds}, default 5. A number past the chosen model ceiling is refused (bad_seconds).` }),
   seed: z.number().int().min(0).max(4_294_967_295).optional(),
   loras: z.array(LoraEntry).max(4).optional().openapi({ description: "LoRAs from the household library (GET /stack/v1/video/loras) to apply, by id, with a strength of 0 to 2 (the record's default when left out). Home decides which ids this caller may name." }),
   audience: z.enum(["all-ages", "adult"]).optional().openapi({ description: "Who the clip is for, set by Home from the person's age band and the surface. Default all-ages. An adult-only LoRA in the list with audience all-ages is refused (422 lora_not_allowed)." }),
   timeout_ms: z.number().int().positive().max(MAX_WAIT_MS).optional().openapi({ description: `How long this request waits for the clip before answering 202 with the job id. Default ${DEFAULT_WAIT_MS}. A clip takes about two to three minutes.` }),
 });
 const VideoDataSchema = z.object({
-  url: z.string().openapi({ description: "GET this for the mp4 (H.264, yuv420p, 24 fps, no sound). Supports Range requests." }),
+  url: z.string().openapi({ description: "GET this for the mp4 (H.264, yuv420p, 24 fps; a Detailed clip has an AAC sound track the model made, a Quick clip a silent one). Supports Range requests." }),
   poster_url: z.string().openapi({ description: "GET this for the JPEG of frame 0." }),
   content_type: z.literal("video/mp4"),
   width: z.number().int(), height: z.number().int(), frames: z.number().int(), fps: z.number().int(), seconds: z.number().int(), seed: z.number().int(),
-  model: z.string(), mode: z.enum(["text-to-video", "image-to-video"]), lora_ids: z.array(z.string()), ms: z.number().int(), bytes: z.number().int(), poster_bytes: z.number().int(),
+  model: z.string(), quality: z.enum(["quick", "detailed"]), audio: z.boolean().openapi({ description: "The clip has a sound track the model made (Detailed). A Quick clip carries a silent track and answers false." }), mode: z.enum(["text-to-video", "image-to-video"]), lora_ids: z.array(z.string()), ms: z.number().int(), bytes: z.number().int(), poster_bytes: z.number().int(),
 });
 const VideoResponseSchema = z.object({ created: z.number().int(), job: z.string(), data: z.array(VideoDataSchema) });
 const ErrorBody = z.object({ error: z.string(), code: z.string(), job: z.string().optional() });
@@ -126,17 +126,18 @@ function reply<T extends Context>(c: T, body: unknown, status: number) {
 const fail = <T extends Context>(c: T, status: number, code: string, error: string, job?: string) => reply(c, { error, code, ...(job ? { job } : {}) }, status);
 
 function entry(meta: VideoResultMeta) {
-  return { url: `/v1/videos/generations/${meta.job}/video.mp4`, poster_url: `/v1/videos/generations/${meta.job}/poster.jpg`, content_type: "video/mp4" as const, width: meta.width, height: meta.height, frames: meta.frames, fps: meta.fps, seconds: meta.seconds, seed: meta.seed, model: meta.model, mode: meta.mode, lora_ids: meta.lora_ids, ms: meta.ms, bytes: meta.bytes, poster_bytes: meta.poster_bytes };
+  return { url: `/v1/videos/generations/${meta.job}/video.mp4`, poster_url: `/v1/videos/generations/${meta.job}/poster.jpg`, content_type: "video/mp4" as const, width: meta.width, height: meta.height, frames: meta.frames, fps: meta.fps, seconds: meta.seconds, seed: meta.seed, model: meta.model, quality: meta.quality ?? "quick", audio: meta.audio === true, mode: meta.mode, lora_ids: meta.lora_ids, ms: meta.ms, bytes: meta.bytes, poster_bytes: meta.poster_bytes };
 }
 
 /** "832x480" to width and height, or the sentence to return. */
-export function parseVideoSize(size: string | undefined): { width: number; height: number } | string {
-  const match = /^(\d{3,4})x(\d{3,4})$/.exec(size ?? VIDEO_DEFAULT_SIZE);
-  if (!match) return `The size must look like ${VIDEO_DEFAULT_SIZE}.`;
+export function parseVideoSize(size: string | undefined, quality: VideoQuality = "quick"): { width: number; height: number } | string {
+  const spec = VIDEO_SPECS[quality];
+  const match = /^(\d{3,4})x(\d{3,4})$/.exec(size ?? spec.defaultSize);
+  if (!match) return `The size must look like ${spec.defaultSize}.`;
   const width = Number(match[1]); const height = Number(match[2]);
-  if (width % VIDEO_SIZE_STEP || height % VIDEO_SIZE_STEP) return `Width and height must be multiples of ${VIDEO_SIZE_STEP} (832x480 is the default).`;
-  if (width < VIDEO_MIN_SIDE || height < VIDEO_MIN_SIDE) return `Each side must be at least ${VIDEO_MIN_SIDE} pixels.`;
-  if (width * height > VIDEO_MAX_PIXELS) return `That size is larger than this computer makes. The most is 832x480 (or 480x832): ${VIDEO_MAX_PIXELS} pixels.`;
+  if (width % spec.sizeStep || height % spec.sizeStep) return `Width and height must be multiples of ${spec.sizeStep} (${spec.defaultSize} is the default).`;
+  if (width < spec.minSide || height < spec.minSide) return `Each side must be at least ${spec.minSide} pixels.`;
+  if (width * height > spec.maxPixels) { const [w, h] = spec.defaultSize.split("x"); return `That size is larger than this computer makes. The most is ${spec.defaultSize} (or ${h}x${w}): ${spec.maxPixels} pixels.`; }
   return { width, height };
 }
 
@@ -189,9 +190,14 @@ videoV1Routes.openapi(postRoute, async (c) => {
   const availability = tierAvailability();
   if (!availability.available) return fail(c, 503, availability.code ?? "unsupported", availability.reason ?? "Video is not available on this computer.");
   if (!hasJobRunner(VIDEO_JOB_KIND)) return fail(c, 503, "unsupported", "Video is not available on this machine.");
-  const size = parseVideoSize(body.size);
+  const quality = qualityOfModelName(body.model);
+  if (!quality) return fail(c, 422, "unknown_model", "That video model is not one this computer has. Use quick (silent, up to 5 seconds) or detailed (with sound and speech, up to 10 seconds).");
+  const spec = VIDEO_SPECS[quality];
+  if (body.image !== undefined && !spec.imageToVideo) return fail(c, 422, "reference_unsupported", "A Detailed video cannot start from a picture yet. Ask for a Quick video to animate a picture, or describe the Detailed video in words.");
+  const size = parseVideoSize(body.size, quality);
   if (typeof size === "string") return fail(c, 422, "bad_size", size);
-  const seconds = body.seconds ?? VIDEO_MAX_SECONDS;
+  const seconds = body.seconds ?? (quality === "quick" ? VIDEO_MAX_SECONDS : 5);
+  if (seconds > spec.maxSeconds) return fail(c, 422, "bad_seconds", `A ${quality === "quick" ? "Quick" : "Detailed"} clip is at most ${spec.maxSeconds} seconds on this computer.${quality === "quick" ? " Detailed clips run up to " + VIDEO_SPECS.detailed.maxSeconds + " seconds." : ""}`);
   let image: Uint8Array | null = null;
   const checks: LikenessCheck[] = [];
   if (body.image !== undefined) {
@@ -214,23 +220,23 @@ videoV1Routes.openapi(postRoute, async (c) => {
     }
   }
   let loras;
-  try { loras = await resolveLoras((body.loras ?? []).map((entry) => ({ id: entry.id, ...(entry.strength !== undefined ? { strength: entry.strength } : {}), ...(entry.likeness_proof !== undefined ? { likenessProof: entry.likeness_proof } : {}) })), body.audience ?? "all-ages"); } catch (error) {
+  try { loras = await resolveLoras((body.loras ?? []).map((entry) => ({ id: entry.id, ...(entry.strength !== undefined ? { strength: entry.strength } : {}), ...(entry.likeness_proof !== undefined ? { likenessProof: entry.likeness_proof } : {}) })), body.audience ?? "all-ages", spec.loraBase as "wan2.2-ti2v-5b" | "ltx-2.3"); } catch (error) {
     if (error instanceof LoraError) return fail(c, error.status === 404 ? 422 : error.status, error.code, error.message);
     throw error;
   }
   for (const lora of loras) if (lora.likeness) checks.push(lora.likeness);
   // The age and surface gate outranks a consent: a clip that looks like a person is for an adult audience only.
   if (checks.length > 0 && (body.audience ?? "all-ages") !== "adult") return fail(c, 403, "likeness_adult_only", "A video that looks like a person is only made for an adult on their own screen. Ask Home to make it from a signed-in adult's chat.");
-  if (!videoGen.hasModels()) return fail(c, 503, "not_installed", "The video model is not installed yet. Install it from Home's Engines page, then try again.");
+  if (!videoGen.hasModels(quality)) return fail(c, 503, "not_installed", quality === "detailed" ? "The Detailed video model is not installed yet. An admin can install it in Settings, Models and storage, then try again." : "The video model is not installed yet. Install it from Home's Engines page, then try again.");
   if (activeClips() >= VIDEO_QUEUE_MAX) return fail(c, 429, "queue_full", `${VIDEO_QUEUE_MAX} clips are already waiting. Try again when one finishes.`);
-  const verdict = memoryVerdict();
+  const verdict = memoryVerdict(quality);
   if (!verdict.ok) return fail(c, 503, "no_memory", verdict.reason);
   const seed = body.seed ?? Math.floor(Math.random() * 2 ** 32);
   const frames = seconds * VIDEO_FPS + 1;
   const token = crypto.randomUUID();
   const loraIds = loras.map((lora) => lora.record.id);
-  stashClip(token, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, likeness: checks, preview: body.preview !== false });
-  const submitted = submitJob({ kind: VIDEO_JOB_KIND, role: "video", input: { token, size: `${size.width}x${size.height}`, seconds, seed, mode: image ? "image-to-video" : "text-to-video", lora_ids: loraIds, likeness: checks.length > 0 } });
+  stashClip(token, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, likeness: checks, preview: body.preview !== false });
+  const submitted = submitJob({ kind: VIDEO_JOB_KIND, role: "video", input: { token, size: `${size.width}x${size.height}`, seconds, seed, quality, mode: image ? "image-to-video" : "text-to-video", lora_ids: loraIds, likeness: checks.length > 0 } });
   if ("refused" in submitted) return fail(c, 503, "unsupported", submitted.reason);
   const settled = await waitForJob(submitted.job.id, body.timeout_ms ?? DEFAULT_WAIT_MS);
   const created = Math.floor(new Date(submitted.job.createdAt).getTime() / 1000);

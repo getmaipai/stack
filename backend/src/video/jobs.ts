@@ -9,12 +9,12 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { registerJobRunner } from "@/lib/jobs";
-import { STACK_VIDEO_MODEL_ID } from "@/lib/modelCatalog";
+
 import { workDir, commitResult, type VideoResultMeta } from "./results";
 import { recordGeneratedImage } from "./provenance";
 import { LikenessError, recheck, type LikenessCheck } from "@/lib/likeness";
 import { GenTracker, historyKey, previewExists, previewFile, recordRun } from "@/lib/genProgress";
-import { overallPercent, VideoError, videoGen, VIDEO_PEAK_BYTES } from "./videoGen";
+import { overallPercent, VideoError, videoGen, VIDEO_SPECS, type VideoQuality } from "./videoGen";
 
 export const VIDEO_JOB_KIND = "video_generation";
 
@@ -25,6 +25,8 @@ export interface StashedClip {
   width: number; height: number; frames: number; seed: number;
   loras: Array<[string, number]>;
   loraIds: string[];
+  /** Which model makes the clip (default Quick). */
+  quality?: VideoQuality;
   /** LIKENESS-01: the proofs this clip rests on, checked again when it starts. */
   likeness?: LikenessCheck[];
   /** GENPREVIEW-01: draw the first-frame preview when the motion is done (default on). */
@@ -84,9 +86,12 @@ export function registerVideoJobs(): void {
       if (clip.image) { imagePath = join(work, "reference.bin"); writeFileSync(imagePath, clip.image, { mode: 0o600 }); }
       const outputDir = join(work, "out");
       const started = Date.now();
-      const tracker = new GenTracker("video", historyKey("video", clip.width, clip.height, clip.frames));
+      const quality = clip.quality ?? "quick";
+      const tracker = quality === "quick"
+        ? new GenTracker("video", historyKey("video", clip.width, clip.height, clip.frames))
+        : new GenTracker("video_detailed", historyKey("video_detailed", clip.width, clip.height, clip.frames), Date.now, Math.max(0.25, (clip.frames - 1) / 120));
       remember(trackers, job.id, tracker);
-      const result = await videoGen.run({ ...(clip.preview !== false ? { previewPath: previewFile(outputDir) } : {}), prompt: clip.prompt, negativePrompt: clip.negativePrompt, imagePath, width: clip.width, height: clip.height, frames: clip.frames, seed: clip.seed, loras: clip.loras, outputDir }, {
+      const result = await videoGen.run({ ...(clip.preview !== false ? { previewPath: previewFile(outputDir) } : {}), prompt: clip.prompt, negativePrompt: clip.negativePrompt, imagePath, width: clip.width, height: clip.height, frames: clip.frames, seed: clip.seed, loras: clip.loras, outputDir, quality }, {
         jobId: job.id, signal,
         onPhase: (phase, phasePercent) => { remember(progress, job.id, { phase, phasePercent }); update({ status: phase, percent: tracker.started ? Math.round(tracker.snapshot().fraction * 100) : overallPercent(phase, phasePercent) }); },
         onStage: (stage, n, of) => { tracker.enter(stage, n, of); update({ percent: Math.round(tracker.snapshot().fraction * 100) }); },
@@ -97,7 +102,7 @@ export function registerVideoJobs(): void {
       const poster = join(outputDir, "poster.jpg");
       const meta: VideoResultMeta = {
         job: job.id, created: Math.floor(new Date(job.createdAt).getTime() / 1000), width: result.width, height: result.height, frames: result.frames, fps: result.fps, seconds: Math.round((result.frames - 1) / result.fps),
-        seed: result.seed, model: STACK_VIDEO_MODEL_ID, mode: clip.image ? "image-to-video" : "text-to-video", lora_ids: clip.loraIds, ms: Date.now() - started,
+        seed: result.seed, model: VIDEO_SPECS[quality].modelId, quality, audio: result.audio, mode: clip.image ? "image-to-video" : "text-to-video", lora_ids: clip.loraIds, ms: Date.now() - started,
         bytes: Bun.file(video).size, poster_bytes: Bun.file(poster).size, mlx_peak_gb: result.peakBytes === null ? null : Math.round(result.peakBytes / 1e8) / 10,
       };
       update({ status: "ready", percent: 100 });
@@ -113,5 +118,5 @@ export function registerVideoJobs(): void {
     } finally {
       rmSync(work, { recursive: true, force: true });
     }
-  }, { generator: { role: "video", memory: () => ({ requestedBytes: VIDEO_PEAK_BYTES, measuredPeakBytes: VIDEO_PEAK_BYTES, engine: "video-gen" }) } });
+  }, { generator: { role: "video", memory: (job) => { const peak = VIDEO_SPECS[(job.input as { quality?: VideoQuality } | null)?.quality ?? "quick"].peakBytes; return { requestedBytes: peak, measuredPeakBytes: peak, engine: "video-gen" }; } } });
 }

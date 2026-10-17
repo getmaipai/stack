@@ -23,12 +23,12 @@ export function ffmpegPath(root: string): string | null {
   } catch { return null; }
 }
 
-export interface ClipFacts { videoCodec: string | null; pixelFormat: string | null; width: number; height: number; hasAudio: boolean }
+export interface ClipFacts { videoCodec: string | null; pixelFormat: string | null; width: number; height: number; hasAudio: boolean; audioCodec?: string | null }
 
 /** Reads the facts the plan needs from `ffmpeg -i` (it prints the streams on stderr and exits 1 for want of an output). */
 export function parseProbe(text: string): ClipFacts {
   const video = /Stream #\S+: Video: (\w+)[^,\n]*(?:\([^)]*\))?[^,\n]*, (\w+)[^,\n]*, (\d{2,5})x(\d{2,5})/.exec(text);
-  return { videoCodec: video?.[1] ?? null, pixelFormat: video?.[2] ?? null, width: Number(video?.[3] ?? 0), height: Number(video?.[4] ?? 0), hasAudio: /Stream #\S+: Audio:/.test(text) };
+  return { videoCodec: video?.[1] ?? null, pixelFormat: video?.[2] ?? null, width: Number(video?.[3] ?? 0), height: Number(video?.[4] ?? 0), hasAudio: /Stream #\S+: Audio:/.test(text), audioCodec: /Stream #\S+: Audio: (\w+)/.exec(text)?.[1] ?? null };
 }
 
 export async function probeClip(ffmpeg: string, file: string): Promise<ClipFacts> {
@@ -47,7 +47,11 @@ export function messagesArgs(input: string, output: string, facts: ClipFacts, ti
   args.push("-map", "0:v:0", "-map", facts.hasAudio ? "0:a:0" : "1:a:0");
   if (copy) args.push("-c:v", "copy");
   else args.push("-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", "-crf", forceReencode ? "27" : "21", "-vf", `scale='min(${MESSAGES_MAX_EDGE},iw)':'min(${MESSAGES_MAX_EDGE},ih)':force_original_aspect_ratio=decrease:force_divisible_by=2`);
-  args.push("-tag:v", "avc1", "-c:a", "aac", "-b:a", "96k", "-ar", "44100", "-shortest", "-movflags", "+faststart", "-map_metadata", "-1", "-metadata", `title=${title}`, "-f", "mp4", output);
+  // A sound track the model made is kept exactly as it is when it is already AAC (VIDEO-LTX-01); a silent clip gets the silent one.
+  args.push("-tag:v", "avc1");
+  if (facts.hasAudio && facts.audioCodec === "aac") args.push("-c:a", "copy");
+  else args.push("-c:a", "aac", "-b:a", facts.hasAudio ? "192k" : "96k", "-ar", facts.hasAudio ? "48000" : "44100");
+  args.push("-shortest", "-movflags", "+faststart", "-map_metadata", "-1", "-metadata", `title=${title}`, "-f", "mp4", output);
   return args;
 }
 

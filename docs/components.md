@@ -273,9 +273,11 @@ Engines per platform:
 | p16 | not available |  |  |  |  |  |  |  | not available |
 | p32 | not available |  |  |  |  |  |  |  | not available |
 | p64 | not available |  |  |  |  |  |  |  | not available |
-| p128 | on demand | `fastwan2-2-ti2v-5b-mlx-bf16` | bf16 | 22.52 GB | 41.06 GB (Apple M5 Max, 128 GB unified memory) | n/a | Apache-2.0 | lBroth/FastWan2.2-TI2V-5B-MLX @ de2998ac446581895089ae363f4dcc0c02ca9ea2 | pinned |
+| p128 | on demand | `ltx-2-3-distilled-mlx` | bf16 | 43.91 GB | 42.84 GB (Apple M5 Max, 128 GB unified memory) | n/a | LTX-2.x Community License Agreement (2026-08-11) | prince-canuma/LTX-2.3-distilled @ 65b104b9387fb173d8e4b92fc5effc47625baf2a | pinned |
 
-Installed beside the model, never selected on its own: `video-umt5-tokenizer` (tokenizer, 20.4 MB, Apache-2.0, google/umt5-xxl @ 66cb9e7e85526fe440a945569e42c72fb6cbc0ad).
+Also pinned, started only when chosen (Home's "load this model"): `fastwan2-2-ti2v-5b-mlx-bf16` (bf16, 22.52 GB, Apache-2.0, lBroth/FastWan2.2-TI2V-5B-MLX @ de2998ac446581895089ae363f4dcc0c02ca9ea2).
+
+Installed beside the model, never selected on its own: `video-umt5-tokenizer` (tokenizer, 20.4 MB, Apache-2.0, google/umt5-xxl @ 66cb9e7e85526fe440a945569e42c72fb6cbc0ad); `video-gemma-3-12b-text-encoder` (text-encoder, 24.61 GB, Gemma Terms of Use, mlx-community/gemma-3-12b-it-bf16 @ b8b9b412cb795bd6115fdce8c9a0ef0d1664db3a).
 
 ## music (Music)
 

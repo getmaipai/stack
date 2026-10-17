@@ -315,6 +315,14 @@
       "download_bytes": 1372695114,
       "installed_bytes": 1372695114
     },
+    "ltx-2-3-distilled-mlx": {
+      "download_bytes": 47145417266,
+      "installed_bytes": 47145417266
+    },
+    "video-gemma-3-12b-text-encoder": {
+      "download_bytes": 26427893141,
+      "installed_bytes": 26427893141
+    },
     "nomic-embed-text-v1-5-q4-k-m": {
       "download_bytes": 84106624,
       "installed_bytes": 84106624

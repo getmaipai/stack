@@ -425,6 +425,17 @@ Wan2.2 TI2V-5B with FastWan's 3-step distillation, run by mlx-video on the Apple
 and chat is never evicted for it; a Mac that cannot hold the clip beside what is resident answers 503 `no_memory` at once. Design and the
 measurements: Home `docs/design/video-generation-2026-10-17.md`.
 
+**Two models (VIDEO-LTX-01).** `model` on `POST /v1/videos/generations` is `video` or `quick` (the default: the clip above, silent, up to 5 s, can start from a
+picture), or `detailed` (LTX-2.3 on the same mlx-video, 768 x 448 or 448 x 768, 64-pixel steps, up to 10 s: a 5 s clip takes about 45 s, a 10 s clip about
+80 s, a sound track with speech is made in the same pass, admission 46 GB). A model's own id names it too; anything else is 422 `unknown_model`. A length past
+the model's ceiling is 422 `bad_seconds`, a picture with `detailed` is 422 `reference_unsupported` (the pinned runtime fails on a picture with LTX-2.3), a model
+that is not installed is 503 `not_installed`. Results carry `quality` and `audio`; `GET /stack/v1/video` has `qualities.quick` and `qualities.detailed`
+(`id`, `installed`, `available`, `audio`, `image_to_video`, `limits`, `memory`, `install`, `licence`, `lora_base_model`). Only one video model is in memory: asking
+for the other stops the first one's worker. The Detailed component (`ltx-2-3-distilled-mlx`, optional, p128 only, 73.6 GB) needs the maker's licence accepted
+once: `POST /stack/v1/components/{id}/install` answers 409 `licence_required` until the body carries `accepted_licence` (the `licence.id` the component lists);
+the acceptance is one small file (`licence-acceptances.json`) and no name. Video LoRAs record the model they were made for (`base_model` `wan2.2-ti2v-5b` or
+`ltx-2.3`, read from the tensors; `GET /stack/v1/video/loras` lists `base_models`), and a clip applies only LoRAs of its own model (422 `wrong_base_model`).
+
 `POST /v1/videos/generations` (JSON) answers like `/v1/images/generations`: 200 `{ created, job, data: [{ url, poster_url, content_type, width, height,
 frames, fps, seconds, seed, model, mode, lora_ids, ms, bytes, poster_bytes }] }`, or 202 `{ created, job, data: [] }` when the clip is still going at
 `timeout_ms` (30 s unsaid, 30 min at most); then poll. Fields: `prompt` (required, 4000 characters), `negative_prompt` (accepted; the distilled model
