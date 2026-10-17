@@ -17,6 +17,10 @@ with Home's releases, so this file tracks what a Home release picks up.
   only, so those two engines now need macOS 14 or later on an Apple
   silicon Mac; the build refuses an older Mac with the reason.
 
+### Changed
+
+- Z-Image-Turbo is the default picture model on a 128 GB computer when it is installed (a request that names no model and no LoRA uses it, and `GET /stack/v1/image` reports it as `default_model`), and its disk-plan row is `recommended`, so the wizard installs it beside FLUX.2 Klein 4B, which stays for quick pictures and every edit. Smaller computers keep Klein as the default. LoRA base detection reads Civitai-style files (kohya `lora_unet_layers_N` names for Z-Image, a header that declares its base) and names Pony, Illustrious, NoobAI, FLUX.1 and Chroma files in the refusal.
+
 ### Added
 
 - Video clips are made messaging-ready: the stored mp4 carries a silent AAC track and a title (picture copied untouched), and

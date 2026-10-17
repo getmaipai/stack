@@ -14,18 +14,26 @@ export const IMAGE_LORA_BASES = ["flux2-klein-4b", "z-image-turbo"] as const;
 export type ImageLoraBase = typeof IMAGE_LORA_BASES[number];
 export const MAX_LORAS_PER_IMAGE = 4;
 
-/** Which base the tensors fit, from the key names and the hidden width: Klein 4B is 3072 wide with double and single blocks (or the diffusers names), Z-Image is 3840 wide with `layers.N`. SDXL and Wan files are named in the refusal so a person knows where they go. */
+/** What a trainer wrote about the base model in the file's own header (kohya `ss_base_model_version`, `modelspec.architecture`, ai-toolkit `base_model`), lower case. Civitai files carry these. Empty when the file says nothing. */
+function declaredBase(info: SafetensorsInfo): string {
+  const meta = info.metadata ?? {};
+  return ["ss_base_model_version", "modelspec.architecture", "base_model", "ss_sd_model_name", "ss_network_module"].map((key) => meta[key]).filter((value): value is string => typeof value === "string").join(" ").toLowerCase();
+}
+
+/** Which base the tensors fit, from the key names and the hidden width: Klein 4B is 3072 wide with double and single blocks (or the diffusers names), Z-Image is 3840 wide with `layers.N` (or `layers_N` in the kohya naming a Civitai file may use, which must be checked before the SDXL `lora_unet_` prefix). SDXL-family files (SDXL, Pony, Illustrious, NoobAI), FLUX.1 files and Wan files are named in the refusal so a person knows where they go. A header that declares its base wins over a guess from the tensors. */
 export function detectImageBase(info: SafetensorsInfo): ImageLoraBase {
   const keys = info.keys.join("\n");
+  const declared = declaredBase(info);
   const wide = (width: number): boolean => info.dims.includes(width);
-  const sdxl = /lora_unet_|input_blocks|down_blocks|output_blocks|conditioner|lora_te1?_/.test(keys) || (wide(640) && wide(1280));
+  const zimage = /(^|[._])layers[._]\d+[._](attention|adaLN_modulation|feed_forward)/.test(keys) && wide(3840);
+  const sdxl = /sdxl|stable-diffusion-xl|pony|illustrious|noobai/.test(declared) || (!zimage && (/lora_unet_|input_blocks|down_blocks|output_blocks|conditioner|lora_te1?_/.test(keys) || (wide(640) && wide(1280))));
   const wan = /(^|\.)blocks\.\d+\.(self_attn|cross_attn)/.test(keys);
   if (wan) throw new LoraError("wrong_base_model", "This LoRA was made for a video model (Wan). Add it to the video library instead.", 422);
-  if (sdxl) throw new LoraError("wrong_base_model", "This LoRA was made for Stable Diffusion XL. This computer's picture models are FLUX.2 Klein 4B and Z-Image-Turbo; use a LoRA made for one of them.", 422);
+  if (sdxl) throw new LoraError("wrong_base_model", "This LoRA was made for Stable Diffusion XL (or Pony, Illustrious or NoobAI, which are built on it). This computer's picture models are FLUX.2 Klein 4B and Z-Image-Turbo; use a LoRA made for one of them.", 422);
+  if (/flux[.\-_ ]?1|flux_dev|flux-dev|schnell|chroma/.test(declared)) throw new LoraError("wrong_base_model", "This LoRA was made for FLUX.1 (or Chroma, which is built on it). It does not fit FLUX.2 Klein 4B or Z-Image-Turbo; use a LoRA made for one of them.", 422);
+  if (zimage || /z-image|zimage/.test(declared)) return "z-image-turbo";
   const klein = /double_blocks|single_blocks|double_stream_modulation|single_stream_modulation/.test(keys) && wide(3072) && !wide(3840);
-  const zimage = /(^|\.)layers\.\d+\.(attention|adaLN_modulation|feed_forward)/.test(keys) && wide(3840);
   if (klein) return "flux2-klein-4b";
-  if (zimage) return "z-image-turbo";
   throw new LoraError("wrong_base_model", "This LoRA was not made for FLUX.2 Klein 4B or Z-Image-Turbo, the picture models on this computer. Pick a LoRA made for one of those.", 422);
 }
 

@@ -18,7 +18,7 @@ import { modelView } from "@/routes/models";
 import { getGovernorStatus } from "@/lib/governor";
 import { LORA_CLASSES, LoraError, MAX_LORA_BYTES, MAX_LORA_STRENGTH, isLoraId } from "@/lib/media/loraLibrary";
 import { IMAGE_LORA_BASES, imageLoras, MAX_LORAS_PER_IMAGE, startLoraInstall } from "@/images/loras";
-import { IMAGE_FAMILIES, IMAGE_FEATHER_DEFAULT, IMAGE_FEATHER_MAX, IMAGE_MAX_COUNT, IMAGE_MAX_EDIT_MEGAPIXELS, IMAGE_MAX_INPUT_BYTES, IMAGE_MAX_PROMPT_CHARS, IMAGE_MAX_SIDE, IMAGE_MIN_SIDE, IMAGE_QUEUE_MAX, IMAGE_SIZE_STEP, DEFAULT_FAMILY, familyInstalled, imageAvailability, isFamilyId, peakBytes, quantizeFor, type ImageFamilyId } from "@/images/models";
+import { IMAGE_FAMILIES, IMAGE_FEATHER_DEFAULT, IMAGE_FEATHER_MAX, IMAGE_MAX_COUNT, IMAGE_MAX_EDIT_MEGAPIXELS, IMAGE_MAX_INPUT_BYTES, IMAGE_MAX_PROMPT_CHARS, IMAGE_MAX_SIDE, IMAGE_MIN_SIDE, IMAGE_QUEUE_MAX, IMAGE_SIZE_STEP, DEFAULT_FAMILY, defaultFamilyFor, familyInstalled, imageAvailability, isFamilyId, peakBytes, quantizeFor, type ImageFamilyId } from "@/images/models";
 import { IMAGE_GEN_NAME, IMAGE_GEN_VERSION, imageGen, imageGenEnvironmentReady, memoryVerdict } from "@/images/imageEngine";
 import { startImageInstall } from "@/images/install";
 
@@ -106,7 +106,7 @@ imageRoutes.openapi(statusRoute, (c) => {
   const installedIds = listModels().map(modelView).filter((model) => model.state === "installed").map((model) => model.id);
   const tier = getGovernorStatus().tier;
   const installed = imageGen.families();
-  const defaultModel = familyInstalled(DEFAULT_FAMILY) ? DEFAULT_FAMILY : installed[0] ?? null;
+  const defaultModel = defaultFamilyFor(tier) ?? installed[0] ?? null;
   const models = (Object.keys(IMAGE_FAMILIES) as ImageFamilyId[]).map((family) => {
     const info = IMAGE_FAMILIES[family];
     const pins = imageInstallModels(family, installedIds);

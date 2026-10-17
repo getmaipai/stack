@@ -173,8 +173,13 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   const tools = plannedWhere((pin) => imageTools.has(pin.id));
   if (tools.length) rows.push(modelRow({ id: "image-tools", label: "Edit pictures tools", note: "Remove a background, erase something, make a picture bigger.", need: "recommended", engines: ["engine:image-tools", "engine:python"] }, tools));
   if (!tier.notAvailable.includes("image")) {
-    rows.push(modelRow({ id: "pictures", label: "Make pictures (FLUX.2 Klein)", note: "Makes pictures from a sentence, and edits yours.", need: "recommended", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_KLEIN_MODELS));
-    if (TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "pictures-zimage", label: "More picture styles (Z-Image Turbo)", note: "A second picture maker with a different look. Optional.", need: "optional", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_ZIMAGE_MODELS));
+    // Owner ruling 2026-10-17: on a 128 GB computer Z-Image-Turbo is the main picture maker (the most community LoRAs, no built-in filter) and
+    // Klein stays beside it for quick pictures and every edit. Smaller computers keep Klein as the picture maker.
+    const zimageDefault = TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128");
+    rows.push(modelRow(zimageDefault
+      ? { id: "pictures", label: "Quick pictures and edits (FLUX.2 Klein)", note: "Makes a picture in a few seconds and edits yours.", need: "recommended", engines: ["engine:pictures", "engine:python"] }
+      : { id: "pictures", label: "Make pictures (FLUX.2 Klein)", note: "Makes pictures from a sentence, and edits yours.", need: "recommended", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_KLEIN_MODELS));
+    if (zimageDefault) rows.push(modelRow({ id: "pictures-zimage", label: "Make pictures (Z-Image Turbo)", note: "The main picture maker on this computer: lifelike pictures, and the most community picture styles (LoRAs) to add. A big download.", need: "recommended", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_ZIMAGE_MODELS));
   }
   if (!tier.notAvailable.includes("video")) rows.push(modelRow({ id: "video", label: "Make videos (Wan2.2)", note: "Makes a short clip from a sentence or a picture. Optional.", need: "optional", engines: ["engine:video", "engine:python"] }, STACK_VIDEO_MODELS));
   const search = table.engines["search-helper"]!;
