@@ -5,7 +5,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { detectHardware } from "@/lib/hardware";
-import { buildInstallPlan } from "@/lib/installPlan";
+import { buildInstallPlan, imageInstallModels, videoInstallModels } from "@/lib/installPlan";
 import { diskPlanForTier } from "@/lib/diskPlan";
 import { listModels } from "@/lib/modelStore";
 import { modelView } from "@/routes/models";
@@ -31,6 +31,7 @@ const PlanSchema = z.object({
   memory_gb: z.number(), memory_source: z.enum(["unified", "graphics", "override", "unknown"]),
   models: z.array(PlanModelSchema), total_bytes: z.number().int(), remaining_bytes: z.number().int(), free_disk_bytes: z.number().int().nullable(), fits_disk: z.boolean().nullable(),
   disk: DiskPlanSchema.nullable(),
+  optional_models: z.array(PlanModelSchema).openapi({ description: "The pinned files of the disk plan's picture and video rows (FLUX.2 Klein, Z-Image Turbo, Wan2.2 and its tokenizer), shaped as pull bodies, for a wizard that installs a row the person turned on. Not part of `models`: the first-run set." }),
 });
 const planRoute = createRoute({
   method: "get", path: "/", tags: ["Install plan"], summary: "The models to install on this computer",
@@ -44,5 +45,12 @@ installPlanRoutes.openapi(planRoute, async (c) => {
   const hardware = await detectHardware();
   const installedIds = listModels().map(modelView).filter((model) => model.state === "installed").map((model) => model.id);
   const plan = buildInstallPlan(hardware, { vramOverrideGb: vramGb ?? null, installedIds });
-  return c.json({ ...plan, disk: plan.tier ? diskPlanForTier(plan.tier, installedIds) : null }, 200);
+  const disk = plan.tier ? diskPlanForTier(plan.tier, installedIds) : null;
+  const rows = new Set(disk?.rows.map((row) => row.id) ?? []);
+  const optional = [
+    ...(rows.has("pictures") ? imageInstallModels("flux2-klein-4b", installedIds) : []),
+    ...(rows.has("pictures-zimage") ? imageInstallModels("z-image-turbo", installedIds) : []),
+    ...(rows.has("video") ? videoInstallModels(installedIds) : []),
+  ];
+  return c.json({ ...plan, disk, optional_models: optional }, 200);
 });

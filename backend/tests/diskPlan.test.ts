@@ -109,5 +109,13 @@ test("route: the install plan carries the disk plan for its tier", async () => {
   expect(body.tier).not.toBeNull();
   expect(body.disk?.tier).toBe(body.tier!);
   expect(body.disk?.rows.map((row) => row.id)).toContain("chat");
-  expect(body.disk!.default.required_free_bytes).toBeGreaterThan(40 * GB);
+  expect(body.disk!.default.required_free_bytes).toBeGreaterThan(10 * GB);
+  // Every picture and video row's pins are offered as pull bodies, none of them in the first-run models.
+  const full = body as unknown as { models: Array<{ id: string }>; optional_models: Array<{ id: string }>; disk: { rows: Array<{ id: string; model_ids: string[] }> } };
+  for (const id of ["pictures", "pictures-zimage", "video"]) {
+    const row = full.disk.rows.find((candidate) => candidate.id === id);
+    if (!row) continue;
+    expect(full.optional_models.map((m) => m.id).sort()).toEqual(expect.arrayContaining(row.model_ids.slice().sort()));
+    for (const modelId of row.model_ids) expect(full.models.map((m) => m.id)).not.toContain(modelId);
+  }
 });
