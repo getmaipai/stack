@@ -79,6 +79,8 @@ type EngineSizes = Record<string, { installed_bytes: number; download_bytes: num
 const table = measured as { measured_on: string; margin_percent: number; headroom_warn_bytes: number; pins: PinSizes; engines: EngineSizes };
 
 export const DISK_MARGIN_PERCENT = table.margin_percent;
+/** The measured download of one engine environment (the components list sizes an install from the same table the wizard uses). */
+export function engineDownloadBytes(key: string): number | null { return table.engines[key]?.download_bytes ?? null; }
 export const DISK_MEASURED_ON = table.measured_on;
 
 const GIB = 1_073_741_824;

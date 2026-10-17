@@ -17,6 +17,7 @@ import { raise, resolve as resolveHealth } from "@/lib/health";
 import { getModel, installCatalogModel, removeModel, type CatalogModelLike, type DownloadModelOptions } from "@/lib/modelStore";
 import { STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_MODELS, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
 import { buildInstallPlan } from "@/lib/installPlan";
+import { diskPlanForTier, diskTotalsFor, engineDownloadBytes, type DiskPlan } from "@/lib/diskPlan";
 import { modelsDir } from "@/lib/paths";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
 import { releaseHfFile } from "@/lib/store/hfCache";
@@ -82,7 +83,10 @@ export interface UnitDef {
 }
 
 const GB = 1_000_000_000;
-const ENV_BYTES = { image: 1.1 * GB, video: 1.0 * GB, tools: 0.4 * GB, pocket: 0.72 * GB, mlxAudio: 0.47 * GB };
+/** Environment downloads come from the disk plan's measured table (one definition with the wizard); the figures are a fallback only. */
+const ENV_BYTES = { image: engineDownloadBytes("image-gen") ?? 1.1 * GB, video: engineDownloadBytes("video-gen") ?? 1.0 * GB, tools: engineDownloadBytes("image-tools") ?? 0.4 * GB, pocket: engineDownloadBytes("pocket-tts") ?? 0.72 * GB, mlxAudio: engineDownloadBytes("mlx-audio") ?? 0.47 * GB };
+/** The disk plan's row for a component, where the plan has one (its optional rows are the wizard's unchecked extras). */
+const DISK_ROW: Record<string, string> = { "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "image-tools": "image-tools", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fastwan2-2-ti2v-5b-mlx-bf16": "video" };
 
 const envImage: EnvDef = { name: "image-gen", approxBytes: ENV_BYTES.image, root: imageGenRoot, ready: imageGenEnvironmentReady, build: (onPhase, signal) => ensureImageGenEnvironment(onPhase, { signal }), stop: () => imageGen.stop() };
 const envVideo: EnvDef = {
@@ -248,6 +252,10 @@ export interface ComponentView {
   download_bytes: number;
   /** The full size of a fresh install, for the setup estimate. */
   full_bytes: number;
+  /** The free space the data volume needs before an install starts: the installed size plus the disk plan's margin plus its peak temporary space. */
+  required_free_bytes: number;
+  /** What the setup wizard's plan calls it on this tier (recommended parts are on by default), or null when the plan has no row. */
+  plan_need: "required" | "recommended" | "optional" | null;
   requirement: ComponentRequirement;
   /** Plain words when requirement is unsupported, or the reason it is required. */
   requirement_reason: string | null;
@@ -309,6 +317,7 @@ function guardUninstall(unit: UnitDef, requirement: ComponentRequirement): Compo
 export async function listComponents(hw?: HardwareInfo): Promise<ComponentList> {
   const hardware = hw ?? await detectHardware();
   const { tier, planned } = planOf(hardware);
+  const disk: DiskPlan | null = tier ? diskPlanForTier(tier) : null;
   const free = hardware.freeDiskBytes ?? null;
   const defs = componentDefs();
   const views: ComponentView[] = defs.map((unit) => {
@@ -318,16 +327,20 @@ export async function listComponents(hw?: HardwareInfo): Promise<ComponentList> 
     const state: ComponentState = job ? "installing" : installed ? "installed" : failure ? "failed" : "notInstalled";
     const { requirement, reason } = requirementFor(unit, tier, planned);
     const remaining = installed ? 0 : remainingDownload(unit);
+    const row = disk?.rows.find((candidate) => candidate.id === DISK_ROW[unit.id]) ?? null;
+    const totals = row && disk ? diskTotalsFor(disk, [row.id]) : null;
+    // The plan's own sums (margin and peak temporary space included) decide the fit; a part the plan has no row for falls back to its download plus a fixed margin.
+    const requiredFree = installed ? 0 : totals ? totals.required_free_bytes : remaining + DISK_MARGIN_BYTES;
     let installBlock: string | null = null;
     if (installed) installBlock = "It is already installed.";
     else if (job) installBlock = "It is installing now.";
     else if (requirement === "unsupported") installBlock = reason;
-    else if (free !== null && remaining + DISK_MARGIN_BYTES > free) installBlock = `Not enough room: it needs about ${gbWords(remaining)} and this computer has ${gbWords(free)} free. Free some space first.`;
+    else if (free !== null && requiredFree > free) installBlock = `Not enough room: it needs about ${gbWords(requiredFree)} and this computer has ${gbWords(free)} free. Free some space first.`;
     const guard = installed || unitPartlyInstalled(unit) ? guardUninstall(unit, requirement) : null;
     const present = installed || unitPartlyInstalled(unit);
     return {
       id: unit.id, label: unit.label, summary: unit.summary, group: unit.group, kind: "model" as const, state,
-      size_bytes: present ? unitDiskBytes(unit, defs) : null, download_bytes: remaining, full_bytes: totalDownload(unit),
+      size_bytes: present ? unitDiskBytes(unit, defs) : null, download_bytes: remaining, full_bytes: totals ? totals.download_bytes : totalDownload(unit), required_free_bytes: requiredFree, plan_need: row ? row.need : null,
       requirement, requirement_reason: reason, last_used_at: lastUsedOf([unit.id, ...unit.pins.map((pin) => pin.id)]), used_by: unit.usedBy(), depends_on: [],
       job: job?.id ?? null, percent: job ? job.percent : null, failure: state === "failed" ? failure : null,
       can_install: installBlock === null, install_block: installBlock,
@@ -337,7 +350,7 @@ export async function listComponents(hw?: HardwareInfo): Promise<ComponentList> 
   // The household's LoRA files: removable items, never installable here (they are added from the Pictures and Video pages).
   const loraView = (kindLabel: "picture" | "video", id: string, name: string, bytes: number, lastBase: string, group: ComponentGroup): ComponentView => ({
     id: `lora.${kindLabel}.${id}`, label: `Style: ${name}`, summary: `A ${kindLabel} style (LoRA) the household added.`, group: "loras", kind: "lora", state: "installed",
-    size_bytes: bytes, download_bytes: 0, full_bytes: bytes, requirement: "optional", requirement_reason: null, last_used_at: null, used_by: [group === "pictures" ? "Pictures" : "The Video app"], depends_on: [lastBase],
+    size_bytes: bytes, download_bytes: 0, full_bytes: bytes, required_free_bytes: 0, plan_need: null, requirement: "optional", requirement_reason: null, last_used_at: null, used_by: [group === "pictures" ? "Pictures" : "The Video app"], depends_on: [lastBase],
     job: null, percent: null, failure: null, can_install: false, install_block: `Add it again from the ${kindLabel === "picture" ? "Pictures" : "Video"} page.`, can_uninstall: true, uninstall_block: null,
   });
   const loras = [
@@ -367,8 +380,7 @@ export async function startComponentInstall(id: string, hw?: HardwareInfo): Prom
   if (unitInstalled(unit)) return { job: null, component: id, joined: false, already: true };
   const list = await listComponents(hw);
   const view = list.components.find((candidate) => candidate.id === id)!;
-  if (view.install_block && view.state !== "failed" && view.state !== "notInstalled") throw new ComponentError("not_available", view.install_block, 409);
-  if (view.install_block) throw new ComponentError(view.requirement === "unsupported" ? "not_available" : "not_enough_space", view.install_block, 409);
+  if (view.install_block) throw new ComponentError(view.requirement === "unsupported" ? "not_available" : view.install_block.startsWith("Not enough room") ? "not_enough_space" : "not_available", view.install_block, 409);
 
   const pins = unit.pins.filter((pin): pin is CatalogModelLike & { download: NonNullable<CatalogModelLike["download"]> } => !!pin.download);
   const items = [

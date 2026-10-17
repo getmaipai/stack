@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { app } from "@/app";
+import { diskPlanForTier, diskTotalsFor } from "@/lib/diskPlan";
 import { ComponentError, __setComponentDepsForTests, __setComponentUnitsForTests, __settleComponentInstallsForTests, componentDefs, forgetSizes, listComponents, startComponentInstall, uninstallComponent, type EnvDef, type UnitDef } from "@/lib/components";
 import { noteComponentUse, __forgetUseForTests } from "@/lib/componentUse";
 import { __resetHealthForTests, list as listHealth } from "@/lib/health";
@@ -70,6 +71,13 @@ test("the real list names Z-Image-Turbo as an optional picture model on a 128 GB
   expect(z).toMatchObject({ label: "Pictures: Z-Image-Turbo", group: "pictures", requirement: "optional", state: "notInstalled", can_install: true, can_uninstall: false, size_bytes: null });
   const pins = STACK_IMAGE_ZIMAGE_MODELS.reduce((sum, pin) => sum + pin.download!.approx_bytes, 0);
   expect(z.full_bytes).toBeGreaterThanOrEqual(pins);
+  // The wizard's disk plan has the same row, optional (unchecked by default), and the fit uses its sums.
+  const plan = diskPlanForTier("p128")!;
+  const row = plan.rows.find((candidate) => candidate.id === "pictures-zimage")!;
+  expect(z.plan_need).toBe("optional");
+  expect(plan.default_selected).not.toContain("pictures-zimage");
+  expect(z.required_free_bytes).toBe(diskTotalsFor(plan, [row.id]).required_free_bytes);
+  expect(z.full_bytes).toBe(diskTotalsFor(plan, [row.id]).download_bytes);
   expect(pins).toBeGreaterThan(32e9);
   expect(pins).toBeLessThan(35e9);
   expect(list.components.every((c) => c.id && c.label && !c.label.includes("—"))).toBe(true);

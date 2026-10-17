@@ -14,6 +14,8 @@ const ComponentSchema = z.object({
   size_bytes: z.number().int().nullable().openapi({ description: "Bytes on disk now (models and their engine environment); null when nothing is installed." }),
   download_bytes: z.number().int().openapi({ description: "What an install would still download; 0 when installed." }),
   full_bytes: z.number().int().openapi({ description: "The size of a fresh install, for the setup estimate." }),
+  required_free_bytes: z.number().int().openapi({ description: "Free space the data volume needs before an install starts (the disk plan's sum: installed size, margin and peak temporary space); 0 when installed." }),
+  plan_need: z.enum(["required", "recommended", "optional"]).nullable().openapi({ description: "The setup wizard plan's word for it on this tier; recommended parts are on by default, optional ones (Z-Image-Turbo) off." }),
   requirement: z.enum(["required", "optional", "unsupported"]).openapi({ description: "For this computer's tier: required (Home installs it), optional, or unsupported (see requirement_reason)." }),
   requirement_reason: z.string().nullable(), last_used_at: z.string().nullable(), used_by: z.array(z.string()), depends_on: z.array(z.string()),
   job: z.string().nullable(), percent: z.number().nullable(), failure: z.string().nullable(),

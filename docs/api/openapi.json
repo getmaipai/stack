@@ -8451,6 +8451,21 @@
                             "type": "integer",
                             "description": "The size of a fresh install, for the setup estimate."
                           },
+                          "required_free_bytes": {
+                            "type": "integer",
+                            "description": "Free space the data volume needs before an install starts (the disk plan's sum: installed size, margin and peak temporary space); 0 when installed."
+                          },
+                          "plan_need": {
+                            "type": "string",
+                            "nullable": true,
+                            "enum": [
+                              "required",
+                              "recommended",
+                              "optional",
+                              null
+                            ],
+                            "description": "The setup wizard plan's word for it on this tier; recommended parts are on by default, optional ones (Z-Image-Turbo) off."
+                          },
                           "requirement": {
                             "type": "string",
                             "enum": [
@@ -8517,6 +8532,8 @@
                           "size_bytes",
                           "download_bytes",
                           "full_bytes",
+                          "required_free_bytes",
+                          "plan_need",
                           "requirement",
                           "requirement_reason",
                           "last_used_at",
