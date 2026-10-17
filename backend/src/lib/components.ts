@@ -388,7 +388,7 @@ export async function startComponentInstall(id: string, hw?: HardwareInfo): Prom
     ...unit.envs.filter((env) => !env.lazy && !env.ready()).map((env) => ({ id: `env:${env.name}`, label: `${env.name} engine`, completedBytes: 0, totalBytes: env.approxBytes, state: "queued" as const })),
   ];
   const totalBytes = items.reduce((sum, item) => sum + item.totalBytes, 0);
-  const job = createJob({ kind: COMPONENT_JOB_KIND, role: unit.role, totalBytes, items, status: "downloading", input: { component: id, model: id } });
+  const job = createJob({ kind: COMPONENT_JOB_KIND, role: unit.role, totalBytes, items, status: "downloading", input: { component: id, model: id, label: unit.label } });
   inFlight.set(id, job.id);
   failures.delete(id);
   const run = (async () => {

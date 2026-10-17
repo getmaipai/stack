@@ -112,7 +112,7 @@ test("install is one job: the files, then the environment; the list follows; a s
   expect((await listComponents(hw())).components.find((c) => c.id === "tiny-picture")).toMatchObject({ state: "installing", job: started.job, can_install: false });
   await __settleComponentInstallsForTests();
   const job = getJob(started.job!)!;
-  expect(job).toMatchObject({ kind: "component.install", state: "done", role: "image", input: { component: "tiny-picture", model: "tiny-picture" } });
+  expect(job).toMatchObject({ kind: "component.install", state: "done", role: "image", input: { component: "tiny-picture", model: "tiny-picture", label: "Pictures: Tiny" } });
   expect(job.items?.map((item) => item.id)).toEqual(["tiny-picture", "tiny-picture-vae", "env:fake-env"]);
   expect(envBuilt).toBe(1);
   const after = (await listComponents(hw())).components.find((c) => c.id === "tiny-picture")!;
