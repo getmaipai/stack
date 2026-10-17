@@ -39,10 +39,7 @@ export const IMAGE_FAMILIES: Record<ImageFamilyId, ImageFamily> = {
   "flux2-klein-4b": { id: "flux2-klein-4b", catalogId: STACK_IMAGE_KLEIN_ID, label: "FLUX.2 Klein 4B", licence: "Apache-2.0", stepsDefault: 4, stepsMax: 12, peak: { gen8: 15 * GB, gen4: 13 * GB, edit: 18 * GB }, loraExtraBytes: 1 * GB, edit: true, tiers: ["p32", "p64", "p128"], warmSeconds: 4.0 },
   "z-image-turbo": { id: "z-image-turbo", catalogId: STACK_IMAGE_ZIMAGE_ID, label: "Z-Image-Turbo", licence: "Apache-2.0", stepsDefault: 9, stepsMax: 20, peak: { gen8: 34 * GB, gen4: 34 * GB, edit: 0 }, loraExtraBytes: 1 * GB, edit: false, tiers: ["p128"], warmSeconds: 12.9 },
 };
-/** The baseline model: runs on every tier that makes pictures, makes quick pictures, and is the only one that edits. */
 export const DEFAULT_FAMILY: ImageFamilyId = "flux2-klein-4b";
-/** Owner ruling 2026-10-17: where the computer can hold it, the model a person gets when they name no model and no LoRA is the one with the most community LoRAs and no built-in filter (Z-Image-Turbo, Apache-2.0). Every other tier keeps the baseline; p64 waits for a measured 4-bit or 8-bit run (design note image-engine-2026-10-17, section 16). */
-const PREFERRED_FAMILY: Partial<Record<string, ImageFamilyId>> = { p128: "z-image-turbo" };
 
 /** Hard ceilings in the Stack, not settings. */
 export const IMAGE_MIN_SIDE = 256;
@@ -85,13 +82,6 @@ export function familySnapshot(family: ImageFamilyId): string | null {
   const record = getModel(primary.id)!;
   const file = primary.download!.hub_file!;
   return record.modelPath!.endsWith(`/${file}`) ? record.modelPath!.slice(0, -(file.length + 1)) : null;
-}
-
-/** The model used when the request names none and carries no LoRA: the tier's preferred model when it is installed, else the baseline when installed, else null. */
-export function defaultFamilyFor(tier: string, installed: (family: ImageFamilyId) => boolean = familyInstalled): ImageFamilyId | null {
-  const preferred = PREFERRED_FAMILY[tier];
-  if (preferred && runsOnTier(preferred, tier) && installed(preferred)) return preferred;
-  return installed(DEFAULT_FAMILY) ? DEFAULT_FAMILY : null;
 }
 
 export function installedFamilies(): ImageFamilyId[] { return (Object.keys(IMAGE_FAMILIES) as ImageFamilyId[]).filter(familyInstalled); }

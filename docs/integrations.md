@@ -332,7 +332,7 @@ can_uninstall, uninstall_block }`, and beside the rows `{ tier, free_disk_bytes,
 `free_disk_bytes` come from the install plan's own sizing, so the setup wizard and this list never disagree. `install_block` and `uninstall_block` are
 sentences for the person (not enough room, needs more memory, "Chat is using this model").
 
-A component is what a household member would name, not a file: Z-Image-Turbo (id `z-image-turbo`, about 33 GB, `recommended`, so installed by default, on p128 only), FLUX.2 Klein 4B,
+A component is what a household member would name, not a file: Z-Image-Turbo (id `z-image-turbo`, about 33 GB, `optional` on p128 only), FLUX.2 Klein 4B,
 the Video model, Picture tools, each voice, the wake word, each chat model (its picture reader included) and each household LoRA (`lora.picture.<id>`,
 `lora.video.<id>`, removable, never installable here).
 
@@ -452,7 +452,7 @@ makes no network request.
 
 ## Picture generation (IMGGEN-STACK-01 and 02, IMGGEN-EDIT-01, IMGGEN-LORA-01)
 
-FLUX.2 Klein 4B (Apache-2.0) is the baseline: it runs on every tier that makes pictures and it is the only model that edits. Z-Image-Turbo (Apache-2.0) is the default on a 128 GB Mac when it is installed (a request that names no model and no LoRA uses it; `GET /stack/v1/image` reports it as `default_model`); with it missing, or on any smaller tier, the default is Klein. A LoRA still selects the base it was made for. Both run on mflux 0.23.0 (MLX, Apple GPU)
+FLUX.2 Klein 4B (Apache-2.0) is the default on every tier (owner ruling 2026-10-17: plain pictures stay fast, about 4 s); Z-Image-Turbo (Apache-2.0, 13 to 30 s, the most community LoRAs) is the optional second model on a 128 GB Mac, chosen by name or by a LoRA made for it. Both run on mflux 0.23.0 (MLX, Apple GPU)
 inside one managed Python 3.12 environment and one worker process that exists only while picture work does: it starts on the first request, waits ten
 minutes (`IMAGE_IDLE_MS`) for the next one, then exits and returns its memory. It is never started at boot and never kept warm. The weights are pinned
 model records (revision, sha256, bytes, licence per file; about 16 GB for Klein, 33 GB for Z-Image) placed in the hub cache, and the worker runs with

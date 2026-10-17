@@ -22,12 +22,12 @@
     "p64.needed_bytes": 74764178827,
     "p64.home_required_free_bytes": 3176323277,
     "p64.ai_required_free_bytes": 85714021376,
-    "p128.required_free_bytes": 128308310524,
+    "p128.required_free_bytes": 88890344653,
     "p128.minimum_required_free_bytes": 60009229733,
     "p128.everything_required_free_bytes": 159433121912,
-    "p128.needed_bytes": 107612483720,
+    "p128.needed_bytes": 74764178827,
     "p128.home_required_free_bytes": 3176323277,
-    "p128.ai_required_free_bytes": 125131987247
+    "p128.ai_required_free_bytes": 85714021376
   },
   "tiers": {
     "p16": {
@@ -1033,8 +1033,8 @@
         },
         {
           "id": "pictures",
-          "label": "Quick pictures and edits (FLUX.2 Klein)",
-          "note": "Makes a picture in a few seconds and edits yours.",
+          "label": "Make pictures (FLUX.2 Klein)",
+          "note": "Makes pictures from a sentence, and edits yours.",
           "kind": "model",
           "need": "recommended",
           "selectable": true,
@@ -1068,10 +1068,10 @@
         },
         {
           "id": "pictures-zimage",
-          "label": "Make pictures (Z-Image Turbo)",
-          "note": "The main picture maker on this computer: lifelike pictures, and the most community picture styles (LoRAs) to add. A big download.",
+          "label": "More picture styles (Z-Image Turbo)",
+          "note": "A second picture maker with a different look. Optional.",
           "kind": "model",
-          "need": "recommended",
+          "need": "optional",
           "selectable": true,
           "download_bytes": 32848304893,
           "installed_bytes": 32848304893,
@@ -1245,11 +1245,11 @@
         }
       ],
       "default": {
-        "download_bytes": 100918905531,
-        "installed_bytes": 103479134019,
+        "download_bytes": 68070600638,
+        "installed_bytes": 70630829126,
         "peak_temp_bytes": 4133349701,
-        "needed_bytes": 107612483720,
-        "required_free_bytes": 128308310524
+        "needed_bytes": 74764178827,
+        "required_free_bytes": 88890344653
       },
       "minimum": {
         "download_bytes": 45846836612,
@@ -1277,7 +1277,6 @@
         "voice-better",
         "image-tools",
         "pictures",
-        "pictures-zimage",
         "search"
       ]
     }

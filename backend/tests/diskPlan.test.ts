@@ -70,18 +70,14 @@ test("home and AI parts add up to the whole within a byte per part", () => {
   }
 });
 
-test("tiers: p16 and p32 have no generators, p64 has pictures but no video, p128 has Z-Image as a recommended default and video as an optional extra", () => {
+test("tiers: p16 and p32 have no generators, p64 has pictures but no video, p128 has Z-Image and video as optional extras", () => {
   const ids = (tier: string) => buildDiskPlan(PROFILE_TIERS.find((t) => t.id === tier)!).rows.map((row) => row.id);
   for (const tier of ["p16", "p32"]) for (const id of ["pictures", "pictures-zimage", "video", "voice-better"]) expect(ids(tier)).not.toContain(id);
   expect(ids("p64")).toContain("pictures");
   expect(ids("p64")).toContain("voice-better");
   for (const id of ["pictures-zimage", "video"]) expect(ids("p64")).not.toContain(id);
   const p128 = buildDiskPlan(PROFILE_TIERS.find((t) => t.id === "p128")!);
-  { const row = p128.rows.find((r) => r.id === "video")!; expect(row.need).toBe("optional"); expect(p128.default_selected).not.toContain("video"); }
-  // Owner ruling 2026-10-17: Z-Image-Turbo is the main picture maker on a 128 GB computer, so it installs by default; Klein stays for quick pictures and every edit.
-  { const row = p128.rows.find((r) => r.id === "pictures-zimage")!; expect(row.need).toBe("recommended"); expect(p128.default_selected).toContain("pictures-zimage"); expect(row.label).toBe("Make pictures (Z-Image Turbo)"); }
-  expect(p128.rows.find((r) => r.id === "pictures")!.label).toBe("Quick pictures and edits (FLUX.2 Klein)");
-  expect(buildDiskPlan(PROFILE_TIERS.find((t) => t.id === "p64")!).rows.find((r) => r.id === "pictures")!.label).toBe("Make pictures (FLUX.2 Klein)");
+  for (const id of ["pictures-zimage", "video"]) { const row = p128.rows.find((r) => r.id === id)!; expect(row.need).toBe("optional"); expect(p128.default_selected).not.toContain(id); }
   expect(p128.rows.find((r) => r.id === "pictures")!.need).toBe("recommended");
   expect(p128.rows.find((r) => r.id === "video")!.download_bytes).toBe(STACK_VIDEO_MODELS.reduce((s, p) => s + p.download!.approx_bytes, 0));
   expect(p128.rows.find((r) => r.id === "pictures")!.download_bytes).toBe(STACK_IMAGE_KLEIN_MODELS.reduce((s, p) => s + p.download!.approx_bytes, 0));
@@ -99,13 +95,11 @@ test("turning an optional row on or off moves the total by that row and its engi
   const withVideo = diskTotalsFor(plan, [...plan.default_selected, "video"]);
   expect(withVideo.installed_bytes - base.installed_bytes).toBe(video.installed_bytes + videoEngine.installed_bytes);
   const zimage = plan.rows.find((r) => r.id === "pictures-zimage")!;
-  const withoutZ = diskTotalsFor(plan, plan.default_selected.filter((id) => id !== "pictures-zimage"));
-  expect(base.installed_bytes - withoutZ.installed_bytes).toBe(zimage.installed_bytes); // the picture engine is already counted for Klein
+  const withZ = diskTotalsFor(plan, [...plan.default_selected, "pictures-zimage"]);
+  expect(withZ.installed_bytes - base.installed_bytes).toBe(zimage.installed_bytes); // the picture engine is already counted for Klein
+  const noPictures = diskTotalsFor(plan, plan.default_selected.filter((id) => id !== "pictures"));
   const klein = plan.rows.find((r) => r.id === "pictures")!;
-  const noKlein = diskTotalsFor(plan, plan.default_selected.filter((id) => id !== "pictures"));
-  expect(base.installed_bytes - noKlein.installed_bytes).toBe(klein.installed_bytes); // Z-Image-Turbo still needs the picture engine
-  const noPictures = diskTotalsFor(plan, plan.default_selected.filter((id) => id !== "pictures" && id !== "pictures-zimage"));
-  expect(base.installed_bytes - noPictures.installed_bytes).toBe(klein.installed_bytes + zimage.installed_bytes + plan.rows.find((r) => r.id === "engine:pictures")!.installed_bytes);
+  expect(base.installed_bytes - noPictures.installed_bytes).toBe(klein.installed_bytes + plan.rows.find((r) => r.id === "engine:pictures")!.installed_bytes);
 });
 
 test("rows already on this computer are marked installed", () => {

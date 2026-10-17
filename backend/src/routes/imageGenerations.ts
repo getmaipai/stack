@@ -24,7 +24,7 @@ import { imageLoras, MAX_LORAS_PER_IMAGE } from "@/images/loras";
 import { deleteResult, isJobId, pngPath, readResult, thumbPath, type ImageResultMeta } from "@/images/results";
 import { imageGen, memoryVerdict } from "@/images/imageEngine";
 import {
-  defaultFamilyFor, familyInstalled, IMAGE_DEFAULT_SIZE, IMAGE_FAMILIES, IMAGE_FEATHER_DEFAULT, IMAGE_FEATHER_MAX, IMAGE_MAX_COUNT, IMAGE_MAX_INPUT_BYTES, IMAGE_MAX_PROMPT_CHARS, IMAGE_QUEUE_MAX, imageAvailability, installedFamilies,
+  DEFAULT_FAMILY, familyInstalled, IMAGE_DEFAULT_SIZE, IMAGE_FAMILIES, IMAGE_FEATHER_DEFAULT, IMAGE_FEATHER_MAX, IMAGE_MAX_COUNT, IMAGE_MAX_INPUT_BYTES, IMAGE_MAX_PROMPT_CHARS, IMAGE_QUEUE_MAX, imageAvailability, installedFamilies,
   isFamilyId, parseSize, peakBytes, quantizeFor, type ImageFamilyId,
 } from "@/images/models";
 import { IMAGE_EDIT_JOB_KIND, IMAGE_JOB_KIND, imageFailure, imagePreviewPath, imageProgress, imageTracker, stashImage, unstashImage } from "@/images/jobs";
@@ -178,7 +178,7 @@ function chooseFamily(model: string | undefined, loraRequests: LoraRequest[]): {
     if (!familyInstalled(base)) return { error: { status: 503, code: "not_installed", message: `This LoRA needs ${IMAGE_FAMILIES[base].label}, which is not installed yet. Install it from Home's Engines page, then try again.` } };
     return { family: base };
   }
-  return { family: defaultFamilyFor(getGovernorStatus().tier) ?? installed[0]! };
+  return { family: familyInstalled(DEFAULT_FAMILY) ? DEFAULT_FAMILY : installed[0]! };
 }
 
 function loraRequests(list: ImageGenerationBody["loras"]): LoraRequest[] {

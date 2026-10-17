@@ -16,7 +16,7 @@ import { detectImageBase, imageLoras, parseHfLoraUrl, startLoraInstall } from "@
 import { registerImageJobs, pngSize } from "@/images/jobs";
 import { commitResult, readResult, resultsRoot, sweepResults, workDir } from "@/images/results";
 import { ImageGenService, imageEngineActive, imageGen, imageRoleState, imageRequirementsFileFor, overallPercent, workerHandle, type ImageGenDeps, type WorkerEvent, type WorkerHandle, type WorkerReply, type WorkerRequest } from "@/images/imageEngine";
-import { __setInstalledFamiliesForTests, defaultFamilyFor, IMAGE_FAMILIES, parseSize, peakBytes, quantizeFor } from "@/images/models";
+import { __setInstalledFamiliesForTests, IMAGE_FAMILIES, parseSize, peakBytes, quantizeFor } from "@/images/models";
 import { __resetProvenanceForTests, wasGeneratedHere } from "@/video/provenance";
 import { LoraError, scanWords } from "@/lib/media/loraLibrary";
 import { parseRegion } from "@/routes/imageGenerations";
@@ -85,7 +85,7 @@ beforeEach(() => {
   spawned = 0; killed = 0; requests.length = 0; cancelled.length = 0;
   clean();
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 90 * GB, tier: "p128" });
-  __setInstalledFamiliesForTests(["flux2-klein-4b"]);
+  __setInstalledFamiliesForTests(["flux2-klein-4b", "z-image-turbo"]);
   registerImageJobs();
 });
 afterEach(() => { delete process.env.IMAGE_IDLE_MS; delete process.env.IMAGE_RESULT_KEEP; delete process.env.IMAGE_RESULT_TTL_MS; clean(); });
@@ -230,7 +230,6 @@ test("requests are checked: size, count, steps, model, starting picture", async 
 });
 
 test("Z-Image-Turbo runs when named, with its own steps, and a smaller tier refuses it", async () => {
-  __setInstalledFamiliesForTests(["flux2-klein-4b", "z-image-turbo"]);
   imageGen.useDeps(scripted());
   const response = await post({ model: "z-image-turbo", prompt: "a fox", timeout_ms: 5000 });
   expect(response.status).toBe(200);
@@ -245,22 +244,6 @@ test("Z-Image-Turbo runs when named, with its own steps, and a smaller tier refu
   expect(requests.at(-1)).toMatchObject({ family: "flux2-klein-4b", quantize: 4 });
   __setGovernorTuningForTestsOnly({ tier: "p16", totalMemoryBytes: 16 * GB, freeMemoryBytes: 8 * GB });
   expect((await post({ prompt: "a fox", timeout_ms: 5000 })).status).toBe(503);
-});
-
-test("a request that names no model uses Z-Image-Turbo on p128 when it is installed, and Klein on a smaller tier or when it is not", async () => {
-  imageGen.useDeps(scripted());
-  __setInstalledFamiliesForTests(["flux2-klein-4b", "z-image-turbo"]);
-  expect((await post({ prompt: "a fox", timeout_ms: 5000 })).status).toBe(200);
-  expect(requests.at(-1)).toMatchObject({ family: "z-image-turbo", steps: 9, quantize: 8 });
-  expect((await post({ model: "flux2-klein-4b", prompt: "a fox", timeout_ms: 5000 })).status).toBe(200);
-  expect(requests.at(-1)).toMatchObject({ family: "flux2-klein-4b" });
-  __setInstalledFamiliesForTests(["flux2-klein-4b"]);
-  expect((await post({ prompt: "a fox", timeout_ms: 5000 })).status).toBe(200);
-  expect(requests.at(-1)).toMatchObject({ family: "flux2-klein-4b" });
-  __setInstalledFamiliesForTests(["flux2-klein-4b", "z-image-turbo"]);
-  __setGovernorTuningForTestsOnly({ tier: "p64", totalMemoryBytes: 64 * GB, freeMemoryBytes: 40 * GB });
-  expect((await post({ prompt: "a fox", timeout_ms: 5000 })).status).toBe(200);
-  expect(requests.at(-1)).toMatchObject({ family: "flux2-klein-4b" });
 });
 
 test("a failed picture reports the engine's sentence and code; an out-of-memory worker is replaced", async () => {
@@ -293,7 +276,6 @@ test("the worker exits after the idle time and starts again on the next picture;
 // ---- LoRAs ----
 
 test("a LoRA is chosen by id or sha256, selects the base it was made for, and reaches the worker with its scale", async () => {
-  __setInstalledFamiliesForTests(["flux2-klein-4b", "z-image-turbo"]);
   imageGen.useDeps(scripted());
   const klein = await lora("pixel-style", { base: "klein" });
   const zimage = await lora("technicolor", { base: "zimage" });
@@ -496,13 +478,12 @@ test("the image role reads the picture service when its weights are installed an
 
 test("GET /stack/v1/image reports state, models, limits, edit and what to install", async () => {
   imageGen.useDeps(scripted());
-  __setInstalledFamiliesForTests(["flux2-klein-4b", "z-image-turbo"]);
   const body = await (await app.request("/stack/v1/image")).json() as { image: Record<string, any> };
   const image = body.image;
-  expect(image).toMatchObject({ state: "needs-setup", available: true, tier: "p128", default_model: "z-image-turbo", loras_supported: true, idle_unload_s: 600, edit: { generative: true, masked: true, model: "flux2-klein-4b" } });
+  expect(image).toMatchObject({ state: "needs-setup", available: true, tier: "p128", default_model: "flux2-klein-4b", loras_supported: true, idle_unload_s: 600, edit: { generative: true, masked: true, model: "flux2-klein-4b" } });
   expect(image.models.map((m: { id: string }) => m.id)).toEqual(["flux2-klein-4b", "z-image-turbo"]);
-  expect(image.models[0]).toMatchObject({ installed: true, default: false, edit: true, steps_default: 4, peak_gb: 15, quantize: 8, available: true });
-  expect(image.models[1]).toMatchObject({ installed: true, default: true, steps_default: 9, edit: false, peak_gb: 34 });
+  expect(image.models[0]).toMatchObject({ installed: true, default: true, edit: true, steps_default: 4, peak_gb: 15, quantize: 8, available: true });
+  expect(image.models[1]).toMatchObject({ steps_default: 9, edit: false, peak_gb: 34 });
   expect(image.limits).toMatchObject({ min_side: 256, max_side: 2048, size_step: 16, max_n: 4, max_loras: 4, queue_max: 4 });
   expect(image.memory.fits).toBe(true);
   __setInstalledFamiliesForTests([]);
@@ -707,17 +688,4 @@ test("several pictures in one job: the fraction covers all of them and never goe
   expect(seen[seen.length - 1]!).toBeLessThan(1);
   expect(seen[4]!).toBeLessThan(0.5 + 1e-9);
   expect(IMAGE_STAGES.reduce((sum, item) => sum + item.weight, 0)).toBeCloseTo(1, 5);
-});
-
-test("defaultFamilyFor: Z-Image-Turbo is the default on p128 when installed, Klein everywhere else and as the fallback", () => {
-  const both = () => true;
-  const kleinOnly = (family: string) => family === "flux2-klein-4b";
-  const zimageOnly = (family: string) => family === "z-image-turbo";
-  expect(defaultFamilyFor("p128", both)).toBe("z-image-turbo");
-  expect(defaultFamilyFor("p128", kleinOnly)).toBe("flux2-klein-4b");
-  expect(defaultFamilyFor("p128", zimageOnly)).toBe("z-image-turbo");
-  expect(defaultFamilyFor("p64", both)).toBe("flux2-klein-4b");
-  expect(defaultFamilyFor("p32", both)).toBe("flux2-klein-4b");
-  expect(defaultFamilyFor("p64", zimageOnly)).toBeNull();
-  expect(defaultFamilyFor("p128", () => false)).toBeNull();
 });
