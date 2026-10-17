@@ -114,6 +114,17 @@ test("a directory model installs file by file, each verified, into one directory
   const placed = await installCatalogModel(nested, { destination: join(modelsDir, nested.id, "model.safetensors"), download: async (url, destination) => { const name = url.split("/").pop()!; mkdirSync(join(destination, ".."), { recursive: true }); writeFileSync(destination, files[name]!); } });
   expect(existsSync(join(placed.modelPath!, "weights", "model.safetensors"))).toBe(true);
   expect(removeModel(nested.id)).toBe(true);
+  // Regression (MUSIC-GEN-06): sibling files resolve from the repository root, not from the weights' folder, and keep their own folders.
+  const urls: string[] = [];
+  const siblings = { ...pin, id: "mlx-siblings", download: { ...nested.download, files: nested.download.files.map((file) => file.path === "tokenizer.json" ? { ...file, path: "text/tokenizer.json" } : file) } };
+  const fromRoot = await installCatalogModel(siblings, { destination: join(modelsDir, siblings.id, "model.safetensors"), download: async (url, destination) => { urls.push(url); const name = url.split("/").pop()!; mkdirSync(join(destination, ".."), { recursive: true }); writeFileSync(destination, files[name]!); } });
+  expect(urls.sort()).toEqual([
+    "https://huggingface.co/mlx-community/test/resolve/rev1/config.json",
+    "https://huggingface.co/mlx-community/test/resolve/rev1/text/tokenizer.json",
+    "https://huggingface.co/mlx-community/test/resolve/rev1/weights/model.safetensors",
+  ]);
+  expect(existsSync(join(fromRoot.modelPath!, "text", "tokenizer.json"))).toBe(true);
+  expect(removeModel(siblings.id)).toBe(true);
   // A corrupt secondary file is refused, the record never verified, and the same health item raised as for the weights.
   const badPin = { ...pin, id: "mlx-bad", download: { ...pin.download, files: pin.download.files.map((file) => file.path === "config.json" ? { ...file, sha256: "0".repeat(64) } : file) } };
   await expect(installCatalogModel(badPin, { destination: join(modelsDir, badPin.id, "model.safetensors"), download: async (url, destination) => { const name = url.split("/").pop()!; mkdirSync(join(destination, ".."), { recursive: true }); writeFileSync(destination, files[name]!); } })).rejects.toThrow(/checksum/);

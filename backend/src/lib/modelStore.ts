@@ -478,8 +478,12 @@ async function installRegisteredModel(
   const fileBlobs: Array<{ digest: string; sizeBytes: number; path: string }> = [];
   if (directory && verifiedDownload.files) {
     mkdirSync(directory, { recursive: true });
+    // Every file's path is relative to the repository root, not to the weights' folder: the base is the URL with the weights'
+    // own relative path taken off its end (MUSIC-GEN-06: ACE-Step's weights sit in a subfolder beside sibling folders, and
+    // a base cut at the weights' folder asked for `acestep-v15-turbo/Qwen3-Embedding-0.6B/...`, a 404).
     const path = urlPath(verifiedDownload.url);
-    const base = verifiedDownload.url.slice(0, verifiedDownload.url.indexOf(path) + path.lastIndexOf("/") + 1);
+    const rootLength = path.endsWith(`/${weights!.path}`) ? path.length - weights!.path.length : path.lastIndexOf("/") + 1;
+    const base = verifiedDownload.url.slice(0, verifiedDownload.url.indexOf(path) + rootLength);
     if (placedWeights && !alreadyPlaced) { mkdirSync(dirname(placedWeights), { recursive: true }); renameSync(destination, placedWeights); }
     let landed = weights?.bytes ?? 0;
     for (const file of verifiedDownload.files) {
