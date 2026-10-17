@@ -1685,6 +1685,53 @@ are the first run's for those steps and the second's for 6d):
 | `tts` identity after the restart | ok: the pinned repository's gated twin, as allowed | |
 | `POST /stack/v1/check` | ok | 0.23 s |
 
+### The second voice engine: Chatterbox Turbo on MLX (VOICE-STUDIO-01 slice 1, 2026-10-17)
+
+Why: Jesse wants laughs, coughs, sighs and hesitations in conversation mode on the Studio. Measured on the Studio (M5 Max, 128 GB; the
+home repo's `docs/design/studio-voice-2026-10-17.md`): Chatterbox Turbo through the MLX port in `mlx-audio` has 0.45 s to first audio, a
+real-time factor of 0.27, a 4.8 GB peak, chunked streaming and tag support, with no watermark code in the port. Orpheus 3B MLX 4-bit
+(0.75 s, 0.42, 3.2 GB) is the alternate and slots into the same interface later. Pocket TTS stays: the small-machine engine and the
+fallback.
+
+- **One setting picks the engine.** `stack.voice.engine`: `auto` (default), `chatterbox-turbo`, `pocket`; applies at the voice
+  engine's restart (`needs_restart`). `auto` is the tier default in `speech/ttsEngines.ts`: Chatterbox Turbo on p64 and p128, Pocket TTS on
+  p16 and p32 (p32's budget is spent by the 17 GB Muse 30B pin). Choosing it by hand on a smaller tier is allowed; the governor refuses a
+  load that does not fit and the voice falls back.
+- **Registry and resolution.** `ttsEngines.ts` holds the engines (id, catalog engine name, runtime, tags, planned footprint, repo) and
+  `resolveTtsEngine`: the requested engine, unless it is not built (Orpheus), not installed, or failed to start this run, in which case
+  Pocket TTS with the reason in words. `supervisor.activeTtsChoice()` applies it to the live state; `engineForRole("tts")` returns the
+  engine's catalog name, so `selectedModel("tts")` picks that engine's records and the install plan adds Chatterbox's pins beside Pocket's on
+  p64 and p128.
+- **Fallback.** `startVoiceWithFallback` wraps the voice start: if a non-Pocket engine cannot start (exit before health, a memory
+  refusal, a load that never finishes) it is marked failed for the run, the health item `tts.engine-fallback` (warning, with the reason) is
+  raised and Pocket TTS starts. A restart of the voice engine clears the mark and tries again. Chat and the Stack are never touched.
+- **Runtime.** `mlx-audio` 0.5.9 is a managed runtime (`speech/mlxAudio.ts`) built by the same `uvEnvironment.ts` as Pocket TTS and ComfyUI
+  (requirements written to disk before uv syncs them): a hashed requirements file compiled for Python 3.12 on macOS 14 arm64, about 36
+  packages, no torch. The engine is `speech/mlx_tts_server.py`, written next to the venv at each launch: `GET /health`, `GET /tags` and
+  `POST /tts` (the same multipart form and chunked 24 kHz mono 16-bit WAV with the placeholder data size as Pocket TTS), so
+  `/v1/audio/speech` and Home's voice session are unchanged. It loads the model and synthesizes one short sentence before it reports
+  `ok` (the first synthesis costs 6 to 14 s of kernel compile), runs all MLX work on one thread, frees MLX's buffer cache after each
+  request, and runs with `HF_HUB_OFFLINE=1`.
+- **Pins.** `mlx-community/chatterbox-turbo-fp16` at commit `b2d0a13a...`: `model.safetensors` (2,985,990,960 bytes) as the model and seven
+  small files (config, tokenizer files, `conds.safetensors`, the default voice's conditioning) as components, each by sha256 and size,
+  placed in the hub cache like Pocket's. Licences: the weights card says Apache-2.0 (the upstream ResembleAI card says MIT), the
+  `mlx-audio` code is MIT; the MLX port has no watermark code. Weights are downloaded at install, never vendored, so permissive weights sit
+  cleanly under AGPL-3.0 code. The reference-clip tokenizer (S3TokenizerV2, 472 MB) is not pinned: cloning from a clip is a later slice.
+- **Voices and the capability flag.** With Chatterbox in effect `GET /stack/v1/voices` lists one voice, `chatterbox-turbo-voice-default`;
+  `/v1/audio/speech` ignores `voice_url` for it (a voice Home saved from Pocket's list is not an error). Every voice entry carries
+  `tts: { engine, tags }` and `GET /stack/v1/roles` gives the `tts` role `tts: { engine, requested, tags, fallback_reason }`. `tags` is the
+  list the engine renders as sounds; Home's composer writes only those into `reply.speech` (REG-02).
+- **Tags verified.** Each tag was synthesized alone three times and compared with spoken words ("banana", "laugh", "Hello there.")
+  by voiced-frame fraction and spectral flatness (speech: voiced 0.82 to 0.99, flatness 0.0025 to 0.0033). [laugh] 0.42 / 0.053,
+  [chuckle] 0.72 / 0.019, [cough] 0.21 / 0.019, [sigh] 0.23 / 0.015, [gasp] 0.20 / 0.029, [clear throat] 0.66 / 0.0085 (weakest: about 3x
+  speech flatness) render as non-speech sound. [sniff] and [shush] also render as non-speech but are not offered; [groan] measures like
+  speech (not a sound) and an unknown tag ([banana]) is read aloud as a word, which is why only measured tags are listed. Measured by
+  numbers, not by ear: Jesse's ear is the final judge.
+- **Memory.** Planned 5.2 GB until measured (4.8 GB MLX peak on the Studio); the keep-warm set loads it with the other roles only where
+  `planWarmSet` says it fits, and it never loads on a tier that does not.
+- **Orpheus.** Not built. The slot is the `orpheus` row in the registry (`built: false`), a class in `mlx_tts_server.py` with `load`, `stream`
+  and `tags`, and its pins in the catalog; then the setting gains its option.
+
 ## The image role: ComfyUI as a managed engine (STACK-13b, 2026-09-20)
 
 ComfyUI is the `image` role's engine, managed the way Pocket TTS is
