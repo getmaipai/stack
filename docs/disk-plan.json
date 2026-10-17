@@ -18,13 +18,13 @@
     "p32.ai_required_free_bytes": 30604414790,
     "p64.required_free_bytes": 88890344653,
     "p64.minimum_required_free_bytes": 60009229733,
-    "p64.everything_required_free_bytes": 88890344653,
+    "p64.everything_required_free_bytes": 104887962219,
     "p64.needed_bytes": 74764178827,
     "p64.home_required_free_bytes": 3176323277,
     "p64.ai_required_free_bytes": 85714021376,
     "p128.required_free_bytes": 88890344653,
     "p128.minimum_required_free_bytes": 60009229733,
-    "p128.everything_required_free_bytes": 159433121912,
+    "p128.everything_required_free_bytes": 175430739478,
     "p128.needed_bytes": 74764178827,
     "p128.home_required_free_bytes": 3176323277,
     "p128.ai_required_free_bytes": 85714021376
@@ -707,6 +707,27 @@
           "basis": "pins"
         },
         {
+          "id": "music",
+          "label": "Make music (ACE-Step 1.5)",
+          "note": "Makes and changes songs in chat. Optional.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 11464681305,
+          "installed_bytes": 11464681305,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "ace-step-1-5-turbo",
+            "ace-step-1-5-lm-0-6b"
+          ],
+          "engines": [
+            "engine:music",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -810,6 +831,21 @@
           "engines": [],
           "installed": false,
           "basis": "measured"
+        },
+        {
+          "id": "engine:music",
+          "label": "Music engine tools",
+          "note": "What making songs runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 800000000,
+          "installed_bytes": 1200000000,
+          "peak_temp_bytes": 800000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
         }
       ],
       "default": {
@@ -827,11 +863,11 @@
         "required_free_bytes": 60009229733
       },
       "everything": {
-        "download_bytes": 68070600638,
-        "installed_bytes": 70630829126,
-        "peak_temp_bytes": 4133349701,
-        "needed_bytes": 74764178827,
-        "required_free_bytes": 88890344653
+        "download_bytes": 80335281943,
+        "installed_bytes": 83295510431,
+        "peak_temp_bytes": 4933349701,
+        "needed_bytes": 88228860132,
+        "required_free_bytes": 104887962219
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -1124,6 +1160,27 @@
           "basis": "pins"
         },
         {
+          "id": "music",
+          "label": "Make music (ACE-Step 1.5)",
+          "note": "Makes and changes songs in chat. Optional.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 11464681305,
+          "installed_bytes": 11464681305,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "ace-step-1-5-turbo",
+            "ace-step-1-5-lm-0-6b"
+          ],
+          "engines": [
+            "engine:music",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -1242,6 +1299,21 @@
           "engines": [],
           "installed": false,
           "basis": "measured"
+        },
+        {
+          "id": "engine:music",
+          "label": "Music engine tools",
+          "note": "What making songs runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 800000000,
+          "installed_bytes": 1200000000,
+          "peak_temp_bytes": 800000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
         }
       ],
       "default": {
@@ -1259,11 +1331,11 @@
         "required_free_bytes": 60009229733
       },
       "everything": {
-        "download_bytes": 125879388995,
-        "installed_bytes": 128784157956,
-        "peak_temp_bytes": 4892132364,
-        "needed_bytes": 133676290320,
-        "required_free_bytes": 159433121912
+        "download_bytes": 138144070300,
+        "installed_bytes": 141448839261,
+        "peak_temp_bytes": 5692132364,
+        "needed_bytes": 147140971625,
+        "required_free_bytes": 175430739478
       },
       "measured_on": "2026-10-17",
       "default_selected": [

@@ -15,7 +15,7 @@ import { createJob, finishJob, getJob, jobSignal, listJobs, updateJob } from "@/
 import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { getModel, installCatalogModel, removeModel, type CatalogModelLike, type DownloadModelOptions } from "@/lib/modelStore";
-import { STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_MODELS, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
+import { STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
 import { buildInstallPlan } from "@/lib/installPlan";
 import { diskPlanForTier, diskTotalsFor, engineDownloadBytes, type DiskPlan } from "@/lib/diskPlan";
 import { modelsDir } from "@/lib/paths";
@@ -29,6 +29,7 @@ import { loadedRoleForModel, selectedModel } from "@/lib/supervisor";
 import { ensureImageGenEnvironment, imageGen, imageGenEnvironmentReady, imageGenRoot } from "@/images/imageEngine";
 import { imageLoras } from "@/images/loras";
 import { ensureVideoGenEnvironment, tierAvailability as videoAvailability, videoGen, videoGenEnvironmentReady, videoGenRoot, VIDEO_GEN_NAME } from "@/video/videoGen";
+import { ensureMusicGenEnvironment, tierAvailability as musicAvailability, musicGen, musicGenEnvironmentReady, musicGenRoot, MUSIC_GEN_NAME } from "@/music/musicGen";
 import { listLoras as listVideoLoras, removeLora as removeVideoLora } from "@/video/loras";
 import { imageTools, imageToolsProof, imageToolsRoot } from "@/imagetools/imageTools";
 import { ensurePocketTtsEnvironment, pocketTtsInstalled, pocketTtsRoot } from "@/speech/pocketTts";
@@ -40,7 +41,7 @@ export const COMPONENT_FAILED_PREFIX = "component-install-failed.";
 /** Room kept free on the data volume beyond a download, so a fit never leaves the computer full. */
 export const DISK_MARGIN_BYTES = 5_000_000_000;
 
-export type ComponentGroup = "chat" | "voice" | "pictures" | "video" | "tools" | "loras";
+export type ComponentGroup = "chat" | "voice" | "pictures" | "video" | "music" | "tools" | "loras";
 export type ComponentState = "installed" | "installing" | "notInstalled" | "failed";
 export type ComponentRequirement = "required" | "optional" | "unsupported";
 type Tier = "p16" | "p32" | "p64" | "p128";
@@ -84,9 +85,9 @@ export interface UnitDef {
 
 const GB = 1_000_000_000;
 /** Environment downloads come from the disk plan's measured table (one definition with the wizard); the figures are a fallback only. */
-const ENV_BYTES = { image: engineDownloadBytes("image-gen") ?? 1.1 * GB, video: engineDownloadBytes("video-gen") ?? 1.0 * GB, tools: engineDownloadBytes("image-tools") ?? 0.4 * GB, pocket: engineDownloadBytes("pocket-tts") ?? 0.72 * GB, mlxAudio: engineDownloadBytes("mlx-audio") ?? 0.47 * GB };
+const ENV_BYTES = { image: engineDownloadBytes("image-gen") ?? 1.1 * GB, video: engineDownloadBytes("video-gen") ?? 1.0 * GB, music: engineDownloadBytes("music-gen") ?? 0.8 * GB, tools: engineDownloadBytes("image-tools") ?? 0.4 * GB, pocket: engineDownloadBytes("pocket-tts") ?? 0.72 * GB, mlxAudio: engineDownloadBytes("mlx-audio") ?? 0.47 * GB };
 /** The disk plan's row for a component, where the plan has one (its optional rows are the wizard's unchecked extras). */
-const DISK_ROW: Record<string, string> = { "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "image-tools": "image-tools", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fastwan2-2-ti2v-5b-mlx-bf16": "video" };
+const DISK_ROW: Record<string, string> = { "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "image-tools": "image-tools", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "ace-step-1-5-turbo": "music" };
 
 const envImage: EnvDef = { name: "image-gen", approxBytes: ENV_BYTES.image, root: imageGenRoot, ready: imageGenEnvironmentReady, build: (onPhase, signal) => ensureImageGenEnvironment(onPhase, { signal }), stop: () => imageGen.stop() };
 const envVideo: EnvDef = {
@@ -97,6 +98,16 @@ const envVideo: EnvDef = {
     onPhase("the video engine");
     await ensureEngine(pin, () => {}, { signal });
     await ensureVideoGenEnvironment(onPhase, { signal });
+  },
+};
+const envMusic: EnvDef = {
+  name: MUSIC_GEN_NAME, approxBytes: ENV_BYTES.music, root: musicGenRoot, ready: musicGenEnvironmentReady, link: engineCurrentPath(MUSIC_GEN_NAME), stop: () => musicGen.stop(),
+  build: async (onPhase, signal) => {
+    const pin = selectEngineBinary(await detectHardware(), MUSIC_GEN_NAME);
+    if (!pin) throw new Error("No pinned music engine build exists for this computer.");
+    onPhase("the music engine");
+    await ensureEngine(pin, () => {}, { signal });
+    await ensureMusicGenEnvironment(onPhase, { signal });
   },
 };
 const envTools: EnvDef = { name: "image-tools", approxBytes: ENV_BYTES.tools, root: imageToolsRoot, ready: () => uvEnvironmentReady({ root: imageToolsRoot(), proof: imageToolsProof() }), lazy: true, build: async () => {}, stop: () => imageTools.stop() };
@@ -121,6 +132,7 @@ const LABELS: Record<string, { label: string; summary: string }> = {
   "flux2-klein-4b": { label: "Pictures: FLUX.2 Klein 4B", summary: "The everyday picture model. Makes and edits pictures in a few seconds." },
   "z-image-turbo": { label: "Pictures: Z-Image-Turbo", summary: "A higher-detail picture model for the largest computers. A big download." },
   "fastwan2-2-ti2v-5b-mlx-bf16": { label: "Video: Wan 2.2 (FastWan 5B)", summary: "Makes short video clips from words or a picture." },
+  "ace-step-1-5-turbo": { label: "Music: ACE-Step 1.5", summary: "Makes and changes songs in chat" },
 };
 
 function dedupe<T>(items: T[], key: (item: T) => string): T[] { const seen = new Set<string>(); return items.filter((item) => { const k = key(item); if (seen.has(k)) return false; seen.add(k); return true; }); }
@@ -187,6 +199,16 @@ export function componentDefs(): UnitDef[] {
       const state = videoGen.status().state;
       if (state === "running" || state === "building") return "A video clip is being made right now.";
       return activeJobFor((kind) => kind.startsWith("video")) ? "A video clip is waiting or being made right now." : null;
+    },
+  });
+  units.push({
+    id: STACK_MUSIC_MODELS[0]!.id, ...LABELS[STACK_MUSIC_MODELS[0]!.id]!, group: "music", role: "music", pins: STACK_MUSIC_MODELS, envs: [envMusic], tiers: ["p64", "p128"],
+    platformBlock: () => musicAvailability().code === "unsupported" ? musicAvailability().reason : null,
+    usedBy: () => ["Songs in chat"],
+    busy: () => {
+      const state = musicGen.status().state;
+      if (state === "running" || state === "building") return "A song is being made right now.";
+      return activeJobFor((kind) => kind.startsWith("music")) ? "A song is waiting or being made right now." : null;
     },
   });
   return units;
@@ -291,7 +313,7 @@ function requirementFor(unit: UnitDef, tier: Tier | null, planned: Set<string>):
   const primary = unit.pins[0]!;
   const profile = (primary.sizing as { profile?: string } | undefined)?.profile as Tier | undefined;
   const tooBig = tier && ((unit.tiers && !unit.tiers.includes(tier)) || (!unit.tiers && profile && TIER_RANK[profile] > TIER_RANK[tier]));
-  if (tooBig) return { requirement: "unsupported", reason: unit.group === "video" ? "Video needs a computer with 128 GB of memory." : unit.tiers ? "This needs a computer with more memory than this one." : "This model needs more memory than this computer has." };
+  if (tooBig) return { requirement: "unsupported", reason: unit.group === "video" ? "Video needs a computer with 128 GB of memory." : unit.group === "music" ? "Music needs a computer with 64 GB of memory or more." : unit.tiers ? "This needs a computer with more memory than this one." : "This model needs more memory than this computer has." };
   if (planned.has(primary.id)) return { requirement: "required", reason: "Home installs this on a computer of this size." };
   return { requirement: "optional", reason: null };
 }

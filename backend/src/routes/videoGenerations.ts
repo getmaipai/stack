@@ -258,7 +258,7 @@ videoV1Routes.openapi(getRoute, (c) => {
   return fail(c, 404, "unknown_job", "No such clip: it expired after a day, was deleted, or never existed.");
 });
 
-function fileResponse(c: Context, path: string, type: string, range: string | undefined): Response {
+export function fileResponse(c: Context, path: string, type: string, range: string | undefined): Response {
   const size = statSync(path).size;
   const headers: Record<string, string> = { "content-type": type, "cache-control": "no-store", "accept-ranges": "bytes" };
   const match = range ? /^bytes=(\d*)-(\d*)$/.exec(range.trim()) : null;

@@ -22,6 +22,8 @@ import { imageTools, sweepImageToolsTmp } from "@/imagetools/imageTools";
 import { hostLimiter } from "@/media/hosts";
 import { sweepJobDirs } from "@/media/paths";
 import { videoGen } from "@/video/videoGen";
+import { musicGen } from "@/music/musicGen";
+import { sweepResults as sweepMusicResults, sweepMusicTmp } from "@/music/results";
 import { imageGen } from "@/images/imageEngine";
 import { sweepImageTmp, sweepResults as sweepImageResults } from "@/images/results";
 import { sweepResults, sweepVideoTmp } from "@/video/results";
@@ -84,6 +86,9 @@ async function serve(): Promise<void> {
   // Clips an earlier run left half-made are removed and old results swept; the video worker itself starts on the first clip and exits after ten idle minutes.
   sweepVideoTmp();
   sweepResults();
+  // Songs: half-made work removed and old results swept; the music worker starts on the first song and exits after five idle minutes.
+  sweepMusicTmp();
+  sweepMusicResults();
   // The same for pictures (IMGGEN-STACK-02): half-made work removed, old results swept; the picture worker starts on the first request and exits after ten idle minutes.
   sweepImageTmp();
   sweepImageResults();
@@ -107,6 +112,7 @@ async function serve(): Promise<void> {
     await ddgsSupervisor.stop().catch(() => {});
     imageTools.stop();
     videoGen.stop();
+    musicGen.stop();
     imageGen.stop();
     await stopAllRoles("The Stack is stopping.");
     stopTierWatch();

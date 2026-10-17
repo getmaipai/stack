@@ -62,9 +62,9 @@ export const PRIVACY_ROWS: PrivacyRow[] = [
   },
   {
     id: "tts-environment",
-    what: "Building a Python engine's environment (the packages the voice engines, Pocket TTS and the MLX voice, ComfyUI, the web search service, the image tools, the picture generator, the video engine, the oMLX chat engine and the web fetch tool yt-dlp run on)",
-    when: "Only when the Stack starts and the search service is not built yet, when Home installs the voice or image engine, on the first image edit (remove background, erase, upscale), when Home installs the video engine or the first clip is made, when Home installs the picture generator, on the first web fetch (media.fetch, MEDIA-STACK-01), in the background at start on a Mac whose chat engine is oMLX by default and has no environment yet (ENGINE-MLX-01), and again when the Stack updates it",
-    carries: "The names of the pinned packages and their hashes; uv, the tool that fetches them, comes from GitHub and sends nothing else. The video engine's source (mlx-video, pinned by commit and checksum) and the oMLX release wheel (pinned by checksum) come from GitHub the same way",
+    what: "Building a Python engine's environment (the packages the voice engines, Pocket TTS and the MLX voice, ComfyUI, the web search service, the image tools, the picture generator, the video engine, the music engine, the oMLX chat engine and the web fetch tool yt-dlp run on)",
+    when: "Only when the Stack starts and the search service is not built yet, when Home installs the voice or image engine, on the first image edit (remove background, erase, upscale), when Home installs the video engine or the first clip is made, when Home installs the music engine or the first song is made, when Home installs the picture generator, on the first web fetch (media.fetch, MEDIA-STACK-01), in the background at start on a Mac whose chat engine is oMLX by default and has no environment yet (ENGINE-MLX-01), and again when the Stack updates it",
+    carries: "The names of the pinned packages and their hashes; uv, the tool that fetches them, comes from GitHub and sends nothing else. The video engine's source (mlx-video) and the music engine's source (ACE-Step), both pinned by commit and checksum, and the oMLX release wheel (pinned by checksum) come from GitHub the same way",
     receiver: "The Python Package Index, straight from this computer, and GitHub for the uv build",
     setting: null,
     hosts: ["pypi.org", "files.pythonhosted.org", "github.com", "docs.astral.sh"],

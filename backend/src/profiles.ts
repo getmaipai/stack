@@ -48,13 +48,13 @@ export const PROFILE_TIERS: ProfileTier[] = [
   {
     id: "p64",
     level: "recommended",
-    label: "This computer can run chat, voice, and embeddings, plus one image job at a time. Video and music are not available.",
+    label: "This computer can run chat, voice, and embeddings, plus one image or music job at a time. Video is not available.",
     minUnifiedGb: 64,
     minVramGb: 64,
     resident: ["chat", "coding", "judge", "router", "embed", "rerank", "stt", "tts"],
-    onDemand: ["image"],
+    onDemand: ["image", "music"],
     installedOnly: ["wakeword"],
-    notAvailable: ["vision", "video", "music"],
+    notAvailable: ["vision", "video"],
     speedRange: { min: 35, max: 220 },
   },
   {

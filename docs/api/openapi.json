@@ -3195,6 +3195,830 @@
         }
       }
     },
+    "/v1/audio/music": {
+      "post": {
+        "tags": [
+          "Music"
+        ],
+        "summary": "Make or change a song (the job API with a wait)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "task": {
+                    "type": "string",
+                    "enum": [
+                      "text2music",
+                      "cover",
+                      "repaint",
+                      "extend",
+                      "edit"
+                    ],
+                    "description": "text2music: a new song. cover: the same song in another style. repaint: new words or a new feel for one stretch (`from_s` to `to_s`). extend: add `add_s` seconds at the end (or `at: start`). edit: trim, fade or loudness on a song, no model."
+                  },
+                  "caption": {
+                    "type": "string",
+                    "description": "Genre, mood, instruments, voice, in words. At most 4000 characters."
+                  },
+                  "lyrics": {
+                    "type": "string",
+                    "description": "The words, in ACE-Step's tagged form ([Verse], [Chorus]). At most 4000 characters. Left out: an instrumental."
+                  },
+                  "instrumental": {
+                    "type": "boolean"
+                  },
+                  "duration_s": {
+                    "type": "number",
+                    "description": "text2music only: 10 to the tier's longest (240 on p128, 120 on p64), default 60."
+                  },
+                  "bpm": {
+                    "type": "number"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "language": {
+                    "type": "string"
+                  },
+                  "seed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295
+                  },
+                  "quality": {
+                    "type": "string",
+                    "enum": [
+                      "quick",
+                      "detailed"
+                    ],
+                    "description": "quick: the 0.6B planning model. detailed: the 1.7B one, on tiers that have it (p128). Default: the tier's own (GET /stack/v1/music)."
+                  },
+                  "source": {
+                    "type": "string",
+                    "description": "cover, repaint, extend and edit: the song to start from, base64 of the m4a this Stack made, unchanged (a data: URL is fine), at most 40 MB."
+                  },
+                  "source_sha256": {
+                    "type": "string",
+                    "description": "The sha256 of the source bytes; must equal it."
+                  },
+                  "from_s": {
+                    "type": "number"
+                  },
+                  "to_s": {
+                    "type": "number"
+                  },
+                  "add_s": {
+                    "type": "number",
+                    "description": "extend: 5 to 120 seconds, default 20; the song may not pass the tier's longest."
+                  },
+                  "at": {
+                    "type": "string",
+                    "enum": [
+                      "start",
+                      "end"
+                    ]
+                  },
+                  "strength": {
+                    "type": "number",
+                    "description": "cover: how far to move from the original, 0.1 to 1 (default 0.6)."
+                  },
+                  "edit": {
+                    "type": "object",
+                    "properties": {
+                      "op": {
+                        "type": "string",
+                        "enum": [
+                          "trim",
+                          "fade",
+                          "loudness"
+                        ]
+                      },
+                      "from_s": {
+                        "type": "number"
+                      },
+                      "to_s": {
+                        "type": "number"
+                      },
+                      "seconds": {
+                        "type": "number",
+                        "description": "fade: how long the fade lasts."
+                      },
+                      "where": {
+                        "type": "string",
+                        "enum": [
+                          "in",
+                          "out",
+                          "both"
+                        ],
+                        "description": "fade: which end (default out)."
+                      },
+                      "lufs": {
+                        "type": "number",
+                        "description": "loudness: the target, -30 to -8 (default -14)."
+                      }
+                    },
+                    "required": [
+                      "op"
+                    ]
+                  },
+                  "title": {
+                    "type": "string",
+                    "description": "Written into the file as its title. At most 200 characters."
+                  },
+                  "timeout_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true,
+                    "maximum": 1800000,
+                    "description": "How long this request waits for the song before answering 202 with the job id. Default 60000. A minute-long song takes about half a minute warm."
+                  }
+                },
+                "required": [
+                  "task"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The song is ready; `data[0].url` is where to fetch it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "description": "GET this for the audio (audio/mp4, AAC, 48 kHz stereo). Supports Range requests."
+                          },
+                          "content_type": {
+                            "type": "string",
+                            "enum": [
+                              "audio/mp4"
+                            ]
+                          },
+                          "duration_s": {
+                            "type": "number"
+                          },
+                          "seed": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "model": {
+                            "type": "string",
+                            "description": "The pinned model id, or `none` for an edit that ran no model."
+                          },
+                          "task": {
+                            "type": "string",
+                            "description": "text2music, cover, repaint, extend, or for an edit trim, fade or loudness."
+                          },
+                          "ms": {
+                            "type": "integer"
+                          },
+                          "bytes": {
+                            "type": "integer"
+                          },
+                          "lrc": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Lyric timings (LRC) for a sung song, held in memory only for as long as the song is held; null for an instrumental, an edit, or after a restart."
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "content_type",
+                          "duration_s",
+                          "seed",
+                          "model",
+                          "task",
+                          "ms",
+                          "bytes",
+                          "lrc"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "job",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Still going past timeout_ms (`data` is empty); poll GET /v1/audio/music/{job}.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "description": "GET this for the audio (audio/mp4, AAC, 48 kHz stereo). Supports Range requests."
+                          },
+                          "content_type": {
+                            "type": "string",
+                            "enum": [
+                              "audio/mp4"
+                            ]
+                          },
+                          "duration_s": {
+                            "type": "number"
+                          },
+                          "seed": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "model": {
+                            "type": "string",
+                            "description": "The pinned model id, or `none` for an edit that ran no model."
+                          },
+                          "task": {
+                            "type": "string",
+                            "description": "text2music, cover, repaint, extend, or for an edit trim, fade or loudness."
+                          },
+                          "ms": {
+                            "type": "integer"
+                          },
+                          "bytes": {
+                            "type": "integer"
+                          },
+                          "lrc": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Lyric timings (LRC) for a sung song, held in memory only for as long as the song is held; null for an instrumental, an edit, or after a restart."
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "content_type",
+                          "duration_s",
+                          "seed",
+                          "model",
+                          "task",
+                          "ms",
+                          "bytes",
+                          "lrc"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "job",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The source song is larger than 40 MB (too_large).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request cannot be done: bad_request, bad_range, too_long, source_not_made_here; `error` says what to change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Four songs are already waiting (queue_full).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "The job was cancelled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The song failed (failed, worker_stopped).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Music is off on this computer (not_available_on_this_computer, unsupported), not installed (not_installed), or there is no free memory for it (no_memory).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The song took longer than 10 minutes and was stopped (timeout).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "507": {
+            "description": "The computer ran out of memory while making the song (out_of_memory).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audio/music/{job}": {
+      "get": {
+        "tags": [
+          "Music"
+        ],
+        "summary": "A song's state, stage and file",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Poll this every second or two while state is queued or running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "done",
+                        "failed",
+                        "cancelled"
+                      ]
+                    },
+                    "phase": {
+                      "type": "string",
+                      "description": "queued, waiting for memory, starting, then the stage while running, ready; failed or cancelled when it ended so."
+                    },
+                    "progress": {
+                      "type": "integer",
+                      "description": "0 to 100, `progress_fraction` as a whole percent."
+                    },
+                    "progress_fraction": {
+                      "type": "number",
+                      "nullable": true,
+                      "description": "0 to 1 over the whole job, weighted by measured stage times; never goes back."
+                    },
+                    "stage": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "load, plan, music, mix or save while running; null otherwise."
+                    },
+                    "stage_label": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "The stage in plain words: Getting ready, Planning the song, Making the music, Mixing it down, Saving."
+                    },
+                    "eta_seconds": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Whole seconds left, from the medians of earlier jobs of the same task and length (built-in times until there are some); null until a stage is known."
+                    },
+                    "position": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Place in line while queued (1 is next)."
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "code": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "description": "GET this for the audio (audio/mp4, AAC, 48 kHz stereo). Supports Range requests."
+                          },
+                          "content_type": {
+                            "type": "string",
+                            "enum": [
+                              "audio/mp4"
+                            ]
+                          },
+                          "duration_s": {
+                            "type": "number"
+                          },
+                          "seed": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "model": {
+                            "type": "string",
+                            "description": "The pinned model id, or `none` for an edit that ran no model."
+                          },
+                          "task": {
+                            "type": "string",
+                            "description": "text2music, cover, repaint, extend, or for an edit trim, fade or loudness."
+                          },
+                          "ms": {
+                            "type": "integer"
+                          },
+                          "bytes": {
+                            "type": "integer"
+                          },
+                          "lrc": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Lyric timings (LRC) for a sung song, held in memory only for as long as the song is held; null for an instrumental, an edit, or after a restart."
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "content_type",
+                          "duration_s",
+                          "seed",
+                          "model",
+                          "task",
+                          "ms",
+                          "bytes",
+                          "lrc"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "state",
+                    "phase",
+                    "progress",
+                    "progress_fraction",
+                    "stage",
+                    "stage_label",
+                    "eta_seconds",
+                    "position",
+                    "error",
+                    "code",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such job (it expired, was deleted, or never existed).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Music"
+        ],
+        "summary": "Cancel a song, or free a finished one's file",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A queued or running song is cancelled (the worker is stopped and its memory returns); a finished song's file is freed (Home calls this once it has stored the file).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "cancelled",
+                        "deleted",
+                        "failed"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "state"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such job.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audio/music/{job}/file": {
+      "get": {
+        "tags": [
+          "Music"
+        ],
+        "summary": "The finished song (Range requests supported)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The audio/mp4 bytes.",
+            "content": {
+              "audio/mp4": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "A byte range.",
+            "content": {
+              "audio/mp4": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The song is gone: results are held about ten minutes, the six newest, or Home deleted it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/images/generations/{job}": {
       "get": {
         "tags": [
@@ -9413,6 +10237,7 @@
                               "voice",
                               "pictures",
                               "video",
+                              "music",
                               "tools",
                               "loras"
                             ]
@@ -10728,6 +11553,266 @@
                   },
                   "required": [
                     "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/music": {
+      "get": {
+        "tags": [
+          "Music"
+        ],
+        "summary": "The music role's state, limits, and what to install",
+        "responses": {
+          "200": {
+            "description": "Additive. Home enables its music control from `available` and `state`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "music": {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "unsupported",
+                            "off",
+                            "not-installed",
+                            "needs-setup",
+                            "building",
+                            "idle",
+                            "running"
+                          ],
+                          "description": "off: this computer's tier does not run music. not-installed: the model files are missing. needs-setup: installed; the first song builds the environment (first time only) and starts the worker. idle: the worker is up and waits five minutes for the next song, then exits. running: a song is in progress."
+                        },
+                        "available": {
+                          "type": "boolean"
+                        },
+                        "code": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "reason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "tier": {
+                          "type": "string"
+                        },
+                        "memory": {
+                          "type": "object",
+                          "properties": {
+                            "fits": {
+                              "type": "boolean"
+                            },
+                            "reason": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "peak_gb": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "fits",
+                            "reason",
+                            "peak_gb"
+                          ],
+                          "description": "Whether a song could be admitted next to what is resident now."
+                        },
+                        "model": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "installed": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "installed"
+                          ]
+                        },
+                        "limits": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              }
+                            ]
+                          }
+                        },
+                        "quality": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "quick",
+                              "detailed"
+                            ]
+                          },
+                          "description": "The qualities this computer offers: quick (the 0.6B planning model) and, on a 128 GB computer, detailed (1.7B). Empty when music is off."
+                        },
+                        "default_quality": {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            "quick",
+                            "detailed",
+                            null
+                          ]
+                        },
+                        "tasks": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "worker": {
+                          "type": "object",
+                          "properties": {
+                            "alive": {
+                              "type": "boolean"
+                            },
+                            "idle_exit_seconds": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "alive",
+                            "idle_exit_seconds"
+                          ]
+                        },
+                        "environment": {
+                          "type": "object",
+                          "properties": {
+                            "engine": {
+                              "type": "string"
+                            },
+                            "version": {
+                              "type": "string"
+                            },
+                            "source": {
+                              "type": "boolean"
+                            },
+                            "ready": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "engine",
+                            "version",
+                            "source",
+                            "ready"
+                          ]
+                        },
+                        "install": {
+                          "type": "object",
+                          "properties": {
+                            "models": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "role": {
+                                    "type": "string"
+                                  },
+                                  "repo": {
+                                    "type": "string"
+                                  },
+                                  "url": {
+                                    "type": "string"
+                                  },
+                                  "sha256": {
+                                    "type": "string"
+                                  },
+                                  "approx_bytes": {
+                                    "type": "integer"
+                                  },
+                                  "licence": {
+                                    "type": "string"
+                                  },
+                                  "revision": {
+                                    "type": "string"
+                                  },
+                                  "engine": {
+                                    "type": "string"
+                                  },
+                                  "archive": {
+                                    "type": "boolean"
+                                  },
+                                  "hub_file": {
+                                    "type": "string"
+                                  },
+                                  "component": {
+                                    "type": "string"
+                                  },
+                                  "starter": {
+                                    "type": "boolean"
+                                  },
+                                  "installed": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "role",
+                                  "url",
+                                  "sha256",
+                                  "approx_bytes",
+                                  "licence",
+                                  "revision",
+                                  "starter",
+                                  "installed"
+                                ]
+                              }
+                            },
+                            "remaining_bytes": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "models",
+                            "remaining_bytes"
+                          ],
+                          "description": "The pinned models to pull (POST /stack/v1/models, shaped as an install-plan model) and how many bytes are still to come."
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "available",
+                        "code",
+                        "reason",
+                        "tier",
+                        "memory",
+                        "model",
+                        "limits",
+                        "quality",
+                        "default_quality",
+                        "tasks",
+                        "worker",
+                        "environment",
+                        "install"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "music"
                   ]
                 }
               }

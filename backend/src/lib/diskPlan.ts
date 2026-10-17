@@ -11,7 +11,7 @@ import measured from "@/lib/diskPlanMeasured.json";
 import { PROFILE_TIERS, type ProfileTier } from "@/profiles";
 import {
   CHATTERBOX_ENGINE, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS,
-  STACK_MODELS, STACK_VIDEO_MODELS,
+  STACK_MODELS, STACK_MUSIC_MODELS, STACK_VIDEO_MODELS,
 } from "@/lib/modelCatalog";
 import { plannedPinsFor } from "@/lib/installPlan";
 import type { CatalogModelLike } from "@/lib/modelStore";
@@ -123,9 +123,10 @@ const ENGINE_ROWS: Record<string, () => DiskRow> = {
   "engine:pictures": () => engineRow("engine:pictures", "image-gen", "Picture engine tools", "What making pictures runs on."),
   "engine:image-tools": () => engineRow("engine:image-tools", "image-tools", "Picture editing engine tools", "What removing a background, erasing and enlarging run on."),
   "engine:video": () => engineRow("engine:video", "video-gen", "Video engine tools", "What making videos runs on."),
+  "engine:music": () => engineRow("engine:music", "music-gen", "Music engine tools", "What making songs runs on."),
   "engine:chat-mlx": () => engineRow("engine:chat-mlx", "omlx", "Faster chat engine tools (oMLX)", "What the faster chat engine runs on. llama.cpp stays as the fallback."),
 };
-const PYTHON_ENGINES = ["engine:chat-mlx", "engine:voice", "engine:voice-better", "engine:pictures", "engine:image-tools", "engine:video"];
+const PYTHON_ENGINES = ["engine:chat-mlx", "engine:voice", "engine:voice-better", "engine:pictures", "engine:image-tools", "engine:video", "engine:music"];
 
 function totals(rows: DiskRow[], selected: Set<string>, only?: "home" | "ai"): DiskTotals {
   const chosen = rows.filter((row) => selected.has(row.id));
@@ -177,6 +178,7 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
     if (TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "pictures-zimage", label: "More picture styles (Z-Image Turbo)", note: "A second picture maker with a different look. Optional.", need: "optional", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_ZIMAGE_MODELS));
   }
   if (!tier.notAvailable.includes("video")) rows.push(modelRow({ id: "video", label: "Make videos (Wan2.2)", note: "Makes a short clip from a sentence or a picture. Optional.", need: "optional", engines: ["engine:video", "engine:python"] }, STACK_VIDEO_MODELS));
+  if (!tier.notAvailable.includes("music")) rows.push(modelRow({ id: "music", label: "Make music (ACE-Step 1.5)", note: "Makes and changes songs in chat. Optional.", need: "optional", engines: ["engine:music", "engine:python"] }, STACK_MUSIC_MODELS));
   const search = table.engines["search-helper"]!;
   rows.push({ id: "search", label: "Search helper", note: "Looks up web search results for adults, when web search is turned on.", kind: "model", need: "recommended", selectable: false, download_bytes: search.download_bytes, installed_bytes: search.installed_bytes, peak_temp_bytes: search.peak_temp_bytes, model_ids: [], engines: [], installed: false, basis: search.basis });
   const used = new Set(rows.flatMap((row) => row.engines));

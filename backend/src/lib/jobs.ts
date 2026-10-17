@@ -113,7 +113,7 @@ export function finishJob(id: string, outcome: { ok: true; result?: unknown } | 
   controllers.delete(id);
   if (!job || (job.state !== "running" && job.state !== "queued" && job.state !== "stalled")) return null;
   // A finished picture or clip counts as use of its model family.
-  if (outcome.ok && job.kind !== "component.install" && job.kind !== "model.install") { const input = job.input as { family?: unknown; model?: unknown } | null; noteComponentUse(typeof input?.family === "string" ? input.family : typeof input?.model === "string" ? input.model : job.kind.startsWith("video") ? "fastwan2-2-ti2v-5b-mlx-bf16" : null); }
+  if (outcome.ok && job.kind !== "component.install" && job.kind !== "model.install") { const input = job.input as { family?: unknown; model?: unknown } | null; noteComponentUse(typeof input?.family === "string" ? input.family : typeof input?.model === "string" ? input.model : job.kind.startsWith("video") ? "fastwan2-2-ti2v-5b-mlx-bf16" : job.kind.startsWith("music") ? "ace-step-1-5-turbo" : null); }
   return outcome.ok ? touch(job, { state: "done", percent: 100, status: "done", ...(job.items ? { items: job.items.map((item) => ({ ...item, completedBytes: item.totalBytes, state: "done" as const })) } : {}), result: outcome.result ?? null, position: null }) : touch(job, { state: "failed", status: outcome.status ?? "failed", ...(job.items ? { items: job.items.map((item) => item.state === "done" ? item : { ...item, state: "failed" as const }) } : {}), reason: outcome.reason, ...(outcome.result === undefined ? {} : { result: outcome.result }), position: null });
 }
 

@@ -35,6 +35,12 @@
       "peak_temp_bytes": 758782663,
       "basis": "measured"
     },
+    "music-gen": {
+      "installed_bytes": 1200000000,
+      "download_bytes": 800000000,
+      "peak_temp_bytes": 800000000,
+      "basis": "estimate"
+    },
     "python-base": {
       "installed_bytes": 112668672,
       "download_bytes": 112668672,
@@ -300,6 +306,14 @@
     "video-umt5-tokenizer": {
       "download_bytes": 21414790,
       "installed_bytes": 21414790
+    },
+    "ace-step-1-5-turbo": {
+      "download_bytes": 10091986191,
+      "installed_bytes": 10091986191
+    },
+    "ace-step-1-5-lm-0-6b": {
+      "download_bytes": 1372695114,
+      "installed_bytes": 1372695114
     },
     "nomic-embed-text-v1-5-q4-k-m": {
       "download_bytes": 84106624,

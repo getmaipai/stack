@@ -549,6 +549,104 @@ export const STACK_VIDEO_TOKENIZER: CatalogModelLike = {
 };
 export const STACK_VIDEO_MODELS: CatalogModelLike[] = [STACK_VIDEO_MODEL, STACK_VIDEO_TOKENIZER];
 
+// MUSIC-GEN-01 (docs/design/music-generation-2026-10-17.md in Home, section
+// 3): the `music` role's pins. ACE-Step 1.5 (MIT; the card states it was
+// trained on licensed, royalty-free and synthetic audio and that output may
+// be used commercially, read 2026-10-17): the 2B turbo DiT, the 1.7B planning
+// LM (the "detailed" quality), the Qwen3-Embedding-0.6B text encoder and the
+// music VAE, from one revision of ACE-Step/Ace-Step1.5, laid out as ACE-Step
+// reads its checkpoints folder (one directory model, every file by sha256 and
+// size; the LFS hashes are the Hub's own and were checked against the bytes).
+// Two files of that repository are left out on purpose: the model repository's
+// `modeling_acestep_v15_turbo.py` and `configuration_acestep_v15.py`. ACE-Step
+// overwrites both from its own pinned package before it loads the model, so
+// the code that runs is the pinned package's, never the model repository's
+// (Home's note, section 3); the Stack therefore does not install them, and the
+// worker's checkpoint folder lets ACE-Step write them beside the weights. The
+// README and .gitattributes are left out too. The second record is the 0.6B
+// planning LM (the "quick" quality, ACE-Step/acestep-5Hz-lm-0.6B, MIT), a
+// separate repository, so a separate directory model; the worker's checkpoint
+// folder links it in as `acestep-5Hz-lm-0.6B/` (music/musicGen.ts). The peak
+// memory of a song is MUSIC_PEAK_BYTES in music/musicGen.ts (not repeated here).
+const MUSIC_REPO = "ACE-Step/Ace-Step1.5";
+const MUSIC_REVISION = "19671f406d603126926c1b7e2adc169acbcade22";
+const MUSIC_LM06_REPO = "ACE-Step/acestep-5Hz-lm-0.6B";
+const MUSIC_LM06_REVISION = "148d8ea0225bdab342ee1ae3a354275ccd60ca80";
+export const MUSIC_ENGINE = "music-gen";
+export const STACK_MUSIC_MODEL_ID = "ace-step-1-5-turbo";
+export const STACK_MUSIC_LM_06_ID = "ace-step-1-5-lm-0-6b";
+const MUSIC_FILES = [
+  { path: "Qwen3-Embedding-0.6B/added_tokens.json", sha256: "c0284b582e14987fbd3d5a2cb2bd139084371ed9acbae488829a1c900833c680", bytes: 707 },
+  { path: "Qwen3-Embedding-0.6B/chat_template.jinja", sha256: "87a2728cb8dc9fe424d624542f6060ec05a1d285ebbec578bb078900e33396b5", bytes: 4_116 },
+  { path: "Qwen3-Embedding-0.6B/config.json", sha256: "bb23c1607cfe059a58d8f0196cf1cebb52082b1056b8e358a579da80a5759420", bytes: 1_359 },
+  { path: "Qwen3-Embedding-0.6B/merges.txt", sha256: "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5", bytes: 1_671_853 },
+  { path: "Qwen3-Embedding-0.6B/model.safetensors", sha256: "0437e45c94563b09e13cb7a64478fc406947a93cb34a7e05870fc8dcd48e23fd", bytes: 1_191_586_416 },
+  { path: "Qwen3-Embedding-0.6B/special_tokens_map.json", sha256: "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd", bytes: 613 },
+  { path: "Qwen3-Embedding-0.6B/tokenizer.json", sha256: "def76fb086971c7867b829c23a26261e38d9d74e02139253b38aeb9df8b4b50a", bytes: 11_423_705 },
+  { path: "Qwen3-Embedding-0.6B/tokenizer_config.json", sha256: "443bfa629eb16387a12edbf92a76f6a6f10b2af3b53d87ba1550adfcf45f7fa0", bytes: 5_404 },
+  { path: "Qwen3-Embedding-0.6B/vocab.json", sha256: "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910", bytes: 2_776_833 },
+  { path: "acestep-5Hz-lm-1.7B/added_tokens.json", sha256: "db08b66a515fb5d6acca0b3492d25bb44e0deda6241fc1113ac0679d40558c48", bytes: 2_217_787 },
+  { path: "acestep-5Hz-lm-1.7B/chat_template.jinja", sha256: "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8", bytes: 4_168 },
+  { path: "acestep-5Hz-lm-1.7B/config.json", sha256: "73515ca4bfd86a5b56f28bf680311d1911e159c85d7f7ceb2188e310007c9010", bytes: 1_385 },
+  { path: "acestep-5Hz-lm-1.7B/merges.txt", sha256: "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5", bytes: 1_671_853 },
+  { path: "acestep-5Hz-lm-1.7B/model.safetensors", sha256: "f161689da73e5ecefa28ff780d51c2d92a00f056d021d7933c779ed5c6cd7db8", bytes: 3_708_521_528 },
+  { path: "acestep-5Hz-lm-1.7B/special_tokens_map.json", sha256: "76e233bfc357b0b03d7b6e6ba8e799244f358552575a7cdadb78d3d19106b298", bytes: 1_824_199 },
+  { path: "acestep-5Hz-lm-1.7B/tokenizer.json", sha256: "35af56c3f5cb3ea2cc578aa28a8937770981d504f183ac5c8c38baf4bbd4af4d", bytes: 24_321_939 },
+  { path: "acestep-5Hz-lm-1.7B/tokenizer_config.json", sha256: "6cd70cdd89425971794f5235562edcc608b0629a6c4686ae51a8b8c8b8ba5e95", bytes: 14_072_925 },
+  { path: "acestep-5Hz-lm-1.7B/vocab.json", sha256: "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910", bytes: 2_776_833 },
+  { path: "acestep-v15-turbo/config.json", sha256: "74745ff704ea49164c3d2d1c99fc0670f3fc635a869f0aec2d1311e6a52d400a", bytes: 1_968 },
+  { path: "acestep-v15-turbo/model.safetensors", sha256: "3f6e0797fad420a39bd33979eb6e840e30989e34a3794e843d23b60ec6e422d7", bytes: 4_787_825_604 },
+  { path: "acestep-v15-turbo/silence_latent.pt", sha256: "a778e9dd942f5e8b2c09c55370782d318834432b03dabbcdf70e6ed49ad6358b", bytes: 3_841_215 },
+  { path: "config.json", sha256: "74745ff704ea49164c3d2d1c99fc0670f3fc635a869f0aec2d1311e6a52d400a", bytes: 1_968 },
+  { path: "vae/config.json", sha256: "14e019904df567f26df750317a70e2bd08f9f8f3c40ff4a24c97d1cd3f20ccd2", bytes: 425 },
+  { path: "vae/diffusion_pytorch_model.safetensors", sha256: "da17edb604c40deaf09e9b24974e590d1ca83a374070e5d0884cfa4bed9a99b0", bytes: 337_431_388 },
+];
+const MUSIC_LM06_FILES = [
+  { path: "added_tokens.json", sha256: "db08b66a515fb5d6acca0b3492d25bb44e0deda6241fc1113ac0679d40558c48", bytes: 2_217_787 },
+  { path: "chat_template.jinja", sha256: "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8", bytes: 4_168 },
+  { path: "config.json", sha256: "873ca63808b74e1e008ab950114765553b898b489b9e077e80db83348a118384", bytes: 1_386 },
+  { path: "merges.txt", sha256: "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5", bytes: 1_671_853 },
+  { path: "model.safetensors", sha256: "5d92a60806e2e88c04de58ddc6dde93f2bc8f1336162b3ad5853886c9bcc6b82", bytes: 1_325_804_024 },
+  { path: "special_tokens_map.json", sha256: "76e233bfc357b0b03d7b6e6ba8e799244f358552575a7cdadb78d3d19106b298", bytes: 1_824_199 },
+  { path: "tokenizer.json", sha256: "35af56c3f5cb3ea2cc578aa28a8937770981d504f183ac5c8c38baf4bbd4af4d", bytes: 24_321_939 },
+  { path: "tokenizer_config.json", sha256: "6cd70cdd89425971794f5235562edcc608b0629a6c4686ae51a8b8c8b8ba5e95", bytes: 14_072_925 },
+  { path: "vocab.json", sha256: "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910", bytes: 2_776_833 },
+];
+export const STACK_MUSIC_MODEL: CatalogModelLike = {
+  id: STACK_MUSIC_MODEL_ID,
+  role: "music",
+  repo: MUSIC_REPO,
+  license: "MIT",
+  revision: MUSIC_REVISION,
+  engine: MUSIC_ENGINE,
+  sizing: { profile: "p64", quantization: "bf16" },
+  download: {
+    url: hfUrl(`${MUSIC_REPO}/resolve/${MUSIC_REVISION}/acestep-v15-turbo/model.safetensors`),
+    sha256: "3f6e0797fad420a39bd33979eb6e840e30989e34a3794e843d23b60ec6e422d7",
+    approx_bytes: MUSIC_FILES.reduce((sum, file) => sum + file.bytes, 0),
+    directory: "ACE-Step-1.5-checkpoints",
+    files: MUSIC_FILES,
+  },
+};
+export const STACK_MUSIC_LM_06: CatalogModelLike = {
+  id: STACK_MUSIC_LM_06_ID,
+  role: "music",
+  component: "planning-lm-0.6b",
+  repo: MUSIC_LM06_REPO,
+  license: "MIT",
+  revision: MUSIC_LM06_REVISION,
+  engine: MUSIC_ENGINE,
+  sizing: { profile: "p64", quantization: "bf16" },
+  download: {
+    url: hfUrl(`${MUSIC_LM06_REPO}/resolve/${MUSIC_LM06_REVISION}/model.safetensors`),
+    sha256: "5d92a60806e2e88c04de58ddc6dde93f2bc8f1336162b3ad5853886c9bcc6b82",
+    approx_bytes: MUSIC_LM06_FILES.reduce((sum, file) => sum + file.bytes, 0),
+    directory: "ACE-Step-5Hz-lm-0.6B",
+    files: MUSIC_LM06_FILES,
+  },
+};
+export const STACK_MUSIC_MODELS: CatalogModelLike[] = [STACK_MUSIC_MODEL, STACK_MUSIC_LM_06];
+
 // IMGGEN-STACK-01 (docs/design/image-engine-2026-10-17.md in Home): the
 // image generator's weights for the mflux worker. One family is a primary
 // record (the transformer, or its first shard) plus a component record for
@@ -659,7 +757,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_MUSIC_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a
@@ -679,6 +777,7 @@ export const ROLE_CANDIDATES: Partial<Record<string, RoleCandidate[]>> = {
     { name: "Wan2.2 A14B (the quality profile, two 14B experts)", kind: "model", source: "docs/design/video-generation-2026-10-17.md in Home, VIDEO-GEN-10" },
   ],
   music: [
-    { name: "ACE-Step 1.5 (managed, the official MLX backend, acestep-api), the owner's pick", kind: "engine", source: "docs/plans/jev-and-yue-2026-09-20.md; STACK-99" },
+    { name: "ACE-Step 1.5 XL turbo (4B DiT, MIT), a later quality profile for p128", kind: "model", source: "docs/design/music-generation-2026-10-17.md in Home, MUSIC-GEN-10" },
+    { name: "Stable Audio 3.0 for beds and effects (Stability Community licence, behind a licence gate)", kind: "model", source: "docs/design/music-generation-2026-10-17.md in Home, MUSIC-GEN-11" },
   ],
 };

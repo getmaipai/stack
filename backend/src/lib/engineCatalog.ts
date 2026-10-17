@@ -239,6 +239,19 @@ export const ENGINE_BINARIES: EngineBinaryPin[] = [
     archive: { label: "mlx-video 87db56a source", url: "https://github.com/Blaizzy/mlx-video/archive/87db56a51758fefb748a359b90a5283bb8ba4837.tar.gz", sha256: "174adddb7797125438adbf1996f5c344cfbc6187ac0b49d58615e302302a7a45", approxBytes: 22_144_111 },
     verified: true,
   },
+  {
+    id: "music-gen-ca1e85f-macos-arm64",
+    name: "music-gen",
+    tag: "ca1e85f",
+    platform: "darwin",
+    arch: "arm64",
+    tool: "pyproject.toml",
+    requiresNvidia: false,
+    label: "ACE-Step 1.5 source, commit ca1e85f (MIT; the music path the music worker runs on Apple silicon)",
+    docsUrl: "https://github.com/ACE-Step/ACE-Step-1.5/tree/ca1e85fe9430179831e6bc6be790c332190a3866",
+    archive: { label: "ACE-Step 1.5 ca1e85f source", url: "https://github.com/ACE-Step/ACE-Step-1.5/archive/ca1e85fe9430179831e6bc6be790c332190a3866.tar.gz", sha256: "b464c11f00af00e1e089a09f58a03962f803c080f116fd0517dbe5ec839706b3", approxBytes: 8_439_408 },
+    verified: true,
+  },
 ];
 
 /** The second chat engine (STACK-93): one archive with the binary and
@@ -264,8 +277,8 @@ export type ChatEngine = typeof CHAT_ENGINES[number];
 
 /** The role each engine name serves, for the routes that act on "the
  * engine's role" (start, stop, restart, the swap's drain). */
-export type EngineRole = "chat" | "tts" | "image" | "video";
-export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", "mlx-serve": "chat", omlx: "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", comfyui: "image", "video-gen": "video", "image-gen": "image" };
+export type EngineRole = "chat" | "tts" | "image" | "video" | "music";
+export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", "mlx-serve": "chat", omlx: "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", comfyui: "image", "video-gen": "video", "music-gen": "music", "image-gen": "image" };
 export function engineRole(name: string): EngineRole { return ENGINE_ROLE[name] ?? "chat"; }
 
 /** Runtimes the Stack assembles from pinned wheels through uv, in an
@@ -277,6 +290,7 @@ export const MANAGED_RUNTIMES: ManagedRuntime[] = [
   { name: "omlx", version: "0.7.0", roles: ["chat"], platforms: "macOS 15 or later on arm64 (MLX is Apple silicon only; the chat engine on the p64 and p128 tiers by default, llama-server stays installed as the fallback, ENGINE-MLX-01; no Linux file)" },
   { name: "comfyui", version: "v0.36.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (torch 2.13 ships macOS 14 wheels only; a hashed requirements file per platform, the source archive is the same on every platform)" },
   { name: "video-gen", version: "87db56a", roles: ["video"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the mlx-video source archive plus a hashed requirements file; Wan2.2 TI2V-5B FastWan, text and picture to video, no sound; needs 64 GB or more; no Linux file)" },
+  { name: "music-gen", version: "ca1e85f", roles: ["music"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the ACE-Step 1.5 source archive plus a hashed requirements file; songs with sung lyrics, remakes, covers, repaints and extensions; needs 64 GB or more; no Linux file)" },
   { name: "image-gen", version: "0.23.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; mflux 0.23.0 and a hashed requirements file; FLUX.2 Klein 4B and Z-Image-Turbo, text to picture, image to picture, LoRAs and reference edits; needs 32 GB of memory or more)" },
   { name: "image-tools", version: "1.0.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (onnxruntime, numpy, pillow, opencv; no torch; remove background, erase, upscale and resize on a picture the person has; the Linux file lands with the robot's first image run)" },
 ];

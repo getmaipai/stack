@@ -20,7 +20,7 @@ export interface StageDef {
   label: (n: number | null, of: number | null) => string;
 }
 
-export type GenKind = "image" | "video";
+export type GenKind = "image" | "video" | "music";
 
 /** Video stages. Weights and seconds are the medians of measured runs (832x480, 5 s, 128 GB Mac); see the design note "Stack API as built". */
 export const VIDEO_STAGES: StageDef[] = [
@@ -39,7 +39,16 @@ export const IMAGE_STAGES: StageDef[] = [
   { id: "decode", weight: 0.1, seconds: 0.4, label: () => "Finishing the picture" },
 ];
 
-export const stagesFor = (kind: GenKind): StageDef[] => (kind === "video" ? VIDEO_STAGES : IMAGE_STAGES);
+/** Music stages (MUSIC-GEN-02). Seconds are the medians measured for a 60 s song on the Studio (Home's note, section 4: plan 16, music 1.4, mix 2.7, save 1; load is 0 when the worker is warm); weights are those shares, with a small one kept for loading so a cold start still moves the bar. An edit skips plan and music, and the tracker counts a skipped stage as done. */
+export const MUSIC_STAGES: StageDef[] = [
+  { id: "load", weight: 0.02, seconds: 0, label: () => "Getting ready" },
+  { id: "plan", weight: 0.74, seconds: 16, label: () => "Planning the song" },
+  { id: "music", weight: 0.065, seconds: 1.4, label: () => "Making the music" },
+  { id: "mix", weight: 0.13, seconds: 2.7, label: () => "Mixing it down" },
+  { id: "save", weight: 0.045, seconds: 1, label: () => "Saving" },
+];
+
+export const stagesFor = (kind: GenKind): StageDef[] => (kind === "video" ? VIDEO_STAGES : kind === "music" ? MUSIC_STAGES : IMAGE_STAGES);
 
 // ---- history: the last few stage durations per kind and size ----
 

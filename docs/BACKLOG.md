@@ -192,7 +192,7 @@ are never copied. Nothing migrates Home until STACK-16.
   Mirror: the tts live table. Out of scope: any code change; if the
   run finds one, it is its own item. Exit: `bash scripts/check.sh
   --docs` and the table in `dev.md`.
-- [ ] **STACK-99 (M): the music role on ACE-Step 1.5.** ACE-Step 1.5
+- [x] **STACK-99 (M): the music role on ACE-Step 1.5.** ACE-Step 1.5
   as a managed engine through the uv pattern (MIT code and weights,
   the official MLX backend, its REST server acestep-api, an ungated
   download pinned by revision and sha256), the music role behind the
@@ -205,7 +205,13 @@ are never copied. Nothing migrates Home until STACK-16.
   `routes/v1.ts`. Mirror: STACK-13b. Out of scope:
   vocals-versus-instrumental scope for the household (the owner's
   question in the note), unofficial MLX forks (never). Exit: `bash
-  scripts/check.sh` and the measured table in `dev.md`.
+  scripts/check.sh` and the measured table in `dev.md`. Built 2026-10-17
+  as MUSIC-GEN-01 and MUSIC-GEN-02 (Home
+  `docs/design/music-generation-2026-10-17.md`): the `music-gen` engine
+  with an in-process JSON-lines worker instead of `acestep-api`, the
+  pins, `/v1/audio/music`, the made-here ledger and the `music`
+  component; the measured peak (`MUSIC_PEAK_BYTES`) and the real-worker
+  run are the owning session's.
 
 ## Governor and sizing
 

@@ -14,6 +14,7 @@ import { ensureOmlxEnvironment, omlxInstalled, omlxRoot, OMLX_NAME } from "@/cha
 import { comfyuiInstalled, comfyuiRoot, COMFYUI_NAME, ensureComfyuiEnvironment } from "@/generators/comfyui";
 import { ensureImageGenEnvironment, IMAGE_GEN_NAME, imageGen, imageGenEnvironmentReady } from "@/images/imageEngine";
 import { ensureVideoGenEnvironment, videoGen, videoGenEnvironmentReady, videoGenRoot, VIDEO_GEN_NAME } from "@/video/videoGen";
+import { ensureMusicGenEnvironment, musicGen, musicGenEnvironmentReady, musicGenRoot, MUSIC_GEN_NAME } from "@/music/musicGen";
 import { engineDir, engineIsBound, ensureEngine, removeEngine } from "@/lib/engineInstall";
 import { readEngineManifest } from "@/lib/store/manifests";
 import { currentEngine, stagingPin, swapEngine } from "@/updates/engines";
@@ -74,10 +75,10 @@ enginesRoutes.openapi(listRoute, async (c) => {
   // on every platform, installed when the environment is built.
   const managed = MANAGED_RUNTIMES.map((runtime) => {
     const status = getRoleStatus(engineRole(runtime.name));
-    const installed = runtime.name === POCKET_TTS_NAME ? pocketTtsInstalled() : runtime.name === MLX_AUDIO_NAME ? mlxAudioInstalled() : runtime.name === OMLX_NAME ? omlxInstalled() : runtime.name === COMFYUI_NAME ? comfyuiInstalled() : runtime.name === VIDEO_GEN_NAME ? videoGenEnvironmentReady() : runtime.name === IMAGE_GEN_NAME ? imageGenEnvironmentReady() : false;
+    const installed = runtime.name === POCKET_TTS_NAME ? pocketTtsInstalled() : runtime.name === MLX_AUDIO_NAME ? mlxAudioInstalled() : runtime.name === OMLX_NAME ? omlxInstalled() : runtime.name === COMFYUI_NAME ? comfyuiInstalled() : runtime.name === VIDEO_GEN_NAME ? videoGenEnvironmentReady() : runtime.name === MUSIC_GEN_NAME ? musicGenEnvironmentReady() : runtime.name === IMAGE_GEN_NAME ? imageGenEnvironmentReady() : false;
     const running = engineRole(runtime.name) === "chat" && runningEngine("chat") !== runtime.name ? null : status.identity?.build ?? null;
     const version = deriveEngineVersionState({ running, currentTag: installed ? runtime.version : null, newestTag: runtime.version, needsRestart: false });
-    return { id: `${runtime.name}-${runtime.version}`, name: runtime.name, label: `${runtime.name} ${runtime.version}, an environment the Stack assembles through uv`, platform: process.platform, arch: process.arch, verified: true, installed, matchesThisMachine: true, ...version, directory: runtime.name === POCKET_TTS_NAME ? pocketTtsRoot() : runtime.name === MLX_AUDIO_NAME ? mlxAudioRoot() : runtime.name === OMLX_NAME ? omlxRoot() : runtime.name === COMFYUI_NAME ? comfyuiRoot() : runtime.name === VIDEO_GEN_NAME ? videoGenRoot() : "", roleState: status.state, roleReason: status.reason };
+    return { id: `${runtime.name}-${runtime.version}`, name: runtime.name, label: `${runtime.name} ${runtime.version}, an environment the Stack assembles through uv`, platform: process.platform, arch: process.arch, verified: true, installed, matchesThisMachine: true, ...version, directory: runtime.name === POCKET_TTS_NAME ? pocketTtsRoot() : runtime.name === MLX_AUDIO_NAME ? mlxAudioRoot() : runtime.name === OMLX_NAME ? omlxRoot() : runtime.name === COMFYUI_NAME ? comfyuiRoot() : runtime.name === VIDEO_GEN_NAME ? videoGenRoot() : runtime.name === MUSIC_GEN_NAME ? musicGenRoot() : "", roleState: status.state, roleReason: status.reason };
   });
   return c.json({ engines: [...pins, ...managed] }, 200);
 });
@@ -144,10 +145,11 @@ enginesRoutes.openapi(installRoute, async (c) => {
     return c.json({ job: job.id, engine: MLX_AUDIO_NAME, staged: false }, 202);
   }
   if (!ENGINE_BINARIES.some((candidate) => candidate.name === name)) return c.json({ error: `Unknown engine ${name}.` }, 404);
-  if ((name === COMFYUI_NAME || name === VIDEO_GEN_NAME) && !staged) {
+  if ((name === COMFYUI_NAME || name === VIDEO_GEN_NAME || name === MUSIC_GEN_NAME) && !staged) {
     // The source archive (a pinned engine build, checksummed), then the
     // environment on top of it, one job; a second request joins it. The
-    // video engine (mlx-video's source and its Python environment) builds
+    // video engine (mlx-video's source and its Python environment) and the
+    // music engine (ACE-Step's source and its environment) build
     // the same way; its models are pulled separately, as image's are.
     const inFlight = environmentJobs.get(name);
     if (inFlight) return c.json({ job: inFlight, engine: name, staged: false }, 202);
@@ -160,7 +162,7 @@ enginesRoutes.openapi(installRoute, async (c) => {
     const job = createJob({ kind: "engine.install", totalBytes, items, status: "downloading", input: { engine: pin.id } });
     environmentJobs.set(name, job.id);
     void ensureEngine(pin, (progress) => { const nextItems = getJob(job.id)?.items?.map((item) => item.id !== progress.itemId ? item : { ...item, completedBytes: progress.itemCompletedBytes ?? progress.completedBytes, state: progress.itemState ?? "running" }); updateJob(job.id, { completedBytes: progress.completedBytes, totalBytes: progress.totalBytes || totalBytes, ...(progress.bytesPerSecond === undefined ? {} : { bytesPerSecond: progress.bytesPerSecond }), ...(nextItems ? { items: nextItems } : {}), state: progress.itemState === "stalled" ? "stalled" : "running", status: progress.status }); }, { signal: jobSignal(job.id), activate: true })
-      .then(() => (name === COMFYUI_NAME ? ensureComfyuiEnvironment : ensureVideoGenEnvironment)((phase) => updateJob(job.id, { status: `building ${phase}` }), { signal: jobSignal(job.id) }))
+      .then(() => (name === COMFYUI_NAME ? ensureComfyuiEnvironment : name === MUSIC_GEN_NAME ? ensureMusicGenEnvironment : ensureVideoGenEnvironment)((phase) => updateJob(job.id, { status: `building ${phase}` }), { signal: jobSignal(job.id) }))
       .then(() => { finishJob(job.id, { ok: true, result: { engine: name } }); emit({ id: "engine.state", data: { engine: name, state: "installed" } }); })
       .catch((error) => finishJob(job.id, { ok: false, reason: error instanceof Error ? error.message : String(error) }))
       .finally(() => { environmentJobs.delete(name); });
@@ -210,6 +212,11 @@ for (const action of ["start", "stop", "restart"] as const) enginesRoutes.openap
   if (name === VIDEO_GEN_NAME) {
     if (action === "stop" || action === "restart") { videoGen.stop(); return c.json({ ok: true }, 200); }
     return c.json({ ok: true, reason: "The video engine starts by itself when a clip is made." }, 200);
+  }
+  // The music worker is the music service's, started by the first song and stopped after five idle minutes.
+  if (name === MUSIC_GEN_NAME) {
+    if (action === "stop" || action === "restart") { musicGen.stop(); return c.json({ ok: true }, 200); }
+    return c.json({ ok: true, reason: "The music engine starts by itself when a song is made." }, 200);
   }
   const role = engineRole(name);
   const unchosen = unchosenChatEngine(name, { stoppable: action === "stop" });

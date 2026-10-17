@@ -283,14 +283,17 @@ Engines per platform:
 
 | Engine | Build | Platform | Status |
 |---|---|---|---|
-| ACE-Step 1.5 (managed, the official MLX backend, acestep-api), the owner's pick | | | candidate (docs/plans/jev-and-yue-2026-09-20.md; STACK-99) |
+| `music-gen-ca1e85f-macos-arm64` | ca1e85f | darwin arm64 | pinned, verified (the engine's source; its environment is the row below) |
+| `music-gen` | ca1e85f | macOS 14 or later on arm64 (MLX is Apple silicon only; the ACE-Step 1.5 source archive plus a hashed requirements file; songs with sung lyrics, remakes, covers, repaints and extensions; needs 64 GB or more; no Linux file) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
 | p16 | not available |  |  |  |  |  |  |  | not available |
 | p32 | not available |  |  |  |  |  |  |  | not available |
-| p64 | not available |  |  |  |  |  |  |  | not available |
-| p128 | on demand |  |  |  |  |  |  |  | not yet |
+| p64 | on demand | `ace-step-1-5-turbo` | bf16 | 9.40 GB | not measured | not measured | MIT | ACE-Step/Ace-Step1.5 @ 19671f406d603126926c1b7e2adc169acbcade22 | pinned |
+| p128 | on demand | `ace-step-1-5-turbo` | bf16 | 9.40 GB | not measured | not measured | MIT | ACE-Step/Ace-Step1.5 @ 19671f406d603126926c1b7e2adc169acbcade22 | pinned |
+
+Installed beside the model, never selected on its own: `ace-step-1-5-lm-0-6b` (planning-lm-0.6b, 1.28 GB, MIT, ACE-Step/acestep-5Hz-lm-0.6B @ 148d8ea0225bdab342ee1ae3a354275ccd60ca80).
 
 ## media (the media service: probe, fetch, transcode, preview)
 

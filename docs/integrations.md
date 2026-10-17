@@ -43,6 +43,7 @@ OpenAI-shaped, so an existing client library works unchanged.
 | `POST /v1/audio/speech` | `tts` | speech; phrase-level streaming and cancel |
 | `POST /v1/images/generations` | `image` | the job API with a wait; on a Mac with the picture models installed the mflux worker answers (see Picture generation below), otherwise the supervised ComfyUI |
 | `POST /v1/videos/generations` | `video` | the job API with a wait; progress by phase, cancel, the clip fetched by URL (see Video generation below) |
+| `POST /v1/audio/music` | `music` | the job API with a wait; progress by stage, cancel, the song fetched by URL (see Music generation below) |
 | `GET /v1/models` | all | role ids plus installed model ids in OpenAI's list shape |
 
 The request's common fields are spec `RoleRequest`: `model` carries a
@@ -327,7 +328,7 @@ unreachable), which owns identity and renders the UI schema.
 
 ## Components: install and uninstall (COMPONENTS-01)
 
-`GET /stack/v1/components` lists every installable part as one row: `{ id, label, summary, group (chat, voice, pictures, video, tools, loras),
+`GET /stack/v1/components` lists every installable part as one row: `{ id, label, summary, group (chat, voice, pictures, video, music, tools, loras),
 kind (model, lora), state (installed, installing, notInstalled, failed), size_bytes (on disk now, models plus their engine environment, null when
 nothing is installed), download_bytes (what an install would still fetch), full_bytes (a fresh install, for the setup estimate), requirement
 (required, optional, unsupported) with requirement_reason, last_used_at, used_by, depends_on, job, percent, failure, can_install, install_block,
@@ -507,6 +508,62 @@ tokenizer) shaped as install-plan models to post to `POST /stack/v1/models` (the
 `GET /stack/v1/roles` follows the same facts: `notInstalled`, `installed`, `loaded` (the worker is up), `ready` (a clip finished in the last hour).
 The tokenizer is the one file set the model would otherwise fetch from the Hub at run time; it is pinned, so the worker runs with `HF_HUB_OFFLINE=1` and
 makes no network request.
+
+## Music generation (MUSIC-GEN-01 and 02)
+
+ACE-Step 1.5 (MIT; the 2B turbo DiT, a 5 Hz planning LM, the Qwen3-Embedding-0.6B text encoder and the music VAE) runs in process on the Apple GPU,
+driven by one JSON-lines worker inside the managed Python 3.12 environment `music-gen`. No `acestep-api` server and no port. The worker starts on the first
+song, keeps its models for five idle minutes (`MUSIC_IDLE_MS`; songs come in bursts of edits), then exits and returns its memory. It is never started at boot,
+runs with `HF_HUB_OFFLINE=1`, and makes no network request. Tiers: `p128` (songs up to 240 s, quality `quick` or `detailed`, default `detailed`) and `p64` (up to
+120 s, `quick` only); `p16` and `p32` answer 503 `not_available_on_this_computer`. Quality is the planning model: `quick` the 0.6B one, `detailed` the 1.7B one.
+Design and the measurements: Home `docs/design/music-generation-2026-10-17.md`, sections 3, 4 and 12.
+
+`POST /v1/audio/music` (JSON) answers like the picture and video routes: 200 `{ created, job, data: [{ url, content_type, duration_s, seed, model, task, ms, bytes,
+lrc }] }`, or 202 `{ created, job, data: [] }` when the song is still going at `timeout_ms` (60 s unsaid, 30 min at most); then poll. Fields: `task` (required:
+`text2music`, `cover`, `repaint`, `extend`, `edit`), `caption` (style, mood, instruments, voice), `lyrics` (ACE-Step's tagged form), `instrumental`, `duration_s`
+(`text2music` only: 10 to the tier's longest, default 60), `bpm` (30 to 300), `key`, `language`, `seed`, `quality`, `source` (base64 of an m4a this Stack made,
+unchanged; at most 40 MB) with `source_sha256`, `from_s` and `to_s` (`repaint`: at least 2 s), `add_s` (`extend`: 5 to 120 s, default 20; `at` is `end` or `start`),
+`strength` (`cover`: 0.1 to 1, default 0.6), `edit` (`{ op: trim | fade | loudness, from_s, to_s, seconds, where, lufs }`), `title` (written into the file), `timeout_ms`.
+A `text2music` song needs a `caption` or `lyrics` (an instrumental needs a `caption`); the other tasks need `source`, and `repaint` needs `from_s` and `to_s`. The
+chat model writes the lyrics; the Stack never asks ACE-Step to. Errors carry `error` (what happened and what to do) and `code`: 413 `too_large`; 422 `bad_request`
+`bad_range` `too_long` (4000 characters of `caption` or `lyrics`) `source_not_made_here`; 429 `queue_full` (four songs already waiting); 499 `cancelled`; 500 `failed`
+`worker_stopped`; 503 `not_available_on_this_computer` `unsupported` `not_installed` `no_memory` `setup_failed` `model_missing`; 504 `timeout` (10 minutes); 507
+`out_of_memory`. A body that breaks the schema (an unknown `task`, a negative seed) is a plain 400.
+
+`GET /v1/audio/music/{job}` returns `{ job, state, phase, progress, progress_fraction, stage, stage_label, eta_seconds, position, error, code, data }`. `state` is `queued`,
+`running`, `done`, `failed` or `cancelled`. `stage` is `load`, `plan`, `music`, `mix` or `save` and `stage_label` says it in plain words: "Getting ready", "Planning the
+song", "Making the music", "Mixing it down", "Saving". `progress_fraction` (0 to 1, never goes back) is weighted by measured stage times and `progress` is the same as a whole
+percent; `eta_seconds` is whole seconds left, from the medians of the last seven jobs of the same task and length kept as numbers in `data/gen-history.json` (the built-in
+times for a 60 s song are plan 16 s, music 1.4 s, mix 2.7 s, save 1 s, and no load when the worker is warm; the countdown only runs down unless the stage's own pace says
+the run is slower). An edit skips plan and music, and a skipped stage counts as done. A job the Stack no longer remembers (restart) but whose file is still held answers
+`done`; one whose file is gone is 404 `unknown_job`. `GET /v1/audio/music/{job}/file` serves the song (`audio/mp4`: AAC-LC, 48 kHz stereo, 256 kbps, the moov box first,
+no tags except `title`; Range requests supported). `DELETE /v1/audio/music/{job}` cancels a queued or running job (the worker is stopped and its memory returns) or,
+for a finished one, frees its file; Home calls it once it has stored the file. Results are held about ten minutes (`MUSIC_RESULT_TTL_MS`) and the six newest under
+`data/music/results/<job>/`. No caption, lyrics, title or source song is written there, logged, or put in a job record or on the event feed; the lyric timings (`lrc`) are kept in
+memory only, for as long as the song is held.
+
+**The made-here ledger.** A change (`cover`, `repaint`, `extend`, `edit`) starts only from a song this Stack wrote. The Stack records the sha256 of every m4a it writes (hash
+and time only, 30 days, the newest 2,000, in `data/music/made-here.json`) and checks the bytes it is given, so Home must send the stored file unchanged. Any other song is
+422 `source_not_made_here` with "I can only change a song that was made here."; `source_sha256`, when sent, must equal the bytes' sha256 (422 `bad_request` otherwise). There is
+no way to bring a recording in (Home's note, section 9: no uploaded audio and no real person's voice in v1).
+
+**Edits.** `task: edit` runs no model: the worker trims, fades or normalises the decoded samples and encodes the file again, well under a second. It takes no governor
+admission, but it goes through the same single chain as a song, so the worker is never shared: an edit sent while a song is being made starts when the song ends.
+
+Memory: a song holds one governor admission through the generator queue (one generator job at a time across pictures, video and music; the loser shows `waiting for memory`)
+of `MUSIC_PEAK_BYTES` (24 GB until the measured peak replaces it). A song that can never fit beside what is resident is 503 `no_memory` at once, and so is any song while
+the memory watchdog's level is not `normal`. Four songs may be waiting (429 `queue_full`).
+
+`GET /stack/v1/music` returns `{ music: { state, available, code, reason, tier, memory, model, limits, quality, default_quality, tasks, worker, environment, install } }` for Home
+to enable its control: `state` is `unsupported`, `off` (this tier), `not-installed` (the model files are missing), `needs-setup` (installed; the first song builds the environment
+and starts the worker), `building`, `idle` (the worker waits five minutes for the next song, then exits) or `running`. `limits` holds `min_seconds` (10), `max_seconds` (the tier's, 0 when
+off), `default_seconds`, `min_bpm`, `max_bpm`, `min_extend_seconds`, `max_extend_seconds`, `max_text_chars`, `max_source_mb` and `queue_max`; `quality` is the list this tier offers
+and `default_quality` the one used when a request names none. `install.models` lists the two pins (the 10.1 GB ACE-Step folder, with the 1.7B planning LM, and the 1.37 GB 0.6B
+planning LM) shaped as install-plan models to post to `POST /stack/v1/models`, and `POST /stack/v1/engines/music-gen/install` builds the pinned ACE-Step source and the
+environment ahead of the first song. The `music` component (`GET /stack/v1/components`, group `music`, "Music: ACE-Step 1.5", optional, `p64` and `p128`) installs and removes
+both. The `music` role in `GET /stack/v1/roles` follows the same facts: `notInstalled`, `installed`, `loaded` (the worker is up), `ready` (a song finished in the last hour).
+The worker is handed a checkpoints folder the Stack assembles with links from the two pinned model folders; ACE-Step writes its own model code (two .py files) into the DiT
+folder there, which is why the model repository's copies of those two files are not pinned (the code that runs is the pinned package's).
 
 ## Picture generation (IMGGEN-STACK-01 and 02, IMGGEN-EDIT-01, IMGGEN-LORA-01)
 

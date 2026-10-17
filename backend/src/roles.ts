@@ -141,7 +141,7 @@ export const ROLES = {
     label: "Music",
     wire: "job",
     residency: "jit",
-    endpoints: [],
+    endpoints: ["/v1/audio/music"],
     quality: ["fast", "everyday", "best"],
   },
 } satisfies Record<RoleId, RoleDefinition>;
