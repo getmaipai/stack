@@ -1,0 +1,1238 @@
+{
+  "measured_on": "2026-10-17",
+  "margin_percent": 20,
+  "headroom_warn_bytes": 5368709120,
+  "gib_bytes": 1073741824,
+  "installer": {
+    "p16.required_free_bytes": 15028926546,
+    "p16.minimum_required_free_bytes": 13731452373,
+    "p16.everything_required_free_bytes": 15028926546,
+    "p16.needed_bytes": 12876596138,
+    "p32.required_free_bytes": 33780738066,
+    "p32.minimum_required_free_bytes": 30802869180,
+    "p32.everything_required_free_bytes": 33780738066,
+    "p32.needed_bytes": 28503105738,
+    "p64.required_free_bytes": 63160716413,
+    "p64.minimum_required_free_bytes": 34279601493,
+    "p64.everything_required_free_bytes": 63160716413,
+    "p64.needed_bytes": 53177196982,
+    "p128.required_free_bytes": 63160716413,
+    "p128.minimum_required_free_bytes": 34279601493,
+    "p128.everything_required_free_bytes": 133703493672,
+    "p128.needed_bytes": 53177196982
+  },
+  "tiers": {
+    "p16": {
+      "tier": "p16",
+      "level": "minimal",
+      "margin_percent": 20,
+      "headroom_warn_bytes": 5368709120,
+      "rows": [
+        {
+          "id": "home",
+          "label": "Home itself",
+          "note": "Home, the AI program that runs the models, and the space the install needs to build them.",
+          "kind": "home",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 494080819,
+          "installed_bytes": 1646936064,
+          "peak_temp_bytes": 1200000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
+        },
+        {
+          "id": "chat",
+          "label": "Chat AI (Qwen3 8B)",
+          "note": "The AI you talk to. A small starter chat AI (Qwen3 1.7B) comes first so you can talk while the big one downloads.",
+          "kind": "model",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 6862209504,
+          "installed_bytes": 6862209504,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "qwen3-1.7b-q8-0",
+            "qwen3-8b-instruct-q4-k-m"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "embed",
+          "label": "Memory search model",
+          "note": "Finds what Home remembers when you ask.",
+          "kind": "model",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 84106624,
+          "installed_bytes": 84106624,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "nomic-embed-text-v1-5-q4-k-m"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "stt",
+          "label": "Speech to text",
+          "note": "Turns what you say into words, on this computer.",
+          "kind": "model",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 108244392,
+          "installed_bytes": 233037838,
+          "peak_temp_bytes": 107600538,
+          "model_ids": [
+            "moonshine-tiny-en-int8",
+            "silero-vad"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "voice",
+          "label": "Voice (Pocket TTS)",
+          "note": "Home's spoken voice.",
+          "kind": "model",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 225282959,
+          "installed_bytes": 225282959,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "pocket-tts-english",
+            "pocket-tts-english-tokenizer",
+            "pocket-tts-voice-alba"
+          ],
+          "engines": [
+            "engine:voice",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "image-tools",
+          "label": "Edit pictures tools",
+          "note": "Remove a background, erase something, make a picture bigger.",
+          "kind": "model",
+          "need": "recommended",
+          "selectable": true,
+          "download_bytes": 389065803,
+          "installed_bytes": 389065803,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "image-tool-isnet-general",
+            "image-tool-lama-big",
+            "image-tool-realesrgan-general-x4v3"
+          ],
+          "engines": [
+            "engine:image-tools",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "search",
+          "label": "Search helper",
+          "note": "Looks up web search results for adults, when web search is turned on.",
+          "kind": "model",
+          "need": "recommended",
+          "selectable": false,
+          "download_bytes": 34410496,
+          "installed_bytes": 34410496,
+          "peak_temp_bytes": 0,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
+          "id": "engine:python",
+          "label": "Python base for the engines",
+          "note": "The shared Python the voice and picture engines run on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 112668672,
+          "installed_bytes": 112668672,
+          "peak_temp_bytes": 0,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
+          "id": "engine:voice",
+          "label": "Voice engine tools",
+          "note": "What the voice runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 519789477,
+          "installed_bytes": 755810304,
+          "peak_temp_bytes": 519789477,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
+          "id": "engine:image-tools",
+          "label": "Picture editing engine tools",
+          "note": "What removing a background, erasing and enlarging run on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 287554083,
+          "installed_bytes": 418123776,
+          "peak_temp_bytes": 287554083,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        }
+      ],
+      "default": {
+        "download_bytes": 9117412829,
+        "installed_bytes": 10761652040,
+        "peak_temp_bytes": 2114944098,
+        "needed_bytes": 12876596138,
+        "required_free_bytes": 15028926546
+      },
+      "minimum": {
+        "download_bytes": 8406382447,
+        "installed_bytes": 9920051965,
+        "peak_temp_bytes": 1827390015,
+        "needed_bytes": 11747441980,
+        "required_free_bytes": 13731452373
+      },
+      "everything": {
+        "download_bytes": 9117412829,
+        "installed_bytes": 10761652040,
+        "peak_temp_bytes": 2114944098,
+        "needed_bytes": 12876596138,
+        "required_free_bytes": 15028926546
+      },
+      "measured_on": "2026-10-17",
+      "default_selected": [
+        "home",
+        "chat",
+        "embed",
+        "stt",
+        "voice",
+        "image-tools",
+        "search"
+      ]
+    },
+    "p32": {
+      "tier": "p32",
+      "level": "moderate",
+      "margin_percent": 20,
+      "headroom_warn_bytes": 5368709120,
+      "rows": [
+        {
+          "id": "home",
+          "label": "Home itself",
+          "note": "Home, the AI program that runs the models, and the space the install needs to build them.",
+          "kind": "home",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 494080819,
+          "installed_bytes": 1646936064,
+          "peak_temp_bytes": 1200000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
+        },
+        {
+          "id": "chat",
+          "label": "Chat AI (Muse Glimmer 30B)",
+          "note": "The AI you talk to. A small starter chat AI (Qwen3 1.7B) comes first so you can talk while the big one downloads.",
+          "kind": "model",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 18591109920,
+          "installed_bytes": 18591109920,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "qwen3-1.7b-q8-0",
+            "muse-glimmer-30b-q4-k-m"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "reads-pictures",
+          "label": "Reads pictures (projector)",
+          "note": "Lets the chat AI look at a picture you send it.",
+          "kind": "model",
+          "need": "recommended",
+          "selectable": true,
+          "download_bytes": 1400328928,
+          "installed_bytes": 1400328928,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "muse-glimmer-30b-mmproj-q4-k-m"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "judge",
+          "label": "Quick helper AI",
+          "note": "A second, smaller AI that double-checks answers.",
+          "kind": "model",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 2497280256,
+          "installed_bytes": 2497280256,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "qwen3-4b-q4-k-m"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "embed",
+          "label": "Memory search model",
+          "note": "Finds what Home remembers when you ask.",
+          "kind": "model",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 84106624,
+          "installed_bytes": 84106624,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "nomic-embed-text-v1-5-q4-k-m"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "stt",
+          "label": "Speech to text",
+          "note": "Turns what you say into words, on this computer.",
+          "kind": "model",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 108244392,
+          "installed_bytes": 233037838,
+          "peak_temp_bytes": 107600538,
+          "model_ids": [
+            "moonshine-tiny-en-int8",
+            "silero-vad"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "voice",
+          "label": "Voice (Pocket TTS)",
+          "note": "Home's spoken voice.",
+          "kind": "model",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 225282959,
+          "installed_bytes": 225282959,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "pocket-tts-english",
+            "pocket-tts-english-tokenizer",
+            "pocket-tts-voice-alba"
+          ],
+          "engines": [
+            "engine:voice",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "image-tools",
+          "label": "Edit pictures tools",
+          "note": "Remove a background, erase something, make a picture bigger.",
+          "kind": "model",
+          "need": "recommended",
+          "selectable": true,
+          "download_bytes": 389065803,
+          "installed_bytes": 389065803,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "image-tool-isnet-general",
+            "image-tool-lama-big",
+            "image-tool-realesrgan-general-x4v3"
+          ],
+          "engines": [
+            "engine:image-tools",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "search",
+          "label": "Search helper",
+          "note": "Looks up web search results for adults, when web search is turned on.",
+          "kind": "model",
+          "need": "recommended",
+          "selectable": false,
+          "download_bytes": 34410496,
+          "installed_bytes": 34410496,
+          "peak_temp_bytes": 0,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
+          "id": "engine:python",
+          "label": "Python base for the engines",
+          "note": "The shared Python the voice and picture engines run on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 112668672,
+          "installed_bytes": 112668672,
+          "peak_temp_bytes": 0,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
+          "id": "engine:voice",
+          "label": "Voice engine tools",
+          "note": "What the voice runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 519789477,
+          "installed_bytes": 755810304,
+          "peak_temp_bytes": 519789477,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
+          "id": "engine:image-tools",
+          "label": "Picture editing engine tools",
+          "note": "What removing a background, erasing and enlarging run on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 287554083,
+          "installed_bytes": 418123776,
+          "peak_temp_bytes": 287554083,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        }
+      ],
+      "default": {
+        "download_bytes": 24743922429,
+        "installed_bytes": 26388161640,
+        "peak_temp_bytes": 2114944098,
+        "needed_bytes": 28503105738,
+        "required_free_bytes": 33780738066
+      },
+      "minimum": {
+        "download_bytes": 22632563119,
+        "installed_bytes": 24146232637,
+        "peak_temp_bytes": 1827390015,
+        "needed_bytes": 25973622652,
+        "required_free_bytes": 30802869180
+      },
+      "everything": {
+        "download_bytes": 24743922429,
+        "installed_bytes": 26388161640,
+        "peak_temp_bytes": 2114944098,
+        "needed_bytes": 28503105738,
+        "required_free_bytes": 33780738066
+      },
+      "measured_on": "2026-10-17",
+      "default_selected": [
+        "home",
+        "chat",
+        "reads-pictures",
+        "judge",
+        "embed",
+        "stt",
+        "voice",
+        "image-tools",
+        "search"
+      ]
+    },
+    "p64": {
+      "tier": "p64",
+      "level": "recommended",
+      "margin_percent": 20,
+      "headroom_warn_bytes": 5368709120,
+      "rows": [
+        {
+          "id": "home",
+          "label": "Home itself",
+          "note": "Home, the AI program that runs the models, and the space the install needs to build them.",
+          "kind": "home",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 494080819,
+          "installed_bytes": 1646936064,
+          "peak_temp_bytes": 1200000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
+        },
+        {
+          "id": "chat",
+          "label": "Chat AI (Muse Glimmer 30B)",
+          "note": "The AI you talk to. A small starter chat AI (Qwen3 1.7B) comes first so you can talk while the big one downloads.",
+          "kind": "model",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 21488386848,
+          "installed_bytes": 21488386848,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "qwen3-1.7b-q8-0",
+            "muse-glimmer-30b-q4-k-xl"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "reads-pictures",
+          "label": "Reads pictures (projector)",
+          "note": "Lets the chat AI look at a picture you send it.",
+          "kind": "model",
+          "need": "recommended",
+          "selectable": true,
+          "download_bytes": 1400328928,
+          "installed_bytes": 1400328928,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "muse-glimmer-30b-mmproj-q4-k-m"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "judge",
+          "label": "Quick helper AI",
+          "note": "A second, smaller AI that double-checks answers.",
+          "kind": "model",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 2497280256,
+          "installed_bytes": 2497280256,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "qwen3-4b-q4-k-m"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "embed",
+          "label": "Memory search model",
+          "note": "Finds what Home remembers when you ask.",
+          "kind": "model",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 84106624,
+          "installed_bytes": 84106624,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "nomic-embed-text-v1-5-q4-k-m"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "stt",
+          "label": "Speech to text",
+          "note": "Turns what you say into words, on this computer.",
+          "kind": "model",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 108244392,
+          "installed_bytes": 233037838,
+          "peak_temp_bytes": 107600538,
+          "model_ids": [
+            "moonshine-tiny-en-int8",
+            "silero-vad"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "voice",
+          "label": "Voice (Pocket TTS)",
+          "note": "Home's spoken voice.",
+          "kind": "model",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 225282959,
+          "installed_bytes": 225282959,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "pocket-tts-english",
+            "pocket-tts-english-tokenizer",
+            "pocket-tts-voice-alba"
+          ],
+          "engines": [
+            "engine:voice",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "voice-better",
+          "label": "Voice (Chatterbox)",
+          "note": "A more expressive spoken voice. Pocket TTS stays as the fallback.",
+          "kind": "model",
+          "need": "recommended",
+          "selectable": true,
+          "download_bytes": 2987618173,
+          "installed_bytes": 2987618173,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "chatterbox-turbo-fp16",
+            "chatterbox-turbo-fp16-config",
+            "chatterbox-turbo-fp16-added-tokens",
+            "chatterbox-turbo-fp16-merges",
+            "chatterbox-turbo-fp16-special-tokens-map",
+            "chatterbox-turbo-fp16-tokenizer-config",
+            "chatterbox-turbo-fp16-vocab",
+            "chatterbox-turbo-fp16-conds"
+          ],
+          "engines": [
+            "engine:voice-better",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "image-tools",
+          "label": "Edit pictures tools",
+          "note": "Remove a background, erase something, make a picture bigger.",
+          "kind": "model",
+          "need": "recommended",
+          "selectable": true,
+          "download_bytes": 389065803,
+          "installed_bytes": 389065803,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "image-tool-isnet-general",
+            "image-tool-lama-big",
+            "image-tool-realesrgan-general-x4v3"
+          ],
+          "engines": [
+            "engine:image-tools",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "pictures",
+          "label": "Make pictures (FLUX.2 Klein)",
+          "note": "Makes pictures from a sentence, and edits yours.",
+          "kind": "model",
+          "need": "recommended",
+          "selectable": true,
+          "download_bytes": 15980130813,
+          "installed_bytes": 15980130813,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "flux2-klein-4b",
+            "flux2-klein-4b-text-encoder-config",
+            "flux2-klein-4b-text-encoder-generation-config",
+            "flux2-klein-4b-text-encoder-model-00001-of-00002",
+            "flux2-klein-4b-text-encoder-model-00002-of-00002",
+            "flux2-klein-4b-text-encoder-model-safetensors-index",
+            "flux2-klein-4b-tokenizer-added-tokens",
+            "flux2-klein-4b-tokenizer-chat-template",
+            "flux2-klein-4b-tokenizer-merges",
+            "flux2-klein-4b-tokenizer-special-tokens-map",
+            "flux2-klein-4b-tokenizer-tokenizer",
+            "flux2-klein-4b-tokenizer-tokenizer-config",
+            "flux2-klein-4b-tokenizer-vocab",
+            "flux2-klein-4b-transformer-config",
+            "flux2-klein-4b-vae-config",
+            "flux2-klein-4b-vae-diffusion-pytorch-model"
+          ],
+          "engines": [
+            "engine:pictures",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "search",
+          "label": "Search helper",
+          "note": "Looks up web search results for adults, when web search is turned on.",
+          "kind": "model",
+          "need": "recommended",
+          "selectable": false,
+          "download_bytes": 34410496,
+          "installed_bytes": 34410496,
+          "peak_temp_bytes": 0,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
+          "id": "engine:python",
+          "label": "Python base for the engines",
+          "note": "The shared Python the voice and picture engines run on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 112668672,
+          "installed_bytes": 112668672,
+          "peak_temp_bytes": 0,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
+          "id": "engine:voice",
+          "label": "Voice engine tools",
+          "note": "What the voice runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 519789477,
+          "installed_bytes": 755810304,
+          "peak_temp_bytes": 519789477,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
+          "id": "engine:voice-better",
+          "label": "Better voice engine tools",
+          "note": "What the expressive voice runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 336965689,
+          "installed_bytes": 489971712,
+          "peak_temp_bytes": 336965689,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
+          "id": "engine:pictures",
+          "label": "Picture engine tools",
+          "note": "What making pictures runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 807690041,
+          "installed_bytes": 1174437888,
+          "peak_temp_bytes": 807690041,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
+          "id": "engine:image-tools",
+          "label": "Picture editing engine tools",
+          "note": "What removing a background, erasing and enlarging run on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 287554083,
+          "installed_bytes": 418123776,
+          "peak_temp_bytes": 287554083,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        }
+      ],
+      "default": {
+        "download_bytes": 47753604073,
+        "installed_bytes": 49917597154,
+        "peak_temp_bytes": 3259599828,
+        "needed_bytes": 53177196982,
+        "required_free_bytes": 63160716413
+      },
+      "minimum": {
+        "download_bytes": 25529840047,
+        "installed_bytes": 27043509565,
+        "peak_temp_bytes": 1827390015,
+        "needed_bytes": 28870899580,
+        "required_free_bytes": 34279601493
+      },
+      "everything": {
+        "download_bytes": 47753604073,
+        "installed_bytes": 49917597154,
+        "peak_temp_bytes": 3259599828,
+        "needed_bytes": 53177196982,
+        "required_free_bytes": 63160716413
+      },
+      "measured_on": "2026-10-17",
+      "default_selected": [
+        "home",
+        "chat",
+        "reads-pictures",
+        "judge",
+        "embed",
+        "stt",
+        "voice",
+        "voice-better",
+        "image-tools",
+        "pictures",
+        "search"
+      ]
+    },
+    "p128": {
+      "tier": "p128",
+      "level": "recommended",
+      "margin_percent": 20,
+      "headroom_warn_bytes": 5368709120,
+      "rows": [
+        {
+          "id": "home",
+          "label": "Home itself",
+          "note": "Home, the AI program that runs the models, and the space the install needs to build them.",
+          "kind": "home",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 494080819,
+          "installed_bytes": 1646936064,
+          "peak_temp_bytes": 1200000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
+        },
+        {
+          "id": "chat",
+          "label": "Chat AI (Muse Glimmer 30B)",
+          "note": "The AI you talk to. A small starter chat AI (Qwen3 1.7B) comes first so you can talk while the big one downloads.",
+          "kind": "model",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 21488386848,
+          "installed_bytes": 21488386848,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "qwen3-1.7b-q8-0",
+            "muse-glimmer-30b-q4-k-xl"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "reads-pictures",
+          "label": "Reads pictures (projector)",
+          "note": "Lets the chat AI look at a picture you send it.",
+          "kind": "model",
+          "need": "recommended",
+          "selectable": true,
+          "download_bytes": 1400328928,
+          "installed_bytes": 1400328928,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "muse-glimmer-30b-mmproj-q4-k-m"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "judge",
+          "label": "Quick helper AI",
+          "note": "A second, smaller AI that double-checks answers.",
+          "kind": "model",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 2497280256,
+          "installed_bytes": 2497280256,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "qwen3-4b-q4-k-m"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "embed",
+          "label": "Memory search model",
+          "note": "Finds what Home remembers when you ask.",
+          "kind": "model",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 84106624,
+          "installed_bytes": 84106624,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "nomic-embed-text-v1-5-q4-k-m"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "stt",
+          "label": "Speech to text",
+          "note": "Turns what you say into words, on this computer.",
+          "kind": "model",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 108244392,
+          "installed_bytes": 233037838,
+          "peak_temp_bytes": 107600538,
+          "model_ids": [
+            "moonshine-tiny-en-int8",
+            "silero-vad"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "voice",
+          "label": "Voice (Pocket TTS)",
+          "note": "Home's spoken voice.",
+          "kind": "model",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 225282959,
+          "installed_bytes": 225282959,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "pocket-tts-english",
+            "pocket-tts-english-tokenizer",
+            "pocket-tts-voice-alba"
+          ],
+          "engines": [
+            "engine:voice",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "voice-better",
+          "label": "Voice (Chatterbox)",
+          "note": "A more expressive spoken voice. Pocket TTS stays as the fallback.",
+          "kind": "model",
+          "need": "recommended",
+          "selectable": true,
+          "download_bytes": 2987618173,
+          "installed_bytes": 2987618173,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "chatterbox-turbo-fp16",
+            "chatterbox-turbo-fp16-config",
+            "chatterbox-turbo-fp16-added-tokens",
+            "chatterbox-turbo-fp16-merges",
+            "chatterbox-turbo-fp16-special-tokens-map",
+            "chatterbox-turbo-fp16-tokenizer-config",
+            "chatterbox-turbo-fp16-vocab",
+            "chatterbox-turbo-fp16-conds"
+          ],
+          "engines": [
+            "engine:voice-better",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "image-tools",
+          "label": "Edit pictures tools",
+          "note": "Remove a background, erase something, make a picture bigger.",
+          "kind": "model",
+          "need": "recommended",
+          "selectable": true,
+          "download_bytes": 389065803,
+          "installed_bytes": 389065803,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "image-tool-isnet-general",
+            "image-tool-lama-big",
+            "image-tool-realesrgan-general-x4v3"
+          ],
+          "engines": [
+            "engine:image-tools",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "pictures",
+          "label": "Make pictures (FLUX.2 Klein)",
+          "note": "Makes pictures from a sentence, and edits yours.",
+          "kind": "model",
+          "need": "recommended",
+          "selectable": true,
+          "download_bytes": 15980130813,
+          "installed_bytes": 15980130813,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "flux2-klein-4b",
+            "flux2-klein-4b-text-encoder-config",
+            "flux2-klein-4b-text-encoder-generation-config",
+            "flux2-klein-4b-text-encoder-model-00001-of-00002",
+            "flux2-klein-4b-text-encoder-model-00002-of-00002",
+            "flux2-klein-4b-text-encoder-model-safetensors-index",
+            "flux2-klein-4b-tokenizer-added-tokens",
+            "flux2-klein-4b-tokenizer-chat-template",
+            "flux2-klein-4b-tokenizer-merges",
+            "flux2-klein-4b-tokenizer-special-tokens-map",
+            "flux2-klein-4b-tokenizer-tokenizer",
+            "flux2-klein-4b-tokenizer-tokenizer-config",
+            "flux2-klein-4b-tokenizer-vocab",
+            "flux2-klein-4b-transformer-config",
+            "flux2-klein-4b-vae-config",
+            "flux2-klein-4b-vae-diffusion-pytorch-model"
+          ],
+          "engines": [
+            "engine:pictures",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "pictures-zimage",
+          "label": "More picture styles (Z-Image Turbo)",
+          "note": "A second picture maker with a different look. Optional.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 32848304893,
+          "installed_bytes": 32848304893,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "z-image-turbo",
+            "z-image-turbo-text-encoder-config",
+            "z-image-turbo-text-encoder-generation-config",
+            "z-image-turbo-text-encoder-model-00001-of-00003",
+            "z-image-turbo-text-encoder-model-00002-of-00003",
+            "z-image-turbo-text-encoder-model-00003-of-00003",
+            "z-image-turbo-text-encoder-model-safetensors-index",
+            "z-image-turbo-tokenizer-merges",
+            "z-image-turbo-tokenizer-tokenizer",
+            "z-image-turbo-tokenizer-tokenizer-config",
+            "z-image-turbo-tokenizer-vocab",
+            "z-image-turbo-transformer-config",
+            "z-image-turbo-transformer-diffusion-pytorch-model-00002-of-00003",
+            "z-image-turbo-transformer-diffusion-pytorch-model-00003-of-00003",
+            "z-image-turbo-transformer-diffusion-pytorch-model-safetensors-index",
+            "z-image-turbo-vae-config",
+            "z-image-turbo-vae-diffusion-pytorch-model"
+          ],
+          "engines": [
+            "engine:pictures",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "video",
+          "label": "Make videos (Wan2.2)",
+          "note": "Makes a short clip from a sentence or a picture. Optional.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 24201700801,
+          "installed_bytes": 24201700801,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "fastwan2-2-ti2v-5b-mlx-bf16",
+            "video-umt5-tokenizer"
+          ],
+          "engines": [
+            "engine:video",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "search",
+          "label": "Search helper",
+          "note": "Looks up web search results for adults, when web search is turned on.",
+          "kind": "model",
+          "need": "recommended",
+          "selectable": false,
+          "download_bytes": 34410496,
+          "installed_bytes": 34410496,
+          "peak_temp_bytes": 0,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
+          "id": "engine:python",
+          "label": "Python base for the engines",
+          "note": "The shared Python the voice and picture engines run on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 112668672,
+          "installed_bytes": 112668672,
+          "peak_temp_bytes": 0,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
+          "id": "engine:voice",
+          "label": "Voice engine tools",
+          "note": "What the voice runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 519789477,
+          "installed_bytes": 755810304,
+          "peak_temp_bytes": 519789477,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
+          "id": "engine:voice-better",
+          "label": "Better voice engine tools",
+          "note": "What the expressive voice runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 336965689,
+          "installed_bytes": 489971712,
+          "peak_temp_bytes": 336965689,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
+          "id": "engine:pictures",
+          "label": "Picture engine tools",
+          "note": "What making pictures runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 807690041,
+          "installed_bytes": 1174437888,
+          "peak_temp_bytes": 807690041,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
+          "id": "engine:image-tools",
+          "label": "Picture editing engine tools",
+          "note": "What removing a background, erasing and enlarging run on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 287554083,
+          "installed_bytes": 418123776,
+          "peak_temp_bytes": 287554083,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
+          "id": "engine:video",
+          "label": "Video engine tools",
+          "note": "What making videos runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 758782663,
+          "installed_bytes": 1103323136,
+          "peak_temp_bytes": 758782663,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        }
+      ],
+      "default": {
+        "download_bytes": 47753604073,
+        "installed_bytes": 49917597154,
+        "peak_temp_bytes": 3259599828,
+        "needed_bytes": 53177196982,
+        "required_free_bytes": 63160716413
+      },
+      "minimum": {
+        "download_bytes": 25529840047,
+        "installed_bytes": 27043509565,
+        "peak_temp_bytes": 1827390015,
+        "needed_bytes": 28870899580,
+        "required_free_bytes": 34279601493
+      },
+      "everything": {
+        "download_bytes": 105562392430,
+        "installed_bytes": 108070925984,
+        "peak_temp_bytes": 4018382491,
+        "needed_bytes": 112089308475,
+        "required_free_bytes": 133703493672
+      },
+      "measured_on": "2026-10-17",
+      "default_selected": [
+        "home",
+        "chat",
+        "reads-pictures",
+        "judge",
+        "embed",
+        "stt",
+        "voice",
+        "voice-better",
+        "image-tools",
+        "pictures",
+        "search"
+      ]
+    }
+  }
+}

@@ -107,6 +107,17 @@ if [ "$MODE" != docs ]; then
   fi
   rm -f "$before"
 
+  echo "== backend: disk plan export, regenerate and check for drift"
+  before="$(mktemp)"
+  cp docs/disk-plan.json "$before"
+  (cd backend && bun run gen:disk-plan >/dev/null)
+  if ! cmp -s "$before" docs/disk-plan.json; then
+    rm -f "$before"
+    echo "docs/disk-plan.json was out of date with the pins and backend/src/lib/diskPlanMeasured.json; it has been regenerated. Review and commit it (after a pin's bytes change, run bun run measure:disk-plan first, in backend/)."
+    [ "$MODE" = pre ] || exit 1
+  fi
+  rm -f "$before"
+
   if [ "$MODE" = full ]; then
     echo "== backend: tests"
     (cd backend && bun test)

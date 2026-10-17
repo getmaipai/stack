@@ -6,6 +6,7 @@ import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { detectHardware } from "@/lib/hardware";
 import { buildInstallPlan } from "@/lib/installPlan";
+import { diskPlanForTier } from "@/lib/diskPlan";
 import { listModels } from "@/lib/modelStore";
 import { modelView } from "@/routes/models";
 import { RoleIdSchema } from "@/roles";
@@ -15,10 +16,21 @@ const PlanModelSchema = z.object({
   engine: z.string().optional(), archive: z.boolean().optional(), hub_file: z.string().optional(), component: z.string().optional(),
   starter: z.boolean(), installed: z.boolean(),
 });
+const DiskRowSchema = z.object({
+  id: z.string(), label: z.string(), note: z.string(), kind: z.enum(["home", "model", "engine"]), need: z.enum(["required", "recommended", "optional"]), selectable: z.boolean(),
+  download_bytes: z.number().int().nonnegative(), installed_bytes: z.number().int().nonnegative(), peak_temp_bytes: z.number().int().nonnegative(),
+  model_ids: z.array(z.string()), engines: z.array(z.string()), installed: z.boolean(), basis: z.enum(["pins", "measured", "estimate"]),
+});
+const DiskTotalsSchema = z.object({ download_bytes: z.number().int(), installed_bytes: z.number().int(), peak_temp_bytes: z.number().int(), needed_bytes: z.number().int(), required_free_bytes: z.number().int() });
+const DiskPlanSchema = z.object({
+  tier: z.enum(["p16", "p32", "p64", "p128"]), level: z.enum(["minimal", "moderate", "recommended"]), margin_percent: z.number(), headroom_warn_bytes: z.number().int(),
+  rows: z.array(DiskRowSchema), default: DiskTotalsSchema, minimum: DiskTotalsSchema, everything: DiskTotalsSchema, measured_on: z.string(), default_selected: z.array(z.string()),
+}).openapi({ description: "What each install costs on disk, per component, from the pins' byte counts and a measured table. required_free_bytes is the installed size plus the safety margin plus the peak temporary space: the free space a plan asks for." });
 const PlanSchema = z.object({
   level: z.enum(["minimal", "moderate", "recommended"]).nullable(), tier: z.enum(["p16", "p32", "p64", "p128"]).nullable(), label: z.string(),
   memory_gb: z.number(), memory_source: z.enum(["unified", "graphics", "override", "unknown"]),
   models: z.array(PlanModelSchema), total_bytes: z.number().int(), remaining_bytes: z.number().int(), free_disk_bytes: z.number().int().nullable(), fits_disk: z.boolean().nullable(),
+  disk: DiskPlanSchema.nullable(),
 });
 const planRoute = createRoute({
   method: "get", path: "/", tags: ["Install plan"], summary: "The models to install on this computer",
@@ -31,5 +43,6 @@ installPlanRoutes.openapi(planRoute, async (c) => {
   const { vram_gb: vramGb } = c.req.valid("query");
   const hardware = await detectHardware();
   const installedIds = listModels().map(modelView).filter((model) => model.state === "installed").map((model) => model.id);
-  return c.json(buildInstallPlan(hardware, { vramOverrideGb: vramGb ?? null, installedIds }), 200);
+  const plan = buildInstallPlan(hardware, { vramOverrideGb: vramGb ?? null, installedIds });
+  return c.json({ ...plan, disk: plan.tier ? diskPlanForTier(plan.tier, installedIds) : null }, 200);
 });

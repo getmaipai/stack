@@ -12,7 +12,9 @@
     "lint": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "gen:api-docs": "bun run scripts/gen-api-docs.ts",
-    "gen:components-doc": "bun run scripts/gen-components-doc.ts"
+    "gen:components-doc": "bun run scripts/gen-components-doc.ts",
+    "measure:disk-plan": "bun run scripts/measure-disk-plan.ts",
+    "gen:disk-plan": "bun run scripts/gen-disk-plan.ts"
   },
   "dependencies": {
     "@hono/zod-openapi": "^1.6.3",

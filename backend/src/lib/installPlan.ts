@@ -67,12 +67,8 @@ export function imageInstallModels(family: "flux2-klein-4b" | "z-image-turbo", i
   return pins.flatMap((pin) => view(pin, installed, false) ?? []);
 }
 
-export function buildInstallPlan(hw: HardwareInfo, options: { vramOverrideGb?: number | null; installedIds?: Iterable<string> } = {}): InstallPlan {
-  const { tier, memoryGb, source } = sizeMachine(hw, options.vramOverrideGb);
-  const free = hw.freeDiskBytes ?? null;
-  const base = { memory_gb: memoryGb, memory_source: source, free_disk_bytes: free };
-  if (!tier) return { level: null, tier: null, label: source === "unknown" ? UNKNOWN_LABEL : NO_TIER_LABEL, ...base, models: [], total_bytes: 0, remaining_bytes: 0, fits_disk: null };
-  const installed = new Set(options.installedIds ?? []);
+/** The pins a tier's first-run plan installs, in plan order, the starter chat first: the one list both the install plan and the disk plan read. */
+export function plannedPinsFor(tier: ProfileTier): Array<{ pin: CatalogModelLike; starter: boolean }> {
   const projectors = new Set(STACK_MODELS.flatMap((pin) => pin.imageInput ? [pin.imageInput.projector] : []));
   // Resident roles, plus embeddings where the tier loads them on demand:
   // search and memory need the model on disk either way. A role that
@@ -102,6 +98,16 @@ export function buildInstallPlan(hw: HardwareInfo, options: { vramOverrideGb?: n
   // The image tools (remove background, erase, upscale; about 390 MB, one worker that loads on demand) are small enough for every tier
   // that has a plan; the governor decides at the first edit whether memory allows it (IMAGETOOLS-01).
   for (const pin of STACK_IMAGE_TOOL_MODELS) add(pin);
+  return planned;
+}
+
+export function buildInstallPlan(hw: HardwareInfo, options: { vramOverrideGb?: number | null; installedIds?: Iterable<string> } = {}): InstallPlan {
+  const { tier, memoryGb, source } = sizeMachine(hw, options.vramOverrideGb);
+  const free = hw.freeDiskBytes ?? null;
+  const base = { memory_gb: memoryGb, memory_source: source, free_disk_bytes: free };
+  if (!tier) return { level: null, tier: null, label: source === "unknown" ? UNKNOWN_LABEL : NO_TIER_LABEL, ...base, models: [], total_bytes: 0, remaining_bytes: 0, fits_disk: null };
+  const installed = new Set(options.installedIds ?? []);
+  const planned = plannedPinsFor(tier);
   const models = planned.flatMap(({ pin, starter }) => view(pin, installed, starter) ?? []);
   const total = models.reduce((sum, model) => sum + model.approx_bytes, 0);
   const remaining = models.filter((model) => !model.installed).reduce((sum, model) => sum + model.approx_bytes, 0);

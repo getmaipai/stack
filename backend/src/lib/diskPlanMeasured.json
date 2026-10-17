@@ -1,0 +1,327 @@
+{
+  "measured_on": "2026-10-17",
+  "machine": "darwin arm64, /usr/local/maipai-home/stack/data",
+  "margin_percent": 20,
+  "headroom_warn_bytes": 5368709120,
+  "uv_cache_over_environments": 0.688,
+  "engines": {
+    "pocket-tts": {
+      "installed_bytes": 755810304,
+      "download_bytes": 519789477,
+      "peak_temp_bytes": 519789477,
+      "basis": "measured"
+    },
+    "mlx-audio": {
+      "installed_bytes": 489971712,
+      "download_bytes": 336965689,
+      "peak_temp_bytes": 336965689,
+      "basis": "measured"
+    },
+    "image-gen": {
+      "installed_bytes": 1174437888,
+      "download_bytes": 807690041,
+      "peak_temp_bytes": 807690041,
+      "basis": "measured"
+    },
+    "image-tools": {
+      "installed_bytes": 418123776,
+      "download_bytes": 287554083,
+      "peak_temp_bytes": 287554083,
+      "basis": "measured"
+    },
+    "video-gen": {
+      "installed_bytes": 1103323136,
+      "download_bytes": 758782663,
+      "peak_temp_bytes": 758782663,
+      "basis": "measured"
+    },
+    "python-base": {
+      "installed_bytes": 112668672,
+      "download_bytes": 112668672,
+      "peak_temp_bytes": 0,
+      "basis": "measured"
+    },
+    "search-helper": {
+      "installed_bytes": 34410496,
+      "download_bytes": 34410496,
+      "peak_temp_bytes": 0,
+      "basis": "measured"
+    },
+    "home": {
+      "installed_bytes": 1646936064,
+      "download_bytes": 494080819,
+      "peak_temp_bytes": 1200000000,
+      "basis": "estimate"
+    }
+  },
+  "pins": {
+    "qwen3-1.7b-q8-0": {
+      "download_bytes": 1834426016,
+      "installed_bytes": 1834426016
+    },
+    "qwen3-8b-instruct-q4-k-m": {
+      "download_bytes": 5027783488,
+      "installed_bytes": 5027783488
+    },
+    "muse-glimmer-30b-q4-k-xl": {
+      "download_bytes": 19653960832,
+      "installed_bytes": 19653960832
+    },
+    "muse-glimmer-30b-q4-k-m": {
+      "download_bytes": 16756683904,
+      "installed_bytes": 16756683904
+    },
+    "muse-glimmer-30b-mmproj-q4-k-m": {
+      "download_bytes": 1400328928,
+      "installed_bytes": 1400328928
+    },
+    "qwen3-4b-q4-k-m": {
+      "download_bytes": 2497280256,
+      "installed_bytes": 2497280256
+    },
+    "qwen3-1.7b-mlx-4bit": {
+      "download_bytes": 984013244,
+      "installed_bytes": 984013244
+    },
+    "moonshine-tiny-en-int8": {
+      "download_bytes": 107600538,
+      "installed_bytes": 232393984
+    },
+    "silero-vad": {
+      "download_bytes": 643854,
+      "installed_bytes": 643854
+    },
+    "pocket-tts-english": {
+      "download_bytes": 219029196,
+      "installed_bytes": 219029196
+    },
+    "pocket-tts-english-tokenizer": {
+      "download_bytes": 59339,
+      "installed_bytes": 59339
+    },
+    "pocket-tts-voice-alba": {
+      "download_bytes": 6194424,
+      "installed_bytes": 6194424
+    },
+    "chatterbox-turbo-fp16": {
+      "download_bytes": 2985990960,
+      "installed_bytes": 2985990960
+    },
+    "chatterbox-turbo-fp16-config": {
+      "download_bytes": 2059,
+      "installed_bytes": 2059
+    },
+    "chatterbox-turbo-fp16-added-tokens": {
+      "download_bytes": 418,
+      "installed_bytes": 418
+    },
+    "chatterbox-turbo-fp16-merges": {
+      "download_bytes": 456318,
+      "installed_bytes": 456318
+    },
+    "chatterbox-turbo-fp16-special-tokens-map": {
+      "download_bytes": 470,
+      "installed_bytes": 470
+    },
+    "chatterbox-turbo-fp16-tokenizer-config": {
+      "download_bytes": 3878,
+      "installed_bytes": 3878
+    },
+    "chatterbox-turbo-fp16-vocab": {
+      "download_bytes": 999186,
+      "installed_bytes": 999186
+    },
+    "chatterbox-turbo-fp16-conds": {
+      "download_bytes": 164884,
+      "installed_bytes": 164884
+    },
+    "sd-1-5-emaonly": {
+      "download_bytes": 4265146304,
+      "installed_bytes": 4265146304
+    },
+    "image-tool-isnet-general": {
+      "download_bytes": 176149806,
+      "installed_bytes": 176149806
+    },
+    "image-tool-lama-big": {
+      "download_bytes": 208044816,
+      "installed_bytes": 208044816
+    },
+    "image-tool-realesrgan-general-x4v3": {
+      "download_bytes": 4871181,
+      "installed_bytes": 4871181
+    },
+    "flux2-klein-4b": {
+      "download_bytes": 7751109744,
+      "installed_bytes": 7751109744
+    },
+    "flux2-klein-4b-text-encoder-config": {
+      "download_bytes": 1536,
+      "installed_bytes": 1536
+    },
+    "flux2-klein-4b-text-encoder-generation-config": {
+      "download_bytes": 214,
+      "installed_bytes": 214
+    },
+    "flux2-klein-4b-text-encoder-model-00001-of-00002": {
+      "download_bytes": 4967215360,
+      "installed_bytes": 4967215360
+    },
+    "flux2-klein-4b-text-encoder-model-00002-of-00002": {
+      "download_bytes": 3077766632,
+      "installed_bytes": 3077766632
+    },
+    "flux2-klein-4b-text-encoder-model-safetensors-index": {
+      "download_bytes": 32855,
+      "installed_bytes": 32855
+    },
+    "flux2-klein-4b-tokenizer-added-tokens": {
+      "download_bytes": 707,
+      "installed_bytes": 707
+    },
+    "flux2-klein-4b-tokenizer-chat-template": {
+      "download_bytes": 4168,
+      "installed_bytes": 4168
+    },
+    "flux2-klein-4b-tokenizer-merges": {
+      "download_bytes": 1671853,
+      "installed_bytes": 1671853
+    },
+    "flux2-klein-4b-tokenizer-special-tokens-map": {
+      "download_bytes": 613,
+      "installed_bytes": 613
+    },
+    "flux2-klein-4b-tokenizer-tokenizer": {
+      "download_bytes": 11422654,
+      "installed_bytes": 11422654
+    },
+    "flux2-klein-4b-tokenizer-tokenizer-config": {
+      "download_bytes": 5404,
+      "installed_bytes": 5404
+    },
+    "flux2-klein-4b-tokenizer-vocab": {
+      "download_bytes": 2776833,
+      "installed_bytes": 2776833
+    },
+    "flux2-klein-4b-transformer-config": {
+      "download_bytes": 541,
+      "installed_bytes": 541
+    },
+    "flux2-klein-4b-vae-config": {
+      "download_bytes": 821,
+      "installed_bytes": 821
+    },
+    "flux2-klein-4b-vae-diffusion-pytorch-model": {
+      "download_bytes": 168120878,
+      "installed_bytes": 168120878
+    },
+    "z-image-turbo": {
+      "download_bytes": 9973693184,
+      "installed_bytes": 9973693184
+    },
+    "z-image-turbo-text-encoder-config": {
+      "download_bytes": 726,
+      "installed_bytes": 726
+    },
+    "z-image-turbo-text-encoder-generation-config": {
+      "download_bytes": 239,
+      "installed_bytes": 239
+    },
+    "z-image-turbo-text-encoder-model-00001-of-00003": {
+      "download_bytes": 3957900840,
+      "installed_bytes": 3957900840
+    },
+    "z-image-turbo-text-encoder-model-00002-of-00003": {
+      "download_bytes": 3987450520,
+      "installed_bytes": 3987450520
+    },
+    "z-image-turbo-text-encoder-model-00003-of-00003": {
+      "download_bytes": 99630640,
+      "installed_bytes": 99630640
+    },
+    "z-image-turbo-text-encoder-model-safetensors-index": {
+      "download_bytes": 32819,
+      "installed_bytes": 32819
+    },
+    "z-image-turbo-tokenizer-merges": {
+      "download_bytes": 1671853,
+      "installed_bytes": 1671853
+    },
+    "z-image-turbo-tokenizer-tokenizer": {
+      "download_bytes": 11422654,
+      "installed_bytes": 11422654
+    },
+    "z-image-turbo-tokenizer-tokenizer-config": {
+      "download_bytes": 9732,
+      "installed_bytes": 9732
+    },
+    "z-image-turbo-tokenizer-vocab": {
+      "download_bytes": 2776833,
+      "installed_bytes": 2776833
+    },
+    "z-image-turbo-transformer-config": {
+      "download_bytes": 473,
+      "installed_bytes": 473
+    },
+    "z-image-turbo-transformer-diffusion-pytorch-model-00002-of-00003": {
+      "download_bytes": 9973714824,
+      "installed_bytes": 9973714824
+    },
+    "z-image-turbo-transformer-diffusion-pytorch-model-00003-of-00003": {
+      "download_bytes": 4672282880,
+      "installed_bytes": 4672282880
+    },
+    "z-image-turbo-transformer-diffusion-pytorch-model-safetensors-index": {
+      "download_bytes": 48969,
+      "installed_bytes": 48969
+    },
+    "z-image-turbo-vae-config": {
+      "download_bytes": 805,
+      "installed_bytes": 805
+    },
+    "z-image-turbo-vae-diffusion-pytorch-model": {
+      "download_bytes": 167666902,
+      "installed_bytes": 167666902
+    },
+    "fastwan2-2-ti2v-5b-mlx-bf16": {
+      "download_bytes": 24180286011,
+      "installed_bytes": 24180286011
+    },
+    "video-umt5-tokenizer": {
+      "download_bytes": 21414790,
+      "installed_bytes": 21414790
+    },
+    "nomic-embed-text-v1-5-q4-k-m": {
+      "download_bytes": 84106624,
+      "installed_bytes": 84106624
+    },
+    "qwen3-vl-4b-instruct-q4-k-m": {
+      "download_bytes": 2497281664,
+      "installed_bytes": 2497281664
+    },
+    "qwen3-vl-4b-instruct-mmproj-q8-0": {
+      "download_bytes": 453974304,
+      "installed_bytes": 453974304
+    },
+    "qwen3-vl-8b-instruct-q4-k-m": {
+      "download_bytes": 5027784800,
+      "installed_bytes": 5027784800
+    },
+    "qwen3-vl-8b-instruct-mmproj-q8-0": {
+      "download_bytes": 752289728,
+      "installed_bytes": 752289728
+    },
+    "openwakeword-melspectrogram": {
+      "download_bytes": 1087958,
+      "installed_bytes": 1087958
+    },
+    "openwakeword-embedding": {
+      "download_bytes": 1326578,
+      "installed_bytes": 1326578
+    },
+    "trained-hey-maipai-v2": {
+      "download_bytes": 937243,
+      "installed_bytes": 937243
+    }
+  }
+}

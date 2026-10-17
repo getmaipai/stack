@@ -7134,6 +7134,224 @@
                     "fits_disk": {
                       "type": "boolean",
                       "nullable": true
+                    },
+                    "disk": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "tier": {
+                          "type": "string",
+                          "enum": [
+                            "p16",
+                            "p32",
+                            "p64",
+                            "p128"
+                          ]
+                        },
+                        "level": {
+                          "type": "string",
+                          "enum": [
+                            "minimal",
+                            "moderate",
+                            "recommended"
+                          ]
+                        },
+                        "margin_percent": {
+                          "type": "number"
+                        },
+                        "headroom_warn_bytes": {
+                          "type": "integer"
+                        },
+                        "rows": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "label": {
+                                "type": "string"
+                              },
+                              "note": {
+                                "type": "string"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "home",
+                                  "model",
+                                  "engine"
+                                ]
+                              },
+                              "need": {
+                                "type": "string",
+                                "enum": [
+                                  "required",
+                                  "recommended",
+                                  "optional"
+                                ]
+                              },
+                              "selectable": {
+                                "type": "boolean"
+                              },
+                              "download_bytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "installed_bytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "peak_temp_bytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "model_ids": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "engines": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "installed": {
+                                "type": "boolean"
+                              },
+                              "basis": {
+                                "type": "string",
+                                "enum": [
+                                  "pins",
+                                  "measured",
+                                  "estimate"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "label",
+                              "note",
+                              "kind",
+                              "need",
+                              "selectable",
+                              "download_bytes",
+                              "installed_bytes",
+                              "peak_temp_bytes",
+                              "model_ids",
+                              "engines",
+                              "installed",
+                              "basis"
+                            ]
+                          }
+                        },
+                        "default": {
+                          "type": "object",
+                          "properties": {
+                            "download_bytes": {
+                              "type": "integer"
+                            },
+                            "installed_bytes": {
+                              "type": "integer"
+                            },
+                            "peak_temp_bytes": {
+                              "type": "integer"
+                            },
+                            "needed_bytes": {
+                              "type": "integer"
+                            },
+                            "required_free_bytes": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "download_bytes",
+                            "installed_bytes",
+                            "peak_temp_bytes",
+                            "needed_bytes",
+                            "required_free_bytes"
+                          ]
+                        },
+                        "minimum": {
+                          "type": "object",
+                          "properties": {
+                            "download_bytes": {
+                              "type": "integer"
+                            },
+                            "installed_bytes": {
+                              "type": "integer"
+                            },
+                            "peak_temp_bytes": {
+                              "type": "integer"
+                            },
+                            "needed_bytes": {
+                              "type": "integer"
+                            },
+                            "required_free_bytes": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "download_bytes",
+                            "installed_bytes",
+                            "peak_temp_bytes",
+                            "needed_bytes",
+                            "required_free_bytes"
+                          ]
+                        },
+                        "everything": {
+                          "type": "object",
+                          "properties": {
+                            "download_bytes": {
+                              "type": "integer"
+                            },
+                            "installed_bytes": {
+                              "type": "integer"
+                            },
+                            "peak_temp_bytes": {
+                              "type": "integer"
+                            },
+                            "needed_bytes": {
+                              "type": "integer"
+                            },
+                            "required_free_bytes": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "download_bytes",
+                            "installed_bytes",
+                            "peak_temp_bytes",
+                            "needed_bytes",
+                            "required_free_bytes"
+                          ]
+                        },
+                        "measured_on": {
+                          "type": "string"
+                        },
+                        "default_selected": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "tier",
+                        "level",
+                        "margin_percent",
+                        "headroom_warn_bytes",
+                        "rows",
+                        "default",
+                        "minimum",
+                        "everything",
+                        "measured_on",
+                        "default_selected"
+                      ],
+                      "description": "What each install costs on disk, per component, from the pins' byte counts and a measured table. required_free_bytes is the installed size plus the safety margin plus the peak temporary space: the free space a plan asks for."
                     }
                   },
                   "required": [
@@ -7146,7 +7364,8 @@
                     "total_bytes",
                     "remaining_bytes",
                     "free_disk_bytes",
-                    "fits_disk"
+                    "fits_disk",
+                    "disk"
                   ]
                 }
               }
