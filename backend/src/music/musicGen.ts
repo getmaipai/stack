@@ -50,8 +50,10 @@ export const MUSIC_MAX_SOURCE_BYTES = 40 * 1024 * 1024;
 export const MUSIC_MIN_EXTEND_SECONDS = 5;
 export const MUSIC_MAX_EXTEND_SECONDS = 120;
 export const MUSIC_QUEUE_MAX = 4;
-/** The measured peak memory footprint of a whole song, see Home's note section 4.2 (the owning session sets the measured value). */
-export const MUSIC_PEAK_BYTES = 24_000_000_000;
+/** The measured peak memory footprint of a whole song through this worker (tiled decode, 2 GB MLX cache): 27 to 29 GB for quick songs up to
+ * 120 s and 30 to 32 GB for detailed songs up to 240 s on the Studio, 2026-10-17 (Home's note, section 4.2). One admission covers the worst
+ * case with a gigabyte of margin. */
+export const MUSIC_PEAK_BYTES = 33_000_000_000;
 /** Tiers that run music; p16 and p32 keep it in `notAvailable`. */
 export const MUSIC_TIERS = ["p64", "p128"] as const;
 /** The longest song per tier; also passed to the worker as MUSIC_MAX_SECONDS. */

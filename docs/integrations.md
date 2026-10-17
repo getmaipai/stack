@@ -551,7 +551,7 @@ no way to bring a recording in (Home's note, section 9: no uploaded audio and no
 admission, but it goes through the same single chain as a song, so the worker is never shared: an edit sent while a song is being made starts when the song ends.
 
 Memory: a song holds one governor admission through the generator queue (one generator job at a time across pictures, video and music; the loser shows `waiting for memory`)
-of `MUSIC_PEAK_BYTES` (24 GB until the measured peak replaces it). A song that can never fit beside what is resident is 503 `no_memory` at once, and so is any song while
+of `MUSIC_PEAK_BYTES` (33 GB: the measured 32 GB peak of a 240 s detailed song plus a gigabyte). A song that can never fit beside what is resident is 503 `no_memory` at once, and so is any song while
 the memory watchdog's level is not `normal`. Four songs may be waiting (429 `queue_full`).
 
 `GET /stack/v1/music` returns `{ music: { state, available, code, reason, tier, memory, model, limits, quality, default_quality, tasks, worker, environment, install } }` for Home

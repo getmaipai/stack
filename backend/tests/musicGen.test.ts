@@ -406,7 +406,7 @@ test("not installed without the model, and refused with the numbers when a song 
   expect(full.status).toBe(503);
   expect(await full.json()).toMatchObject({ code: "no_memory", error: "Not enough free memory for music right now. Close other big jobs, or try again in a few minutes." });
   expect(memoryVerdict().ok).toBe(false);
-  expect(MUSIC_PEAK_BYTES).toBe(24_000_000_000);
+  expect(MUSIC_PEAK_BYTES).toBe(33_000_000_000);
 });
 
 // ---- results ----
@@ -463,7 +463,7 @@ test("GET /stack/v1/music says what is installed, what a song may be and what to
   expect(status.music.tasks).toEqual(["text2music", "cover", "repaint", "extend", "edit"]);
   expect(status.music.install.models.map((model: { id: string }) => model.id)).toEqual([STACK_MUSIC_MODEL.id, STACK_MUSIC_LM_06.id]);
   expect(status.music.worker.idle_exit_seconds).toBe(300);
-  expect(status.music.memory).toMatchObject({ peak_gb: 24 });
+  expect(status.music.memory).toMatchObject({ peak_gb: 33 });
   const roles = await (await get("/stack/v1/roles")).json() as { roles: Array<{ id: string; state: { state: string }; endpoints: string[] }> };
   const music = roles.roles.find((role) => role.id === "music")!;
   expect(music.endpoints).toEqual(["/v1/audio/music"]);
