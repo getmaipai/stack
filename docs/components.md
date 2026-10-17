@@ -272,7 +272,7 @@ Engines per platform:
 |---|---|---|---|---|---|---|---|---|---|
 | p16 | not available |  |  |  |  |  |  |  | not available |
 | p32 | not available |  |  |  |  |  |  |  | not available |
-| p64 | on demand | `fastwan2-2-ti2v-5b-mlx-bf16` | bf16 | 22.52 GB | 41.06 GB (Apple M5 Max, 128 GB unified memory) | n/a | Apache-2.0 | lBroth/FastWan2.2-TI2V-5B-MLX @ de2998ac446581895089ae363f4dcc0c02ca9ea2 | pinned |
+| p64 | not available |  |  |  |  |  |  |  | not available |
 | p128 | on demand | `fastwan2-2-ti2v-5b-mlx-bf16` | bf16 | 22.52 GB | 41.06 GB (Apple M5 Max, 128 GB unified memory) | n/a | Apache-2.0 | lBroth/FastWan2.2-TI2V-5B-MLX @ de2998ac446581895089ae363f4dcc0c02ca9ea2 | pinned |
 
 Installed beside the model, never selected on its own: `video-umt5-tokenizer` (tokenizer, 20.4 MB, Apache-2.0, google/umt5-xxl @ 66cb9e7e85526fe440a945569e42c72fb6cbc0ad).
