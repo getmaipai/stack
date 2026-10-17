@@ -32,6 +32,8 @@ import { registerVideoJobs } from "@/video/jobs";
 import { imageRoutes } from "@/routes/image";
 import { imageV1Routes } from "@/routes/imageGenerations";
 import { registerImageJobs } from "@/images/jobs";
+import { memoryRoutes } from "@/routes/memory";
+import { isStopping } from "@/lib/lifecycle";
 import { speechRoutes, websocket } from "@/routes/speech";
 import { registerGenerators } from "@/generators";
 import { SESSION_PATH } from "@/speech/server";
@@ -58,6 +60,16 @@ const livenessRoute = createRoute({
 });
 app.openapi(livenessRoute, (c) => c.json({ ok: true as const, version, contract: CONTRACT, uptimeSeconds: process.uptime() }, 200));
 
+// While the Stack is shutting down (an update, a restart) a new request is
+// told so plainly, with when to come back, instead of reaching a half-stopped
+// engine and dropping mid-answer. Liveness stays answerable.
+app.use("*", async (c, next) => {
+  if (isStopping() && c.req.path !== "/healthz") {
+    return c.json({ error: "The Stack is restarting. Try again in a few seconds.", code: "stack_restarting" }, 503, { "Retry-After": "5" });
+  }
+  await next();
+});
+
 app.doc("/api/openapi.json", { openapi: "3.0.0", info: { title: "MaiPai Stack API", version } });
 app.get("/api/docs", apiReference({ url: "/api/openapi.json" }));
 
@@ -76,6 +88,7 @@ app.route("/stack/v1/check", checkRoutes);
 app.route("/stack/v1/updates", updatesRoutes);
 app.route("/stack/v1", eventsRoutes);
 app.route("/stack/v1/hardware", hardwareRoutes);
+app.route("/stack/v1/memory", memoryRoutes);
 app.route("/stack/v1/install-plan", installPlanRoutes);
 app.route("/stack/v1/fit-plan", fitPlanRoutes);
 app.route("/stack/v1/warmup", warmupRoutes);

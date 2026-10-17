@@ -9,6 +9,7 @@
 // submit for it is refused with a reason rather than left queued.
 import { emit } from "@/lib/events";
 import { admit, getGovernorStatus, getRunState, peakFor, release, withdraw, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
+import { PAUSED_LOW_MEMORY, waitingText, WatchdogRules } from "@/lib/memoryState";
 import { StackJob, StackJobState } from "@maipai/spec/stack/ts/stack-job.js";
 
 export const JobStateSchema = StackJobState;
@@ -82,11 +83,11 @@ export function updateJob(id: string, patch: Partial<Pick<Job, "percent" | "comp
   return touch(job, { ...patch, totalBytes, completedBytes, percent });
 }
 
-export function finishJob(id: string, outcome: { ok: true; result?: unknown } | { ok: false; reason: string }): Job | null {
+export function finishJob(id: string, outcome: { ok: true; result?: unknown } | { ok: false; reason: string; status?: string }): Job | null {
   const job = jobs.get(id);
   controllers.delete(id);
   if (!job || (job.state !== "running" && job.state !== "queued" && job.state !== "stalled")) return null;
-  return outcome.ok ? touch(job, { state: "done", percent: 100, status: "done", ...(job.items ? { items: job.items.map((item) => ({ ...item, completedBytes: item.totalBytes, state: "done" as const })) } : {}), result: outcome.result ?? null, position: null }) : touch(job, { state: "failed", status: "failed", ...(job.items ? { items: job.items.map((item) => item.state === "done" ? item : { ...item, state: "failed" as const }) } : {}), reason: outcome.reason, position: null });
+  return outcome.ok ? touch(job, { state: "done", percent: 100, status: "done", ...(job.items ? { items: job.items.map((item) => ({ ...item, completedBytes: item.totalBytes, state: "done" as const })) } : {}), result: outcome.result ?? null, position: null }) : touch(job, { state: "failed", status: outcome.status ?? "failed", ...(job.items ? { items: job.items.map((item) => item.state === "done" ? item : { ...item, state: "failed" as const }) } : {}), reason: outcome.reason, position: null });
 }
 
 /** Submits work to a registered runner. A generator kind is queued for
@@ -125,6 +126,11 @@ function renumber(role: string): void {
   queue.forEach((job, index) => { const current = jobs.get(job.id); if (current && current.state === "queued" && current.position !== index + 1) touch(current, { position: index + 1 }); });
 }
 
+/** A generative job that waited the whole admission window for memory: it fails with the status `no_memory`. */
+export class NoMemoryError extends Error {
+  constructor(message: string) { super(message); this.name = "NoMemoryError"; }
+}
+
 /** Runs the next queued job of a role when none is in flight: it asks
  * the governor for room, waits on the governor's own promise when told
  * to (its poll settles it when memory frees), fails the job with the
@@ -148,7 +154,7 @@ async function pump(role: string): Promise<void> {
   try {
     handle = await admitJob(next.id, { id: next.id, kind: "generator", ...runner.options.generator.memory(jobs.get(next.id)!) });
   } catch (error) {
-    finishJob(next.id, { ok: false, reason: error instanceof Error ? error.message : String(error) });
+    finishJob(next.id, { ok: false, reason: error instanceof Error ? error.message : String(error), ...(error instanceof NoMemoryError ? { status: "no_memory" } : {}) });
     settle();
     return;
   }
@@ -179,9 +185,10 @@ async function admitJob(jobId: string, request: GovernorRequest): Promise<Govern
   const answer = await admit(request);
   if ("refused" in answer) throw new Error(answer.reason);
   if (!("queued" in answer)) return answer;
-  updateJob(jobId, { status: `waiting for memory (${answer.position} ahead)` });
+  updateJob(jobId, { status: waitingText(peak, answer.position) });
   const signal = controller?.signal;
   let pauseTimer: ReturnType<typeof setInterval> | null = null;
+  let waitTimer: ReturnType<typeof setTimeout> | null = null;
   try {
     const settled = await Promise.race([
       answer.admitted,
@@ -191,6 +198,9 @@ async function admitJob(jobId: string, request: GovernorRequest): Promise<Govern
             signal.addEventListener("abort", () => reject(new Error("Cancelled by Home.")), { once: true });
           })
         : new Promise<never>(() => {}),
+      new Promise<never>((_, reject) => {
+        waitTimer = setTimeout(() => reject(new NoMemoryError(`There was not enough free memory to start this within ${Math.round(admissionWaitMs() / 60_000 * 10) / 10} minutes (${waitingText(peak, 0).replace("waiting for memory: ", "")}). Close big apps, or try again in a few minutes.`)), admissionWaitMs());
+      }),
       new Promise<never>((_, reject) => {
         pauseTimer = setInterval(() => {
           if (getRunState() !== "running") { if (pauseTimer) clearInterval(pauseTimer); reject(new Error("The Stack is paused.")); }
@@ -204,8 +214,13 @@ async function admitJob(jobId: string, request: GovernorRequest): Promise<Govern
     throw error;
   } finally {
     if (pauseTimer) clearInterval(pauseTimer);
+    if (waitTimer) clearTimeout(waitTimer);
   }
 }
+
+let admissionWaitOverrideMs: number | null = null;
+function admissionWaitMs(): number { return admissionWaitOverrideMs ?? Number(process.env.STACK_ADMISSION_WAIT_MS ?? WatchdogRules.admissionWaitMs); }
+export function __setAdmissionWaitForTests(ms: number | null): void { admissionWaitOverrideMs = ms; }
 
 function gb(bytes: number): string { return (bytes / 1_073_741_824).toFixed(1); }
 
@@ -222,6 +237,35 @@ export function cancelJob(id: string): Job | null {
   controllers.delete(id);
   return touch(job, { state: "cancelled", status: "cancelled", reason: "Cancelled by Home.", position: null });
 }
+
+/** The watchdog's way to stop generative work for memory. A queued job is cancelled before it starts; a running one has its signal aborted, which makes its runner stop the worker and remove its partial files (every runner cleans up in a finally). The record says plainly why. Running jobs go video first, then the rest. */
+export function cancelGeneratorsForMemory(scope: "queued" | "running", reason: string, status = PAUSED_LOW_MEMORY): string[] {
+  const stopped: string[] = [];
+  const ids: string[] = [];
+  if (scope === "queued") for (const queue of queues.values()) for (const queued of queue) ids.push(queued.id);
+  else ids.push(...inFlight.values());
+  ids.sort((a, b) => Number(/video/i.test(jobs.get(b)?.kind ?? "")) - Number(/video/i.test(jobs.get(a)?.kind ?? "")));
+  for (const id of ids) {
+    const job = jobs.get(id);
+    if (!job || (job.state !== "queued" && job.state !== "running" && job.state !== "stalled")) continue;
+    if (scope === "queued" && job.state === "queued") {
+      const queue = job.role ? queues.get(job.role) : undefined;
+      const index = queue?.findIndex((queued) => queued.id === id) ?? -1;
+      if (queue && index >= 0) queue.splice(index, 1);
+      if (job.role) renumber(job.role);
+    }
+    controllers.get(id)?.abort();
+    controllers.delete(id);
+    touch(job, { state: "cancelled", status, reason, position: null });
+    stopped.push(id);
+    // One running job per pass: the caller asks again if memory is still short.
+    if (scope === "running") break;
+  }
+  return stopped;
+}
+
+/** The kind of the generator job in flight (the watchdog names it in its action log). */
+export function runningGeneratorKinds(): string[] { return [...inFlight.values()].map((id) => jobs.get(id)?.kind ?? "").filter(Boolean); }
 
 export function getJob(id: string): Job | null { return jobs.get(id) ?? null; }
 export function listJobs(): Job[] { return [...jobs.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)); }

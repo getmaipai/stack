@@ -23,6 +23,7 @@
 // reference picture arrives with a declared source that is not an upload
 // (Home owns the gate). Age and surface gates, the household-name gate on the
 // prompt, and the two absolute lines live in Home, where the person is known.
+import { lowMemoryRefusal } from "@/lib/memoryState";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { installedEnginePin, MANAGED_RUNTIMES } from "@/lib/engineCatalog";
@@ -107,6 +108,8 @@ export function tierAvailability(tier = getGovernorStatus().tier, totalMemoryByt
 
 /** Whether a clip's peak can ever fit beside what is resident right now. A clip that cannot is refused now with the numbers; one that only waits on another generator queues. */
 export function memoryVerdict(): { ok: true } | { ok: false; reason: string } {
+  const lowMemory = lowMemoryRefusal();
+  if (lowMemory) return { ok: false, reason: lowMemory };
   const status = getGovernorStatus();
   const resident = status.loaded.filter((item) => item.kind === "resident").reduce((sum, item) => sum + item.peakBytes, 0);
   if (resident + VIDEO_PEAK_BYTES > status.capBytes) return { ok: false, reason: "Not enough free memory for video right now. Close other big jobs, or try again in a few minutes." };
@@ -271,6 +274,13 @@ export class VideoGenService {
 
   /** Stops the worker now (shutdown, a cancel, or a test). */
   stop(): void { this.stopWorker(); }
+
+  /** Stops the worker only when it is loaded and not working (the memory watchdog's way to give memory back); true when it stopped one. */
+  stopIfIdle(): boolean {
+    if (!this.worker || this.busy > 0) return false;
+    this.stopWorker();
+    return true;
+  }
 
   private async execute(input: VideoRunInput, options: { signal?: AbortSignal; onPhase?: (phase: string, phasePercent: number) => void; jobId: string }): Promise<VideoRunResult> {
     const onPhase = (phase: string, percent: number) => { this.lastPhase = phase; options.onPhase?.(phase, percent); };

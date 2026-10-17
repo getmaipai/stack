@@ -50,6 +50,48 @@ function sysctlNumber(name: string): number {
   return Number(out[0]);
 }
 
+function sysctlBytes(name: string, size: number): Uint8Array | null {
+  const native = loadSymbols();
+  const out = new Uint8Array(size); const length = new BigUint64Array([BigInt(size)]);
+  return native.sysctlbyname(Buffer.from(`${name}\0`), ptr(out), ptr(length), null, 0n) === 0 ? out : null;
+}
+
+/** The kernel's raw pressure level (1 normal, 2 warn, 4 critical). */
+export function pressureLevel(): number { return sysctlNumber("kern.memorystatus_vm_pressure_level"); }
+
+/** `vm.swapusage` is a `struct xsw_usage`: total, available and used as
+ * three 64-bit byte counts. Null when the sysctl cannot be read. */
+export function readSwapUsage(): { totalBytes: number; usedBytes: number } | null {
+  try {
+    const raw = sysctlBytes("vm.swapusage", 32);
+    if (!raw) return null;
+    const view = new DataView(raw.buffer);
+    return { totalBytes: Number(view.getBigUint64(0, true)), usedBytes: Number(view.getBigUint64(16, true)) };
+  } catch { return null; }
+}
+
+export interface VmDetail { pageSize: number; freeBytes: number; wiredBytes: number; compressorBytes: number; purgeableBytes: number; availableBytes: number; }
+const VM_WIRED = 3;
+const VM_COMPRESSOR = 32;
+
+/** One `host_statistics64` call, in bytes: the same counters `vm_stat` prints. */
+export function readVmDetail(): VmDetail {
+  const native = loadSymbols();
+  const stats = new Uint32Array(HOST_VM_INFO64_COUNT); const count = new Uint32Array([HOST_VM_INFO64_COUNT]);
+  const host = native.mach_host_self();
+  if (native.host_statistics64(host, HOST_VM_INFO64, ptr(stats), ptr(count)) !== 0) throw new Error("host_statistics64 failed");
+  const sizeOut = new Uint32Array([PAGE_SIZE_FALLBACK]);
+  const pageSize = native.host_page_size(host, ptr(sizeOut)) === 0 && sizeOut[0] ? sizeOut[0] : PAGE_SIZE_FALLBACK;
+  return {
+    pageSize,
+    freeBytes: stats[VM_FREE]! * pageSize,
+    wiredBytes: stats[VM_WIRED]! * pageSize,
+    compressorBytes: stats[VM_COMPRESSOR]! * pageSize,
+    purgeableBytes: stats[VM_PURGEABLE]! * pageSize,
+    availableBytes: availableBytesFromVmStatistics(stats, pageSize),
+  };
+}
+
 function pressureFor(level: number): MemoryPressure {
   return level >= 4 ? "critical" : level >= 2 ? "warn" : "normal";
 }

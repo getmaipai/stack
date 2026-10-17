@@ -8,6 +8,7 @@
 // band, the surface, the prompt floor and the LoRA rules, then passes down the
 // audience and the allowed LoRA list; the Stack applies the hard limits and
 // the locks it can check (see images/imageEngine.ts and lib/media/loraLibrary.ts).
+import { PAUSED_LOW_MEMORY } from "@/lib/memoryState";
 import { createRoute, z } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import { existsSync, readFileSync, statSync } from "node:fs";
@@ -121,12 +122,12 @@ function statusOf(job: Job) {
   const detail = imageProgress(job.id);
   const failure = imageFailure(job.id);
   const state = job.state === "stalled" ? "running" : job.state;
-  const phase = state === "queued" ? "queued" : state === "done" ? "ready" : state === "failed" || state === "cancelled" ? state : detail?.phase ?? (job.status.startsWith("waiting for memory") ? "waiting for memory" : job.status);
+  const phase = state === "queued" ? "queued" : state === "done" ? "ready" : state === "cancelled" && job.status === PAUSED_LOW_MEMORY ? PAUSED_LOW_MEMORY : state === "failed" || state === "cancelled" ? state : detail?.phase ?? (job.status.startsWith("waiting for memory") ? "waiting for memory" : job.status);
   const result = job.state === "done" ? readResult(job.id) : null;
   return {
     job: job.id, state, phase, progress: Math.round(job.percent), phase_progress: state === "running" && detail ? Math.round(detail.phasePercent) : null, position: job.state === "queued" ? job.position : null,
-    error: job.state === "failed" ? failure?.message ?? job.reason ?? "The picture failed." : job.state === "cancelled" ? "The picture was cancelled." : null,
-    code: job.state === "failed" ? failure?.code ?? "failed" : job.state === "cancelled" ? "cancelled" : null,
+    error: job.state === "failed" ? failure?.message ?? job.reason ?? "The picture failed." : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? job.reason ?? "Paused: this computer is low on memory." : "The picture was cancelled.") : null,
+    code: job.state === "failed" ? (job.status === "no_memory" ? "no_memory" : failure?.code ?? "failed") : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? "no_memory" : "cancelled") : null,
     data: result ? entries(result, false) : [],
   };
 }
@@ -162,7 +163,9 @@ async function waitAndReply<T extends Context>(c: T, jobId: string, createdAt: s
   const settled = await waitForJob(jobId, timeoutMs);
   const created = Math.floor(new Date(createdAt).getTime() / 1000);
   if (!settled || settled.state === "queued" || settled.state === "running" || settled.state === "stalled") return reply(c, { created, job: jobId, data: [] }, 202);
+  if (settled.state === "cancelled" && settled.status === PAUSED_LOW_MEMORY) return fail(c, 503, "no_memory", settled.reason ?? "Paused: this computer is low on memory.", settled.id);
   if (settled.state === "cancelled") return fail(c, 499, "cancelled", "The picture was cancelled.", settled.id);
+  if (settled.state === "failed" && settled.status === "no_memory") return fail(c, 503, "no_memory", settled.reason ?? "There was not enough free memory.", settled.id);
   if (settled.state !== "done") {
     const failure = imageFailure(settled.id);
     return fail(c, failure?.status ?? 500, failure?.code ?? "failed", failure?.message ?? settled.reason ?? "The picture failed.", settled.id);

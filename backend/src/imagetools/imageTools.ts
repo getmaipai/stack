@@ -229,6 +229,13 @@ export class ImageToolsService {
   /** Stops the worker now (shutdown, or a test). */
   stop(): void { this.stopWorker(); }
 
+  /** Stops the worker only when it is loaded and not working (the memory watchdog's way to give memory back); true when it stopped one. */
+  stopIfIdle(): boolean {
+    if (!this.worker || this.busy > 0) return false;
+    this.stopWorker();
+    return true;
+  }
+
   private async execute(input: ImageToolInput, options: { signal?: AbortSignal; onStatus?: (status: string) => void }): Promise<ImageToolResult> {
     const onStatus = options.onStatus ?? (() => {});
     if (options.signal?.aborted) throw new ImageToolError("cancelled", "Cancelled.", 499);

@@ -21,6 +21,8 @@ import { videoGen } from "@/video/videoGen";
 import { imageGen } from "@/images/imageEngine";
 import { sweepImageTmp, sweepResults as sweepImageResults } from "@/images/results";
 import { sweepResults, sweepVideoTmp } from "@/video/results";
+import { beginStopping } from "@/lib/lifecycle";
+import { startMemoryWatchdog } from "@/lib/memoryWatchdog";
 import { execFileSync } from "node:child_process";
 import { readMetalCapBytes } from "@/lib/metalCap";
 import { setMetalCapBytes, getGovernorStatus } from "@/lib/governor";
@@ -66,6 +68,8 @@ async function serve(): Promise<void> {
   ddgsSupervisor.start();
   // Pictures an earlier crash left in the image tools' temporary folder are removed; the worker itself starts on the first edit.
   sweepImageToolsTmp();
+  // The memory watchdog (2026-10-17): samples the whole computer every 5 s, gates generative starts on real free memory, and acts on pressure.
+  const stopMemoryWatchdog = startMemoryWatchdog();
   // Clips an earlier run left half-made are removed and old results swept; the video worker itself starts on the first clip and exits after ten idle minutes.
   sweepVideoTmp();
   sweepResults();
@@ -82,6 +86,9 @@ async function serve(): Promise<void> {
     if (stopping) return;
     stopping = true;
     notifySystemd("STOPPING=1");
+    // From here a new request gets 503 stack_restarting with Retry-After; Home retries after the restart.
+    beginStopping();
+    stopMemoryWatchdog();
     clearInterval(idle);
     // The watchdog keeps beating through the drain: a stop that takes
     // longer than WatchdogSec must not be mistaken for a hang.

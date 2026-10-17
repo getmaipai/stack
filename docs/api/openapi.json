@@ -6667,6 +6667,241 @@
         }
       }
     },
+    "/stack/v1/memory": {
+      "get": {
+        "tags": [
+          "Memory"
+        ],
+        "summary": "The whole computer's memory and what the watchdog is doing about it",
+        "responses": {
+          "200": {
+            "description": "The latest 5-second sample (available, free, wired, compressed memory, swap and its recent growth, the kernel's pressure level), the watchdog's level and reserve, whether picture and video making is paused, the Stack's own processes, the biggest memory users on the computer by name (the Stack's and not), and the watchdog's recent actions. Read only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "watchdog": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "level": {
+                          "type": "string",
+                          "enum": [
+                            "normal",
+                            "warn",
+                            "critical"
+                          ]
+                        },
+                        "since": {
+                          "type": "string"
+                        },
+                        "reserve_bytes": {
+                          "type": "number"
+                        },
+                        "generation_paused": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "level",
+                        "since",
+                        "reserve_bytes",
+                        "generation_paused"
+                      ]
+                    },
+                    "memory": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "total_bytes": {
+                          "type": "number"
+                        },
+                        "available_bytes": {
+                          "type": "number"
+                        },
+                        "free_bytes": {
+                          "type": "number"
+                        },
+                        "wired_bytes": {
+                          "type": "number"
+                        },
+                        "compressor_bytes": {
+                          "type": "number"
+                        },
+                        "swap_used_bytes": {
+                          "type": "number"
+                        },
+                        "swap_total_bytes": {
+                          "type": "number"
+                        },
+                        "swap_growth_bytes_30s": {
+                          "type": "number"
+                        },
+                        "pressure_level": {
+                          "type": "number"
+                        },
+                        "pressure": {
+                          "type": "string"
+                        },
+                        "sampled_at": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "total_bytes",
+                        "available_bytes",
+                        "free_bytes",
+                        "wired_bytes",
+                        "compressor_bytes",
+                        "swap_used_bytes",
+                        "swap_total_bytes",
+                        "swap_growth_bytes_30s",
+                        "pressure_level",
+                        "pressure",
+                        "sampled_at"
+                      ]
+                    },
+                    "stack": {
+                      "type": "object",
+                      "properties": {
+                        "bytes": {
+                          "type": "number"
+                        },
+                        "processes": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "pid": {
+                                "type": "number"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "bytes": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "pid",
+                              "name",
+                              "bytes"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "bytes",
+                        "processes"
+                      ]
+                    },
+                    "top_consumers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "pid": {
+                            "type": "number"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "bytes": {
+                            "type": "number"
+                          },
+                          "stack": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "pid",
+                          "name",
+                          "bytes",
+                          "stack"
+                        ]
+                      }
+                    },
+                    "non_stack_bytes": {
+                      "type": "number"
+                    },
+                    "recent_actions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "type": "string"
+                          },
+                          "level": {
+                            "type": "string",
+                            "enum": [
+                              "normal",
+                              "warn",
+                              "critical"
+                            ]
+                          },
+                          "action": {
+                            "type": "string"
+                          },
+                          "detail": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "at",
+                          "level",
+                          "action",
+                          "detail"
+                        ]
+                      }
+                    },
+                    "history": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "type": "string"
+                          },
+                          "available_bytes": {
+                            "type": "number"
+                          },
+                          "swap_used_bytes": {
+                            "type": "number"
+                          },
+                          "pressure_level": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "at",
+                          "available_bytes",
+                          "swap_used_bytes",
+                          "pressure_level"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "watchdog",
+                    "memory",
+                    "stack",
+                    "top_consumers",
+                    "non_stack_bytes",
+                    "recent_actions",
+                    "history"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/install-plan": {
       "get": {
         "tags": [

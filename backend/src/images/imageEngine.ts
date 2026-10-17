@@ -20,6 +20,7 @@
 // ever be added (never a minor in a sexual context, never a real person's
 // likeness). Age and surface gates, the prompt floor and the finished-picture
 // check live in Home, where the person is known.
+import { lowMemoryRefusal } from "@/lib/memoryState";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MANAGED_RUNTIMES } from "@/lib/engineCatalog";
@@ -229,6 +230,13 @@ export class ImageGenService {
   /** Stops the worker now (shutdown, a repair, or a test). */
   stop(): void { this.stopWorker(); }
 
+  /** Stops the worker only when it is loaded and not working (the memory watchdog's way to give memory back); true when it stopped one. */
+  stopIfIdle(): boolean {
+    if (!this.worker || this.busy > 0) return false;
+    this.stopWorker();
+    return true;
+  }
+
   private async execute(input: ImageRunInput, options: { signal?: AbortSignal; onPhase?: (phase: string, phasePercent: number) => void; onImage?: (index: number) => void; jobId: string }): Promise<ImageRunResult> {
     const onPhase = (phase: string, percent: number) => { this.lastPhase = phase; options.onPhase?.(phase, percent); };
     if (options.signal?.aborted) throw new ImageError("cancelled", "Cancelled.", 499);
@@ -281,6 +289,8 @@ export function imageEngineActive(service: ImageGenService = imageGen): boolean 
 
 /** Whether a request for a family could ever fit beside what is resident right now. A job that cannot is refused now with the numbers; one that only waits on another generator queues. */
 export function memoryVerdict(peak: number): { ok: true } | { ok: false; reason: string } {
+  const lowMemory = lowMemoryRefusal();
+  if (lowMemory) return { ok: false, reason: lowMemory };
   const status = getGovernorStatus();
   const resident = status.loaded.filter((item) => item.kind === "resident").reduce((sum, item) => sum + item.peakBytes, 0);
   if (resident + peak > status.capBytes) return { ok: false, reason: `Pictures need about ${Math.ceil(peak / 1e9)} GB of free memory, and there is not enough right now. Close other big jobs, or try again in a few minutes.` };

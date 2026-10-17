@@ -216,8 +216,17 @@ function workingMargin(): number {
   return GovernorRules.tiers[activeTier].workingMarginBytes;
 }
 
+/** The memory watchdog's say on a start, from the whole machine's real
+ * numbers (lib/memoryWatchdog.ts). One hook, so every generative start
+ * (picture, clip, image tools, voice engine) asks it the same way. */
+export type AdmissionGate = (request: GovernorRequest, peakBytes: number) => { ok: true } | { ok: false; reason: string };
+let admissionGate: AdmissionGate | null = null;
+export function setAdmissionGate(gate: AdmissionGate | null): void { admissionGate = gate; }
+export function gateVerdict(request: GovernorRequest, peakBytes: number): { ok: true } | { ok: false; reason: string } { return admissionGate ? admissionGate(request, peakBytes) : { ok: true }; }
+
 function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
   if (memoryReadingDegraded) return false;
+  if (!gateVerdict(request, peakBytes).ok) return false;
   if (pressure !== "normal") return false;
   const generatorBusy = request.kind === "generator" && [...loaded.values()].some((item) => item.kind === "generator");
   if (generatorBusy) return false;
@@ -243,7 +252,8 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
     const admitted: Promise<GovernorHandle | { refused: true; reason: string }> = new Promise<GovernorHandle | { refused: true; reason: string }>((resolve) => { resolveQueued = resolve; });
     const entry: QueuedEntry = { request, settled: false, admitted, resolve: resolveQueued };
     queue.push(entry);
-    decide("Queued", pressure !== "normal" ? `Memory pressure is ${pressure}.` : "The current memory budget cannot admit the request.", request.id);
+    const gated = gateVerdict(request, peak.bytes);
+    decide("Queued", !gated.ok ? gated.reason : pressure !== "normal" ? `Memory pressure is ${pressure}.` : "The current memory budget cannot admit the request.", request.id);
     return { queued: true, position: queue.length, admitted };
   }
   refusalCounts.delete(request.id);
@@ -492,6 +502,7 @@ export function __setGovernorTuningForTestsOnly(overrides: Partial<GovernorTunin
 
 export function __resetGovernorForTests(): void {
   metalCapBytes = null;
+  admissionGate = null;
   loaded.clear();
   queue.length = 0;
   refusalCounts.clear();
