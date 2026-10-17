@@ -24,6 +24,10 @@ with Home's releases, so this file tracks what a Home release picks up.
 ### Added
 
 - Self-heal (ROBUST-01): an engine that exits on its own is restarted by the Stack (2 s, 10 s, 30 s, 2 min; 5 failures in 30 minutes stops it and leaves the Repairs item with the last 20 log lines), after an identity check and a one-token request, never during an install, an update, a graphics job or low memory. The crash item names the cause in plain words (out of memory, killed by the system, missing file, port in use, bad config). `GET /stack/v1/engines/self-heal` reports crashes per day and restart events; setting `stack.runtime.self_heal`. <!-- prose-lint: allow -->
+- The media service (MEDIA-STACK-01): `media.probe`, `media.fetch`, `media.transcode`, `media.preview` and `media.setup`
+  jobs on one idle-priority queue, quiet mode per site after four push-back failures, Home's folder declaration, and
+  pinned ffmpeg, ffprobe (jellyfin-ffmpeg 8.1.3-1) and yt-dlp 2026.8.19. Home's media apps read and convert their files
+  through it.
 
 - Video clips are made messaging-ready: the stored mp4 carries a silent AAC track and a title (picture copied untouched), and
   `GET /v1/videos/generations/{job}/messages.mp4` and the stateless `POST /v1/videos/messages` prepare any clip for a text message (H.264

@@ -19,7 +19,8 @@ const scripted: ComponentsCatalog = {
 test("one section per role in order, one row per profile, the largest fitting pin wins", () => {
   const doc = renderComponentsDoc(scripted);
   const sections = [...doc.matchAll(/^## (\S+)/gm)].map((match) => match[1]);
-  expect(sections).toEqual(["chat", "judge", "tts", "image"]);
+  // The media service (MEDIA-STACK-01) is not a model role and is listed once, last.
+  expect(sections).toEqual(["chat", "judge", "tts", "image", "media"]);
   for (const role of scripted.roles) {
     const section = doc.split(`## ${role} `)[1]!.split("\n## ")[0]!;
     for (const profile of ["p16", "p32", "p64", "p128"]) expect(section).toContain(`| ${profile} |`);
@@ -45,7 +46,7 @@ test("a shared role shows the role it shares; a role with candidates says so; a 
 
 test("the real catalog renders the household chat and judge pins", () => {
   const doc = renderComponentsDoc(collectComponentsCatalog());
-  expect([...doc.matchAll(/^## (\S+)/gm)]).toHaveLength(13);
+  expect([...doc.matchAll(/^## (\S+)/gm)]).toHaveLength(14);
   expect(doc).toContain("`qwen3-8b-instruct-q4-k-m`");
   expect(doc).toContain("`qwen3-4b-q4-k-m`");
   expect(doc.startsWith("<!-- GENERATED")).toBe(true);

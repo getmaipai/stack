@@ -2237,6 +2237,32 @@ the numbers, the alternative that lost (Rapid-MLX) and what was not verified: Ho
 - **Not done here:** the repo's own quality benches against the engine (Home row ENGINE-MLX-02, to run once a release carries this), 5 and 6 bit weights, and
   a Linux or Intel path (llama-server remains the engine there).
 
+## The media service (MEDIA-STACK-01, 2026-10-17)
+
+Home's media apps (Videos, Shows and Films, Music, Podcasts, Books) need ffprobe to read a file's streams, ffmpeg to make a
+playable copy, thumbnails, storyboards and preview clips, and yt-dlp to save a link a person chose. Home never runs those
+tools itself: the Stack owns them, the same way it owns every engine binary, because it already pins and checksums downloads,
+runs jobs on a queue and publishes its outbound hosts for the privacy page (Home design note
+`docs/design/media-apps-blend-2026-10-17.md` sections 3, 8 and 14). Code: `backend/src/media/`; the contract Home builds against
+is `docs/integrations.md`, "Media service (MEDIA-STACK-01)".
+
+- **One lane.** `media.probe`, `media.fetch`, `media.transcode`, `media.preview` and `media.setup` share one idle-priority
+  first-in-first-out queue (one job at a time, 64 waiting at most). FileTube's heavy-gate lessons are the tests in
+  `backend/tests/mediaLane.test.ts`: a cancelled or crashed job never blocks the next, and every kind has a deadline.
+- **Quiet mode.** Four push-back failures in a row from one site (a 429, a sign-in wall) rest that site for 30 minutes. Background
+  fetches are refused while it rests; a fetch a person started still runs. State survives a restart.
+- **Folders.** Home declares the folders the Stack may read and write; every path in a job is checked against them after
+  symlinks are resolved.
+- **Pins.** ffmpeg and ffprobe 8.1.3 from jellyfin-ffmpeg 8.1.3-1 (a GPL build with no nonfree parts; sha256 and size pinned per
+  platform); yt-dlp 2026.8.19 from a hashed PyPI requirements file in a uv environment, the image tools' recipe. Records in
+  `backend/src/media/pins.ts` and `docs/components.md`.
+- **No live video requests.** Nothing in the Stack or its tests contacts YouTube or any other video service (Home RULES.md V1).
+  `backend/tests/mediaReal.test.ts` runs the real tools against a localhost fixture server only, and only when `STACK_MEDIA_*`
+  point at installed tools.
+- **Measured on 2026-10-17** (scratch data dir, M-series Mac under load): probe about 52 ms; transcode of a 60 s 720p HEVC clip
+  25.4 s; preview of that clip 3.2 s; a localhost fetch 1.7 s; first-time install 108 s for ffmpeg and ffprobe, 31 s for the yt-dlp
+  environment.
+
 ## Measured so far
 
 On an Apple silicon Mac (2026-09-18, a temporary copy of the owner's
