@@ -428,7 +428,7 @@ measurements: Home `docs/design/video-generation-2026-10-17.md`.
 **Two models (VIDEO-LTX-01).** `model` on `POST /v1/videos/generations` is `video` or `quick` (the default: the clip above, silent, up to 5 s, can start from a
 picture), or `detailed` (LTX-2.3 on the same mlx-video, 768 x 448 or 448 x 768, 64-pixel steps, up to 10 s: a 5 s clip takes about 45 s, a 10 s clip about
 80 s, a sound track with speech is made in the same pass, admission 46 GB). A model's own id names it too; anything else is 422 `unknown_model`. A length past
-the model's ceiling is 422 `bad_seconds`, a picture with `detailed` is 422 `reference_unsupported` (the pinned runtime fails on a picture with LTX-2.3), a model
+the model's ceiling is 422 `bad_seconds`, a picture can start a `detailed` clip too (`image_to_video` true on both qualities; the same generated-picture rule), a model
 that is not installed is 503 `not_installed`. Results carry `quality` and `audio`; `GET /stack/v1/video` has `qualities.quick` and `qualities.detailed`
 (`id`, `installed`, `available`, `audio`, `image_to_video`, `limits`, `memory`, `install`, `licence`, `lora_base_model`). Only one video model is in memory: asking
 for the other stops the first one's worker. The Detailed component (`ltx-2-3-distilled-mlx`, optional, p128 only, 73.6 GB) needs the maker's licence accepted

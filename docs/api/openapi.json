@@ -1962,7 +1962,7 @@
                 "properties": {
                   "model": {
                     "type": "string",
-                    "description": "Which video model: `video` or `quick` (the default, a silent clip of up to 5 s, which can start from a picture) or `detailed` (LTX-2.3: a sound track with speech made in the same pass, up to 15 s, from words only for now: a picture with `detailed` answers 422 reference_unsupported). A model's own id names it too. An unknown name is refused (unknown_model); a model that is not installed answers 503 not_installed.",
+                    "description": "Which video model: `video` or `quick` (the default, a silent clip of up to 5 s, which can start from a picture) or `detailed` (LTX-2.3: a sound track with speech made in the same pass, up to 10 s, which can start from a picture too). A model's own id names it too. An unknown name is refused (unknown_model); a model that is not installed answers 503 not_installed.",
                     "example": "quick"
                   },
                   "prompt": {
@@ -11024,7 +11024,7 @@
                                 },
                                 "image_to_video": {
                                   "type": "boolean",
-                                  "description": "A picture can start a clip of this model (Quick yes, Detailed not yet)."
+                                  "description": "A picture can start a clip of this model (Quick and Detailed both)."
                                 },
                                 "limits": {
                                   "type": "object",
@@ -11191,7 +11191,7 @@
                                 },
                                 "image_to_video": {
                                   "type": "boolean",
-                                  "description": "A picture can start a clip of this model (Quick yes, Detailed not yet)."
+                                  "description": "A picture can start a clip of this model (Quick and Detailed both)."
                                 },
                                 "limits": {
                                   "type": "object",

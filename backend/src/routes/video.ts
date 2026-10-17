@@ -31,7 +31,7 @@ const LoraSchema = z.object({
 });
 const ErrorBody = z.object({ error: z.string(), code: z.string().optional() });
 const QualitySchema = z.object({
-  id: z.string(), installed: z.boolean(), available: z.boolean(), audio: z.boolean(), image_to_video: z.boolean().openapi({ description: "A picture can start a clip of this model (Quick yes, Detailed not yet)." }),
+  id: z.string(), installed: z.boolean(), available: z.boolean(), audio: z.boolean(), image_to_video: z.boolean().openapi({ description: "A picture can start a clip of this model (Quick and Detailed both)." }),
   limits: z.record(z.string(), z.union([z.number(), z.string()])),
   memory: z.object({ fits: z.boolean(), reason: z.string().nullable(), peak_gb: z.number() }),
   install: z.object({ models: z.array(PlanModelSchema), remaining_bytes: z.number().int(), download_bytes: z.number().int() }),

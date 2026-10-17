@@ -11,7 +11,7 @@ import { __resetJobsForTests } from "@/lib/jobs";
 import { LTX_LICENCE, LTX_UPSCALER_FILE, STACK_MODELS, STACK_VIDEO_DETAILED_MODEL, STACK_VIDEO_DETAILED_MODEL_ID, STACK_VIDEO_MODEL, STACK_VIDEO_TEXT_ENCODER } from "@/lib/modelCatalog";
 import { registerVideoJobs } from "@/video/jobs";
 import { detectLoraBase, importLora, LoraError, readLoraHeader, resolveLoras } from "@/video/loras";
-import { __resetProvenanceForTests } from "@/video/provenance";
+import { __resetProvenanceForTests, recordGeneratedImage } from "@/video/provenance";
 import { defaultVideoGenDeps, qualityOfModelName, memoryVerdict, VIDEO_SPECS, videoGen, type VideoGenDeps, type WorkerHandle, type WorkerReply, type WorkerRequest } from "@/video/videoGen";
 import { dataDir } from "@/lib/paths";
 import { diskPlanForTier } from "@/lib/diskPlan";
@@ -127,18 +127,35 @@ test("Detailed has its own hard ceilings: 5 seconds past Quick is fine, 64-pixel
   expect(requests[0]).toMatchObject({ width: 448, height: 768, num_frames: 49 });
 });
 
-test("a picture cannot start a Detailed clip yet: a plain 422 before anything else, while Quick still takes pictures", async () => {
+test("a picture starts a Detailed clip too (VIDEO-LTX-02): the generated-picture rule is the same, the status says so, the worker gets the picture", async () => {
   videoGen.useDeps(scripted());
-  const png = Buffer.from(new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4])).toString("base64");
-  const response = await post({ prompt: "x", model: "detailed", image: png, image_source: "generated" });
-  expect(response.status).toBe(422);
-  const body = await response.json() as { code: string; error: string };
-  expect(body.code).toBe("reference_unsupported");
-  expect(body.error).toContain("Quick video");
+  const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]);
+  const encoded = Buffer.from(png).toString("base64");
+  // Not made by this Stack's image generator: refused for Detailed exactly as for Quick, before anything runs.
+  const unknown = await post({ prompt: "x", model: "detailed", image: encoded, image_source: "generated" });
+  expect(unknown.status).toBe(422);
+  expect(((await unknown.json()) as { code: string }).code).toBe("reference_not_generated");
   expect(requests).toHaveLength(0);
+  recordGeneratedImage(png);
+  const accepted = await post({ prompt: "the hero says hello", model: "detailed", image: encoded, image_source: "generated", seconds: 5, timeout_ms: 5000 });
+  expect(accepted.status).toBe(200);
+  const body = await accepted.json() as { data: Array<{ quality: string; mode: string; audio: boolean }> };
+  expect(body.data[0]).toMatchObject({ quality: "detailed", mode: "image-to-video", audio: true });
+  expect(requests[0]?.image).toBeTruthy();
+  expect(spawnedQualities).toEqual(["detailed"]);
   const status = await (await app.request("/stack/v1/video")).json() as { video: { qualities: { quick: { image_to_video: boolean }; detailed: { image_to_video: boolean } } } };
   expect(status.video.qualities.quick.image_to_video).toBe(true);
-  expect(status.video.qualities.detailed.image_to_video).toBe(false);
+  expect(status.video.qualities.detailed.image_to_video).toBe(true);
+});
+
+test("the Detailed worker builds the picture encoder from the shape of the shipped weights, not the shipped config (the 1024 against 2048 channel mismatch)", async () => {
+  const worker = await Bun.file(join(import.meta.dir, "../src/video/ltx_worker.py")).text();
+  expect(worker).toContain("encoder_from_pretrained");
+  expect(worker).toContain('"compress_all_res": 8');
+  expect(worker).toContain('params["multiplier"] = max(1, round(shape[0] * ratio[name] / shape[-1]))');
+  // The first-frame preview is drawn with the same call the tiles get (timestep included), and a failure says so on stderr.
+  expect(worker).toContain('timestep=kwargs.get("timestep")');
+  expect(worker).toContain("video worker: no preview");
 });
 
 test("Detailed that is not installed answers 503 not_installed with where to get it; Quick still works", async () => {

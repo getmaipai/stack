@@ -11,7 +11,11 @@
 #      2026-10-17); a large finite value (-1e9) is what the reference implementation effectively uses;
 #   2. community LoRAs (merged into the transformer as it loads, strength by strength);
 #   3. progress by stage (motion steps, frame tiles, saving) in place of the engine's console bars;
-#   4. the finished file: the engine's frames are written once as H.264 yuv420p with the moov box first, the sound track
+#   4. the picture encoder (picture to video): the shipped vae/encoder/config.json says the last "compress_all_res" block
+#      doubles the channels (1024 to 2048) but the shipped weights keep 1024 (the conv writes 128 x 8 = 1024), so the
+#      pinned source builds a 2048-wide block and fails with `broadcast_shapes (1,1024,...) and (1,2048,...)` (measured
+#      2026-10-17). The multiplier of every "_res" down-sampling block is read from its own weights instead of the config;
+#   5. the finished file: the engine's frames are written once as H.264 yuv420p with the moov box first, the sound track
 #      the engine decoded is added as AAC without any other change, and a JPEG poster of frame 0 is written; no metadata.
 # The engine's disclosure features (watermark, latent disclosure) are left exactly as shipped: this file never removes
 # or disables one (licence section 6). Nothing is logged with a prompt or a picture; stderr carries phase and size only.
@@ -133,7 +137,8 @@ def _install_patches():
                 import numpy as np
 
                 started = time.time()
-                frame = decoder_fn(latents[:, :, :1])
+                # The same call the tiles get (this decoder is conditioned on a timestep; without it the call fails and no preview is drawn).
+                frame = decoder_fn(latents[:, :, :1], causal=kwargs.get("causal", False), timestep=kwargs.get("timestep"), debug=False, chunked_conv=kwargs.get("chunked_conv", False))
                 mx.eval(frame)
                 array = np.array(frame[0][:, 0]).transpose(1, 2, 0)
                 array = np.clip((array + 1.0) / 2.0 * 255.0, 0, 255).astype(np.uint8)
@@ -144,8 +149,9 @@ def _install_patches():
                 os.replace(temp, target)
                 emit({"id": base._current["id"], "event": "preview", "ms": int((time.time() - started) * 1000)})
                 mx.clear_cache()
-            except Exception:  # noqa: BLE001 - the clip never depends on its preview
-                pass
+            except Exception as error:  # noqa: BLE001 - the clip never depends on its preview
+                sys.stderr.write("video worker: no preview (%s)\n" % type(error).__name__)
+                sys.stderr.flush()
         total = 0
         try:
             tiling = sys.modules["mlx_video.models.ltx_2.video_vae.tiling"]
@@ -177,6 +183,46 @@ def _install_patches():
         return original_decode(*args, **kwargs)
 
     vae_decoder_module.decode_with_tiling = counted_decode
+
+    # Picture to video: build the encoder from the shape the weights really have (see the header, item 4).
+    import json
+    from pathlib import Path
+
+    import mlx_video.models.ltx_2.video_vae.video_vae as vae_module
+    from mlx_video.models.ltx_2.config import VideoEncoderModelConfig
+
+    ratio = {"compress_space_res": 4, "compress_time_res": 2, "compress_all_res": 8}
+
+    def encoder_from_pretrained(cls, model_path):
+        from safetensors import safe_open
+
+        model_path = Path(model_path)
+        config_dict = json.loads((model_path / "config.json").read_text())
+        files = sorted(model_path.glob("*.safetensors"))
+        if not files:
+            raise FileNotFoundError("the picture encoder is not installed")
+        shapes = {}
+        for file in files:
+            with safe_open(str(file), "np") as handle:
+                for key in handle.keys():
+                    if key.startswith("down_blocks.") and key.endswith(".conv.conv.weight"):
+                        shapes[key] = handle.get_slice(key).get_shape()
+        blocks = []
+        for index, (name, params) in enumerate(config_dict.get("encoder_blocks", [])):
+            shape = shapes.get("down_blocks.%d.conv.conv.weight" % index)
+            if name in ratio and shape:
+                params = dict(params) if isinstance(params, dict) else {}
+                params["multiplier"] = max(1, round(shape[0] * ratio[name] / shape[-1]))
+            blocks.append([name, params])
+        config_dict["encoder_blocks"] = blocks
+        model = cls(VideoEncoderModelConfig(**config_dict))
+        weights = {}
+        for file in files:
+            weights.update(mx.load(str(file)))
+        model.load_weights(list(model.sanitize(weights).items()), strict=False)
+        return model
+
+    vae_module.VideoEncoder.from_pretrained = classmethod(encoder_from_pretrained)
 
     # The engine joins picture and sound with an `ffmpeg` found on PATH; the Stack names its bundled one instead.
     gen.mux_video_audio = lambda video_path, audio_path, output_path: False

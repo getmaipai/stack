@@ -71,12 +71,12 @@ export interface VideoSpec {
   quality: VideoQuality; modelId: string; maxSeconds: number; frameStep: number; defaultSize: string; maxPixels: number; sizeStep: number; minSide: number;
   /** A clip of this model has a sound track. */
   audio: boolean; peakBytes: number; loraBase: string; worker: "video_worker.py" | "ltx_worker.py";
-  /** A picture can start a clip of this model. Detailed cannot yet: the pinned runtime's picture path fails on LTX-2.3 (measured 2026-10-17, a broadcast_shapes error), so it is off rather than half working. */
+  /** A picture can start a clip of this model. Detailed can since the worker builds the picture encoder from the shape of the shipped weights (the shipped config disagrees with them: ltx_worker.py, item 4). */
   imageToVideo: boolean;
 }
 export const VIDEO_SPECS: Record<VideoQuality, VideoSpec> = {
   quick: { quality: "quick", modelId: STACK_VIDEO_MODEL_ID, maxSeconds: VIDEO_MAX_SECONDS, frameStep: 4, defaultSize: VIDEO_DEFAULT_SIZE, maxPixels: VIDEO_MAX_PIXELS, sizeStep: VIDEO_SIZE_STEP, minSide: VIDEO_MIN_SIDE, audio: false, peakBytes: VIDEO_PEAK_BYTES, loraBase: "wan2.2-ti2v-5b", worker: "video_worker.py", imageToVideo: true },
-  detailed: { quality: "detailed", modelId: STACK_VIDEO_DETAILED_MODEL_ID, maxSeconds: 10, frameStep: 8, defaultSize: "768x448", maxPixels: 768 * 448, sizeStep: 64, minSide: 256, audio: true, peakBytes: LTX_PEAK_BYTES, loraBase: "ltx-2.3", worker: "ltx_worker.py", imageToVideo: false },
+  detailed: { quality: "detailed", modelId: STACK_VIDEO_DETAILED_MODEL_ID, maxSeconds: 10, frameStep: 8, defaultSize: "768x448", maxPixels: 768 * 448, sizeStep: 64, minSide: 256, audio: true, peakBytes: LTX_PEAK_BYTES, loraBase: "ltx-2.3", worker: "ltx_worker.py", imageToVideo: true },
 };
 /** The quality a request's `model` names: "video" and the Quick pin's id are Quick, "detailed" and the LTX pin's id are Detailed, anything else is unknown. */
 export function qualityOfModelName(name: string | undefined): VideoQuality | null {
