@@ -52,6 +52,12 @@ export function renderLaunchdPlist(binaryPath: string, dataDirectory = serviceDa
 
 function launchctl(args: string[], allowFailure = false): string {
   const command = process.env.STACK_LAUNCHCTL ?? "launchctl";
+  // 2026-10-17: a test run drove the production com.maipai.stack agent out
+  // of launchd. Under a test run the real launchctl is only reachable
+  // with a non-production label; the production one needs a stub.
+  if (process.env.NODE_ENV === "test" && !process.env.STACK_LAUNCHCTL && serviceLabel() === DEFAULT_SERVICE_LABEL) {
+    throw new Error(`Refusing to run launchctl ${args.join(" ")} for ${DEFAULT_SERVICE_LABEL} from a test. Set STACK_SERVICE_LABEL to a test label or STACK_LAUNCHCTL to a stub.`);
+  }
   const result = spawnSync(command, args, { encoding: "utf8", env: process.env });
   if (result.error && !allowFailure) throw result.error;
   if (result.status !== 0 && !allowFailure) {

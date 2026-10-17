@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { installLaunchdService, launchAgentPath, renderLaunchdPlist, uninstallLaunchdService } from "@/service/launchd";
+import { installLaunchdService, launchAgentPath, launchdStatus, stopLaunchdService, renderLaunchdPlist, uninstallLaunchdService } from "@/service/launchd";
 
 const original = { HOME: process.env.HOME, DATA: process.env.STACK_DATA_DIR, LABEL: process.env.STACK_SERVICE_LABEL, LAUNCHCTL: process.env.STACK_LAUNCHCTL };
 const root = mkdtempSync(join(tmpdir(), "maipai-stack-service-"));
@@ -60,5 +60,18 @@ test("omits STACK_BUN_BIN entirely when unset", () => {
     expect(plist).not.toContain("STACK_BUN_BIN");
   } finally {
     if (original !== undefined) process.env.STACK_BUN_BIN = original;
+  }
+});
+
+test("a test run cannot reach the production label through the real launchctl", () => {
+  const saved = { label: process.env.STACK_SERVICE_LABEL, tool: process.env.STACK_LAUNCHCTL };
+  delete process.env.STACK_SERVICE_LABEL; delete process.env.STACK_LAUNCHCTL;
+  try {
+    // Stop swallows launchctl failures, so only the guard (thrown before any spawn) can make this throw.
+    expect(() => stopLaunchdService()).toThrow("Refusing to run launchctl");
+    expect(() => launchdStatus()).toThrow("com.maipai.stack");
+  } finally {
+    if (saved.label === undefined) delete process.env.STACK_SERVICE_LABEL; else process.env.STACK_SERVICE_LABEL = saved.label;
+    if (saved.tool === undefined) delete process.env.STACK_LAUNCHCTL; else process.env.STACK_LAUNCHCTL = saved.tool;
   }
 });
