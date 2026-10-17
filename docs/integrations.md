@@ -365,8 +365,27 @@ newest 24 under `data/video/results/<job>/`. No prompt and no reference picture 
 **Reference pictures (VIDEO-GEN-12, owner ruling 2026-10-17).** `image` is a PNG, JPEG or WebP as base64 (a `data:` URL is fine), at most 20 MB,
 and needs `image_source`. Only `generated` is accepted, and only for a picture this Stack's own image generator returned (or the poster of one of its own
 clips): the Stack records the sha256 of every picture it generates (hash and time only, 30 days, the newest 2,000) and checks the bytes it is given, so the
-picture must arrive unchanged. `uploaded` and any picture the Stack did not make are refused for everyone, a household member's photo included, until a
-check for "no identifiable real person" exists. Home applies its own age, surface and household gates first.
+picture must arrive unchanged. `uploaded` and any picture the Stack did not make are refused for everyone. The one other source is `household_photo`
+(LIKENESS-01, owner ruling 2026-10-17): a photo of a household adult who agreed, accepted only with `consent_proof`, Home's signed proof (below) bound to the
+sha256 of that exact picture. Home applies its own age, surface, consent and face-count gates first.
+
+**Likeness proofs (LIKENESS-01).** Who agreed to what is Home's record; the Stack refuses to act on a likeness without a short-lived proof Home signed for
+that one thing. A proof is `<payload>.<signature>`, both base64url: the payload is JSON `{ v: 1, purpose, subject, requester, bind, iat, exp, jti }` and the
+signature is Ed25519 over the payload text. `purpose` is `photo` (a photo of the subject starts a clip, a picture or an edit; `bind` is the picture's sha256),
+`style_import` (a style of the subject is added; `bind` is the file's sha256, its link, or `name:<name>`) or `style_use` (that style is applied; `bind` is the
+LoRA id). A proof lives at most 30 minutes (`exp - iat`), is checked when the request arrives and again when the job starts (a job can wait minutes in the line),
+and is refused when forged, expired, for another picture or purpose, or when no key is registered. Home registers its public key once with `PUT
+/stack/v1/likeness/trust { public_key }` (base64 SPKI DER, Ed25519); the first key is trusted, a different one replaces it only with `rotation_signature`, the
+old key's signature over the new key's base64 text (409 `likeness_key_mismatch` otherwise). `GET /stack/v1/likeness` reports `{ trusted, fingerprint,
+max_proof_minutes }`. Errors are 403 with `likeness_proof_required`, `_invalid`, `_expired`, `_mismatch` or `likeness_not_trusted`.
+
+**Pictures that look like a person.** A LoRA record has `likeness_subject` (the opaque id Home gave, or null). A file whose own description names a real
+person's likeness is refused at import, unless the import carries `likeness_subject` and a valid `style_import` proof; a file that names a public figure
+(celebrity, actor, influencer, politician and the like) is refused with or without one, and a minor in a sexual context is refused always. A likeness LoRA is
+always adult-only (`classification_locked` on any change) and every picture or clip request that applies it needs `likeness_proof` (a `style_use` proof) on its
+`loras` entry. `init_image` on `/v1/images/generations` and the picture of `/v1/images/edits` now need `image_source` too (`generated` checked against the
+ledger, `household_photo` with a proof, or `uploaded`: a photo Home found to show no person). Output of a job that rested on a proof is not recorded as a
+generated picture, so starting again from it needs a fresh proof. Home applies its own age, surface and consent gates first.
 
 **LoRAs.** The household library is `data/video/loras/` (one `.safetensors` per record plus `manifest.json`). `GET /stack/v1/video/loras`;
 `POST /stack/v1/video/loras` (multipart: `file`, or `path` for a file already on the Stack's computer; `name`, `licence`, `licence_acknowledged`,
@@ -411,7 +430,7 @@ never fit beside what is resident is 503 `no_memory` at once. Four jobs may be w
 `z-image-turbo`), `size` (`1024x1024` unsaid; 256 to 2048 a side, multiples of 16), `n` (1 to 4; seeds `seed`, `seed+1`, ...), `seed`, `steps` (4 for
 Klein, 9 for Z-Image; at most 12 and 20), `negative_prompt` (accepted, no effect: the distilled models run without guidance), `loras`
 (`[{ id | sha256, scale }]`, at most 4, scale 0 to 2, the record's default when left out), `audience` (`all-ages` unsaid, or `adult`), `init_image` (base64,
-at most 40 MB) with `strength` (0.05 to 1, default 0.6) for image to image, `preview` (accepted, ignored), `timeout_ms`. A LoRA selects the base model it
+at most 40 MB, needs `image_source` and, for a household photo, `consent_proof`) with `strength` (0.05 to 1, default 0.6) for image to image, `preview` (accepted, ignored), `timeout_ms`. A LoRA selects the base model it
 was made for (a request that mixes bases is 422 `wrong_base_model`). `Pic` is `{ url, thumbnail_url, b64_json (the waiting reply only), content_type, seed,
 width, height, model, steps, ms, lora_ids, mode }`. Errors carry `error` (what happened, what to do) and `code`: 413 `too_large`; 422 `bad_size` `bad_steps`
 `bad_image` `unknown_lora` `wrong_base_model` `lora_not_allowed` `lora_changed` `lora_missing` `too_many_loras` `duplicate_lora` `bad_strength`; 429 `queue_full`;

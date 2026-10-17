@@ -12,6 +12,7 @@ import { registerJobRunner } from "@/lib/jobs";
 import { STACK_VIDEO_MODEL_ID } from "@/lib/modelCatalog";
 import { workDir, commitResult, type VideoResultMeta } from "./results";
 import { recordGeneratedImage } from "./provenance";
+import { LikenessError, recheck, type LikenessCheck } from "@/lib/likeness";
 import { overallPercent, VideoError, videoGen, VIDEO_PEAK_BYTES } from "./videoGen";
 
 export const VIDEO_JOB_KIND = "video_generation";
@@ -23,6 +24,8 @@ export interface StashedClip {
   width: number; height: number; frames: number; seed: number;
   loras: Array<[string, number]>;
   loraIds: string[];
+  /** LIKENESS-01: the proofs this clip rests on, checked again when it starts. */
+  likeness?: LikenessCheck[];
 }
 const pending = new Map<string, StashedClip & { at: number }>();
 const STASH_TTL_MS = 30 * 60_000;
@@ -57,6 +60,12 @@ export function registerVideoJobs(): void {
     const token = String((job.input as { token?: string } | null)?.token ?? "");
     const clip = unstashClip(token);
     if (!clip) throw new VideoError("failed", "The request was not received. Send it again.", 400);
+    // A clip can wait in the line for minutes: the proofs are checked again the moment it starts.
+    try { recheck(clip.likeness); } catch (error) {
+      const refused = error instanceof LikenessError ? new VideoError(error.code, error.message, error.status) : new VideoError("likeness_proof_invalid", "The consent proof was not accepted. Ask Home to make it again.", 403);
+      remember(failures, job.id, { code: refused.code, message: refused.message, status: refused.status });
+      throw refused;
+    }
     const work = workDir(job.id);
     rmSync(work, { recursive: true, force: true });
     mkdirSync(work, { recursive: true, mode: 0o700 });
@@ -77,8 +86,8 @@ export function registerVideoJobs(): void {
         bytes: Bun.file(video).size, poster_bytes: Bun.file(poster).size, mlx_peak_gb: result.peakBytes === null ? null : Math.round(result.peakBytes / 1e8) / 10,
       };
       update({ status: "ready", percent: 100 });
-      // The poster of a clip the Stack made counts as a picture made here.
-      recordGeneratedImage(new Uint8Array(readFileSync(poster)));
+      // The poster of a clip the Stack made counts as a picture made here, except one that looks like a person: starting from it again needs a fresh proof.
+      if (!clip.likeness || clip.likeness.length === 0) recordGeneratedImage(new Uint8Array(readFileSync(poster)));
       commitResult(meta, outputDir);
       remember(progress, job.id, { phase: "ready", phasePercent: 100 });
       return { job: job.id, model: meta.model, width: meta.width, height: meta.height, frames: meta.frames, fps: meta.fps, seconds: meta.seconds, seed: meta.seed, lora_ids: meta.lora_ids, ms: meta.ms };

@@ -20,6 +20,9 @@ with Home's releases, so this file tracks what a Home release picks up.
 ### Added
 
 - Memory watchdog (2026-10-17): samples the whole computer every 5 s (`GET /stack/v1/memory`), admits picture, video, image-tool and voice-engine starts only while available memory after the job's peak stays above a reserve (`stack.memory.reserve_gb`, default the larger of 8 GB and 8 percent), and walks a WARN and CRITICAL ladder with hysteresis: refuse new work, unload idle workers, cancel queued jobs, then cancel the running job (video first), evict the judge, and restart chat only after 60 s of critical. Names the biggest memory users, logs any non-Stack process above 40 GB, stops an orphaned engine of this Stack's own engines folder (parent launchd, older than 90 s, no client connected). Shutdown answers 503 `stack_restarting` with `Retry-After` instead of dropping requests. Settings `stack.memory.watchdog`, `stack.memory.reserve_gb`, `stack.memory.reap_orphans`.
+- Likeness proofs (LIKENESS-01): a clip, picture or saved style that looks like a household adult is accepted only with a short-lived Ed25519 proof Home signed
+  for that one thing (the picture's hash, or the style), checked on arrival and again when the job starts. New `household_photo` source for video and picture
+  references, `likeness_subject` on both LoRA libraries, `PUT /stack/v1/likeness/trust`. A starting picture or edit now has to say where it came from.
 
 - Picture generation (IMGGEN-STACK-01 and 02, IMGGEN-EDIT-01, IMGGEN-LORA-01): FLUX.2 Klein 4B and Z-Image-Turbo on mflux in an on-demand worker, `POST /v1/images/generations` with LoRAs, image to image, n up to 4, progress, cancel and a result store, the `edit` and `edit_masked` operations on `/v1/images/edits`, the LoRA library with install by Hugging Face link, `GET /stack/v1/image`, `POST /stack/v1/image/install`.
 

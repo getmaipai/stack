@@ -29,7 +29,7 @@ const PlanModelSchema = z.object({
 const LoraSchema = z.object({
   id: z.string(), name: z.string(), file: z.string(), sha256: z.string(), bytes: z.number().int(), rank: z.number().int(), modules: z.number().int(), base_model: z.string(),
   licence: z.string(), licence_class: z.enum(["free", "acknowledged"]), source_url: z.string().nullable(),
-  classification: z.enum(LORA_CLASSES), classification_note: z.string().nullable(), strength_default: z.number(), trigger_words: z.array(z.string()), added_by: z.string().nullable(), added_at: z.string(),
+  classification: z.enum(LORA_CLASSES), classification_note: z.string().nullable(), strength_default: z.number(), trigger_words: z.array(z.string()), added_by: z.string().nullable(), added_at: z.string(), likeness_subject: z.string().nullable().openapi({ description: "The household adult this LoRA looks like (an opaque id Home gave), or null. A LoRA that looks like a person is always adult-only and every request that applies it needs Home's signed proof." }),
 });
 const ErrorBody = z.object({ error: z.string(), code: z.string().optional() });
 const ModelSchema = z.object({
@@ -71,17 +71,21 @@ const importForm = z.object({
   strength_default: z.coerce.number().min(0).max(MAX_LORA_STRENGTH).optional(),
   trigger_words: z.string().optional().openapi({ description: "Comma separated, or a JSON array." }),
   added_by: z.string().optional().openapi({ description: "An opaque label Home keeps for who added it." }),
+  likeness_subject: z.string().max(200).optional().openapi({ description: "LIKENESS-01: the household adult this style looks like (an opaque id), sent with `likeness_proof`. A file whose description names a real person is refused without both." }),
+  likeness_proof: z.string().max(4096).optional().openapi({ description: "Home's signed, short-lived proof (purpose style_import) that the subject is a household adult who agreed." }),
 });
 const importRoute = createRoute({ method: "post", path: "/loras", tags: ["Images"], summary: "Add a LoRA to the library (a file)", request: { body: { content: { "multipart/form-data": { schema: importForm } } } }, responses: {
   200: { content: { "application/json": { schema: LoraSchema } }, description: "Added; the id is `lora-` and the first 16 hex of the sha256. `base_model` was read from the tensors." },
   409: { content: { "application/json": { schema: ErrorBody } }, description: "Already in the library (already_added)." },
   413: { content: { "application/json": { schema: ErrorBody } }, description: "Larger than 2 GB." },
+  403: { content: { "application/json": { schema: ErrorBody } }, description: "A style that looks like a person was sent without a valid proof from Home: likeness_proof_required, likeness_proof_invalid, likeness_proof_expired, likeness_proof_mismatch, likeness_not_trusted." },
   422: { content: { "application/json": { schema: ErrorBody } }, description: "Not usable: not_safetensors, not_a_lora, wrong_base_model, licence_acknowledgement_required, lora_refused (a minor in a sexual context, or a real person's likeness: never allowed), bad_name, bad_strength." },
 } });
 const urlRoute = createRoute({ method: "post", path: "/loras/install", tags: ["Images"], summary: "Add a LoRA from a Hugging Face link (an install job)", request: { body: { content: { "application/json": { schema: z.object({
   url: z.string().openapi({ description: "https://huggingface.co/<owner>/<repo>/resolve/<revision>/<file>.safetensors (a /blob/ link works too). No other host is fetched." }),
   name: z.string(), licence: z.string().optional().openapi({ description: "Left out: read from the repository's card; \"unknown\" when it has none." }), licence_acknowledged: z.boolean().optional(),
   classification: z.enum(LORA_CLASSES).optional(), strength_default: z.number().min(0).max(MAX_LORA_STRENGTH).optional(), trigger_words: z.array(z.string()).optional(), added_by: z.string().optional(),
+  likeness_subject: z.string().max(200).optional().openapi({ description: "LIKENESS-01: the household adult this style looks like, sent with `likeness_proof` (purpose style_import, bound to `name:<name>` or the link)." }), likeness_proof: z.string().max(4096).optional(),
 }) } } } }, responses: {
   202: { content: { "application/json": { schema: z.object({ job: z.string() }) } }, description: "The install job (/stack/v1/jobs/{id}); when done its `result.lora` is the record, when failed its `reason` starts with the code (licence_acknowledgement_required, lora_refused, wrong_base_model, ...)." },
   422: { content: { "application/json": { schema: ErrorBody } }, description: "bad_url: not a huggingface.co file link." },
@@ -164,18 +168,20 @@ imageRoutes.openapi(importRoute, async (c) => {
       if (!form.path.startsWith("/") || !existsSync(form.path) || !statSync(form.path).isFile()) return c.json({ error: "That path is not a file on this computer.", code: "not_safetensors" }, 422);
       source = form.path;
     } else return c.json({ error: "Send the LoRA as the `file` field.", code: "not_safetensors" }, 422);
-    const record = await imageLoras.importFile({ path: source, name: form.name, licence: form.licence, licenceAcknowledged: form.licence_acknowledged === "true", sourceUrl: form.source_url ?? null, classification: form.classification, strengthDefault: form.strength_default, triggerWords: triggerWords(form.trigger_words), addedBy: form.added_by ?? null });
+    if (!!form.likeness_subject !== !!form.likeness_proof) return c.json({ error: "A style that looks like a person needs both the person and Home's proof that they agreed.", code: "likeness_proof_required" }, 403);
+    const record = await imageLoras.importFile({ path: source, name: form.name, licence: form.licence, licenceAcknowledged: form.licence_acknowledged === "true", sourceUrl: form.source_url ?? null, classification: form.classification, strengthDefault: form.strength_default, triggerWords: triggerWords(form.trigger_words), addedBy: form.added_by ?? null, ...(form.likeness_subject && form.likeness_proof ? { likeness: { subject: form.likeness_subject, proof: form.likeness_proof } } : {}) });
     return c.json(record, 200);
   } catch (error) {
-    if (error instanceof LoraError) return c.json({ error: error.message, code: error.code }, error.status as 409 | 413 | 422);
+    if (error instanceof LoraError) return c.json({ error: error.message, code: error.code }, error.status as 403 | 409 | 413 | 422);
     throw error;
   } finally { if (temp) rmSync(temp, { force: true }); }
 });
 
 imageRoutes.openapi(urlRoute, (c) => {
   const body = c.req.valid("json");
+  if (!!body.likeness_subject !== !!body.likeness_proof) return c.json({ error: "A style that looks like a person needs both the person and Home's proof that they agreed.", code: "likeness_proof_required" }, 422);
   try {
-    const job = startLoraInstall({ url: body.url, name: body.name, licence: body.licence, licenceAcknowledged: body.licence_acknowledged, classification: body.classification, strengthDefault: body.strength_default, triggerWords: body.trigger_words, addedBy: body.added_by ?? null });
+    const job = startLoraInstall({ url: body.url, name: body.name, licence: body.licence, licenceAcknowledged: body.licence_acknowledged, classification: body.classification, strengthDefault: body.strength_default, triggerWords: body.trigger_words, addedBy: body.added_by ?? null, ...(body.likeness_subject && body.likeness_proof ? { likeness: { subject: body.likeness_subject, proof: body.likeness_proof } } : {}) });
     return c.json({ job: job.id }, 202);
   } catch (error) {
     if (error instanceof LoraError) return c.json({ error: error.message, code: error.code }, 422);

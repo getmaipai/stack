@@ -17,6 +17,7 @@ import { identityHeaders } from "@/lib/identity";
 import { RoleReplyHeaders } from "@maipai/spec/stack/ts/role-reply-headers.js";
 import { cancelJob, getJob, hasJobRunner, listJobs, submitJob, waitForJob, type Job } from "@/lib/jobs";
 import { LoraError, resolveLoras } from "@/video/loras";
+import { LikenessError, photoBind, verifyProof, type LikenessCheck } from "@/lib/likeness";
 import { wasGeneratedHere } from "@/video/provenance";
 import { deleteResult, isJobId, posterPath, readResult, videoPath, type VideoResultMeta } from "@/video/results";
 import { memoryVerdict, tierAvailability, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, videoGen } from "@/video/videoGen";
@@ -25,13 +26,14 @@ import { stashClip, unstashClip, videoFailure, videoProgress, VIDEO_JOB_KIND } f
 const DEFAULT_WAIT_MS = 30_000;
 const MAX_WAIT_MS = 30 * 60_000;
 
-const LoraEntry = z.object({ id: z.string().max(40), strength: z.number().min(0).max(2).optional() });
+const LoraEntry = z.object({ id: z.string().max(40), strength: z.number().min(0).max(2).optional(), likeness_proof: z.string().max(4096).optional().openapi({ description: "Needed when the LoRA looks like a person (its record has a likeness_subject): Home's signed, short-lived proof that the person agreed, bound to this LoRA." }) });
 const VideoRequestSchema = z.object({
   model: z.string().optional().openapi({ description: "Accepted for symmetry with the other job routes; this route always serves the video role.", example: "video" }),
   prompt: z.string().trim().min(1).max(VIDEO_MAX_PROMPT_CHARS),
   negative_prompt: z.string().max(VIDEO_MAX_PROMPT_CHARS).optional().openapi({ description: "Accepted. The distilled FastWan model runs without guidance, so it has no effect on the clip." }),
   image: z.string().optional().openapi({ description: "Image to video: the first frame, base64 (a data: URL is fine), PNG, JPEG or WebP, at most 20 MB. Needs image_source." }),
-  image_source: z.enum(["generated", "uploaded"]).optional().openapi({ description: "Where the picture came from, as Home knows it. Only `generated` is accepted, and only for a picture this Stack's own image generator produced (or the poster of one of its clips): the Stack checks the picture's hash. `uploaded` is refused for everyone until a check for \"no identifiable real person\" exists (VIDEO-GEN-12)." }),
+  image_source: z.enum(["generated", "uploaded", "household_photo"]).optional().openapi({ description: "Where the picture came from, as Home knows it. `generated`: a picture this Stack's own image generator produced (or the poster of one of its clips); the Stack checks the picture's hash. `household_photo`: a photo of a consenting household adult, accepted only with `consent_proof`. `uploaded` (any other photo) is refused for everyone: a photo that may show a real person needs the household proof (VIDEO-GEN-12, LIKENESS-01)." }),
+  consent_proof: z.string().max(4096).optional().openapi({ description: "With `image_source: household_photo`: Home's signed proof that the person in the photo is a household adult who agreed, bound to this exact picture (its sha256) and valid for at most 30 minutes. Checked when the request arrives and again when the clip starts." }),
   size: z.string().regex(/^\d{3,4}x\d{3,4}$/).optional().openapi({ description: `<width>x<height>, multiples of ${VIDEO_SIZE_STEP}, each side at least ${VIDEO_MIN_SIDE}, area at most ${VIDEO_MAX_PIXELS} pixels (832x480; 480x832 also fits). Default ${VIDEO_DEFAULT_SIZE}.`, example: VIDEO_DEFAULT_SIZE }),
   seconds: z.number().int().min(1).max(VIDEO_MAX_SECONDS).optional().openapi({ description: `Whole seconds, 1 to ${VIDEO_MAX_SECONDS} per tier (24 frames a second plus the first frame). Default ${VIDEO_MAX_SECONDS}.` }),
   seed: z.number().int().min(0).max(4_294_967_295).optional(),
@@ -63,6 +65,7 @@ const postRoute = createRoute({ method: "post", path: "/generations", tags: ["Vi
   200: { content: { "application/json": { schema: VideoResponseSchema } }, description: "The clip is ready; `data[0].url` is where to fetch it." },
   202: { content: { "application/json": { schema: VideoResponseSchema } }, description: "Still going past timeout_ms (`data` is empty); poll GET /v1/videos/generations/{job}." },
   413: { content: { "application/json": { schema: ErrorBody } }, description: "The reference picture is larger than 20 MB." },
+  403: { content: { "application/json": { schema: ErrorBody } }, description: "A picture or style that looks like a person was sent without a valid proof from Home: likeness_proof_required, likeness_proof_invalid, likeness_proof_expired, likeness_proof_mismatch, likeness_not_trusted." },
   422: { content: { "application/json": { schema: ErrorBody } }, description: "The request cannot be done: bad_size, bad_image, reference_source_required, reference_image_refused, reference_not_generated, unknown_lora, wrong_base_model, lora_not_allowed, too_many_loras, bad_strength; `error` says what to change." },
   429: { content: { "application/json": { schema: ErrorBody } }, description: "Four clips are already waiting; try again when one finishes." },
   499: { content: { "application/json": { schema: ErrorBody } }, description: "The job was cancelled." },
@@ -149,20 +152,30 @@ videoV1Routes.openapi(postRoute, async (c) => {
   if (typeof size === "string") return fail(c, 422, "bad_size", size);
   const seconds = body.seconds ?? VIDEO_MAX_SECONDS;
   let image: Uint8Array | null = null;
+  const checks: LikenessCheck[] = [];
   if (body.image !== undefined) {
     if (!body.image_source) return fail(c, 422, "reference_source_required", "Say where the picture came from (image_source). Only a picture the Stack's image generator made can start a clip.");
-    if (body.image_source !== "generated") return fail(c, 422, "reference_image_refused", "A clip cannot start from an uploaded picture or a photo of a person yet. Make a picture with the image generator and start the clip from that.");
+    if (body.image_source !== "generated" && body.image_source !== "household_photo") return fail(c, 422, "reference_image_refused", "A clip cannot start from an uploaded picture or a photo of a person unless Home confirms the person is a household adult who agreed. Make a picture with the image generator and start the clip from that, or ask Home to animate a photo of someone who agreed.");
     image = decodeImage(body.image);
     if (!image) return fail(c, 422, "bad_image", "The picture could not be read. Send a PNG, JPEG or WebP as base64.");
     if (image.length > VIDEO_MAX_REFERENCE_BYTES) return fail(c, 413, "too_large", `The picture is larger than ${VIDEO_MAX_REFERENCE_BYTES / 1024 / 1024} MB.`);
     if (!looksLikePicture(image)) return fail(c, 422, "bad_image", "The picture could not be read. Send a PNG, JPEG or WebP as base64.");
-    if (!wasGeneratedHere(image)) return fail(c, 422, "reference_not_generated", "That picture was not made by this computer's image generator, so it cannot start a clip. Make a picture with the image generator and start the clip from that, unchanged.");
+    if (body.image_source === "generated") {
+      if (!wasGeneratedHere(image)) return fail(c, 422, "reference_not_generated", "That picture was not made by this computer's image generator, so it cannot start a clip. Make a picture with the image generator and start the clip from that, unchanged.");
+    } else {
+      try { verifyProof(body.consent_proof, { purpose: "photo", bind: photoBind(image) }); } catch (error) {
+        if (error instanceof LikenessError) return fail(c, error.status, error.code, error.message);
+        throw error;
+      }
+      checks.push({ purpose: "photo", bind: photoBind(image), token: body.consent_proof! });
+    }
   }
   let loras;
-  try { loras = await resolveLoras(body.loras, body.audience ?? "all-ages"); } catch (error) {
+  try { loras = await resolveLoras((body.loras ?? []).map((entry) => ({ id: entry.id, ...(entry.strength !== undefined ? { strength: entry.strength } : {}), ...(entry.likeness_proof !== undefined ? { likenessProof: entry.likeness_proof } : {}) })), body.audience ?? "all-ages"); } catch (error) {
     if (error instanceof LoraError) return fail(c, error.status === 404 ? 422 : error.status, error.code, error.message);
     throw error;
   }
+  for (const lora of loras) if (lora.likeness) checks.push(lora.likeness);
   if (!videoGen.hasModels()) return fail(c, 503, "not_installed", "The video model is not installed yet. Install it from Home's Engines page, then try again.");
   if (activeClips() >= VIDEO_QUEUE_MAX) return fail(c, 429, "queue_full", `${VIDEO_QUEUE_MAX} clips are already waiting. Try again when one finishes.`);
   const verdict = memoryVerdict();
@@ -171,8 +184,8 @@ videoV1Routes.openapi(postRoute, async (c) => {
   const frames = seconds * VIDEO_FPS + 1;
   const token = crypto.randomUUID();
   const loraIds = loras.map((lora) => lora.record.id);
-  stashClip(token, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds });
-  const submitted = submitJob({ kind: VIDEO_JOB_KIND, role: "video", input: { token, size: `${size.width}x${size.height}`, seconds, seed, mode: image ? "image-to-video" : "text-to-video", lora_ids: loraIds } });
+  stashClip(token, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, likeness: checks });
+  const submitted = submitJob({ kind: VIDEO_JOB_KIND, role: "video", input: { token, size: `${size.width}x${size.height}`, seconds, seed, mode: image ? "image-to-video" : "text-to-video", lora_ids: loraIds, likeness: checks.length > 0 } });
   if ("refused" in submitted) return fail(c, 503, "unsupported", submitted.reason);
   const settled = await waitForJob(submitted.job.id, body.timeout_ms ?? DEFAULT_WAIT_MS);
   const created = Math.floor(new Date(submitted.job.createdAt).getTime() / 1000);

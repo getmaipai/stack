@@ -260,6 +260,8 @@ const ImageEditFormSchema = z.object({
   factor: z.coerce.number().positive().optional(),
   engine: z.enum(["auto", "vision", "isnet"]).optional().openapi({ description: "remove_background only: auto uses Apple's on-device finder when this Mac has it, else the ONNX model." }),
   timeout_ms: z.coerce.number().int().positive().optional(),
+  image_source: z.enum(["generated", "uploaded", "household_photo"]).optional().openapi({ description: "edit and edit_masked: where the picture came from, as Home knows it (required): `generated` (this Stack made it; its hash is checked), `household_photo` (a photo of a consenting household adult; needs `consent_proof`) or `uploaded` (a photo Home checked shows no person)." }),
+  consent_proof: z.string().max(4096).optional().openapi({ description: "With `image_source: household_photo`: Home's signed proof, bound to this exact picture, valid for at most 30 minutes." }),
 });
 const ImageEditResponseSchema = z.object({ created: z.number().int(), job: z.string(), data: z.array(z.record(z.string(), z.unknown())) });
 const ImageEditErrorSchema = z.object({ error: z.string(), code: z.string().optional(), job: z.string().optional() });
@@ -279,7 +281,7 @@ v1Routes.openapi(imageEditsRoute, async (c) => {
   if (form.operation === "edit" || form.operation === "edit_masked") {
     if (form.image.size === 0 || form.image.size > MAX_UPLOAD_BYTES) return jsonReply(c, { error: `The picture must be between 1 byte and ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.`, code: "too_large" }, 413, identityHeaders(null)) as never;
     if (form.mask && form.mask.size > MAX_UPLOAD_BYTES) return jsonReply(c, { error: "The mask is too big.", code: "too_large" }, 413, identityHeaders(null)) as never;
-    return editImages(c, { image: form.image, mask: form.mask, operation: form.operation, instruction: form.instruction, prompt: form.prompt, region: form.region, feather: form.feather, seed: form.seed, steps: form.steps, timeout_ms: form.timeout_ms }) as never;
+    return editImages(c, { image: form.image, mask: form.mask, operation: form.operation, instruction: form.instruction, prompt: form.prompt, region: form.region, feather: form.feather, seed: form.seed, steps: form.steps, timeout_ms: form.timeout_ms, image_source: form.image_source, consent_proof: form.consent_proof }) as never;
   }
   if (form.image.size === 0 || form.image.size > MAX_UPLOAD_BYTES) return jsonReply(c, { error: `The picture must be between 1 byte and ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.`, code: "too_large" }, 413, identityHeaders(null)) as never;
   if (form.mask && form.mask.size > MAX_UPLOAD_BYTES) return jsonReply(c, { error: "The mask is too big.", code: "too_large" }, 413, identityHeaders(null)) as never;

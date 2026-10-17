@@ -26,6 +26,7 @@ import { createHash } from "node:crypto";
 import { closeSync, copyFileSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { sha256OfFile } from "@/lib/fileHash";
+import { LikenessError, verifyProof, type LikenessCheck } from "@/lib/likeness";
 
 export const LORA_CLASSES = ["all-ages", "adult-only"] as const;
 export type LoraClass = typeof LORA_CLASSES[number];
@@ -55,6 +56,8 @@ export interface LoraRecord {
   trigger_words: string[];
   added_by: string | null;
   added_at: string;
+  /** LIKENESS-01: the household adult this LoRA looks like (an opaque id Home gave with a signed proof), or null. Always adult-only. */
+  likeness_subject: string | null;
 }
 
 export class LoraError extends Error {
@@ -70,13 +73,16 @@ const ADULT_WORDS = ["nsfw", "explicit", "nude", "nudity", "naked", "porn", "por
 const MINOR_ALONE = ["loli", "lolicon", "shota", "shotacon"];
 /** Words that mean the file is refused beside any adult word. */
 const MINOR_WORDS = ["child", "children", "kid", "kids", "minor", "underage", "preteen", "toddler", "schoolgirl", "schoolboy", "teen", "teenage", "young girl", "young boy", "little girl", "little boy"];
-/** Words that say the LoRA reproduces a real person's likeness (a CivitAI "person" or "celebrity" tag): refused for everyone. */
-const REAL_PERSON_WORDS = ["celebrity", "celebrities", "real person", "real people", "likeness", "actress", "actor", "pornstar", "porn star", "influencer", "streamer", "politician", "supermodel"];
+/** Words that say the LoRA reproduces a real person's likeness: refused, unless Home signed a proof that the person is a consenting household adult (LIKENESS-01). */
+export const LIKENESS_WORDS = ["real person", "real people", "likeness"];
+/** Words that say the LoRA reproduces a public figure (a CivitAI "celebrity" tag): refused for everyone, with or without a proof. A household member is not a celebrity, and a file that says it is one is the celebrity's. */
+export const PUBLIC_FIGURE_WORDS = ["celebrity", "celebrities", "actress", "actor", "pornstar", "porn star", "influencer", "streamer", "politician", "supermodel"];
 const wordRegex = (words: string[]) => new RegExp(`(^|[^a-z0-9])(${words.map((word) => word.replace(/[+]/g, "\\+")).join("|")})([^a-z0-9]|$)`, "i");
 const ADULT_RE = wordRegex(ADULT_WORDS);
 const MINOR_ALONE_RE = wordRegex(MINOR_ALONE);
 const MINOR_RE = wordRegex(MINOR_WORDS);
-const REAL_PERSON_RE = wordRegex(REAL_PERSON_WORDS);
+const LIKENESS_RE = wordRegex(LIKENESS_WORDS);
+const PUBLIC_FIGURE_RE = wordRegex(PUBLIC_FIGURE_WORDS);
 
 /** Everything a person or a trainer wrote about the file, as one string to scan: metadata values, tag names, the name, the file name, the trigger words. */
 export function describedAs(parts: Array<string | null | undefined>, metadata: Record<string, unknown> | undefined): string {
@@ -94,11 +100,18 @@ export function describedAs(parts: Array<string | null | undefined>, metadata: R
   return strings.join("\n").replace(/[_\-.,/]+/g, " ");
 }
 
-export function scanWords(text: string): { refuse: boolean; refuseReason: "minor" | "real_person" | null; adult: boolean } {
+export function scanWords(text: string): { refuse: boolean; refuseReason: "minor" | "real_person" | "public_figure" | null; adult: boolean } {
   const adult = ADULT_RE.test(text);
   if (MINOR_ALONE_RE.test(text) || (adult && MINOR_RE.test(text))) return { refuse: true, refuseReason: "minor", adult };
-  if (REAL_PERSON_RE.test(text)) return { refuse: true, refuseReason: "real_person", adult };
+  if (PUBLIC_FIGURE_RE.test(text)) return { refuse: true, refuseReason: "public_figure", adult };
+  if (LIKENESS_RE.test(text)) return { refuse: true, refuseReason: "real_person", adult };
   return { refuse: false, refuseReason: null, adult };
+}
+
+/** Words that name a real person's likeness or a public figure in a file's own description: the video library uses the same two lists as the picture library. */
+export function realPersonReason(text: string): "real_person" | "public_figure" | null {
+  if (PUBLIC_FIGURE_RE.test(text)) return "public_figure";
+  return LIKENESS_RE.test(text) ? "real_person" : null;
 }
 
 export interface SafetensorsInfo { rank: number; modules: number; dims: number[]; keys: string[]; metadata: Record<string, unknown> | undefined; }
@@ -148,11 +161,13 @@ export interface ImportInput {
   addedBy?: string | null;
   /** Extra words to scan beside the file's own (a Hugging Face card's tags). */
   extraDescription?: string[];
+  /** LIKENESS-01: Home's signed proof that the LoRA looks like this consenting household adult. Without it a file that names a real person is refused. */
+  likeness?: { subject: string; proof: string };
 }
 
 export interface LoraPatch { name?: string; classification?: LoraClass; strengthDefault?: number; triggerWords?: string[]; sourceUrl?: string | null; }
-export interface LoraRequest { id?: string; sha256?: string; strength?: number; }
-export interface ResolvedLora { record: LoraRecord; path: string; strength: number; }
+export interface LoraRequest { id?: string; sha256?: string; strength?: number; /** LIKENESS-01: Home's signed proof for using a likeness LoRA (bound to the LoRA's id). */ likenessProof?: string; }
+export interface ResolvedLora { record: LoraRecord; path: string; strength: number; /** Set for a likeness LoRA: checked again when the job starts. */ likeness?: LikenessCheck; }
 
 export interface LoraLibraryConfig {
   /** The library's directory (a function: the data directory is read late). */
@@ -173,7 +188,7 @@ export function createLoraLibrary(config: LoraLibraryConfig) {
   const loraFile = (id: string): string => join(config.dir(), `${id}.safetensors`);
 
   function readManifest(): LoraRecord[] {
-    try { const parsed = JSON.parse(readFileSync(manifestPath(), "utf8")) as { loras?: LoraRecord[] }; return Array.isArray(parsed.loras) ? parsed.loras : []; } catch { return []; }
+    try { const parsed = JSON.parse(readFileSync(manifestPath(), "utf8")) as { loras?: LoraRecord[] }; return Array.isArray(parsed.loras) ? parsed.loras.map((record) => ({ ...record, likeness_subject: record.likeness_subject ?? null })) : []; } catch { return []; }
   }
   function writeManifest(records: LoraRecord[]): void {
     mkdirSync(config.dir(), { recursive: true, mode: 0o700 });
@@ -215,8 +230,22 @@ export function createLoraLibrary(config: LoraLibraryConfig) {
     const text = describedAs([name, ...triggerWords, input.path.split("/").pop(), input.sourceUrl, ...(input.extraDescription ?? [])], info.metadata);
     const words = scanWords(text);
     if (words.refuse && words.refuseReason === "minor") throw new LoraError("lora_refused", "This LoRA's own description names a child or a minor in a sexual context. It cannot be added; no setting allows that.", 422);
-    if (words.refuse) throw new LoraError("lora_refused", "This LoRA's own description says it reproduces a real person's likeness. It cannot be added: no setting allows pictures of a real, identifiable person that they have not agreed to.", 422);
+    if (words.refuse && words.refuseReason === "public_figure") throw new LoraError("lora_refused", "This LoRA's own description says it reproduces a real, public person's likeness. It cannot be added: no setting allows pictures of a real, identifiable person that they have not agreed to.", 422);
     const sha256 = await sha256OfFile(input.path);
+    // A likeness of a household adult needs Home's signed proof that they agreed; a file that names a real person with no proof is refused.
+    let likenessSubject: string | null = null;
+    if (input.likeness) {
+      try {
+        const proof = verifyProof(input.likeness.proof, { purpose: "style_import", bind: [sha256, input.sourceUrl ?? "", `name:${name}`].filter(Boolean) });
+        if (proof.subject !== input.likeness.subject) throw new LikenessError("likeness_proof_mismatch", "That consent proof is for a different person. Ask Home to add the style again.", 403);
+      } catch (error) {
+        if (error instanceof LikenessError) throw new LoraError(error.code, error.message, error.status);
+        throw error;
+      }
+      likenessSubject = input.likeness.subject;
+    } else if (words.refuse) {
+      throw new LoraError("lora_refused", "This LoRA's own description says it reproduces a real person's likeness. It cannot be added unless it is a style of a household adult who agreed, which Home confirms when the style is added. No setting allows pictures of any other real person.", 422);
+    }
     const id = `lora-${sha256.slice(0, 16)}`;
     return exclusive(() => {
       const records = readManifest();
@@ -227,12 +256,13 @@ export function createLoraLibrary(config: LoraLibraryConfig) {
       copyFileSync(input.path, temp);
       renameSync(temp, target);
       const asked: LoraClass = input.classification ?? "adult-only";
-      const classification: LoraClass = words.adult ? "adult-only" : asked;
+      const classification: LoraClass = words.adult || likenessSubject ? "adult-only" : asked;
       const record: LoraRecord = {
         id, name, file: `${id}.safetensors`, sha256, bytes: stat.size, mtime_ms: Math.floor(statSync(target).mtimeMs), rank: info.rank, modules: info.modules, base_model: baseModel,
         licence, licence_class: klass, source_url: input.sourceUrl?.slice(0, 2000) ?? null, classification,
-        classification_note: words.adult && asked === "all-ages" ? "The file's own description names adult content, so it is adult-only." : null,
+        classification_note: likenessSubject ? "A style that looks like a person is always adult-only." : words.adult && asked === "all-ages" ? "The file's own description names adult content, so it is adult-only." : null,
         strength_default: input.strengthDefault ?? 1, trigger_words: triggerWords, added_by: input.addedBy?.slice(0, 200) ?? null, added_at: new Date().toISOString(),
+        likeness_subject: likenessSubject,
       };
       writeManifest([...records, record]);
       return record;
@@ -254,6 +284,7 @@ export function createLoraLibrary(config: LoraLibraryConfig) {
       if (patch.triggerWords !== undefined) next.trigger_words = cleanWords(patch.triggerWords);
       if (patch.sourceUrl !== undefined) next.source_url = patch.sourceUrl?.slice(0, 2000) ?? null;
       if (patch.classification !== undefined) {
+        if (patch.classification === "all-ages" && current.likeness_subject) throw new LoraError("classification_locked", "A style that looks like a person is always adult-only.", 409);
         if (patch.classification === "all-ages") {
           const info = readLoraHeader(loraFile(id));
           const words = scanWords(describedAs([next.name, ...next.trigger_words, next.source_url], info.metadata));
@@ -299,7 +330,17 @@ export function createLoraLibrary(config: LoraLibraryConfig) {
       if (stat.size !== record.bytes || Math.floor(stat.mtimeMs) !== record.mtime_ms) {
         if ((await sha256OfFile(path)) !== record.sha256) throw new LoraError("lora_changed", `The file for "${record.name}" changed after it was added, so it was not used. Remove it and add it again.`, 422);
       }
-      out.push({ record, path, strength });
+      let likeness: LikenessCheck | undefined;
+      if (record.likeness_subject) {
+        let proof;
+        try { proof = verifyProof(entry.likenessProof, { purpose: "style_use", bind: record.id }); } catch (error) {
+          if (error instanceof LikenessError) throw new LoraError(error.code, error.message, error.status);
+          throw error;
+        }
+        if (proof.subject !== record.likeness_subject) throw new LoraError("likeness_proof_mismatch", "That consent proof is for a different person. Ask Home to make it again.", 403);
+        likeness = { purpose: "style_use", bind: record.id, token: entry.likenessProof! };
+      }
+      out.push({ record, path, strength, ...(likeness ? { likeness } : {}) });
     }
     return out;
   }

@@ -147,7 +147,7 @@ test("pictures are made, polled to done, fetched, and deleted; the picture is th
 
 test("neither the prompt nor an input picture is kept in a job record, on the feed or in the result store", async () => {
   imageGen.useDeps(scripted());
-  const response = await post({ prompt: "SECRET-PROMPT-WORDS", negative_prompt: "SECRET-NEGATIVE", init_image: SMALL_PNG_B64, timeout_ms: 5000 });
+  const response = await post({ prompt: "SECRET-PROMPT-WORDS", negative_prompt: "SECRET-NEGATIVE", init_image: SMALL_PNG_B64, image_source: "uploaded", timeout_ms: 5000 });
   expect(response.status).toBe(200);
   const body = await response.json() as { job: string };
   expect(JSON.stringify(listJobs())).not.toContain("SECRET");
@@ -396,6 +396,7 @@ test("edit_masked sends the picture, the mask and the region to the worker at bf
   imageGen.useDeps(scripted());
   const form = new FormData();
   form.set("operation", "edit_masked");
+  form.set("image_source", "uploaded");
   form.set("image", new File([pngBytes(1200, 800)], "in.png", { type: "image/png" }));
   form.set("mask", new File([pngBytes(1200, 800, "mask")], "mask.png", { type: "image/png" }));
   form.set("instruction", "remove the potted plant"); form.set("feather", "6"); form.set("seed", "5"); form.set("timeout_ms", "5000");
@@ -416,6 +417,7 @@ test("edit operations are checked: instruction, mask or region, region shape, pi
   const send = async (fields: Record<string, string>, image: Buffer | null = pngBytes(100, 100)) => {
     const form = new FormData();
     for (const [key, value] of Object.entries(fields)) form.set(key, value);
+    if (!("image_source" in fields)) form.set("image_source", "uploaded");
     form.set("image", new File([image ?? Buffer.from("text")], "in.png"));
     const response = await app.request("/v1/images/edits", { method: "POST", body: form });
     return { status: response.status, code: ((await response.json()) as { code?: string }).code };

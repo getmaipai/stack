@@ -18,6 +18,8 @@ import { identityHeaders } from "@/lib/identity";
 import { RoleReplyHeaders } from "@maipai/spec/stack/ts/role-reply-headers.js";
 import { cancelJob, getJob, hasJobRunner, listJobs, submitJob, waitForJob, type Job } from "@/lib/jobs";
 import { LoraError, type LoraRequest } from "@/lib/media/loraLibrary";
+import { LikenessError, photoBind, verifyProof, type LikenessCheck } from "@/lib/likeness";
+import { wasGeneratedHere } from "@/video/provenance";
 import { imageLoras, MAX_LORAS_PER_IMAGE } from "@/images/loras";
 import { deleteResult, isJobId, pngPath, readResult, thumbPath, type ImageResultMeta } from "@/images/results";
 import { imageGen, memoryVerdict } from "@/images/imageEngine";
@@ -35,6 +37,7 @@ const LoraEntry = z.object({
   id: z.string().max(40).optional().openapi({ description: "The library id (`lora-` and the first 16 hex of the sha256)." }),
   sha256: z.string().length(64).optional().openapi({ description: "Or the file's full sha256." }),
   scale: z.number().min(0).max(2).optional().openapi({ description: "Strength, 0 to 2; the record's default when left out." }),
+  likeness_proof: z.string().max(4096).optional().openapi({ description: "Needed when the LoRA looks like a person (its record has a likeness_subject): Home's signed, short-lived proof that the person agreed, bound to this LoRA." }),
   strength: z.number().min(0).max(2).optional().openapi({ description: "Alias of `scale`." }),
 });
 export const ImageGenerationBodySchema = z.object({
@@ -48,6 +51,8 @@ export const ImageGenerationBodySchema = z.object({
   loras: z.array(LoraEntry).max(MAX_LORAS_PER_IMAGE).optional().openapi({ description: "LoRAs from the household library (GET /stack/v1/image/loras), by id or sha256, with a scale. Home decides which ids this caller may name." }),
   audience: z.enum(["all-ages", "adult"]).optional().openapi({ description: "Who the picture is for, set by Home from the person's age band and the surface. Default all-ages. An adult-only LoRA in the list with audience all-ages is refused (422 lora_not_allowed)." }),
   init_image: z.string().optional().openapi({ description: "Image to image: the starting picture, base64 (a data: URL is fine), PNG, JPEG or WebP, at most 40 MB." }),
+  image_source: z.enum(["generated", "uploaded", "household_photo"]).optional().openapi({ description: "Needed with `init_image`: where the starting picture came from, as Home knows it. `generated`: a picture this Stack made (its hash is checked). `household_photo`: a photo of a consenting household adult, accepted only with `consent_proof`. `uploaded`: a photo Home checked and found to show no person. Anything else is refused." }),
+  consent_proof: z.string().max(4096).optional().openapi({ description: "With `image_source: household_photo`: Home's signed proof that the person in the photo is a household adult who agreed, bound to this exact picture and valid for at most 30 minutes. Checked when the request arrives and again when the job starts." }),
   strength: z.number().min(0.05).max(1).optional().openapi({ description: "Image to image only: how far the result may move from `init_image` (1 is a new picture). Default 0.6." }),
   preview: z.boolean().optional().openapi({ description: "Accepted and ignored in this build: no preview frame is produced." }),
   timeout_ms: z.number().int().positive().max(MAX_WAIT_MS).optional().openapi({ description: `How long this request waits for the picture before answering 202 with the job id. Default ${DEFAULT_WAIT_MS}.` }),
@@ -156,7 +161,22 @@ function chooseFamily(model: string | undefined, loraRequests: LoraRequest[]): {
 }
 
 function loraRequests(list: ImageGenerationBody["loras"]): LoraRequest[] {
-  return (list ?? []).map((entry) => ({ ...(entry.id !== undefined ? { id: entry.id } : {}), ...(entry.sha256 !== undefined ? { sha256: entry.sha256 } : {}), ...(entry.scale !== undefined ? { strength: entry.scale } : entry.strength !== undefined ? { strength: entry.strength } : {}) }));
+  return (list ?? []).map((entry) => ({ ...(entry.id !== undefined ? { id: entry.id } : {}), ...(entry.sha256 !== undefined ? { sha256: entry.sha256 } : {}), ...(entry.scale !== undefined ? { strength: entry.scale } : entry.strength !== undefined ? { strength: entry.strength } : {}), ...(entry.likeness_proof !== undefined ? { likenessProof: entry.likeness_proof } : {}) }));
+}
+
+type Source = "generated" | "uploaded" | "household_photo" | undefined;
+/** The checks on a starting picture: the source must be declared; a generated picture must be in the ledger; a household photo needs Home's proof bound to these bytes. Returns the response to send, or the proof to re-check when the job starts. */
+function checkSource<T extends Context>(c: T, bytes: Uint8Array, source: Source, proof: string | undefined, what: string): Response | LikenessCheck | null {
+  if (!source) return fail(c, 422, "reference_source_required", `Say where the ${what} came from (image_source): a picture this computer made, a photo of a household adult who agreed, or a photo Home checked shows no person.`) as unknown as Response;
+  if (source === "generated") {
+    return wasGeneratedHere(bytes) ? null : fail(c, 422, "reference_not_generated", `That ${what} was not made by this computer's image generator, so it cannot be used as a generated picture. Send it as a photo instead.`) as unknown as Response;
+  }
+  if (source === "uploaded") return null;
+  try { verifyProof(proof, { purpose: "photo", bind: photoBind(bytes) }); } catch (error) {
+    if (error instanceof LikenessError) return fail(c, error.status, error.code, error.message) as unknown as Response;
+    throw error;
+  }
+  return { purpose: "photo", bind: photoBind(bytes), token: proof! };
 }
 
 async function waitAndReply<T extends Context>(c: T, jobId: string, createdAt: string, timeoutMs: number) {
@@ -199,16 +219,21 @@ export async function generateImages<T extends Context>(c: T, body: ImageGenerat
   const steps = body.steps ?? info.stepsDefault;
   if (steps > info.stepsMax) return fail(c, 422, "bad_steps", `${info.label} needs at most ${info.stepsMax} steps; ${info.stepsDefault} is the default.`);
   let initImage: Uint8Array | null = null;
+  const checks: LikenessCheck[] = [];
   if (body.init_image !== undefined) {
     initImage = decodeImage(body.init_image);
     if (!initImage || !looksLikePicture(initImage)) return fail(c, 422, "bad_image", "The starting picture could not be read. Send a PNG, JPEG or WebP as base64.");
     if (initImage.length > IMAGE_MAX_INPUT_BYTES) return fail(c, 413, "too_large", `The starting picture is larger than ${IMAGE_MAX_INPUT_BYTES / 1024 / 1024} MB.`);
+    const checked = checkSource(c, initImage, body.image_source, body.consent_proof, "starting picture");
+    if (checked instanceof Response) return checked;
+    if (checked) checks.push(checked);
   }
   let loras;
   try { loras = await imageLoras.resolve(requests, body.audience ?? "all-ages", family); } catch (error) {
     if (error instanceof LoraError) return fail(c, error.status === 404 ? 422 : error.status, error.code, error.message);
     throw error;
   }
+  for (const lora of loras) if (lora.likeness) checks.push(lora.likeness);
   if (activeJobs() >= IMAGE_QUEUE_MAX) return fail(c, 429, "queue_full", `${IMAGE_QUEUE_MAX} pictures are already waiting. Try again when one finishes.`);
   const quantize = quantizeFor(family, "generate", tier);
   const verdict = memoryVerdict(peakBytes(family, "generate", quantize, loras.length));
@@ -218,15 +243,15 @@ export async function generateImages<T extends Context>(c: T, body: ImageGenerat
   const loraIds = loras.map((lora) => lora.record.id);
   stashImage(token, {
     op: "generate", prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, family, quantize, width: size.width, height: size.height, steps, seed, count,
-    loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, initImage, strength: body.strength ?? 0.6, image: null, mask: null, region: null, feather: 0,
+    loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, initImage, strength: body.strength ?? 0.6, image: null, mask: null, region: null, feather: 0, likeness: checks,
   });
-  const submitted = submitJob({ kind: IMAGE_JOB_KIND, role: "image", input: { token, family, mode: "generate", quantize, size: `${size.width}x${size.height}`, steps, seed, count, lora_ids: loraIds, image_to_image: initImage !== null } });
+  const submitted = submitJob({ kind: IMAGE_JOB_KIND, role: "image", input: { token, family, mode: "generate", quantize, size: `${size.width}x${size.height}`, steps, seed, count, lora_ids: loraIds, image_to_image: initImage !== null, likeness: checks.length > 0 } });
   if ("refused" in submitted) return fail(c, 503, "unsupported", submitted.reason);
   return waitAndReply(c, submitted.job.id, submitted.job.createdAt, body.timeout_ms ?? DEFAULT_WAIT_MS);
 }
 
 export interface EditForm {
-  image: File; mask?: File; operation: "edit" | "edit_masked"; instruction?: string; prompt?: string; region?: string; feather?: number; seed?: number; steps?: number; timeout_ms?: number;
+  image: File; mask?: File; operation: "edit" | "edit_masked"; instruction?: string; prompt?: string; region?: string; feather?: number; seed?: number; steps?: number; timeout_ms?: number; image_source?: Source; consent_proof?: string;
 }
 
 /** Normalized x,y,w,h from "0.1,0.2,0.3,0.3", or the sentence to return. */
@@ -253,6 +278,8 @@ export async function editImages<T extends Context>(c: T, form: EditForm) {
   if (!(feather >= 0 && feather <= IMAGE_FEATHER_MAX)) return fail(c, 422, "bad_feather", `The feather is 0 to ${IMAGE_FEATHER_MAX} pixels.`);
   const image = new Uint8Array(await form.image.arrayBuffer());
   if (!looksLikePicture(image)) return fail(c, 422, "bad_image", "The picture could not be read. Send a PNG, JPEG or WebP.");
+  const checked = checkSource(c, image, form.image_source, form.consent_proof, "picture");
+  if (checked instanceof Response) return checked;
   const mask = form.mask ? new Uint8Array(await form.mask.arrayBuffer()) : null;
   if (mask && !looksLikePicture(mask)) return fail(c, 422, "bad_image", "The mask could not be read. Send a PNG, JPEG or WebP.");
   const family: ImageFamilyId = "flux2-klein-4b";
@@ -265,8 +292,8 @@ export async function editImages<T extends Context>(c: T, form: EditForm) {
   const steps = form.steps ?? IMAGE_FAMILIES[family].stepsDefault;
   const seed = form.seed ?? Math.floor(Math.random() * 2 ** 32);
   const token = crypto.randomUUID();
-  stashImage(token, { op: "edit", prompt: instruction, negativePrompt: null, family, quantize: null, width: 0, height: 0, steps, seed, count: 1, loras: [], loraIds: [], initImage: null, strength: 0, image, mask, region: region ?? null, feather });
-  const submitted = submitJob({ kind: IMAGE_EDIT_JOB_KIND, role: "image", input: { token, family, mode: "edit", quantize: null, steps, seed, count: 1, lora_ids: [], masked: mask !== null || region !== null } });
+  stashImage(token, { op: "edit", prompt: instruction, negativePrompt: null, family, quantize: null, width: 0, height: 0, steps, seed, count: 1, loras: [], loraIds: [], initImage: null, strength: 0, image, mask, region: region ?? null, feather, likeness: checked ? [checked] : [] });
+  const submitted = submitJob({ kind: IMAGE_EDIT_JOB_KIND, role: "image", input: { token, family, mode: "edit", quantize: null, steps, seed, count: 1, lora_ids: [], masked: mask !== null || region !== null, likeness: checked !== null } });
   if ("refused" in submitted) return fail(c, 503, "unsupported", submitted.reason);
   return waitAndReply(c, submitted.job.id, submitted.job.createdAt, form.timeout_ms ?? DEFAULT_WAIT_MS);
 }
