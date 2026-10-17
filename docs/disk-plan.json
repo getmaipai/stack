@@ -8,18 +8,26 @@
     "p16.minimum_required_free_bytes": 13731452373,
     "p16.everything_required_free_bytes": 15028926546,
     "p16.needed_bytes": 12876596138,
+    "p16.home_required_free_bytes": 3176323277,
+    "p16.ai_required_free_bytes": 11852603270,
     "p32.required_free_bytes": 33780738066,
     "p32.minimum_required_free_bytes": 30802869180,
     "p32.everything_required_free_bytes": 33780738066,
     "p32.needed_bytes": 28503105738,
+    "p32.home_required_free_bytes": 3176323277,
+    "p32.ai_required_free_bytes": 30604414790,
     "p64.required_free_bytes": 88890344653,
     "p64.minimum_required_free_bytes": 60009229733,
     "p64.everything_required_free_bytes": 88890344653,
     "p64.needed_bytes": 74764178827,
+    "p64.home_required_free_bytes": 3176323277,
+    "p64.ai_required_free_bytes": 85714021376,
     "p128.required_free_bytes": 88890344653,
     "p128.minimum_required_free_bytes": 60009229733,
     "p128.everything_required_free_bytes": 159433121912,
-    "p128.needed_bytes": 74764178827
+    "p128.needed_bytes": 74764178827,
+    "p128.home_required_free_bytes": 3176323277,
+    "p128.ai_required_free_bytes": 85714021376
   },
   "tiers": {
     "p16": {

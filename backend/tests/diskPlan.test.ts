@@ -58,6 +58,18 @@ test("sums: each tier's default total is its pins plus Home plus the engines the
   }
 });
 
+test("home and AI parts add up to the whole within a byte per part", () => {
+  for (const tier of PROFILE_TIERS) {
+    const plan = buildDiskPlan(tier);
+    const home = diskTotalsFor(plan, plan.default_selected, "home");
+    const ai = diskTotalsFor(plan, plan.default_selected, "ai");
+    expect(home.installed_bytes + ai.installed_bytes).toBe(plan.default.installed_bytes);
+    expect(home.peak_temp_bytes + ai.peak_temp_bytes).toBe(plan.default.peak_temp_bytes);
+    expect(Math.abs(home.required_free_bytes + ai.required_free_bytes - plan.default.required_free_bytes)).toBeLessThanOrEqual(2);
+    expect(home.installed_bytes).toBe(buildDiskPlan(tier).rows.find((row) => row.id === "home")!.installed_bytes);
+  }
+});
+
 test("tiers: p16 and p32 have no generators, p64 has pictures but no video, p128 has Z-Image and video as optional extras", () => {
   const ids = (tier: string) => buildDiskPlan(PROFILE_TIERS.find((t) => t.id === tier)!).rows.map((row) => row.id);
   for (const tier of ["p16", "p32"]) for (const id of ["pictures", "pictures-zimage", "video", "voice-better"]) expect(ids(tier)).not.toContain(id);

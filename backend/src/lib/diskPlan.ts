@@ -127,10 +127,11 @@ const ENGINE_ROWS: Record<string, () => DiskRow> = {
 };
 const PYTHON_ENGINES = ["engine:chat-mlx", "engine:voice", "engine:voice-better", "engine:pictures", "engine:image-tools", "engine:video"];
 
-function totals(rows: DiskRow[], selected: Set<string>): DiskTotals {
+function totals(rows: DiskRow[], selected: Set<string>, only?: "home" | "ai"): DiskTotals {
   const chosen = rows.filter((row) => selected.has(row.id));
   const engineIds = new Set(chosen.flatMap((row) => row.engines));
-  const counted = [...chosen.filter((row) => row.kind !== "engine"), ...rows.filter((row) => row.kind === "engine" && (selected.has(row.id) || engineIds.has(row.id)))];
+  const counted = [...chosen.filter((row) => row.kind !== "engine"), ...rows.filter((row) => row.kind === "engine" && (selected.has(row.id) || engineIds.has(row.id)))]
+    .filter((row) => only === undefined || (only === "home") === (row.kind === "home"));
   const sum = (pick: (row: DiskRow) => number) => counted.reduce((acc, row) => acc + pick(row), 0);
   const installed = sum((row) => row.installed_bytes);
   const temp = sum((row) => row.peak_temp_bytes);
@@ -196,8 +197,8 @@ export function diskPlanForTier(id: ProfileTier["id"], installedIds: Iterable<st
 }
 
 /** Totals for a person's selection (row ids, engine rows implied). Exported for the tests that hold the same sums the clients make. */
-export function diskTotalsFor(plan: DiskPlan, selected: Iterable<string>): DiskTotals {
-  return totals(plan.rows, new Set(selected));
+export function diskTotalsFor(plan: DiskPlan, selected: Iterable<string>, only?: "home" | "ai"): DiskTotals {
+  return totals(plan.rows, new Set(selected), only);
 }
 
 /** Everything a client needs without the Stack: every tier's plan, written to docs/disk-plan.json by scripts/gen-disk-plan.ts. */
@@ -210,6 +211,9 @@ export function diskPlanExport() {
     flat[`${tier.id}.minimum_required_free_bytes`] = plan.minimum.required_free_bytes;
     flat[`${tier.id}.everything_required_free_bytes`] = plan.everything.required_free_bytes;
     flat[`${tier.id}.needed_bytes`] = plan.default.needed_bytes;
+    // The two parts apart, for an installer whose Home and AI folders sit on different disks.
+    flat[`${tier.id}.home_required_free_bytes`] = diskTotalsFor(plan, plan.default_selected, "home").required_free_bytes;
+    flat[`${tier.id}.ai_required_free_bytes`] = diskTotalsFor(plan, plan.default_selected, "ai").required_free_bytes;
   }
   return { measured_on: table.measured_on, margin_percent: table.margin_percent, headroom_warn_bytes: table.headroom_warn_bytes, gib_bytes: GIB, installer: flat, tiers };
 }
