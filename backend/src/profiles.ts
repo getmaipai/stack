@@ -71,13 +71,16 @@ export const PROFILE_TIERS: ProfileTier[] = [
   },
 ];
 
-/** Household chat pin selected at p16 and above. The judge shares chat
- * through p16; from p32 it has its own 4B pin and process. */
+/** Household chat pin by tier (STACK-MUSE-01, the owner's rule of
+ * 2026-10-16): Qwen3 8B on p16, which is every Mac of 24 GB or less;
+ * Muse Glimmer 30B above that, the 17 GB Q4_K_M on p32 and the
+ * KQuant-Dynamic Q4_K_XL from p64. The judge shares chat through p16;
+ * from p32 it has its own 4B pin and process. */
 export const PROFILE_MODEL_BINDINGS: Partial<Record<ProfileTier["id"], Partial<Record<RoleId, string>>>> = {
   p16: { chat: "qwen3-8b-instruct-q4-k-m" },
-  p32: { chat: "qwen3-8b-instruct-q4-k-m", judge: "qwen3-4b-q4-k-m" },
-  p64: { chat: "qwen3-8b-instruct-q4-k-m", judge: "qwen3-4b-q4-k-m" },
-  p128: { chat: "qwen3-8b-instruct-q4-k-m", judge: "qwen3-4b-q4-k-m" },
+  p32: { chat: "muse-glimmer-30b-q4-k-m", judge: "qwen3-4b-q4-k-m" },
+  p64: { chat: "muse-glimmer-30b-q4-k-xl", judge: "qwen3-4b-q4-k-m" },
+  p128: { chat: "muse-glimmer-30b-q4-k-xl", judge: "qwen3-4b-q4-k-m" },
 };
 
 /** The tier this machine's sizing memory (see `sizingMemory`) clears, and

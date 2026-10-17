@@ -334,6 +334,15 @@ are never copied. Nothing migrates Home until STACK-16.
 
 ## Store and provenance
 
+- [x] **STACK-MUSE-01 (M): Muse Glimmer 30B is the chat pin above 24 GB.**
+  Owner's rule 2026-10-16: Qwen3 8B stays the p16 chat (16 and 24 GB);
+  p32 binds `muse-glimmer-30b-q4-k-m` (17 GB) and p64/p128 bind
+  `muse-glimmer-30b-q4-k-xl` (19.7 GB), both pinned to one revision of
+  `meta-models/Muse-Glimmer-30B-GGUF` with sha256. Catalog records gain
+  `launch.chatTemplateKwargs`, passed as `--chat-template-kwargs`, so
+  Muse runs at `reasoning_strength: low`. Tests: `profiles`,
+  `engineArgs`, `modelStore`, `installPlan`. Measurement is Home's
+  STUDIO-EVAL-01. Reasoning: dev.md "The chat pin above 24 GB".
 - [x] **STACK-04: the model store.** Provenance-gated records, the HF
   cache layout, engine tag layout with the `current` link, manifests
   with blob references and orphan grace, ranged resumable downloads,

@@ -28,6 +28,11 @@ export interface LlamaServerArgsOptions {
    * engine scales a larger picture down itself, so a picture's cost in the
    * context is bounded by a declared number, never guessed. */
   imageMaxTokens?: number;
+  /** Template variables the record's launch pins (`--chat-template-kwargs`):
+   * Muse Glimmer's `reasoning_strength` (STACK-MUSE-01), which `--reasoning
+   * off` cannot reach because that template has no `enable_thinking`
+   * switch. A request's own `chat_template_kwargs` still win key by key. */
+  chatTemplateKwargs?: Record<string, string>;
 }
 
 export type KvCacheType = "f16" | "q8_0" | "q4_0";
@@ -98,6 +103,9 @@ export function llamaServerArgs(options: LlamaServerArgsOptions): string[] {
     // drop the default (hub, 2026-09-07).
     "--jinja",
   ];
+  // The record's pinned template variables, as one JSON object (the form
+  // llama-server b10797 parses for this flag).
+  if (options.chatTemplateKwargs && Object.keys(options.chatTemplateKwargs).length > 0) args.push("--chat-template-kwargs", JSON.stringify(options.chatTemplateKwargs));
   // Prefix cache reuse: stable system messages are not re-prefilled on
   // every turn (hub, FAST-01). llama-server b10797 turns chunk reuse off
   // itself once a projector is loaded ("cache_reuse is not supported by

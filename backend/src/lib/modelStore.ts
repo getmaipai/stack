@@ -101,8 +101,11 @@ export interface CatalogModelLike {
   imageInput?: { projector: string };
   /** A launch the role needs regardless of the chat settings: the vision
    * role's short context; the most tokens one picture may take in a model
-   * that reads pictures (llama-server's --image-max-tokens, VISION-02b). */
-  launch?: { contextLength?: number; imageMaxTokens?: number };
+   * that reads pictures (llama-server's --image-max-tokens, VISION-02b);
+   * the chat-template variables the record pins (llama-server's
+   * --chat-template-kwargs, STACK-MUSE-01: Muse Glimmer's reasoning
+   * strength). A request's own chat_template_kwargs win key by key. */
+  launch?: { contextLength?: number; imageMaxTokens?: number; chatTemplateKwargs?: Record<string, string> };
   /** Sampling defaults from the model's own card, with the source named;
    * a request's own values win. */
   sampling?: { temperature?: number; top_p?: number; top_k?: number; presence_penalty?: number; source: string };

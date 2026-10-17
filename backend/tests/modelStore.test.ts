@@ -18,7 +18,7 @@ import {
   upsertModel,
   ProvenanceIncompleteError,
 } from "@/lib/modelStore";
-import { STACK_CHAT_8B_MODEL, STACK_CHAT_MODEL, STACK_EMBED_MODEL, STACK_JUDGE_MODEL, STACK_MODELS } from "@/lib/modelCatalog";
+import { STACK_CHAT_8B_MODEL, STACK_CHAT_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_EMBED_MODEL, STACK_JUDGE_MODEL, STACK_MODELS } from "@/lib/modelCatalog";
 import { hfUrl } from "@/lib/hf";
 import { downloadUrl } from "@/lib/download";
 import { eq } from "drizzle-orm";
@@ -60,8 +60,8 @@ test("the household chat and judge pins match Home's hashes and file sizes", () 
   });
 });
 
-test("p16 judge shares the household 8B chat while p32 selects its separate 4B judge", () => {
-  const install = (pin: typeof STACK_CHAT_MODEL | typeof STACK_CHAT_8B_MODEL | typeof STACK_JUDGE_MODEL) => upsertModel({
+test("p16 judge shares the household 8B chat while p32 selects Muse Glimmer and its separate 4B judge", () => {
+  const install = (pin: typeof STACK_CHAT_MODEL | typeof STACK_CHAT_8B_MODEL | typeof STACK_CHAT_MUSE_30B_M_MODEL | typeof STACK_JUDGE_MODEL) => upsertModel({
     id: pin.id,
     roles: [pin.role],
     source: "catalog",
@@ -76,13 +76,15 @@ test("p16 judge shares the household 8B chat while p32 selects its separate 4B j
   });
   const small = install(STACK_CHAT_MODEL);
   const chat = install(STACK_CHAT_8B_MODEL);
+  const muse = install(STACK_CHAT_MUSE_30B_M_MODEL);
   const judge = install(STACK_JUDGE_MODEL);
   setMachineTier("p16");
   expect(selectedModel("chat")?.id).toBe(chat.id);
   expect(selectedModel("judge")?.id).toBe(chat.id);
   expect(processRoleFor("judge")).toBe("chat");
   setMachineTier("p32");
-  expect(selectedModel("chat")?.id).toBe(chat.id);
+  // STACK-MUSE-01: above 24 GB the bound chat is Muse Glimmer 30B.
+  expect(selectedModel("chat")?.id).toBe(muse.id);
   expect(selectedModel("judge")?.id).toBe(judge.id);
   expect(processRoleFor("judge")).toBe("judge");
   setMachineTier(null);
@@ -414,4 +416,35 @@ test("an install whose catalog gave no size records the real file size", async (
   const installed = await installCatalogModel({ id: "size-fill", role: "embed", revision: "rev-a", license: "Apache-2.0", download: { url: "https://example.com/size-fill.gguf", sha256: digest, approx_bytes: 0 } } as never, { destination, download: async (_url, to) => { writeFileSync(to, bytes); } });
   expect(installed.sizeBytes).toBe(bytes.length);
   expect(getModel("size-fill")!.sizeBytes).toBe(bytes.length);
+});
+
+test("the Muse Glimmer 30B chat pins match the repository's hashes and sizes and pin a low reasoning strength (STACK-MUSE-01)", () => {
+  expect(STACK_MODELS).toEqual(expect.arrayContaining([STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL]));
+  const revision = "70bf1b61ac09f91b24d39038091b41c582bc5d7a";
+  expect(STACK_CHAT_MUSE_30B_XL_MODEL).toMatchObject({
+    id: "muse-glimmer-30b-q4-k-xl",
+    role: "chat",
+    repo: "meta-models/Muse-Glimmer-30B-GGUF",
+    revision,
+    sizing: { profile: "p64", quantization: "Q4_K_XL" },
+    download: {
+      url: `https://huggingface.co/meta-models/Muse-Glimmer-30B-GGUF/resolve/${revision}/Muse-Glimmer-30B-KQuant-Dynamic-Q4_K_XL.gguf`,
+      sha256: "ac7023d6a4c704eb9af54ab53e476a66b7f5b6c0ef2fc4a8dde5253c291a6c38",
+      approx_bytes: 19_653_960_832,
+    },
+    launch: { chatTemplateKwargs: { reasoning_strength: "low" } },
+    sampling: { temperature: 1.0, top_p: 0.95, top_k: 64 },
+  });
+  expect(STACK_CHAT_MUSE_30B_M_MODEL).toMatchObject({
+    id: "muse-glimmer-30b-q4-k-m",
+    role: "chat",
+    revision,
+    sizing: { profile: "p32", quantization: "Q4_K_M" },
+    download: {
+      url: `https://huggingface.co/meta-models/Muse-Glimmer-30B-GGUF/resolve/${revision}/Muse-Glimmer-30B-KQuant-17GB-Q4_K_M.gguf`,
+      sha256: "4cc57c0f51040a226e5a72cc47b7613f7772950e460a665f7083de89f183f60e",
+      approx_bytes: 16_756_683_904,
+    },
+    launch: { chatTemplateKwargs: { reasoning_strength: "low" } },
+  });
 });

@@ -40,6 +40,56 @@ export const STACK_CHAT_8B_MODEL: CatalogModelLike = {
   },
 };
 
+// The household chat pin above 24 GB (STACK-MUSE-01, 2026-10-16): Meta's
+// own GGUF repository of Muse Glimmer 30B (dense 29.6B, Apache-2.0 on the
+// card), pinned to one revision; sha256 and sizes are the repository's
+// git-lfs oids, confirmed against a live HEAD on each resolve URL. p32
+// binds the 17 GB Q4_K_M (the Q4_K_XL beside the 4B judge would leave a
+// 32 GB Mac under the governor's 4 GiB margin); p64 and p128 bind the
+// KQuant-Dynamic Q4_K_XL, the build the owner named. p16 (a 24 GB Mac or
+// smaller) keeps Qwen3-8B. The template reasons on every turn at a
+// strength it reads from `reasoning_strength` (low, medium, high, xhigh;
+// there is no off, so `--reasoning off` does not reach it), and the launch
+// pins it low for chat latency; a request may raise it per turn. Sampling
+// from the card. llama-server parses the model's ATEM tool calls natively
+// from b10353 (the pinned b10797 does).
+const MUSE_30B_REPO = "meta-models/Muse-Glimmer-30B-GGUF";
+const MUSE_30B_REVISION = "70bf1b61ac09f91b24d39038091b41c582bc5d7a";
+const MUSE_30B_LAUNCH = { chatTemplateKwargs: { reasoning_strength: "low" } };
+const MUSE_30B_SAMPLING = { temperature: 1.0, top_p: 0.95, top_k: 64, source: "meta-models/Muse-Glimmer-30B-GGUF model card, recommended sampling" };
+export const STACK_CHAT_MUSE_30B_XL_MODEL: CatalogModelLike = {
+  id: "muse-glimmer-30b-q4-k-xl",
+  role: "chat",
+  repo: MUSE_30B_REPO,
+  license: "Apache-2.0",
+  revision: MUSE_30B_REVISION,
+  engine: "llama-server",
+  sizing: { profile: "p64", quantization: "Q4_K_XL" },
+  download: {
+    url: hfUrl(`${MUSE_30B_REPO}/resolve/${MUSE_30B_REVISION}/Muse-Glimmer-30B-KQuant-Dynamic-Q4_K_XL.gguf`),
+    sha256: "ac7023d6a4c704eb9af54ab53e476a66b7f5b6c0ef2fc4a8dde5253c291a6c38",
+    approx_bytes: 19_653_960_832,
+  },
+  launch: MUSE_30B_LAUNCH,
+  sampling: MUSE_30B_SAMPLING,
+};
+export const STACK_CHAT_MUSE_30B_M_MODEL: CatalogModelLike = {
+  id: "muse-glimmer-30b-q4-k-m",
+  role: "chat",
+  repo: MUSE_30B_REPO,
+  license: "Apache-2.0",
+  revision: MUSE_30B_REVISION,
+  engine: "llama-server",
+  sizing: { profile: "p32", quantization: "Q4_K_M" },
+  download: {
+    url: hfUrl(`${MUSE_30B_REPO}/resolve/${MUSE_30B_REVISION}/Muse-Glimmer-30B-KQuant-17GB-Q4_K_M.gguf`),
+    sha256: "4cc57c0f51040a226e5a72cc47b7613f7772950e460a665f7083de89f183f60e",
+    approx_bytes: 16_756_683_904,
+  },
+  launch: MUSE_30B_LAUNCH,
+  sampling: MUSE_30B_SAMPLING,
+};
+
 // The household's background worker pin, exposed as Stack's distinct
 // judge role on machines with a known p16-or-larger profile.
 export const STACK_JUDGE_MODEL: CatalogModelLike = {
@@ -369,7 +419,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_IMAGE_MODEL, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_IMAGE_MODEL, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

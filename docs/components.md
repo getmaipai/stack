@@ -22,9 +22,9 @@ Engines per platform:
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
 | p16 | resident | `qwen3-8b-instruct-q4-k-m` | Q4_K_M | 4.68 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-8B-GGUF @ 7c41481f57cb95916b40956ab2f0b139b296d974 | pinned |
-| p32 | resident | `qwen3-8b-instruct-q4-k-m` | Q4_K_M | 4.68 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-8B-GGUF @ 7c41481f57cb95916b40956ab2f0b139b296d974 | pinned |
-| p64 | resident | `qwen3-8b-instruct-q4-k-m` | Q4_K_M | 4.68 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-8B-GGUF @ 7c41481f57cb95916b40956ab2f0b139b296d974 | pinned |
-| p128 | resident | `qwen3-8b-instruct-q4-k-m` | Q4_K_M | 4.68 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-8B-GGUF @ 7c41481f57cb95916b40956ab2f0b139b296d974 | pinned |
+| p32 | resident | `muse-glimmer-30b-q4-k-m` | Q4_K_M | 15.61 GB | not measured | not measured | Apache-2.0 | meta-models/Muse-Glimmer-30B-GGUF @ 70bf1b61ac09f91b24d39038091b41c582bc5d7a | pinned |
+| p64 | resident | `muse-glimmer-30b-q4-k-xl` | Q4_K_XL | 18.30 GB | not measured | not measured | Apache-2.0 | meta-models/Muse-Glimmer-30B-GGUF @ 70bf1b61ac09f91b24d39038091b41c582bc5d7a | pinned |
+| p128 | resident | `muse-glimmer-30b-q4-k-xl` | Q4_K_XL | 18.30 GB | not measured | not measured | Apache-2.0 | meta-models/Muse-Glimmer-30B-GGUF @ 70bf1b61ac09f91b24d39038091b41c582bc5d7a | pinned |
 
 Also pinned, started only when chosen (Home's "load this model"): `qwen3-1.7b-q8-0` (Q8_0, 1.71 GB, Apache-2.0, Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077); `qwen3-1.7b-mlx-4bit` (4-bit, 0.92 GB, Apache-2.0, mlx-community/Qwen3-1.7B-4bit @ 3b1b1768f8f8cf8351c712464f906e86c2b8269e); `qwen3-vl-8b-instruct-q4-k-m` (Q4_K_M, 4.68 GB, Apache-2.0, Qwen/Qwen3-VL-8B-Instruct-GGUF @ f982a07559d4a2f6c8744d840bf6fccab30eea96, reads pictures).
 
@@ -51,9 +51,9 @@ Engines per platform:
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
 | p16 | resident | `qwen3-8b-instruct-q4-k-m` | Q4_K_M | 4.68 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-8B-GGUF @ 7c41481f57cb95916b40956ab2f0b139b296d974 | pinned |
-| p32 | resident | `qwen3-8b-instruct-q4-k-m` | Q4_K_M | 4.68 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-8B-GGUF @ 7c41481f57cb95916b40956ab2f0b139b296d974 | pinned |
-| p64 | resident | `qwen3-8b-instruct-q4-k-m` | Q4_K_M | 4.68 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-8B-GGUF @ 7c41481f57cb95916b40956ab2f0b139b296d974 | pinned |
-| p128 | on demand | `qwen3-8b-instruct-q4-k-m` | Q4_K_M | 4.68 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-8B-GGUF @ 7c41481f57cb95916b40956ab2f0b139b296d974 | pinned |
+| p32 | resident | `muse-glimmer-30b-q4-k-m` | Q4_K_M | 15.61 GB | not measured | not measured | Apache-2.0 | meta-models/Muse-Glimmer-30B-GGUF @ 70bf1b61ac09f91b24d39038091b41c582bc5d7a | pinned |
+| p64 | resident | `muse-glimmer-30b-q4-k-xl` | Q4_K_XL | 18.30 GB | not measured | not measured | Apache-2.0 | meta-models/Muse-Glimmer-30B-GGUF @ 70bf1b61ac09f91b24d39038091b41c582bc5d7a | pinned |
+| p128 | on demand | `muse-glimmer-30b-q4-k-xl` | Q4_K_XL | 18.30 GB | not measured | not measured | Apache-2.0 | meta-models/Muse-Glimmer-30B-GGUF @ 70bf1b61ac09f91b24d39038091b41c582bc5d7a | pinned |
 
 Also pinned, started only when chosen (Home's "load this model"): `qwen3-1.7b-q8-0` (Q8_0, 1.71 GB, Apache-2.0, Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077); `qwen3-1.7b-mlx-4bit` (4-bit, 0.92 GB, Apache-2.0, mlx-community/Qwen3-1.7B-4bit @ 3b1b1768f8f8cf8351c712464f906e86c2b8269e); `qwen3-vl-8b-instruct-q4-k-m` (Q4_K_M, 4.68 GB, Apache-2.0, Qwen/Qwen3-VL-8B-Instruct-GGUF @ f982a07559d4a2f6c8744d840bf6fccab30eea96, reads pictures).
 
@@ -84,7 +84,7 @@ Engines per platform:
 | p64 | resident | `qwen3-4b-q4-k-m` | Q4_K_M | 2.33 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-4B-GGUF @ bc640142c66e1fdd12af0bd68f40445458f3869b | pinned |
 | p128 | resident | `qwen3-4b-q4-k-m` | Q4_K_M | 2.33 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-4B-GGUF @ bc640142c66e1fdd12af0bd68f40445458f3869b | pinned |
 
-Also pinned, started only when chosen (Home's "load this model"): `qwen3-1.7b-q8-0` (Q8_0, 1.71 GB, Apache-2.0, Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077); `qwen3-1.7b-mlx-4bit` (4-bit, 0.92 GB, Apache-2.0, mlx-community/Qwen3-1.7B-4bit @ 3b1b1768f8f8cf8351c712464f906e86c2b8269e); `qwen3-vl-8b-instruct-q4-k-m` (Q4_K_M, 4.68 GB, Apache-2.0, Qwen/Qwen3-VL-8B-Instruct-GGUF @ f982a07559d4a2f6c8744d840bf6fccab30eea96, reads pictures).
+Also pinned, started only when chosen (Home's "load this model"): `qwen3-1.7b-q8-0` (Q8_0, 1.71 GB, Apache-2.0, Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077); `muse-glimmer-30b-q4-k-xl` (Q4_K_XL, 18.30 GB, Apache-2.0, meta-models/Muse-Glimmer-30B-GGUF @ 70bf1b61ac09f91b24d39038091b41c582bc5d7a); `muse-glimmer-30b-q4-k-m` (Q4_K_M, 15.61 GB, Apache-2.0, meta-models/Muse-Glimmer-30B-GGUF @ 70bf1b61ac09f91b24d39038091b41c582bc5d7a); `qwen3-1.7b-mlx-4bit` (4-bit, 0.92 GB, Apache-2.0, mlx-community/Qwen3-1.7B-4bit @ 3b1b1768f8f8cf8351c712464f906e86c2b8269e); `qwen3-vl-8b-instruct-q4-k-m` (Q4_K_M, 4.68 GB, Apache-2.0, Qwen/Qwen3-VL-8B-Instruct-GGUF @ f982a07559d4a2f6c8744d840bf6fccab30eea96, reads pictures).
 
 Installed beside the model, never selected on its own: `qwen3-vl-8b-instruct-mmproj-q8-0` (projector, 0.70 GB, Apache-2.0, Qwen/Qwen3-VL-8B-Instruct-GGUF @ f982a07559d4a2f6c8744d840bf6fccab30eea96).
 
@@ -109,9 +109,9 @@ Engines per platform:
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
 | p16 | resident | `qwen3-8b-instruct-q4-k-m` | Q4_K_M | 4.68 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-8B-GGUF @ 7c41481f57cb95916b40956ab2f0b139b296d974 | pinned |
-| p32 | resident | `qwen3-8b-instruct-q4-k-m` | Q4_K_M | 4.68 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-8B-GGUF @ 7c41481f57cb95916b40956ab2f0b139b296d974 | pinned |
-| p64 | resident | `qwen3-8b-instruct-q4-k-m` | Q4_K_M | 4.68 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-8B-GGUF @ 7c41481f57cb95916b40956ab2f0b139b296d974 | pinned |
-| p128 | resident | `qwen3-8b-instruct-q4-k-m` | Q4_K_M | 4.68 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-8B-GGUF @ 7c41481f57cb95916b40956ab2f0b139b296d974 | pinned |
+| p32 | resident | `muse-glimmer-30b-q4-k-m` | Q4_K_M | 15.61 GB | not measured | not measured | Apache-2.0 | meta-models/Muse-Glimmer-30B-GGUF @ 70bf1b61ac09f91b24d39038091b41c582bc5d7a | pinned |
+| p64 | resident | `muse-glimmer-30b-q4-k-xl` | Q4_K_XL | 18.30 GB | not measured | not measured | Apache-2.0 | meta-models/Muse-Glimmer-30B-GGUF @ 70bf1b61ac09f91b24d39038091b41c582bc5d7a | pinned |
+| p128 | resident | `muse-glimmer-30b-q4-k-xl` | Q4_K_XL | 18.30 GB | not measured | not measured | Apache-2.0 | meta-models/Muse-Glimmer-30B-GGUF @ 70bf1b61ac09f91b24d39038091b41c582bc5d7a | pinned |
 
 Also pinned, started only when chosen (Home's "load this model"): `qwen3-1.7b-q8-0` (Q8_0, 1.71 GB, Apache-2.0, Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077); `qwen3-1.7b-mlx-4bit` (4-bit, 0.92 GB, Apache-2.0, mlx-community/Qwen3-1.7B-4bit @ 3b1b1768f8f8cf8351c712464f906e86c2b8269e); `qwen3-vl-8b-instruct-q4-k-m` (Q4_K_M, 4.68 GB, Apache-2.0, Qwen/Qwen3-VL-8B-Instruct-GGUF @ f982a07559d4a2f6c8744d840bf6fccab30eea96, reads pictures).
 

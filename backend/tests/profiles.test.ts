@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { PROFILE_TIERS, proposeProfile } from "@/profiles";
+import { PROFILE_MODEL_BINDINGS, PROFILE_TIERS, proposeProfile } from "@/profiles";
 import type { RoleId } from "@/roles";
 import type { HardwareInfo } from "@/lib/hardware";
 
@@ -64,4 +64,15 @@ test("each tier's role lists are disjoint and cover every role", () => {
     expect(new Set(all).size).toBe(all.length);
     expect(new Set(all)).toEqual(new Set(roles));
   }
+});
+
+test("the chat pin is Qwen3 8B through 24 GB and Muse Glimmer 30B above (STACK-MUSE-01)", () => {
+  expect(proposeProfile(hw({ unifiedMemoryGb: 24 }))?.id).toBe("p16");
+  expect(proposeProfile(hw({ unifiedMemoryGb: 32 }))?.id).toBe("p32");
+  expect(proposeProfile(hw({ unifiedMemoryGb: 128 }))?.id).toBe("p128");
+  expect(PROFILE_MODEL_BINDINGS.p16?.chat).toBe("qwen3-8b-instruct-q4-k-m");
+  expect(PROFILE_MODEL_BINDINGS.p32?.chat).toBe("muse-glimmer-30b-q4-k-m");
+  expect(PROFILE_MODEL_BINDINGS.p64?.chat).toBe("muse-glimmer-30b-q4-k-xl");
+  expect(PROFILE_MODEL_BINDINGS.p128?.chat).toBe("muse-glimmer-30b-q4-k-xl");
+  for (const tier of ["p32", "p64", "p128"] as const) expect(PROFILE_MODEL_BINDINGS[tier]?.judge).toBe("qwen3-4b-q4-k-m");
 });

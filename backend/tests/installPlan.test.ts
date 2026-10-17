@@ -71,7 +71,19 @@ test("plan: the starter is first, then chat, stt, tts, embed, judge", () => {
   expect(plan.models[0]).toMatchObject({ id: "qwen3-1.7b-q8-0", starter: true });
   expect(plan.models.filter((model) => model.starter)).toHaveLength(1);
   expect(plan.models.filter((model) => !model.component).map((model) => model.role)).toEqual(["chat", "chat", "stt", "tts", "embed", "judge"]);
-  expect(plan.models[1]).toMatchObject({ id: "qwen3-8b-instruct-q4-k-m", starter: false });
+  // STACK-MUSE-01: above 24 GB the bound chat is Muse Glimmer 30B, so the
+  // 8B is not in this plan at all.
+  expect(plan.models[1]).toMatchObject({ id: "muse-glimmer-30b-q4-k-xl", starter: false });
+  expect(plan.models.map((model) => model.id)).not.toContain("qwen3-8b-instruct-q4-k-m");
+});
+test("plan: the chat pull follows the tier (STACK-MUSE-01): 8B through 24 GB, Muse Q4_K_M at 32 GB, Q4_K_XL from 64 GB", () => {
+  const chatOf = (gb: number) => buildInstallPlan(hw({ unifiedMemoryGb: gb, totalRamGb: gb })).models[1]?.id;
+  expect(chatOf(24)).toBe("qwen3-8b-instruct-q4-k-m");
+  expect(chatOf(32)).toBe("muse-glimmer-30b-q4-k-m");
+  expect(chatOf(64)).toBe("muse-glimmer-30b-q4-k-xl");
+  expect(chatOf(128)).toBe("muse-glimmer-30b-q4-k-xl");
+  const p32 = buildInstallPlan(hw({ unifiedMemoryGb: 32, totalRamGb: 32 }));
+  expect(p32.models.find((model) => model.id === "muse-glimmer-30b-q4-k-m")).toMatchObject({ approx_bytes: 16_756_683_904, role: "chat", starter: false });
 });
 test("plan: p16 has the larger chat bound, so the small pin is still the starter; embeddings ride along", () => {
   const plan = buildInstallPlan(hw({}));

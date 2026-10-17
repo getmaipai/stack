@@ -761,6 +761,16 @@ function declaredLaunchContext(model: ModelRecord): number | null {
   return typeof launch?.contextLength === "number" && launch.contextLength > 0 ? launch.contextLength : null;
 }
 
+/** The chat-template variables a record's launch pins (STACK-MUSE-01:
+ * Muse Glimmer's reasoning strength), string values only, or null. */
+function declaredChatTemplateKwargs(model: ModelRecord): Record<string, string> | null {
+  const launch = model.engineRequirements.launch as { chatTemplateKwargs?: unknown } | undefined;
+  const kwargs = launch?.chatTemplateKwargs;
+  if (!kwargs || typeof kwargs !== "object") return null;
+  const entries = Object.entries(kwargs as Record<string, unknown>).filter((entry): entry is [string, string] => typeof entry[1] === "string");
+  return entries.length > 0 ? Object.fromEntries(entries) : null;
+}
+
 /** The most tokens one picture may take in a model that reads pictures,
  * as its record declares (VISION-02b), or null. */
 function declaredPictureTokensMax(model: ModelRecord): number | null {
@@ -840,7 +850,7 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
   const projector = launchProjectorFor(role, model);
   if (role === "vision" && !projector?.modelPath) throw new EngineUnavailableError(`The ${model.id} projector is not installed.`);
   const pictureTokensMax = projector?.modelPath ? declaredPictureTokensMax(model) : null;
-  const args = llamaServerArgs({ modelPath: model.modelPath!, port, config, contextLength, kvCacheType: defaultKvCacheType(), gpuLayers: gpuLayersFor(role), embeddings: role === "embed", projectorPath: projector?.modelPath ?? undefined, onePictureSlot: role === "vision", imageMaxTokens: pictureTokensMax ?? undefined });
+  const args = llamaServerArgs({ modelPath: model.modelPath!, port, config, contextLength, kvCacheType: defaultKvCacheType(), gpuLayers: gpuLayersFor(role), embeddings: role === "embed", projectorPath: projector?.modelPath ?? undefined, onePictureSlot: role === "vision", imageMaxTokens: pictureTokensMax ?? undefined, chatTemplateKwargs: declaredChatTemplateKwargs(model) ?? undefined });
   return { command: [binary, ...args], engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength, slots, contextScope: "per slot", kind: "spawned", imageInput: !!projector?.modelPath, pictureTokensMax };
 }
 

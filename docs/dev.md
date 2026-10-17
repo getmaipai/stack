@@ -19,11 +19,14 @@ history in [plans/field-survey-2026-09-17.md](plans/field-survey-2026-09-17.md).
 Nothing in this file is household content: every person in an example
 is from the org's persona roster.
 
-The household chat pin is Qwen3 8B from p16 upward. On p16 the judge
-uses that same model and process because a separate 4B judge would need
-about 3.76 GiB after chat, leaving less than the 4 GiB working margin
-under the governor's free-memory check. From p32 the judge has its own
-Qwen3 4B pin and process; profiles below p16 keep the shared 1.7B chat.
+The household chat pin is Qwen3 8B on p16 (a 16 or 24 GB machine). From
+p32 upward it is Muse Glimmer 30B (STACK-MUSE-01 below, owner's rule
+2026-10-16): the 17 GB Q4_K_M on p32, the KQuant-Dynamic Q4_K_XL on p64
+and p128. On p16 the judge uses the chat model and process because a
+separate 4B judge would need about 3.76 GiB after chat, leaving less
+than the 4 GiB working margin under the governor's free-memory check.
+From p32 the judge has its own Qwen3 4B pin and process; profiles below
+p16 keep the shared 1.7B chat.
 
 ## Why the Stack exists
 
@@ -2080,6 +2083,50 @@ machine. Qwen3-8B never shows this because its own maximum is 40,960.
 The p16 flip needs the owner's choice first (Home's VISION-02e report:
 a 40,960 ceiling for the chat record, or a launch plan that never picks
 a context admission cannot admit).
+
+## The chat pin above 24 GB: Muse Glimmer 30B (STACK-MUSE-01, 2026-10-16)
+
+Owner's rule, 2026-10-16: the Qwen3 8B chat entries are for machines
+with 24 GB or less; every larger machine runs Muse Glimmer 30B
+(`meta-models/Muse-Glimmer-30B-GGUF`, Apache-2.0, dense 29.6B, 52
+layers, 2 KV heads, 131072 context, pinned at revision `70bf1b6`).
+Nothing is chosen in the wizard: the tier decides, through
+`PROFILE_MODEL_BINDINGS` in `profiles.ts`, and Home mirrors the same
+ids in its own catalog for thinking mode and turn budgets.
+
+| Tier | Memory | Chat pin | File |
+|---|---|---|---|
+| p16 | 16 to 24 GB | `qwen3-8b-instruct-q4-k-m` | 5.0 GB |
+| p32 | 32 GB | `muse-glimmer-30b-q4-k-m` (KQuant 17GB) | 16.8 GB |
+| p64, p128 | 64 GB and up | `muse-glimmer-30b-q4-k-xl` (KQuant-Dynamic) | 19.7 GB |
+
+p32 takes the smaller file because Q4_K_XL (19.7 GB) plus the 4B judge
+(3.76 GiB) plus context would leave a 32 GB machine under the
+governor's 4 GiB free-memory margin; the 17 GB build keeps it above.
+A 24 GB machine stays on the 8B for the same reason: either Muse file
+plus its context is most of the memory, with nothing left for the
+judge, vision or the household.
+
+Reasoning: Muse's chat template reasons on every turn and takes a
+`reasoning_strength` kwarg (`low`, `medium`, `high`, `xhigh`; default
+`high`) with no off switch, so `--reasoning off` (which sets
+`enable_thinking=false`) does nothing for it. The catalog record now
+carries `launch.chatTemplateKwargs`, which the supervisor passes as
+`--chat-template-kwargs` (new in `engineArgs.ts`); Muse launches with
+`reasoning_strength: "low"`. llama-server merges a request's
+`chat_template_kwargs` over the launch defaults key by key
+(`server-common.cpp` in b10797), so Home's per-request
+`enable_thinking` leaves the launch's `reasoning_strength` in place.
+b10797 parses Muse's `<atem:function_calls>` tool calls natively and
+returns the `to=self` reasoning as `reasoning_content`
+(`common_chat_params_init_muse_glimmer` in `chat.cpp`), so the turn
+pipeline sees the same shapes it sees from Qwen3. Sampling is the model
+card's recommendation (temperature 1.0, top_p 0.95, top_k 64).
+
+Not measured yet: tokens per second, load time and the tool-calling
+bench on the Studio are STUDIO-EVAL-01's job in Home. Follow-ups once
+measured: `--reasoning-budget` as a hard cap on reasoning tokens, the
+repo's `mmproj` for vision, and its DFlash draft model.
 
 ## Measured so far
 
