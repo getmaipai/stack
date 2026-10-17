@@ -16,6 +16,178 @@
         "required": [
           "error"
         ]
+      },
+      "JobRefusal": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "MediaStatus": {
+        "type": "object",
+        "properties": {
+          "supported": {
+            "type": "boolean"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "enum": [
+                    "ffmpeg",
+                    "ffprobe",
+                    "yt-dlp"
+                  ]
+                },
+                "installed": {
+                  "type": "boolean",
+                  "description": "False until the first job that needs it (or a media.setup job) downloads it."
+                },
+                "version": {
+                  "type": "string"
+                },
+                "licence": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "installed",
+                "version",
+                "licence",
+                "source"
+              ]
+            }
+          },
+          "kinds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "lane": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "cap": {
+                "type": "integer"
+              },
+              "queued": {
+                "type": "integer"
+              },
+              "running_job": {
+                "type": "string",
+                "nullable": true
+              },
+              "deadlines_minutes": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "number"
+                }
+              }
+            },
+            "required": [
+              "name",
+              "cap",
+              "queued",
+              "running_job",
+              "deadlines_minutes"
+            ]
+          },
+          "quiet_hosts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "until": {
+                  "type": "string"
+                },
+                "failures": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "host",
+                "until",
+                "failures"
+              ]
+            },
+            "description": "Sites resting now. A background media.fetch for one is refused (503, code media_quiet_mode); a person-initiated one still runs."
+          },
+          "quiet_policy": {
+            "type": "object",
+            "properties": {
+              "failures": {
+                "type": "integer"
+              },
+              "minutes": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "failures",
+              "minutes"
+            ]
+          },
+          "roots": {
+            "$ref": "#/components/schemas/MediaRoots"
+          }
+        },
+        "required": [
+          "supported",
+          "platform",
+          "tools",
+          "kinds",
+          "lane",
+          "quiet_hosts",
+          "quiet_policy",
+          "roots"
+        ]
+      },
+      "MediaRoots": {
+        "type": "object",
+        "properties": {
+          "read": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Folders the media jobs may read (the library roots Home scans). Absolute, existing, never `/` or the Stack's own data folder."
+          },
+          "write": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Folders a job may write into when it names an output_dir. Without one, a job writes into a folder it owns."
+          }
+        },
+        "required": [
+          "read",
+          "write"
+        ]
       }
     },
     "parameters": {}
@@ -5034,7 +5206,7 @@
         "tags": [
           "Jobs"
         ],
-        "summary": "Submit a generator job",
+        "summary": "Submit a job (a generator, an install or a media job)",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5229,12 +5401,22 @@
               }
             }
           },
-          "503": {
-            "description": "Nothing on this machine can run the kind.",
+          "422": {
+            "description": "The job input was not acceptable (a path outside the folders Home declared, a missing field, an unreadable link): `code` is bad_input, path_invalid, path_not_found, path_outside_roots or no_roots; `error` says what to fix.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "$ref": "#/components/schemas/JobRefusal"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Nothing on this machine can run the kind, or the kind refused this job now: `code` is queue_full (an idle lane is at its cap), media_quiet_mode (a background fetch for a host that is resting), or a validation code for a path or URL; `error` says what to do.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRefusal"
                 }
               }
             }
@@ -9023,6 +9205,158 @@
                   "required": [
                     "image_tools"
                   ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/media": {
+      "get": {
+        "tags": [
+          "Media"
+        ],
+        "summary": "The media service: tools, the idle lane, resting sites, declared folders",
+        "responses": {
+          "200": {
+            "description": "Additive. Home enables fetch from `tools` and `quiet_hosts`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "media": {
+                      "$ref": "#/components/schemas/MediaStatus"
+                    }
+                  },
+                  "required": [
+                    "media"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/media/roots": {
+      "put": {
+        "tags": [
+          "Media"
+        ],
+        "summary": "Declare the folders media jobs may read and write",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "read": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "write": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "read"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved (it survives a Stack restart). Replaces the previous declaration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "roots": {
+                      "$ref": "#/components/schemas/MediaRoots"
+                    }
+                  },
+                  "required": [
+                    "roots"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A folder does not exist, is `/`, or holds or sits inside the Stack's data folder.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/media/outputs/{job}": {
+      "delete": {
+        "tags": [
+          "Media"
+        ],
+        "summary": "Release a finished job's output folder",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The folder the job owned is deleted (false when there was none). Home calls this after it has moved or copied what it keeps.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "released": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "released"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a job id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }

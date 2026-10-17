@@ -27,6 +27,8 @@ import { searchRoutes } from "@/routes/search";
 import { imageToolsRoutes } from "@/routes/imageTools";
 import { componentsRoutes } from "@/routes/components";
 import { registerImageToolJobs } from "@/imagetools/jobs";
+import { mediaRoutes } from "@/routes/media";
+import { registerMediaJobs } from "@/media/jobs";
 import { videoRoutes } from "@/routes/video";
 import { videoV1Routes } from "@/routes/videoGenerations";
 import { registerVideoJobs } from "@/video/jobs";
@@ -53,6 +55,7 @@ export const app = apiRouter<AppEnv>();
 // engine still answers the honest 503 through the route's bound check.
 registerGenerators();
 registerImageToolJobs();
+registerMediaJobs();
 registerVideoJobs();
 registerImageJobs();
 
@@ -96,6 +99,7 @@ app.route("/stack/v1/fit-plan", fitPlanRoutes);
 app.route("/stack/v1/warmup", warmupRoutes);
 app.route("/stack/v1/search", searchRoutes);
 app.route("/stack/v1/image-tools", imageToolsRoutes);
+app.route("/stack/v1/media", mediaRoutes);
 app.route("/stack/v1/components", componentsRoutes);
 app.route("/stack/v1/video", videoRoutes);
 app.route("/stack/v1/image", imageRoutes);

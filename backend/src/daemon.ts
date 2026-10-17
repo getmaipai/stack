@@ -19,6 +19,8 @@ import { STACK_MODELS } from "@/lib/modelCatalog";
 import { startSelfHeal } from "@/lib/selfHeal";
 import { ddgsSupervisor } from "@/search/ddgsSidecar";
 import { imageTools, sweepImageToolsTmp } from "@/imagetools/imageTools";
+import { hostLimiter } from "@/media/hosts";
+import { sweepJobDirs } from "@/media/paths";
 import { videoGen } from "@/video/videoGen";
 import { imageGen } from "@/images/imageEngine";
 import { sweepImageTmp, sweepResults as sweepImageResults } from "@/images/results";
@@ -74,6 +76,9 @@ async function serve(): Promise<void> {
   const stopSelfHeal = startSelfHeal();
   // Pictures an earlier crash left in the image tools' temporary folder are removed; the worker itself starts on the first edit.
   sweepImageToolsTmp();
+  // Media job folders nobody released within a week (Home was away) go; a site that asked the Stack to rest is still resting after a restart.
+  sweepJobDirs();
+  hostLimiter.load();
   // The memory watchdog (2026-10-17): samples the whole computer every 5 s, gates generative starts on real free memory, and acts on pressure.
   const stopMemoryWatchdog = startMemoryWatchdog();
   // Clips an earlier run left half-made are removed and old results swept; the video worker itself starts on the first clip and exits after ten idle minutes.

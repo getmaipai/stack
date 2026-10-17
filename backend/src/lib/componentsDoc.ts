@@ -6,6 +6,7 @@
 // drift-checked by scripts/check.sh like docs/api/openapi.json.
 import { POCKET_TTS_UNGATED_REPO } from "@/speech/pocketTts";
 import { POCKET_TTS_CLONING_REVISION, POCKET_TTS_CLONING_WEIGHTS, POCKET_TTS_PRESET_VOICES, POCKET_TTS_VOICES_REVISION } from "@/speech/voices";
+import { FFMPEG_PINS, MEDIA_COMPONENTS } from "@/media/pins";
 import { BUNDLED_RUNTIMES, ENGINE_BINARIES, engineRole, MANAGED_RUNTIMES, type BundledRuntime, type EngineBinaryPin, type ManagedRuntime } from "@/lib/engineCatalog";
 import packageJson from "../../package.json";
 import { ROLE_CANDIDATES, STACK_MODELS, type RoleCandidate } from "@/lib/modelCatalog";
@@ -135,5 +136,18 @@ export function renderComponentsDoc(catalog: ComponentsCatalog): string {
     }
     lines.push("");
   }
+  // The media service is not a model role: its tools are listed once, with the licence the pin records (MEDIA-STACK-01).
+  lines.push("## media (the media service: probe, fetch, transcode, preview)");
+  lines.push("");
+  lines.push("Tools the media jobs run, fetched on the first job that needs them, each pinned by checksum. ffmpeg and ffprobe are one verified archive per platform; yt-dlp is a hashed PyPI requirements file in a uv environment.");
+  lines.push("");
+  lines.push("| Tool | Build | Licence | Source | Why |");
+  lines.push("|---|---|---|---|---|");
+  for (const component of MEDIA_COMPONENTS) lines.push(`| \`${component.name}\` | ${component.version} | ${component.licence} | ${component.source} | ${component.why} |`);
+  lines.push("");
+  lines.push("| ffmpeg and ffprobe archive | Platform | Status |");
+  lines.push("|---|---|---|");
+  for (const pin of FFMPEG_PINS) lines.push(`| \`${pin.id}\` | ${pin.platform} ${pin.arch} | ${pin.verified ? "pinned, verified" : "pinned, not yet verified"} |`);
+  lines.push("");
   return lines.join("\n");
 }

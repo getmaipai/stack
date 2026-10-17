@@ -219,6 +219,8 @@ own. The rows the Stack declares:
 | Reading a model's provenance before install | Only when Home asks to install a model by repository | The repository name, then its immutable revision and file list | Hugging Face or the declared mirror | none: an explicit action |
 | The first part of a model file's header, or a model repository's file list and configuration file, read to size it before download | Only when a person asks whether a model will fit, before any download | The model file's address or repository name and revision; its file list and configuration file; nothing about the household or any person | Hugging Face (`huggingface.co`), with content redirected to `us.aws.cdn.hf.co` | none: an explicit action |
 | Building a Python engine's environment (the packages the voice engines, Pocket TTS and the MLX voice, ComfyUI and the oMLX chat engine run on) | Only when Home installs the voice or image engine, in the background at start on a Mac whose chat engine is oMLX by default and has no environment yet (ENGINE-MLX-01), and again when the Stack updates it | The names of the pinned packages and their hashes; uv, the tool that fetches them, comes from GitHub and sends nothing else | The Python Package Index, straight from this computer, and GitHub for the uv build and the oMLX release wheel | none: an explicit action |
+| Fetching a video or audio file from a link a person pasted, or from a source a person follows (`media.fetch`, yt-dlp) | Only when Home submits a `media.fetch` job: when a person pastes a link, then each time a followed source is polled (its own interval, a few items per check, a pause between requests). A site that answers with too many requests or a sign-in wall four times is left alone for 30 minutes; only a person's own request goes through while it rests | A request to the site the person named, as a browser's tool would make it: the link, one ordinary client identity, and cookies only when the owner added a cookies file in Home. Nothing about the household or any person | The site named by the link, straight from this computer; the Stack has no list of sites and never contacts one by itself | none: per source in Home |
+| Downloading the pinned ffmpeg and ffprobe builds | Only the first time a media job needs them, or when the Stack's release pins a new build (there is no version check) | The name of the pinned archive; nothing about the household | GitHub releases of jellyfin-ffmpeg, straight from this computer | none |
 | The voice engine asking Hugging Face for its weights and voices | Each time the voice engine starts (it asks for the voice-cloning weights, and reads the pinned copy on this computer when the ask is refused without a token), and when a person picks a voice the computer does not hold yet | The file's name, and the Hugging Face token from settings when one is set, so the cloning weights can be read | Hugging Face, straight from this computer | `stack.engines.tts.hf_token` |
 
 Nothing else leaves the machine. Adding or changing an outbound
@@ -358,6 +360,61 @@ happened, what to do) and `code`: 413 `too_large`, 422 `mask_required` `mask_emp
 `GET /stack/v1/image-tools` returns `{ image_tools: { state, phase, vision, models: { isnet, lama, esrgan }, limits, operations, reason } }`.
 The worker is one Python process that starts on the first edit and exits after about two minutes idle; it holds a pinned 4 GB governor admission
 while it lives. Pictures, masks and results are never logged or written beyond the request. Design: Home `docs/design/image-tools-2026-10-17.md`.
+
+## Media service (MEDIA-STACK-01)
+
+The Stack does the heavy media work for Home so Home never runs ffmpeg or yt-dlp itself: read a file's codecs, fetch a link a person chose,
+convert to H.264 and AAC, make a thumbnail, a storyboard sheet and a short silent preview. Five job kinds on the ordinary job API; no media route
+carries a file. Design: Home `docs/design/media-apps-blend-2026-10-17.md` sections 8, 12 and 14.
+
+**How Home calls it.** `POST /stack/v1/jobs` with `{ kind, input }` answers 202 `{ job }`; poll `GET /stack/v1/jobs/{id}` (or follow `job.progress` and
+`job.done` on the event feed) until `state` is `done`, `failed` or `cancelled`; `DELETE /stack/v1/jobs/{id}` cancels (queued or running). On `done`,
+`result` holds the shape below. On `failed`, `reason` is a sentence for the person and `result` is `{ failure: { code, message, host?, quiet?,
+quiet_until?, detail? } }`: branch on `code`, show `message`, put `detail` (the tool's last lines) under a Details disclosure.
+A refused submit is 422 `{ error, code }` (the input is wrong: `bad_input`, `path_invalid`, `path_not_found`, `path_outside_roots`, `no_roots`) or 503
+`{ error, code }` (`media_quiet_mode`, `queue_full`, or no code when the kind is unknown). Nothing is queued on a refusal.
+
+**Folders.** Home reads library folders, so it declares them: `PUT /stack/v1/media/roots { read: string[], write?: string[] }` replaces the
+declaration (saved under the Stack's data folder, so a restart keeps it; declare again whenever the library roots change). Each folder must exist and
+may not be `/` or hold or sit inside the Stack's own data folder (422 `root_refused`, `path_not_found` or `path_invalid`). Every path in a job input
+must be absolute, free of `..`, and, after symlinks are resolved, inside a `read` or `write` folder (the job folders below are always readable).
+An output goes where `output_dir` says, which must be inside a `write` folder; without `output_dir` it goes into a folder the job owns, named by the
+job id. Home reads or moves what it keeps, then calls `DELETE /stack/v1/media/outputs/{job}` (`{ released }`); folders nobody releases are swept after
+7 days. Before any folder is declared, every media job is refused with `no_roots`.
+
+**One lane.** All five kinds share one idle-priority first-in-first-out queue (`taskpolicy -b` on a Mac, `nice -n 19` elsewhere): one media job runs at
+a time, the rest wait with `state: queued` and `position`. At most 64 wait (a submit past that is 503 `queue_full`). A cancelled queued job leaves the
+queue; a cancelled running job stops its tool and frees the lane at once; a crashed job never blocks the next; a job past its deadline (probe 3 min,
+preview 20 min, fetch 3 h, transcode 12 h, setup 30 min) is stopped and fails with a sentence. The first job that needs a tool downloads and checks it
+inside the job (`status` says so), which can take a couple of minutes on a slow link; `media.setup` does that ahead of time.
+
+**Kinds.**
+
+| Kind | Input | Result |
+|---|---|---|
+| `media.probe` | `{ path }` | `{ path, size_bytes, format, duration_s, bit_rate, has_video, has_audio, has_cover_art, width, height, video_codec, hevc_tag ("hvc1" or "hev1" for HEVC, else null), audio_codec, channels, sample_rate, projection, rotation, streams[{ index, type, codec, codec_tag, profile, width, height, pix_fmt, fps, channels, sample_rate, bit_rate, language, default, cover_art }], chapters[{ index, start_s, end_s, title }], tags{all, lower-case keys}, title, embedded_date (ISO date or year), created_at, source_url (the `purl` tag a fetch embeds), elapsed_ms }`. Failure `unreadable` when ffprobe cannot read the file. |
+| `media.fetch` | `{ url (http or https), kind: "video" or "audio" (video), quality: "best" or a ceiling "2160", "1440", "1080", "720", "480", "360" (best), playlist (false; true for a channel or playlist), archive_key (letters, digits, `.`, `-`, `_`: names this source's download archive so an item is never fetched twice), max_items (1 to 100, newest first), date_after ("YYYYMMDD"), min_duration_s, max_duration_s, cookies_path (a file inside a declared folder; only when the owner configured cookies), person_initiated (false), subtitles (true), limit_rate_kbps, output_dir }` | `{ host, output_dir, count, items[{ id, title, uploader, channel, channel_id, duration_s, upload_date (ISO), webpage_url, extractor, ext, description, playlist_title, playlist_index, path, size_bytes, subtitle_paths[] (.vtt), thumbnail_path }], warnings[], elapsed_ms }`. `count: 0` is a success (everything was already in the archive). A fetch that stopped at `max_items` is a success. Failure codes: `rate_limited`, `login_wall`, `unavailable`, `unsupported`, `network`, `failed`, `media_quiet_mode`, `tool_setup_failed`. |
+| `media.transcode` | `{ path, output_dir, output_name (no extension), max_height (never scales up), video: "auto", "encode" or "copy" (auto), audio: "auto" or "encode" (auto), crf (23), preset ("veryfast"), audio_bitrate_k (160) }` | `{ path, size_bytes, container ("mp4"; "m4a" for audio only), video_action ("copy", "encode" or "none"), audio_action, duration_s, width, height, video_codec, audio_codec, elapsed_ms }`. H.264 + AAC + `+faststart`, chapters and tags kept; `auto` copies a stream that is already 8-bit H.264 (within `max_height`) or AAC. `percent` moves with the output time. The output is written as `<name>.mp4.part` and renamed on success; nothing partial is left on failure or cancel. |
+| `media.preview` | `{ path, output_dir, thumbnail (true), storyboard (true), clip (true), thumbnail_at_s (10 percent in), thumbnail_width (640), storyboard_columns (10), storyboard_frames (100 at most), storyboard_tile_width (160), clip_start_s (30 percent in), clip_length_s (6), clip_height (360) }` | `{ duration_s, thumbnail{ path, width, height, at_s, from_cover_art, size_bytes }, storyboard{ path, width, height, columns, rows, tile_width, tile_height, interval_s, frames, size_bytes }, clip{ path, start_s, duration_s, height, has_audio: false, size_bytes }, skipped[{ part, reason }], elapsed_ms }`. An audio file gets its cover art as the thumbnail and skips the other two. Frame `n` of the sheet is at `n * interval_s`. |
+| `media.setup` | `{}` | `{ tools{ ffmpeg, ffprobe, "yt-dlp" } (paths), elapsed_ms }`. Downloads and checks all three tools now. |
+
+**Quiet mode.** The limiter keys a site by its registrable host (`www.`, `m.` and other subdomains share a key; `media.example.co.uk` is `example.co.uk`).
+Four failures in a row that mean the site is pushing back (a 429, a sign-in wall) put it in quiet mode for 30 minutes; a removed video, an unsupported
+link or a network error never counts. While a site rests, a `media.fetch` without `person_initiated: true` is refused at submit with 503
+`media_quiet_mode` (the sentence names the site and when it ends); one with `person_initiated: true` still runs, and a success ends quiet mode early.
+Background requests to one site are also spaced at least 5 seconds apart, and yt-dlp pauses 3 to 8 seconds between files. The state survives a Stack
+restart. `GET /stack/v1/media` lists the resting sites so Home can skip a poll without asking.
+
+**State.** `GET /stack/v1/media` returns `{ media: { supported, platform, tools[{ name, installed, version, licence, source }], kinds[], lane{ name,
+cap, queued, running_job, deadlines_minutes }, quiet_hosts[{ host, until, failures }], quiet_policy{ failures, minutes }, roots{ read, write } } }`.
+
+**Tools and licences.** ffmpeg and ffprobe 8.1.3 come from one pinned archive per platform of jellyfin-ffmpeg 8.1.3-1 (GitHub release, sha256 and size
+pinned; GPL-3.0-or-later build with libx264 and no nonfree parts; the Stack only runs them and ships no copy). Why this source: the other static macOS
+builds are either `--enable-nonfree` (eugeneware/ffmpeg-static, which no licence lets anyone redistribute) or on a second download host that the privacy
+page would have to name. yt-dlp 2026.8.19 is a hashed PyPI requirements file (Unlicense, with its default extras) synced into a uv environment, the
+recipe of the image tools. The licence record is in `backend/src/media/pins.ts` and `docs/components.md`. `STACK_MEDIA_FFMPEG`, `STACK_MEDIA_FFPROBE`
+and `STACK_MEDIA_YTDLP` point at programs an operator already has. No request is ever made to a video service by the Stack itself or by its tests
+(RULES.md V1): the tests fetch a localhost fixture with yt-dlp's generic extractor.
 
 ## Video generation (VIDEO-GEN-01 to 03)
 

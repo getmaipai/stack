@@ -25,9 +25,28 @@ export type JobRunner = (job: Job, signal: AbortSignal, progress: JobProgress) =
  * peak it expects, the model file it loads and its engine (the
  * governor's multiplier), or a measured peak. */
 export interface JobMemory { requestedBytes: number; modelFileBytes?: number | null; measuredPeakBytes?: number | null; engine?: string; }
+/** A refusal at submit time carries a stable code Home can branch on. */
+export type JobRefusal = { reason: string; code?: string; /** 422 when the input is not acceptable (a bad path, a bad field), 503 (the default) when the Stack cannot take the job now. */ status?: 422 | 503 };
+/** The idle lane (MEDIA-STACK-01): one job at a time, first in first out,
+ * for work that must never compete with the household's own requests
+ * (media probes, fetches, transcodes). Its rules, ported from FileTube's
+ * heavyGate and pinned by tests/mediaLane.test.ts:
+ * - the queue has a cap; past it a submit is refused with a reason;
+ * - a cancelled queued job leaves the queue; a cancelled running job frees
+ *   the lane at once, whatever its runner does with the abort;
+ * - a runner that throws, rejects or never settles cannot hold the lane:
+ *   the lane moves on when it settles, is cancelled, or passes its deadline. */
+export interface JobLane { name: string; cap: number; deadlineMs?: (job: Job) => number; precheck?: (input: Record<string, unknown>) => JobRefusal | null; }
 export interface JobRunnerOptions {
   /** A generator: queued per role and admitted through the governor. */
   generator?: { role: string; memory: (job: Job) => JobMemory };
+  /** Work on an idle lane: queued first in first out, one at a time. */
+  lane?: JobLane;
+}
+
+/** A runner throws this to fail its job and still hand Home a structured result (a code to branch on). */
+export class JobFailure extends Error {
+  constructor(message: string, readonly result?: unknown) { super(message); }
 }
 
 interface RegisteredRunner { run: JobRunner; options: JobRunnerOptions; }
@@ -39,6 +58,11 @@ const runners = new Map<string, RegisteredRunner>();
 const queues = new Map<string, Job[]>();
 /** The generator job in flight per role, if any. */
 const inFlight = new Map<string, string>();
+/** Queued jobs per idle lane, the job running on each lane, and the settle function that frees a running job's lane (callable once). */
+const laneQueues = new Map<string, Job[]>();
+const laneRunning = new Map<string, string>();
+const laneSettles = new Map<string, () => void>();
+const laneTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const KEEP_FINISHED = 200;
 
 export function registerJobRunner(kind: string, runner: JobRunner, options: JobRunnerOptions = {}): void { runners.set(kind, { run: runner, options }); }
@@ -84,22 +108,34 @@ export function updateJob(id: string, patch: Partial<Pick<Job, "percent" | "comp
   return touch(job, { ...patch, totalBytes, completedBytes, percent });
 }
 
-export function finishJob(id: string, outcome: { ok: true; result?: unknown } | { ok: false; reason: string; status?: string }): Job | null {
+export function finishJob(id: string, outcome: { ok: true; result?: unknown } | { ok: false; reason: string; status?: string; result?: unknown }): Job | null {
   const job = jobs.get(id);
   controllers.delete(id);
   if (!job || (job.state !== "running" && job.state !== "queued" && job.state !== "stalled")) return null;
   // A finished picture or clip counts as use of its model family.
   if (outcome.ok && job.kind !== "component.install" && job.kind !== "model.install") { const input = job.input as { family?: unknown; model?: unknown } | null; noteComponentUse(typeof input?.family === "string" ? input.family : typeof input?.model === "string" ? input.model : job.kind.startsWith("video") ? "fastwan2-2-ti2v-5b-mlx-bf16" : null); }
-  return outcome.ok ? touch(job, { state: "done", percent: 100, status: "done", ...(job.items ? { items: job.items.map((item) => ({ ...item, completedBytes: item.totalBytes, state: "done" as const })) } : {}), result: outcome.result ?? null, position: null }) : touch(job, { state: "failed", status: outcome.status ?? "failed", ...(job.items ? { items: job.items.map((item) => item.state === "done" ? item : { ...item, state: "failed" as const }) } : {}), reason: outcome.reason, position: null });
+  return outcome.ok ? touch(job, { state: "done", percent: 100, status: "done", ...(job.items ? { items: job.items.map((item) => ({ ...item, completedBytes: item.totalBytes, state: "done" as const })) } : {}), result: outcome.result ?? null, position: null }) : touch(job, { state: "failed", status: outcome.status ?? "failed", ...(job.items ? { items: job.items.map((item) => item.state === "done" ? item : { ...item, state: "failed" as const }) } : {}), reason: outcome.reason, ...(outcome.result === undefined ? {} : { result: outcome.result }), position: null });
 }
 
 /** Submits work to a registered runner. A generator kind is queued for
  * its role and admitted through the governor; anything else runs at
  * once. Returns the job, or a refusal with the reason when nothing on
  * this machine can run the kind. */
-export function submitJob(input: { kind: string; role?: string | null; input?: Record<string, unknown> }): { job: Job } | { refused: true; reason: string } {
+export function submitJob(input: { kind: string; role?: string | null; input?: Record<string, unknown> }): { job: Job } | ({ refused: true } & JobRefusal) {
   const runner = runners.get(input.kind);
   if (!runner) return { refused: true, reason: `No engine on this machine can run ${input.kind} jobs yet.` };
+  if (runner.options.lane) {
+    const lane = runner.options.lane;
+    const refusal = lane.precheck?.(input.input ?? {}) ?? null;
+    if (refusal) return { refused: true, ...refusal };
+    const queue = laneQueues.get(lane.name) ?? [];
+    laneQueues.set(lane.name, queue);
+    if (queue.length >= lane.cap) return { refused: true, code: "queue_full", reason: `The ${lane.name} queue is full (${queue.length} jobs are waiting). Try again when some have finished.` };
+    const job = createJob({ kind: input.kind, role: input.role ?? null, input: input.input ?? null, status: "queued", state: "queued", position: queue.length + 1 });
+    queue.push(job);
+    void pumpLane(lane.name);
+    return { job: jobs.get(job.id)! };
+  }
   if (runner.options.generator) {
     const role = runner.options.generator.role;
     const queue = queues.get(role) ?? [];
@@ -117,10 +153,49 @@ export function submitJob(input: { kind: string; role?: string | null; input?: R
 function run(job: Job, runner: RegisteredRunner, onSettled: () => void = () => {}): void {
   const controller = controllers.get(job.id) ?? new AbortController();
   controllers.set(job.id, controller);
-  void runner.run(jobs.get(job.id) ?? job, controller.signal, (update) => { updateJob(job.id, update); })
+  // A runner that throws before its first await fails its job like one that rejects.
+  let started: Promise<unknown>;
+  try { started = Promise.resolve(runner.run(jobs.get(job.id) ?? job, controller.signal, (update) => { updateJob(job.id, update); })); } catch (error) { started = Promise.reject(error); }
+  void started
     .then((result) => { if (!controller.signal.aborted) finishJob(job.id, { ok: true, result }); })
-    .catch((error) => { if (!controller.signal.aborted) finishJob(job.id, { ok: false, reason: error instanceof Error ? error.message : String(error) }); })
+    .catch((error) => { if (!controller.signal.aborted) finishJob(job.id, { ok: false, reason: error instanceof Error ? error.message : String(error), ...(error instanceof JobFailure && error.result !== undefined ? { result: error.result } : {}) }); })
     .finally(() => { controllers.delete(job.id); onSettled(); });
+}
+
+/** Runs the next queued job of an idle lane when none is running. The lane
+ * is freed exactly once per job (`settle`): when the runner settles, when
+ * the job is cancelled, or when its deadline passes, whichever is first. */
+function pumpLane(name: string): void {
+  if (laneRunning.has(name)) return;
+  const queue = laneQueues.get(name) ?? [];
+  const next = queue.shift();
+  if (!next) return;
+  queue.forEach((job, index) => { const current = jobs.get(job.id); if (current && current.state === "queued" && current.position !== index + 1) touch(current, { position: index + 1 }); });
+  const current = jobs.get(next.id);
+  const runner = runners.get(next.kind);
+  if (!current || current.state !== "queued") { pumpLane(name); return; }
+  if (!runner?.options.lane) { finishJob(next.id, { ok: false, reason: `No runner is registered for ${next.kind} jobs.` }); pumpLane(name); return; }
+  laneRunning.set(name, next.id);
+  let settled = false;
+  const settle = () => {
+    if (settled) return;
+    settled = true;
+    const timer = laneTimers.get(next.id); if (timer) clearTimeout(timer);
+    laneTimers.delete(next.id); laneSettles.delete(next.id);
+    if (laneRunning.get(name) === next.id) laneRunning.delete(name);
+    pumpLane(name);
+  };
+  laneSettles.set(next.id, settle);
+  const started = touch({ ...current, position: null }, { state: "running", status: "starting", position: null });
+  const deadline = runner.options.lane.deadlineMs?.(started);
+  if (deadline && deadline > 0) {
+    laneTimers.set(next.id, setTimeout(() => {
+      const live = jobs.get(next.id);
+      if (live && live.state === "running") { controllers.get(next.id)?.abort(); finishJob(next.id, { ok: false, reason: `The job took longer than ${Math.round(deadline / 60_000)} minutes and was stopped so the next one could run.` }); }
+      settle();
+    }, deadline));
+  }
+  run(started, runner, settle);
 }
 
 /** Queue positions after a move, told on the feed like any progress. */
@@ -236,9 +311,20 @@ export function cancelJob(id: string): Job | null {
     const queue = queues.get(job.role);
     if (queue) { const index = queue.findIndex((queued) => queued.id === id); if (index >= 0) queue.splice(index, 1); renumber(job.role); }
   }
+  if (job.state === "queued") {
+    for (const queue of laneQueues.values()) {
+      const index = queue.findIndex((queued) => queued.id === id);
+      if (index < 0) continue;
+      queue.splice(index, 1);
+      queue.forEach((waiting, at) => { const current = jobs.get(waiting.id); if (current && current.position !== at + 1) touch(current, { position: at + 1 }); });
+    }
+  }
   controllers.get(id)?.abort();
   controllers.delete(id);
-  return touch(job, { state: "cancelled", status: "cancelled", reason: "Cancelled by Home.", position: null });
+  const cancelled = touch(job, { state: "cancelled", status: "cancelled", reason: "Cancelled by Home.", position: null });
+  // A running lane job frees its lane now; its runner may take a moment to stop its process, and the next job does not wait for that.
+  laneSettles.get(id)?.();
+  return cancelled;
 }
 
 /** The watchdog's way to stop generative work for memory. A queued job is cancelled before it starts; a running one has its signal aborted, which makes its runner stop the worker and remove its partial files (every runner cleans up in a finally). The record says plainly why. Running jobs go video first, then the rest. */
@@ -270,6 +356,8 @@ export function cancelGeneratorsForMemory(scope: "queued" | "running", reason: s
 /** The kind of the generator job in flight (the watchdog names it in its action log). */
 export function runningGeneratorKinds(): string[] { return [...inFlight.values()].map((id) => jobs.get(id)?.kind ?? "").filter(Boolean); }
 
+/** An idle lane's depth, for the status route. */
+export function laneStatus(name: string): { queued: number; running: string | null } { return { queued: laneQueues.get(name)?.length ?? 0, running: laneRunning.get(name) ?? null }; }
 export function getJob(id: string): Job | null { return jobs.get(id) ?? null; }
 export function listJobs(): Job[] { return [...jobs.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)); }
 
@@ -288,5 +376,7 @@ export async function waitForJob(id: string, timeoutMs: number): Promise<Job | n
 
 export function __resetJobsForTests(): void {
   for (const controller of controllers.values()) controller.abort();
+  for (const timer of laneTimers.values()) clearTimeout(timer);
   controllers.clear(); jobs.clear(); runners.clear(); queues.clear(); inFlight.clear();
+  laneQueues.clear(); laneRunning.clear(); laneSettles.clear(); laneTimers.clear();
 }
