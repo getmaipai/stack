@@ -473,7 +473,7 @@ function launchBinary(pin: EngineBinaryPin): string {
 /** Whether the role's engine is on this machine: the `current`
  * llama-server build for the chat wire, the bundled speech runtime plus
  * its detector component for the speech roles. */
-function engineInstalledFor(role: RoleId): boolean {
+export function engineInstalledFor(role: RoleId): boolean {
   // A scripted engine stands in for an installed one, as it does at launch.
   if (testFactory) return true;
   if (SPEECH_ROLES.includes(role)) return componentModel(role, "vad") !== null;

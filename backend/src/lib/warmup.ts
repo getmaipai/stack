@@ -13,7 +13,7 @@
 // (the `stack.runtime.keep_warm` setting, off when on battery).
 import { GovernorRules, defaultModelBudgetBytes, getGovernorStatus, type GovernorTier } from "@/lib/governor";
 import { logger } from "@/lib/log";
-import { currentMachineTier, getProcess, processRoleFor, requestRole, selectedModel } from "@/lib/supervisor";
+import { currentMachineTier, engineInstalledFor, getProcess, processRoleFor, requestRole, selectedModel } from "@/lib/supervisor";
 import type { RoleId } from "@/roles";
 import { settingValues } from "@/settings";
 
@@ -67,16 +67,36 @@ function candidatesNow(): WarmCandidate[] {
     const owner = processRoleFor(role);
     if (seen.has(owner)) continue;
     const model = selectedModel(owner);
-    if (!model?.modelPath) continue;
+    // No model file or no engine build yet: nothing to load, and a refused start would back the role off.
+    if (!model?.modelPath || !engineInstalledFor(owner)) continue;
     seen.add(owner);
     out.push({ role, bytes: Math.ceil(model.measuredFootprintBytes ?? (model.sizeBytes ?? 0) * FOOTPRINT_FACTOR) });
   }
   return out;
 }
 
-/** The one-token request that primes the engine's kernels, per role. */
+/** Mixed topics on purpose. The engine maps its weights lazily, and a
+ * mixture-of-experts model reads an expert's pages only when a token is
+ * routed to it, so a one token request leaves most of the file on disk
+ * (measured: the first real reply ran at 14 tokens/s, then 26). A few
+ * hundred tokens of varied text, with a short reply, reaches most of them
+ * and compiles the batch and decode kernels. */
+export const PRIME_TEXT = [
+  "The kitchen light is on, the garage door is closed, and the thermostat is set to 68 degrees until Saturday morning.",
+  "Photosynthesis turns light, water and carbon dioxide into sugar and oxygen inside the chloroplasts of a leaf.",
+  "def fibonacci(n): a, b = 0, 1; for _ in range(n): a, b = b, a + b; return a",
+  "Le marché ouvre à huit heures et ferme à midi, mais les fromages partent toujours avant dix heures.",
+  "If a train leaves at 3:15 pm going 80 km/h and another leaves an hour later going 100 km/h, when does the second catch up?",
+  "The treaty was signed in 1648, ending a war that had devastated much of central Europe for thirty years.",
+  "Remember to buy flour, two lemons, unsalted butter, a bag of oranges and a birthday card for Saturday.",
+  "SELECT name, COUNT(*) FROM visits WHERE day >= '2026-01-01' GROUP BY name ORDER BY 2 DESC LIMIT 5;",
+  "Una receta sencilla: cocina el arroz con caldo, añade ajo, pimentón y un poco de limón al final.",
+  "Neurons pass signals across synapses with neurotransmitters, and repeated use strengthens the connection.",
+].join(" ") + " Summarize all of that in one short sentence.";
+
+/** The request that loads the weights and primes the engine's kernels, per role. */
 async function prime(role: RoleId): Promise<void> {
-  if (role === "chat" || role === "judge") await requestRole(role, "/v1/chat/completions", { model: role, messages: [{ role: "user", content: "Hi" }], max_tokens: 1, temperature: 0 });
+  if (role === "chat" || role === "judge") await requestRole(role, "/v1/chat/completions", { model: role, messages: [{ role: "user", content: PRIME_TEXT }], max_tokens: 48, temperature: 0 });
   else if (role === "embed") await requestRole(role, "/v1/embeddings", { model: role, input: "Hi" });
 }
 

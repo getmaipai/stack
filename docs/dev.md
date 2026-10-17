@@ -2134,7 +2134,9 @@ Measured on the Mac Studio (M5 Max, 128 GB, chat Muse Glimmer 30B q4, 19.7 GB): 
 answer "hello", the next reply 1 s, then the memory notice appeared. Cause, from `stack.log`: every role loaded on its first request.
 Chat went `loaded` to `ready` in 17 s, embed in 14 s (100 MB model; the fit dry run plus a first read from disk), the judge in
 15 s, one after another. With the files already in the page cache the same loads take 4.6 s (chat), 0.2 s and 1.0 s. A warm 16 token
-reply takes 0.7 s. So the cost is the first load of 20+ GB from disk plus the first kernel compile, paid by the person.
+reply takes 0.7 s. A one token prime was not enough: a mixture-of-experts model maps its weights lazily, and the first real reply after
+it still ran at 15 tokens/s before settling at 25; the prime is now a short varied prompt with a 48 token reply (first real reply
+3.6 s after warm-up, warm-up 30 to 36 s in the background at start). So the cost is the first load of 20+ GB from disk plus the first kernel compile, paid by the person.
 
 Design (`lib/warmup.ts`): `warmUp(trigger)` runs at daemon start, after a model install job finishes, after an engine update, and
 on `POST /stack/v1/warmup` (Home calls it when setup ends). It reads the installed roles in `WARM_ORDER` (chat, embed, judge, stt,
