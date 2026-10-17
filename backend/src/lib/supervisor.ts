@@ -4,6 +4,7 @@
 // supervisor (the generation guard, the free-port probe, the size-scaled
 // liveness wait, the post-load completion, the measured footprint, the
 // exit watch, the drain) are the same here, keyed by role.
+import { noteComponentUse } from "@/lib/componentUse";
 import { existsSync } from "node:fs";
 import { createServer } from "node:net";
 import { dirname, join } from "node:path";
@@ -427,6 +428,7 @@ async function acquireRequestProcess(requested: RoleId, modelId?: string): Promi
   try {
     const processRecord = await getProcess(role, modelId);
     processRecord.activeRequests++;
+    noteComponentUse(processRecord.modelId);
     // A request keeps a jit role's idle clock at zero.
     if (JIT_ROLES.includes(role)) touchGovernor(role);
     const current = runtime(role);

@@ -321,6 +321,30 @@ signature against the Catalog's release key waits on that key existing
 Go never talks to the Stack. It talks to Home (or to Bot when Home is
 unreachable), which owns identity and renders the UI schema.
 
+## Components: install and uninstall (COMPONENTS-01)
+
+`GET /stack/v1/components` lists every installable part as one row: `{ id, label, summary, group (chat, voice, pictures, video, tools, loras),
+kind (model, lora), state (installed, installing, notInstalled, failed), size_bytes (on disk now, models plus their engine environment, null when
+nothing is installed), download_bytes (what an install would still fetch), full_bytes (a fresh install, for the setup estimate), requirement
+(required, optional, unsupported) with requirement_reason, last_used_at, used_by, depends_on, job, percent, failure, can_install, install_block,
+can_uninstall, uninstall_block }`, and beside the rows `{ tier, free_disk_bytes, disk_margin_bytes, installed_bytes }`. The tier, the `required` set and
+`free_disk_bytes` come from the install plan's own sizing, so the setup wizard and this list never disagree. `install_block` and `uninstall_block` are
+sentences for the person (not enough room, needs more memory, "Chat is using this model").
+
+A component is what a household member would name, not a file: Z-Image-Turbo (id `z-image-turbo`, about 33 GB, `optional` on p128 only), FLUX.2 Klein 4B,
+the Video model, Picture tools, each voice, the wake word, each chat model (its picture reader included) and each household LoRA (`lora.picture.<id>`,
+`lora.video.<id>`, removable, never installable here).
+
+`POST /stack/v1/components/{id}/install` is one job of kind `component.install` (`input: { component, model }`, role of the part): the pinned files,
+then the engine environment. It answers 202 `{ job, component, joined }` (a second call joins the job), 200 `{ job: null, already_installed: true }`,
+404 `unknown_component`, or 409 `not_available` / `not_enough_space` (a download plus `disk_margin_bytes` must fit the data volume). A failed job raises
+the Repairs item `component-install-failed.<id>` whose fix `retry_download` starts the install again; the item clears when it lands.
+
+`DELETE /stack/v1/components/{id}` removes the model records, their hub-cache files (a blob only when no other snapshot points at it) and the engine
+environment when no other installed component runs in it, then answers `{ component, freed_bytes, removed }`. Removing what is not installed answers
+`removed: false`. 409 `in_use` (a request or job is using it, or it is still installing), `required` (Home installs it on this tier), `chat_model_in_use`
+(chat's selected model) or `only_chat_model`: the error is a sentence saying what to do first. The Stack never leaves chat without a model.
+
 ## Image tools (IMAGETOOLS-01)
 
 `POST /v1/images/edits` (multipart: `image`, `operation` = `remove_background` | `erase` | `upscale` | `resize`; `mask` for erase, white is

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync, renameSync, rmSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, symlinkSync, writeFileSync, renameSync, rmSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { putBlob, sha256OfPath } from "@/lib/store/blobs";
 import { hfBlobsRoot, hfRefsRoot, hfRepoRoot, hfRepoName, hfSnapshotsRoot } from "@/lib/store/layout";
@@ -95,3 +95,42 @@ export async function scanHfCache(root: string): Promise<HfCachedFile[]> {
 }
 
 export function isHfRepoName(value: string): boolean { return value.startsWith("models--") && value === hfRepoName(value.slice(8).replaceAll("--", "/")); }
+
+/** Removes one file from the hub cache: its snapshot link, then its blob
+ * unless another snapshot of the same repository still points at it, then
+ * the repository folder once no snapshot file is left. Returns the bytes
+ * freed (0 when nothing was there), so an uninstall can report them. */
+export function releaseHfFile(repo: string, revision: string, filePath: string): number {
+  const snapshot = join(hfSnapshotsRoot(repo), revision, filePath);
+  let blob: string | null = null;
+  try { blob = realpathSync(snapshot); } catch { /* a dangling or missing link */ }
+  try { rmSync(snapshot, { force: true }); } catch { /* already gone */ }
+  let freed = 0;
+  if (blob && existsSync(blob) && !snapshotsPointAt(hfSnapshotsRoot(repo), blob)) {
+    freed = statSync(blob).size;
+    rmSync(blob, { force: true });
+  }
+  pruneEmptyDirs(hfSnapshotsRoot(repo));
+  if (!hasSnapshotFiles(hfSnapshotsRoot(repo))) rmSync(hfRepoRoot(repo), { recursive: true, force: true });
+  return freed;
+}
+
+function snapshotsPointAt(root: string, blob: string): boolean {
+  if (!existsSync(root)) return false;
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const path = join(root, entry.name);
+    if (entry.isDirectory()) { if (snapshotsPointAt(path, blob)) return true; continue; }
+    try { if (lstatSync(path).isSymbolicLink() && realpathSync(path) === blob) return true; } catch { /* dangling */ }
+  }
+  return false;
+}
+
+function hasSnapshotFiles(root: string): boolean {
+  if (!existsSync(root)) return false;
+  return readdirSync(root, { withFileTypes: true }).some((entry) => entry.isDirectory() ? hasSnapshotFiles(join(root, entry.name)) : true);
+}
+
+function pruneEmptyDirs(root: string): void {
+  if (!existsSync(root)) return;
+  for (const entry of readdirSync(root, { withFileTypes: true })) if (entry.isDirectory()) { const path = join(root, entry.name); pruneEmptyDirs(path); if (readdirSync(path).length === 0) rmSync(path, { recursive: true, force: true }); }
+}

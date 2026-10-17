@@ -1,6 +1,7 @@
 // The problem list with one fix per item, and the three actions Home
 // calls on an item: fix (the Stack runs the repair), resolve, ignore.
 import { createRoute, z } from "@hono/zod-openapi";
+import { componentIdOfFailureCode, startComponentInstall } from "@/lib/components";
 import { apiRouter, ErrorSchema, idParamSchema } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { ignore, list as listHealth, resolve } from "@/lib/health";
@@ -61,6 +62,11 @@ export async function runFix(code: string): Promise<{ ok: boolean; result: strin
       } catch (error) { return { ok: false, result: (error as Error).message }; }
     }
     case "retry_download": {
+      const componentId = componentIdOfFailureCode(code);
+      if (componentId) {
+        try { await startComponentInstall(componentId); return { ok: true, result: "The install started again; this item clears when it finishes." }; }
+        catch (error) { return { ok: false, result: error instanceof Error ? error.message : String(error) }; }
+      }
       if (code !== DDGS_HEALTH_CODE) return { ok: false, result: "This repair needs the matching engine or model installer; reinstall from Home's Engines page." };
       ddgsSupervisor.retryNow();
       return { ok: true, result: "The search service is being built or restarted again; this item clears when it answers." };

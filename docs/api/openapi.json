@@ -8369,6 +8369,399 @@
         }
       }
     },
+    "/stack/v1/components": {
+      "get": {
+        "tags": [
+          "Components"
+        ],
+        "summary": "Every installable component, its state, size and what it needs",
+        "responses": {
+          "200": {
+            "description": "Additive. `free_disk_bytes` is the data volume's, the same figure the install plan uses.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tier": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "free_disk_bytes": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "disk_margin_bytes": {
+                      "type": "integer"
+                    },
+                    "installed_bytes": {
+                      "type": "integer"
+                    },
+                    "components": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "group": {
+                            "type": "string",
+                            "enum": [
+                              "chat",
+                              "voice",
+                              "pictures",
+                              "video",
+                              "tools",
+                              "loras"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "model",
+                              "lora"
+                            ]
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "installed",
+                              "installing",
+                              "notInstalled",
+                              "failed"
+                            ]
+                          },
+                          "size_bytes": {
+                            "type": "integer",
+                            "nullable": true,
+                            "description": "Bytes on disk now (models and their engine environment); null when nothing is installed."
+                          },
+                          "download_bytes": {
+                            "type": "integer",
+                            "description": "What an install would still download; 0 when installed."
+                          },
+                          "full_bytes": {
+                            "type": "integer",
+                            "description": "The size of a fresh install, for the setup estimate."
+                          },
+                          "requirement": {
+                            "type": "string",
+                            "enum": [
+                              "required",
+                              "optional",
+                              "unsupported"
+                            ],
+                            "description": "For this computer's tier: required (Home installs it), optional, or unsupported (see requirement_reason)."
+                          },
+                          "requirement_reason": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "last_used_at": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "used_by": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "depends_on": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "job": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "percent": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "failure": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "can_install": {
+                            "type": "boolean"
+                          },
+                          "install_block": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "can_uninstall": {
+                            "type": "boolean"
+                          },
+                          "uninstall_block": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "label",
+                          "summary",
+                          "group",
+                          "kind",
+                          "state",
+                          "size_bytes",
+                          "download_bytes",
+                          "full_bytes",
+                          "requirement",
+                          "requirement_reason",
+                          "last_used_at",
+                          "used_by",
+                          "depends_on",
+                          "job",
+                          "percent",
+                          "failure",
+                          "can_install",
+                          "install_block",
+                          "can_uninstall",
+                          "uninstall_block"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "tier",
+                    "free_disk_bytes",
+                    "disk_margin_bytes",
+                    "installed_bytes",
+                    "components"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/components/{id}/install": {
+      "post": {
+        "tags": [
+          "Components"
+        ],
+        "summary": "Install a component (one job: the files, then its engine environment)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "example": "z-image-turbo"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Already installed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "nullable": true
+                    },
+                    "component": {
+                      "type": "string"
+                    },
+                    "already_installed": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "component",
+                    "already_installed"
+                  ]
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "The install job (/stack/v1/jobs/{id}); a second call while one runs joins it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    },
+                    "component": {
+                      "type": "string"
+                    },
+                    "joined": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "component",
+                    "joined"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unknown_component.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "not_available (this computer cannot run it) or not_enough_space (the data volume cannot hold it); the error is a sentence for the person.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/components/{id}": {
+      "delete": {
+        "tags": [
+          "Components"
+        ],
+        "summary": "Uninstall a component and report the space freed",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "example": "z-image-turbo"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Removed; removed=false (and freed_bytes 0) when it was not installed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "component": {
+                      "type": "string"
+                    },
+                    "freed_bytes": {
+                      "type": "integer"
+                    },
+                    "removed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "component",
+                    "freed_bytes",
+                    "removed"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unknown_component.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "in_use (a request or job is using it), required (Home needs it on this tier), chat_model_in_use or only_chat_model (chat would be left with no model); the error says what to do first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/video": {
       "get": {
         "tags": [

@@ -8,6 +8,7 @@
 // that module drives it. Until a runner is registered for a kind, a
 // submit for it is refused with a reason rather than left queued.
 import { emit } from "@/lib/events";
+import { noteComponentUse } from "@/lib/componentUse";
 import { admit, getGovernorStatus, getRunState, peakFor, release, withdraw, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
 import { PAUSED_LOW_MEMORY, waitingText, WatchdogRules } from "@/lib/memoryState";
 import { StackJob, StackJobState } from "@maipai/spec/stack/ts/stack-job.js";
@@ -87,6 +88,8 @@ export function finishJob(id: string, outcome: { ok: true; result?: unknown } | 
   const job = jobs.get(id);
   controllers.delete(id);
   if (!job || (job.state !== "running" && job.state !== "queued" && job.state !== "stalled")) return null;
+  // A finished picture or clip counts as use of its model family.
+  if (outcome.ok && job.kind !== "component.install" && job.kind !== "model.install") { const input = job.input as { family?: unknown; model?: unknown } | null; noteComponentUse(typeof input?.family === "string" ? input.family : typeof input?.model === "string" ? input.model : job.kind.startsWith("video") ? "fastwan2-2-ti2v-5b-mlx-bf16" : null); }
   return outcome.ok ? touch(job, { state: "done", percent: 100, status: "done", ...(job.items ? { items: job.items.map((item) => ({ ...item, completedBytes: item.totalBytes, state: "done" as const })) } : {}), result: outcome.result ?? null, position: null }) : touch(job, { state: "failed", status: outcome.status ?? "failed", ...(job.items ? { items: job.items.map((item) => item.state === "done" ? item : { ...item, state: "failed" as const }) } : {}), reason: outcome.reason, position: null });
 }
 
