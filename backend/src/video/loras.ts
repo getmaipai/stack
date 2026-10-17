@@ -213,7 +213,7 @@ export async function importLora(input: ImportInput): Promise<LoraRecord> {
   let likenessSubject: string | null = null;
   if (input.likeness) {
     try {
-      const proof = verifyProof(input.likeness.proof, { purpose: "style_import", bind: [sha256, input.sourceUrl ?? "", `name:${name}`].filter(Boolean) });
+      const proof = verifyProof(input.likeness.proof, { purpose: "style_import", bind: sha256, consume: true });
       if (proof.subject !== input.likeness.subject) throw new LikenessError("likeness_proof_mismatch", "That consent proof is for a different person. Ask Home to add the style again.", 403);
     } catch (error) {
       if (error instanceof LikenessError) throw new LoraError(error.code, error.message, error.status);
@@ -318,7 +318,7 @@ export async function resolveLoras(requests: LoraRequest[] | undefined, audience
     let likeness: LikenessCheck | undefined;
     if (record.likeness_subject) {
       let proof;
-      try { proof = verifyProof(entry.likenessProof, { purpose: "style_use", bind: record.id }); } catch (error) {
+      try { proof = verifyProof(entry.likenessProof, { purpose: "style_use", bind: record.id, consume: true }); } catch (error) {
         if (error instanceof LikenessError) throw new LoraError(error.code, error.message, error.status);
         throw error;
       }

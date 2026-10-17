@@ -8,8 +8,9 @@
 // Shape. A proof is `<payload>.<signature>`, both base64url. The payload is JSON: `v` 1, `purpose` (photo: a photo of the
 // subject starts a clip or a picture edit; style_import: a saved style of the subject is added; style_use: that style
 // is applied), `subject` and `requester` (opaque ids, never logged), `bind` (what the proof is for: the photo's sha256, the
-// style's id, or the style's file hash or link), `iat`, `exp` and `jti` (seconds, an id). The signature is Ed25519 over the
-// payload text with Home's key. A proof lives at most 30 minutes; Home mints one per request.
+// style's id, or the style's file hash), `iat`, `exp` and `jti` (seconds, an id). The signature is Ed25519 over the
+// payload text with Home's key. A proof lives at most 30 minutes; Home mints one per request, and the Stack accepts each
+// one once (its `jti` is remembered until it expires), so a copy of a proof cannot start a second job.
 //
 // Trust. Home registers its public key once (PUT /stack/v1/likeness/trust). The first key a Stack sees is trusted (the
 // Stack listens on loopback and Home is its only caller); a different key replaces it only when the current key signs the
@@ -22,6 +23,7 @@ import { join } from "node:path";
 import { dataDir } from "@/lib/paths";
 
 export type ProofPurpose = "photo" | "style_import" | "style_use";
+const PURPOSES: readonly string[] = ["photo", "style_import", "style_use"];
 export interface ProofPayload { v: 1; purpose: ProofPurpose; subject: string; requester: string; bind: string; iat: number; exp: number; jti: string }
 
 export const MAX_PROOF_SECONDS = 30 * 60;
@@ -77,9 +79,16 @@ export function registerTrust(publicKey: string, rotationSignature?: string): "r
 
 export interface ProofExpectation {
   purpose: ProofPurpose;
-  /** What the proof must be bound to: any one of these values (a file hash or a link for an import). */
-  bind: string | string[];
+  /** What the proof must be bound to (a picture's hash, a style's id or a style file's hash). */
+  bind: string;
+  /** True when a job is being admitted: the proof is then used up (a second use is refused). The check made when a queued job starts leaves it alone. */
+  consume?: boolean;
 }
+
+/** `jti` to expiry, for proofs already used. Memory only: a Stack restart forgets them, which the 30 minute cap bounds. */
+const used = new Map<string, number>();
+function forgetExpired(now: number): void { for (const [id, exp] of used) if (exp <= now) used.delete(id); }
+export function __resetUsedProofsForTests(): void { used.clear(); }
 
 /** The payload of a valid proof, or a LikenessError that says what is wrong. Checks, in order: a key is trusted, the shape, the signature, the purpose, the binding, then the clock. */
 export function verifyProof(token: unknown, expected: ProofExpectation): ProofPayload {
@@ -96,15 +105,24 @@ export function verifyProof(token: unknown, expected: ProofExpectation): ProofPa
   try { signatureOk = verifySignature(null, Buffer.from(parts[0]), key, b64urlToBuffer(parts[1])); } catch { signatureOk = false; }
   if (!signatureOk) throw invalid;
   let payload: ProofPayload;
-  try { payload = JSON.parse(b64urlToBuffer(parts[0]).toString("utf8")) as ProofPayload; } catch { throw invalid; }
-  if (payload.v !== 1 || typeof payload.subject !== "string" || !payload.subject || typeof payload.requester !== "string" || typeof payload.bind !== "string" || typeof payload.iat !== "number" || typeof payload.exp !== "number" || typeof payload.jti !== "string") throw invalid;
+  try {
+    const parsed: unknown = JSON.parse(b64urlToBuffer(parts[0]).toString("utf8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw invalid;
+    payload = parsed as ProofPayload;
+  } catch { throw invalid; }
+  const whole = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+  if (payload.v !== 1 || !PURPOSES.includes(payload.purpose) || typeof payload.subject !== "string" || !payload.subject || payload.subject.length > 200 || typeof payload.requester !== "string" || typeof payload.bind !== "string" || !whole(payload.iat) || !whole(payload.exp) || typeof payload.jti !== "string" || payload.jti.length < 8 || payload.jti.length > 100) throw invalid;
   if (payload.purpose !== expected.purpose) throw new LikenessError("likeness_proof_mismatch", "That consent proof is for something else. Ask Home to make it again.", 403);
-  const allowed = Array.isArray(expected.bind) ? expected.bind : [expected.bind];
-  if (!allowed.includes(payload.bind)) throw new LikenessError("likeness_proof_mismatch", "That consent proof is for a different picture or style. Ask Home to make it again.", 403);
+  if (payload.bind !== expected.bind) throw new LikenessError("likeness_proof_mismatch", "That consent proof is for a different picture or style. Ask Home to make it again.", 403);
   const now = Math.floor(clock() / 1000);
   if (payload.exp - payload.iat > MAX_PROOF_SECONDS || payload.exp <= payload.iat) throw invalid;
   if (payload.iat > now + SKEW_SECONDS) throw invalid;
   if (now >= payload.exp) throw new LikenessError("likeness_proof_expired", "The consent proof ran out of time before the job started. Ask Home to make it again; the person's agreement is checked again then.", 403);
+  if (expected.consume) {
+    forgetExpired(now);
+    if (used.has(payload.jti)) throw new LikenessError("likeness_proof_replayed", "That consent proof was already used. Ask Home to make it again.", 403);
+    used.set(payload.jti, payload.exp);
+  }
   return payload;
 }
 

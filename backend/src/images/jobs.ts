@@ -37,6 +37,8 @@ export interface StashedImage {
   feather: number;
   /** LIKENESS-01: the proofs this job rests on, checked again when it starts. */
   likeness?: LikenessCheck[];
+  /** The starting picture was a photo someone brought, not one this Stack made: the output is not recorded as a free starting picture. */
+  derived?: boolean;
 }
 const pending = new Map<string, StashedImage & { at: number }>();
 const STASH_TTL_MS = 30 * 60_000;
@@ -124,7 +126,7 @@ export function registerImageJobs(): void {
           images.push({ index, seed: result.seeds[index] ?? item.seed + index, width: size.width, height: size.height, bytes: bytes.length, thumb_bytes: Bun.file(join(work, `${index}.thumb.jpg`)).size });
           // A picture the Stack made may later start a clip; a photo someone brought may not (VIDEO-GEN-12).
           // A picture that looks like a person is not a free starting picture: using it again needs a fresh proof.
-          if (!item.likeness || item.likeness.length === 0) recordGeneratedImage(bytes);
+          if (!item.derived && (!item.likeness || item.likeness.length === 0)) recordGeneratedImage(bytes);
         }
         const meta: ImageResultMeta = {
           job: job.id, created: Math.floor(new Date(job.createdAt).getTime() / 1000), mode: item.op === "edit" ? (item.mask || item.region ? "edit-masked" : "edit") : item.initImage ? "image-to-image" : "generate",

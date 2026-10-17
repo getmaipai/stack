@@ -172,7 +172,7 @@ function checkSource<T extends Context>(c: T, bytes: Uint8Array, source: Source,
     return wasGeneratedHere(bytes) ? null : fail(c, 422, "reference_not_generated", `That ${what} was not made by this computer's image generator, so it cannot be used as a generated picture. Send it as a photo instead.`) as unknown as Response;
   }
   if (source === "uploaded") return null;
-  try { verifyProof(proof, { purpose: "photo", bind: photoBind(bytes) }); } catch (error) {
+  try { verifyProof(proof, { purpose: "photo", bind: photoBind(bytes), consume: true }); } catch (error) {
     if (error instanceof LikenessError) return fail(c, error.status, error.code, error.message) as unknown as Response;
     throw error;
   }
@@ -220,13 +220,16 @@ export async function generateImages<T extends Context>(c: T, body: ImageGenerat
   if (steps > info.stepsMax) return fail(c, 422, "bad_steps", `${info.label} needs at most ${info.stepsMax} steps; ${info.stepsDefault} is the default.`);
   let initImage: Uint8Array | null = null;
   const checks: LikenessCheck[] = [];
+  let derived = false;
   if (body.init_image !== undefined) {
     initImage = decodeImage(body.init_image);
     if (!initImage || !looksLikePicture(initImage)) return fail(c, 422, "bad_image", "The starting picture could not be read. Send a PNG, JPEG or WebP as base64.");
     if (initImage.length > IMAGE_MAX_INPUT_BYTES) return fail(c, 413, "too_large", `The starting picture is larger than ${IMAGE_MAX_INPUT_BYTES / 1024 / 1024} MB.`);
+    if (body.image_source === "household_photo" && (body.audience ?? "all-ages") !== "adult") return fail(c, 403, "likeness_adult_only", "A picture that looks like a person is only made for an adult on their own screen. Ask Home to make it from a signed-in adult's chat.");
     const checked = checkSource(c, initImage, body.image_source, body.consent_proof, "starting picture");
     if (checked instanceof Response) return checked;
     if (checked) checks.push(checked);
+    if (body.image_source !== "generated") derived = true;
   }
   let loras;
   try { loras = await imageLoras.resolve(requests, body.audience ?? "all-ages", family); } catch (error) {
@@ -234,6 +237,8 @@ export async function generateImages<T extends Context>(c: T, body: ImageGenerat
     throw error;
   }
   for (const lora of loras) if (lora.likeness) checks.push(lora.likeness);
+  // The age and surface gate outranks a consent: a picture that looks like a person is for an adult audience only.
+  if (checks.length > 0 && (body.audience ?? "all-ages") !== "adult") return fail(c, 403, "likeness_adult_only", "A picture that looks like a person is only made for an adult on their own screen. Ask Home to make it from a signed-in adult's chat.");
   if (activeJobs() >= IMAGE_QUEUE_MAX) return fail(c, 429, "queue_full", `${IMAGE_QUEUE_MAX} pictures are already waiting. Try again when one finishes.`);
   const quantize = quantizeFor(family, "generate", tier);
   const verdict = memoryVerdict(peakBytes(family, "generate", quantize, loras.length));
@@ -243,7 +248,7 @@ export async function generateImages<T extends Context>(c: T, body: ImageGenerat
   const loraIds = loras.map((lora) => lora.record.id);
   stashImage(token, {
     op: "generate", prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, family, quantize, width: size.width, height: size.height, steps, seed, count,
-    loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, initImage, strength: body.strength ?? 0.6, image: null, mask: null, region: null, feather: 0, likeness: checks,
+    loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, initImage, strength: body.strength ?? 0.6, image: null, mask: null, region: null, feather: 0, likeness: checks, derived,
   });
   const submitted = submitJob({ kind: IMAGE_JOB_KIND, role: "image", input: { token, family, mode: "generate", quantize, size: `${size.width}x${size.height}`, steps, seed, count, lora_ids: loraIds, image_to_image: initImage !== null, likeness: checks.length > 0 } });
   if ("refused" in submitted) return fail(c, 503, "unsupported", submitted.reason);
@@ -251,7 +256,7 @@ export async function generateImages<T extends Context>(c: T, body: ImageGenerat
 }
 
 export interface EditForm {
-  image: File; mask?: File; operation: "edit" | "edit_masked"; instruction?: string; prompt?: string; region?: string; feather?: number; seed?: number; steps?: number; timeout_ms?: number; image_source?: Source; consent_proof?: string;
+  image: File; mask?: File; operation: "edit" | "edit_masked"; instruction?: string; prompt?: string; region?: string; feather?: number; seed?: number; steps?: number; timeout_ms?: number; image_source?: Source; consent_proof?: string; audience?: "all-ages" | "adult";
 }
 
 /** Normalized x,y,w,h from "0.1,0.2,0.3,0.3", or the sentence to return. */
@@ -278,8 +283,10 @@ export async function editImages<T extends Context>(c: T, form: EditForm) {
   if (!(feather >= 0 && feather <= IMAGE_FEATHER_MAX)) return fail(c, 422, "bad_feather", `The feather is 0 to ${IMAGE_FEATHER_MAX} pixels.`);
   const image = new Uint8Array(await form.image.arrayBuffer());
   if (!looksLikePicture(image)) return fail(c, 422, "bad_image", "The picture could not be read. Send a PNG, JPEG or WebP.");
+  if (form.image_source === "household_photo" && form.audience !== "adult") return fail(c, 403, "likeness_adult_only", "A picture that looks like a person is only made for an adult on their own screen. Ask Home to make it from a signed-in adult's chat.");
   const checked = checkSource(c, image, form.image_source, form.consent_proof, "picture");
   if (checked instanceof Response) return checked;
+  if (checked && form.audience !== "adult") return fail(c, 403, "likeness_adult_only", "A picture that looks like a person is only made for an adult on their own screen. Ask Home to make it from a signed-in adult's chat.");
   const mask = form.mask ? new Uint8Array(await form.mask.arrayBuffer()) : null;
   if (mask && !looksLikePicture(mask)) return fail(c, 422, "bad_image", "The mask could not be read. Send a PNG, JPEG or WebP.");
   const family: ImageFamilyId = "flux2-klein-4b";
@@ -292,7 +299,7 @@ export async function editImages<T extends Context>(c: T, form: EditForm) {
   const steps = form.steps ?? IMAGE_FAMILIES[family].stepsDefault;
   const seed = form.seed ?? Math.floor(Math.random() * 2 ** 32);
   const token = crypto.randomUUID();
-  stashImage(token, { op: "edit", prompt: instruction, negativePrompt: null, family, quantize: null, width: 0, height: 0, steps, seed, count: 1, loras: [], loraIds: [], initImage: null, strength: 0, image, mask, region: region ?? null, feather, likeness: checked ? [checked] : [] });
+  stashImage(token, { op: "edit", prompt: instruction, negativePrompt: null, family, quantize: null, width: 0, height: 0, steps, seed, count: 1, loras: [], loraIds: [], initImage: null, strength: 0, image, mask, region: region ?? null, feather, likeness: checked ? [checked] : [], derived: form.image_source !== "generated" });
   const submitted = submitJob({ kind: IMAGE_EDIT_JOB_KIND, role: "image", input: { token, family, mode: "edit", quantize: null, steps, seed, count: 1, lora_ids: [], masked: mask !== null || region !== null, likeness: checked !== null } });
   if ("refused" in submitted) return fail(c, 503, "unsupported", submitted.reason);
   return waitAndReply(c, submitted.job.id, submitted.job.createdAt, form.timeout_ms ?? DEFAULT_WAIT_MS);

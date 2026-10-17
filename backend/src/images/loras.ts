@@ -68,7 +68,6 @@ export interface LoraUrlInput {
   strengthDefault?: number;
   triggerWords?: string[];
   addedBy?: string | null;
-  likeness?: { subject: string; proof: string };
 }
 
 /** Streams the file to a temporary path with a size cap and no knowledge of its hash (the hash is computed on the bytes that arrived and recorded; nothing is trusted from the server). */
@@ -111,7 +110,6 @@ export function startLoraInstall(input: LoraUrlInput, deps: { fetch?: typeof fet
       const record = await imageLoras.importFile({
         path: staging, name: input.name, licence, licenceAcknowledged: input.licenceAcknowledged, sourceUrl: `https://huggingface.co/${source.repo}/blob/${source.revision}/${source.file}`,
         classification: input.classification, strengthDefault: input.strengthDefault, triggerWords: input.triggerWords, addedBy: input.addedBy, extraDescription: [source.repo, ...card.tags],
-        ...(input.likeness ? { likeness: input.likeness } : {}),
       });
       finishJob(job.id, { ok: true, result: { lora: record satisfies LoraRecord } });
     } catch (error) {

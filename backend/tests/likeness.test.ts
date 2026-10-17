@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { app } from "@/app";
 import { __resetGovernorForTests, __setGovernorTuningForTestsOnly } from "@/lib/governor";
 import { __resetJobsForTests, getJob } from "@/lib/jobs";
-import { __setLikenessClockForTests, LikenessError, photoBind, registerTrust, verifyProof, type ProofPurpose } from "@/lib/likeness";
+import { __resetUsedProofsForTests, __setLikenessClockForTests, LikenessError, photoBind, registerTrust, verifyProof, type ProofPurpose } from "@/lib/likeness";
 import { registerVideoJobs } from "@/video/jobs";
 import { registerImageJobs } from "@/images/jobs";
 import { importLora, resolveLoras, updateLora, LoraError as VideoLoraError } from "@/video/loras";
@@ -81,7 +81,7 @@ function scriptedImage(onSend?: () => Promise<void> | void): ImageGenDeps {
         send: async (request): Promise<ImageReply> => {
           imageRequests.push(request); await onSend?.();
           const count = request.op === "edit" ? 1 : request.count ?? 1;
-          for (let i = 0; i < count; i++) { writeFileSync(join(request.out_dir, `${i}.png`), pngBytes(request.width ?? 640, request.height ?? 480, `PIC${i}`)); writeFileSync(join(request.out_dir, `${i}.thumb.jpg`), "JPG"); }
+          for (let i = 0; i < count; i++) { writeFileSync(join(request.out_dir, `${i}.png`), pngBytes(request.width ?? 640, request.height ?? 480, `PIC${i}-${request.id}-${request.prompt}`)); writeFileSync(join(request.out_dir, `${i}.thumb.jpg`), "JPG"); }
           return { id: request.id, ok: true, seeds: Array.from({ length: count }, (_, i) => request.seed + i), ms: 10, peak_bytes: 13_500_000_000, width: request.width, height: request.height };
         },
       };
@@ -99,6 +99,7 @@ beforeEach(() => {
   clean();
   nowMs = Date.UTC(2026, 9, 17, 12, 0, 0);
   __setLikenessClockForTests(() => nowMs);
+  __resetUsedProofsForTests();
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 90 * GB, tier: "p128" });
   __setInstalledFamiliesForTests(["flux2-klein-4b", "z-image-turbo"]);
   registerVideoJobs(); registerImageJobs();
@@ -181,7 +182,7 @@ test("the trust route registers the first key, refuses a different one and repor
 
 test("a clip starts from a household photo only with a proof bound to that exact picture", async () => {
   videoGen.useDeps(scriptedVideo());
-  const base = { prompt: "she waves", image: PNG_B64, image_source: "household_photo", timeout_ms: 5000 };
+  const base = { prompt: "she waves", image: PNG_B64, image_source: "household_photo", audience: "adult", timeout_ms: 5000 };
   const none = await postVideo(base);
   expect(none.status).toBe(403);
   expect(await codeOf(none)).toBe("likeness_proof_required");
@@ -214,7 +215,7 @@ test("a proof that runs out while the clip waits in the line fails the clip when
   // One clip holds the generator; the second waits behind it with a proof that has a minute left.
   const blocker = await postVideo({ prompt: "a boat", timeout_ms: 1 });
   expect(blocker.status).toBe(202);
-  const queued = await postVideo({ prompt: "she waves", image: PNG_B64, image_source: "household_photo", consent_proof: proof("photo", sha(PNG), { ttl: 60 }), timeout_ms: 1 });
+  const queued = await postVideo({ prompt: "she waves", image: PNG_B64, image_source: "household_photo", audience: "adult", consent_proof: proof("photo", sha(PNG), { ttl: 60 }), timeout_ms: 1 });
   expect(queued.status).toBe(202);
   const job = (await queued.json() as { job: string }).job;
   expect(getJob(job)?.state).toBe("queued");
@@ -231,7 +232,7 @@ test("a proof that runs out while the clip waits in the line fails the clip when
 
 test("the poster of a clip made from a household photo is not a free starting picture", async () => {
   videoGen.useDeps(scriptedVideo());
-  const ok = await postVideo({ prompt: "she waves", image: PNG_B64, image_source: "household_photo", consent_proof: proof("photo", sha(PNG)), timeout_ms: 5000 });
+  const ok = await postVideo({ prompt: "she waves", image: PNG_B64, image_source: "household_photo", audience: "adult", consent_proof: proof("photo", sha(PNG)), timeout_ms: 5000 });
   expect(ok.status).toBe(200);
   expect(wasGeneratedHere(new TextEncoder().encode("JPEGDATA"))).toBe(false);
   const plain = await postVideo({ prompt: "a boat", timeout_ms: 5000 });
@@ -246,27 +247,62 @@ test("a starting picture or an edit needs a declared source; a household photo n
   const initB64 = pngBytes(8, 8).toString("base64");
   expect(await codeOf(await postImage({ prompt: "x", init_image: initB64 }))).toBe("reference_source_required");
   expect(await codeOf(await postImage({ prompt: "x", init_image: initB64, image_source: "generated" }))).toBe("reference_not_generated");
-  expect(await codeOf(await postImage({ prompt: "x", init_image: initB64, image_source: "household_photo" }))).toBe("likeness_proof_required");
-  expect(await codeOf(await postImage({ prompt: "x", init_image: initB64, image_source: "household_photo", consent_proof: proof("photo", sha(OTHER)) }))).toBe("likeness_proof_mismatch");
+  expect(await codeOf(await postImage({ prompt: "x", init_image: initB64, image_source: "household_photo", audience: "adult" }))).toBe("likeness_proof_required");
+  expect(await codeOf(await postImage({ prompt: "x", init_image: initB64, image_source: "household_photo", audience: "adult", consent_proof: proof("photo", sha(OTHER)) }))).toBe("likeness_proof_mismatch");
   expect(imageRequests).toHaveLength(0);
   const bytes = pngBytes(8, 8);
-  expect((await postImage({ prompt: "x", init_image: initB64, image_source: "household_photo", consent_proof: proof("photo", sha(bytes)), timeout_ms: 5000 })).status).toBe(200);
+  expect((await postImage({ prompt: "x", init_image: initB64, image_source: "household_photo", audience: "adult", consent_proof: proof("photo", sha(bytes)), timeout_ms: 5000 })).status).toBe(200);
   expect((await postImage({ prompt: "x", init_image: initB64, image_source: "uploaded", timeout_ms: 5000 })).status).toBe(200);
   const form = (fields: Record<string, string>) => { const f = new FormData(); f.set("operation", "edit"); f.set("instruction", "make it sunny"); f.set("timeout_ms", "5000"); for (const [k, v] of Object.entries(fields)) f.set(k, v); f.set("image", new File([bytes], "in.png")); return f; };
   const edit = (fields: Record<string, string>) => app.request("/v1/images/edits", { method: "POST", body: form(fields) });
   expect(await codeOf(await edit({}))).toBe("reference_source_required");
-  expect(await codeOf(await edit({ image_source: "household_photo" }))).toBe("likeness_proof_required");
-  expect((await edit({ image_source: "household_photo", consent_proof: proof("photo", sha(bytes)) })).status).toBe(200);
+  expect(await codeOf(await edit({ image_source: "household_photo", audience: "adult" }))).toBe("likeness_proof_required");
+  expect((await edit({ image_source: "household_photo", audience: "adult", consent_proof: proof("photo", sha(bytes)) })).status).toBe(200);
 });
 
 test("a picture made from a household photo is not recorded as a free starting picture", async () => {
   imageGen.useDeps(scriptedImage());
   const bytes = pngBytes(8, 8);
-  const response = await postImage({ prompt: "x", init_image: bytes.toString("base64"), image_source: "household_photo", consent_proof: proof("photo", sha(bytes)), timeout_ms: 5000 });
+  const response = await postImage({ prompt: "x", init_image: bytes.toString("base64"), image_source: "household_photo", audience: "adult", consent_proof: proof("photo", sha(bytes)), timeout_ms: 5000 });
   const body = await response.json() as { data: Array<{ b64_json: string }> };
   expect(wasGeneratedHere(new Uint8Array(Buffer.from(body.data[0]!.b64_json, "base64")))).toBe(false);
   const plain = await (await postImage({ prompt: "x", timeout_ms: 5000 })).json() as { data: Array<{ b64_json: string }> };
   expect(wasGeneratedHere(new Uint8Array(Buffer.from(plain.data[0]!.b64_json, "base64")))).toBe(true);
+  // A photo someone brought (even one Home found to show no person) does not turn its output into a free starting picture either.
+  const uploaded = await (await postImage({ prompt: "x", init_image: bytes.toString("base64"), image_source: "uploaded", timeout_ms: 5000 })).json() as { data: Array<{ b64_json: string }> };
+  expect(wasGeneratedHere(new Uint8Array(Buffer.from(uploaded.data[0]!.b64_json, "base64")))).toBe(false);
+});
+
+test("a proof is accepted once, and a photo or style of a person is for an adult audience only", async () => {
+  videoGen.useDeps(scriptedVideo());
+  const token = proof("photo", sha(PNG));
+  const base = { prompt: "she waves", image: PNG_B64, image_source: "household_photo", consent_proof: token, timeout_ms: 5000 };
+  const kids = await postVideo({ ...base, audience: "all-ages" });
+  expect(kids.status).toBe(403);
+  expect(await codeOf(kids)).toBe("likeness_adult_only");
+  expect((await postVideo({ ...base, audience: "adult" })).status).toBe(200);
+  const again = await postVideo({ ...base, audience: "adult" });
+  expect(again.status).toBe(403);
+  expect(await codeOf(again)).toBe("likeness_proof_replayed");
+  imageGen.useDeps(scriptedImage());
+  const bytes = pngBytes(8, 8);
+  const one = proof("photo", sha(bytes));
+  const send = (audience: string | null) => postImage({ prompt: "x", init_image: bytes.toString("base64"), image_source: "household_photo", consent_proof: one, ...(audience ? { audience } : {}), timeout_ms: 5000 });
+  expect(await codeOf(await send(null))).toBe("likeness_adult_only");
+  expect((await send("adult")).status).toBe(200);
+  expect(await codeOf(await send("adult"))).toBe("likeness_proof_replayed");
+  const form = new FormData();
+  form.set("operation", "edit"); form.set("instruction", "x"); form.set("image_source", "household_photo"); form.set("consent_proof", proof("photo", sha(bytes))); form.set("image", new File([bytes], "in.png"));
+  const noAudience = await app.request("/v1/images/edits", { method: "POST", body: form });
+  expect(await codeOf(noAudience)).toBe("likeness_adult_only");
+});
+
+test("a payload that is not an object, or has odd numbers, is refused as invalid and never escapes as a 500", () => {
+  const signed = (payload: string) => { const text = b64url(Buffer.from(payload)); return `${text}.${b64url(signBytes(null, Buffer.from(text), key.privateKey))}`; };
+  const now = Math.floor(nowMs / 1000);
+  for (const payload of ["null", "7", "[]", JSON.stringify({ v: 1, purpose: "photo", subject: "a", requester: "b", bind: sha(PNG), iat: -5, exp: 100, jti: "abcdefgh12" }), JSON.stringify({ v: 1, purpose: "photo", subject: "a", requester: "b", bind: sha(PNG), iat: now + 0.5, exp: now + 100.5, jti: "abcdefgh12" }), JSON.stringify({ v: 1, purpose: "nuke", subject: "a", requester: "b", bind: sha(PNG), iat: now, exp: now + 100, jti: "abcdefgh12" })]) {
+    expect(() => verifyProof(signed(payload), { purpose: "photo", bind: sha(PNG) })).toThrow(LikenessError);
+  }
 });
 
 // ---- likeness LoRAs ----

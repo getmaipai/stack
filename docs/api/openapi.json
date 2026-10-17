@@ -1473,7 +1473,15 @@
                   "consent_proof": {
                     "type": "string",
                     "maxLength": 4096,
-                    "description": "With `image_source: household_photo`: Home's signed proof, bound to this exact picture, valid for at most 30 minutes."
+                    "description": "With `image_source: household_photo`: Home's signed proof, bound to this exact picture, valid for at most 30 minutes. Each proof is accepted once."
+                  },
+                  "audience": {
+                    "type": "string",
+                    "enum": [
+                      "all-ages",
+                      "adult"
+                    ],
+                    "description": "edit and edit_masked: who the picture is for. A household photo is accepted only with `adult`."
                   }
                 },
                 "required": [
@@ -10041,7 +10049,7 @@
                   "likeness_subject": {
                     "type": "string",
                     "maxLength": 200,
-                    "description": "LIKENESS-01: the household adult this style looks like, sent with `likeness_proof` (purpose style_import, bound to `name:<name>` or the link)."
+                    "description": "Refused (422 likeness_file_required): a style of a person is added as a file, not from a link."
                   },
                   "likeness_proof": {
                     "type": "string",

@@ -372,9 +372,11 @@ sha256 of that exact picture. Home applies its own age, surface, consent and fac
 **Likeness proofs (LIKENESS-01).** Who agreed to what is Home's record; the Stack refuses to act on a likeness without a short-lived proof Home signed for
 that one thing. A proof is `<payload>.<signature>`, both base64url: the payload is JSON `{ v: 1, purpose, subject, requester, bind, iat, exp, jti }` and the
 signature is Ed25519 over the payload text. `purpose` is `photo` (a photo of the subject starts a clip, a picture or an edit; `bind` is the picture's sha256),
-`style_import` (a style of the subject is added; `bind` is the file's sha256, its link, or `name:<name>`) or `style_use` (that style is applied; `bind` is the
-LoRA id). A proof lives at most 30 minutes (`exp - iat`), is checked when the request arrives and again when the job starts (a job can wait minutes in the line),
-and is refused when forged, expired, for another picture or purpose, or when no key is registered. Home registers its public key once with `PUT
+`style_import` (a style of the subject is added; `bind` is the file's sha256, so it is added as a file, never from a link) or `style_use` (that style is applied;
+`bind` is the LoRA id). A proof lives at most 30 minutes (`exp - iat`), is accepted once (its `jti` is remembered until it expires: `likeness_proof_replayed`),
+is checked when the request arrives and again when the job starts (a job can wait minutes in the line), and is refused when forged, expired, for another
+picture or purpose, or when no key is registered. A photo or style of a person is made only with `audience: adult` (`likeness_adult_only`). Trust on first use is
+the limit of the key registration: the Stack and Home share one computer's loopback, so Home registers at start and compares the fingerprint it gets back. Home registers its public key once with `PUT
 /stack/v1/likeness/trust { public_key }` (base64 SPKI DER, Ed25519); the first key is trusted, a different one replaces it only with `rotation_signature`, the
 old key's signature over the new key's base64 text (409 `likeness_key_mismatch` otherwise). `GET /stack/v1/likeness` reports `{ trusted, fingerprint,
 max_proof_minutes }`. Errors are 403 with `likeness_proof_required`, `_invalid`, `_expired`, `_mismatch` or `likeness_not_trusted`.

@@ -155,6 +155,8 @@ videoV1Routes.openapi(postRoute, async (c) => {
   const checks: LikenessCheck[] = [];
   if (body.image !== undefined) {
     if (!body.image_source) return fail(c, 422, "reference_source_required", "Say where the picture came from (image_source). Only a picture the Stack's image generator made can start a clip.");
+    // The age and surface gate outranks a consent, and a refused request must not use up the proof.
+    if (body.image_source === "household_photo" && (body.audience ?? "all-ages") !== "adult") return fail(c, 403, "likeness_adult_only", "A video that looks like a person is only made for an adult on their own screen. Ask Home to make it from a signed-in adult's chat.");
     if (body.image_source !== "generated" && body.image_source !== "household_photo") return fail(c, 422, "reference_image_refused", "A clip cannot start from an uploaded picture or a photo of a person unless Home confirms the person is a household adult who agreed. Make a picture with the image generator and start the clip from that, or ask Home to animate a photo of someone who agreed.");
     image = decodeImage(body.image);
     if (!image) return fail(c, 422, "bad_image", "The picture could not be read. Send a PNG, JPEG or WebP as base64.");
@@ -163,7 +165,7 @@ videoV1Routes.openapi(postRoute, async (c) => {
     if (body.image_source === "generated") {
       if (!wasGeneratedHere(image)) return fail(c, 422, "reference_not_generated", "That picture was not made by this computer's image generator, so it cannot start a clip. Make a picture with the image generator and start the clip from that, unchanged.");
     } else {
-      try { verifyProof(body.consent_proof, { purpose: "photo", bind: photoBind(image) }); } catch (error) {
+      try { verifyProof(body.consent_proof, { purpose: "photo", bind: photoBind(image), consume: true }); } catch (error) {
         if (error instanceof LikenessError) return fail(c, error.status, error.code, error.message);
         throw error;
       }
@@ -176,6 +178,8 @@ videoV1Routes.openapi(postRoute, async (c) => {
     throw error;
   }
   for (const lora of loras) if (lora.likeness) checks.push(lora.likeness);
+  // The age and surface gate outranks a consent: a clip that looks like a person is for an adult audience only.
+  if (checks.length > 0 && (body.audience ?? "all-ages") !== "adult") return fail(c, 403, "likeness_adult_only", "A video that looks like a person is only made for an adult on their own screen. Ask Home to make it from a signed-in adult's chat.");
   if (!videoGen.hasModels()) return fail(c, 503, "not_installed", "The video model is not installed yet. Install it from Home's Engines page, then try again.");
   if (activeClips() >= VIDEO_QUEUE_MAX) return fail(c, 429, "queue_full", `${VIDEO_QUEUE_MAX} clips are already waiting. Try again when one finishes.`);
   const verdict = memoryVerdict();

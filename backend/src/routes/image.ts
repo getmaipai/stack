@@ -85,7 +85,7 @@ const urlRoute = createRoute({ method: "post", path: "/loras/install", tags: ["I
   url: z.string().openapi({ description: "https://huggingface.co/<owner>/<repo>/resolve/<revision>/<file>.safetensors (a /blob/ link works too). No other host is fetched." }),
   name: z.string(), licence: z.string().optional().openapi({ description: "Left out: read from the repository's card; \"unknown\" when it has none." }), licence_acknowledged: z.boolean().optional(),
   classification: z.enum(LORA_CLASSES).optional(), strength_default: z.number().min(0).max(MAX_LORA_STRENGTH).optional(), trigger_words: z.array(z.string()).optional(), added_by: z.string().optional(),
-  likeness_subject: z.string().max(200).optional().openapi({ description: "LIKENESS-01: the household adult this style looks like, sent with `likeness_proof` (purpose style_import, bound to `name:<name>` or the link)." }), likeness_proof: z.string().max(4096).optional(),
+  likeness_subject: z.string().max(200).optional().openapi({ description: "Refused (422 likeness_file_required): a style of a person is added as a file, not from a link." }), likeness_proof: z.string().max(4096).optional(),
 }) } } } }, responses: {
   202: { content: { "application/json": { schema: z.object({ job: z.string() }) } }, description: "The install job (/stack/v1/jobs/{id}); when done its `result.lora` is the record, when failed its `reason` starts with the code (licence_acknowledgement_required, lora_refused, wrong_base_model, ...)." },
   422: { content: { "application/json": { schema: ErrorBody } }, description: "bad_url: not a huggingface.co file link." },
@@ -179,9 +179,10 @@ imageRoutes.openapi(importRoute, async (c) => {
 
 imageRoutes.openapi(urlRoute, (c) => {
   const body = c.req.valid("json");
-  if (!!body.likeness_subject !== !!body.likeness_proof) return c.json({ error: "A style that looks like a person needs both the person and Home's proof that they agreed.", code: "likeness_proof_required" }, 422);
+  // A style of a person is added from the file itself (its proof is bound to the file's hash), never from a link whose content can change.
+  if (body.likeness_subject || body.likeness_proof) return c.json({ error: "A style that looks like a person has to be added as a file, not from a link. Download it, then add the file.", code: "likeness_file_required" }, 422);
   try {
-    const job = startLoraInstall({ url: body.url, name: body.name, licence: body.licence, licenceAcknowledged: body.licence_acknowledged, classification: body.classification, strengthDefault: body.strength_default, triggerWords: body.trigger_words, addedBy: body.added_by ?? null, ...(body.likeness_subject && body.likeness_proof ? { likeness: { subject: body.likeness_subject, proof: body.likeness_proof } } : {}) });
+    const job = startLoraInstall({ url: body.url, name: body.name, licence: body.licence, licenceAcknowledged: body.licence_acknowledged, classification: body.classification, strengthDefault: body.strength_default, triggerWords: body.trigger_words, addedBy: body.added_by ?? null });
     return c.json({ job: job.id }, 202);
   } catch (error) {
     if (error instanceof LoraError) return c.json({ error: error.message, code: error.code }, 422);
