@@ -8,6 +8,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { basename, join, resolve, sep } from "node:path";
 import { apiRouter, ErrorSchema, idParamSchema } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
+import { warmUp } from "@/lib/warmup";
 import { installCatalogModel, listModels, ModelSourceSchema, refuseUnsafeModelId, removeModel, upsertModel, type CatalogModelLike, type ModelRecord } from "@/lib/modelStore";
 import { readModelManifest } from "@/lib/store/manifests";
 import { modelsRoot } from "@/lib/store/layout";
@@ -109,7 +110,7 @@ modelsRoutes.openapi(pullRoute, (c) => {
     const state = progress.itemState === "stalled" ? "stalled" : "running";
     updateJob(job.id, { completedBytes: progress.completedBytes, totalBytes: progress.totalBytes || model.download.approx_bytes, ...(progress.bytesPerSecond === undefined ? {} : { bytesPerSecond: progress.bytesPerSecond }), ...(nextItems ? { items: nextItems } : {}), state, status: progress.status });
   } })
-    .then((installed) => finishJob(job.id, { ok: true, result: { model: installed.id } }))
+    .then((installed) => { finishJob(job.id, { ok: true, result: { model: installed.id } }); void warmUp("model-install").catch(() => {}); })
     .catch((error) => finishJob(job.id, { ok: false, reason: error instanceof Error ? error.message : String(error) }));
   return c.json({ job: job.id, model: body.id }, 202);
 });

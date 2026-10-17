@@ -11,6 +11,7 @@ import { bumpStackGeneration } from "@/lib/stackGeneration";
 import { emit } from "@/lib/events";
 import { currentEngineTag, ensureEngine } from "@/lib/engineInstall";
 import type { EngineBinaryPin } from "@/lib/engineCatalog";
+import { warmUp } from "@/lib/warmup";
 import { chatEngine, getProcess, restartRole, stopRole } from "@/lib/supervisor";
 import { pendingEngineUpdate } from "@/updates/catalog";
 
@@ -93,7 +94,7 @@ export function stagingPin(name: string, tag: string, target: StagingTarget): En
 export function updateSwapOptions(name: string): EngineSwapOptions {
   const runsChat = CHAT_ENGINES.includes(name as ChatEngine) ? chatEngine() === name : true;
   if (!runsChat) return { emitEvents: false };
-  return { drain: () => stopRole("chat", "Draining for an engine update."), postLoadCheck: async () => { await restartRole("chat"); await getProcess("chat"); return true; }, emitEvents: false };
+  return { drain: () => stopRole("chat", "Draining for an engine update."), postLoadCheck: async () => { await restartRole("chat"); await getProcess("chat"); void warmUp("engine-update").catch(() => {}); return true; }, emitEvents: false };
 }
 async function stageAndSwap(name: string, tag: string, target: StagingTarget): Promise<void> {
   await ensureEngine(stagingPin(name, tag, target), undefined, { activate: false });

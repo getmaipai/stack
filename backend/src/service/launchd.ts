@@ -39,6 +39,8 @@ export function renderLaunchdPlist(binaryPath: string, dataDirectory = serviceDa
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
   <key>ThrottleInterval</key><integer>30</integer>
+  <!-- Interactive: the system never throttles the engines like a background agent (App Nap, timer coalescing). -->
+  <key>ProcessType</key><string>Interactive</string>
   <key>StandardOutPath</key><string>${xml(join(logs, "stack.log"))}</string>
   <key>StandardErrorPath</key><string>${xml(join(logs, "stack.error.log"))}</string>
   <key>EnvironmentVariables</key>

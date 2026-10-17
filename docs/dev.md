@@ -2128,6 +2128,29 @@ bench on the Studio are STUDIO-EVAL-01's job in Home. Follow-ups once
 measured: `--reasoning-budget` as a hard cap on reasoning tokens, the
 repo's `mmproj` for vision, and its DFlash draft model.
 
+## Keep-warm: no cold start for the first chat (STACK-WARM-01, 2026-10-17)
+
+Measured on the Mac Studio (M5 Max, 128 GB, chat Muse Glimmer 30B q4, 19.7 GB): the first chat after install took about 23 s to
+answer "hello", the next reply 1 s, then the memory notice appeared. Cause, from `stack.log`: every role loaded on its first request.
+Chat went `loaded` to `ready` in 17 s, embed in 14 s (100 MB model; the fit dry run plus a first read from disk), the judge in
+15 s, one after another. With the files already in the page cache the same loads take 4.6 s (chat), 0.2 s and 1.0 s. A warm 16 token
+reply takes 0.7 s. So the cost is the first load of 20+ GB from disk plus the first kernel compile, paid by the person.
+
+Design (`lib/warmup.ts`): `warmUp(trigger)` runs at daemon start, after a model install job finishes, after an engine update, and
+on `POST /stack/v1/warmup` (Home calls it when setup ends). It reads the installed roles in `WARM_ORDER` (chat, embed, judge, stt,
+tts), keeps those that fit (`planWarmSet`: running total within the model budget less the tier's working margin, resident bytes
+counted first), loads each through the normal `getProcess` (so the governor still admits it) and sends a one token request that
+primes Metal. A role that does not fit stays on-demand; nothing is evicted for it. State is `GET /stack/v1/warmup`, and a role being
+loaded already reads `loaded` on `GET /stack/v1/roles`, which Home shows as "getting ready" (its Welcome warming-up art).
+The setting `stack.runtime.keep_warm` (default on) makes the idle unload skip the warm set while plugged in; on battery the
+battery idle limit still applies. The launchd unit is `ProcessType` Interactive so the system does not throttle it like a
+background agent.
+
+Cost: the warm set's RAM all the time (about 22 GB chat, 6 GB judge, 0.2 GB embed on the Studio) and the idle power of resident
+models (the GPU is idle between requests; a fan-less laptop will notice the RAM, not the power). Rejected: a periodic completion
+ping, because the chat engine has one slot and a ping would replace the person's cached prompt prefix; the weights stay paged in
+by being resident and unloaded only by the idle rule.
+
 ## Measured so far
 
 On an Apple silicon Mac (2026-09-18, a temporary copy of the owner's

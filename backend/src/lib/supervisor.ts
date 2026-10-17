@@ -1276,8 +1276,9 @@ export async function unloadAllRoles(reason: string): Promise<RoleId[]> {
 /** Drains and unloads a role that has had no request for the declared
  * idle time (shorter on battery); the process is started again by the
  * next request. Returns true when something was unloaded. */
-export async function unloadIdleRole(requested: RoleId, options: { now?: Date; onBattery: boolean; idleMinutes: number; batteryIdleMinutes: number }): Promise<boolean> {
+export async function unloadIdleRole(requested: RoleId, options: { now?: Date; onBattery: boolean; idleMinutes: number; batteryIdleMinutes: number; keep?: RoleId[] }): Promise<boolean> {
   const role = processRoleFor(requested);
+  if (!options.onBattery && options.keep?.includes(role)) return false;
   const current = runtime(role);
   const processRecord = current.process;
   const last = current.lastRealRequestAt;
@@ -1293,7 +1294,7 @@ export async function unloadIdleRole(requested: RoleId, options: { now?: Date; o
   return true;
 }
 
-export async function unloadIdleRoles(options: { now?: Date; onBattery: boolean; idleMinutes: number; batteryIdleMinutes: number }): Promise<RoleId[]> {
+export async function unloadIdleRoles(options: { now?: Date; onBattery: boolean; idleMinutes: number; batteryIdleMinutes: number; keep?: RoleId[] }): Promise<RoleId[]> {
   const unloaded: RoleId[] = [];
   for (const role of runtimes.keys()) if (await unloadIdleRole(role, options)) unloaded.push(role);
   return unloaded;

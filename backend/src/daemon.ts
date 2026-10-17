@@ -10,6 +10,7 @@ import { installSystemdService, startSystemdService, stopSystemdService, systemd
 import { notifySystemd, startSystemdWatchdog } from "@/service/notify";
 import { applyPendingSettings, settingValues } from "@/settings";
 import { setMachineTierFromHardware, stopAllRoles, unloadIdleRoles } from "@/lib/supervisor";
+import { keepWarmEnabled, warmUp, warmedRoles } from "@/lib/warmup";
 import { migrateLegacyEngineTags } from "@/lib/engineInstall";
 import { execFileSync } from "node:child_process";
 import { readMetalCapBytes } from "@/lib/metalCap";
@@ -43,9 +44,11 @@ async function serve(): Promise<void> {
   // watchdog is answered from here on; elsewhere both are no-ops.
   notifySystemd("READY=1");
   const stopWatchdog = startSystemdWatchdog();
+  // Load and prime the roles a first chat needs, now, so nobody meets a cold start.
+  void warmUp("daemon-start").catch(() => {});
   const idle = setInterval(() => {
     const values = settingValues();
-    void unloadIdleRoles({ onBattery: onBattery(), idleMinutes: Number(values["stack.runtime.idle_unload_minutes"] ?? 30), batteryIdleMinutes: Number(values["stack.runtime.idle_unload_on_battery_minutes"] ?? 10) }).catch(() => {});
+    void unloadIdleRoles({ onBattery: onBattery(), idleMinutes: Number(values["stack.runtime.idle_unload_minutes"] ?? 30), batteryIdleMinutes: Number(values["stack.runtime.idle_unload_on_battery_minutes"] ?? 10), keep: keepWarmEnabled() ? warmedRoles() : [] }).catch(() => {});
   }, 60_000);
   (idle as unknown as { unref?: () => void }).unref?.();
   let stopping = false;

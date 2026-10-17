@@ -5784,6 +5784,172 @@
         }
       }
     },
+    "/stack/v1/warmup": {
+      "get": {
+        "tags": [
+          "Warm-up"
+        ],
+        "summary": "The keep-warm state",
+        "responses": {
+          "200": {
+            "description": "Whether the roles a first chat needs are loaded and primed, and which ones were left on-demand and why.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "idle",
+                        "warming",
+                        "ready"
+                      ]
+                    },
+                    "startedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "finishedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "trigger": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "role": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "warming",
+                              "warm",
+                              "skipped",
+                              "failed"
+                            ]
+                          },
+                          "reason": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "ms": {
+                            "type": "integer",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "role",
+                          "state",
+                          "reason",
+                          "ms"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "state",
+                    "startedAt",
+                    "finishedAt",
+                    "trigger",
+                    "roles"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Warm-up"
+        ],
+        "summary": "Warm the roles a first chat needs now",
+        "responses": {
+          "202": {
+            "description": "A warm-up is running (started now, or already under way); poll GET for the end.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "idle",
+                        "warming",
+                        "ready"
+                      ]
+                    },
+                    "startedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "finishedAt": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "trigger": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "role": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "warming",
+                              "warm",
+                              "skipped",
+                              "failed"
+                            ]
+                          },
+                          "reason": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "ms": {
+                            "type": "integer",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "role",
+                          "state",
+                          "reason",
+                          "ms"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "state",
+                    "startedAt",
+                    "finishedAt",
+                    "trigger",
+                    "roles"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/settings": {
       "get": {
         "tags": [
