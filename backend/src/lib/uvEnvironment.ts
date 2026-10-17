@@ -100,6 +100,14 @@ function macosMajor(): number | null {
   return Number.isFinite(major) ? major : null;
 }
 
+/** Copies the requirements file onto the real disk under the environment's root and returns that path. */
+export async function materializeRequirements(root: string, source: string): Promise<string> {
+  mkdirSync(root, { recursive: true });
+  const target = join(root, "requirements.txt");
+  writeFileSync(target, await Bun.file(source).text());
+  return target;
+}
+
 async function buildUvEnvironment(spec: UvEnvironmentSpec, onProgress: (phase: string) => void, options: { signal?: AbortSignal }): Promise<void> {
   if (!spec.requirements) throw new Error(`No hashed requirements file for ${process.platform} ${process.arch} yet; the ${spec.name} environment cannot be built on this machine.`);
   const macos = macosMajor();
@@ -116,7 +124,10 @@ async function buildUvEnvironment(spec: UvEnvironmentSpec, onProgress: (phase: s
   onProgress("python");
   await run([uv, "venv", venv, "--python", MANAGED_PYTHON], env, options.signal);
   onProgress("packages");
-  await run([uv, "pip", "sync", "--python", uvVenvPython(spec.root), "--require-hashes", spec.requirements], env, options.signal);
+  // In the compiled daemon the requirements file lives in Bun's virtual
+  // filesystem (/$bunfs/...), which uv cannot open: write it to disk first.
+  const requirements = await materializeRequirements(spec.root, spec.requirements);
+  await run([uv, "pip", "sync", "--python", uvVenvPython(spec.root), "--require-hashes", requirements], env, options.signal);
   if (!existsSync(spec.proof)) throw new Error(`The ${spec.name} environment built but ${spec.proof.split("/").pop()} is not in it.`);
   writeFileSync(join(spec.root, ENV_READY_MARKER), new Date().toISOString());
   // An engine whose archive wrote the manifest keeps it; an environment
