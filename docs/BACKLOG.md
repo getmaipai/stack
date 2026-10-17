@@ -355,6 +355,21 @@ are never copied. Nothing migrates Home until STACK-16.
   the projector of any bound model that declares one. Nothing changes until
   the file is pulled: without it the launch is text only, as before.
   Tests: `museVision`, `installPlan`, `chatVision`, `modelStore`.
+- [x] **VISION-03f (S): an installed model takes on what its pin declares, and chat restarts when its projector arrives.**
+  Found 2026-10-17 on a scratch Stack built from the Studio's own database:
+  the Muse record installed before VISION-03a had no `imageInput`, and the
+  install plan skips an installed model, so pulling the projector alone left
+  chat text only (`imageInput: false`, no `--mmproj`). Now
+  `reconcilePinDeclarations` copies a pin's `component`, `imageInput`,
+  `launch` and `sampling` onto the installed record of the same id,
+  revision and sha256 at daemon start and when a projector finishes
+  installing, and `restartForNewProjector` restarts a chat process that
+  started text-only so the next message reads pictures (a process that did
+  load its projector is left alone). Measured on the scratch Stack with the
+  Studio's record and the real projector: keep-warm launches with
+  `--mmproj ... --image-max-tokens 2560`, the role row reads
+  `imageInput: true`, `picture_tokens_max` 2560. Tests:
+  `museProjectorReconcile`.
 - [x] **STACK-04: the model store.** Provenance-gated records, the HF
   cache layout, engine tag layout with the `current` link, manifests
   with blob references and orphan grace, ranged resumable downloads,

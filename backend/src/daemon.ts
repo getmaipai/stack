@@ -12,6 +12,8 @@ import { applyPendingSettings, settingValues } from "@/settings";
 import { setMachineTierFromHardware, stopAllRoles, unloadIdleRoles } from "@/lib/supervisor";
 import { keepWarmEnabled, warmUp, warmedRoles } from "@/lib/warmup";
 import { migrateLegacyEngineTags } from "@/lib/engineInstall";
+import { reconcilePinDeclarations } from "@/lib/modelStore";
+import { STACK_MODELS } from "@/lib/modelCatalog";
 import { ddgsSupervisor } from "@/search/ddgsSidecar";
 import { execFileSync } from "node:child_process";
 import { readMetalCapBytes } from "@/lib/metalCap";
@@ -31,6 +33,8 @@ async function serve(): Promise<void> {
   logger.installConsoleMirror();
   for (const moved of migrateLegacyEngineTags()) console.log(`Renamed engine ${moved.name} ${moved.from} to ${moved.to}.`);
   applyPendingSettings();
+  // An installed model gets what its pin now declares (picture input) before anything launches.
+  for (const id of reconcilePinDeclarations(STACK_MODELS)) console.log(`Updated the record of ${id} to match its pin.`);
   // The governor's working margin follows the machine's tier from here on.
   const { tier, stop: stopTierWatch } = await setMachineTierFromHardware();
   void readMetalCapBytes().then((bytes) => {

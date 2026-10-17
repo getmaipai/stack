@@ -345,6 +345,35 @@ export function packageDirectoryName(archivePath: string): string {
   return stripped === name ? `${name}.extracted` : stripped;
 }
 
+/** VISION-03f: what a pin declares about a file (its component kind,
+ * picture input with the projector's id, its own launch settings, its
+ * card's sampling) is copied onto an installed record of that exact file
+ * (same id, revision and sha256). A record installed before the pin
+ * declared them (Muse Glimmer was installed on 2026-10-17 before its
+ * projector was pinned) would otherwise stay text-only forever: the
+ * install plan skips an installed model, so nothing else re-registers it.
+ * Only the four declared fields are written, only when they differ, and
+ * only for the same bytes; nothing else on the record changes. Returns
+ * the ids it updated. */
+export function reconcilePinDeclarations(pins: readonly CatalogModelLike[], now = new Date().toISOString()): string[] {
+  const updated: string[] = [];
+  for (const pin of pins) {
+    const sha = pin.download?.sha256?.toLowerCase();
+    const record = getModel(pin.id);
+    if (!record || !sha || record.sha256?.toLowerCase() !== sha || record.revision !== pin.revision) continue;
+    const declared: Record<string, unknown> = {};
+    if (pin.component) declared.component = pin.component;
+    if (pin.imageInput) declared.imageInput = pin.imageInput;
+    if (pin.launch) declared.launch = pin.launch;
+    if (pin.sampling) declared.sampling = pin.sampling;
+    const differs = Object.entries(declared).some(([key, value]) => JSON.stringify(record.engineRequirements[key]) !== JSON.stringify(value));
+    if (!differs) continue;
+    upsertModel({ ...record, engineRequirements: { ...record.engineRequirements, ...declared } }, now);
+    updated.push(pin.id);
+  }
+  return updated;
+}
+
 /** A record that is a component of a role's engine, not a model. */
 export function isComponent(record: ModelRecord): boolean {
   return typeof record.engineRequirements.component === "string";

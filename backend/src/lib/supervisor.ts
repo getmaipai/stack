@@ -95,6 +95,9 @@ export interface RoleProcess {
   /** VISION-02b: the process was launched with its projector and reads
    * pictures; false for a text-only launch. */
   imageInput?: boolean;
+  /** The process was launched with a projector (whether or not the
+   * picture check then passed); false for a text-only launch. */
+  projectorLoaded?: boolean;
   /** The most tokens one picture takes in this process (the record's
    * declared --image-max-tokens), when it reads pictures. */
   pictureTokensMax?: number | null;
@@ -1041,7 +1044,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     resolveHealth(`post-load-check-failed.${role}`);
     const loadedRevision = plan.kind === "managed" && !GENERATOR_ROLES.includes(role) ? (plan.engine === "chatterbox-turbo" ? model.revision : loadedWeightsRepo()?.revision) ?? null : null;
     const processRecord: RoleProcess = {
-      role, kind: plan.kind, client, identity, engine: plan.engine, contextLength: plan.contextLength, slots: plan.slots, contextScope: plan.contextScope, modelId: model.id, modelRevision: loadedRevision ?? model.revision, imageInput: readsPictures, pictureTokensMax: readsPictures ? plan.pictureTokensMax ?? null : null, pid: handle.pid, port, activeRequests: 0, retired: false,
+      role, kind: plan.kind, client, identity, engine: plan.engine, contextLength: plan.contextLength, slots: plan.slots, contextScope: plan.contextScope, modelId: model.id, modelRevision: loadedRevision ?? model.revision, imageInput: readsPictures, projectorLoaded: plan.imageInput === true, pictureTokensMax: readsPictures ? plan.pictureTokensMax ?? null : null, pid: handle.pid, port, activeRequests: 0, retired: false,
       governorHandle: admission,
       stopGovernor: watchProcessMemory(role, handle.pid, keepsFootprint ? { modelId: model.id, contextLength } : undefined),
       stop: async () => { handle.kill(); await handle.exited; },
@@ -1282,6 +1285,26 @@ async function retire(processRecord: RoleProcess): Promise<void> {
   while (processRecord.activeRequests > 0) await new Promise((resolve) => setTimeout(resolve, 10));
   await processRecord.stop();
   if (processRecord.governorHandle) release(processRecord.governorHandle);
+}
+
+/** VISION-03f: a chat process that started text-only (its projector was
+ * not installed yet, or its record did not declare one) is restarted once
+ * the projector is installed and verified, so the next message reads
+ * pictures without anyone restarting the Stack. A process that did load
+ * its projector is left alone, even when its picture check failed (that
+ * has its own health item and a restart action). Returns the roles
+ * restarted. */
+export async function restartForNewProjector(): Promise<RoleId[]> {
+  const restarted: RoleId[] = [];
+  for (const role of ["chat"] as RoleId[]) {
+    const running = runtime(role).process;
+    const model = selectedModel(role);
+    if (!running || running.retired || running.projectorLoaded === true || !model || running.modelId !== model.id) continue;
+    if (!launchProjectorFor(role, model)) continue;
+    await restartRole(role);
+    restarted.push(role);
+  }
+  return restarted;
 }
 
 export async function restartRole(requested: RoleId): Promise<void> {
