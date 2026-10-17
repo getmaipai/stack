@@ -11,6 +11,7 @@ import { CHAT_ENGINES, ENGINE_BINARIES, ENGINE_READY_MARKER, engineRole, MANAGED
 import { ensurePocketTtsEnvironment, pocketTtsInstalled, pocketTtsRoot, POCKET_TTS_NAME } from "@/speech/pocketTts";
 import { ensureMlxAudioEnvironment, mlxAudioInstalled, mlxAudioRoot, MLX_AUDIO_NAME } from "@/speech/mlxAudio";
 import { comfyuiInstalled, comfyuiRoot, COMFYUI_NAME, ensureComfyuiEnvironment } from "@/generators/comfyui";
+import { ensureVideoGenEnvironment, videoGen, videoGenEnvironmentReady, videoGenRoot, VIDEO_GEN_NAME } from "@/video/videoGen";
 import { engineDir, engineIsBound, ensureEngine, removeEngine } from "@/lib/engineInstall";
 import { readEngineManifest } from "@/lib/store/manifests";
 import { currentEngine, stagingPin, swapEngine } from "@/updates/engines";
@@ -67,9 +68,9 @@ enginesRoutes.openapi(listRoute, async (c) => {
   // on every platform, installed when the environment is built.
   const managed = MANAGED_RUNTIMES.map((runtime) => {
     const status = getRoleStatus(engineRole(runtime.name));
-    const installed = runtime.name === POCKET_TTS_NAME ? pocketTtsInstalled() : runtime.name === MLX_AUDIO_NAME ? mlxAudioInstalled() : runtime.name === COMFYUI_NAME ? comfyuiInstalled() : false;
+    const installed = runtime.name === POCKET_TTS_NAME ? pocketTtsInstalled() : runtime.name === MLX_AUDIO_NAME ? mlxAudioInstalled() : runtime.name === COMFYUI_NAME ? comfyuiInstalled() : runtime.name === VIDEO_GEN_NAME ? videoGenEnvironmentReady() : false;
     const version = deriveEngineVersionState({ running: status.identity?.build ?? null, currentTag: installed ? runtime.version : null, newestTag: runtime.version, needsRestart: false });
-    return { id: `${runtime.name}-${runtime.version}`, name: runtime.name, label: `${runtime.name} ${runtime.version}, an environment the Stack assembles through uv`, platform: process.platform, arch: process.arch, verified: true, installed, matchesThisMachine: true, ...version, directory: runtime.name === POCKET_TTS_NAME ? pocketTtsRoot() : runtime.name === MLX_AUDIO_NAME ? mlxAudioRoot() : runtime.name === COMFYUI_NAME ? comfyuiRoot() : "", roleState: status.state, roleReason: status.reason };
+    return { id: `${runtime.name}-${runtime.version}`, name: runtime.name, label: `${runtime.name} ${runtime.version}, an environment the Stack assembles through uv`, platform: process.platform, arch: process.arch, verified: true, installed, matchesThisMachine: true, ...version, directory: runtime.name === POCKET_TTS_NAME ? pocketTtsRoot() : runtime.name === MLX_AUDIO_NAME ? mlxAudioRoot() : runtime.name === COMFYUI_NAME ? comfyuiRoot() : runtime.name === VIDEO_GEN_NAME ? videoGenRoot() : "", roleState: status.state, roleReason: status.reason };
   });
   return c.json({ engines: [...pins, ...managed] }, 200);
 });
@@ -110,24 +111,26 @@ enginesRoutes.openapi(installRoute, async (c) => {
     return c.json({ job: job.id, engine: MLX_AUDIO_NAME, staged: false }, 202);
   }
   if (!ENGINE_BINARIES.some((candidate) => candidate.name === name)) return c.json({ error: `Unknown engine ${name}.` }, 404);
-  if (name === COMFYUI_NAME && !staged) {
+  if ((name === COMFYUI_NAME || name === VIDEO_GEN_NAME) && !staged) {
     // The source archive (a pinned engine build, checksummed), then the
-    // environment on top of it, one job; a second request joins it.
-    const inFlight = environmentJobs.get(COMFYUI_NAME);
-    if (inFlight) return c.json({ job: inFlight, engine: COMFYUI_NAME, staged: false }, 202);
+    // environment on top of it, one job; a second request joins it. The
+    // video engine (mlx-video's source and its Python environment) builds
+    // the same way; its models are pulled separately, as image's are.
+    const inFlight = environmentJobs.get(name);
+    if (inFlight) return c.json({ job: inFlight, engine: name, staged: false }, 202);
     const hardware = await detectHardware();
-    const pin = selectEngineBinary(hardware, COMFYUI_NAME);
+    const pin = selectEngineBinary(hardware, name);
     if (!pin) return c.json({ error: `No pinned ${name} build for this machine.` }, 404);
     const archives = [pin.archive, ...(pin.extraArchives ?? [])];
     const items = archives.map((archive) => ({ id: archive.label, label: archive.label, completedBytes: 0, totalBytes: archive.approxBytes, state: "queued" as const }));
     const totalBytes = items.reduce((sum, item) => sum + item.totalBytes, 0);
     const job = createJob({ kind: "engine.install", totalBytes, items, status: "downloading", input: { engine: pin.id } });
-    environmentJobs.set(COMFYUI_NAME, job.id);
+    environmentJobs.set(name, job.id);
     void ensureEngine(pin, (progress) => { const nextItems = getJob(job.id)?.items?.map((item) => item.id !== progress.itemId ? item : { ...item, completedBytes: progress.itemCompletedBytes ?? progress.completedBytes, state: progress.itemState ?? "running" }); updateJob(job.id, { completedBytes: progress.completedBytes, totalBytes: progress.totalBytes || totalBytes, ...(progress.bytesPerSecond === undefined ? {} : { bytesPerSecond: progress.bytesPerSecond }), ...(nextItems ? { items: nextItems } : {}), state: progress.itemState === "stalled" ? "stalled" : "running", status: progress.status }); }, { signal: jobSignal(job.id), activate: true })
-      .then(() => ensureComfyuiEnvironment((phase) => updateJob(job.id, { status: `building ${phase}` }), { signal: jobSignal(job.id) }))
-      .then(() => { finishJob(job.id, { ok: true, result: { engine: COMFYUI_NAME } }); emit({ id: "engine.state", data: { engine: COMFYUI_NAME, state: "installed" } }); })
+      .then(() => (name === COMFYUI_NAME ? ensureComfyuiEnvironment : ensureVideoGenEnvironment)((phase) => updateJob(job.id, { status: `building ${phase}` }), { signal: jobSignal(job.id) }))
+      .then(() => { finishJob(job.id, { ok: true, result: { engine: name } }); emit({ id: "engine.state", data: { engine: name, state: "installed" } }); })
       .catch((error) => finishJob(job.id, { ok: false, reason: error instanceof Error ? error.message : String(error) }))
-      .finally(() => { environmentJobs.delete(COMFYUI_NAME); });
+      .finally(() => { environmentJobs.delete(name); });
     return c.json({ job: job.id, engine: pin.id, staged: false }, 202);
   }
   const hardware = await detectHardware();
@@ -165,6 +168,11 @@ function unchosenChatEngine(name: string, options: { stoppable?: boolean } = {})
 for (const action of ["start", "stop", "restart"] as const) enginesRoutes.openapi(controlRoute(action), async (c) => {
   const { name } = c.req.valid("param");
   if (!ENGINE_BINARIES.some((pin) => pin.name === name) && !MANAGED_RUNTIMES.some((runtime) => runtime.name === name)) return c.json({ error: "Unknown engine" }, 404);
+  // The video worker is the video service's, started by the first clip and stopped after ten idle minutes.
+  if (name === VIDEO_GEN_NAME) {
+    if (action === "stop" || action === "restart") { videoGen.stop(); return c.json({ ok: true }, 200); }
+    return c.json({ ok: true, reason: "The video engine starts by itself when a clip is made." }, 200);
+  }
   const role = engineRole(name);
   const unchosen = unchosenChatEngine(name, { stoppable: action === "stop" });
   if (unchosen) return c.json({ ok: false, reason: unchosen }, 200);

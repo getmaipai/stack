@@ -14,6 +14,7 @@ import { dataDir } from "@/lib/paths";
 import { ensureUvEnvironment, managedEnv, uvEnvironmentReady, uvVenvPython, type UvEnvironmentSpec } from "@/lib/uvEnvironment";
 import type { EngineClient } from "@/lib/supervisor";
 import type { Job, JobMemory, JobProgress } from "@/lib/jobs";
+import { recordGeneratedImage } from "@/video/provenance";
 import darwinArm64Requirements from "./comfyui.darwin-arm64.requirements.txt" with { type: "file" };
 
 export const COMFYUI_NAME = "comfyui";
@@ -167,7 +168,10 @@ export async function renderImage(client: EngineClient, checkpoint: string, job:
       for (const image of images) {
         const view = await client.raw(`/view?filename=${encodeURIComponent(image.filename)}&subfolder=${encodeURIComponent(image.subfolder)}&type=${encodeURIComponent(image.type)}`, { method: "GET" }, signal);
         if (!view.ok) throw new Error(`The engine could not hand back ${image.filename} (HTTP ${view.status}).`);
-        results.push({ b64_json: Buffer.from(await view.arrayBuffer()).toString("base64"), seed });
+        const bytes = Buffer.from(await view.arrayBuffer());
+        // A picture the Stack made may later start a clip; a photo someone brought may not (VIDEO-GEN-12).
+        recordGeneratedImage(bytes);
+        results.push({ b64_json: bytes.toString("base64"), seed });
       }
       return { images: results };
     }

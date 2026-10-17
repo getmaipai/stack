@@ -134,7 +134,7 @@ export const ROLES = {
     label: "Video",
     wire: "job",
     residency: "jit",
-    endpoints: [],
+    endpoints: ["/v1/videos/generations"],
     quality: ["fast", "everyday", "best"],
   },
   music: {

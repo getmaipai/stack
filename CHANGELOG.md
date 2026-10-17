@@ -19,6 +19,11 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Added
 
+- Video generation (VIDEO-GEN-01 to 03): `POST /v1/videos/generations` makes a 5 s, 832 x 480, 24 fps clip (text to video, or picture to video) with
+  Wan2.2 TI2V-5B FastWan on mlx-video, in about 132 s on an M5 Max with a 44.1 GB peak, on tiers p64 and p128 only. A job API with progress by phase,
+  cancel, 202 past the deadline, and the clip (H.264 mp4 and a JPEG poster) fetched by URL; one on-demand worker that exits after ten idle minutes;
+  pinned weights, tokenizer and mlx-video source; a household LoRA library (`/stack/v1/video/loras`) with hash, licence and all-ages or adult-only
+  class; a reference picture must be one this Stack generated. `GET /stack/v1/video` reports state, limits and what to install.
 - Image tools (IMAGETOOLS-01): `POST /v1/images/edits` removes a background (Apple's on-device foreground finder on a Mac, IS-Net ONNX elsewhere),
   erases an object under a mask (Big-LaMa), upscales 2x or 4x (Real-ESRGAN general x4v3) and resizes, on a picture the person already has. One
   on-demand worker in a managed Python environment (onnxruntime, no torch) that exits when idle; three pinned ONNX models (389 MB) in the install

@@ -62,9 +62,9 @@ export const PRIVACY_ROWS: PrivacyRow[] = [
   },
   {
     id: "tts-environment",
-    what: "Building a Python engine's environment (the packages the voice engines, Pocket TTS and the MLX voice, ComfyUI, the web search service and the image tools run on)",
-    when: "Only when the Stack starts and the search service is not built yet, when Home installs the voice or image engine, on the first image edit (remove background, erase, upscale), and again when the Stack updates it",
-    carries: "The names of the pinned packages and their hashes; uv, the tool that fetches them, comes from GitHub and sends nothing else",
+    what: "Building a Python engine's environment (the packages the voice engines, Pocket TTS and the MLX voice, ComfyUI, the web search service, the image tools and the video engine run on)",
+    when: "Only when the Stack starts and the search service is not built yet, when Home installs the voice or image engine, on the first image edit (remove background, erase, upscale), when Home installs the video engine or the first clip is made, and again when the Stack updates it",
+    carries: "The names of the pinned packages and their hashes; uv, the tool that fetches them, comes from GitHub and sends nothing else. The video engine's source (mlx-video, pinned by commit and checksum) comes from GitHub the same way",
     receiver: "The Python Package Index, straight from this computer, and GitHub for the uv build",
     setting: null,
     hosts: ["pypi.org", "files.pythonhosted.org", "github.com", "docs.astral.sh"],

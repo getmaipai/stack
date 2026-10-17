@@ -1588,6 +1588,878 @@
         }
       }
     },
+    "/v1/videos/generations": {
+      "post": {
+        "tags": [
+          "Video"
+        ],
+        "summary": "Make a clip (the job API with a wait)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "description": "Accepted for symmetry with the other job routes; this route always serves the video role.",
+                    "example": "video"
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  },
+                  "negative_prompt": {
+                    "type": "string",
+                    "maxLength": 4000,
+                    "description": "Accepted. The distilled FastWan model runs without guidance, so it has no effect on the clip."
+                  },
+                  "image": {
+                    "type": "string",
+                    "description": "Image to video: the first frame, base64 (a data: URL is fine), PNG, JPEG or WebP, at most 20 MB. Needs image_source."
+                  },
+                  "image_source": {
+                    "type": "string",
+                    "enum": [
+                      "generated",
+                      "uploaded"
+                    ],
+                    "description": "Where the picture came from, as Home knows it. Only `generated` is accepted, and only for a picture this Stack's own image generator produced (or the poster of one of its clips): the Stack checks the picture's hash. `uploaded` is refused for everyone until a check for \"no identifiable real person\" exists (VIDEO-GEN-12)."
+                  },
+                  "size": {
+                    "type": "string",
+                    "pattern": "^\\d{3,4}x\\d{3,4}$",
+                    "description": "<width>x<height>, multiples of 32, each side at least 256, area at most 399360 pixels (832x480; 480x832 also fits). Default 832x480.",
+                    "example": "832x480"
+                  },
+                  "seconds": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5,
+                    "description": "Whole seconds, 1 to 5 per tier (24 frames a second plus the first frame). Default 5."
+                  },
+                  "seed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295
+                  },
+                  "loras": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "maxLength": 40
+                        },
+                        "strength": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 2
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ]
+                    },
+                    "maxItems": 4,
+                    "description": "LoRAs from the household library (GET /stack/v1/video/loras) to apply, by id, with a strength of 0 to 2 (the record's default when left out). Home decides which ids this caller may name."
+                  },
+                  "audience": {
+                    "type": "string",
+                    "enum": [
+                      "all-ages",
+                      "adult"
+                    ],
+                    "description": "Who the clip is for, set by Home from the person's age band and the surface. Default all-ages. An adult-only LoRA in the list with audience all-ages is refused (422 lora_not_allowed)."
+                  },
+                  "timeout_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true,
+                    "maximum": 1800000,
+                    "description": "How long this request waits for the clip before answering 202 with the job id. Default 30000. A clip takes about two to three minutes."
+                  }
+                },
+                "required": [
+                  "prompt"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The clip is ready; `data[0].url` is where to fetch it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "description": "GET this for the mp4 (H.264, yuv420p, 24 fps, no sound). Supports Range requests."
+                          },
+                          "poster_url": {
+                            "type": "string",
+                            "description": "GET this for the JPEG of frame 0."
+                          },
+                          "content_type": {
+                            "type": "string",
+                            "enum": [
+                              "video/mp4"
+                            ]
+                          },
+                          "width": {
+                            "type": "integer"
+                          },
+                          "height": {
+                            "type": "integer"
+                          },
+                          "frames": {
+                            "type": "integer"
+                          },
+                          "fps": {
+                            "type": "integer"
+                          },
+                          "seconds": {
+                            "type": "integer"
+                          },
+                          "seed": {
+                            "type": "integer"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "text-to-video",
+                              "image-to-video"
+                            ]
+                          },
+                          "lora_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "ms": {
+                            "type": "integer"
+                          },
+                          "bytes": {
+                            "type": "integer"
+                          },
+                          "poster_bytes": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "poster_url",
+                          "content_type",
+                          "width",
+                          "height",
+                          "frames",
+                          "fps",
+                          "seconds",
+                          "seed",
+                          "model",
+                          "mode",
+                          "lora_ids",
+                          "ms",
+                          "bytes",
+                          "poster_bytes"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "job",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Still going past timeout_ms (`data` is empty); poll GET /v1/videos/generations/{job}.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "description": "GET this for the mp4 (H.264, yuv420p, 24 fps, no sound). Supports Range requests."
+                          },
+                          "poster_url": {
+                            "type": "string",
+                            "description": "GET this for the JPEG of frame 0."
+                          },
+                          "content_type": {
+                            "type": "string",
+                            "enum": [
+                              "video/mp4"
+                            ]
+                          },
+                          "width": {
+                            "type": "integer"
+                          },
+                          "height": {
+                            "type": "integer"
+                          },
+                          "frames": {
+                            "type": "integer"
+                          },
+                          "fps": {
+                            "type": "integer"
+                          },
+                          "seconds": {
+                            "type": "integer"
+                          },
+                          "seed": {
+                            "type": "integer"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "text-to-video",
+                              "image-to-video"
+                            ]
+                          },
+                          "lora_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "ms": {
+                            "type": "integer"
+                          },
+                          "bytes": {
+                            "type": "integer"
+                          },
+                          "poster_bytes": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "poster_url",
+                          "content_type",
+                          "width",
+                          "height",
+                          "frames",
+                          "fps",
+                          "seconds",
+                          "seed",
+                          "model",
+                          "mode",
+                          "lora_ids",
+                          "ms",
+                          "bytes",
+                          "poster_bytes"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "job",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The reference picture is larger than 20 MB.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request cannot be done: bad_size, bad_image, reference_source_required, reference_image_refused, reference_not_generated, unknown_lora, wrong_base_model, lora_not_allowed, too_many_loras, bad_strength; `error` says what to change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Four clips are already waiting; try again when one finishes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "The job was cancelled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The clip failed (failed, worker_stopped).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Video is off on this computer (not_available_on_this_computer, unsupported), not installed (not_installed), or there is no free memory for it (no_memory).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The clip took longer than 15 minutes and was stopped.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/videos/generations/{job}": {
+      "get": {
+        "tags": [
+          "Video"
+        ],
+        "summary": "A clip's state, progress and files",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Poll this every second or two while state is queued or running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "done",
+                        "failed",
+                        "cancelled"
+                      ]
+                    },
+                    "phase": {
+                      "type": "string",
+                      "description": "queued, waiting for memory, starting, setting up (first clip only), loading, rendering, decoding, encoding, ready; failed or cancelled when it ended so."
+                    },
+                    "progress": {
+                      "type": "integer",
+                      "description": "0 to 100 over the whole clip, weighted by where the time goes (decoding is most of it)."
+                    },
+                    "phase_progress": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "0 to 100 inside the current phase, when the phase has one."
+                    },
+                    "position": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Place in line while queued (1 is next)."
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "code": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "description": "GET this for the mp4 (H.264, yuv420p, 24 fps, no sound). Supports Range requests."
+                          },
+                          "poster_url": {
+                            "type": "string",
+                            "description": "GET this for the JPEG of frame 0."
+                          },
+                          "content_type": {
+                            "type": "string",
+                            "enum": [
+                              "video/mp4"
+                            ]
+                          },
+                          "width": {
+                            "type": "integer"
+                          },
+                          "height": {
+                            "type": "integer"
+                          },
+                          "frames": {
+                            "type": "integer"
+                          },
+                          "fps": {
+                            "type": "integer"
+                          },
+                          "seconds": {
+                            "type": "integer"
+                          },
+                          "seed": {
+                            "type": "integer"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "text-to-video",
+                              "image-to-video"
+                            ]
+                          },
+                          "lora_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "ms": {
+                            "type": "integer"
+                          },
+                          "bytes": {
+                            "type": "integer"
+                          },
+                          "poster_bytes": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "poster_url",
+                          "content_type",
+                          "width",
+                          "height",
+                          "frames",
+                          "fps",
+                          "seconds",
+                          "seed",
+                          "model",
+                          "mode",
+                          "lora_ids",
+                          "ms",
+                          "bytes",
+                          "poster_bytes"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "state",
+                    "phase",
+                    "progress",
+                    "phase_progress",
+                    "position",
+                    "error",
+                    "code",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such job (it expired or never existed).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Video"
+        ],
+        "summary": "Cancel a clip, or delete a finished one's files",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A queued or running clip is cancelled (the worker stops and its memory returns); a finished clip's files are deleted (Home calls this once it has stored the file).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "cancelled",
+                        "deleted",
+                        "failed"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "state"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such job.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/videos/generations/{job}/video.mp4": {
+      "get": {
+        "tags": [
+          "Video"
+        ],
+        "summary": "The finished clip (Range requests supported)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The mp4.",
+            "content": {
+              "video/mp4": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "A byte range of the mp4.",
+            "content": {
+              "video/mp4": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The clip is gone: results are kept for a day, or Home deleted it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/videos/generations/{job}/poster.jpg": {
+      "get": {
+        "tags": [
+          "Video"
+        ],
+        "summary": "The poster frame",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The JPEG of frame 0.",
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The poster is gone.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/roles": {
       "get": {
         "tags": [
@@ -6534,6 +7406,916 @@
                   },
                   "required": [
                     "image_tools"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/video": {
+      "get": {
+        "tags": [
+          "Video"
+        ],
+        "summary": "The video role's state, limits, and what to install",
+        "responses": {
+          "200": {
+            "description": "Additive. Home enables the video control from `available` and `state`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "video": {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "unsupported",
+                            "off",
+                            "not-installed",
+                            "needs-setup",
+                            "building",
+                            "idle",
+                            "running"
+                          ],
+                          "description": "off: this computer's tier does not run video. not-installed: the model files are missing. needs-setup: installed; the first clip builds the environment (first time only) and starts the worker. idle: the worker is up and waits ten minutes for the next clip, then exits. running: a clip is in progress."
+                        },
+                        "phase": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "available": {
+                          "type": "boolean"
+                        },
+                        "code": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "reason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "tier": {
+                          "type": "string"
+                        },
+                        "memory": {
+                          "type": "object",
+                          "properties": {
+                            "fits": {
+                              "type": "boolean"
+                            },
+                            "reason": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "peak_gb": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "fits",
+                            "reason",
+                            "peak_gb"
+                          ],
+                          "description": "Whether a clip could be admitted next to what is resident now."
+                        },
+                        "model": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "installed": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "installed"
+                          ]
+                        },
+                        "limits": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              }
+                            ]
+                          }
+                        },
+                        "loras_supported": {
+                          "type": "boolean"
+                        },
+                        "lora_count": {
+                          "type": "integer"
+                        },
+                        "audio": {
+                          "type": "boolean"
+                        },
+                        "negative_prompt": {
+                          "type": "string"
+                        },
+                        "reference_images": {
+                          "type": "object",
+                          "properties": {
+                            "generated": {
+                              "type": "boolean"
+                            },
+                            "uploaded": {
+                              "type": "boolean"
+                            },
+                            "reason": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "generated",
+                            "uploaded",
+                            "reason"
+                          ]
+                        },
+                        "worker": {
+                          "type": "object",
+                          "properties": {
+                            "alive": {
+                              "type": "boolean"
+                            },
+                            "idle_exit_seconds": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "alive",
+                            "idle_exit_seconds"
+                          ]
+                        },
+                        "environment": {
+                          "type": "object",
+                          "properties": {
+                            "engine": {
+                              "type": "string"
+                            },
+                            "version": {
+                              "type": "string"
+                            },
+                            "source": {
+                              "type": "boolean"
+                            },
+                            "ready": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "engine",
+                            "version",
+                            "source",
+                            "ready"
+                          ]
+                        },
+                        "install": {
+                          "type": "object",
+                          "properties": {
+                            "models": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "role": {
+                                    "type": "string"
+                                  },
+                                  "repo": {
+                                    "type": "string"
+                                  },
+                                  "url": {
+                                    "type": "string"
+                                  },
+                                  "sha256": {
+                                    "type": "string"
+                                  },
+                                  "approx_bytes": {
+                                    "type": "integer"
+                                  },
+                                  "licence": {
+                                    "type": "string"
+                                  },
+                                  "revision": {
+                                    "type": "string"
+                                  },
+                                  "engine": {
+                                    "type": "string"
+                                  },
+                                  "archive": {
+                                    "type": "boolean"
+                                  },
+                                  "hub_file": {
+                                    "type": "string"
+                                  },
+                                  "component": {
+                                    "type": "string"
+                                  },
+                                  "starter": {
+                                    "type": "boolean"
+                                  },
+                                  "installed": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "role",
+                                  "url",
+                                  "sha256",
+                                  "approx_bytes",
+                                  "licence",
+                                  "revision",
+                                  "starter",
+                                  "installed"
+                                ]
+                              }
+                            },
+                            "remaining_bytes": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "models",
+                            "remaining_bytes"
+                          ],
+                          "description": "The pinned models to pull (POST /stack/v1/models, shaped as an install-plan model) and how many bytes are still to come."
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "phase",
+                        "available",
+                        "code",
+                        "reason",
+                        "tier",
+                        "memory",
+                        "model",
+                        "limits",
+                        "loras_supported",
+                        "lora_count",
+                        "audio",
+                        "negative_prompt",
+                        "reference_images",
+                        "worker",
+                        "environment",
+                        "install"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "video"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/video/loras": {
+      "get": {
+        "tags": [
+          "Video"
+        ],
+        "summary": "The household LoRA library",
+        "responses": {
+          "200": {
+            "description": "Every LoRA with its hash, licence, classification and default strength.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "loras": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "file": {
+                            "type": "string"
+                          },
+                          "sha256": {
+                            "type": "string"
+                          },
+                          "bytes": {
+                            "type": "integer"
+                          },
+                          "rank": {
+                            "type": "integer"
+                          },
+                          "modules": {
+                            "type": "integer"
+                          },
+                          "base_model": {
+                            "type": "string",
+                            "enum": [
+                              "wan2.2-ti2v-5b"
+                            ]
+                          },
+                          "licence": {
+                            "type": "string"
+                          },
+                          "licence_class": {
+                            "type": "string",
+                            "enum": [
+                              "free",
+                              "acknowledged"
+                            ]
+                          },
+                          "source_url": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "classification": {
+                            "type": "string",
+                            "enum": [
+                              "all-ages",
+                              "adult-only"
+                            ]
+                          },
+                          "classification_note": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "strength_default": {
+                            "type": "number"
+                          },
+                          "trigger_words": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "added_by": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "added_at": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "file",
+                          "sha256",
+                          "bytes",
+                          "rank",
+                          "modules",
+                          "base_model",
+                          "licence",
+                          "licence_class",
+                          "source_url",
+                          "classification",
+                          "classification_note",
+                          "strength_default",
+                          "trigger_words",
+                          "added_by",
+                          "added_at"
+                        ]
+                      }
+                    },
+                    "base_model": {
+                      "type": "string"
+                    },
+                    "max_per_clip": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "loras",
+                    "base_model",
+                    "max_per_clip"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Video"
+        ],
+        "summary": "Add a LoRA to the library",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "Instead of `file`: a .safetensors file already on the Stack's own computer."
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "licence": {
+                    "type": "string",
+                    "description": "The licence as the source states it (apache-2.0, mit, cc0-1.0 import freely; any other needs licence_acknowledged)."
+                  },
+                  "licence_acknowledged": {
+                    "type": "string",
+                    "enum": [
+                      "true",
+                      "false"
+                    ]
+                  },
+                  "source_url": {
+                    "type": "string"
+                  },
+                  "classification": {
+                    "type": "string",
+                    "enum": [
+                      "all-ages",
+                      "adult-only"
+                    ],
+                    "description": "Default adult-only (uncertain means adult-only). A file whose own metadata names adult content is adult-only whatever is asked."
+                  },
+                  "strength_default": {
+                    "type": "number",
+                    "nullable": true,
+                    "minimum": 0,
+                    "maximum": 2
+                  },
+                  "trigger_words": {
+                    "type": "string",
+                    "description": "Comma separated, or a JSON array."
+                  },
+                  "added_by": {
+                    "type": "string",
+                    "description": "An opaque label Home keeps for who added it."
+                  }
+                },
+                "required": [
+                  "name",
+                  "licence"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Added; the id is `lora-` and the first 16 hex of the sha256.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "file": {
+                      "type": "string"
+                    },
+                    "sha256": {
+                      "type": "string"
+                    },
+                    "bytes": {
+                      "type": "integer"
+                    },
+                    "rank": {
+                      "type": "integer"
+                    },
+                    "modules": {
+                      "type": "integer"
+                    },
+                    "base_model": {
+                      "type": "string",
+                      "enum": [
+                        "wan2.2-ti2v-5b"
+                      ]
+                    },
+                    "licence": {
+                      "type": "string"
+                    },
+                    "licence_class": {
+                      "type": "string",
+                      "enum": [
+                        "free",
+                        "acknowledged"
+                      ]
+                    },
+                    "source_url": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "classification": {
+                      "type": "string",
+                      "enum": [
+                        "all-ages",
+                        "adult-only"
+                      ]
+                    },
+                    "classification_note": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "strength_default": {
+                      "type": "number"
+                    },
+                    "trigger_words": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "added_by": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "added_at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "file",
+                    "sha256",
+                    "bytes",
+                    "rank",
+                    "modules",
+                    "base_model",
+                    "licence",
+                    "licence_class",
+                    "source_url",
+                    "classification",
+                    "classification_note",
+                    "strength_default",
+                    "trigger_words",
+                    "added_by",
+                    "added_at"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already in the library (already_added).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Larger than 2 GB.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Not usable: not_safetensors, not_a_lora, wrong_base_model, licence_acknowledgement_required, lora_refused (a minor in a sexual context: never allowed), bad_name, bad_strength.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/video/loras/{id}": {
+      "patch": {
+        "tags": [
+          "Video"
+        ],
+        "summary": "Edit a LoRA's name, class, default strength or trigger words",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "classification": {
+                    "type": "string",
+                    "enum": [
+                      "all-ages",
+                      "adult-only"
+                    ]
+                  },
+                  "strength_default": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 2
+                  },
+                  "trigger_words": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "source_url": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "file": {
+                      "type": "string"
+                    },
+                    "sha256": {
+                      "type": "string"
+                    },
+                    "bytes": {
+                      "type": "integer"
+                    },
+                    "rank": {
+                      "type": "integer"
+                    },
+                    "modules": {
+                      "type": "integer"
+                    },
+                    "base_model": {
+                      "type": "string",
+                      "enum": [
+                        "wan2.2-ti2v-5b"
+                      ]
+                    },
+                    "licence": {
+                      "type": "string"
+                    },
+                    "licence_class": {
+                      "type": "string",
+                      "enum": [
+                        "free",
+                        "acknowledged"
+                      ]
+                    },
+                    "source_url": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "classification": {
+                      "type": "string",
+                      "enum": [
+                        "all-ages",
+                        "adult-only"
+                      ]
+                    },
+                    "classification_note": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "strength_default": {
+                      "type": "number"
+                    },
+                    "trigger_words": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "added_by": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "added_at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "file",
+                    "sha256",
+                    "bytes",
+                    "rank",
+                    "modules",
+                    "base_model",
+                    "licence",
+                    "licence_class",
+                    "source_url",
+                    "classification",
+                    "classification_note",
+                    "strength_default",
+                    "trigger_words",
+                    "added_by",
+                    "added_at"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such LoRA.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "classification_locked: the file's own description names adult content, so it cannot be all-ages.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A value is out of range.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Video"
+        ],
+        "summary": "Remove a LoRA and its file",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Removed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such LoRA.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
                   ]
                 }
               }

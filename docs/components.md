@@ -262,14 +262,17 @@ Engines per platform:
 
 | Engine | Build | Platform | Status |
 |---|---|---|---|
-| ComfyUI (managed), the same environment as image | | | candidate (dev.md, Jobs; a later item) |
+| `video-gen-87db56a-macos-arm64` | 87db56a | darwin arm64 | pinned, verified (the engine's source; its environment is the row below) |
+| `video-gen` | 87db56a | macOS 14 or later on arm64 (MLX is Apple silicon only; the mlx-video source archive plus a hashed requirements file; Wan2.2 TI2V-5B FastWan, text and picture to video, no sound; needs 64 GB or more; no Linux file) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
 | p16 | not available |  |  |  |  |  |  |  | not available |
 | p32 | not available |  |  |  |  |  |  |  | not available |
-| p64 | not available |  |  |  |  |  |  |  | not available |
-| p128 | on demand |  |  |  |  |  |  |  | not yet |
+| p64 | on demand | `fastwan2-2-ti2v-5b-mlx-bf16` | bf16 | 22.52 GB | 41.06 GB (Apple M5 Max, 128 GB unified memory) | n/a | Apache-2.0 | lBroth/FastWan2.2-TI2V-5B-MLX @ de2998ac446581895089ae363f4dcc0c02ca9ea2 | pinned |
+| p128 | on demand | `fastwan2-2-ti2v-5b-mlx-bf16` | bf16 | 22.52 GB | 41.06 GB (Apple M5 Max, 128 GB unified memory) | n/a | Apache-2.0 | lBroth/FastWan2.2-TI2V-5B-MLX @ de2998ac446581895089ae363f4dcc0c02ca9ea2 | pinned |
+
+Installed beside the model, never selected on its own: `video-umt5-tokenizer` (tokenizer, 20.4 MB, Apache-2.0, google/umt5-xxl @ 66cb9e7e85526fe440a945569e42c72fb6cbc0ad).
 
 ## music (Music)
 

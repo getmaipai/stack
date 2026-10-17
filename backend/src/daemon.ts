@@ -17,13 +17,18 @@ import { pullMissingDeclaredParts } from "@/lib/installJobs";
 import { STACK_MODELS } from "@/lib/modelCatalog";
 import { ddgsSupervisor } from "@/search/ddgsSidecar";
 import { imageTools, sweepImageToolsTmp } from "@/imagetools/imageTools";
+import { videoGen } from "@/video/videoGen";
+import { sweepResults, sweepVideoTmp } from "@/video/results";
 import { execFileSync } from "node:child_process";
 import { readMetalCapBytes } from "@/lib/metalCap";
 import { setMetalCapBytes, getGovernorStatus } from "@/lib/governor";
 
-export function serveOptions(): { port: number; hostname: "127.0.0.1"; fetch: (request: Request, server: unknown) => Response | Promise<Response>; websocket: typeof websocket; idleTimeout: number } {
+/** Bun's default request body limit is 128 MB; a LoRA upload (VIDEO-GEN-03) may be up to 2 GB, so the limit leaves room for it. Every route checks its own size. */
+export const MAX_REQUEST_BODY_BYTES = 2 * 1024 * 1024 * 1024 + 64 * 1024 * 1024;
+
+export function serveOptions(): { port: number; hostname: "127.0.0.1"; fetch: (request: Request, server: unknown) => Response | Promise<Response>; websocket: typeof websocket; idleTimeout: number; maxRequestBodySize: number } {
   const port = Number(process.env.PORT ?? settingValues()["stack.runtime.port"] ?? 8770);
-  return { port, hostname: "127.0.0.1", fetch: app.fetch as (request: Request, server: unknown) => Response | Promise<Response>, websocket, idleTimeout: 255 };
+  return { port, hostname: "127.0.0.1", fetch: app.fetch as (request: Request, server: unknown) => Response | Promise<Response>, websocket, idleTimeout: 255, maxRequestBodySize: MAX_REQUEST_BODY_BYTES };
 }
 
 function onBattery(): boolean {
@@ -59,6 +64,9 @@ async function serve(): Promise<void> {
   ddgsSupervisor.start();
   // Pictures an earlier crash left in the image tools' temporary folder are removed; the worker itself starts on the first edit.
   sweepImageToolsTmp();
+  // Clips an earlier run left half-made are removed and old results swept; the video worker itself starts on the first clip and exits after ten idle minutes.
+  sweepVideoTmp();
+  sweepResults();
   const idle = setInterval(() => {
     const values = settingValues();
     void unloadIdleRoles({ onBattery: onBattery(), idleMinutes: Number(values["stack.runtime.idle_unload_minutes"] ?? 30), batteryIdleMinutes: Number(values["stack.runtime.idle_unload_on_battery_minutes"] ?? 10), keep: keepWarmEnabled() ? warmedRoles() : [] }).catch(() => {});
@@ -74,6 +82,7 @@ async function serve(): Promise<void> {
     // longer than WatchdogSec must not be mistaken for a hang.
     await ddgsSupervisor.stop().catch(() => {});
     imageTools.stop();
+    videoGen.stop();
     await stopAllRoles("The Stack is stopping.");
     stopTierWatch();
     stopWatchdog();

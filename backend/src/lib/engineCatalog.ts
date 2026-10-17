@@ -226,6 +226,19 @@ export const ENGINE_BINARIES: EngineBinaryPin[] = [
     archive: { label: "ComfyUI v0.36.0 source", url: "https://github.com/comfyanonymous/ComfyUI/archive/refs/tags/v0.36.0.tar.gz", sha256: "ab0d2f14e6a20616c6019d7af733aa897507a9a34ed0e88cec9d9c574065e8a1", approxBytes: 12_479_903 },
     verified: false,
   },
+  {
+    id: "video-gen-87db56a-macos-arm64",
+    name: "video-gen",
+    tag: "87db56a",
+    platform: "darwin",
+    arch: "arm64",
+    tool: "pyproject.toml",
+    requiresNvidia: false,
+    label: "mlx-video source, commit 87db56a (MIT; the Wan2.2 path the video worker runs on Apple silicon)",
+    docsUrl: "https://github.com/Blaizzy/mlx-video/tree/87db56a51758fefb748a359b90a5283bb8ba4837",
+    archive: { label: "mlx-video 87db56a source", url: "https://github.com/Blaizzy/mlx-video/archive/87db56a51758fefb748a359b90a5283bb8ba4837.tar.gz", sha256: "174adddb7797125438adbf1996f5c344cfbc6187ac0b49d58615e302302a7a45", approxBytes: 22_144_111 },
+    verified: true,
+  },
 ];
 
 /** The second chat engine (STACK-93): one archive with the binary and
@@ -251,8 +264,8 @@ export type ChatEngine = typeof CHAT_ENGINES[number];
 
 /** The role each engine name serves, for the routes that act on "the
  * engine's role" (start, stop, restart, the swap's drain). */
-export type EngineRole = "chat" | "tts" | "image";
-export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", "mlx-serve": "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", comfyui: "image" };
+export type EngineRole = "chat" | "tts" | "image" | "video";
+export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", "mlx-serve": "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", comfyui: "image", "video-gen": "video" };
 export function engineRole(name: string): EngineRole { return ENGINE_ROLE[name] ?? "chat"; }
 
 /** Runtimes the Stack assembles from pinned wheels through uv, in an
@@ -262,6 +275,7 @@ export const MANAGED_RUNTIMES: ManagedRuntime[] = [
   { name: "pocket-tts", version: "3.1.0", roles: ["tts"], platforms: "macOS 14 or later on arm64 (torch 2.13 ships macOS 14 wheels only; a hashed requirements file per platform, the Linux files land with the first Linux tts run)" },
   { name: "mlx-audio", version: "0.5.9", roles: ["tts"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the Stack's second voice engine, Chatterbox Turbo, VOICE-STUDIO-01; no Linux file)" },
   { name: "comfyui", version: "v0.36.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (torch 2.13 ships macOS 14 wheels only; a hashed requirements file per platform, the source archive is the same on every platform)" },
+  { name: "video-gen", version: "87db56a", roles: ["video"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the mlx-video source archive plus a hashed requirements file; Wan2.2 TI2V-5B FastWan, text and picture to video, no sound; needs 64 GB or more; no Linux file)" },
   { name: "image-tools", version: "1.0.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (onnxruntime, numpy, pillow, opencv; no torch; remove background, erase, upscale and resize on a picture the person has; the Linux file lands with the robot's first image run)" },
 ];
 

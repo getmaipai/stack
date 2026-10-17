@@ -431,6 +431,76 @@ export const STACK_IMAGE_TOOL_MODELS: CatalogModelLike[] = [
   imageToolPin("image-tool-realesrgan-general-x4v3", "tool-realesrgan", "Heliosoph/realesrgan-onnx", "488e5dda07333179f229a6205d92135eea4c25e9", "realesr-general-x4v3.onnx", "BSD-3-Clause", "09b757accd747d7e423c1d352b3e8f23e77cc5742d04bae958d4eb8082b76fa4", 4_871_181, 1_500_000_000),
 ];
 
+// VIDEO-GEN-01: the `video` role's pin. Wan2.2 TI2V-5B with the FastWan
+// 3-step DMD distillation, converted to MLX (bf16), at one revision of
+// the community conversion, every file by sha256 and size (the three
+// large oids are the repository's git-lfs oids, confirmed against a
+// live revision listing and by hashing the benchmarked copy). A
+// directory model, like the MLX chat pin: the worker reads the folder.
+// Licences: the conversion's card says Apache-2.0, the base
+// Wan-AI/Wan2.2-TI2V-5B is Apache-2.0 and FastVideo/FastWan2.2-TI2V-5B
+// is Apache-2.0; the runtime (mlx-video) is MIT. No safety filter exists
+// in the weights or the runtime, so every gate lives in Home. Measured
+// 2026-10-17, Apple M5 Max 128 GB: 5 s, 121 frames, 24 fps at 832 x 480
+// in 130 to 140 s, peak memory footprint 44.1 GB with `--tiling
+// aggressive` (any other tiling peaks near 112 GB). The tokenizer is the
+// umt5 files mlx-video would otherwise fetch from the Hub at run time;
+// pinned here so the worker runs offline.
+const VIDEO_REPO = "lBroth/FastWan2.2-TI2V-5B-MLX";
+const VIDEO_REVISION = "de2998ac446581895089ae363f4dcc0c02ca9ea2";
+export const VIDEO_ENGINE = "video-gen";
+export const STACK_VIDEO_MODEL_ID = "fastwan2-2-ti2v-5b-mlx-bf16";
+export const STACK_VIDEO_TOKENIZER_ID = "video-umt5-tokenizer";
+const VIDEO_FILES = [
+  { path: "model.safetensors", sha256: "d770a93f780208ad8b4edea9ea17c1f9532debb59292688ea038e824a30bbf84", bytes: 9_999_659_892 },
+  { path: "t5_encoder.safetensors", sha256: "e86ee4199903e00a88dcd43583a43a6eb898cef600e38670f222d7e37d163787", bytes: 11_361_845_505 },
+  { path: "vae.safetensors", sha256: "a2d3602f692144facc3d58c56db30820c4400e67d4bb821feff3ea8347629804", bytes: 2_818_778_952 },
+  { path: "config.json", sha256: "6c6520bb7c9af3172de23a7acf67b53958974d81001eac5b6ab24d9577018003", bytes: 1_662 },
+];
+export const STACK_VIDEO_MODEL: CatalogModelLike = {
+  id: STACK_VIDEO_MODEL_ID,
+  role: "video",
+  repo: VIDEO_REPO,
+  license: "Apache-2.0",
+  revision: VIDEO_REVISION,
+  engine: VIDEO_ENGINE,
+  sizing: { profile: "p64", quantization: "bf16" },
+  download: {
+    url: hfUrl(`${VIDEO_REPO}/resolve/${VIDEO_REVISION}/model.safetensors`),
+    sha256: VIDEO_FILES[0]!.sha256,
+    approx_bytes: VIDEO_FILES.reduce((sum, file) => sum + file.bytes, 0),
+    directory: "FastWan2.2-TI2V-5B-MLX",
+    files: VIDEO_FILES,
+  },
+  measured: { footprintBytes: 44_088_747_800, contextLength: 0, hardware: "Apple M5 Max, 128 GB unified memory" },
+};
+const UMT5_REPO = "google/umt5-xxl";
+const UMT5_REVISION = "66cb9e7e85526fe440a945569e42c72fb6cbc0ad";
+const UMT5_FILES = [
+  { path: "tokenizer.json", sha256: "af904105ce1071b1202bba0059a841f4a7b85b48b6ec179c4948e3483476e0dd", bytes: 16_853_013 },
+  { path: "tokenizer_config.json", sha256: "616015e2b6c26f9a98ae3171634518d440a46260ebc1115c2596792d33827bdc", bytes: 6_841 },
+  { path: "special_tokens_map.json", sha256: "14ef492a69e59396e918521a5f8394af1acf9f8dddd47273693b2b42570dfd12", bytes: 6_623 },
+  { path: "spiece.model", sha256: "e3909a67b780650b35cf529ac782ad2b6b26e6d1f849d3fbb6a872905f452458", bytes: 4_548_313 },
+];
+export const STACK_VIDEO_TOKENIZER: CatalogModelLike = {
+  id: STACK_VIDEO_TOKENIZER_ID,
+  role: "video",
+  component: "tokenizer",
+  repo: UMT5_REPO,
+  license: "Apache-2.0",
+  revision: UMT5_REVISION,
+  engine: VIDEO_ENGINE,
+  sizing: { profile: "p64", quantization: "n/a" },
+  download: {
+    url: hfUrl(`${UMT5_REPO}/resolve/${UMT5_REVISION}/tokenizer.json`),
+    sha256: UMT5_FILES[0]!.sha256,
+    approx_bytes: UMT5_FILES.reduce((sum, file) => sum + file.bytes, 0),
+    directory: "umt5-xxl-tokenizer",
+    files: UMT5_FILES,
+  },
+};
+export const STACK_VIDEO_MODELS: CatalogModelLike[] = [STACK_VIDEO_MODEL, STACK_VIDEO_TOKENIZER];
+
 // Nomic's official GGUF conversion, pinned to the Hub revision whose
 // Q4_K_M file matches the household's existing embedding model.
 export const STACK_EMBED_MODEL: CatalogModelLike = {
@@ -519,7 +589,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_VIDEO_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a
@@ -536,7 +606,8 @@ export const ROLE_CANDIDATES: Partial<Record<string, RoleCandidate[]>> = {
     { name: "Kokoro 82M through the stt worker's runtime, rejected by the owner's ear on 2026-09-04; the alternative if he reverses it", kind: "model", source: "dev.md, The speech roles" },
   ],
   video: [
-    { name: "ComfyUI (managed), the same environment as image", kind: "engine", source: "dev.md, Jobs; a later item" },
+    { name: "Kandinsky 6.0 Lite distill (3B, MIT, sound-capable), the second pin; no MLX port yet", kind: "model", source: "docs/design/video-generation-2026-10-17.md in Home, VIDEO-GEN-10" },
+    { name: "Wan2.2 A14B (the quality profile, two 14B experts)", kind: "model", source: "docs/design/video-generation-2026-10-17.md in Home, VIDEO-GEN-10" },
   ],
   music: [
     { name: "ACE-Step 1.5 (managed, the official MLX backend, acestep-api), the owner's pick", kind: "engine", source: "docs/plans/jev-and-yue-2026-09-20.md; STACK-99" },

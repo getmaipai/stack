@@ -42,6 +42,7 @@ OpenAI-shaped, so an existing client library works unchanged.
 | `POST /v1/audio/transcriptions` | `stt` | transcription (multipart audio) |
 | `POST /v1/audio/speech` | `tts` | speech; phrase-level streaming and cancel |
 | `POST /v1/images/generations` | `image` | the job API with a wait |
+| `POST /v1/videos/generations` | `video` | the job API with a wait; progress by phase, cancel, the clip fetched by URL (see Video generation below) |
 | `GET /v1/models` | all | role ids plus installed model ids in OpenAI's list shape |
 
 The request's common fields are spec `RoleRequest`: `model` carries a
@@ -330,3 +331,61 @@ happened, what to do) and `code`: 413 `too_large`, 422 `mask_required` `mask_emp
 `GET /stack/v1/image-tools` returns `{ image_tools: { state, phase, vision, models: { isnet, lama, esrgan }, limits, operations, reason } }`.
 The worker is one Python process that starts on the first edit and exits after about two minutes idle; it holds a pinned 4 GB governor admission
 while it lives. Pictures, masks and results are never logged or written beyond the request. Design: Home `docs/design/image-tools-2026-10-17.md`.
+
+## Video generation (VIDEO-GEN-01 to 03)
+
+Wan2.2 TI2V-5B with FastWan's 3-step distillation, run by mlx-video on the Apple GPU (a Mac with 64 GB or more: tiers `p64` and `p128`;
+`p16` and `p32` answer 503 `not_available_on_this_computer`). Text to video and picture to video, 24 fps, no sound. A 5 s clip
+(121 frames) at 832 x 480 takes about two and a half minutes and peaks at 44.1 GB, so a clip holds one pinned governor admission of that size
+and chat is never evicted for it; a Mac that cannot hold the clip beside what is resident answers 503 `no_memory` at once. Design and the
+measurements: Home `docs/design/video-generation-2026-10-17.md`.
+
+`POST /v1/videos/generations` (JSON) answers like `/v1/images/generations`: 200 `{ created, job, data: [{ url, poster_url, content_type, width, height,
+frames, fps, seconds, seed, model, mode, lora_ids, ms, bytes, poster_bytes }] }`, or 202 `{ created, job, data: [] }` when the clip is still going at
+`timeout_ms` (30 s unsaid, 30 min at most); then poll. Fields: `prompt` (required, 4000 characters), `negative_prompt` (accepted; the distilled model
+runs without guidance, so it has no effect), `image` + `image_source` (see below), `size` (`832x480` default; multiples of 32, each side 256 or more,
+area at most 399,360 pixels, so `480x832` also fits and 1280x704 does not), `seconds` (whole, 1 to 5, default 5), `seed`, `loras` (`[{ id, strength }]`, at
+most 4, strength 0 to 2, the record's default when left out), `audience` (`all-ages` unsaid, or `adult`), `timeout_ms`. Errors carry `error` (what
+happened and what to do) and `code`: 413 `too_large`; 422 `bad_size` `bad_image` `reference_source_required` `reference_image_refused`
+`reference_not_generated` `unknown_lora` `lora_not_allowed` `lora_changed` `lora_missing` `too_many_loras` `duplicate_lora` `bad_strength`; 429 `queue_full` (four clips
+already waiting); 499 `cancelled`; 500 `failed` `worker_stopped`; 503 `not_available_on_this_computer` `unsupported` `not_installed` `no_memory` `setup_failed`
+`model_missing`; 504 `timeout` (15 minutes); 507 `out_of_memory`. A request body that breaks the schema (a sixth second, an empty prompt) is a plain 400.
+
+`GET /v1/videos/generations/{job}` returns `{ job, state, phase, progress, phase_progress, position, error, code, data }`. `state` is `queued`,
+`running`, `done`, `failed` or `cancelled`; `phase` is `queued`, `waiting for memory`, `starting`, `setting up` (the first clip only: the Python
+environment and the pinned source build once), `loading`, `rendering`, `decoding`, `encoding`, `ready`. `progress` is 0 to 100 over the whole clip,
+weighted by where the time goes (decoding is about 85 percent of it); `phase_progress` is 0 to 100 inside the phase. `data` holds the same entry as the
+200 answer once `state` is `done`. A job the Stack no longer remembers (restart) but whose files are still held answers `done`; one whose files are gone
+is 404 `unknown_job`. `GET .../{job}/video.mp4` serves the clip (H.264, yuv420p, 24 fps, moov box first, no metadata, Range requests supported) and
+`GET .../{job}/poster.jpg` the JPEG of frame 0. `DELETE /v1/videos/generations/{job}` cancels a queued or running clip (the worker is stopped and its
+memory returns) or, for a finished one, deletes its files; Home calls it once it has stored the file. Results are otherwise kept for a day and the
+newest 24 under `data/video/results/<job>/`. No prompt and no reference picture is written there, logged, or put in a job record or on the event feed.
+
+**Reference pictures (VIDEO-GEN-12, owner ruling 2026-10-17).** `image` is a PNG, JPEG or WebP as base64 (a `data:` URL is fine), at most 20 MB,
+and needs `image_source`. Only `generated` is accepted, and only for a picture this Stack's own image generator returned (or the poster of one of its own
+clips): the Stack records the sha256 of every picture it generates (hash and time only, 30 days, the newest 2,000) and checks the bytes it is given, so the
+picture must arrive unchanged. `uploaded` and any picture the Stack did not make are refused for everyone, a household member's photo included, until a
+check for "no identifiable real person" exists. Home applies its own age, surface and household gates first.
+
+**LoRAs.** The household library is `data/video/loras/` (one `.safetensors` per record plus `manifest.json`). `GET /stack/v1/video/loras`;
+`POST /stack/v1/video/loras` (multipart: `file`, or `path` for a file already on the Stack's computer; `name`, `licence`, `licence_acknowledged`,
+`source_url`, `classification`, `strength_default`, `trigger_words` comma separated or a JSON array, `added_by`); `PATCH` and `DELETE /stack/v1/video/loras/{id}`.
+The id is `lora-` and the first 16 hex of the sha256. The Stack reads the tensor shapes from the file's header: a LoRA for the 14B model (width 5120) or
+the 1.3B model (1536) is refused 422 `wrong_base_model`; a file with no LoRA tensors is `not_a_lora`. An open licence (apache-2.0, mit, cc0-1.0, bsd-2/3-clause,
+unlicense, isc, cc-by-4.0) imports as is; any other needs `licence_acknowledged=true` (422 `licence_acknowledgement_required`) and is recorded as
+`acknowledged`. `classification` is `all-ages` or `adult-only` and defaults to `adult-only` (uncertain means adult-only); a file whose own metadata, name, tags or
+trigger words name adult content is adult-only whatever is asked (409 `classification_locked` on a later try), and one that names a child or a minor in a sexual
+context is refused outright (422 `lora_refused`; the word lists are a tripwire in `video/loras.ts`, not a judgement of the pictures). **Who may use which LoRA is
+Home's rule**: the clip request names the ids it may apply, and `audience` is a second lock, so an `all-ages` request that names an `adult-only` LoRA
+is refused (`lora_not_allowed`) even if Home's list is wrong. A file whose size or time changed since it was added is re-hashed before use (`lora_changed`).
+The weights are merged into the model at load, so a LoRA adds about a second. The request body limit is 2 GB for the upload.
+
+`GET /stack/v1/video` returns `{ video: { state, phase, available, code, reason, tier, memory, model, limits, loras_supported, lora_count, audio,
+negative_prompt, reference_images, worker, environment, install } }` for Home to enable its control: `state` is `unsupported`, `off` (this tier), `not-installed`
+(the model files are missing), `needs-setup` (installed; the first clip builds the environment and starts the worker), `building`, `idle` (the worker waits ten
+minutes for the next clip, then exits and returns its memory) or `running`. `install.models` lists the two pins (the 24.2 GB FastWan MLX folder and the 21 MB umt5
+tokenizer) shaped as install-plan models to post to `POST /stack/v1/models` (the Stack fills in each folder's pinned file list from its own pin), and
+`POST /stack/v1/engines/video-gen/install` builds the pinned mlx-video source and the environment ahead of the first clip. The `video` role in
+`GET /stack/v1/roles` follows the same facts: `notInstalled`, `installed`, `loaded` (the worker is up), `ready` (a clip finished in the last hour).
+The tokenizer is the one file set the model would otherwise fetch from the Hub at run time; it is pinned, so the worker runs with `HF_HUB_OFFLINE=1` and
+makes no network request.

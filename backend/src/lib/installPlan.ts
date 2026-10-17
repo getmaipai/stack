@@ -4,7 +4,7 @@
 // pins. Pure: the route supplies the hardware and the installed set.
 import { PROFILE_MODEL_BINDINGS, sizeMachine, type ProfileTier } from "@/profiles";
 import type { HardwareInfo, MemorySource } from "@/lib/hardware";
-import { STACK_CHAT_MODEL, STACK_IMAGE_TOOL_MODELS, STACK_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
+import { STACK_CHAT_MODEL, STACK_IMAGE_TOOL_MODELS, STACK_MODELS, STACK_VIDEO_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
 import { tierDefaultTtsEngine } from "@/speech/ttsEngines";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import type { RoleId } from "@/roles";
@@ -52,6 +52,12 @@ function view(pin: CatalogModelLike, installed: Set<string>, starter: boolean): 
     ...(download.archive ? { archive: true } : {}), ...(download.hub_file ? { hub_file: download.hub_file } : {}), ...(pin.component ? { component: pin.component } : {}),
     starter, installed: installed.has(pin.id),
   };
+}
+
+/** The pins the video role needs (the weights and the tokenizer), in the shape of a pull, for the video status route: Home installs them when the person turns video on. They are not in the first-run plan, the way no generator is. */
+export function videoInstallModels(installedIds: Iterable<string> = []): PlanModel[] {
+  const installed = new Set(installedIds);
+  return STACK_VIDEO_MODELS.flatMap((pin) => view(pin, installed, false) ?? []);
 }
 
 export function buildInstallPlan(hw: HardwareInfo, options: { vramOverrideGb?: number | null; installedIds?: Iterable<string> } = {}): InstallPlan {

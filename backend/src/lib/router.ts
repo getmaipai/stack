@@ -6,6 +6,7 @@ import { ROLE_IDS, READY_TTL_MS, type RoleId, type RoleState, type RoleStateReco
 import { identityHeaders } from "@/lib/identity";
 import { getModel, isModelSelectable } from "@/lib/modelStore";
 import { getRoleStatus, identityCheck, lastRealRequestAt, processRoleFor, selectedModel } from "@/lib/supervisor";
+import { videoRoleState } from "@/video/videoGen";
 
 export interface RoleResolution { role: RoleId; modelId: string | null; }
 
@@ -56,6 +57,8 @@ function flatState(role: RoleId): RoleState {
 }
 
 export function resolveRoleState(role: RoleId): RoleStateRecord {
+  // The video role has no process the supervisor spawns: its worker lives in the video service.
+  if (role === "video") return videoRoleState();
   const flat = flatState(role);
   const now = new Date().toISOString();
   if (flat === "ready") {
