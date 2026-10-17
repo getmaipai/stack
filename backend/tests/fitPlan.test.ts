@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StackFitPlan } from "@maipai/spec/gen/ts/stack-fit-plan.js";
@@ -32,10 +32,15 @@ test("parses the measured qwen3 estimate and rejects malformed values", () => {
   }
 });
 
-test("parses the parser's exact model file size when present", () => {
-  const saved = JSON.parse(readFileSync("/Users/jessetorres/Developer/github.com/getmaipai/stack/data-scratch/sizer-bake/local-32768-f16.json", "utf8"));
+const SAVED_PARSER_RUN = "/Users/jessetorres/Developer/github.com/getmaipai/stack/data-scratch/sizer-bake/local-32768-f16.json";
+// The saved run lives in one author's scratch folder, so this half only runs where it exists; the fixture half below always runs.
+test.skipIf(!existsSync(SAVED_PARSER_RUN))("parses the parser's exact model file size from a saved run", () => {
+  const saved = JSON.parse(readFileSync(SAVED_PARSER_RUN, "utf8"));
   expect(saved.metadata.fileSize).toBe(1834426016);
   expect(parseGgufParserJson(JSON.stringify(saved))?.modelFileBytes).toBe(1834426016);
+});
+
+test("a parser answer without the file size parses with no model file size", () => {
   const withoutSize = JSON.parse(fixtureText);
   delete withoutSize.metadata.fileSize;
   expect(parseGgufParserJson(JSON.stringify(withoutSize))?.modelFileBytes).toBeUndefined();
