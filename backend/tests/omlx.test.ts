@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { COUNT_TAG, OmlxEngineClient, timingsFromUsage, withTimingsStream } from "@/chat/omlxClient";
+import { COUNT_TAG, OmlxEngineClient, offeredToolNames, repairToolCalls, repairToolName, timingsFromUsage, withTimingsStream } from "@/chat/omlxClient";
 import { newLaunchKey, omlxCacheDir, omlxCommand, omlxEnv, omlxModelsDir, omlxRequirementsFileFor, omlxRoot, omlxSupportedHere, OMLX_NAME, OMLX_VERSION, prepareModelFolder, resetState } from "@/chat/omlx";
 import { CHAT_ENGINES, MANAGED_RUNTIMES } from "@/lib/engineCatalog";
 import { chatEngineFailure, clearChatEngineFailures, markChatEngineFailed, requestedChatEngine, resolveChatEngine, tierDefaultChatEngine } from "@/lib/chatEngines";
@@ -384,4 +384,23 @@ test.skipIf(!APPLE_SILICON)("one failure then success starts oMLX and does not f
   let direct = 0;
   await startChatWithFallbackForTests(undefined, (async (role: "chat") => { direct++; return scriptedProcess(role, { engine: "llama-server" }); }) as never);
   expect(direct).toBe(1);
+});
+
+test("a namespace echoed on a tool name is repaired to the offered tool (ENGINE-MLX-02)", async () => {
+  const offered = offeredToolNames({ tools: [{ type: "function", function: { name: "math" } }, { type: "function", function: { name: "generate_image" } }] });
+  expect(repairToolName("math.math", offered)).toBe("math");
+  expect(repairToolName("generate_image.generate_image", offered)).toBe("generate_image");
+  expect(repairToolName("tools.math", offered)).toBe("math");
+  expect(repairToolName("math", offered)).toBe("math");
+  expect(repairToolName("math<|message|>", offered)).toBe("math");
+  expect(repairToolName("math.expression", offered)).toBe("math");
+  expect(repairToolName("unknown.thing", offered)).toBe("unknown.thing");
+  expect(repairToolName("math.math", new Set())).toBe("math.math");
+  const reply = { choices: [{ message: { tool_calls: [{ function: { name: "math.math", arguments: "{}" } }] } }] };
+  repairToolCalls(reply, offered);
+  expect(reply.choices[0]!.message.tool_calls[0]!.function.name).toBe("math");
+  const chunk = `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, function: { name: "generate_image.generate_image", arguments: "{}" } }] } }] })}\n\n`;
+  const out = await new Response(withTimingsStream(new Response(chunk).body!, offered)).text();
+  expect(out).toContain("\"name\":\"generate_image\"");
+  expect(out).not.toContain("generate_image.generate_image");
 });

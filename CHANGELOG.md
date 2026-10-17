@@ -21,6 +21,10 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 - LoRA base detection reads Civitai-style files (kohya `lora_unet_layers_N` names for Z-Image, a header that declares its base) and names Pony, Illustrious, NoobAI, FLUX.1 and Chroma files in the refusal. FLUX.2 Klein 4B stays the default picture model on every tier; Z-Image-Turbo is optional and selected by name or by a LoRA made for it.
 
+### Fixed
+
+- The oMLX chat engine no longer returns tool names with a namespace or control token on them (`math.math`, `generate_image.generate_image`, `convert<|message|>`): the 4-bit Muse weights echo the namespace the chat template documents, and Home looked the dotted name up as an unknown tool. The Stack now rewrites a returned name that is not an offered tool, but whose halves name one, to that tool, streamed or not (ENGINE-MLX-02).
+
 ### Added
 
 - Self-heal (ROBUST-01): an engine that exits on its own is restarted by the Stack (2 s, 10 s, 30 s, 2 min; 5 failures in 30 minutes stops it and leaves the Repairs item with the last 20 log lines), after an identity check and a one-token request, never during an install, an update, a graphics job or low memory. The crash item names the cause in plain words (out of memory, killed by the system, missing file, port in use, bad config). `GET /stack/v1/engines/self-heal` reports crashes per day and restart events; setting `stack.runtime.self_heal`. <!-- prose-lint: allow -->

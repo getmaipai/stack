@@ -19,6 +19,11 @@
 //     reading its own `usage.prompt_tokens`, which is exact (the engine's
 //     template and tokenizer) and cheap (the prompt cache holds the prefix).
 //  6. Every request carries the launch's bearer key.
+//  7. The template tells the model to write `namespace.function` when a tool has a
+//     namespace; the Home tools have none, and the 4-bit weights often echo the name
+//     as `math.math` or `generate_image.generate_image`. A returned tool name that is
+//     not an offered tool but whose dotted halves name one is rewritten to that tool
+//     (ENGINE-MLX-02: 12 of 12 picture requests came back dotted before this).
 import type { EngineClient } from "@/lib/supervisor";
 
 /** The stand-in `/apply-template` returns: the request itself, tagged, for `/tokenize` to count. */
@@ -45,6 +50,35 @@ interface Usage {
   generation_tokens_per_second?: number;
 }
 
+/** The names of the tools a request offers. */
+export function offeredToolNames(body: Record<string, unknown>): Set<string> {
+  const names = new Set<string>();
+  if (Array.isArray(body.tools)) for (const tool of body.tools as Array<{ function?: { name?: unknown }; name?: unknown }>) {
+    const name = tool?.function?.name ?? tool?.name;
+    if (typeof name === "string") names.add(name);
+  }
+  return names;
+}
+
+/** `math.math` or `files.math` becomes `math` when `math` is offered and the dotted name is not. */
+export function repairToolName(rawName: string, offered: Set<string>): string {
+  // A template control token written after the name (`convert<|message|>`) is not part of it.
+  const name = rawName.replace(/<\|[a-z_]+\|>.*$/s, "").trim();
+  if (offered.size === 0 || offered.has(name) || !name.includes(".")) return offered.size > 0 && offered.has(name) ? name : (name === rawName ? rawName : name);
+  const halves = name.split(".");
+  const last = halves[halves.length - 1]!;
+  if (offered.has(last)) return last;
+  const first = halves[0]!;
+  return offered.has(first) ? first : name;
+}
+
+/** Repairs the tool names in a chat completion body (non-streamed), in place. */
+export function repairToolCalls(reply: unknown, offered: Set<string>): void {
+  const choices = (reply as { choices?: Array<{ message?: { tool_calls?: Array<{ function?: { name?: string } }> } }> } | null)?.choices;
+  if (!Array.isArray(choices) || offered.size === 0) return;
+  for (const choice of choices) for (const call of choice.message?.tool_calls ?? []) if (call.function && typeof call.function.name === "string") call.function.name = repairToolName(call.function.name, offered);
+}
+
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 
 /** llama-server's `timings` object from the engine's usage, or null when the usage carries no speed. */
@@ -64,13 +98,24 @@ export function timingsFromUsage(usage: Usage | null | undefined): Record<string
 }
 
 /** Adds `timings` to the usage chunk of a server-sent-event stream; every other line passes through byte for byte. */
-export function withTimingsStream(upstream: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
+export function withTimingsStream(upstream: ReadableStream<Uint8Array>, offered: Set<string> = new Set()): ReadableStream<Uint8Array> {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
   let pending = "";
   const rewrite = (line: string): string => {
     if (!line.startsWith("data:")) return line;
     const payload = line.slice(5).trim();
+    if (offered.size > 0 && payload.startsWith("{") && payload.includes("\"tool_calls\"")) {
+      try {
+        const chunk = JSON.parse(payload) as { choices?: Array<{ delta?: { tool_calls?: Array<{ function?: { name?: string } }> } }> };
+        let changed = false;
+        for (const choice of chunk.choices ?? []) for (const call of choice.delta?.tool_calls ?? []) {
+          const fn = call.function;
+          if (fn && typeof fn.name === "string") { const fixed = repairToolName(fn.name, offered); if (fixed !== fn.name) { fn.name = fixed; changed = true; } }
+        }
+        if (changed) return `data: ${JSON.stringify(chunk)}`;
+      } catch { /* not JSON: pass through */ }
+    }
     if (!payload.startsWith("{") || !payload.includes("\"usage\"")) return line;
     try {
       const chunk = JSON.parse(payload) as { usage?: Usage; timings?: unknown };
@@ -157,6 +202,7 @@ export class OmlxEngineClient implements EngineClient {
     const chat = path === "/v1/chat/completions" || path === "/v1/completions";
     const response = await this.post(path, chat ? this.wireBody(body) : body, signal);
     const reply = await response.json().catch(() => ({ error: `Engine returned HTTP ${response.status}.` })) as Record<string, unknown>;
+    if (chat && response.ok) repairToolCalls(reply, offeredToolNames(body));
     if (chat && response.ok && reply && typeof reply === "object" && reply.timings === undefined) {
       const timings = timingsFromUsage(reply.usage as Usage | undefined);
       if (timings) reply.timings = timings;
@@ -168,7 +214,7 @@ export class OmlxEngineClient implements EngineClient {
     const wire = { ...this.wireBody(body), stream: true, stream_options: { include_usage: true } };
     const response = await this.post(path, wire, signal, { accept: "text/event-stream" });
     if (!response.ok || !response.body) return response;
-    return new Response(withTimingsStream(response.body), { status: response.status, statusText: response.statusText, headers: response.headers });
+    return new Response(withTimingsStream(response.body, offeredToolNames(body)), { status: response.status, statusText: response.statusText, headers: response.headers });
   }
 
   async raw(path: string, init: { method: string; body?: FormData | string | Uint8Array; headers?: Record<string, string> }, signal?: AbortSignal): Promise<Response> {
