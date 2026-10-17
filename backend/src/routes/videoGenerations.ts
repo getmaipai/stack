@@ -10,7 +10,10 @@
 import { PAUSED_LOW_MEMORY } from "@/lib/memoryState";
 import { createRoute, z } from "@hono/zod-openapi";
 import type { Context } from "hono";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { dataDir } from "@/lib/paths";
+import { MessagesError, makeMessagesCopy } from "@/video/messages";
 import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { identityHeaders } from "@/lib/identity";
@@ -19,8 +22,8 @@ import { cancelJob, getJob, hasJobRunner, listJobs, submitJob, waitForJob, type 
 import { LoraError, resolveLoras } from "@/video/loras";
 import { LikenessError, photoBind, verifyProof, type LikenessCheck } from "@/lib/likeness";
 import { wasGeneratedHere } from "@/video/provenance";
-import { deleteResult, isJobId, posterPath, readResult, videoPath, type VideoResultMeta } from "@/video/results";
-import { memoryVerdict, tierAvailability, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, videoGen } from "@/video/videoGen";
+import { deleteResult, isJobId, messagesPath, posterPath, readResult, videoPath, type VideoResultMeta } from "@/video/results";
+import { memoryVerdict, tierAvailability, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, videoGen, videoGenRoot } from "@/video/videoGen";
 import { stashClip, unstashClip, videoFailure, videoProgress, VIDEO_JOB_KIND } from "@/video/jobs";
 
 const DEFAULT_WAIT_MS = 30_000;
@@ -85,6 +88,19 @@ const videoFileRoute = createRoute({ method: "get", path: "/generations/{job}/vi
 const posterFileRoute = createRoute({ method: "get", path: "/generations/{job}/poster.jpg", tags: ["Video"], summary: "The poster frame", request: { params: z.object({ job: z.string() }) }, responses: {
   200: { content: { "image/jpeg": { schema: z.string().openapi({ format: "binary" }) } }, description: "The JPEG of frame 0." },
   404: { content: { "application/json": { schema: ErrorBody } }, description: "The poster is gone." },
+} });
+const MessagesTitle = z.object({ title: z.string().max(120).optional().openapi({ description: "The title written into the file (the clip's name in a share sheet). Default: MaiPai video." }) });
+const messagesFileRoute = createRoute({ method: "get", path: "/generations/{job}/messages.mp4", tags: ["Video"], summary: "The clip prepared for messaging apps (made on first request, then kept)", request: { params: z.object({ job: z.string() }), query: MessagesTitle }, responses: {
+  200: { content: { "video/mp4": { schema: z.string().openapi({ format: "binary" }) } }, description: "H.264 yuv420p mp4 with a silent AAC track, the moov box first, a title, at most 20 MB. New clips are already in this form; this makes it for a clip made before." },
+  404: { content: { "application/json": { schema: ErrorBody } }, description: "The clip is gone." },
+  422: { content: { "application/json": { schema: ErrorBody } }, description: "The clip cannot be prepared (too_large)." },
+  503: { content: { "application/json": { schema: ErrorBody } }, description: "The video tools are not installed (no_ffmpeg)." },
+} });
+const messagesConvertRoute = createRoute({ method: "post", path: "/messages", tags: ["Video"], summary: "Prepare any mp4 for messaging apps (stateless; nothing is kept)", request: { query: MessagesTitle, body: { content: { "video/mp4": { schema: z.string().openapi({ format: "binary" }) } }, required: true } }, responses: {
+  200: { content: { "video/mp4": { schema: z.string().openapi({ format: "binary" }) } }, description: "The same picture as an H.264 yuv420p mp4 with a silent AAC track (kept when it has one), the moov box first, a title, at most 20 MB. For a clip Home stored before the Stack made them this way." },
+  413: { content: { "application/json": { schema: ErrorBody } }, description: "The upload is larger than 100 MB." },
+  422: { content: { "application/json": { schema: ErrorBody } }, description: "Not a video (bad_clip) or still over 20 MB (too_large)." },
+  503: { content: { "application/json": { schema: ErrorBody } }, description: "The video tools are not installed (no_ffmpeg)." },
 } });
 const deleteRoute = createRoute({ method: "delete", path: "/generations/{job}", tags: ["Video"], summary: "Cancel a clip, or delete a finished one's files", request: { params: z.object({ job: z.string() }) }, responses: {
   200: { content: { "application/json": { schema: z.object({ job: z.string(), state: z.enum(["cancelled", "deleted", "failed"]) }) } }, description: "A queued or running clip is cancelled (the worker stops and its memory returns); a finished clip's files are deleted (Home calls this once it has stored the file)." },
@@ -241,6 +257,43 @@ videoV1Routes.openapi(posterFileRoute, (c) => {
   const id = c.req.valid("param").job;
   if (!isJobId(id) || !existsSync(posterPath(id))) return fail(c, 404, "expired", "That poster is gone: results are kept for a day, or Home deleted it.") as never;
   return fileResponse(c, posterPath(id), "image/jpeg", undefined) as never;
+});
+
+function messagesFailure<T extends Context>(c: T, error: unknown) {
+  if (error instanceof MessagesError) return fail(c, error.code === "no_ffmpeg" ? 503 : error.code === "failed" ? 500 : 422, error.code, error.message);
+  throw error;
+}
+const cleanTitle = (title: string | undefined): string => (title ?? "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, 120) || "MaiPai video";
+const MESSAGES_UPLOAD_MAX = 100 * 1024 * 1024;
+const messagesInFlight = new Map<string, Promise<unknown>>();
+
+videoV1Routes.openapi(messagesFileRoute, async (c) => {
+  const id = c.req.valid("param").job;
+  if (!isJobId(id) || !existsSync(videoPath(id))) return fail(c, 404, "expired", "That clip is gone: results are kept for a day, or Home deleted it. Make it again.") as never;
+  if (!existsSync(messagesPath(id))) {
+    try {
+      const running = messagesInFlight.get(id) ?? makeMessagesCopy(videoPath(id), messagesPath(id), cleanTitle(c.req.valid("query").title), videoGenRoot()).finally(() => messagesInFlight.delete(id));
+      messagesInFlight.set(id, running);
+      await running;
+    } catch (error) { return messagesFailure(c, error) as never; }
+  }
+  return fileResponse(c, messagesPath(id), "video/mp4", c.req.header("range")) as never;
+});
+
+videoV1Routes.openapi(messagesConvertRoute, async (c) => {
+  const declared = Number(c.req.header("content-length") ?? 0);
+  if (declared > MESSAGES_UPLOAD_MAX) return fail(c, 413, "too_large", "The clip is larger than 100 MB.") as never;
+  const bytes = new Uint8Array(await c.req.arrayBuffer());
+  if (bytes.length > MESSAGES_UPLOAD_MAX) return fail(c, 413, "too_large", "The clip is larger than 100 MB.") as never;
+  const work = join(dataDir, "tmp", "video", `messages-${crypto.randomUUID()}`);
+  mkdirSync(work, { recursive: true, mode: 0o700 });
+  try {
+    writeFileSync(join(work, "in.mp4"), bytes);
+    await makeMessagesCopy(join(work, "in.mp4"), join(work, "out.mp4"), cleanTitle(c.req.valid("query").title), videoGenRoot());
+    const out = new Uint8Array(await Bun.file(join(work, "out.mp4")).arrayBuffer());
+    for (const [name, value] of Object.entries(RoleReplyHeaders.parse(identityHeaders(null)))) c.header(name, value);
+    return c.body(out, 200, { "content-type": "video/mp4", "cache-control": "no-store" }) as never;
+  } catch (error) { return messagesFailure(c, error) as never; } finally { rmSync(work, { recursive: true, force: true }); }
 });
 
 videoV1Routes.openapi(deleteRoute, (c) => {

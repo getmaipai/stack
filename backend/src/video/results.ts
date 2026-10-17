@@ -40,6 +40,7 @@ export function resultDir(job: string): string {
 }
 export function workDir(job: string): string { return join(dataDir, "tmp", "video", job); }
 export const videoPath = (job: string): string => join(resultDir(job), "video.mp4");
+export const messagesPath = (job: string): string => join(resultDir(job), "messages.mp4");
 export const posterPath = (job: string): string => join(resultDir(job), "poster.jpg");
 
 /** Moves a finished clip from the job's work folder into the result store and writes its record. */

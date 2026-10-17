@@ -19,6 +19,10 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Added
 
+- Video clips are made messaging-ready: the stored mp4 carries a silent AAC track and a title (picture copied untouched), and
+  `GET /v1/videos/generations/{job}/messages.mp4` and the stateless `POST /v1/videos/messages` prepare any clip for a text message (H.264
+  yuv420p, 1280 pixel edge, 20 MB cap). Uses the ffmpeg bundled with the video environment (VIDEOSHARE-01).
+
 - Disk plan (2026-10-17): `GET /stack/v1/install-plan` carries `disk`, what every install costs on disk per component and tier (Home itself, chat, projector, quick helper, memory search, speech to text, both voices, picture editing tools, FLUX.2 Klein, Z-Image Turbo, video, the search helper and the Python engine environments): download, installed and peak temporary bytes, marked required, recommended or optional, with the free space a plan asks for (installed size plus 20 percent plus temporary space). Sizes come from the pins' byte counts and `lib/diskPlanMeasured.json` (`bun run measure:disk-plan`); `tests/diskPlan.test.ts` fails when a pin's bytes change without it. `docs/disk-plan.json` is the same table for every tier, for clients that run before a Stack exists.
 - `GET /stack/v1/components`, `POST /stack/v1/components/{id}/install` and `DELETE /stack/v1/components/{id}`: every installable part (chat models, voices, the wake word, picture and video models, picture tools, household LoRAs) as one list with size, state, tier requirement and last use, installed as a job and removed with the space freed reported; Z-Image-Turbo is an optional component on the largest computers (COMPONENTS-01).
 

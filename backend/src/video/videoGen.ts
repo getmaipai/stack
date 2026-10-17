@@ -30,6 +30,7 @@ import { installedEnginePin, MANAGED_RUNTIMES } from "@/lib/engineCatalog";
 import { ensureEngine } from "@/lib/engineInstall";
 import { getGovernorStatus } from "@/lib/governor";
 import { log } from "@/lib/log";
+import { ffmpegPath, makeMessagesCopy } from "@/video/messages";
 import { getModel } from "@/lib/modelStore";
 import { STACK_VIDEO_MODEL_ID, STACK_VIDEO_TOKENIZER_ID } from "@/lib/modelCatalog";
 import { engineTagRoot } from "@/lib/store/layout";
@@ -307,6 +308,10 @@ export class VideoGenService {
         throw new VideoError(reply.code ?? "failed", reply.error ?? "The clip could not be made.", STATUS_BY_CODE[reply.code ?? "failed"] ?? 500);
       }
       if (!existsSync(output) || !existsSync(poster)) throw new VideoError("failed", "The video engine finished without a file. Try again.", 500);
+      // The stored clip is the messaging-ready one (silent AAC track, faststart, title): what Home keeps and the person sends.
+      if (ffmpegPath(videoGenRoot())) {
+        try { await makeMessagesCopy(output, output, "MaiPai video", videoGenRoot()); } catch (error) { log(`video: kept the plain clip, the messaging copy failed: ${error instanceof Error ? error.message : "unknown"}`); }
+      }
       this.lastSuccessAt = Date.now();
       return { width: reply.width ?? input.width, height: reply.height ?? input.height, frames: reply.frames ?? input.frames, fps: reply.fps ?? VIDEO_FPS, seed: reply.seed ?? input.seed, ms: reply.ms ?? 0, peakBytes: reply.peak_bytes ?? null };
     } finally {
