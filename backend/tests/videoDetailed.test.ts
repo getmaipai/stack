@@ -231,14 +231,14 @@ test("the Detailed pins are ungated, pinned by revision and sha256, never bundle
   expect((VIDEO_SPECS.detailed.maxSeconds * 24) % 8).toBe(0);
 });
 
-test("the disk plan offers Detailed on a 128 GB computer only, optional, with its plain size", () => {
+test("the disk plan offers Detailed on a 128 GB computer only, recommended (VIDEO-LTX-03), with its plain size", () => {
   const p128 = diskPlanForTier("p128")!;
   const row = p128.rows.find((candidate) => candidate.id === "video-detailed")!;
-  expect(row.need).toBe("optional");
+  expect(row.need).toBe("recommended");
   expect(row.download_bytes).toBeGreaterThan(70_000_000_000);
   expect(row.model_ids).toEqual([STACK_VIDEO_DETAILED_MODEL_ID, STACK_VIDEO_TEXT_ENCODER.id]);
   for (const tier of ["p16", "p32", "p64"] as const) expect(diskPlanForTier(tier)!.rows.some((candidate) => candidate.id === "video-detailed")).toBe(false);
-  expect(p128.default_selected).not.toContain("video-detailed");
+  expect(p128.default_selected).toContain("video-detailed");
 });
 
 // The real Detailed worker on the real weights, through the job API, only where a prepared environment and the model folders are named
