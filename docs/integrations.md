@@ -540,6 +540,8 @@ runs with `HF_HUB_OFFLINE=1`, and makes no network request. Tiers: `p128` (songs
 120 s, `quick` only); `p16` and `p32` answer 503 `not_available_on_this_computer`. Quality is the planning model: `quick` the 0.6B one, `detailed` the 1.7B one.
 Design and the measurements: Home `docs/design/music-generation-2026-10-17.md`, sections 3, 4 and 12.
 
+The on-demand MUSIC-GEN-17 bench measures sung-word recall, unmatched heard words with their times and LRC sections, and a squeezed ending. Run `python3 backend/scripts/bench/music-sung-words.py --stack http://127.0.0.1:<scratch-port> --lyrics <file> --caption "rock vocals" --seconds 60 --seed 42 --quality quick --whisper <model-dir> --out <dir>` with an existing local whisper model directory and a scratch Stack, never the live one. It saves `song.m4a`, `job.json` and `report.json`; a repeated LRC timestamp in the last 1.5 seconds fails (exit 1), with the preceding line included in the reported tail. Extra heard words are diagnostic only because whisper can mishear growled vocals. Pass exits 0; an error exits 2. This bench never runs in the gate.
+
 `POST /v1/audio/music` (JSON) answers like the picture and video routes: 200 `{ created, job, data: [{ url, content_type, duration_s, seed, model, task, ms, bytes,
 lrc }] }`, or 202 `{ created, job, data: [] }` when the song is still going at `timeout_ms` (60 s unsaid, 30 min at most); then poll. Fields: `task` (required:
 `text2music`, `cover`, `repaint`, `extend`, `edit`), `caption` (style, mood, instruments, voice), `lyrics` (ACE-Step's tagged form), `instrumental`, `duration_s`
