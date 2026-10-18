@@ -14,7 +14,7 @@ import { STACK_MUSIC_MODEL_ID } from "@/lib/modelCatalog";
 import { GenTracker, recordRun } from "@/lib/genProgress";
 import { commitResult, rememberLrc, workDir, type MusicResultMeta } from "./results";
 import { recordMadeSong } from "./provenance";
-import { MUSIC_PEAK_BYTES, MusicError, musicGen, SONG_FILE, type MusicRunFields } from "./musicGen";
+import { musicAdmissionBytes, MusicError, musicGen, SONG_FILE, type MusicRunFields } from "./musicGen";
 
 export const MUSIC_JOB_KIND = "music_generation";
 export const MUSIC_EDIT_JOB_KIND = "music_edit";
@@ -108,6 +108,6 @@ async function runSong(job: Job, signal: AbortSignal, update: JobProgress): Prom
 }
 
 export function registerMusicJobs(): void {
-  registerJobRunner(MUSIC_JOB_KIND, runSong, { generator: { role: "music", memory: () => ({ requestedBytes: MUSIC_PEAK_BYTES, measuredPeakBytes: MUSIC_PEAK_BYTES, engine: "music-gen" }) } });
+  registerJobRunner(MUSIC_JOB_KIND, runSong, { generator: { role: "music", memory: () => { const bytes = musicAdmissionBytes(); return { requestedBytes: bytes, measuredPeakBytes: bytes, engine: "music-gen" }; } } });
   registerJobRunner(MUSIC_EDIT_JOB_KIND, runSong);
 }

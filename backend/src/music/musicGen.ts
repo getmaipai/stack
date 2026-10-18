@@ -54,6 +54,14 @@ export const MUSIC_QUEUE_MAX = 4;
  * 120 s and 30 to 32 GB for detailed songs up to 240 s on the Studio, 2026-10-17 (Home's note, section 4.2). One admission covers the worst
  * case with a gigabyte of margin. */
 export const MUSIC_PEAK_BYTES = 33_000_000_000;
+/** What a warm worker (models loaded, between songs) already holds: 21 to 25 GB measured on the Studio, the low end taken. A song
+ * on a warm worker only needs the rest of its peak; asking for the whole peak again counted the loaded models twice and refused a
+ * second song (an edit right after a song) on a Mac with 50 GB free (MUSIC-GEN-06, 2026-10-17). */
+export const MUSIC_WARM_RESIDENT_BYTES = 21_000_000_000;
+/** The admission a song asks the governor for now: the whole peak on a cold start, the rest of it on a warm worker. */
+export function musicAdmissionBytes(warm: boolean = musicGen.workerAlive): number {
+  return warm ? MUSIC_PEAK_BYTES - MUSIC_WARM_RESIDENT_BYTES : MUSIC_PEAK_BYTES;
+}
 /** Tiers that run music; p16 and p32 keep it in `notAvailable`. */
 export const MUSIC_TIERS = ["p64", "p128"] as const;
 /** The longest song per tier; also passed to the worker as MUSIC_MAX_SECONDS. */
@@ -167,7 +175,7 @@ export function memoryVerdict(): { ok: true } | { ok: false; reason: string } {
   if (lowMemory) return { ok: false, reason: lowMemory };
   const status = getGovernorStatus();
   const resident = status.loaded.filter((item) => item.kind === "resident").reduce((sum, item) => sum + item.peakBytes, 0);
-  if (resident + MUSIC_PEAK_BYTES > status.capBytes) return { ok: false, reason: "Not enough free memory for music right now. Close other big jobs, or try again in a few minutes." };
+  if (resident + musicAdmissionBytes() > status.capBytes) return { ok: false, reason: "Not enough free memory for music right now. Close other big jobs, or try again in a few minutes." };
   return { ok: true };
 }
 

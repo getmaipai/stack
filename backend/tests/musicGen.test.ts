@@ -349,6 +349,7 @@ test("an edit takes no generator admission, runs through the same chain as a son
 test("an edit alone never touches the governor, even when no generator could be admitted", async () => {
   musicGen.useDeps(scripted());
   const made = await makeSong();
+  musicGen.stop(); // a cold worker: the new song asks for its whole peak, which cannot fit beside the chat below
   __setGovernorTuningForTestsOnly({ tier: "p128", totalMemoryBytes: 64 * GB, freeMemoryBytes: 60 * GB });
   await admit({ id: "chat", kind: "resident", requestedBytes: 40 * GB, pinned: true });
   const full = await post(song);
@@ -706,3 +707,10 @@ test.skipIf(!real)("the real worker makes a short quick song and trims it (MUSIC
   worker.kill();
   rmSync(out, { recursive: true, force: true });
 }, 900_000);
+
+test("a song on a warm worker asks only for the rest of its peak (a second song right after the first is not refused)", async () => {
+  const { musicAdmissionBytes, MUSIC_PEAK_BYTES, MUSIC_WARM_RESIDENT_BYTES } = await import("@/music/musicGen");
+  expect(musicAdmissionBytes(false)).toBe(MUSIC_PEAK_BYTES);
+  expect(musicAdmissionBytes(true)).toBe(MUSIC_PEAK_BYTES - MUSIC_WARM_RESIDENT_BYTES);
+  expect(musicAdmissionBytes(true)).toBe(12_000_000_000);
+});
