@@ -22,12 +22,12 @@
     "p64.needed_bytes": 53177196982,
     "p64.home_required_free_bytes": 3176323277,
     "p64.ai_required_free_bytes": 59984393136,
-    "p128.required_free_bytes": 63160716413,
+    "p128.required_free_bytes": 153531459328,
     "p128.minimum_required_free_bytes": 34279601493,
     "p128.everything_required_free_bytes": 263718711966,
-    "p128.needed_bytes": 53177196982,
+    "p128.needed_bytes": 128612613188,
     "p128.home_required_free_bytes": 3176323277,
-    "p128.ai_required_free_bytes": 59984393136
+    "p128.ai_required_free_bytes": 150355136051
   },
   "tiers": {
     "p16": {
@@ -1215,9 +1215,9 @@
         {
           "id": "video-detailed",
           "label": "Detailed videos with sound (LTX-2.3)",
-          "note": "Longer clips with a sound track and spoken words, and a large library of styles. Slower than the quick clip. Optional; needs the licence accepted.",
+          "note": "Longer clips with a sound track and spoken words, and a large library of styles. Slower than the quick clip. On by default on this computer size (about 74 GB); untick it to skip. Needs the maker's licence accepted once during setup.",
           "kind": "model",
-          "need": "optional",
+          "need": "recommended",
           "selectable": true,
           "download_bytes": 73573310407,
           "installed_bytes": 73573310407,
@@ -1370,11 +1370,11 @@
         }
       ],
       "default": {
-        "download_bytes": 47753604073,
-        "installed_bytes": 49917597154,
-        "peak_temp_bytes": 3259599828,
-        "needed_bytes": 53177196982,
-        "required_free_bytes": 63160716413
+        "download_bytes": 122085697143,
+        "installed_bytes": 124594230697,
+        "peak_temp_bytes": 4018382491,
+        "needed_bytes": 128612613188,
+        "required_free_bytes": 153531459328
       },
       "minimum": {
         "download_bytes": 25529840047,
@@ -1402,6 +1402,7 @@
         "voice-better",
         "image-tools",
         "pictures",
+        "video-detailed",
         "search"
       ]
     }

@@ -93,7 +93,12 @@ test("turning an optional row on or off moves the total by that row and its engi
   const video = plan.rows.find((r) => r.id === "video")!;
   const videoEngine = plan.rows.find((r) => r.id === "engine:video")!;
   const withVideo = diskTotalsFor(plan, [...plan.default_selected, "video"]);
-  expect(withVideo.installed_bytes - base.installed_bytes).toBe(video.installed_bytes + videoEngine.installed_bytes);
+  // Detailed video is on by default and brings the video engine, so Quick video adds only its own weights.
+  expect(plan.default_selected).toContain("video-detailed");
+  expect(withVideo.installed_bytes - base.installed_bytes).toBe(video.installed_bytes);
+  const noDetailed = diskTotalsFor(plan, plan.default_selected.filter((id) => id !== "video-detailed"));
+  const withBoth = diskTotalsFor(plan, [...plan.default_selected.filter((id) => id !== "video-detailed"), "video"]);
+  expect(withBoth.installed_bytes - noDetailed.installed_bytes).toBe(video.installed_bytes + videoEngine.installed_bytes);
   const zimage = plan.rows.find((r) => r.id === "pictures-zimage")!;
   const withZ = diskTotalsFor(plan, [...plan.default_selected, "pictures-zimage"]);
   expect(withZ.installed_bytes - base.installed_bytes).toBe(zimage.installed_bytes); // the picture engine is already counted for Klein
@@ -144,5 +149,22 @@ test("oMLX is an optional row on p64 and p128 only, off by default, and its 19 G
       expect(diskTotalsFor(plan, [...plan.default_selected, "chat-mlx"]).download_bytes).toBeGreaterThanOrEqual(without.download_bytes + 19_443_246_692);
       expect(plan.default.download_bytes).toBe(without.download_bytes);
     } else expect(row).toBeUndefined();
+  }
+});
+
+test("Detailed video (LTX-2.3) is recommended on p128 only: on by default, about 74 GB more free space, never in the first-run install plan (ENGINE-LTX-REC)", () => {
+  const p128 = buildDiskPlan(PROFILE_TIERS.find((t) => t.id === "p128")!);
+  const row = p128.rows.find((r) => r.id === "video-detailed")!;
+  expect(row).toMatchObject({ need: "recommended", selectable: true });
+  expect(p128.default_selected).toContain("video-detailed");
+  expect(row.download_bytes).toBeGreaterThan(70e9);
+  const without = diskTotalsFor(p128, p128.default_selected.filter((id) => id !== "video-detailed"));
+  expect(p128.default.required_free_bytes - without.required_free_bytes).toBeGreaterThan(70e9);
+  expect(p128.minimum.required_free_bytes).toBeLessThan(p128.default.required_free_bytes - 70e9);
+  for (const tier of PROFILE_TIERS) {
+    const plan = buildDiskPlan(tier);
+    if (tier.id !== "p128") expect(plan.rows.find((r) => r.id === "video-detailed")).toBeUndefined();
+    // The install plan (what an install or an upgrade pulls on its own) never carries it: only the wizard's checked row or an explicit install does.
+    expect(plannedPinsFor(tier).some((entry) => row.model_ids.includes(entry.pin.id))).toBe(false);
   }
 });

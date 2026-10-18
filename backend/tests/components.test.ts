@@ -275,7 +275,7 @@ test("the real list offers Detailed video on a 128 GB computer only: optional, i
   __setComponentUnitsForTests(null);
   const list = await listComponents(hw());
   const detailed = list.components.find((c) => c.id === "ltx-2-3-distilled-mlx")!;
-  expect(detailed).toMatchObject({ label: "Video: Detailed (LTX-2.3)", group: "video", requirement: "optional", state: "notInstalled", can_install: true, plan_need: "optional" });
+  expect(detailed).toMatchObject({ label: "Video: Detailed (LTX-2.3)", group: "video", requirement: "optional", state: "notInstalled", can_install: true, plan_need: "recommended" });
   expect(detailed.full_bytes).toBeGreaterThan(70e9);
   expect(detailed.licence).toMatchObject({ id: "ltx-2.x-community-2026-08-11", accepted_at: null });
   expect(detailed.licence!.summary.join(" ")).toContain("$10 million");
