@@ -19,6 +19,7 @@ import { STACK_MODELS } from "@/lib/modelCatalog";
 import { startSelfHeal } from "@/lib/selfHeal";
 import { ddgsSupervisor } from "@/search/ddgsSidecar";
 import { imageTools, sweepImageToolsTmp } from "@/imagetools/imageTools";
+import { heavyGate, recoverPausedWorkers } from "@/lib/heavyGate";
 import { hostLimiter } from "@/media/hosts";
 import { sweepJobDirs } from "@/media/paths";
 import { videoGen } from "@/video/videoGen";
@@ -78,6 +79,8 @@ async function serve(): Promise<void> {
   const stopSelfHeal = startSelfHeal();
   // Pictures an earlier crash left in the image tools' temporary folder are removed; the worker itself starts on the first edit.
   sweepImageToolsTmp();
+  // ISOLATION-01: a worker an earlier Stack left stopped (it was killed while a chat held the pause) is continued now.
+  recoverPausedWorkers();
   // Media job folders nobody released within a week (Home was away) go; a site that asked the Stack to rest is still resting after a restart.
   sweepJobDirs();
   hostLimiter.load();
@@ -107,6 +110,8 @@ async function serve(): Promise<void> {
     stopMemoryWatchdog();
     clearInterval(idle);
     stopSelfHeal();
+    // ISOLATION-01: nothing is left stopped; each worker is continued before it is told to quit.
+    heavyGate.resumeEverything("shutdown");
     // The watchdog keeps beating through the drain: a stop that takes
     // longer than WatchdogSec must not be mistaken for a hang.
     await ddgsSupervisor.stop().catch(() => {});

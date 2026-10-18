@@ -9,6 +9,7 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { registerJobRunner } from "@/lib/jobs";
+import { heavyGate } from "@/lib/heavyGate";
 
 import { workDir, commitResult, type VideoResultMeta } from "./results";
 import { recordGeneratedImage } from "./provenance";
@@ -87,9 +88,10 @@ export function registerVideoJobs(): void {
       const outputDir = join(work, "out");
       const started = Date.now();
       const quality = clip.quality ?? "quick";
+      const pacing = heavyGate.pacing(job.id);
       const tracker = quality === "quick"
-        ? new GenTracker("video", historyKey("video", clip.width, clip.height, clip.frames))
-        : new GenTracker("video_detailed", historyKey("video_detailed", clip.width, clip.height, clip.frames), Date.now, Math.max(0.25, (clip.frames - 1) / 120));
+        ? new GenTracker("video", historyKey("video", clip.width, clip.height, clip.frames), pacing.now, 1, pacing.paused)
+        : new GenTracker("video_detailed", historyKey("video_detailed", clip.width, clip.height, clip.frames), pacing.now, Math.max(0.25, (clip.frames - 1) / 120), pacing.paused);
       remember(trackers, job.id, tracker);
       const result = await videoGen.run({ ...(clip.preview !== false ? { previewPath: previewFile(outputDir) } : {}), prompt: clip.prompt, negativePrompt: clip.negativePrompt, imagePath, width: clip.width, height: clip.height, frames: clip.frames, seed: clip.seed, loras: clip.loras, outputDir, quality }, {
         jobId: job.id, signal,

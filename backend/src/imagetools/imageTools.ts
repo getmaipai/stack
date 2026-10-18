@@ -22,6 +22,7 @@
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { admit, release, type GovernorHandle } from "@/lib/governor";
+import { heavyGate, PausableProcess, type Lease, type PausableWorker } from "@/lib/heavyGate";
 import { log } from "@/lib/log";
 import { MANAGED_RUNTIMES } from "@/lib/engineCatalog";
 import { dataDir } from "@/lib/paths";
@@ -103,7 +104,7 @@ export interface WorkerRequest { id: string; op: ImageToolOperation; input: stri
 /** One person Apple's on-device finder saw: a number (the order the finder gave), and a box as fractions of the picture. */
 export interface PersonBox { id: number; x: number; y: number; w: number; h: number; area: number }
 export interface WorkerReply { id: string | null; ok: boolean; code?: string; error?: string; width?: number; height?: number; engine?: string; model?: string; ms?: number; crop_px?: number; people?: PersonBox[]; }
-export interface WorkerHandle { send(request: WorkerRequest, deadlineMs: number): Promise<WorkerReply>; kill(): void; exited: Promise<number>; }
+export interface WorkerHandle { send(request: WorkerRequest, deadlineMs: number): Promise<WorkerReply>; kill(): void; exited: Promise<number>; /** ISOLATION-01: the process, for the gate that stops it while chat is working (absent on a scripted worker). */ pausable?: PausableWorker; }
 
 export interface ImageToolsDeps {
   requirements: () => string | null;
@@ -148,7 +149,7 @@ export const defaultImageToolsDeps: ImageToolsDeps = {
 };
 
 /** Wraps a spawned worker in the one-request-at-a-time line protocol. */
-export function workerHandle(child: { stdin: { write(data: string): unknown; flush?(): unknown }; stdout: ReadableStream<Uint8Array>; stderr: ReadableStream<Uint8Array>; exited: Promise<number>; kill(): void }): WorkerHandle {
+export function workerHandle(child: { pid?: number; stdin: { write(data: string): unknown; flush?(): unknown }; stdout: ReadableStream<Uint8Array>; stderr: ReadableStream<Uint8Array>; exited: Promise<number>; kill(): void }): WorkerHandle {
   const waiting = new Map<string, (reply: WorkerReply) => void>();
   let ready: () => void = () => {};
   const started = new Promise<void>((resolve) => { ready = resolve; });
@@ -167,14 +168,16 @@ export function workerHandle(child: { stdin: { write(data: string): unknown; flu
     }
   })().catch(() => {});
   const exited = child.exited.then((code) => { for (const [id, resolve] of waiting) resolve({ id, ok: false, code: "worker_stopped", error: `The image tool stopped (${stderrTail.trim().split("\n").slice(-1)[0] ?? `exit ${code}`}). Try again.` }); waiting.clear(); return code; });
+  const pausable = new PausableProcess(child.pid ?? null, child.exited);
   return {
     exited,
-    kill: () => { try { child.kill(); } catch { /* already gone */ } },
+    pausable,
+    kill: () => pausable.killAfterResume(() => { try { child.kill(); } catch { /* already gone */ } }),
     send: async (request, deadlineMs) => {
       await Promise.race([started, exited.then(() => {})]);
       return await new Promise<WorkerReply>((resolve) => {
-        const timer = setTimeout(() => { waiting.delete(request.id); try { child.kill(); } catch { /* gone */ } resolve({ id: request.id, ok: false, code: "failed", error: "The picture took too long to process and was stopped. Try a smaller picture." }); }, deadlineMs);
-        waiting.set(request.id, (reply) => { clearTimeout(timer); waiting.delete(request.id); resolve(reply); });
+        const timer = pausable.deadline(deadlineMs, () => { waiting.delete(request.id); try { child.kill(); } catch { /* gone */ } resolve({ id: request.id, ok: false, code: "failed", error: "The picture took too long to process and was stopped. Try a smaller picture." }); });
+        waiting.set(request.id, (reply) => { timer.clear(); waiting.delete(request.id); resolve(reply); });
         child.stdin.write(`${JSON.stringify(request)}\n`); child.stdin.flush?.();
       });
     },
@@ -262,8 +265,10 @@ export class ImageToolsService {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     const stem = join(dir, crypto.randomUUID());
     const files = [`${stem}.in`, `${stem}.mask`, `${stem}.out.png`, `${stem}.out.png.prepared.png`];
+    let lease: Lease | undefined;
     try {
       const worker = await this.ensureWorker(onStatus, options.signal);
+      lease = heavyGate.attach({ role: "imagetools", worker: worker.pausable });
       const needed = input.operation === "erase" || input.operation === "erase_people" ? ["lama"] : input.operation === "upscale" ? ["esrgan"] : input.operation === "remove_background" ? ["isnet"] : [];
       const models = Object.fromEntries(Object.entries(IMAGE_TOOL_MODEL_IDS).map(([name, id]) => [name, this.deps.modelPath(id)]));
       for (const name of needed) {
@@ -281,6 +286,7 @@ export class ImageToolsService {
       return { png, width: reply.width ?? 0, height: reply.height ?? 0, engine: reply.engine ?? "unknown", model: reply.model ?? "unknown", ms: reply.ms ?? 0, operation: input.operation, ...(reply.people ? { people: reply.people } : {}) };
     } finally {
       for (const file of files) rmSync(file, { force: true });
+      lease?.detach();
       this.busy -= 1;
       if (this.worker && this.busy === 0) this.idleTimer = setTimeout(() => { log("image tools worker stopped after being idle"); this.stopWorker(); }, idleMs());
     }

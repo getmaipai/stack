@@ -8,6 +8,7 @@ import { Hono } from "hono";
 import { createBunWebSocket } from "hono/bun";
 import type { ServerWebSocket } from "bun";
 import { EngineUnavailableError, openRoleSession, type RoleSession } from "@/lib/supervisor";
+import { heavyGate } from "@/lib/heavyGate";
 import { SESSION_PATH } from "@/speech/server";
 
 const { upgradeWebSocket, websocket } = createBunWebSocket<ServerWebSocket>();
@@ -50,7 +51,7 @@ speechRoutes.get("/", upgradeWebSocket(() => {
       const socket = new WebSocket(`${session.baseUrl.replace(/^http/, "ws")}${SESSION_PATH}`);
       socket.binaryType = "arraybuffer";
       socket.onopen = () => { for (const frame of held) socket.send(frame as ArrayBuffer); held.length = 0; };
-      socket.onmessage = (message) => { if (typeof message.data === "string") client.send(message.data); };
+      socket.onmessage = (message) => { if (typeof message.data === "string") { client.send(message.data); heavyGate.begin("stt")(); /* ISOLATION-01: a transcript event means someone is speaking; a heavy job is paused for it and the tail. An open but silent session is not a request. */ } };
       // Once this side has ended the session, the upstream's own close
       // is the echo of ours, not a new reason to give the client.
       socket.onclose = () => { if (closed) return; end(); client.close(1000, "Session ended."); };

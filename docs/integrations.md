@@ -417,6 +417,17 @@ recipe of the image tools. The licence record is in `backend/src/media/pins.ts` 
 and `STACK_MEDIA_YTDLP` point at programs an operator already has. No request is ever made to a video service by the Stack itself or by its tests
 (RULES.md V1): the tests fetch a localhost fixture with yt-dlp's generic extractor.
 
+## Chat and voice win over heavy jobs (ISOLATION-01)
+
+The Stack sees every chat, transcription and speech request itself, so it keeps a heavy job from slowing them without any header or call from Home.
+
+- **Interactive** means a request on `chat`, `coding`, `vision`, `router` (`/v1/chat/completions`), `stt` (`/v1/audio/transcriptions`, and each transcript event on the speech session websocket) or `tts` (`/v1/audio/speech`). The memory judge, embeddings, rerank and token counts are background and never pause anything.
+- While one is in flight, plus a 4 s tail after the last one ends, the worker that is running a job (picture, video, music, image tools) is stopped with SIGSTOP and then continued with SIGCONT. It keeps its memory and loses no work; a streamed reply counts until its last byte is read or the client leaves.
+- Only a worker the Stack itself started and attached for a running job can be stopped, never the Stack, never an engine behind a role. Every way out continues it first: the job ending, a cancel, the memory watchdog's cancel, the Stack stopping or exiting, a worker dying. One pause lasts at most 10 minutes, then it is continued by force (log `isolation.resume_forced`) and runs for 60 s before it can be stopped again. The pids of stopped workers are kept in `isolation-paused.json` in the data directory so a Stack that was killed while a worker was stopped continues it at its next start.
+- The job deadline and the progress estimate do not count the paused time. The job stays `running`; its `status` is `paused: chat` on `GET /stack/v1/jobs/{id}`, and the status routes of the picture, video and music jobs say `stage_label` "Paused while chat is working" with `eta_seconds` null (music: `stage` "paused"). The estimate carries on at the resume.
+- Log lines (JSON, `stack.log`): `isolation.paused` and `isolation.resumed` with job, role and paused seconds, `isolation.resume_forced`. `GET /stack/v1/memory` has an `isolation` object: `paused_now`, `interactive_in_flight`, `pauses`, `resumes`, `forced_resumes`, `paused_seconds`.
+- `STACK_ISOLATION=off` in the Stack's environment turns the pause off (for measuring); `STACK_ISOLATION_TAIL_MS`, `STACK_ISOLATION_MAX_PAUSE_MS` and `STACK_ISOLATION_FORCED_RUN_MS` tune it.
+
 ## Video generation (VIDEO-GEN-01 to 03)
 
 Wan2.2 TI2V-5B with FastWan's 3-step distillation, run by mlx-video on the Apple GPU (a Mac with 128 GB: tier `p128` only, because a clip peaks at 44.1 GB beside the roughly 28 GB resident on a 64 GB Mac and every clip there would be refused with `no_memory`;

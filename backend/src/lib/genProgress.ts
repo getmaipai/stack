@@ -111,6 +111,9 @@ export interface GenSnapshot {
   eta_seconds: number | null;
 }
 
+/** The stage words while the Stack has stopped the worker for a chat or voice request. */
+export const PAUSED_LABEL = "Paused while chat is working";
+
 export class GenTracker {
   private index = -1;
   private n: number | null = null;
@@ -128,7 +131,7 @@ export class GenTracker {
   preview: { version: number; step: number | null; steps: number | null } | null = null;
   private readonly stages: StageDef[];
   /** `scale` stretches the built-in seconds for a job bigger or smaller than the sizes they were measured at (a picture of 2048 x 2048 is four 1024 x 1024 ones); history, once it exists for the size, replaces them. */
-  constructor(readonly kind: GenKind, readonly key: string, private readonly now: () => number = Date.now, private readonly scale = 1) { this.stages = stagesFor(kind); }
+  constructor(readonly kind: GenKind, readonly key: string, private readonly now: () => number = Date.now, private readonly scale = 1, private readonly paused: () => boolean = () => false) { this.stages = stagesFor(kind); }
   private seconds(stage: StageDef): number { return stageSeconds(this.key, stage, stage.fixed ? 1 : this.scale); }
 
   get started(): boolean { return this.seenStage; }
@@ -167,6 +170,12 @@ export class GenTracker {
   }
 
   snapshot(): GenSnapshot {
+    const snap = this.measure();
+    // ISOLATION-01: the worker is stopped so a chat runs at full speed; the stage says so and the countdown waits (the clock the tracker was given leaves the paused time out, so the estimate carries on from here at the resume).
+    return this.paused() && snap.stage !== null ? { ...snap, stage_label: PAUSED_LABEL, eta_seconds: null } : snap;
+  }
+
+  private measure(): GenSnapshot {
     if (this.index < 0) return { stage: null, stage_label: null, step: null, steps: null, fraction: this.unit / this.units, eta_seconds: null };
     const stage = this.stages[this.index]!;
     const elapsed = (this.now() - this.stageStarted) / 1000;

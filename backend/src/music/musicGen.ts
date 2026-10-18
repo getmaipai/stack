@@ -24,6 +24,7 @@
 import { lowMemoryRefusal } from "@/lib/memoryState";
 import { existsSync, mkdirSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { heavyGate, PausableProcess, type Lease, type PausableWorker } from "@/lib/heavyGate";
 import { installedEnginePin, MANAGED_RUNTIMES } from "@/lib/engineCatalog";
 import { ensureEngine } from "@/lib/engineInstall";
 import { getGovernorStatus } from "@/lib/governor";
@@ -189,7 +190,7 @@ export interface WorkerRequest {
 }
 export type WorkerEvent = { id: string | null; event: "stage"; stage: "load" | "plan" | "music" | "mix" | "save"; fraction?: number };
 export interface WorkerReply { id: string | null; ok: boolean; code?: string; error?: string; duration_s?: number; seed?: number | null; task?: string; lrc?: string | null; ms?: number; peak_bytes?: number; }
-export interface WorkerHandle { send(request: WorkerRequest, options: { onEvent: (event: WorkerEvent) => void; deadlineMs: number }): Promise<WorkerReply>; kill(): void; exited: Promise<number>; }
+export interface WorkerHandle { send(request: WorkerRequest, options: { onEvent: (event: WorkerEvent) => void; deadlineMs: number }): Promise<WorkerReply>; kill(): void; exited: Promise<number>; /** ISOLATION-01: the process, for the gate that stops it while chat is working (absent on a scripted worker). */ pausable?: PausableWorker; }
 
 export interface MusicRuntime { ckptDir: string; ffmpeg: string; }
 export interface MusicGenDeps {
@@ -235,7 +236,7 @@ export const defaultMusicGenDeps: MusicGenDeps = {
 };
 
 /** Wraps a spawned worker in the line protocol: one request at a time, stage events while it runs, one reply at the end. */
-export function workerHandle(child: { stdin: { write(data: string): unknown; flush?(): unknown }; stdout: ReadableStream<Uint8Array>; stderr: ReadableStream<Uint8Array>; exited: Promise<number>; kill(): void }): WorkerHandle {
+export function workerHandle(child: { pid?: number; stdin: { write(data: string): unknown; flush?(): unknown }; stdout: ReadableStream<Uint8Array>; stderr: ReadableStream<Uint8Array>; exited: Promise<number>; kill(): void }): WorkerHandle {
   let ready: () => void = () => {};
   const started = new Promise<void>((resolve) => { ready = resolve; });
   const slot: { current: { id: string; onEvent: (event: WorkerEvent) => void; resolve: (reply: WorkerReply) => void } | null } = { current: null };
@@ -262,14 +263,16 @@ export function workerHandle(child: { stdin: { write(data: string): unknown; flu
     if (slot.current) slot.current.resolve({ id: slot.current.id, ok: false, code: "worker_stopped", error: "The music engine stopped before the song was finished. Try again." });
     return code;
   });
+  const pausable = new PausableProcess(child.pid ?? null, child.exited);
   return {
     exited,
-    kill: () => { try { child.kill(); } catch { /* already gone */ } },
+    pausable,
+    kill: () => pausable.killAfterResume(() => { try { child.kill(); } catch { /* already gone */ } }),
     send: async (request, options) => {
       await Promise.race([started, exited.then(() => {})]);
       return await new Promise<WorkerReply>((resolve) => {
-        const timer = setTimeout(() => { try { child.kill(); } catch { /* gone */ } resolve({ id: request.id, ok: false, code: "timeout", error: "The song took too long and was stopped. Try a shorter song." }); }, options.deadlineMs);
-        slot.current = { id: request.id, onEvent: options.onEvent, resolve: (reply) => { clearTimeout(timer); slot.current = null; resolve(reply); } };
+        const timer = pausable.deadline(options.deadlineMs, () => { try { child.kill(); } catch { /* gone */ } resolve({ id: request.id, ok: false, code: "timeout", error: "The song took too long and was stopped. Try a shorter song." }); });
+        slot.current = { id: request.id, onEvent: options.onEvent, resolve: (reply) => { timer.clear(); slot.current = null; resolve(reply); } };
         child.stdin.write(`${JSON.stringify(request)}\n`); child.stdin.flush?.();
       });
     },
@@ -367,8 +370,10 @@ export class MusicGenService {
     if (!this.deps.installed()) throw new MusicError("model_missing", "The music model is not installed yet. Install it from Home's Engines page, then try again.", 503);
     this.busy += 1;
     if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
+    let lease: Lease | undefined;
     try {
       const worker = await this.ensureWorker(onStage, options.signal);
+      lease = heavyGate.attach({ role: "music", jobId: options.jobId, worker: worker.pausable });
       mkdirSync(input.outputDir, { recursive: true, mode: 0o700 });
       const output = join(input.outputDir, SONG_FILE);
       const runtime = this.deps.runtime();
@@ -388,6 +393,7 @@ export class MusicGenService {
       return { duration_s: reply.duration_s ?? input.fields.duration_s ?? 0, seed: reply.seed ?? null, task: reply.task ?? input.fields.task, lrc: reply.lrc ?? null, ms: reply.ms ?? 0, peakBytes: reply.peak_bytes ?? null };
     } finally {
       this.busy -= 1;
+      lease?.detach();
       if (options.signal?.aborted) rmSync(input.outputDir, { recursive: true, force: true });
       if (this.worker && this.busy === 0) this.idleTimer = setTimeout(() => { log("music worker stopped after being idle"); this.stopWorker(); }, idleMs());
     }

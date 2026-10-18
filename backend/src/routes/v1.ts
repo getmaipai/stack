@@ -14,6 +14,7 @@ import { DownloadVerificationError } from "@/lib/download";
 import { POCKET_TTS_GATED_REPO } from "@/speech/pocketTts";
 import { ensureCloningWeights, prepareVoice, voiceNeedsCloning, VoiceRefusedError } from "@/speech/voices";
 import { hasJobRunner, submitJob, waitForJob } from "@/lib/jobs";
+import { endWithStream, heavyGate } from "@/lib/heavyGate";
 import { editImages, generateImages, ImageGenerationBodySchema, type ImageGenerationBody } from "@/routes/imageGenerations";
 import { imageEngineActive } from "@/images/imageEngine";
 import { IMAGE_TOOLS_OPERATIONS, stashInput, takeResult } from "@/imagetools/imageTools";
@@ -107,14 +108,21 @@ async function reply<T extends Context>(c: T, wire: Wire, body: Record<string, u
       const images = (settled.result as { images?: Array<Record<string, unknown>> } | null)?.images ?? [];
       return jsonReply(c, { created, job: settled.id, data: images }, 200, identityHeaders(null));
     }
+    // ISOLATION-01: a chat or transcription request is interactive for as long as it is in flight; a running heavy job is paused meanwhile.
+    const interactive = wire === "chat" || wire === "transcription";
     if (wire === "chat" && body.stream === true) {
-      const result = await streamRole(role, WIRE_PATHS.chat, body, c.req.raw.signal);
+      const end = heavyGate.begin(role);
+      let result: Awaited<ReturnType<typeof streamRole>>;
+      try { result = await streamRole(role, WIRE_PATHS.chat, body, c.req.raw.signal); } catch (error) { end(); throw error; }
       for (const [name, value] of Object.entries(result.headers)) c.header(name, value);
-      if (!result.body) return new Response(JSON.stringify({ error: result.status === 499 ? "Request cancelled" : "Streaming is unavailable" }), { status: result.status, headers: { ...result.headers, "content-type": "application/json" } });
-      return new Response(result.body, { status: result.status, headers: { ...result.headers, "content-type": "text/event-stream", "cache-control": "no-cache" } });
+      if (!result.body) { end(); return new Response(JSON.stringify({ error: result.status === 499 ? "Request cancelled" : "Streaming is unavailable" }), { status: result.status, headers: { ...result.headers, "content-type": "application/json" } }); }
+      return new Response(endWithStream(result.body, end), { status: result.status, headers: { ...result.headers, "content-type": "text/event-stream", "cache-control": "no-cache" } });
     }
-    const result = await requestRole(role, WIRE_PATHS[wire], body, c.req.raw.signal);
-    return jsonReply(c, result.body, result.status, result.headers);
+    const end = interactive ? heavyGate.begin(role) : () => {};
+    try {
+      const result = await requestRole(role, WIRE_PATHS[wire], body, c.req.raw.signal);
+      return jsonReply(c, result.body, result.status, result.headers);
+    } finally { end(); }
   } catch (error) {
     if (error instanceof EngineUnavailableError) {
       const role = (() => { try { return resolveRole(modelField).role; } catch { return "chat" as RoleId; } })();
@@ -202,10 +210,13 @@ v1Routes.openapi(speechRoute, async (c) => {
     const pocket = ttsEngineInEffect() === "pocket";
     const voice = pocket ? await prepareVoice(form.voice_url, { signal: controller.signal }) : undefined;
     if (pocket && voiceNeedsCloning(voice)) await ensureCloningLoaded(resolution.role, controller.signal);
-    const spoken = await speakRole(resolution.role, speechForm(form.text, voice), controller.signal);
+    // ISOLATION-01: speech is interactive from the ask until the last audio is sent (a heavy job is paused meanwhile).
+    const end = heavyGate.begin(resolution.role);
+    let spoken: Awaited<ReturnType<typeof speakRole>>;
+    try { spoken = await speakRole(resolution.role, speechForm(form.text, voice), controller.signal); } catch (error) { end(); throw error; }
     for (const [name, value] of Object.entries(spoken.headers)) c.header(name, value);
-    if (!spoken.body) return new Response(JSON.stringify({ error: spoken.status === 499 ? "Request cancelled" : spoken.status === 504 ? "The engine timed out." : "The engine did not answer." }), { status: spoken.status, headers: { ...spoken.headers, "content-type": "application/json" } });
-    return new Response(spoken.body, { status: spoken.status, headers: { ...spoken.headers, "content-type": spoken.contentType ?? "audio/wav", "cache-control": "no-cache" } });
+    if (!spoken.body) { end(); return new Response(JSON.stringify({ error: spoken.status === 499 ? "Request cancelled" : spoken.status === 504 ? "The engine timed out." : "The engine did not answer." }), { status: spoken.status, headers: { ...spoken.headers, "content-type": "application/json" } }); }
+    return new Response(endWithStream(spoken.body, end), { status: spoken.status, headers: { ...spoken.headers, "content-type": spoken.contentType ?? "audio/wav", "cache-control": "no-cache" } });
   } catch (error) {
     if (error instanceof EngineUnavailableError) { const result = noEngineResponse("tts", error.reason); return jsonReply(c, result.body, result.status, result.headers); }
     if (error instanceof UnverifiedModelError) return jsonReply(c, { error: error.message, model: error.modelId, reason: "unverified", missing: error.missing }, 409, identityHeaders(null));

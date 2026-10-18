@@ -2,6 +2,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { memoryWatchdog } from "@/lib/memoryWatchdog";
+import { heavyGate } from "@/lib/heavyGate";
 
 const Level = z.enum(["normal", "warn", "critical"]);
 const MemorySchema = z.object({
@@ -10,6 +11,7 @@ const MemorySchema = z.object({
   stack: z.object({ bytes: z.number(), processes: z.array(z.object({ pid: z.number(), name: z.string(), bytes: z.number() })) }),
   top_consumers: z.array(z.object({ pid: z.number(), name: z.string(), bytes: z.number(), stack: z.boolean() })),
   non_stack_bytes: z.number(),
+  isolation: z.object({ enabled: z.boolean(), paused_now: z.number(), interactive_in_flight: z.number(), pauses: z.number(), resumes: z.number(), forced_resumes: z.number(), paused_seconds: z.number() }).openapi({ description: "ISOLATION-01: heavy workers (picture, video, music, image tools) are stopped while a chat or voice request is in flight and continued after it. paused_now is how many are stopped this moment; paused_seconds is the total since the Stack started." }),
   recent_actions: z.array(z.object({ at: z.string(), level: Level, action: z.string(), detail: z.string() })),
   history: z.array(z.object({ at: z.string(), available_bytes: z.number(), swap_used_bytes: z.number(), pressure_level: z.number() })),
 });
@@ -20,4 +22,4 @@ const route = createRoute({
 });
 
 export const memoryRoutes = apiRouter<AppEnv>();
-memoryRoutes.openapi(route, (c) => c.json(memoryWatchdog().report(), 200));
+memoryRoutes.openapi(route, (c) => c.json({ ...memoryWatchdog().report(), isolation: heavyGate.status() }, 200));

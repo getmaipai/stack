@@ -23,6 +23,7 @@
 // reference picture arrives with a declared source that is not an upload
 // (Home owns the gate). Age and surface gates, the household-name gate on the
 // prompt, and the two absolute lines live in Home, where the person is known.
+import { heavyGate, PausableProcess, type Lease, type PausableWorker } from "@/lib/heavyGate";
 import { lowMemoryRefusal } from "@/lib/memoryState";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -164,7 +165,7 @@ export type WorkerEvent =
   | { id: string | null; event: "stage"; stage: string; n?: number; of?: number }
   | { id: string | null; event: "preview"; ms?: number };
 export interface WorkerReply { id: string | null; ok: boolean; code?: string; error?: string; width?: number; height?: number; frames?: number; fps?: number; seed?: number; ms?: number; peak_bytes?: number; audio?: boolean; }
-export interface WorkerHandle { send(request: WorkerRequest, options: { onEvent: (event: WorkerEvent) => void; deadlineMs: number }): Promise<WorkerReply>; kill(): void; exited: Promise<number>; }
+export interface WorkerHandle { send(request: WorkerRequest, options: { onEvent: (event: WorkerEvent) => void; deadlineMs: number }): Promise<WorkerReply>; kill(): void; exited: Promise<number>; /** ISOLATION-01: the process, for the gate that stops it while chat is working (absent on a scripted worker). */ pausable?: PausableWorker; }
 
 export interface VideoGenDeps {
   supported: () => boolean;
@@ -193,7 +194,7 @@ export const defaultVideoGenDeps: VideoGenDeps = {
 };
 
 /** Wraps a spawned worker in the line protocol: one request at a time, phase events while it runs, one reply at the end. */
-export function workerHandle(child: { stdin: { write(data: string): unknown; flush?(): unknown }; stdout: ReadableStream<Uint8Array>; stderr: ReadableStream<Uint8Array>; exited: Promise<number>; kill(): void }): WorkerHandle {
+export function workerHandle(child: { pid?: number; stdin: { write(data: string): unknown; flush?(): unknown }; stdout: ReadableStream<Uint8Array>; stderr: ReadableStream<Uint8Array>; exited: Promise<number>; kill(): void }): WorkerHandle {
   let ready: () => void = () => {};
   const started = new Promise<void>((resolve) => { ready = resolve; });
   const slot: { current: { id: string; onEvent: (event: WorkerEvent) => void; resolve: (reply: WorkerReply) => void } | null } = { current: null };
@@ -220,14 +221,17 @@ export function workerHandle(child: { stdin: { write(data: string): unknown; flu
     if (slot.current) slot.current.resolve({ id: slot.current.id, ok: false, code: "worker_stopped", error: "The video engine stopped before the clip was finished. Try again." });
     return code;
   });
+  const pausable = new PausableProcess(child.pid ?? null, child.exited);
   return {
     exited,
-    kill: () => { try { child.kill(); } catch { /* already gone */ } },
+    pausable,
+    kill: () => pausable.killAfterResume(() => { try { child.kill(); } catch { /* already gone */ } }),
     send: async (request, options) => {
       await Promise.race([started, exited.then(() => {})]);
       return await new Promise<WorkerReply>((resolve) => {
-        const timer = setTimeout(() => { try { child.kill(); } catch { /* gone */ } resolve({ id: request.id, ok: false, code: "timeout", error: "The clip took too long and was stopped. Try a shorter clip." }); }, options.deadlineMs);
-        slot.current = { id: request.id, onEvent: options.onEvent, resolve: (reply) => { clearTimeout(timer); slot.current = null; resolve(reply); } };
+        // The deadline does not run while the process is stopped for a chat (ISOLATION-01).
+        const timer = pausable.deadline(options.deadlineMs, () => { try { child.kill(); } catch { /* gone */ } resolve({ id: request.id, ok: false, code: "timeout", error: "The clip took too long and was stopped. Try a shorter clip." }); });
+        slot.current = { id: request.id, onEvent: options.onEvent, resolve: (reply) => { timer.clear(); slot.current = null; resolve(reply); } };
         child.stdin.write(`${JSON.stringify(request)}\n`); child.stdin.flush?.();
       });
     },
@@ -348,8 +352,10 @@ export class VideoGenService {
     if (!paths) throw new VideoError("model_missing", quality === "detailed" ? "The Detailed video model is not installed yet. An admin can install it in Settings, Models and storage, then try again." : "The video model is not installed yet. Install it from Home's Engines page, then try again.", 503);
     this.busy += 1;
     if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
+    let lease: Lease | undefined;
     try {
       const worker = await this.ensureWorker(quality, onPhase, options.signal);
+      lease = heavyGate.attach({ role: "video", jobId: options.jobId, worker: worker.pausable });
       mkdirSync(input.outputDir, { recursive: true, mode: 0o700 });
       const output = join(input.outputDir, "video.mp4");
       const poster = join(input.outputDir, "poster.jpg");
@@ -378,6 +384,7 @@ export class VideoGenService {
       return { width: reply.width ?? input.width, height: reply.height ?? input.height, frames: reply.frames ?? input.frames, fps: reply.fps ?? VIDEO_FPS, seed: reply.seed ?? input.seed, ms: reply.ms ?? 0, peakBytes: reply.peak_bytes ?? null, audio: reply.audio === true };
     } finally {
       this.busy -= 1;
+      lease?.detach();
       if (options.signal?.aborted) rmSync(input.outputDir, { recursive: true, force: true });
       if (this.worker && this.busy === 0) this.idleTimer = setTimeout(() => { log("video worker stopped after being idle"); this.stopWorker(); }, idleMs());
     }

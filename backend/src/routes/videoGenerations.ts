@@ -18,7 +18,8 @@ import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { identityHeaders } from "@/lib/identity";
 import { RoleReplyHeaders } from "@maipai/spec/stack/ts/role-reply-headers.js";
-import { cancelJob, getJob, hasJobRunner, listJobs, submitJob, waitForJob, type Job } from "@/lib/jobs";
+import { cancelJob, getJob, hasJobRunner, isJobPaused, listJobs, submitJob, waitForJob, type Job } from "@/lib/jobs";
+import { PAUSED_LABEL } from "@/lib/genProgress";
 import { LoraError, resolveLoras } from "@/video/loras";
 import { LikenessError, photoBind, verifyProof, type LikenessCheck } from "@/lib/likeness";
 import { wasGeneratedHere } from "@/video/provenance";
@@ -163,7 +164,7 @@ function liveFields(id: string, running: boolean) {
   const preview = tracker?.preview && videoPreviewPath(id) ? tracker.preview : null;
   return {
     progress_fraction: snap && tracker!.started ? Math.round(snap.fraction * 1000) / 1000 : null,
-    stage: snap?.stage ?? null, stage_label: snap?.stage_label ?? null, step: snap?.step ?? null, steps: snap?.steps ?? null, eta_seconds: snap?.eta_seconds ?? null,
+    stage: snap?.stage ?? null, stage_label: running && isJobPaused(id) ? PAUSED_LABEL : snap?.stage_label ?? null, step: snap?.step ?? null, steps: snap?.steps ?? null, eta_seconds: running && isJobPaused(id) ? null : snap?.eta_seconds ?? null,
     preview_url: preview ? `/v1/videos/generations/${id}/preview.jpg?v=${preview.version}` : null,
   };
 }

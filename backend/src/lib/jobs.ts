@@ -10,6 +10,7 @@
 import { emit } from "@/lib/events";
 import { noteComponentUse } from "@/lib/componentUse";
 import { admit, getGovernorStatus, getRunState, peakFor, release, withdraw, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
+import { heavyGate } from "@/lib/heavyGate";
 import { PAUSED_LOW_MEMORY, waitingText, WatchdogRules } from "@/lib/memoryState";
 import { StackJob, StackJobState } from "@maipai/spec/stack/ts/stack-job.js";
 
@@ -65,6 +66,20 @@ const laneSettles = new Map<string, () => void>();
 const laneTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const KEEP_FINISHED = 200;
 
+/** ISOLATION-01: the job card's stage string while the Stack has stopped the worker so a chat or voice request runs at full speed (rule S6: the existing status field, no new surface). */
+export const PAUSED_FOR_CHAT = "paused: chat";
+/** Running jobs that are paused, with the stage they were in (restored on resume; a stage that arrives meanwhile is remembered, not shown). */
+const pausedJobs = new Map<string, { status: string }>();
+export function isJobPaused(id: string): boolean { return pausedJobs.has(id); }
+heavyGate.setObserver((id, paused) => {
+  const job = jobs.get(id);
+  if (!job || job.state !== "running") { pausedJobs.delete(id); return; }
+  if (paused) { pausedJobs.set(id, { status: job.status }); touch(job, { status: PAUSED_FOR_CHAT }); return; }
+  const before = pausedJobs.get(id);
+  pausedJobs.delete(id);
+  touch(job, { status: before?.status ?? job.status });
+});
+
 export function registerJobRunner(kind: string, runner: JobRunner, options: JobRunnerOptions = {}): void { runners.set(kind, { run: runner, options }); }
 export function hasJobRunner(kind: string): boolean { return runners.has(kind); }
 
@@ -105,12 +120,16 @@ export function updateJob(id: string, patch: Partial<Pick<Job, "percent" | "comp
   const totalBytes = patch.totalBytes ?? job.totalBytes;
   const completedBytes = patch.completedBytes ?? job.completedBytes;
   const percent = patch.percent ?? (totalBytes > 0 ? Math.min(100, Math.round((completedBytes / totalBytes) * 100)) : job.percent);
+  // A stage that arrives while the worker is stopped is kept for the resume; the card keeps saying why it waits.
+  const paused = pausedJobs.get(id);
+  if (paused && patch.status !== undefined) { paused.status = patch.status; return touch(job, { ...patch, status: PAUSED_FOR_CHAT, totalBytes, completedBytes, percent }); }
   return touch(job, { ...patch, totalBytes, completedBytes, percent });
 }
 
 export function finishJob(id: string, outcome: { ok: true; result?: unknown } | { ok: false; reason: string; status?: string; result?: unknown }): Job | null {
   const job = jobs.get(id);
   controllers.delete(id);
+  pausedJobs.delete(id);
   if (!job || (job.state !== "running" && job.state !== "queued" && job.state !== "stalled")) return null;
   // A finished picture or clip counts as use of its model family.
   if (outcome.ok && job.kind !== "component.install" && job.kind !== "model.install") { const input = job.input as { family?: unknown; model?: unknown } | null; noteComponentUse(typeof input?.family === "string" ? input.family : typeof input?.model === "string" ? input.model : job.kind.startsWith("video") ? "fastwan2-2-ti2v-5b-mlx-bf16" : job.kind.startsWith("music") ? "ace-step-1-5-turbo" : null); }
@@ -321,6 +340,7 @@ export function cancelJob(id: string): Job | null {
   }
   controllers.get(id)?.abort();
   controllers.delete(id);
+  pausedJobs.delete(id);
   const cancelled = touch(job, { state: "cancelled", status: "cancelled", reason: "Cancelled by Home.", position: null });
   // A running lane job frees its lane now; its runner may take a moment to stop its process, and the next job does not wait for that.
   laneSettles.get(id)?.();
@@ -345,6 +365,7 @@ export function cancelGeneratorsForMemory(scope: "queued" | "running", reason: s
     }
     controllers.get(id)?.abort();
     controllers.delete(id);
+    pausedJobs.delete(id);
     touch(job, { state: "cancelled", status, reason, position: null });
     stopped.push(id);
     // One running job per pass: the caller asks again if memory is still short.
@@ -377,6 +398,6 @@ export async function waitForJob(id: string, timeoutMs: number): Promise<Job | n
 export function __resetJobsForTests(): void {
   for (const controller of controllers.values()) controller.abort();
   for (const timer of laneTimers.values()) clearTimeout(timer);
-  controllers.clear(); jobs.clear(); runners.clear(); queues.clear(); inFlight.clear();
+  controllers.clear(); pausedJobs.clear(); jobs.clear(); runners.clear(); queues.clear(); inFlight.clear();
   laneQueues.clear(); laneRunning.clear(); laneSettles.clear(); laneTimers.clear();
 }

@@ -10,6 +10,7 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { registerJobRunner, type Job, type JobProgress } from "@/lib/jobs";
+import { heavyGate } from "@/lib/heavyGate";
 import { STACK_MUSIC_MODEL_ID } from "@/lib/modelCatalog";
 import { GenTracker, recordRun } from "@/lib/genProgress";
 import { commitResult, rememberLrc, workDir, type MusicResultMeta } from "./results";
@@ -75,7 +76,8 @@ async function runSong(job: Job, signal: AbortSignal, update: JobProgress): Prom
     if (song.source) { sourcePath = join(work, "source.m4a"); writeFileSync(sourcePath, song.source, { mode: 0o600 }); }
     const outputDir = join(work, "out");
     const started = Date.now();
-    const tracker = new GenTracker("music", song.historyKey);
+    const pacing = heavyGate.pacing(job.id);
+    const tracker = new GenTracker("music", song.historyKey, pacing.now, 1, pacing.paused);
     remember(trackers, job.id, tracker);
     const result = await musicGen.run({ fields: { ...song.fields, ...(sourcePath ? { source: sourcePath } : {}) }, outputDir }, {
       jobId: job.id, signal,

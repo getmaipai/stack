@@ -20,6 +20,7 @@
 // ever be added (never a minor in a sexual context, never a real person's
 // likeness). Age and surface gates, the prompt floor and the finished-picture
 // check live in Home, where the person is known.
+import { heavyGate, PausableProcess, type Lease, type PausableWorker } from "@/lib/heavyGate";
 import { lowMemoryRefusal } from "@/lib/memoryState";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -82,6 +83,8 @@ export interface WorkerHandle {
   cancel(id: string): void;
   kill(): void;
   exited: Promise<number>;
+  /** ISOLATION-01: the process, for the gate that stops it while chat is working (absent on a scripted worker). */
+  pausable?: PausableWorker;
 }
 
 export interface ImageGenDeps {
@@ -111,7 +114,7 @@ export const defaultImageGenDeps: ImageGenDeps = {
 };
 
 /** Wraps a spawned worker in the line protocol: one request at a time, events while it runs, one reply at the end, a cancel line at any moment. */
-export function workerHandle(child: { stdin: { write(data: string): unknown; flush?(): unknown }; stdout: ReadableStream<Uint8Array>; stderr: ReadableStream<Uint8Array>; exited: Promise<number>; kill(): void }): WorkerHandle {
+export function workerHandle(child: { pid?: number; stdin: { write(data: string): unknown; flush?(): unknown }; stdout: ReadableStream<Uint8Array>; stderr: ReadableStream<Uint8Array>; exited: Promise<number>; kill(): void }): WorkerHandle {
   let ready: () => void = () => {};
   const started = new Promise<void>((resolve) => { ready = resolve; });
   const slot: { current: { id: string; onEvent: (event: WorkerEvent) => void; resolve: (reply: WorkerReply) => void } | null } = { current: null };
@@ -138,15 +141,18 @@ export function workerHandle(child: { stdin: { write(data: string): unknown; flu
     if (slot.current) slot.current.resolve({ id: slot.current.id, ok: false, code: "worker_stopped", error: "The picture engine stopped before the picture was finished. Try again." });
     return code;
   });
+  const pausable = new PausableProcess(child.pid ?? null, child.exited);
   return {
     exited,
-    kill: () => { try { child.kill(); } catch { /* already gone */ } },
-    cancel: (id) => { try { child.stdin.write(`${JSON.stringify({ op: "cancel", id })}\n`); child.stdin.flush?.(); } catch { /* gone */ } },
+    pausable,
+    kill: () => pausable.killAfterResume(() => { try { child.kill(); } catch { /* already gone */ } }),
+    // A cancel line is read only by a running worker.
+    cancel: (id) => { pausable.resume(); try { child.stdin.write(`${JSON.stringify({ op: "cancel", id })}\n`); child.stdin.flush?.(); } catch { /* gone */ } },
     send: async (request, options) => {
       await Promise.race([started, exited.then(() => {})]);
       return await new Promise<WorkerReply>((resolve) => {
-        const timer = setTimeout(() => { try { child.kill(); } catch { /* gone */ } resolve({ id: request.id, ok: false, code: "timeout", error: "The picture took too long and was stopped. Try a smaller size or fewer pictures." }); }, options.deadlineMs);
-        slot.current = { id: request.id, onEvent: options.onEvent, resolve: (reply) => { clearTimeout(timer); slot.current = null; resolve(reply); } };
+        const timer = pausable.deadline(options.deadlineMs, () => { try { child.kill(); } catch { /* gone */ } resolve({ id: request.id, ok: false, code: "timeout", error: "The picture took too long and was stopped. Try a smaller size or fewer pictures." }); });
+        slot.current = { id: request.id, onEvent: options.onEvent, resolve: (reply) => { timer.clear(); slot.current = null; resolve(reply); } };
         child.stdin.write(`${JSON.stringify(request)}\n`); child.stdin.flush?.();
       });
     },
@@ -259,8 +265,10 @@ export class ImageGenService {
     this.busy += 1;
     if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
     let killTimer: ReturnType<typeof setTimeout> | null = null;
+    let lease: Lease | undefined;
     try {
       const worker = await this.ensureWorker(onPhase, options.signal);
+      lease = heavyGate.attach({ role: "image", jobId: options.jobId, worker: worker.pausable });
       mkdirSync(input.outDir, { recursive: true, mode: 0o700 });
       const request: WorkerRequest = {
         id: options.jobId, op: input.op, family: input.family, quantize: input.quantize, model_dir: modelDir, loras: input.loras, prompt: input.prompt, steps: input.steps, seed: input.seed, out_dir: input.outDir,
@@ -294,6 +302,7 @@ export class ImageGenService {
       return { seeds: reply.seeds ?? [input.seed], ms: reply.ms ?? 0, peakBytes: reply.peak_bytes ?? null, width: reply.width ?? null, height: reply.height ?? null };
     } finally {
       this.busy -= 1;
+      lease?.detach();
       if (killTimer) clearTimeout(killTimer);
       if (options.signal?.aborted) rmSync(input.outDir, { recursive: true, force: true });
       if (this.worker && this.busy === 0) this.idleTimer = setTimeout(() => { log("picture worker stopped after being idle"); this.stopWorker(); }, idleMs());

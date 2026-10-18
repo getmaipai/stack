@@ -11,6 +11,7 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { registerJobRunner, type Job } from "@/lib/jobs";
+import { heavyGate } from "@/lib/heavyGate";
 import { recordGeneratedImage } from "@/video/provenance";
 import { commitResult, workDir, type ImageResultMeta } from "@/images/results";
 import { ImageError, imageGen, overallPercent } from "@/images/imageEngine";
@@ -123,7 +124,8 @@ export function registerImageJobs(): void {
       const mask = keep(write("mask.bin", item.mask));
       const references = (item.references ?? []).map((bytes, index) => keep(write(`ref${index}.bin`, bytes))!);
       const family = item.family as keyof typeof IMAGE_FAMILIES;
-      const tracker = new GenTracker("image", historyKey("image", item.op === "edit" ? 0 : item.width, item.op === "edit" ? 0 : item.height, item.family), Date.now, (item.op === "edit" ? 1 : Math.max(0.25, (item.width * item.height) / (1024 * 1024))) * (item.family === "z-image-turbo" ? 3.2 : 1));
+      const pacing = heavyGate.pacing(job.id);
+      const tracker = new GenTracker("image", historyKey("image", item.op === "edit" ? 0 : item.width, item.op === "edit" ? 0 : item.height, item.family), pacing.now, (item.op === "edit" ? 1 : Math.max(0.25, (item.width * item.height) / (1024 * 1024))) * (item.family === "z-image-turbo" ? 3.2 : 1), pacing.paused);
       tracker.nextUnit(0, item.op === "generate" ? item.count : 1);
       remember(trackers, job.id, tracker);
       const tick = () => { if (tracker.started) update({ percent: Math.round(tracker.snapshot().fraction * 100) }); };

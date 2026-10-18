@@ -49,6 +49,7 @@ import { logger } from "@/lib/log";
 import { readGgufFacts } from "@/lib/gguf";
 import { estimatorAvailable, largestAdmittedContext, placedOnProcessor, runGgufParser, type GgufEstimate } from "@/lib/fitPlan";
 import { getGovernorStatus } from "@/lib/governor";
+import { setProtectedPidProvider } from "@/lib/heavyGate";
 import { readMlxKvBytesPerToken } from "@/lib/mlxMemory";
 
 export type EngineKind = "spawned" | "managed" | "url";
@@ -410,6 +411,8 @@ interface RoleRuntime {
 type ProcessFactory = (role: RoleId, modelId?: string) => Promise<RoleProcess>;
 let testFactory: ProcessFactory | null = null;
 const runtimes = new Map<RoleId, RoleRuntime>();
+// ISOLATION-01: the pids of every engine this supervisor runs; the heavy gate never stops one of them.
+setProtectedPidProvider(() => [...runtimes.values()].map((current) => current.process?.pid).filter((pid): pid is number => typeof pid === "number"));
 const lastRoleStateLog = new Map<RoleId, string>();
 const requestLocks = new Map<RoleId, Promise<void>>();
 

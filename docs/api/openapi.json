@@ -8596,6 +8596,42 @@
                     "non_stack_bytes": {
                       "type": "number"
                     },
+                    "isolation": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "paused_now": {
+                          "type": "number"
+                        },
+                        "interactive_in_flight": {
+                          "type": "number"
+                        },
+                        "pauses": {
+                          "type": "number"
+                        },
+                        "resumes": {
+                          "type": "number"
+                        },
+                        "forced_resumes": {
+                          "type": "number"
+                        },
+                        "paused_seconds": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "paused_now",
+                        "interactive_in_flight",
+                        "pauses",
+                        "resumes",
+                        "forced_resumes",
+                        "paused_seconds"
+                      ],
+                      "description": "ISOLATION-01: heavy workers (picture, video, music, image tools) are stopped while a chat or voice request is in flight and continued after it. paused_now is how many are stopped this moment; paused_seconds is the total since the Stack started."
+                    },
                     "recent_actions": {
                       "type": "array",
                       "items": {
@@ -8660,6 +8696,7 @@
                     "stack",
                     "top_consumers",
                     "non_stack_bytes",
+                    "isolation",
                     "recent_actions",
                     "history"
                   ]

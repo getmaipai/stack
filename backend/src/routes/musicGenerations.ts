@@ -18,7 +18,8 @@ import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { identityHeaders } from "@/lib/identity";
 import { RoleReplyHeaders } from "@maipai/spec/stack/ts/role-reply-headers.js";
-import { cancelJob, getJob, hasJobRunner, listJobs, submitJob, waitForJob, type Job } from "@/lib/jobs";
+import { cancelJob, getJob, hasJobRunner, isJobPaused, listJobs, submitJob, waitForJob, type Job } from "@/lib/jobs";
+import { PAUSED_LABEL } from "@/lib/genProgress";
 import { fileResponse } from "@/routes/videoGenerations";
 import { wasMadeHere, sha256Hex } from "@/music/provenance";
 import { isJobId, lrcOf, readResult, deleteResult, songPath, type MusicResultMeta } from "@/music/results";
@@ -194,6 +195,8 @@ const activeSongs = (): number => listJobs().filter((job) => job.kind === MUSIC_
 function liveFields(id: string, running: boolean) {
   const tracker = running ? musicTracker(id) : null;
   if (!tracker) return { progress_fraction: null, stage: null, stage_label: null, eta_seconds: null };
+  // ISOLATION-01: the worker is stopped while a chat or voice request runs; the stage says so (the existing field) and the countdown waits.
+  if (isJobPaused(id)) return { progress_fraction: tracker.started ? Math.round(tracker.snapshot().fraction * 1000) / 1000 : 0, stage: "paused", stage_label: PAUSED_LABEL, eta_seconds: null };
   if (!tracker.started) return { progress_fraction: 0, stage: "load", stage_label: "Getting ready", eta_seconds: null };
   const snap = tracker.snapshot();
   return { progress_fraction: Math.round(snap.fraction * 1000) / 1000, stage: snap.stage, stage_label: snap.stage_label, eta_seconds: snap.eta_seconds };
