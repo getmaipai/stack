@@ -155,7 +155,7 @@ test("the engine routes start, stop and restart the chat role", async () => {
   expect((await app.request("/stack/v1/engines/nope/start", { method: "POST" })).status).toBe(404);
 });
 
-test("the current build cannot be removed; a rollback to a tag that is not installed is refused; a staged build needs a full pin", async () => {
+test("a stopped role's current build can be removed; a rollback to a tag that is not installed is refused; a staged build needs a full pin", async () => {
   const { mkdirSync, rmSync } = await import("node:fs");
   const { engineTagRoot } = await import("@/lib/store/layout");
   const { swapEngine } = await import("@/updates/engines");
@@ -165,13 +165,14 @@ test("the current build cannot be removed; a rollback to a tag that is not insta
     const { writeFileSync } = await import("node:fs"); const { join } = await import("node:path");
     writeFileSync(join(engineTagRoot("llama-server", "b1"), ".engine-ready"), "now");
     await swapEngine("llama-server", "b1");
-    expect((await app.request("/stack/v1/engines/llama-server/builds/b1", { method: "DELETE" })).status).toBe(400);
     expect((await app.request("/stack/v1/updates/engines/llama-server/rollback", json({ tag: "b9" }))).status).toBe(400);
     expect((await app.request("/stack/v1/engines/llama-server/install", json({ tag: "b2", url: "https://github.com/x/y.tar.gz" }))).status).toBe(400);
     // A tag already on disk with another checksum is never re-described.
     const { writeEngineManifest } = await import("@/lib/store/manifests");
     writeEngineManifest({ kind: "engine", name: "llama-server", tag: "b1", assetUrl: "https://github.com/x/b1.tar.gz", sizeBytes: 1, sha256: "a".repeat(64), extractedAt: new Date().toISOString(), blobs: [] });
     expect((await app.request("/stack/v1/engines/llama-server/install", json({ tag: "b1", url: "https://github.com/x/b1.tar.gz", sha256: "b".repeat(64), size: 1 }))).status).toBe(409);
+    // With its role stopped, the current build may be removed.
+    expect((await app.request("/stack/v1/engines/llama-server/builds/b1", { method: "DELETE" })).status).toBe(200);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

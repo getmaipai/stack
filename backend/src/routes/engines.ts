@@ -15,6 +15,7 @@ import { comfyuiInstalled, comfyuiRoot, COMFYUI_NAME, ensureComfyuiEnvironment }
 import { ensureImageGenEnvironment, IMAGE_GEN_NAME, imageGen, imageGenEnvironmentReady } from "@/images/imageEngine";
 import { ensureVideoGenEnvironment, videoGen, videoGenEnvironmentReady, videoGenRoot, VIDEO_GEN_NAME } from "@/video/videoGen";
 import { ensureMusicGenEnvironment, musicGen, musicGenEnvironmentReady, musicGenRoot, MUSIC_GEN_NAME } from "@/music/musicGen";
+import { engineRemovalRefusal } from "@/lib/engineRemoval";
 import { engineDir, engineIsBound, ensureEngine, removeEngine } from "@/lib/engineInstall";
 import { readEngineManifest } from "@/lib/store/manifests";
 import { currentEngine, stagingPin, swapEngine } from "@/updates/engines";
@@ -257,7 +258,10 @@ enginesRoutes.openapi(currentRoute, async (c) => {
 });
 enginesRoutes.openapi(removeRoute, (c) => {
   const { name, tag } = c.req.valid("param");
-  if (currentEngine(name) === tag) return c.json({ error: "The current engine build cannot be removed." }, 400);
-  if (engineIsBound(name, tag) && currentEngine(name) === null) return c.json({ error: "A model still names this engine." }, 400);
+  const refusal = engineRemovalRefusal({
+    isCurrent: currentEngine(name) === tag, hasCurrent: currentEngine(name) !== null,
+    roleRunning: getRoleStatus(engineRole(name)).state !== "stopped", bound: engineIsBound(name, tag),
+  });
+  if (refusal) return c.json({ error: refusal }, 400);
   return removeEngine(name, tag) ? c.json({ ok: true as const }, 200) : c.json({ error: "Unknown build" }, 404);
 });
