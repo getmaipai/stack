@@ -8,7 +8,8 @@ import type { AppEnv } from "@/types";
 import { identityHeaders } from "@/lib/identity";
 import { noEngineResponse, resolveRole, UnknownRoleError, UnverifiedModelError } from "@/lib/router";
 import { ROLE_IDS, ROLES, type RoleId } from "@/roles";
-import { EngineUnavailableError, getRoleStatus, requestRole, restartRole, roleHasEngine, roleIsBound, speakRole, speechForm, streamRole, ttsEngineInEffect } from "@/lib/supervisor";
+import { clampThinking, CODING_WIRE_PATHS, CodingRequestError, engineServesWire, wireNotServedMessage, type CodingWire } from "@/lib/codingWire";
+import { codingEngineName, codingLaunchSettings, codingServedModel, EngineUnavailableError, getRoleStatus, requestRole, restartRole, roleHasEngine, roleIsBound, speakRole, speechForm, streamRole, ttsEngineInEffect } from "@/lib/supervisor";
 import { listModels, ProvenanceIncompleteError } from "@/lib/modelStore";
 import { DownloadVerificationError } from "@/lib/download";
 import { POCKET_TTS_GATED_REPO } from "@/speech/pocketTts";
@@ -62,7 +63,19 @@ const UnverifiedModelSchema = z.object({ error: z.string(), model: z.string(), r
 /** A voice the Stack will not hand to the engine: not pinnable (400), or
  * cloning it needs is unavailable (409); `error` says what to do. */
 const VoiceRefusedSchema = z.object({ error: z.string(), reason: z.enum(["voice-cloning-unavailable", "voice-not-pinnable"]) });
-const ModelsResponseSchema = z.object({ object: z.literal("list"), data: z.array(z.object({ id: z.string(), object: z.literal("model"), created: z.number(), owned_by: z.literal("maipai-stack") })) });
+const ModelsResponseSchema = z.object({ object: z.literal("list"), data: z.array(z.object({
+  id: z.string(), object: z.literal("model"), created: z.number(), owned_by: z.literal("maipai-stack"),
+  role: z.string().optional().openapi({ description: "With ?role=coding: the role the model serves." }),
+  context_length: z.number().int().optional().openapi({ description: "With ?role=coding: the window in tokens (the running engine's, or the one the next start asks for)." }),
+  thinking_budget_ceiling: z.number().int().optional().openapi({ description: "With ?role=coding: the most thinking tokens one answer gets (stack.engines.coding.thinking_budget_ceiling); a request's own budget is clamped to it." }),
+})) });
+const ModelsQuerySchema = z.object({ role: z.string().optional().openapi({ description: "Only `coding`: list just that role's served model, with its context length and thinking ceiling. Left out, the list is every role id and installed model id." }) });
+// The coding wires (CODE-STACK-01 S3): the request is the wire's own shape, passed to the engine as sent except for the sampling and thinking rules in lib/codingWire.ts.
+const MessagesRequestSchema = z.object({ model: z.string().min(1), messages: z.array(z.object({ role: z.string(), content: z.unknown() }).passthrough()), max_tokens: z.number().int().positive().optional(), stream: z.boolean().optional(), thinking: z.unknown().optional(), timeout_ms: z.number().int().min(1).optional() }).passthrough();
+const CountTokensRequestSchema = z.object({ model: z.string().min(1), messages: z.array(z.object({ role: z.string(), content: z.unknown() }).passthrough()) }).passthrough();
+const ResponsesRequestSchema = z.object({ model: z.string().min(1), input: z.union([z.string(), z.array(z.unknown())]), stream: z.boolean().optional(), timeout_ms: z.number().int().min(1).optional() }).passthrough();
+const WireNotServedSchema = z.object({ error: z.string(), role: z.string(), wire: z.string() });
+const CodingRequestRefusedSchema = z.object({ error: z.string() }).passthrough();
 
 const inferenceResponses = {
   200: { content: { "application/json": { schema: z.record(z.string(), z.unknown()) } }, description: "The engine's OpenAI-shaped reply, with x-maipai-engine, x-maipai-model and x-maipai-revision headers." },
@@ -108,6 +121,8 @@ async function reply<T extends Context>(c: T, wire: Wire, body: Record<string, u
       const images = (settled.result as { images?: Array<Record<string, unknown>> } | null)?.images ?? [];
       return jsonReply(c, { created, job: settled.id, data: images }, 200, identityHeaders(null));
     }
+    // CODE-STACK-01 S3: the coding role's thinking budget never exceeds the admin's ceiling, on this wire as on the Anthropic and Responses ones.
+    if (role === "coding" && wire === "chat") body = clampThinking(body, codingLaunchSettings().thinkingBudgetTokens);
     // ISOLATION-01: a chat or transcription request is interactive for as long as it is in flight; a running heavy job is paused meanwhile.
     const interactive = wire === "chat" || wire === "transcription";
     if (wire === "chat" && body.stream === true) {
@@ -124,6 +139,7 @@ async function reply<T extends Context>(c: T, wire: Wire, body: Record<string, u
       return jsonReply(c, result.body, result.status, result.headers);
     } finally { end(); }
   } catch (error) {
+    if (error instanceof CodingRequestError) return jsonReply(c, { error: error.message }, 400, identityHeaders(null));
     if (error instanceof EngineUnavailableError) {
       const role = (() => { try { return resolveRole(modelField).role; } catch { return "chat" as RoleId; } })();
       const result = noEngineResponse(role, error.reason);
@@ -172,7 +188,50 @@ async function tokenizeReply<T extends Context>(c: T, body: TokenCountRequest) {
   }
 }
 
-const modelsRoute = createRoute({ method: "get", path: "/models", tags: ["Roles"], summary: "Role ids and installed model ids", responses: { 200: { content: { "application/json": { schema: ModelsResponseSchema } }, description: "OpenAI's model-list shape." } } });
+/** The coding wires: `model` must resolve to the coding role (a role id or its installed model id, as for every role), the engine must serve the wire, and the engine's bytes come back as they are. The thinking ceiling is applied here; sampling is dropped and set in the supervisor so a direct caller of requestRole/streamRole gets the same. */
+async function codingWireReply<T extends Context>(c: T, wire: CodingWire, body: Record<string, unknown>) {
+  const modelField = String(body.model);
+  try {
+    const role = resolveRole(modelField).role;
+    if (role !== "coding") return jsonReply(c, { error: `Role '${role}' does not answer on this endpoint. Send model 'coding'.`, roles: ["coding"] }, 400, identityHeaders(null));
+    const engine = codingEngineName();
+    if (!engineServesWire(engine, wire)) return jsonReply(c, { error: wireNotServedMessage(wire, engine), role, wire }, 501, identityHeaders(null));
+    const path = CODING_WIRE_PATHS[wire];
+    const sent = wire === "count_tokens" ? body : clampThinking(body, codingLaunchSettings().thinkingBudgetTokens);
+    const notServed = (headers: Record<string, string>) => jsonReply(c, { error: wireNotServedMessage(wire, engine), role, wire }, 501, headers);
+    if (wire !== "count_tokens" && body.stream === true) {
+      const end = heavyGate.begin(role);
+      let result: Awaited<ReturnType<typeof streamRole>>;
+      try { result = await streamRole(role, path, sent, c.req.raw.signal); } catch (error) { end(); throw error; }
+      for (const [name, value] of Object.entries(result.headers)) c.header(name, value);
+      if (result.status === 404) { end(); await result.body?.cancel().catch(() => {}); return notServed(result.headers); }
+      if (!result.body) { end(); return new Response(JSON.stringify({ error: result.status === 499 ? "Request cancelled" : "The coding engine did not answer. Send the request again." }), { status: result.status, headers: { ...result.headers, "content-type": "application/json" } }); }
+      return new Response(endWithStream(result.body, end), { status: result.status, headers: { ...result.headers, "content-type": result.contentType ?? "text/event-stream", "cache-control": "no-cache" } });
+    }
+    const end = heavyGate.begin(role);
+    try {
+      const result = await requestRole(role, path, sent, c.req.raw.signal);
+      if (result.status === 404) return notServed(result.headers);
+      return jsonReply(c, result.body, result.status, result.headers);
+    } finally { end(); }
+  } catch (error) {
+    if (error instanceof CodingRequestError) return jsonReply(c, { error: error.message }, 400, identityHeaders(null));
+    if (error instanceof EngineUnavailableError) { const result = noEngineResponse("coding", error.reason); return jsonReply(c, result.body, result.status, result.headers); }
+    if (error instanceof UnverifiedModelError) return jsonReply(c, { error: error.message, model: error.modelId, reason: "unverified", missing: error.missing }, 409, identityHeaders(null));
+    return jsonReply(c, { error: error instanceof UnknownRoleError ? error.message : "Unknown role or model.", roles: ROLE_IDS }, 400, identityHeaders(null));
+  }
+}
+
+const modelsRoute = createRoute({ method: "get", path: "/models", tags: ["Roles"], summary: "Role ids and installed model ids, or one role's served model", request: { query: ModelsQuerySchema }, responses: { 200: { content: { "application/json": { schema: ModelsResponseSchema } }, description: "OpenAI's model-list shape. With `?role=coding`, the coding role's one served model (empty when none is installed) with `context_length` and `thinking_budget_ceiling`." }, 400: { content: { "application/json": { schema: CodingRequestRefusedSchema } }, description: "A role other than coding was named; only coding has a scoped list." } } });
+const codingWireResponses = {
+  ...inferenceResponses,
+  200: { content: { "application/json": { schema: z.record(z.string(), z.unknown()) }, "text/event-stream": { schema: z.string() } }, description: "The engine's own reply, byte for byte: JSON, or its server-sent events when `stream` is true, with the identity headers. Abort the request to cancel." },
+  400: { content: { "application/json": { schema: z.union([UnknownModelSchema, CodingRequestRefusedSchema]) } }, description: "Unknown role or model id, a role other than coding, or a thinking budget that is not a number." },
+  501: { content: { "application/json": { schema: WireNotServedSchema } }, description: "The engine bound to the coding role does not serve this wire; `error` says what to use instead. The engine is not started to find out." },
+} as const;
+const messagesRoute = createRoute({ method: "post", path: "/messages", tags: ["Roles"], summary: "Anthropic Messages for the coding role (the engine's native wire)", request: { body: { content: { "application/json": { schema: MessagesRequestSchema } } } }, responses: codingWireResponses });
+const countTokensRoute = createRoute({ method: "post", path: "/messages/count_tokens", tags: ["Roles"], summary: "Anthropic token count for the coding role (the engine's native wire)", request: { body: { content: { "application/json": { schema: CountTokensRequestSchema } } } }, responses: codingWireResponses });
+const responsesRoute = createRoute({ method: "post", path: "/responses", tags: ["Roles"], summary: "OpenAI Responses for the coding role (the engine's native wire)", request: { body: { content: { "application/json": { schema: ResponsesRequestSchema } } } }, responses: codingWireResponses });
 const chatRoute = createRoute({ method: "post", path: "/chat/completions", tags: ["Roles"], summary: "Chat completions by role", request: { body: { content: { "application/json": { schema: ChatRequestSchema } } } }, responses: inferenceResponses });
 const tokenizeRoute = createRoute({ method: "post", path: "/tokenize", tags: ["Roles"], summary: "Token count by role, from the engine's own template and tokenizer", request: { body: { content: { "application/json": { schema: TokenizeRequestSchema } } } }, responses: { ...inferenceResponses, 200: { content: { "application/json": { schema: TokenizeResponseSchema } }, description: "The engine's token count: `messages` (with `tools` and `chat_template_kwargs` when sent) rendered with its chat template, no generation prompt, or `content` as given, with the identity headers. Image parts count as the template's media marker only, not the image's own tokens." }, 501: { content: { "application/json": { schema: CannotCountSchema } }, description: "The engine bound to the role has no token-count route." } } });
 const embeddingsRoute = createRoute({ method: "post", path: "/embeddings", tags: ["Roles"], summary: "Embeddings by role", request: { body: { content: { "application/json": { schema: EmbeddingsRequestSchema } } } }, responses: inferenceResponses });
@@ -183,7 +242,16 @@ const RenderFailedSchema = z.object({ error: z.string(), job: z.string(), role: 
 const imagesRoute = createRoute({ method: "post", path: "/images/generations", tags: ["Roles"], summary: "Image generation (the job API with a wait)", request: { body: { content: { "application/json": { schema: ImageRequestSchema } } } }, responses: { ...inferenceResponses, 200: { content: { "application/json": { schema: ImageResponseSchema } }, description: "OpenAI's image shape with the job id: `data` holds one `{ b64_json }` per image once the render finished within timeout_ms." }, 202: { content: { "application/json": { schema: ImageResponseSchema } }, description: "The render is still running past timeout_ms; fetch it by `job` on /stack/v1/jobs/{id}." }, 499: { content: { "application/json": { schema: RenderFailedSchema } }, description: "The render was cancelled." }, 500: { content: { "application/json": { schema: RenderFailedSchema } }, description: "The generator failed the render; the reason is the generator's own, not an outage." } } });
 
 export const v1Routes = apiRouter<AppEnv>();
-v1Routes.openapi(modelsRoute, (c) => c.json({ object: "list" as const, data: [...new Set([...ROLE_IDS, ...listModels().map((model) => model.id)])].map((id) => ({ id, object: "model" as const, created: 0, owned_by: "maipai-stack" as const })) }, 200));
+v1Routes.openapi(modelsRoute, (c) => {
+  const { role } = c.req.valid("query");
+  if (role === undefined) return c.json({ object: "list" as const, data: [...new Set([...ROLE_IDS, ...listModels().map((model) => model.id)])].map((id) => ({ id, object: "model" as const, created: 0, owned_by: "maipai-stack" as const })) }, 200) as never;
+  if (role !== "coding") return jsonReply(c, { error: `Only the coding role has a scoped model list; '${role}' is not supported. Leave out ?role to list every role and model.` }, 400, identityHeaders(null)) as never;
+  const served = codingServedModel();
+  return c.json({ object: "list" as const, data: served ? [{ id: served.id, object: "model" as const, created: 0, owned_by: "maipai-stack" as const, role: "coding", context_length: served.context_length, thinking_budget_ceiling: served.thinking_budget_ceiling }] : [] }, 200) as never;
+});
+v1Routes.openapi(messagesRoute, (c) => codingWireReply(c, "messages", c.req.valid("json")) as never);
+v1Routes.openapi(countTokensRoute, (c) => codingWireReply(c, "count_tokens", c.req.valid("json")) as never);
+v1Routes.openapi(responsesRoute, (c) => codingWireReply(c, "responses", c.req.valid("json")) as never);
 v1Routes.openapi(chatRoute, (c) => reply(c, "chat", c.req.valid("json")) as never);
 v1Routes.openapi(tokenizeRoute, (c) => tokenizeReply(c, c.req.valid("json")) as never);
 v1Routes.openapi(embeddingsRoute, (c) => reply(c, "embeddings", c.req.valid("json")) as never);

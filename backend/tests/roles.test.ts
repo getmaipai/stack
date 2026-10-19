@@ -27,7 +27,7 @@ test("coding is an on-demand role with its own model: it no longer shares chat's
   expect(ROLES.coding.residency).toBe("jit");
   expect((ROLES.coding as { sharesModelWith?: string }).sharesModelWith).toBeUndefined();
   expect(ROLES.coding.wire).toBe("chat");
-  expect(ROLES.coding.endpoints).toEqual(["/v1/chat/completions"]);
+  expect(ROLES.coding.endpoints).toEqual(["/v1/chat/completions", "/v1/messages", "/v1/messages/count_tokens", "/v1/responses"]);
   expect(ROLES.chat.residency).toBe("resident");
   // The roles that still share chat's model are untouched.
   for (const id of ["judge", "router"] as const) expect((ROLES[id] as { sharesModelWith?: string }).sharesModelWith).toBe("chat");

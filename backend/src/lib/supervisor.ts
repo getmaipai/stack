@@ -6,6 +6,7 @@
 // exit watch, the drain) are the same here, keyed by role.
 import { noteComponentUse } from "@/lib/componentUse";
 import { existsSync } from "node:fs";
+import { CODING_GENERATION_PATHS, dropClientSampling } from "@/lib/codingWire";
 import { createServer } from "node:net";
 import { dirname, join } from "node:path";
 import { withTimeout } from "@maipai/core/src/withTimeout";
@@ -997,6 +998,20 @@ export function codingEngineStatus(): CodingEngineStatus {
   };
 }
 
+/** The engine the coding role runs on, from what is configured and installed, without starting anything (S3: the wire check reads it before a request can start the engine). */
+let codingEngineForTests: string | null | undefined;
+export function codingEngineName(): string | null { return codingEngineForTests !== undefined ? codingEngineForTests : engineForRole("coding"); }
+export function setCodingEngineForTests(engine: string | null | undefined): void { codingEngineForTests = engine; }
+
+/** What `GET /v1/models?role=coding` lists: the coding role's one served model, or null when none is bound. The window is the running engine's when loaded and the one the next start asks for otherwise; the ceiling is the live setting. Never starts the engine. */
+export function codingServedModel(): { id: string; context_length: number; thinking_budget_ceiling: number } | null {
+  const model = selectedModel("coding");
+  if (!model) return null;
+  const settings = codingLaunchSettings();
+  const running = runtime("coding").process;
+  return { id: model.id, context_length: running && !running.retired && running.contextLength ? running.contextLength : settings.contextLength, thinking_budget_ceiling: settings.thinkingBudgetTokens };
+}
+
 /** Why coding cannot load right now, from facts at hand (no dry run, no process): the last refusal for memory, or a model whose estimated peak exceeds the model budget outright. */
 export function codingCannotFitReason(): string | null {
   if (runtime("coding").process) return null;
@@ -1827,6 +1842,17 @@ export function withPinSampling(modelId: string | null, body: Record<string, unk
   return filled;
 }
 
+/** The body a request is dispatched with, after the model's own sampling. The
+ * coding role (CODE-STACK-01 S3) drops every client sampling field and sets
+ * the pin's, on every generation path and streaming or not (design 3.6:
+ * client sampling dropped); the token-count paths carry no sampling. Every other
+ * role keeps its rule: the pin fills only what the request left out, on
+ * `/v1/chat/completions` when not streaming and on any path when streaming. */
+function samplingFor(role: RoleId, path: string, modelId: string | null, body: Record<string, unknown>, streaming: boolean): Record<string, unknown> {
+  if (role === "coding") return CODING_GENERATION_PATHS.includes(path) ? withPinSampling(modelId, dropClientSampling(body)) : body;
+  return withPinSampling(streaming || path === "/v1/chat/completions" ? modelId : null, body);
+}
+
 export async function requestRole(requested: RoleId, path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<RoleReply> {
   const role = processRoleFor(requested);
   const requestedModel = typeof body.model === "string" && body.model !== requested ? body.model : undefined;
@@ -1834,7 +1860,7 @@ export async function requestRole(requested: RoleId, path: string, body: Record<
   const current = runtime(role);
   try {
     const completionMs = typeof body.timeout_ms === "number" && body.timeout_ms > 0 ? body.timeout_ms : (timeoutOverrides.completionMs ?? DEFAULT_COMPLETION_TIMEOUT_MS);
-    const dispatchBody = withPinSampling(path === "/v1/chat/completions" ? processRecord.modelId : null, requestedModel && processRecord.kind !== "url" ? { ...body, model: role } : body);
+    const dispatchBody = samplingFor(role, path, processRecord.modelId, requestedModel && processRecord.kind !== "url" ? { ...body, model: role } : body, false);
     const result = await withTimeout(
       processRecord.client.request(path, dispatchBody, signal),
       completionMs,
@@ -1901,11 +1927,12 @@ export async function streamRole(requested: RoleId, path: string, body: Record<s
   const current = runtime(role);
   try {
     if (!processRecord.client.stream) throw new EngineUnavailableError("The engine does not support streaming.");
-    const dispatchBody = withPinSampling(processRecord.modelId, requestedModel && processRecord.kind !== "url" ? { ...body, model: role } : body);
+    const dispatchBody = samplingFor(role, path, processRecord.modelId, requestedModel && processRecord.kind !== "url" ? { ...body, model: role } : body, true);
     const response = await processRecord.client.stream(path, { ...dispatchBody, stream: true }, signal);
     if (response.status >= 500 && !await processRecord.client.health()) throw new EngineUnavailableError(`Engine returned HTTP ${response.status} and is no longer healthy.`);
-    if (!response.body) { finishStream(role, processRecord); return { status: response.status, body: null, headers: identityHeaders(processRecord.identity, processRecord.modelRevision) }; }
-    return { status: response.status, body: trackedStream(role, processRecord, response.body), headers: identityHeaders(processRecord.identity, processRecord.modelRevision) };
+    const contentType = response.headers.get("content-type") ?? undefined;
+    if (!response.body) { finishStream(role, processRecord); return { status: response.status, body: null, headers: identityHeaders(processRecord.identity, processRecord.modelRevision), contentType }; }
+    return { status: response.status, body: trackedStream(role, processRecord, response.body), headers: identityHeaders(processRecord.identity, processRecord.modelRevision), contentType };
   } catch (error) {
     finishStream(role, processRecord);
     if ((error instanceof DOMException && error.name === "AbortError") || signal?.aborted) return { status: 499, body: null, headers: identityHeaders(processRecord.identity, processRecord.modelRevision) };
@@ -1923,6 +1950,7 @@ export async function streamRole(requested: RoleId, path: string, body: Record<s
 // ---- tests ----------------------------------------------------------------
 
 export function resetSupervisorForTests(): void {
+  codingEngineForTests = undefined;
   stoppingAll = false;
   clearTtsEngineFailures();
   for (const current of runtimes.values()) current.generation++;

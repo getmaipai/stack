@@ -38,13 +38,16 @@ OpenAI-shaped, so an existing client library works unchanged.
 |---|---|---|
 | `POST /v1/chat/completions` | `chat`, `coding`, `judge`, `router`, `vision` | chat completions; `stream: true` passes the engine's SSE bytes through unchanged including `[DONE]`; `tools`, `tool_choice`, `response_format` and `chat_template_kwargs` pass through |
 | `POST /v1/tokenize` | `chat`, `coding`, `judge`, `router`, `vision` | the engine's own token count, `{ count }`: send `messages` (with `tools` and `chat_template_kwargs` when the turn carries them, rendered with the engine's chat template, no generation prompt, then tokenized) or a raw `content` string, exactly one; an image part counts as the template's media marker only, not the image's own tokens; an engine with no token-count route is a 501 that says so, never an estimate (oMLX has none; the Stack asks it for one token and reads its own prompt size, which is exact) |
+| `POST /v1/messages` | `coding` | Anthropic Messages, served natively by the coding engine (llama-server b10797): `stream: true` is the engine's SSE bytes unchanged, with `tool_use` and `tool_result` blocks, thinking blocks, usage and stop reasons. The Stack drops client sampling, bounds `thinking.budget_tokens` by `stack.engines.coding.thinking_budget_ceiling`, and translates nothing. `model` is `coding` or the coding model's id. |
+| `POST /v1/messages/count_tokens` | `coding` | Anthropic token count, the engine's own, unchanged. |
+| `POST /v1/responses` | `coding` | OpenAI Responses, served natively by the coding engine (no `previous_response_id`: the engine refuses it). Same sampling and thinking rules as above. A wire the engine does not serve answers `501` with a sentence saying what to use, without starting the engine. |
 | `POST /v1/embeddings` | `embed` | embeddings |
 | `POST /v1/audio/transcriptions` | `stt` | transcription (multipart audio) |
 | `POST /v1/audio/speech` | `tts` | speech; phrase-level streaming and cancel |
 | `POST /v1/images/generations` | `image` | the job API with a wait; on a Mac with the picture models installed the mflux worker answers (see Picture generation below), otherwise the supervised ComfyUI |
 | `POST /v1/videos/generations` | `video` | the job API with a wait; progress by phase, cancel, the clip fetched by URL (see Video generation below) |
 | `POST /v1/audio/music` | `music` | the job API with a wait; progress by stage, cancel, the song fetched by URL (see Music generation below) |
-| `GET /v1/models` | all | role ids plus installed model ids in OpenAI's list shape |
+| `GET /v1/models` | all | role ids plus installed model ids in OpenAI's list shape; `?role=coding` lists only the coding role's served model with `context_length` and `thinking_budget_ceiling` (an empty list when none is installed; never starts the engine) |
 
 The request's common fields are spec `RoleRequest`: `model` carries a
 role id (`"chat"`) or an installed model id. An installed model id on a

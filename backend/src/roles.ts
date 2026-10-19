@@ -64,7 +64,7 @@ export const ROLES = {
     label: "Coding",
     wire: "chat",
     residency: "jit",
-    endpoints: ["/v1/chat/completions"],
+    endpoints: ["/v1/chat/completions", "/v1/messages", "/v1/messages/count_tokens", "/v1/responses"],
     quality: ["fast", "everyday", "best"],
   },
   judge: {

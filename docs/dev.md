@@ -2375,6 +2375,101 @@ can carry a measured footprint. S5: the Splash engine kind. Not done in S2 and n
 is the file-size estimate against the model budget until a start has been refused); the memory watchdog's refusal text for guarded
 starts still says "picture and video work" when it is what refuses a coding start, but the coding message replaces it for the person.
 
+### Slice S3: the coding role's wires, model list and thinking clamp (CODE-STACK-01, 2026-10-18)
+
+Stack only. The Home gateway (`/code/v1`, CODE-API-01) calls what this slice built.
+
+**Which wires the pinned build serves, and how that was checked.** llama-server b10797 (`engines/llama-server/b10797`, read only; no model
+was loaded). The `llama-server` file is a 33 KB launcher; the server code is `libllama-server-impl.dylib`. `strings` on it lists the route
+literals `/v1/messages`, `/v1/messages/count_tokens`, `/v1/responses`, `/v1/responses/input_tokens`, `/v1/chat/completions`,
+`/v1/chat/completions/input_tokens`, `/v1/models`, plus the converter strings "Request converted: Anthropic -> OpenAI Chat Completions",
+`server_chat_convert_responses_to_chatcmpl`, the Anthropic block names (`tool_use`, `tool_result`, `tool_use_id`, `input_schema`,
+`thinking`, `budget_tokens`) and the Responses events (`response.created`, `response.output_text.delta`,
+`response.function_call_arguments.delta`, `response.completed`, `response.reasoning_text.delta`). So **all three are served**: Messages,
+its count_tokens, and Responses. `--help` lists no flag for any of them (they are always on). Responses refuses `previous_response_id`
+("llama.cpp does not support 'previous_response_id'") and skips tool types it cannot run ("unsupported Responses tool type ... skipped"),
+so a Responses client must send its whole history each time. What `strings` cannot prove: that a real Claude Code or Codex CLI turn
+completes, and what the engine does with Qwen3.8's template (still owed, below).
+
+**The routes** (all in `routes/v1.ts`, all `model`-routed: `coding` or the coding model's id, the same mechanism as `chat` and `embed`;
+there is no role header in the existing mechanism and none was added):
+
+| Route | What it does |
+|---|---|
+| `POST /v1/chat/completions` | unchanged; for `coding` it now also gets the thinking clamp |
+| `POST /v1/messages` | Anthropic Messages, streaming and not |
+| `POST /v1/messages/count_tokens` | Anthropic token count (no sampling, no clamp) |
+| `POST /v1/responses` | OpenAI Responses, streaming and not |
+| `GET /v1/models?role=coding` | the coding role's one served model: `id`, `owned_by`, `role`, `context_length` (the running engine's window, else the one the next start asks for), `thinking_budget_ceiling`; `data: []` when none is installed; never starts the engine. Another `role` is a 400; no `role` is the old list. |
+
+`ROLES.coding.endpoints` lists the four POST paths. A role other than `coding` on the three new paths is a 400 naming `coding`.
+
+**Pass-through.** The Stack does not translate. A stream is the engine's bytes through `streamRole` (a test cuts the frames mid-line and
+asserts byte equality for Messages, Responses and chat completions, thinking blocks, tool calls, usage and finish reasons included); the
+engine's content type is kept, so an engine error on a stream is JSON, not mislabelled SSE. A non-stream reply is the engine's JSON
+through `requestRole`, which parses and re-serialises it (equal in value, not guaranteed in whitespace; the existing client does this for
+every role). The Stack maps only: the coding lease and heavy-job gate, cancellation (a dropped client aborts the engine request; 499),
+errors (an engine that cannot start or cannot fit is a 503 with `offline_reason`, as for every role), and a wire the engine does not
+serve. Engine-supplied 4xx pass through unchanged.
+
+**An unserved wire is a 501.** `lib/codingWire.ts` holds `ENGINE_CODING_WIRES` (llama-server: all three). The route asks
+`codingEngineName()` and answers 501 with "The coding engine (X) on this computer does not serve ... Use /v1/chat/completions instead, or
+ask an admin to update the coding engine." before the engine can start; an engine that answers 404 for a path is mapped to the same 501.
+S5 adds the Splash row when its wires pass the contract suite.
+
+**Sampling (item 3, fixed).** `samplingFor` in `supervisor.ts` replaces the two inline `withPinSampling` calls. For the coding role, on
+`/v1/chat/completions`, `/v1/messages` and `/v1/responses`, streaming or not, the client's sampling is dropped and the pin's is set. Dropped
+fields: `temperature`, `top_p`, `top_k`, `min_p`, `presence_penalty`, `frequency_penalty`, `repeat_penalty`, `repeat_last_n`, `typical_p`,
+`mirostat`, `mirostat_tau`, `mirostat_eta`. Set from the pin (Qwen card thinking set): `temperature` 1.0, `top_p` 0.95, `top_k` 20,
+`presence_penalty` 0.0. Not touched: `seed`, `stop`, `logit_bias`, `max_tokens` and the other output limits, `tools`. The token-count paths
+carry no sampling. Every other role keeps its old rule exactly (pin fills only gaps; non-streaming only on `/v1/chat/completions`, streaming
+on any path), pinned by a test: applying it to `/v1/tokenize` or `/apply-template` would have put sampling on bodies that take none.
+
+**The thinking clamp (item 4).** First, what the build does: `strings -a` on `libllama-server-impl.dylib` shows the Anthropic converter
+reading `thinking` / `enabled` / `budget_tokens` and writing `thinking_budget_tokens`, and the chat parser reading `enable_thinking`,
+`chat_template_kwargs`, `reasoning_effort` and `reasoning_budget_tokens` beside `reasoning_budget_start_tag` and `_end_tags`. So the build
+has a per-request thinking budget field (`thinking_budget_tokens`), in addition to the launch flag. Whether a request value below the launch
+value is honoured, and whether Qwen3.8's tags make the budget sampler end thinking cleanly, only a real run settles. So the design is
+safe either way: the launch-level `--reasoning-budget` is the ceiling (S2), the Stack clamps what the request asks, and no request can
+exceed the launch budget even if the field were ignored. Behaviour of `clampThinking` (`lib/codingWire.ts`, applied by the route on
+chat completions, Messages and Responses for `coding`):
+
+- `thinking_budget_tokens` and Anthropic `thinking.budget_tokens` become `min(requested, ceiling)`; `-1` (unrestricted) becomes the ceiling;
+  0 stays 0; a non-number is a 400 ("... must be a number of tokens ...") and never reaches the engine.
+- An absent budget stays absent. The Stack never adds a budget, a `thinking` block or `enable_thinking`. `thinking: {type: "disabled"}`
+  and `chat_template_kwargs.enable_thinking: false` pass untouched, so a request cannot turn thinking on where the caller turned it off.
+- If the clamped budget would reach the request's own `max_tokens` / `max_completion_tokens` (Anthropic needs budget < max_tokens), the
+  budget is lowered to one under it. The output limit itself is never changed. (The task text said to clamp `max_tokens` to `min(requested,
+  ceiling)`; that would cut a long code answer to the thinking ceiling, so the budget moves instead of the limit.)
+- The ceiling is `stack.engines.coding.thinking_budget_ceiling` as in effect, which is also what the engine was launched with: the setting
+  needs a restart, and a change is pending until the coding engine next starts. The clamp and the launch budget therefore always agree.
+- **Minors.** The Stack has no age signal and must not guess one. Home sends thinking off for a minor (`thinking: {type: "disabled"}` or
+  `enable_thinking: false`); the Stack passes an explicit off through and never raises a budget. Home's gateway (CODE-API-01) owns sending it.
+  An omitted `thinking` on an engine launched with `--reasoning on` means thinking runs under the ceiling, so the gateway must always send
+  the explicit off for a minor rather than rely on omission.
+- Not clamped: `reasoning_effort` and Responses `reasoning.effort` (they pick a template level, not a token count; the launch budget still
+  bounds the answer).
+
+**Tests.** `tests/codingWires.test.ts` (31 tests, scripted engine only): each wire streaming and not, byte equality of frames, tools and
+thinking blocks, the first request starting the engine and the second not, abort of a non-stream and of a stream reaching the engine and
+releasing the lease, 503 for an engine that cannot start or fit, 501 without starting, 404-to-501, the scoped model list, the sampling fix on
+all three paths both ways, the other roles' sampling unchanged, the clamp (above, below, absent, disabled, -1, 0, the live ceiling, the
+output-limit rule, a bad type), chat untouched. `tests/roles.test.ts` pins the coding endpoint list.
+
+**Still owed.**
+
+- **S4:** remove a whole engine build (Home's "remove" for the coding engine).
+- **S5:** the Splash engine kind, with ENGINE-SPLASH-01's contract suite; then a Splash row in `ENGINE_CODING_WIRES`.
+- **C1 and C2:** the catalog engine-index entry and the catalog model package for coding.
+- **Home slices H1 and H2** (settings rows, keys, the `/code/v1` gateway, CODE-API-01 and -02), including always sending thinking off for a minor.
+- **The live run with the real 27B on a scratch Stack** (never on the live Mac's ports). It settles, from S2: the `--reasoning on` start of
+  Qwen3.8-27B under this build, `--kv-unified` with `-np 2` giving one shared 128k window, the real peak. From S3: that a real Claude Code
+  turn and a real Codex CLI turn complete against `/v1/messages` and `/v1/responses` (tool_use round trips, thinking blocks, usage);
+  that a per-request `thinking_budget_tokens` below the launch budget is honoured and one above it is not; that the Anthropic converter
+  carries `thinking.budget_tokens` to `thinking_budget_tokens` as the strings suggest; that Responses with `reasoning.effort` and no
+  `previous_response_id` works; that the 128k window holds with `/v1/messages` prompt caching fields ignored; and that `count_tokens` is
+  accurate for the Qwen template.
+
 ## Measured so far
 
 On an Apple silicon Mac (2026-09-18, a temporary copy of the owner's

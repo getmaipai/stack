@@ -241,10 +241,22 @@
         "tags": [
           "Roles"
         ],
-        "summary": "Role ids and installed model ids",
+        "summary": "Role ids and installed model ids, or one role's served model",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Only `coding`: list just that role's served model, with its context length and thinking ceiling. Left out, the list is every role id and installed model id."
+            },
+            "required": false,
+            "description": "Only `coding`: list just that role's served model, with its context length and thinking ceiling. Left out, the list is every role id and installed model id.",
+            "name": "role",
+            "in": "query"
+          }
+        ],
         "responses": {
           "200": {
-            "description": "OpenAI's model-list shape.",
+            "description": "OpenAI's model-list shape. With `?role=coding`, the coding role's one served model (empty when none is installed) with `context_length` and `thinking_budget_ceiling`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -278,6 +290,18 @@
                             "enum": [
                               "maipai-stack"
                             ]
+                          },
+                          "role": {
+                            "type": "string",
+                            "description": "With ?role=coding: the role the model serves."
+                          },
+                          "context_length": {
+                            "type": "integer",
+                            "description": "With ?role=coding: the window in tokens (the running engine's, or the one the next start asks for)."
+                          },
+                          "thinking_budget_ceiling": {
+                            "type": "integer",
+                            "description": "With ?role=coding: the most thinking tokens one answer gets (stack.engines.coding.thinking_budget_ceiling); a request's own budget is clamped to it."
                           }
                         },
                         "required": [
@@ -292,6 +316,657 @@
                   "required": [
                     "object",
                     "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A role other than coding was named; only coding has a scoped list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/messages": {
+      "post": {
+        "tags": [
+          "Roles"
+        ],
+        "summary": "Anthropic Messages for the coding role (the engine's native wire)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "messages": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string"
+                        },
+                        "content": {
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "role"
+                      ],
+                      "additionalProperties": {
+                        "nullable": true
+                      }
+                    }
+                  },
+                  "max_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true
+                  },
+                  "stream": {
+                    "type": "boolean"
+                  },
+                  "thinking": {
+                    "nullable": true
+                  },
+                  "timeout_ms": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "model",
+                  "messages"
+                ],
+                "additionalProperties": {
+                  "nullable": true
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The engine's own reply, byte for byte: JSON, or its server-sent events when `stream` is true, with the identity headers. Abort the request to cancel.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "nullable": true
+                  }
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown role or model id, a role other than coding, or a thinking budget that is not a number.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "roles": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "error",
+                        "roles"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": {
+                        "nullable": true
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The named model's provenance is incomplete.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "unverified"
+                      ]
+                    },
+                    "missing": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "model",
+                    "reason",
+                    "missing"
+                  ]
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "The engine bound to the coding role does not serve this wire; `error` says what to use instead. The engine is not started to find out.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "wire": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "role",
+                    "wire"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No engine is ready for the role; offline_reason says why.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "offline_reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "role",
+                    "state",
+                    "offline_reason"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/messages/count_tokens": {
+      "post": {
+        "tags": [
+          "Roles"
+        ],
+        "summary": "Anthropic token count for the coding role (the engine's native wire)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "messages": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string"
+                        },
+                        "content": {
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "role"
+                      ],
+                      "additionalProperties": {
+                        "nullable": true
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "model",
+                  "messages"
+                ],
+                "additionalProperties": {
+                  "nullable": true
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The engine's own reply, byte for byte: JSON, or its server-sent events when `stream` is true, with the identity headers. Abort the request to cancel.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "nullable": true
+                  }
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown role or model id, a role other than coding, or a thinking budget that is not a number.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "roles": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "error",
+                        "roles"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": {
+                        "nullable": true
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The named model's provenance is incomplete.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "unverified"
+                      ]
+                    },
+                    "missing": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "model",
+                    "reason",
+                    "missing"
+                  ]
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "The engine bound to the coding role does not serve this wire; `error` says what to use instead. The engine is not started to find out.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "wire": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "role",
+                    "wire"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No engine is ready for the role; offline_reason says why.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "offline_reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "role",
+                    "state",
+                    "offline_reason"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/responses": {
+      "post": {
+        "tags": [
+          "Roles"
+        ],
+        "summary": "OpenAI Responses for the coding role (the engine's native wire)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "input": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "nullable": true
+                        }
+                      }
+                    ]
+                  },
+                  "stream": {
+                    "type": "boolean"
+                  },
+                  "timeout_ms": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "model",
+                  "input"
+                ],
+                "additionalProperties": {
+                  "nullable": true
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The engine's own reply, byte for byte: JSON, or its server-sent events when `stream` is true, with the identity headers. Abort the request to cancel.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "nullable": true
+                  }
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown role or model id, a role other than coding, or a thinking budget that is not a number.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "roles": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "error",
+                        "roles"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": {
+                        "nullable": true
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The named model's provenance is incomplete.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "unverified"
+                      ]
+                    },
+                    "missing": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "model",
+                    "reason",
+                    "missing"
+                  ]
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "The engine bound to the coding role does not serve this wire; `error` says what to use instead. The engine is not started to find out.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "wire": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "role",
+                    "wire"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No engine is ready for the role; offline_reason says why.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "offline_reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "role",
+                    "state",
+                    "offline_reason"
                   ]
                 }
               }
