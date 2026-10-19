@@ -13,6 +13,8 @@ import { ROLES } from "@/roles";
 export interface PlanModel {
   id: string; role: RoleId; repo?: string; url: string; sha256: string; approx_bytes: number; licence: string; revision: string;
   engine?: string; archive?: boolean; hub_file?: string; component?: string; starter: boolean; installed: boolean;
+  /** True for a part the recommended setup installs but an admin may remove later (the coding model); absent otherwise. */
+  removable?: boolean;
 }
 export interface InstallPlan {
   level: ProfileTier["level"] | null;
@@ -29,7 +31,9 @@ export interface InstallPlan {
 
 /** Role importance for ordering: chat first, then speech in, speech out,
  * embeddings, the judge, the router, anything else. */
-const ROLE_ORDER: RoleId[] = ["chat", "stt", "tts", "embed", "judge", "router"];
+const ROLE_ORDER: RoleId[] = ["chat", "stt", "tts", "embed", "judge", "router", "coding"];
+/** Roles whose bound model is in the recommended setup but removable afterwards: the coding model (CODE-STACK-01), which only p64 and p128 bind. */
+const REMOVABLE_ROLES: RoleId[] = ["coding"];
 const rank = (role: RoleId): number => { const index = ROLE_ORDER.indexOf(role); return index === -1 ? ROLE_ORDER.length : index; };
 
 const NO_TIER_LABEL = "This computer has less than 16 GB of memory for AI, which is the least the Stack can run chat and voice on.";
@@ -43,14 +47,14 @@ function pinFor(role: RoleId, tier: ProfileTier): CatalogModelLike | null {
   return own ?? STACK_MODELS.find((pin) => pin.role === role && !pin.component && pin.engine !== "mlx-serve" && pin.engine !== "omlx") ?? null;
 }
 
-function view(pin: CatalogModelLike, installed: Set<string>, starter: boolean): PlanModel | null {
+function view(pin: CatalogModelLike, installed: Set<string>, starter: boolean, removable = false): PlanModel | null {
   const download = pin.download;
   if (!download || !pin.license || !pin.revision) return null;
   return {
     id: pin.id, role: pin.role, ...(pin.repo ? { repo: pin.repo } : {}), url: download.url, sha256: download.sha256, approx_bytes: download.approx_bytes,
     licence: pin.license, revision: pin.revision, ...(pin.engine ? { engine: pin.engine } : {}),
     ...(download.archive ? { archive: true } : {}), ...(download.hub_file ? { hub_file: download.hub_file } : {}), ...(pin.component ? { component: pin.component } : {}),
-    starter, installed: installed.has(pin.id),
+    starter, installed: installed.has(pin.id), ...(removable ? { removable: true } : {}),
   };
 }
 
@@ -79,16 +83,18 @@ export function imageInstallModels(family: "flux2-klein-4b" | "z-image-turbo", i
 }
 
 /** The pins a tier's first-run plan installs, in plan order, the starter chat first: the one list both the install plan and the disk plan read. */
-export function plannedPinsFor(tier: ProfileTier, target: { platform: string; arch: string } = { platform: "darwin", arch: "arm64" }): Array<{ pin: CatalogModelLike; starter: boolean }> {
+export function plannedPinsFor(tier: ProfileTier, target: { platform: string; arch: string } = { platform: "darwin", arch: "arm64" }): Array<{ pin: CatalogModelLike; starter: boolean; removable?: boolean }> {
   const projectors = new Set(STACK_MODELS.flatMap((pin) => pin.imageInput ? [pin.imageInput.projector] : []));
   // Resident roles, plus embeddings where the tier loads them on demand:
-  // search and memory need the model on disk either way. A role that
-  // shares another's model (coding, router, an unbound judge) adds nothing.
-  const roles = [...new Set<RoleId>([...tier.resident, ...tier.onDemand.filter((role) => role === "embed")])]
+  // search and memory need the model on disk either way. Coding is on
+  // demand but has its own bound model, so the recommended setup brings
+  // it (removable). A role that shares another's model (router, an
+  // unbound judge) adds nothing.
+  const roles = [...new Set<RoleId>([...tier.resident, ...tier.onDemand.filter((role) => role === "embed" || (role === "coding" && PROFILE_MODEL_BINDINGS[tier.id]?.coding))])]
     .filter((role) => !(ROLES[role] as { sharesModelWith?: RoleId }).sharesModelWith || PROFILE_MODEL_BINDINGS[tier.id]?.[role])
     .sort((a, b) => rank(a) - rank(b));
-  const planned: Array<{ pin: CatalogModelLike; starter: boolean }> = [];
-  const add = (pin: CatalogModelLike | null, starter = false) => { if (pin && !planned.some((entry) => entry.pin.id === pin.id)) planned.push({ pin, starter }); };
+  const planned: Array<{ pin: CatalogModelLike; starter: boolean; removable?: boolean }> = [];
+  const add = (pin: CatalogModelLike | null, starter = false, removable = false) => { if (pin && !planned.some((entry) => entry.pin.id === pin.id)) planned.push({ pin, starter, ...(removable ? { removable: true } : {}) }); };
   for (const role of roles) {
     const pin = pinFor(role, tier);
     if (!pin) continue;
@@ -97,7 +103,7 @@ export function plannedPinsFor(tier: ProfileTier, target: { platform: string; ar
       // tier's larger one downloads; when chat is already small it is the starter.
       const smaller = (pin.download?.approx_bytes ?? 0) > (STACK_CHAT_MODEL.download?.approx_bytes ?? 0);
       if (smaller) { add(STACK_CHAT_MODEL, true); add(pin); } else add(pin, true);
-    } else add(pin);
+    } else add(pin, false, REMOVABLE_ROLES.includes(role));
     // A bound model that reads pictures brings its projector (VISION-03a).
     const projector = pin.imageInput ? STACK_MODELS.find((candidate) => candidate.id === pin.imageInput!.projector) : undefined;
     for (const part of STACK_MODELS.filter((candidate) => candidate.role === role && candidate.component && candidate.engine === pin.engine && !projectors.has(candidate.id))) add(part);
@@ -123,7 +129,7 @@ export function buildInstallPlan(hw: HardwareInfo, options: { vramOverrideGb?: n
   if (!tier) return { level: null, tier: null, label: source === "unknown" ? UNKNOWN_LABEL : NO_TIER_LABEL, ...base, models: [], total_bytes: 0, remaining_bytes: 0, fits_disk: null };
   const installed = new Set(options.installedIds ?? []);
   const planned = plannedPinsFor(tier, hw);
-  const models = planned.flatMap(({ pin, starter }) => view(pin, installed, starter) ?? []);
+  const models = planned.flatMap(({ pin, starter, removable }) => view(pin, installed, starter, removable) ?? []);
   const total = models.reduce((sum, model) => sum + model.approx_bytes, 0);
   const remaining = models.filter((model) => !model.installed).reduce((sum, model) => sum + model.approx_bytes, 0);
   return { level: tier.level, tier: tier.id, label: tier.label, ...base, models, total_bytes: total, remaining_bytes: remaining, fits_disk: free === null ? null : free >= remaining };

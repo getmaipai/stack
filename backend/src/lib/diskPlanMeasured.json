@@ -91,6 +91,10 @@
       "download_bytes": 1400328928,
       "installed_bytes": 1400328928
     },
+    "qwen3.8-27b-ud-q4-k-m": {
+      "download_bytes": 16464440224,
+      "installed_bytes": 16464440224
+    },
     "qwen3-4b-q4-k-m": {
       "download_bytes": 2497280256,
       "installed_bytes": 2497280256

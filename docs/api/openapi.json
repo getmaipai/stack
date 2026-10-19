@@ -8834,6 +8834,10 @@
                           },
                           "installed": {
                             "type": "boolean"
+                          },
+                          "removable": {
+                            "type": "boolean",
+                            "description": "True for a part the recommended setup installs but an admin may remove later in Settings (the coding model on p64 and p128); absent otherwise."
                           }
                         },
                         "required": [
@@ -9146,6 +9150,10 @@
                           },
                           "installed": {
                             "type": "boolean"
+                          },
+                          "removable": {
+                            "type": "boolean",
+                            "description": "True for a part the recommended setup installs but an admin may remove later in Settings (the coding model on p64 and p128); absent otherwise."
                           }
                         },
                         "required": [

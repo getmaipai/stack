@@ -21,3 +21,14 @@ test("the wire declaration covers the four current request kinds", () => {
   const wires = new Set(ROLE_IDS.map((id) => ROLES[id].wire));
   for (const wire of ["chat", "embeddings", "transcription", "speech"] as const) expect(wires.has(wire)).toBe(true);
 });
+
+// CODE-STACK-01 S1: coding is its own on-demand role, not a second name for chat.
+test("coding is an on-demand role with its own model: it no longer shares chat's", () => {
+  expect(ROLES.coding.residency).toBe("jit");
+  expect((ROLES.coding as { sharesModelWith?: string }).sharesModelWith).toBeUndefined();
+  expect(ROLES.coding.wire).toBe("chat");
+  expect(ROLES.coding.endpoints).toEqual(["/v1/chat/completions"]);
+  expect(ROLES.chat.residency).toBe("resident");
+  // The roles that still share chat's model are untouched.
+  for (const id of ["judge", "router"] as const) expect((ROLES[id] as { sharesModelWith?: string }).sharesModelWith).toBe("chat");
+});

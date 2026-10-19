@@ -68,7 +68,8 @@ test("dryRunFootprint reads the fake fit binary output and returns null on a fai
 
 test("roles that share chat's model run on chat's process", async () => {
   expect(processRoleFor("judge")).toBe("chat");
-  await getProcess("coding");
+  expect(processRoleFor("router")).toBe("chat");
+  await getProcess("router");
   await getProcess("judge");
   expect(started).toEqual(["chat"]);
   expect(getRoleStatus("router").state).toBe("ready");
@@ -388,4 +389,18 @@ test("a fit refusal says what went wrong and what to do (STACK-EMBED-02)", async
   expect(tooBig).toContain("3.0 GB of graphics memory");
   expect(tooBig).toContain("set where this model runs to the processor");
   expect(fitRefusalMessage({ ...base, peakBytes: 3 * 1024 ** 3, onProcessor: true })).toContain("Memory for models");
+});
+
+// CODE-STACK-01 S1: coding has its own model but no process until slice S2, and says so.
+test("coding with its model installed reports installed (not loaded) and a request is refused with a plain reason until S2 adds the process", async () => {
+  const { resolveRoleState } = await import("@/lib/router");
+  clearModelsForTests();
+  setSupervisorFactoryForTests(null);
+  setMachineTier("p128");
+  upsertModel({ id: "qwen3.8-27b-ud-q4-k-m", roles: ["coding"], source: "catalog", provenance: {}, revision: "r1", sha256: "a".repeat(64), licence: "Apache-2.0", verifiedAt: new Date().toISOString(), modelPath: "/tmp/never-opened/coding.gguf" });
+  expect(processRoleFor("coding")).toBe("coding");
+  expect(resolveRoleState("coding").state).toBe("installed");
+  await expect(getProcess("coding")).rejects.toThrow(/No engine can be started for coding/);
+  expect(started).toEqual([]);
+  clearModelsForTests();
 });

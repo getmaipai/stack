@@ -15,6 +15,7 @@ const PlanModelSchema = z.object({
   id: z.string(), role: RoleIdSchema, repo: z.string().optional(), url: z.string().url(), sha256: z.string().length(64), approx_bytes: z.number().int().nonnegative(), licence: z.string(), revision: z.string(),
   engine: z.string().optional(), archive: z.boolean().optional(), hub_file: z.string().optional(), component: z.string().optional(),
   starter: z.boolean(), installed: z.boolean(),
+  removable: z.boolean().optional().openapi({ description: "True for a part the recommended setup installs but an admin may remove later in Settings (the coding model on p64 and p128); absent otherwise." }),
 });
 const DiskRowSchema = z.object({
   id: z.string(), label: z.string(), note: z.string(), kind: z.enum(["home", "model", "engine"]), need: z.enum(["required", "recommended", "optional"]), selectable: z.boolean(),

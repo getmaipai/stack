@@ -90,7 +90,7 @@ const GB = 1_000_000_000;
 /** Environment downloads come from the disk plan's measured table (one definition with the wizard); the figures are a fallback only. */
 const ENV_BYTES = { image: engineDownloadBytes("image-gen") ?? 1.1 * GB, video: engineDownloadBytes("video-gen") ?? 1.0 * GB, music: engineDownloadBytes("music-gen") ?? 0.8 * GB, tools: engineDownloadBytes("image-tools") ?? 0.4 * GB, pocket: engineDownloadBytes("pocket-tts") ?? 0.72 * GB, mlxAudio: engineDownloadBytes("mlx-audio") ?? 0.47 * GB };
 /** The disk plan's row for a component, where the plan has one (its optional rows are the wizard's unchecked extras). */
-const DISK_ROW: Record<string, string> = { "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "image-tools": "image-tools", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "ace-step-1-5-turbo": "music", "ltx-2-3-distilled-mlx": "video-detailed" };
+const DISK_ROW: Record<string, string> = { "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "image-tools": "image-tools", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "ace-step-1-5-turbo": "music", "ltx-2-3-distilled-mlx": "video-detailed" };
 
 const envImage: EnvDef = { name: "image-gen", approxBytes: ENV_BYTES.image, root: imageGenRoot, ready: imageGenEnvironmentReady, build: (onPhase, signal) => ensureImageGenEnvironment(onPhase, { signal }), stop: () => imageGen.stop() };
 const envVideo: EnvDef = {
@@ -125,6 +125,7 @@ const LABELS: Record<string, { label: string; summary: string }> = {
   "qwen3-1.7b-mlx-4bit": { label: "Chat model: Qwen3 1.7B (Apple format)", summary: "A small chat model in the format the second chat engine runs." },
   "qwen3-vl-8b-instruct-q4-k-m": { label: "Chat model: Qwen3-VL 8B (reads pictures)", summary: "A chat model that can look at pictures you share." },
   "qwen3-vl-4b-instruct-q4-k-m": { label: "Picture reader: Qwen3-VL 4B", summary: "Describes pictures for the parts of Home that need to look at one." },
+  "qwen3.8-27b-ud-q4-k-m": { label: "Coding model: Qwen3.8 27B", summary: "The model that writes code for the coding tools you connect. It loads only while someone is coding. Remove it if your household does not want coding." },
   "qwen3-4b-q4-k-m": { label: "Quick checks: Qwen3 4B", summary: "A small model for fast side tasks like titles and safety checks." },
   "nomic-embed-text-v1-5-q4-k-m": { label: "Memory and search model", summary: "Lets Home find the right memory or page by meaning." },
   "moonshine-tiny-en-int8": { label: "Listening: speech to text", summary: "Turns what you say into text. Runs on this computer." },
@@ -168,6 +169,7 @@ export function componentDefs(): UnitDef[] {
     if (pin.component || projectorIds.has(pin.id)) continue;
     if (pin.role === "chat") units.push(generic(pin, "chat", "chat", ["Chat"]));
     else if (pin.role === "judge") units.push(generic(pin, "chat", "judge", ["Quick checks"]));
+    else if (pin.role === "coding") units.push(generic(pin, "chat", "coding", ["Coding"]));
     else if (pin.role === "vision") units.push(generic(pin, "chat", "vision", ["Describing pictures"]));
     else if (pin.role === "embed") units.push(generic(pin, "chat", "embed", ["Memory and search"]));
     else if (pin.role === "stt") units.push(generic(pin, "voice", "stt", ["Listening"]));
@@ -320,7 +322,8 @@ export interface ComponentList {
 /** The tier and the pins Home installs there come from the install plan, the one sizing function the setup wizard uses. */
 function planOf(hardware: HardwareInfo): { tier: Tier | null; planned: Set<string> } {
   const plan = buildInstallPlan(hardware, { installedIds: [] });
-  return { tier: plan.tier, planned: new Set(plan.models.map((model) => model.id)) };
+  // A removable part (the coding model) is in the plan but is not required: an admin may take it off.
+  return { tier: plan.tier, planned: new Set(plan.models.filter((model) => !model.removable).map((model) => model.id)) };
 }
 
 function requirementFor(unit: UnitDef, tier: Tier | null, planned: Set<string>): { requirement: ComponentRequirement; reason: string | null } {

@@ -51,3 +51,14 @@ test("the real catalog renders the household chat and judge pins", () => {
   expect(doc).toContain("`qwen3-4b-q4-k-m`");
   expect(doc.startsWith("<!-- GENERATED")).toBe(true);
 });
+
+test("the real catalog lists coding with no row on p16 and p32 and the Qwen3.8-27B pin on p64 and p128 (CODE-STACK-01 S1)", () => {
+  const doc = renderComponentsDoc(collectComponentsCatalog());
+  const section = doc.split("## coding ")[1]!.split("\n## ")[0]!;
+  expect(section).not.toContain("Shares `chat`");
+  expect(section).toContain("| p16 | not available |");
+  expect(section).toContain("| p32 | not available |");
+  expect(section).toContain("| p64 | on demand | `qwen3.8-27b-ud-q4-k-m` | UD-Q4_K_M |");
+  expect(section).toContain("| p128 | on demand | `qwen3.8-27b-ud-q4-k-m` | UD-Q4_K_M |");
+  expect(section).toContain("unsloth/Qwen3.8-27B-GGUF @ 4ca720788d1e01f1bff70c033e0d0028fd02e502");
+});

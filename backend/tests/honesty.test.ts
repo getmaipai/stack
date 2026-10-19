@@ -139,7 +139,7 @@ test("an offline chat group honors failed-start backoff during readiness checks"
   setSupervisorFactoryForTests(async () => { attempts += 1; throw new Error("llama-server exited during load"); });
   await expect(getProcess("chat")).rejects.toThrow(/exited/);
   expect(resolveRoleState("chat").state).toBe("offline");
-  expect(resolveRoleState("coding").state).toBe("offline");
+  expect(resolveRoleState("router").state).toBe("offline");
   attempts = 0;
   const run = await runCheck();
   expect(run.ok).toBe(false);
@@ -153,10 +153,10 @@ test("roles sharing a process whose owner failed to start in this run are skippe
   upsertModel({ id: "chat-a", roles: ["chat"], ...verified });
   let attempts = 0;
   setSupervisorFactoryForTests(async () => { attempts += 1; throw new Error("llama-server exited during load"); });
-  const run = await runCheck({ roleIds: ["coding", "chat", "judge", "router"] });
+  const run = await runCheck({ roleIds: ["router", "chat", "judge"] });
   expect(attempts).toBe(1);
   expect(run.ok).toBe(false);
-  expect(run.results.map((result) => [result.role, result.ok, result.skipped ?? false])).toEqual([["chat", false, false], ["coding", false, true], ["judge", false, true], ["router", false, true]]);
+  expect(run.results.map((result) => [result.role, result.ok, result.skipped ?? false])).toEqual([["chat", false, false], ["router", false, true], ["judge", false, true]]);
   expect(run.results[1]?.reason).toMatch(/runs on chat's process, which failed: llama-server exited during load/);
 });
 

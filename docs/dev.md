@@ -2270,6 +2270,38 @@ is `docs/integrations.md`, "Media service (MEDIA-STACK-01)".
   25.4 s; preview of that clip 3.2 s; a localhost fetch 1.7 s; first-time install 108 s for ffmpeg and ffprobe, 31 s for the yt-dlp
   environment.
 
+## The coding role: its own model (CODE-STACK-01, slice S1, 2026-10-18)
+
+Home's local-coding design (`local-coding-2026-10-17.md` in `getmaipai/home`, phase 1 scope `local-coding-phase1-2026-10-18.md`)
+gives `coding` its own model. S1 is the role and its per-tier binding only; there is no process, lease, idle unload or wire yet.
+
+**What S1 did.**
+
+- `coding` is now an on-demand (`jit`) role with no `sharesModelWith`. It no longer runs on chat's process or model.
+  `processRoleFor("coding")` is `coding`. Chat, the judge and the router are unchanged.
+- Tiers: `coding` is `notAvailable` on p16 and p32 and `onDemand` on p64 and p128 (it was resident on p16, p32 and p64).
+- Pin and binding on p64 and p128: `qwen3.8-27b-ud-q4-k-m`, Unsloth's `Qwen3.8-27B-UD-Q4_K_M.gguf` from
+  `unsloth/Qwen3.8-27B-GGUF` at commit `4ca720788d1e01f1bff70c033e0d0028fd02e502`, 16,464,440,224 bytes, sha256
+  `322e194ff79741c7baa497c240f677f54b201b0efab44ca8e50f122b39123482` (the repository's git-lfs oid, and re-hashed from the copy
+  benchmarked on the Studio). Apache-2.0 (the repository metadata and the Qwen/Qwen3.8-27B card). Sampling is the Qwen card's
+  Thinking Mode set (temperature 1.0, top_p 0.95, top_k 20, presence_penalty 0.0); the card has no coding-only set.
+- The first-run plan (`/stack/v1/install-plan`) includes the model on p64 and p128 with `removable: true`, never on p16 or p32.
+  Components treat it as optional, not required, so an admin can remove it in Settings; the disk plan has a `coding` row
+  (`recommended`, so on by default and unticked to skip), and `diskPlanMeasured.json` carries its size.
+- Honest state until S2: with the model installed the role reports `installed` (not loaded), and a request is refused with
+  "No engine can be started for coding on this machine yet." because `coding` is not in the supervisor's `SPAWNABLE_ROLES`.
+  Without the model it reports `notInstalled`. `engineArgs.ts` and the launch path are untouched.
+
+**Decisions recorded by the owner, 2026-10-18.** The default coding model on p128 and p64 is Qwen3.8-27B UD-Q4_K_M. The keep-warm
+default is 15 minutes (`coding.keep_warm_minutes`, S2). The 64 GB tier uses Splash in a later slice, unmeasured there, with the
+memory governor refusing when it does not fit and llama-server as the fallback. The Splash engine kind is a later slice too.
+
+**Still owed.** S2: the coding process (add `coding` to `SPAWNABLE_ROLES` and `JIT_ROLES`), the lease and the governor rule that an
+idle coding engine yields to a generator job while a busy one makes it wait and residents are never evicted, the idle unload,
+2 slots on p128, q8_0 KV and a 128k window in the launch (S1 put no `launch` block on the pin on purpose). S3: the wires
+`/v1/messages`, `/v1/messages/count_tokens`, `/v1/responses` (when the pinned build serves it) and `GET /v1/models` for the role
+(closes STACK-60 and STACK-61). S4 and S5 per the Home backlog row.
+
 ## Measured so far
 
 On an Apple silicon Mac (2026-09-18, a temporary copy of the owner's

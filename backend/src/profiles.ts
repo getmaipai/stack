@@ -24,13 +24,13 @@ export const PROFILE_TIERS: ProfileTier[] = [
     label: "This computer can run chat and voice, with embeddings when needed. Images, video, and music are not available.",
     minUnifiedGb: 16,
     minVramGb: 16,
-    resident: ["chat", "coding", "judge", "router", "stt", "tts"],
+    resident: ["chat", "judge", "router", "stt", "tts"],
     onDemand: ["embed"],
     installedOnly: ["wakeword"],
     // vision stays here: measured 2026-10-06 on a 24 GB machine, it does
     // not fit beside the 8B chat under the governor's margin (docs/dev.md,
     // "The vision role").
-    notAvailable: ["rerank", "vision", "image", "video", "music"],
+    notAvailable: ["coding", "rerank", "vision", "image", "video", "music"],
     speedRange: { min: 15, max: 80 },
   },
   {
@@ -39,10 +39,10 @@ export const PROFILE_TIERS: ProfileTier[] = [
     label: "This computer can run chat, voice, and embeddings, with the judge when needed. Generators are not available.",
     minUnifiedGb: 32,
     minVramGb: 32,
-    resident: ["chat", "coding", "judge", "router", "embed", "stt", "tts"],
+    resident: ["chat", "judge", "router", "embed", "stt", "tts"],
     onDemand: ["rerank"],
     installedOnly: ["wakeword"],
-    notAvailable: ["vision", "image", "video", "music"],
+    notAvailable: ["coding", "vision", "image", "video", "music"],
     speedRange: { min: 25, max: 140 },
   },
   {
@@ -51,8 +51,8 @@ export const PROFILE_TIERS: ProfileTier[] = [
     label: "This computer can run chat, voice, and embeddings, plus one image or music job at a time. Video is not available.",
     minUnifiedGb: 64,
     minVramGb: 64,
-    resident: ["chat", "coding", "judge", "router", "embed", "rerank", "stt", "tts"],
-    onDemand: ["image", "music"],
+    resident: ["chat", "judge", "router", "embed", "rerank", "stt", "tts"],
+    onDemand: ["coding", "image", "music"],
     installedOnly: ["wakeword"],
     notAvailable: ["vision", "video"],
     speedRange: { min: 35, max: 220 },
@@ -75,12 +75,14 @@ export const PROFILE_TIERS: ProfileTier[] = [
  * 2026-10-16): Qwen3 8B on p16, which is every Mac of 24 GB or less;
  * Muse Glimmer 30B above that, the 17 GB Q4_K_M on p32 and the
  * KQuant-Dynamic Q4_K_XL from p64. The judge shares chat through p16;
- * from p32 it has its own 4B pin and process. */
+ * from p32 it has its own 4B pin and process. The coding role has its own
+ * model from p64 (CODE-STACK-01 S1): Qwen3.8-27B at UD-Q4_K_M, loaded only
+ * while someone is coding; p16 and p32 have no coding. */
 export const PROFILE_MODEL_BINDINGS: Partial<Record<ProfileTier["id"], Partial<Record<RoleId, string>>>> = {
   p16: { chat: "qwen3-8b-instruct-q4-k-m" },
   p32: { chat: "muse-glimmer-30b-q4-k-m", judge: "qwen3-4b-q4-k-m" },
-  p64: { chat: "muse-glimmer-30b-q4-k-xl", judge: "qwen3-4b-q4-k-m" },
-  p128: { chat: "muse-glimmer-30b-q4-k-xl", judge: "qwen3-4b-q4-k-m" },
+  p64: { chat: "muse-glimmer-30b-q4-k-xl", judge: "qwen3-4b-q4-k-m", coding: "qwen3.8-27b-ud-q4-k-m" },
+  p128: { chat: "muse-glimmer-30b-q4-k-xl", judge: "qwen3-4b-q4-k-m", coding: "qwen3.8-27b-ud-q4-k-m" },
 };
 
 /** The tier this machine's sizing memory (see `sizingMemory`) clears, and

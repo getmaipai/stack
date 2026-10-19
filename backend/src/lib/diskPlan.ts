@@ -166,6 +166,9 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   if (reads.length) rows.push(modelRow({ id: "reads-pictures", label: "Reads pictures (projector)", note: "Lets the chat AI look at a picture you send it.", need: "recommended", engines: [] }, reads));
   const judge = plannedWhere((pin) => pin.role === "judge");
   if (judge.length) rows.push(modelRow({ id: "judge", label: "Quick helper AI", note: "A second, smaller AI that double-checks answers.", need: "required", engines: [] }, judge));
+  // The coding model rides the recommended setup but an admin can leave it out or remove it later (CODE-STACK-01).
+  const coding = plannedWhere((pin) => pin.role === "coding");
+  if (coding.length) rows.push(modelRow({ id: "coding", label: "Coding AI (Qwen3.8 27B)", note: "Writes code for the coding tools you connect. It loads only while someone is coding. Skip it if your household does not want coding.", need: "recommended", engines: [] }, coding));
   const embed = plannedWhere((pin) => pin.role === "embed");
   if (embed.length) rows.push(modelRow({ id: "embed", label: "Memory search model", note: "Finds what Home remembers when you ask.", need: "required", engines: [] }, embed));
   const stt = plannedWhere((pin) => pin.role === "stt");

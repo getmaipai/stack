@@ -325,3 +325,20 @@ test("the install route takes the accepted licence in its body and refuses witho
   await __settleComponentInstallsForTests();
   rmSync(join(dataDir, "licence-acceptances.json"), { force: true });
 });
+
+test("the coding model is a removable component on p128 and p64 (not required), and unsupported on p32 (CODE-STACK-01 S1)", async () => {
+  __setComponentUnitsForTests(null);
+  for (const gb of [128, 64]) {
+    const list = await listComponents(hw({ unifiedMemoryGb: gb, totalRamGb: gb }));
+    const coding = list.components.find((c) => c.id === "qwen3.8-27b-ud-q4-k-m")!;
+    expect(coding).toBeDefined();
+    expect(coding.requirement).toBe("optional");
+    expect(coding.plan_need).toBe("recommended");
+    expect(coding.full_bytes).toBe(16_464_440_224);
+    expect(coding.install_block).toBeNull();
+    // The chat models are still required; the coding model is the only coding row.
+    expect(list.components.find((c) => c.id === "muse-glimmer-30b-q4-k-xl")!.requirement).toBe("required");
+  }
+  const small = await listComponents(hw({ unifiedMemoryGb: 32, totalRamGb: 32 }));
+  expect(small.components.find((c) => c.id === "qwen3.8-27b-ud-q4-k-m")!.requirement).toBe("unsupported");
+});

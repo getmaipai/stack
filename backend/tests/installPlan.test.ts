@@ -70,7 +70,7 @@ test("plan: the starter is first, then chat, stt, tts, embed, judge", () => {
   const plan = buildInstallPlan(hw({ unifiedMemoryGb: 64, totalRamGb: 64 }));
   expect(plan.models[0]).toMatchObject({ id: "qwen3-1.7b-q8-0", starter: true });
   expect(plan.models.filter((model) => model.starter)).toHaveLength(1);
-  expect(plan.models.filter((model) => !model.component).map((model) => model.role)).toEqual(["chat", "chat", "stt", "tts", "tts", "embed", "judge"]);
+  expect(plan.models.filter((model) => !model.component).map((model) => model.role)).toEqual(["chat", "chat", "stt", "tts", "tts", "embed", "judge", "coding"]);
   // STACK-MUSE-01: above 24 GB the bound chat is Muse Glimmer 30B, so the
   // 8B is not in this plan at all.
   expect(plan.models[1]).toMatchObject({ id: "muse-glimmer-30b-q4-k-xl", starter: false });
@@ -119,4 +119,38 @@ test("route: answers the plan, accepts vram_gb in range and refuses it out of ra
   expect((await app.request("/stack/v1/install-plan?vram_gb=513")).status).toBe(400);
   expect((await app.request("/stack/v1/install-plan?vram_gb=1.5")).status).toBe(400);
   expect((await app.request("/stack/v1/install-plan?vram_gb=24")).status).toBe(200);
+});
+
+// CODE-STACK-01 S1: the recommended setup brings the coding model on p64 and p128, removable; never on p16 or p32.
+test("plan: p64 and p128 include the coding model as a removable pull body; p16 and p32 never do", () => {
+  for (const gb of [64, 128]) {
+    const plan = buildInstallPlan(hw({ unifiedMemoryGb: gb, totalRamGb: gb }));
+    const coding = plan.models.filter((model) => model.role === "coding");
+    expect(coding).toHaveLength(1);
+    expect(coding[0]).toMatchObject({ id: "qwen3.8-27b-ud-q4-k-m", removable: true, starter: false, installed: false, approx_bytes: 16_464_440_224, licence: "Apache-2.0", engine: "llama-server", revision: "4ca720788d1e01f1bff70c033e0d0028fd02e502", sha256: "322e194ff79741c7baa497c240f677f54b201b0efab44ca8e50f122b39123482" });
+    // Only the coding model is flagged removable; everything else is required.
+    expect(plan.models.filter((model) => model.removable).map((model) => model.id)).toEqual(["qwen3.8-27b-ud-q4-k-m"]);
+    // Chat is still the starter pair and still first; coding changes neither.
+    expect(plan.models[0]).toMatchObject({ id: "qwen3-1.7b-q8-0", starter: true });
+    expect(plan.models[1]).toMatchObject({ id: "muse-glimmer-30b-q4-k-xl", starter: false });
+  }
+  for (const gb of [16, 24, 32]) {
+    const plan = buildInstallPlan(hw({ unifiedMemoryGb: gb, totalRamGb: gb }));
+    expect(plan.models.some((model) => model.role === "coding" || model.id === "qwen3.8-27b-ud-q4-k-m")).toBe(false);
+    expect(plan.models.some((model) => model.removable)).toBe(false);
+  }
+});
+test("plan: the coding model adds its size to the totals and a pull body for it is complete", () => {
+  const with64 = buildInstallPlan(hw({ unifiedMemoryGb: 64, totalRamGb: 64 }));
+  expect(with64.total_bytes).toBe(with64.models.reduce((sum, model) => sum + model.approx_bytes, 0));
+  const installed = buildInstallPlan(hw({ unifiedMemoryGb: 64, totalRamGb: 64 }), { installedIds: ["qwen3.8-27b-ud-q4-k-m"] });
+  expect(installed.models.find((model) => model.id === "qwen3.8-27b-ud-q4-k-m")?.installed).toBe(true);
+  expect(installed.remaining_bytes).toBe(with64.total_bytes - 16_464_440_224);
+});
+test("route: the plan's coding model carries removable: true in the response", async () => {
+  const body = await (await app.request("/stack/v1/install-plan?vram_gb=64")).json() as { models: Array<{ id: string; removable?: boolean }> };
+  const entries = body.models.filter((model) => model.id === "qwen3.8-27b-ud-q4-k-m");
+  // The route sizes from the real machine first; the override only applies when none is detected, so assert the shape either way.
+  for (const entry of entries) expect(entry.removable).toBe(true);
+  expect(body.models.filter((model) => model.removable).every((model) => model.id === "qwen3.8-27b-ud-q4-k-m")).toBe(true);
 });

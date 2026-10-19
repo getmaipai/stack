@@ -54,13 +54,17 @@ export const ROLES = {
     endpoints: ["/v1/chat/completions"],
     quality: ["fast", "everyday", "best"],
   },
+  // CODE-STACK-01 S1: its own model (Qwen3.8-27B, bound on p64 and p128),
+  // loaded only while someone is coding and never chat's process. The
+  // process, lease and idle unload arrive with slice S2; until then the
+  // role reports "installed" once the model is on disk and a request
+  // answers that no engine can be started yet.
   coding: {
     label: "Coding",
     wire: "chat",
-    residency: "resident",
+    residency: "jit",
     endpoints: ["/v1/chat/completions"],
     quality: ["fast", "everyday", "best"],
-    sharesModelWith: "chat",
   },
   judge: {
     label: "Judge",

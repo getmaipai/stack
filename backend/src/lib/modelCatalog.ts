@@ -178,6 +178,34 @@ export const STACK_JUDGE_MODEL: CatalogModelLike = {
   },
 };
 
+// The `coding` pin (CODE-STACK-01 S1, owner decision 2026-10-18): Qwen3.8-27B,
+// dense, at Unsloth's UD-Q4_K_M, bound on p64 and p128 and loaded only while
+// someone is coding. unsloth/Qwen3.8-27B-GGUF at HEAD 4ca72078 (read from
+// huggingface.co/api/models on 2026-10-18); the file's size and sha256 are
+// the repository's git-lfs oid and size, and the sha256 was re-hashed from
+// the copy the owner benchmarked. Licence Apache-2.0 on both the GGUF
+// repository's metadata and Qwen/Qwen3.8-27B's model card. Sampling is the
+// Qwen card's "Thinking Mode" set (Best Practices); the card gives no
+// coding-only set, and its SWE-bench runs used temperature 1.0 and top_p 0.95.
+// The card's min_p 0.0 and repetition_penalty 1.0 are the engines' defaults.
+const QWEN38_27B_REPO = "unsloth/Qwen3.8-27B-GGUF";
+const QWEN38_27B_REVISION = "4ca720788d1e01f1bff70c033e0d0028fd02e502";
+export const STACK_CODING_MODEL: CatalogModelLike = {
+  id: "qwen3.8-27b-ud-q4-k-m",
+  role: "coding",
+  repo: QWEN38_27B_REPO,
+  license: "Apache-2.0",
+  revision: QWEN38_27B_REVISION,
+  engine: "llama-server",
+  sizing: { profile: "p64", quantization: "UD-Q4_K_M" },
+  download: {
+    url: hfUrl(`${QWEN38_27B_REPO}/resolve/${QWEN38_27B_REVISION}/Qwen3.8-27B-UD-Q4_K_M.gguf`),
+    sha256: "322e194ff79741c7baa497c240f677f54b201b0efab44ca8e50f122b39123482",
+    approx_bytes: 16_464_440_224,
+  },
+  sampling: { temperature: 1.0, top_p: 0.95, top_k: 20, presence_penalty: 0.0, source: "Qwen/Qwen3.8-27B model card, Best Practices, Thinking Mode (the card has no coding-only set; its SWE-bench runs used temperature 1.0 and top_p 0.95)" },
+};
+
 // The `vision` pins (VISION-01b): Qwen's own GGUF of Qwen3-VL-4B-Instruct,
 // the language model at Q4_K_M and its multimodal projector at Q8_0 (the
 // smaller of the two projector files the repository publishes). Licence
@@ -879,7 +907,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_JUDGE_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_DETAILED_MODELS, ...STACK_MUSIC_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_DETAILED_MODELS, ...STACK_MUSIC_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

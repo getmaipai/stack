@@ -16,18 +16,18 @@
     "p32.needed_bytes": 28503105738,
     "p32.home_required_free_bytes": 3176323277,
     "p32.ai_required_free_bytes": 30604414790,
-    "p64.required_free_bytes": 63160716413,
+    "p64.required_free_bytes": 82918044682,
     "p64.minimum_required_free_bytes": 34279601493,
-    "p64.everything_required_free_bytes": 104887962219,
-    "p64.needed_bytes": 53177196982,
+    "p64.everything_required_free_bytes": 124645290487,
+    "p64.needed_bytes": 69641637206,
     "p64.home_required_free_bytes": 3176323277,
-    "p64.ai_required_free_bytes": 59984393136,
-    "p128.required_free_bytes": 153531459328,
+    "p64.ai_required_free_bytes": 79741721405,
+    "p128.required_free_bytes": 173288787597,
     "p128.minimum_required_free_bytes": 34279601493,
-    "p128.everything_required_free_bytes": 263718711966,
-    "p128.needed_bytes": 128612613188,
+    "p128.everything_required_free_bytes": 283476040235,
+    "p128.needed_bytes": 145077053412,
     "p128.home_required_free_bytes": 3176323277,
-    "p128.ai_required_free_bytes": 150355136051
+    "p128.ai_required_free_bytes": 170112464320
   },
   "tiers": {
     "p16": {
@@ -582,6 +582,23 @@
           "basis": "pins"
         },
         {
+          "id": "coding",
+          "label": "Coding AI (Qwen3.8 27B)",
+          "note": "Writes code for the coding tools you connect. It loads only while someone is coding. Skip it if your household does not want coding.",
+          "kind": "model",
+          "need": "recommended",
+          "selectable": true,
+          "download_bytes": 16464440224,
+          "installed_bytes": 16464440224,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "qwen3.8-27b-ud-q4-k-m"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "embed",
           "label": "Memory search model",
           "note": "Finds what Home remembers when you ask.",
@@ -865,11 +882,11 @@
         }
       ],
       "default": {
-        "download_bytes": 47753604073,
-        "installed_bytes": 49917597154,
+        "download_bytes": 64218044297,
+        "installed_bytes": 66382037378,
         "peak_temp_bytes": 3259599828,
-        "needed_bytes": 53177196982,
-        "required_free_bytes": 63160716413
+        "needed_bytes": 69641637206,
+        "required_free_bytes": 82918044682
       },
       "minimum": {
         "download_bytes": 25529840047,
@@ -879,11 +896,11 @@
         "required_free_bytes": 34279601493
       },
       "everything": {
-        "download_bytes": 80335281943,
-        "installed_bytes": 83295510431,
+        "download_bytes": 96799722167,
+        "installed_bytes": 99759950655,
         "peak_temp_bytes": 4933349701,
-        "needed_bytes": 88228860132,
-        "required_free_bytes": 104887962219
+        "needed_bytes": 104693300356,
+        "required_free_bytes": 124645290487
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -891,6 +908,7 @@
         "chat",
         "reads-pictures",
         "judge",
+        "coding",
         "embed",
         "stt",
         "voice",
@@ -988,6 +1006,23 @@
           "peak_temp_bytes": 0,
           "model_ids": [
             "qwen3-4b-q4-k-m"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "coding",
+          "label": "Coding AI (Qwen3.8 27B)",
+          "note": "Writes code for the coding tools you connect. It loads only while someone is coding. Skip it if your household does not want coding.",
+          "kind": "model",
+          "need": "recommended",
+          "selectable": true,
+          "download_bytes": 16464440224,
+          "installed_bytes": 16464440224,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "qwen3.8-27b-ud-q4-k-m"
           ],
           "engines": [],
           "installed": false,
@@ -1370,11 +1405,11 @@
         }
       ],
       "default": {
-        "download_bytes": 122085697143,
-        "installed_bytes": 124594230697,
+        "download_bytes": 138550137367,
+        "installed_bytes": 141058670921,
         "peak_temp_bytes": 4018382491,
-        "needed_bytes": 128612613188,
-        "required_free_bytes": 153531459328
+        "needed_bytes": 145077053412,
+        "required_free_bytes": 173288787597
       },
       "minimum": {
         "download_bytes": 25529840047,
@@ -1384,11 +1419,11 @@
         "required_free_bytes": 34279601493
       },
       "everything": {
-        "download_bytes": 211717380707,
-        "installed_bytes": 215022149668,
+        "download_bytes": 228181820931,
+        "installed_bytes": 231486589892,
         "peak_temp_bytes": 5692132364,
-        "needed_bytes": 220714282032,
-        "required_free_bytes": 263718711966
+        "needed_bytes": 237178722256,
+        "required_free_bytes": 283476040235
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -1396,6 +1431,7 @@
         "chat",
         "reads-pictures",
         "judge",
+        "coding",
         "embed",
         "stt",
         "voice",

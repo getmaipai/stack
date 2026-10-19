@@ -32,8 +32,6 @@ Installed beside the model, never selected on its own: `muse-glimmer-30b-mmproj-
 
 ## coding (Coding)
 
-Shares `chat`'s model and process unless bound elsewhere; the rows below are `chat`'s pins seen from this role.
-
 Engines per platform:
 
 | Engine | Build | Platform | Status |
@@ -45,19 +43,14 @@ Engines per platform:
 | `llama-server-b10797-macos-arm64` | b10797 | darwin arm64 | pinned, verified |
 | `llama-server-b11476-linux-cuda-x64` | b11476 | linux x64 (NVIDIA) | pinned, not yet verified |
 | `llama-server-b10797-win-cuda-x64` | b10797 | win32 x64 (NVIDIA) | pinned, not yet verified |
-| `mlx-serve-v26.9.4-macos-arm64` | v26.9.4 | darwin arm64 | pinned, verified (the second chat engine, chosen by `stack.engines.chat.engine`) |
-| `omlx` | 0.7.0 | macOS 15 or later on arm64 (MLX is Apple silicon only; opt-in chat engine (`stack.engines.chat.engine` = `omlx`), never the default: llama-server is the default on every tier, ENGINE-MLX-02; no Linux file) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
+| `mlx-serve-v26.9.4-macos-arm64` | v26.9.4 | darwin arm64 | pinned, verified (the second chat engine; the coding role stays on llama-server until its own engine slice lands) |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| p16 | resident | `qwen3-8b-instruct-q4-k-m` | Q4_K_M | 4.68 GB | not measured | not measured | Apache-2.0 | Qwen/Qwen3-8B-GGUF @ 7c41481f57cb95916b40956ab2f0b139b296d974 | pinned |
-| p32 | resident | `muse-glimmer-30b-q4-k-m` | Q4_K_M | 15.61 GB | not measured | not measured | Apache-2.0 | meta-models/Muse-Glimmer-30B-GGUF @ 70bf1b61ac09f91b24d39038091b41c582bc5d7a | pinned |
-| p64 | resident | `muse-glimmer-30b-q4-k-xl` | Q4_K_XL | 18.30 GB | not measured | not measured | Apache-2.0 | meta-models/Muse-Glimmer-30B-GGUF @ 70bf1b61ac09f91b24d39038091b41c582bc5d7a | pinned |
-| p128 | on demand | `muse-glimmer-30b-q4-k-xl` | Q4_K_XL | 18.30 GB | not measured | not measured | Apache-2.0 | meta-models/Muse-Glimmer-30B-GGUF @ 70bf1b61ac09f91b24d39038091b41c582bc5d7a | pinned |
-
-Also pinned, started only when chosen (Home's "load this model"): `qwen3-1.7b-q8-0` (Q8_0, 1.71 GB, Apache-2.0, Qwen/Qwen3-1.7B-GGUF @ 90862c4b9d2787eaed51d12237eafdfe7c5f6077); `muse-glimmer-30b-mlx-4bit` (MLX 4-bit (affine, group 64), 18.11 GB, Apache-2.0, mlx-community/Muse-Glimmer-30B-4bit @ 3e7677d7a40d348a3daba263a2b1c0aa41910710); `qwen3-1.7b-mlx-4bit` (4-bit, 0.92 GB, Apache-2.0, mlx-community/Qwen3-1.7B-4bit @ 3b1b1768f8f8cf8351c712464f906e86c2b8269e); `qwen3-vl-8b-instruct-q4-k-m` (Q4_K_M, 4.68 GB, Apache-2.0, Qwen/Qwen3-VL-8B-Instruct-GGUF @ f982a07559d4a2f6c8744d840bf6fccab30eea96, reads pictures).
-
-Installed beside the model, never selected on its own: `muse-glimmer-30b-mmproj-q4-k-m` (projector, 1.30 GB, Apache-2.0, meta-models/Muse-Glimmer-30B-GGUF @ 70bf1b61ac09f91b24d39038091b41c582bc5d7a); `qwen3-vl-8b-instruct-mmproj-q8-0` (projector, 0.70 GB, Apache-2.0, Qwen/Qwen3-VL-8B-Instruct-GGUF @ f982a07559d4a2f6c8744d840bf6fccab30eea96).
+| p16 | not available |  |  |  |  |  |  |  | not available |
+| p32 | not available |  |  |  |  |  |  |  | not available |
+| p64 | on demand | `qwen3.8-27b-ud-q4-k-m` | UD-Q4_K_M | 15.33 GB | not measured | not measured | Apache-2.0 | unsloth/Qwen3.8-27B-GGUF @ 4ca720788d1e01f1bff70c033e0d0028fd02e502 | pinned |
+| p128 | on demand | `qwen3.8-27b-ud-q4-k-m` | UD-Q4_K_M | 15.33 GB | not measured | not measured | Apache-2.0 | unsloth/Qwen3.8-27B-GGUF @ 4ca720788d1e01f1bff70c033e0d0028fd02e502 | pinned |
 
 ## judge (Judge)
 
