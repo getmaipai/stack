@@ -23,7 +23,7 @@ const CodingStatusSchema = z.object({
 });
 const RoleViewSchema = RoleRecordSchema.extend({ coding: CodingStatusSchema.optional(), pending_install: PendingInstallSchema.nullable(), check: CheckSchema, identity: IdentitySchema, ...ChatRoleContextSchema.shape, models: z.array(z.object({ id: z.string(), name: z.string() })).optional(), picture_tokens_max: z.number().int().nullable().optional(), reads_pictures: z.boolean().optional(), tts: z.object({ engine: z.string(), requested: z.string(), tags: z.array(z.string()), fallback_reason: z.string().nullable() }).optional() });
 
-const rolesRoute = createRoute({ method: "get", path: "/", tags: ["Roles"], summary: "Every declared role and its current state", responses: { 200: { content: { "application/json": { schema: z.object({ roles: z.array(RoleViewSchema) }) } }, description: "Declaration; derived state with since, checkedAt on ready and the reason a role is only loaded; the bound model; the launched context length, slot count and whether context is per slot or total; what the last readiness run said; the identity check." } } });
+const rolesRoute = createRoute({ method: "get", path: "/", tags: ["Roles"], summary: "Every declared role and its current state", responses: { 200: { content: { "application/json": { schema: z.object({ roles: z.array(RoleViewSchema) }) } }, description: "Declaration; derived state with since, checkedAt on ready and the reason a role is only loaded; the bound model; the launched context length, slot count and whether context is per slot or total (chat, and coding once its engine runs: one window shared by its slots); what the last readiness run said; the identity check." } } });
 
 /** The voice role's capability flag (VOICE-STUDIO-01): the engine in effect, the one asked for, the tags it renders as sounds, and why it fell back when it did. */
 function ttsView() {
@@ -48,8 +48,11 @@ rolesRoutes.openapi(rolesRoute, (c) => c.json({
     const status = getRoleStatus(id);
     const contextLength = status.contextLength ?? null;
     const slots = status.slots ?? null;
+    // The coding engine runs one KV pool shared by its slots (`--kv-unified`, scope "total across slots"): one request may use the whole window, and the total is the window itself, not the window times the slots.
+    const sharedPool = status.contextScope === "total across slots";
     const perSlot = contextLength;
-    const total = perSlot === null ? null : perSlot * (slots ?? 1);
-    return { id, ...ROLES[id], state, pending_install: pendingInstall(id), reason: state.reason ?? null, model: model ? { id: model.id, sizeBytes: model.sizeBytes, measuredFootprintBytes: model.measuredFootprintBytes, measuredContextLength: model.measuredContextLength, estimated: model.measuredFootprintBytes === null, imageInput: roleReadsPictures(id, model) } : null, check: roleCheck(id), identity: identityCheck(id), ...(id === "chat" ? { context_length: contextLength, context_per_slot: perSlot, context_total: total, slots, context_scope: status.contextScope ?? null, models: selectableModels(id), picture_tokens_max: pictureTokensMax(id) } : {}), ...(id === "chat" || id === "vision" ? { reads_pictures: roleReadsPictures(id, model) } : {}), ...(id === "tts" ? { tts: ttsView() } : {}), ...(id === "coding" ? { coding: codingEngineStatus() } : {}) };
+    const total = perSlot === null ? null : sharedPool ? perSlot : perSlot * (slots ?? 1);
+    const contextFields = { context_length: contextLength, context_per_slot: perSlot, context_total: total, slots, context_scope: status.contextScope ?? null };
+    return { id, ...ROLES[id], state, pending_install: pendingInstall(id), reason: state.reason ?? null, model: model ? { id: model.id, sizeBytes: model.sizeBytes, measuredFootprintBytes: model.measuredFootprintBytes, measuredContextLength: model.measuredContextLength, estimated: model.measuredFootprintBytes === null, imageInput: roleReadsPictures(id, model) } : null, check: roleCheck(id), identity: identityCheck(id), ...(id === "chat" || id === "coding" ? contextFields : {}), ...(id === "chat" ? { models: selectableModels(id), picture_tokens_max: pictureTokensMax(id) } : {}), ...(id === "chat" || id === "vision" ? { reads_pictures: roleReadsPictures(id, model) } : {}), ...(id === "tts" ? { tts: ttsView() } : {}), ...(id === "coding" ? { coding: codingEngineStatus() } : {}) };
   }),
 }, 200));

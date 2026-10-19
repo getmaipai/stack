@@ -4,7 +4,10 @@
 // bytes pass through. Three things change on the way in, each pure and each
 // pinned by tests/codingWires.test.ts:
 //   1. client sampling is dropped and the pin's sampling is set (design 3.6);
-//   2. thinking budgets are clamped to stack.engines.coding.thinking_budget_ceiling;
+//   2. thinking budgets are clamped to stack.engines.coding.thinking_budget_ceiling,
+//      and a request that turned thinking off really gets it off (S3b: the
+//      engine's /v1/messages ignores `thinking: {type: "disabled"}`, so the
+//      Stack forwards chat_template_kwargs.enable_thinking = false);
 //   3. a wire the engine does not serve is refused with a plain 501 before
 //      the engine is started.
 
@@ -64,6 +67,13 @@ export class CodingRequestError extends Error {
   constructor(message: string) { super(message); this.name = "CodingRequestError"; }
 }
 
+/** What the Responses wire cannot do here, refused in plain words before the engine starts. The engine's own refusal of `previous_response_id` names its software; the Stack says what to send instead. */
+export function refuseUnsupportedResponsesFields(body: Record<string, unknown>): void {
+  if (body.previous_response_id !== undefined && body.previous_response_id !== null) {
+    throw new CodingRequestError("This coding service does not keep earlier responses. Send the whole conversation with every request.");
+  }
+}
+
 function clampOne(value: unknown, ceiling: number, field: string): number {
   if (typeof value !== "number" || !Number.isFinite(value)) throw new CodingRequestError(`${field} must be a number of tokens. Send a whole number, or leave it out to use the household's limit of ${ceiling}.`);
   // -1 asks for unrestricted thinking: the ceiling is the most it gets.
@@ -76,13 +86,19 @@ function clampOne(value: unknown, ceiling: number, field: string): number {
  * - `thinking_budget_tokens` (the engine's per-request field, also used by
  *   OpenAI-style clients) and Anthropic's `thinking.budget_tokens` become
  *   `min(requested, ceiling)`; -1 (unrestricted) becomes the ceiling.
- * - A request can never raise a budget, and the Stack never adds a budget,
- *   `thinking` block or `enable_thinking`: an absent budget stays absent (the
- *   engine's launch-level `--reasoning-budget`, set to the ceiling at start,
- *   applies) and `thinking.type: "disabled"` or `enable_thinking: false` stay
- *   exactly as sent, so a request cannot turn thinking on where the caller or
- *   Home turned it off. The Stack has no age signal; Home sends thinking off
- *   for a minor and the Stack honours that.
+ * - A request can never raise a budget, and the Stack never adds a budget
+ *   or a `thinking` block; an absent budget stays absent (the engine's
+ *   launch-level `--reasoning-budget`, set to the ceiling at start, applies).
+ *   The Stack never adds `enable_thinking: true`. It adds `enable_thinking:
+ *   false` (merged into the caller's `chat_template_kwargs`, the caller's
+ *   other keys kept) exactly when the caller turned thinking off:
+ *   Anthropic `thinking.type: "disabled"`, `chat_template_kwargs.
+ *   enable_thinking: false`, `reasoning_effort: "none"` or Responses
+ *   `reasoning.effort: "none"`. The engine's `/v1/messages` converter ignores
+ *   `thinking: {type: "disabled"}` (measured on b10797, 2026-10-18) while
+ *   `chat_template_kwargs.enable_thinking: false` is honoured, so the explicit
+ *   off must reach the template as a kwarg. The Stack has no age signal; Home
+ *   sends thinking off for a minor and the Stack makes it real.
  * - A clamped budget that would reach the request's own output limit
  *   (`max_tokens` or `max_completion_tokens`, whichever is smaller) is lowered
  *   to one token under it, because Anthropic requires budget_tokens below
@@ -118,5 +134,25 @@ export function clampThinking(body: Record<string, unknown>, ceiling: number): R
       if (thinking && typeof thinking.budget_tokens === "number") thinking.budget_tokens = Math.min(thinking.budget_tokens, lowered);
     }
   }
+  if (callerTurnedThinkingOff(out)) out.chat_template_kwargs = withThinkingOff(out.chat_template_kwargs);
   return out;
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+/** True when the caller asked for thinking to be off, in any of the wires' own words. It is only ever a reason to add `enable_thinking: false`. */
+export function callerTurnedThinkingOff(body: Record<string, unknown>): boolean {
+  return asObject(body.thinking)?.type === "disabled"
+    || asObject(body.chat_template_kwargs)?.enable_thinking === false
+    || body.reasoning_effort === "none"
+    || asObject(body.reasoning)?.effort === "none";
+}
+
+function withThinkingOff(kwargs: unknown): Record<string, unknown> {
+  if (kwargs === undefined || kwargs === null) return { enable_thinking: false };
+  const given = asObject(kwargs);
+  if (!given) throw new CodingRequestError("chat_template_kwargs must be an object like {\"enable_thinking\": false}. Send an object, or leave it out.");
+  return { ...given, enable_thinking: false };
 }

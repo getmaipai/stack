@@ -382,6 +382,84 @@ test("thinking the caller turned off stays off, and a budget never turns it on",
   expect(seen[1]!.body.thinking_budget_tokens).toBe(2000);
 });
 
+// CODE-STACK-01 S3b: the engine's /v1/messages ignores thinking.type "disabled", so the Stack forwards the kwarg that works.
+
+test("Messages with thinking disabled reaches the engine with enable_thinking false, streaming or not, and the rest untouched", async () => {
+  const body = { ...messagesBody, thinking: { type: "disabled" } };
+  await post("/v1/messages", body);
+  await post("/v1/messages", { ...body, stream: true });
+  for (const call of seen) {
+    expect(call.body.chat_template_kwargs).toEqual({ enable_thinking: false });
+    expect(call.body.thinking).toEqual({ type: "disabled" });
+    expect(call.body.max_tokens).toBe(4096);
+    expect(call.body.tools).toEqual(messagesBody.tools);
+  }
+  expect(seen.map((call) => call.streamed)).toEqual([false, true]);
+});
+
+test("Responses with reasoning.effort none, and chat with reasoning_effort none, get enable_thinking false; other efforts get nothing added", async () => {
+  await post("/v1/responses", { ...responsesBody, reasoning: { effort: "none" } });
+  await post("/v1/chat/completions", { ...chatBody, reasoning_effort: "none" });
+  expect(seen[0]!.body.chat_template_kwargs).toEqual({ enable_thinking: false });
+  expect(seen[0]!.body.reasoning).toEqual({ effort: "none" });
+  expect(seen[1]!.body.chat_template_kwargs).toEqual({ enable_thinking: false });
+  seen = [];
+  await post("/v1/responses", { ...responsesBody, reasoning: { effort: "high" } });
+  await post("/v1/chat/completions", { ...chatBody, reasoning_effort: "low" });
+  for (const call of seen) expect(call.body).not.toHaveProperty("chat_template_kwargs");
+});
+
+test("an explicit enable_thinking false is forwarded as sent on chat and Messages, with the caller's other kwargs kept", async () => {
+  await post("/v1/chat/completions", { ...chatBody, chat_template_kwargs: { enable_thinking: false, preserve_thinking: true } });
+  await post("/v1/messages", { ...messagesBody, chat_template_kwargs: { enable_thinking: false } });
+  expect(seen[0]!.body.chat_template_kwargs).toEqual({ enable_thinking: false, preserve_thinking: true });
+  expect(seen[1]!.body.chat_template_kwargs).toEqual({ enable_thinking: false });
+});
+
+test("the thinking-off kwarg is merged: the caller's other kwargs stay, and a conflicting enable_thinking true loses to the off", async () => {
+  await post("/v1/messages", { ...messagesBody, thinking: { type: "disabled" }, chat_template_kwargs: { preserve_thinking: true, custom: 7 } });
+  await post("/v1/messages", { ...messagesBody, thinking: { type: "disabled" }, chat_template_kwargs: { enable_thinking: true } });
+  expect(seen[0]!.body.chat_template_kwargs).toEqual({ preserve_thinking: true, custom: 7, enable_thinking: false });
+  expect(seen[1]!.body.chat_template_kwargs).toEqual({ enable_thinking: false });
+});
+
+test("the Stack never adds enable_thinking true: an enabled or absent thinking leaves the kwargs exactly as sent", async () => {
+  await post("/v1/messages", { ...messagesBody, thinking: { type: "enabled", budget_tokens: 500 } });
+  await post("/v1/messages", { ...messagesBody, chat_template_kwargs: { enable_thinking: true } });
+  await post("/v1/messages", { ...messagesBody, chat_template_kwargs: { other: 1 } });
+  expect(seen[0]!.body).not.toHaveProperty("chat_template_kwargs");
+  expect(seen[1]!.body.chat_template_kwargs).toEqual({ enable_thinking: true });
+  expect(seen[2]!.body.chat_template_kwargs).toEqual({ other: 1 });
+});
+
+test("thinking off with chat_template_kwargs that is not an object is a 400 in plain words and never reaches the engine", async () => {
+  const response = await post("/v1/messages", { ...messagesBody, thinking: { type: "disabled" }, chat_template_kwargs: "off" });
+  expect(response.status).toBe(400);
+  expect((await response.json() as { error: string }).error).toContain("chat_template_kwargs must be an object");
+  expect(seen).toEqual([]);
+});
+
+test("previous_response_id is refused in plain words before the engine starts; a null one is not a reference", async () => {
+  const refused = await post("/v1/responses", { ...responsesBody, previous_response_id: "resp_123" });
+  expect(refused.status).toBe(400);
+  const error = (await refused.json() as { error: string }).error;
+  expect(error).toBe("This coding service does not keep earlier responses. Send the whole conversation with every request.");
+  expect(error).not.toContain("llama");
+  expect(seen).toEqual([]);
+  expect(started).toEqual([]);
+  const stream = await post("/v1/responses", { ...responsesBody, stream: true, previous_response_id: "resp_9" });
+  expect(stream.status).toBe(400);
+  const fine = await post("/v1/responses", { ...responsesBody, previous_response_id: null });
+  expect(fine.status).toBe(200);
+});
+
+test("clampThinking adds the off kwarg without changing its input", () => {
+  const input = { model: "coding", thinking: { type: "disabled" }, chat_template_kwargs: { keep: 1 } };
+  const copy = structuredClone(input);
+  expect(clampThinking(input, 2000)).toEqual({ ...copy, chat_template_kwargs: { keep: 1, enable_thinking: false } });
+  expect(input).toEqual(copy);
+});
+
 test("the ceiling is the setting in effect (the one the engine was launched with): lowering it lowers what a request gets, and 0 means no thinking", async () => {
   updateSettings({ "stack.engines.coding.thinking_budget_ceiling": 800 });
   applyPendingSettings();

@@ -4,6 +4,9 @@
 // governor as a `jit` item that yields to a generator job and never
 // evicts a resident. Every test uses the scripted engine; no model runs.
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { app } from "@/app";
 import { codingServerArgs, llamaServerArgs } from "@/lib/engineArgs";
 import { __resetEventsForTests } from "@/lib/events";
@@ -13,7 +16,7 @@ import { scriptedMemoryReader } from "@/lib/memory/scripted";
 import { clearModelsForTests, upsertModel } from "@/lib/modelStore";
 import { runCheck } from "@/lib/readiness";
 import { resolveRoleState } from "@/lib/router";
-import { codingCannotFitReason, codingEngineStatus, codingKeepWarmSeconds, codingLaunchSettings, codingMemoryMessage, EngineDoesNotFitError, getProcess, getRoleStatus, requestRole, resetSupervisorForTests, scriptedProcess, setMachineTier, setSupervisorFactoryForTests, SPAWNABLE_ROLES, unloadIdleRole, unloadIdleRoles, unloadJitForGovernor } from "@/lib/supervisor";
+import { codingCannotFitReason, codingContextFor, codingEngineStatus, codingKeepWarmSeconds, codingLaunchSettings, codingMemoryMessage, EngineDoesNotFitError, getProcess, getRoleStatus, requestRole, resetSupervisorForTests, scriptedProcess, setMachineTier, setSupervisorFactoryForTests, SPAWNABLE_ROLES, unloadIdleRole, unloadIdleRoles, unloadJitForGovernor } from "@/lib/supervisor";
 import { __resetWarmupForTests, warmedRoles, warmUp } from "@/lib/warmup";
 import { __resetSettingsForTests, updateSettings } from "@/settings";
 import type { RoleId } from "@/roles";
@@ -35,8 +38,9 @@ afterEach(() => { setMachineTier(null); setSupervisorFactoryForTests(null); rese
 // ---- the launch ---------------------------------------------------------------
 
 test("the coding launch is exactly this argument list (flags checked against llama-server b10797 --help)", () => {
-  expect(codingServerArgs({ modelPath: "/m/q.gguf", port: 8801, contextLength: 131_072, slots: 2, thinkingBudgetTokens: 2000 })).toEqual([
+  expect(codingServerArgs({ modelPath: "/m/q.gguf", port: 8801, contextLength: 131_072, slots: 2, thinkingBudgetTokens: 2000, alias: "qwen3.8-27b-ud-q4-k-m" })).toEqual([
     "--model", "/m/q.gguf",
+    "--alias", "qwen3.8-27b-ud-q4-k-m",
     "--port", "8801",
     "--host", "127.0.0.1",
     "-c", "131072",
@@ -56,7 +60,7 @@ test("the coding launch is exactly this argument list (flags checked against lla
 });
 
 test("the coding launch keeps thinking on under a budget, q8_0 on every platform, loopback only and offline", () => {
-  const args = codingServerArgs({ modelPath: "/m/q.gguf", port: 1, contextLength: 32_768, slots: 1, thinkingBudgetTokens: 0 });
+  const args = codingServerArgs({ modelPath: "/m/q.gguf", port: 1, contextLength: 32_768, slots: 1, thinkingBudgetTokens: 0, alias: "qwen3.8-27b-ud-q4-k-m" });
   expect(args).not.toContain("off");
   expect(args.slice(args.indexOf("--reasoning"), args.indexOf("--reasoning") + 4)).toEqual(["--reasoning", "on", "--reasoning-budget", "0"]);
   expect(args.slice(args.indexOf("--host"), args.indexOf("--host") + 2)).toEqual(["--host", "127.0.0.1"]);
@@ -319,4 +323,38 @@ test("a warm-up never warms coding, and warmedRoles() excludes it", async () => 
   await warmUp("test");
   expect(started).toEqual(["chat"]);
   expect(warmedRoles()).not.toContain("coding");
+});
+
+// ---- CODE-STACK-01 S3b: four smaller real-run fixes ---------------------------------
+
+test("the role list fills the coding row's context fields from the running engine: one shared window, slots from the setting", async () => {
+  setSupervisorFactoryForTests(async (role) => { started.push(role); return scriptedProcess(role, role === "coding" ? { contextLength: 131_072, slots: 2, contextScope: "total across slots" } : {}); });
+  const before = await (await app.request("/stack/v1/roles")).json() as { roles: Array<Record<string, unknown>> };
+  const unloaded = before.roles.find((role) => role.id === "coding")!;
+  expect(unloaded).toMatchObject({ context_length: null, context_per_slot: null, context_total: null, slots: null, context_scope: null });
+  await getProcess("coding");
+  const body = await (await app.request("/stack/v1/roles")).json() as { roles: Array<Record<string, unknown>> };
+  expect(body.roles.find((role) => role.id === "coding")).toMatchObject({ context_length: 131_072, context_per_slot: 131_072, context_total: 131_072, slots: 2, context_scope: "total across slots" });
+  // Chat's row keeps its own rule (per slot times slots) and the other roles carry no context fields.
+  expect(body.roles.find((role) => role.id === "embed")!.context_length).toBeUndefined();
+});
+
+test("the dry run sizes a model file with no .gguf extension, because the pin's path decides, not its name", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "maipai-fit-ext-"));
+  const previous = process.env.STACK_FIT_BINARY;
+  try {
+    const calls = join(dir, "calls.txt");
+    const binary = join(dir, "fit");
+    writeFileSync(binary, `#!/bin/sh\necho "$@" >> ${calls}\nprintf 'MTL0 14674 4501 748\\nHost 682 0 296\\n'\n`); chmodSync(binary, 0o755);
+    process.env.STACK_FIT_BINARY = binary;
+    __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 100 * GB, tier: "p128" });
+    const named = await codingContextFor({ ...verified, id: "a", roles: ["coding"], modelPath: "/store/blobs/9f3c2a" } as never, 131_072);
+    expect(named.dryRunPeakBytes).toBe((14674 + 4501 + 748 + 682 + 296) * 1_048_576);
+    expect(named.contextLength).toBe(131_072);
+    const ran = await Bun.file(calls).text();
+    expect(ran).toContain("--model /store/blobs/9f3c2a --ctx-size 131072");
+  } finally {
+    if (previous === undefined) delete process.env.STACK_FIT_BINARY; else process.env.STACK_FIT_BINARY = previous;
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

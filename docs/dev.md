@@ -2436,15 +2436,16 @@ chat completions, Messages and Responses for `coding`):
 
 - `thinking_budget_tokens` and Anthropic `thinking.budget_tokens` become `min(requested, ceiling)`; `-1` (unrestricted) becomes the ceiling;
   0 stays 0; a non-number is a 400 ("... must be a number of tokens ...") and never reaches the engine.
-- An absent budget stays absent. The Stack never adds a budget, a `thinking` block or `enable_thinking`. `thinking: {type: "disabled"}`
-  and `chat_template_kwargs.enable_thinking: false` pass untouched, so a request cannot turn thinking on where the caller turned it off.
+- An absent budget stays absent. The Stack never adds a budget, a `thinking` block or `enable_thinking: true`. (S3 passed
+  `thinking: {type: "disabled"}` untouched; the real run showed the engine ignores it, so S3b adds `enable_thinking: false` as a
+  kwarg in that case, below.) A request cannot turn thinking on where the caller turned it off.
 - If the clamped budget would reach the request's own `max_tokens` / `max_completion_tokens` (Anthropic needs budget < max_tokens), the
   budget is lowered to one under it. The output limit itself is never changed. (The task text said to clamp `max_tokens` to `min(requested,
   ceiling)`; that would cut a long code answer to the thinking ceiling, so the budget moves instead of the limit.)
 - The ceiling is `stack.engines.coding.thinking_budget_ceiling` as in effect, which is also what the engine was launched with: the setting
   needs a restart, and a change is pending until the coding engine next starts. The clamp and the launch budget therefore always agree.
 - **Minors.** The Stack has no age signal and must not guess one. Home sends thinking off for a minor (`thinking: {type: "disabled"}` or
-  `enable_thinking: false`); the Stack passes an explicit off through and never raises a budget. Home's gateway (CODE-API-01) owns sending it.
+  `enable_thinking: false`); the Stack makes an explicit off real (S3b) and never raises a budget. Home's gateway (CODE-API-01) owns sending it.
   An omitted `thinking` on an engine launched with `--reasoning on` means thinking runs under the ceiling, so the gateway must always send
   the explicit off for a minor rather than rely on omission.
 - Not clamped: `reasoning_effort` and Responses `reasoning.effort` (they pick a template level, not a token count; the launch budget still
@@ -2469,6 +2470,95 @@ output-limit rule, a bad type), chat untouched. `tests/roles.test.ts` pins the c
   carries `thinking.budget_tokens` to `thinking_budget_tokens` as the strings suggest; that Responses with `reasoning.effort` and no
   `previous_response_id` works; that the 128k window holds with `/v1/messages` prompt caching fields ignored; and that `count_tokens` is
   accurate for the Qwen template.
+
+### Slice S3b: defects found by the first real-model run (CODE-STACK-01, 2026-10-18)
+
+A scratch Stack on its own port loaded the real Qwen3.8-27B UD-Q4_K_M (llama-server b10797) and exercised the S1 to S3 code. What it
+measured: a cold start of 2.3 s with the weights in the page cache (first token of a streamed chat completion at 2.29 s), decode at
+27.6 tokens/s on llama-server Q4 (Splash measured 124 tokens/s on the Studio, which is why S5 exists), a 21.8 GB footprint (the dry run
+said 21,916,286,976 bytes), and live chat latency up 57 percent (median 0.86 s to 1.35 s) while the coding engine generated. The run
+also found six defects, all fixed here; the tests use the scripted engine only.
+
+1. **Thinking off was ignored on `/v1/messages`.** The engine's Messages converter does not read `thinking: {type: "disabled"}`, but
+   `chat_template_kwargs: {enable_thinking: false}` works on `/v1/messages` and `/v1/chat/completions`. `clampThinking` now merges
+   `enable_thinking: false` into the caller's `chat_template_kwargs` (the caller's other keys stay) when the caller turned thinking off:
+   Messages `thinking.type: "disabled"`, `chat_template_kwargs.enable_thinking: false`, `reasoning_effort: "none"` (chat) or Responses
+   `reasoning.effort: "none"`. Everything else in the request is untouched; the Stack still never adds `enable_thinking: true`, never adds
+   a budget or a `thinking` block, and a conflicting `enable_thinking: true` beside an explicit off loses to the off. This protects minors:
+   Home sends an explicit off for them and the Stack makes it real. `strings` on `libllama-server-impl.dylib` shows `enable_thinking`,
+   `chat_template_kwargs`, `reasoning_effort` and `effort`, but not which route reads which, so **whether the Responses converter carries
+   `chat_template_kwargs` through, and whether `reasoning.effort: "none"` alone turns thinking off, is unproven until a real Responses
+   request is made**; the Stack forwards the kwarg on all three wires and the live check must confirm the Responses one.
+2. **The coding engine yields to chat.** See "How the yield works" below.
+3. **`--alias`.** The engine reported the model file's path as the model in Anthropic and Responses replies. The coding launch now carries
+   `--alias <pin id>` (`-a, --alias STRING` in `--help`), so replies say `qwen3.8-27b-ud-q4-k-m`. The exact-args test pins the flag.
+   `/props` `model_path` (the Stack's identity check) is a different field and is not changed by the alias; confirm in the live run.
+4. **`GET /stack/v1/roles` filled the context fields for chat only.** The loaded coding row now carries `context_length`,
+   `context_per_slot`, `context_total`, `slots` and `context_scope` from the running engine: window 131072, one KV pool shared by the slots
+   (`--kv-unified`), so `context_scope` is `"total across slots"`, `context_per_slot` is the window (one request may use all of it) and
+   `context_total` is the window, not the window times the slots. They are null while the engine is not loaded, as chat's are.
+5. **Admission was skipped for a model path without `.gguf`.** The store keeps an imported model at
+   `.../imports/<pin id>/<sha256>` with no extension, so `codingContextFor` never ran the dry run (`llama-fit-params`) and sized the
+   start from the file size alone. The dry run now runs for any model path the pin resolves to. (The same extension test remains in the
+   fit hint and the chat launch; those are other roles and unchanged.)
+6. **`previous_response_id`.** The engine refuses it with a sentence naming llama.cpp. The Stack now refuses a non-null
+   `previous_response_id` on `/v1/responses` itself, before the engine is started: HTTP 400, "This coding service does not keep earlier
+   responses. Send the whole conversation with every request."
+
+**How the yield works.** The coding engine reuses the isolation gate (ISOLATION-01, `lib/heavyGate.ts`), the mechanism that stops a
+music or picture worker while chat runs. While a coding request is in flight, the supervisor holds one gate lease on the coding
+process (one lease however many requests run at once; it exists only while at least one is in flight). The lease asks the gate for
+three things the job workers do not use: it yields to every interactive request except coding's own (`chat`, `vision`, `router`,
+`stt`, `tts`), with its own tail, so a coding request never holds the engine stopped; its pause is bounded at 120 s
+(`STACK_ISOLATION_CODING_MAX_PAUSE_MS`); and it can be turned off live. Mechanics:
+
+- A chat request starts: the gate sends SIGSTOP to the coding process (`isolation.paused`, role `coding`). The process keeps its memory
+  and its KV cache; the answer in flight stalls and the client's connection stays open.
+- Chat ends and stays quiet for the 4 s tail (`STACK_ISOLATION_TAIL_MS`): SIGCONT (`isolation.resumed`). A chat inside the tail keeps
+  it stopped, so the gaps between the rounds of one turn do not flap it.
+- **Bound.** One pause lasts at most 120 s. Then the process is continued by force (`isolation.resume_forced`), runs for 60 s
+  (`STACK_ISOLATION_FORCED_RUN_MS`, the music rule) and is stopped again if chat is still busy. In a long chat burst coding therefore
+  runs about a third of the time; it is slowed, never starved.
+- **A request that arrives while chat is busy** follows the music rule: the engine starts if it was not loaded (the start is not
+  paused, because the lease attaches after the post-load check), the request attaches the lease and the process is stopped at once, then
+  continued at chat's quiet moment. An already loaded engine is stopped before it works.
+- **No timeouts, no false failures.** The 10-minute completion limit on a non-streaming coding request counts only the time the process
+  could run (`withActiveTimeout`); a stream has no limit. Every path that checks the engine's health after an error continues the
+  process first, because a stopped process cannot answer `/health` and a failed check retires an engine. A client that cancels a stopped
+  stream ends the request, which detaches the lease and continues the process at once.
+- **Keep-warm and the lease.** The lease exists only while a request is in flight, and an in-flight request already blocks every unload
+  (S2), so a stopped answer is never unloaded, and the keep-warm clock, which restarts when the request ends, never runs through a pause.
+  `lastRealRequestAt` and the governor's idle clock are set at the end of the request, as before.
+- **Safety.** The gate still never stops an engine the supervisor runs: the protected-pid list shields them all. Only the handle the
+  supervisor makes for the coding process (`new PausableProcess(pid, exited, { engine: true })`) is allowed, and the supervisor's `stop`
+  continues it before the SIGTERM (a stopped process holds a signal). Every way out of the gate continues it first: the request ending,
+  `heavyGate.resumeEverything` at the Stack's shutdown and exit, the pause bound, and `isolation-paused.json` for a Stack that was
+  killed while the engine was stopped (the next start continues it if the pid is still the same command).
+- **Setting.** `stack.engines.coding.yield_to_chat` (boolean, default true, advanced, live, section "Coding engine"). Off: the engine is
+  never stopped, and turning it off continues an engine that chat has stopped at once. `STACK_ISOLATION=off` also turns the yield off.
+- **Not changed:** chat, the other roles, music/picture/video behaviour, S2's keep-warm arithmetic, the model pin. A coding request is
+  still interactive for the heavy jobs (it stops a music job, as before). Observability is the existing mechanism: the `isolation.*` log
+  lines and the `isolation` object on `GET /stack/v1/memory`; the role row stays `busy` while the engine is stopped mid-answer.
+
+**Tests.** `tests/codingYield.test.ts` (23, fake workers, short real timers through the gate's own environment knobs, plus `sleep`
+children for the signal safety test): stop on chat start and continue after the tail; each interactive role yields it and the
+background roles do not; coding's own requests never stop it and never hold it stopped; overlap and tail without flapping; arrival
+during chat; the pause bound, the forced run and the second stop; a long burst leaves coding a share; the setting off, off while
+stopped, and its declaration; paused time is not idle time; the completion limit ignores paused time and still fires otherwise; two
+requests share one lease; stream cancel while stopped; health after an error; chat and idle coding untouched; `STACK_ISOLATION=off`;
+shutdown continues it; the protected-pid rule with and without the coding handle. `tests/codingWires.test.ts` gained the thinking-off
+tests for each wire, the merge, the never-on rule, the non-object kwargs 400, and the `previous_response_id` refusal;
+`tests/codingEngine.test.ts` the exact args with `--alias`, the roles-row context fields and the extension-less dry run.
+
+**Known and left alone (client-compatibility items to test with real Claude Code and OpenCode).** `/v1/messages` accepts a request
+without `max_tokens`; the Messages `id` prefix is `chatcmpl-` and thinking blocks carry an empty `signature`; both are the engine's own
+output and passed through as the Stack's S3 rule says.
+
+**Only a real run can settle.** That the stop-and-continue of a llama-server that is generating on Metal brings live chat back within
+10 percent of its idle latency (the design bar; 57 percent before this slice) and that decode resumes without a stall or error after
+a pause of up to 120 s; that the Responses converter honours `chat_template_kwargs.enable_thinking: false` (item 1); that `--alias`
+leaves `/props` `model_path` and the identity check alone (item 3); that the dry run's figure for the extension-less path matches the
+21.9 GB seen (item 5); the Splash decode speed against 27.6 tokens/s (S5).
 
 ## Measured so far
 

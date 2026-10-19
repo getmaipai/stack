@@ -79,7 +79,7 @@ export function renderComponentsDoc(catalog: ComponentsCatalog): string {
     lines.push("");
     const shares = catalog.shares?.[role];
     if (shares) { lines.push(`Shares \`${shares}\`'s model and process unless bound elsewhere; the rows below are \`${shares}\`'s pins seen from this role.`); lines.push(""); }
-    if (role === "coding") { lines.push("Runs on its own on-demand llama-server process (not chat's), started by the first coding request and unloaded after `stack.engines.coding.keep_warm_minutes` idle (default 15); the memory governor admits it as an on-demand item that yields to a picture, video or music job and never evicts a resident model."); lines.push(""); }
+    if (role === "coding") { lines.push("Runs on its own on-demand llama-server process (not chat's), started by the first coding request and unloaded after `stack.engines.coding.keep_warm_minutes` idle (default 15); the memory governor admits it as an on-demand item that yields to a picture, video or music job and never evicts a resident model. While a chat, voice or picture-reading request is answered it is paused for at most 120 s at a time (`stack.engines.coding.yield_to_chat`, default on), so chat stays as fast as when coding is idle."); lines.push(""); }
     lines.push("Engines per platform:");
     lines.push("");
     lines.push("| Engine | Build | Platform | Status |");

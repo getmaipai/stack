@@ -143,6 +143,8 @@ export interface CodingServerArgsOptions {
   slots: number;
   /** The most tokens the model may spend thinking before it answers, at the server (`--reasoning-budget`). */
   thinkingBudgetTokens: number;
+  /** The model name the engine reports in its replies (`--alias`): the pin's id, not the model file's path. */
+  alias: string;
 }
 
 /** The coding role's own llama-server launch (CODE-STACK-01 S2). Not the
@@ -158,6 +160,7 @@ export function codingServerArgs(options: CodingServerArgsOptions): string[] {
   const ubatch = Math.min(1024, options.contextLength);
   return [
     "--model", options.modelPath,
+    "--alias", options.alias,
     "--port", String(options.port),
     "--host", "127.0.0.1",
     "-c", String(options.contextLength),

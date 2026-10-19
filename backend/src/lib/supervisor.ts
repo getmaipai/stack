@@ -50,7 +50,7 @@ import { logger } from "@/lib/log";
 import { readGgufFacts } from "@/lib/gguf";
 import { estimatorAvailable, largestAdmittedContext, placedOnProcessor, runGgufParser, type GgufEstimate } from "@/lib/fitPlan";
 import { getGovernorStatus } from "@/lib/governor";
-import { setProtectedPidProvider } from "@/lib/heavyGate";
+import { heavyGate, isolationRules, PausableProcess, setProtectedPidProvider, type Lease, type PausableWorker } from "@/lib/heavyGate";
 import { readMlxKvBytesPerToken } from "@/lib/mlxMemory";
 
 export type EngineKind = "spawned" | "managed" | "url";
@@ -113,6 +113,8 @@ export interface RoleProcess {
   port: number | null;
   activeRequests: number;
   retired: boolean;
+  /** The coding engine only (CODE-STACK-01 S3b): the process as the isolation gate may stop it while a chat request runs. */
+  pausable?: PausableWorker;
   /** Open live sessions on this process; a retire closes them first,
    * so a drain never waits on a client that would talk forever. */
   sessions?: Set<() => void>;
@@ -447,6 +449,7 @@ async function acquireRequestProcess(requested: RoleId, modelId?: string): Promi
   try {
     const processRecord = await getProcess(role, modelId);
     processRecord.activeRequests++;
+    if (role === "coding") codingYieldBegin(processRecord);
     noteComponentUse(processRecord.modelId);
     // A request keeps a jit role's idle clock at zero.
     if (JIT_ROLES.includes(role)) touchGovernor(role);
@@ -927,6 +930,54 @@ export function codingLaunchSettings(values: Record<string, SettingValue> = sett
 /** The keep-warm limit in seconds, as the governor holds it for the coding item: it is evicted exactly this long after its last request ended (a poll every 5 s notices), and the daemon's idle tick unloads at the same limit as a backstop. */
 export function codingKeepWarmSeconds(): number { return codingLaunchSettings().keepWarmMinutes * 60; }
 
+// ---- the coding engine yields to chat (CODE-STACK-01 S3b) ----------------------
+
+/** `stack.engines.coding.yield_to_chat` (default true), read live: an admin can turn the yield off and the engine continues at once. */
+export function codingYieldsToChat(values: Record<string, SettingValue> = settingValues()): boolean {
+  return values["stack.engines.coding.yield_to_chat"] !== false;
+}
+
+/** One isolation lease per coding process while it serves a request, however many requests run at once (the engine has slots): the gate stops the process while a chat request (or any interactive request but coding's own) is in flight and continues it when quiet, for at most `codingMaxPauseMs` at a time. It exists only while a request is in flight, so an idle engine is never stopped and the keep-warm clock never runs through a pause. */
+const codingYield = new WeakMap<RoleProcess, { lease: Lease; holds: number }>();
+
+function codingYieldBegin(processRecord: RoleProcess): void {
+  if (!processRecord.pausable) return;
+  const held = codingYield.get(processRecord);
+  if (held) { held.holds++; return; }
+  const lease = heavyGate.attach({ role: "coding", worker: processRecord.pausable, skipCoding: true, maxPauseMs: isolationRules.codingMaxPauseMs, enabled: () => codingYieldsToChat() });
+  codingYield.set(processRecord, { lease, holds: 1 });
+}
+
+function codingYieldEnd(processRecord: RoleProcess): void {
+  const held = codingYield.get(processRecord);
+  if (!held || --held.holds > 0) return;
+  held.lease.detach();
+  codingYield.delete(processRecord);
+}
+
+/** Milliseconds this process has been stopped for chat while the current requests ran. */
+function codingPausedMs(processRecord: RoleProcess): number { return codingYield.get(processRecord)?.lease.pausedMs() ?? 0; }
+
+/** A process the gate has stopped cannot answer a health check, and a failed check retires an engine. Every path that checks health after a request went wrong continues the process first. */
+function continueForHealth(processRecord: RoleProcess): void { processRecord.pausable?.resume(); }
+
+/** A completion timeout that does not run while the process is stopped for chat: a paused coding answer is waiting, not stuck. */
+function withActiveTimeout<T>(work: Promise<T>, ms: number, pausedMs: () => number, onTimeout: () => Error): Promise<T> {
+  const startedAt = Date.now();
+  const pausedAtStart = pausedMs();
+  return new Promise<T>((resolve, reject) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const arm = (wait: number) => {
+      timer = setTimeout(() => {
+        const left = ms - (Date.now() - startedAt - (pausedMs() - pausedAtStart));
+        if (left > 5) arm(left); else reject(onTimeout());
+      }, wait);
+    };
+    arm(ms);
+    work.then((value) => { clearTimeout(timer); resolve(value); }, (error) => { clearTimeout(timer); reject(error); });
+  });
+}
+
 /** Pushes the keep-warm setting into the governor (a live setting). */
 export function applyCodingKeepWarm(values?: Record<string, SettingValue>): void {
   setIdleTtlSeconds("coding", codingLaunchSettings(values).keepWarmMinutes * 60);
@@ -941,7 +992,8 @@ export async function codingContextFor(model: ModelRecord, desired: number): Pro
   const steps = [desired, ...CODING_WINDOW_STEPS.filter((step) => step < desired)].filter((step, index, all) => all.indexOf(step) === index);
   let last = { contextLength: Math.min(desired, CODING_WINDOW_FLOOR), dryRunPeakBytes: null as number | null };
   for (const step of steps) {
-    const dry = model.modelPath?.endsWith(".gguf") ? await dryRunFootprint(model.modelPath, step, { kvCacheType: "q8_0", flashAttention: true }) : null;
+    // The dry run sizes any llama-server model path the pin resolves to; a store file with no .gguf extension is sized the same way.
+    const dry = model.modelPath ? await dryRunFootprint(model.modelPath, step, { kvCacheType: "q8_0", flashAttention: true }) : null;
     const peak = dry ?? Math.ceil((model.sizeBytes ?? 0) * 1.3);
     last = { contextLength: step, dryRunPeakBytes: dry };
     if (peak <= admissionRoomBytes()) return last;
@@ -1121,7 +1173,7 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
     // The coding role's own launch: thinking on under a server-side budget, q8_0 KV, one shared window, offline.
     const coding = codingLaunchSettings();
     const window = resolvedContextLength ?? coding.contextLength;
-    const args = codingServerArgs({ modelPath: model.modelPath!, port, contextLength: window, slots: coding.slots, thinkingBudgetTokens: coding.thinkingBudgetTokens });
+    const args = codingServerArgs({ modelPath: model.modelPath!, port, contextLength: window, slots: coding.slots, thinkingBudgetTokens: coding.thinkingBudgetTokens, alias: model.id });
     return { command: [binary, ...args], engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength: window, slots: coding.slots, contextScope: "total across slots", kind: "spawned", imageInput: false, pictureTokensMax: null };
   }
   const projector = launchProjectorFor(role, model);
@@ -1367,11 +1419,15 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     resolveHealth(`engine.crashed.${role}`);
     resolveHealth(`post-load-check-failed.${role}`);
     const loadedRevision = plan.kind === "managed" && !GENERATOR_ROLES.includes(role) ? (plan.engine === "chatterbox-turbo" ? model.revision : loadedWeightsRepo()?.revision) ?? null : null;
+    // The coding engine is the one engine the isolation gate may stop (it yields to chat); no other engine gets a pausable handle.
+    const codingPausable = role === "coding" && plan.kind === "spawned" ? new PausableProcess(handle.pid, handle.exited, { engine: true }) : undefined;
     const processRecord: RoleProcess = {
       role, kind: plan.kind, client, identity, engine: plan.engine, contextLength: plan.contextLength, slots: plan.slots, contextScope: plan.contextScope, modelId: model.id, modelRevision: loadedRevision ?? model.revision, imageInput: readsPictures, projectorLoaded: plan.imageInput === true, pictureTokensMax: readsPictures ? plan.pictureTokensMax ?? null : null, pid: handle.pid, port, activeRequests: 0, retired: false,
       governorHandle: admission,
       stopGovernor: watchProcessMemory(role, handle.pid, keepsFootprint ? { modelId: model.id, contextLength } : undefined),
-      stop: async () => { handle.kill(); await handle.exited; },
+      ...(role === "coding" && plan.kind === "spawned" ? { pausable: codingPausable } : {}),
+      // A stopped process holds SIGTERM until it runs again, so it continues first.
+      stop: async () => { codingPausable?.resume(); handle.kill(); await handle.exited; },
     };
     const spawnedAt = Date.now();
     void handle.exited.then(async (exitCode) => {
@@ -1861,12 +1917,10 @@ export async function requestRole(requested: RoleId, path: string, body: Record<
   try {
     const completionMs = typeof body.timeout_ms === "number" && body.timeout_ms > 0 ? body.timeout_ms : (timeoutOverrides.completionMs ?? DEFAULT_COMPLETION_TIMEOUT_MS);
     const dispatchBody = samplingFor(role, path, processRecord.modelId, requestedModel && processRecord.kind !== "url" ? { ...body, model: role } : body, false);
-    const result = await withTimeout(
-      processRecord.client.request(path, dispatchBody, signal),
-      completionMs,
-      () => new EngineUnavailableError(`Engine request timed out after ${Math.ceil(completionMs / 1000)}s.`),
-    );
-    if (result.status >= 500 && !await processRecord.client.health()) {
+    const timedOut = () => new EngineUnavailableError(`Engine request timed out after ${Math.ceil(completionMs / 1000)}s.`);
+    const answered = processRecord.client.request(path, dispatchBody, signal);
+    const result = await (role === "coding" ? withActiveTimeout(answered, completionMs, () => codingPausedMs(processRecord), timedOut) : withTimeout(answered, completionMs, timedOut));
+    if (result.status >= 500 && (continueForHealth(processRecord), !await processRecord.client.health())) {
       throw new EngineUnavailableError(`Engine returned HTTP ${result.status} and is no longer healthy.`);
     }
     if (result.status >= 200 && result.status < 300) current.lastRealRequestAt = Date.now();
@@ -1875,6 +1929,7 @@ export async function requestRole(requested: RoleId, path: string, body: Record<
     if (error instanceof DOMException && error.name === "AbortError") {
       return { status: 499, body: { error: "Request cancelled" }, headers: identityHeaders(processRecord.identity, processRecord.modelRevision) };
     }
+    continueForHealth(processRecord);
     if (await processRecord.client.health()) {
       return { status: error instanceof EngineUnavailableError ? 504 : 503, body: { error: (error as Error).message }, headers: identityHeaders(processRecord.identity, processRecord.modelRevision) };
     }
@@ -1887,7 +1942,7 @@ export async function requestRole(requested: RoleId, path: string, body: Record<
     throw unavailable;
   } finally {
     processRecord.activeRequests--;
-    if (role === "coding") touchGovernor(role);
+    if (role === "coding") { codingYieldEnd(processRecord); touchGovernor(role); }
     if (current.process === processRecord && processRecord.activeRequests === 0) current.status = { ...current.status, state: "ready" };
   }
 }
@@ -1896,7 +1951,7 @@ function finishStream(role: RoleId, processRecord: RoleProcess): void {
   const current = runtime(role);
   processRecord.activeRequests--;
   // The coding engine's keep-warm clock counts from the end of its last request, not from its start.
-  if (role === "coding") touchGovernor(role);
+  if (role === "coding") { codingYieldEnd(processRecord); touchGovernor(role); }
   if (current.process === processRecord) {
     if (processRecord.activeRequests === 0) current.status = { ...current.status, state: "ready" };
     current.lastRealRequestAt = Date.now();
@@ -1929,13 +1984,14 @@ export async function streamRole(requested: RoleId, path: string, body: Record<s
     if (!processRecord.client.stream) throw new EngineUnavailableError("The engine does not support streaming.");
     const dispatchBody = samplingFor(role, path, processRecord.modelId, requestedModel && processRecord.kind !== "url" ? { ...body, model: role } : body, true);
     const response = await processRecord.client.stream(path, { ...dispatchBody, stream: true }, signal);
-    if (response.status >= 500 && !await processRecord.client.health()) throw new EngineUnavailableError(`Engine returned HTTP ${response.status} and is no longer healthy.`);
+    if (response.status >= 500 && (continueForHealth(processRecord), !await processRecord.client.health())) throw new EngineUnavailableError(`Engine returned HTTP ${response.status} and is no longer healthy.`);
     const contentType = response.headers.get("content-type") ?? undefined;
     if (!response.body) { finishStream(role, processRecord); return { status: response.status, body: null, headers: identityHeaders(processRecord.identity, processRecord.modelRevision), contentType }; }
     return { status: response.status, body: trackedStream(role, processRecord, response.body), headers: identityHeaders(processRecord.identity, processRecord.modelRevision), contentType };
   } catch (error) {
     finishStream(role, processRecord);
     if ((error instanceof DOMException && error.name === "AbortError") || signal?.aborted) return { status: 499, body: null, headers: identityHeaders(processRecord.identity, processRecord.modelRevision) };
+    continueForHealth(processRecord);
     if (await processRecord.client.health()) return { status: error instanceof EngineUnavailableError ? 504 : 503, body: null, headers: identityHeaders(processRecord.identity, processRecord.modelRevision) };
     const unavailable = error instanceof EngineUnavailableError ? error : new EngineUnavailableError(`Engine streaming request failed: ${(error as Error).message}`);
     current.process = null;

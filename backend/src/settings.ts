@@ -11,6 +11,7 @@ import { db } from "@/db";
 import { meta } from "@/db/schema";
 import { defaultModelBudgetBytes, setGovernorMemorySettings, setIdleTtlSeconds } from "@/lib/governor";
 import { setDownloadCapMbps } from "@/lib/download";
+import { heavyGate } from "@/lib/heavyGate";
 import { StackSetting } from "@maipai/spec/stack/ts/stack-setting.js";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
 import { decryptSecret, encryptSecret } from "@/lib/secrets";
@@ -99,6 +100,7 @@ export const SETTINGS: SettingDeclaration[] = [
   { ...stack, key: "stack.engines.coding.thinking_budget_ceiling", selector: "number", range: { min: 0, max: 32768 }, default: 2000, label: "Most thinking per answer", help: "The most tokens the coding model may spend thinking before it answers. Uncapped thinking looped on some questions in testing. 0 turns thinking off.", section: { id: "engines.coding", order: 20 }, level: "advanced", needs_restart: true },
   { ...stack, key: "stack.engines.coding.slots", selector: "number", range: { min: 0, max: 8 }, default: 0, label: "Coding requests at once", help: "How many coding requests the model serves at the same time. 0 picks for this computer: 2 on a 128 GB Mac, 1 on a 64 GB one.", section: { id: "engines.coding", order: 30 }, level: "advanced", needs_restart: true },
   { ...stack, key: "stack.engines.coding.context_length", selector: "number", range: { min: 8192, max: 262144 }, default: 131072, label: "Coding window", help: "The most text, in tokens, the coding model can hold at once, shared by its requests. The Stack starts with a smaller window when memory is short.", section: { id: "engines.coding", order: 40 }, level: "expert", needs_restart: true },
+  { ...stack, key: "stack.engines.coding.yield_to_chat", selector: "boolean", default: true, label: "Coding waits for chat", help: "While a chat, voice or picture-reading request is being answered, the coding model pauses (for at most two minutes at a time) so chat stays as fast as when coding is idle. Coding answers finish a little later when you use both at once. Turn this off to let coding and chat run at the same time.", section: { id: "engines.coding", order: 50 }, level: "advanced", needs_restart: false },
   ...urlBinding("chat", 10),
   ...urlBinding("embed", 10),
   ...urlBinding("vision", 10),
@@ -270,6 +272,8 @@ export function applySettingsToRuntime(): void {
   setDownloadCapMbps(Number(values["stack.runtime.download_cap_mbps"]));
   // The coding engine idles out after its own keep-warm minutes, not the governor-wide limit (CODE-STACK-01 S2).
   setIdleTtlSeconds("coding", Number(values["stack.engines.coding.keep_warm_minutes"]) * 60);
+  // Turning the coding engine's yield to chat off continues it at once if chat has it stopped (CODE-STACK-01 S3b).
+  heavyGate.recheck();
 }
 
 export function __resetSettingsForTests(): void {

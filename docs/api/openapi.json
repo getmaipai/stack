@@ -428,7 +428,7 @@
             }
           },
           "400": {
-            "description": "Unknown role or model id, a role other than coding, or a thinking budget that is not a number.",
+            "description": "Unknown role or model id, a role other than coding, a thinking budget that is not a number, chat_template_kwargs that is not an object, or (Responses) a previous_response_id: send the whole conversation with every request.",
             "content": {
               "application/json": {
                 "schema": {
@@ -633,7 +633,7 @@
             }
           },
           "400": {
-            "description": "Unknown role or model id, a role other than coding, or a thinking budget that is not a number.",
+            "description": "Unknown role or model id, a role other than coding, a thinking budget that is not a number, chat_template_kwargs that is not an object, or (Responses) a previous_response_id: send the whole conversation with every request.",
             "content": {
               "application/json": {
                 "schema": {
@@ -838,7 +838,7 @@
             }
           },
           "400": {
-            "description": "Unknown role or model id, a role other than coding, or a thinking budget that is not a number.",
+            "description": "Unknown role or model id, a role other than coding, a thinking budget that is not a number, chat_template_kwargs that is not an object, or (Responses) a previous_response_id: send the whole conversation with every request.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5107,7 +5107,7 @@
         "summary": "Every declared role and its current state",
         "responses": {
           "200": {
-            "description": "Declaration; derived state with since, checkedAt on ready and the reason a role is only loaded; the bound model; the launched context length, slot count and whether context is per slot or total; what the last readiness run said; the identity check.",
+            "description": "Declaration; derived state with since, checkedAt on ready and the reason a role is only loaded; the bound model; the launched context length, slot count and whether context is per slot or total (chat, and coding once its engine runs: one window shared by its slots); what the last readiness run said; the identity check.",
             "content": {
               "application/json": {
                 "schema": {

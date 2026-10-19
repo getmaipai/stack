@@ -32,7 +32,7 @@ Installed beside the model, never selected on its own: `muse-glimmer-30b-mmproj-
 
 ## coding (Coding)
 
-Runs on its own on-demand llama-server process (not chat's), started by the first coding request and unloaded after `stack.engines.coding.keep_warm_minutes` idle (default 15); the memory governor admits it as an on-demand item that yields to a picture, video or music job and never evicts a resident model.
+Runs on its own on-demand llama-server process (not chat's), started by the first coding request and unloaded after `stack.engines.coding.keep_warm_minutes` idle (default 15); the memory governor admits it as an on-demand item that yields to a picture, video or music job and never evicts a resident model. While a chat, voice or picture-reading request is answered it is paused for at most 120 s at a time (`stack.engines.coding.yield_to_chat`, default on), so chat stays as fast as when coding is idle.
 
 Engines per platform:
 

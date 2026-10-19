@@ -21,6 +21,19 @@
 //   its next start.
 // - A paused worker's own timers (the job deadline) stop with it, and the
 //   job's clock (the progress estimate) leaves the paused time out.
+//
+// The coding engine (CODE-STACK-01 S3b) is the one engine the gate may stop,
+// through the same lease: the supervisor attaches it while a coding request
+// is in flight, with three differences, each pinned by tests/codingYield.test.ts:
+// - it yields to every interactive request except coding's own (`skipCoding`),
+//   with its own tail so a coding request never keeps it stopped;
+// - its pause is bounded at 120 s (`maxPauseMs`), then it runs 60 s before
+//   chat can stop it again, so coding is slowed in a long chat burst and
+//   never starved;
+// - the `stack.engines.coding.yield_to_chat` setting turns the yield off
+//   (`enabled`), live.
+// Only a PausableProcess made with `{ engine: true }` may be an engine; the
+// protected-pid list still shields every other engine.
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { logger } from "@/lib/log";
@@ -38,6 +51,8 @@ export const isolationRules = {
   tailMs: (): number => num("STACK_ISOLATION_TAIL_MS", 4_000),
   /** The longest one pause lasts; then the worker is continued by force and logged. */
   maxPauseMs: (): number => num("STACK_ISOLATION_MAX_PAUSE_MS", 10 * 60_000),
+  /** The longest one pause of the coding engine lasts (a chat request burst); then it is continued by force and runs forcedRunMs before it can be stopped again. */
+  codingMaxPauseMs: (): number => num("STACK_ISOLATION_CODING_MAX_PAUSE_MS", 120_000),
   /** After a forced resume the worker runs this long before it can be paused again. */
   forcedRunMs: (): number => num("STACK_ISOLATION_FORCED_RUN_MS", 60_000),
   /** A request that has been in flight this long is a leak (a stream nobody closed), not a conversation; it stops counting. */
@@ -51,9 +66,10 @@ let protectedPids: () => number[] = () => [];
 /** The supervisor says which pids are engines it runs; the gate never stops those. */
 export function setProtectedPidProvider(provider: () => number[]): void { protectedPids = provider; }
 
-function safePid(pid: number | null | undefined): pid is number {
+function safePid(pid: number | null | undefined, engine = false): pid is number {
   if (!pid || !Number.isInteger(pid) || pid <= 1 || pid === process.pid || pid === process.ppid) return false;
-  try { if (protectedPids().includes(pid)) return false; } catch { /* the provider is advisory */ }
+  // An engine the supervisor runs is protected unless its owner made this worker with `engine: true` (the coding engine, S3b).
+  if (!engine) { try { if (protectedPids().includes(pid)) return false; } catch { /* the provider is advisory */ } }
   return true;
 }
 
@@ -97,13 +113,15 @@ export class PausableProcess implements PausableWorker {
   private isPaused = false;
   private alive = true;
   private readonly deadlines = new Set<DeadlineEntry>();
-  constructor(readonly pid: number | null, exited?: Promise<unknown>) {
+  private readonly engine: boolean;
+  constructor(readonly pid: number | null, exited?: Promise<unknown>, options: { engine?: boolean } = {}) {
+    this.engine = options.engine === true;
     void exited?.then(() => { this.alive = false; this.isPaused = false; if (this.pid !== null) { pausedNow.delete(this.pid); writePausedFile(); } }, () => {});
   }
   get paused(): boolean { return this.isPaused; }
 
   pause(): boolean {
-    if (this.isPaused || !this.alive || !safePid(this.pid)) return false;
+    if (this.isPaused || !this.alive || !safePid(this.pid, this.engine)) return false;
     try { process.kill(this.pid, "SIGSTOP"); } catch { return false; }
     this.isPaused = true;
     for (const entry of this.deadlines) if (entry.timer) { clearTimeout(entry.timer); entry.timer = null; entry.remaining = Math.max(0, entry.remaining - (Date.now() - entry.armedAt)); }
@@ -139,9 +157,15 @@ export class PausableProcess implements PausableWorker {
 
 // ---- the gate ----
 
-export interface Lease { detach(): void; }
+export interface Lease {
+  detach(): void;
+  /** Milliseconds this lease has had its worker stopped, including a pause still open. */
+  pausedMs(): number;
+}
 interface LeaseState {
   role: string; jobId: string | null; worker: PausableWorker;
+  /** Coding's own requests do not stop this worker (the coding engine). */
+  skipCoding: boolean; maxPauseMs: (() => number) | null; enabled: (() => boolean) | null;
   pausedAt: number | null; pausedMs: number; pauses: number;
   forceTimer: ReturnType<typeof setTimeout> | null; repauseTimer: ReturnType<typeof setTimeout> | null; exemptUntil: number;
 }
@@ -155,6 +179,8 @@ class HeavyGate {
   private readonly interactive = new Map<number, { role: string; at: number }>();
   private nextId = 1;
   private tailTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The tail after the last interactive request that is not coding's own, for the leases that skip coding. */
+  private tailTimerOthers: ReturnType<typeof setTimeout> | null = null;
   private observer: Observer = () => {};
   private readonly stats = { pauses: 0, resumes: 0, forced: 0, pausedMs: 0 };
   private readonly pausedByJob = new Map<string, { ms: number; since: number | null }>();
@@ -175,6 +201,15 @@ class HeavyGate {
 
   private active(): boolean { return isolationRules.enabled() && (this.interactive.size > 0 || this.tailTimer !== null); }
 
+  /** Interactive requests in flight that are not coding's own. */
+  private othersInFlight(): number { let count = 0; for (const entry of this.interactive.values()) if (entry.role !== "coding") count++; return count; }
+
+  /** Whether requests (or their tail) say this lease's worker should be stopped now. A lease that skips coding looks only at the requests that are not coding's. */
+  private demands(lease: LeaseState): boolean {
+    if (!isolationRules.enabled()) return false;
+    return lease.skipCoding ? this.othersInFlight() > 0 || this.tailTimerOthers !== null : this.interactive.size > 0 || this.tailTimer !== null;
+  }
+
   /** A chat, transcription or speech request starts (or a voice session opens). Call the returned function once when it ends, however it ends; calling it again does nothing. */
   begin(role: string): () => void {
     if (!isolationRules.enabled() || !isInteractiveRole(role)) return () => {};
@@ -182,26 +217,33 @@ class HeavyGate {
     const id = this.nextId++;
     this.interactive.set(id, { role, at: Date.now() });
     if (this.tailTimer) { clearTimeout(this.tailTimer); this.tailTimer = null; }
-    this.pauseAll();
+    if (role !== "coding" && this.tailTimerOthers) { clearTimeout(this.tailTimerOthers); this.tailTimerOthers = null; }
+    this.pauseAll(role);
     let ended = false;
     return () => {
       if (ended) return;
       ended = true;
       this.interactive.delete(id);
-      if (this.interactive.size > 0 || this.tailTimer) return;
       const tail = isolationRules.tailMs();
+      // Leases that skip coding are quiet when no request but coding's is in flight.
+      if (role !== "coding" && this.othersInFlight() === 0 && !this.tailTimerOthers) {
+        if (tail <= 0) this.resumeAll("quiet", true);
+        else this.tailTimerOthers = setTimeout(() => { this.tailTimerOthers = null; if (this.othersInFlight() === 0) this.resumeAll("quiet", true); }, tail);
+      }
+      if (this.interactive.size > 0 || this.tailTimer) return;
       if (tail <= 0) { this.resumeAll("quiet"); return; }
       this.tailTimer = setTimeout(() => { this.tailTimer = null; if (this.interactive.size === 0) this.resumeAll("quiet"); }, tail);
     };
   }
 
   /** A service attaches the worker that is running a job; the lease ends with `detach` (in a finally). A job that starts while a chat is in flight is paused at once. */
-  attach(info: { role: string; jobId?: string | null; worker: PausableWorker | undefined | null }): Lease {
-    if (!info.worker) return { detach: () => {} };
-    const lease: LeaseState = { role: info.role, jobId: info.jobId ?? null, worker: info.worker, pausedAt: null, pausedMs: 0, pauses: 0, forceTimer: null, repauseTimer: null, exemptUntil: 0 };
+  attach(info: { role: string; jobId?: string | null; worker: PausableWorker | undefined | null; skipCoding?: boolean; maxPauseMs?: () => number; enabled?: () => boolean }): Lease {
+    if (!info.worker) return { detach: () => {}, pausedMs: () => 0 };
+    const lease: LeaseState = { role: info.role, jobId: info.jobId ?? null, worker: info.worker, skipCoding: info.skipCoding === true, maxPauseMs: info.maxPauseMs ?? null, enabled: info.enabled ?? null, pausedAt: null, pausedMs: 0, pauses: 0, forceTimer: null, repauseTimer: null, exemptUntil: 0 };
     this.leases.add(lease);
-    if (this.active()) { this.prune(); if (this.interactive.size > 0 || this.tailTimer) this.pauseLease(lease); }
-    return { detach: () => this.detachLease(lease) };
+    this.prune();
+    if (this.demands(lease)) this.pauseLease(lease);
+    return { detach: () => this.detachLease(lease), pausedMs: () => lease.pausedMs + (lease.pausedAt === null ? 0 : Date.now() - lease.pausedAt) };
   }
 
   private detachLease(lease: LeaseState): void {
@@ -212,17 +254,30 @@ class HeavyGate {
     this.leases.delete(lease);
   }
 
-  private pauseAll(): void { for (const lease of this.leases) this.pauseLease(lease); }
-  private resumeAll(reason: string): void { for (const lease of this.leases) this.resumeLease(lease, reason); }
+  /** A request of `role` began: stop every worker it outranks. Coding's own request does not stop a lease that skips coding. */
+  private pauseAll(role: string): void { for (const lease of this.leases) if (!(lease.skipCoding && role === "coding")) this.pauseLease(lease); }
+  /** `others`: only the leases that skip coding (their own quiet moment). Otherwise every lease, except one that skips coding while its own tail still runs. */
+  private resumeAll(reason: string, others = false): void {
+    for (const lease of this.leases) {
+      if (others && !lease.skipCoding) continue;
+      if (!others && lease.skipCoding && (this.othersInFlight() > 0 || this.tailTimerOthers)) continue;
+      this.resumeLease(lease, reason);
+    }
+  }
+
+  /** The setting that lets a lease yield changed: a lease that is paused and no longer allowed to yield continues now. */
+  recheck(): void { for (const lease of this.leases) if (lease.pausedAt !== null && lease.enabled && !this.safeEnabled(lease)) this.resumeLease(lease, "yielding turned off"); }
+
+  private safeEnabled(lease: LeaseState): boolean { try { return lease.enabled ? lease.enabled() : true; } catch { return true; } }
 
   private pauseLease(lease: LeaseState): void {
-    if (lease.pausedAt !== null || Date.now() < lease.exemptUntil) return;
+    if (lease.pausedAt !== null || Date.now() < lease.exemptUntil || !this.safeEnabled(lease)) return;
     if (!lease.worker.pause()) return;
     lease.pausedAt = Date.now(); lease.pauses++; this.stats.pauses++;
     if (lease.jobId) { const entry = this.pausedByJob.get(lease.jobId) ?? { ms: 0, since: null }; entry.since = lease.pausedAt; this.remember(lease.jobId, entry); }
     logger.appendLine(JSON.stringify({ event: "isolation.paused", job: lease.jobId, role: lease.role, pid: lease.worker.pid, interactive: this.interactive.size }));
     if (lease.jobId) this.safely(lease.jobId, true);
-    lease.forceTimer = setTimeout(() => this.forceResume(lease), isolationRules.maxPauseMs());
+    lease.forceTimer = setTimeout(() => this.forceResume(lease), (lease.maxPauseMs ?? isolationRules.maxPauseMs)());
   }
 
   private resumeLease(lease: LeaseState, reason: string, forced = false): void {
@@ -245,13 +300,14 @@ class HeavyGate {
     logger.appendLine(JSON.stringify({ event: "isolation.resume_forced", job: lease.jobId, role: lease.role, paused_seconds: seconds, interactive: this.interactive.size }));
     this.resumeLease(lease, "maximum pause", true);
     lease.exemptUntil = Date.now() + isolationRules.forcedRunMs();
-    lease.repauseTimer = setTimeout(() => { lease.repauseTimer = null; this.prune(); if (this.interactive.size > 0 || this.tailTimer) this.pauseLease(lease); }, isolationRules.forcedRunMs() + 1);
+    lease.repauseTimer = setTimeout(() => { lease.repauseTimer = null; this.prune(); if (this.demands(lease)) this.pauseLease(lease); }, isolationRules.forcedRunMs() + 1);
   }
 
   /** Continues every worker now: the Stack is shutting down or exiting. */
   resumeEverything(reason = "shutdown"): void {
     if (this.tailTimer) { clearTimeout(this.tailTimer); this.tailTimer = null; }
-    this.resumeAll(reason);
+    if (this.tailTimerOthers) { clearTimeout(this.tailTimerOthers); this.tailTimerOthers = null; }
+    for (const lease of this.leases) this.resumeLease(lease, reason);
   }
 
   private safely(jobId: string, paused: boolean): void { try { this.observer(jobId, paused); } catch { /* the card is a nicety; the pause is the point */ } }
@@ -273,7 +329,8 @@ class HeavyGate {
     for (const lease of this.leases) { if (lease.forceTimer) clearTimeout(lease.forceTimer); if (lease.repauseTimer) clearTimeout(lease.repauseTimer); }
     this.leases.clear(); this.interactive.clear(); this.pausedByJob.clear();
     if (this.tailTimer) clearTimeout(this.tailTimer);
-    this.tailTimer = null;
+    if (this.tailTimerOthers) clearTimeout(this.tailTimerOthers);
+    this.tailTimer = null; this.tailTimerOthers = null;
     this.stats.pauses = this.stats.resumes = this.stats.forced = this.stats.pausedMs = 0;
   }
 }

@@ -8,7 +8,7 @@ import type { AppEnv } from "@/types";
 import { identityHeaders } from "@/lib/identity";
 import { noEngineResponse, resolveRole, UnknownRoleError, UnverifiedModelError } from "@/lib/router";
 import { ROLE_IDS, ROLES, type RoleId } from "@/roles";
-import { clampThinking, CODING_WIRE_PATHS, CodingRequestError, engineServesWire, wireNotServedMessage, type CodingWire } from "@/lib/codingWire";
+import { clampThinking, CODING_WIRE_PATHS, CodingRequestError, engineServesWire, refuseUnsupportedResponsesFields, wireNotServedMessage, type CodingWire } from "@/lib/codingWire";
 import { codingEngineName, codingLaunchSettings, codingServedModel, EngineUnavailableError, getRoleStatus, requestRole, restartRole, roleHasEngine, roleIsBound, speakRole, speechForm, streamRole, ttsEngineInEffect } from "@/lib/supervisor";
 import { listModels, ProvenanceIncompleteError } from "@/lib/modelStore";
 import { DownloadVerificationError } from "@/lib/download";
@@ -197,6 +197,7 @@ async function codingWireReply<T extends Context>(c: T, wire: CodingWire, body: 
     const engine = codingEngineName();
     if (!engineServesWire(engine, wire)) return jsonReply(c, { error: wireNotServedMessage(wire, engine), role, wire }, 501, identityHeaders(null));
     const path = CODING_WIRE_PATHS[wire];
+    if (wire === "responses") refuseUnsupportedResponsesFields(body);
     const sent = wire === "count_tokens" ? body : clampThinking(body, codingLaunchSettings().thinkingBudgetTokens);
     const notServed = (headers: Record<string, string>) => jsonReply(c, { error: wireNotServedMessage(wire, engine), role, wire }, 501, headers);
     if (wire !== "count_tokens" && body.stream === true) {
@@ -226,7 +227,7 @@ const modelsRoute = createRoute({ method: "get", path: "/models", tags: ["Roles"
 const codingWireResponses = {
   ...inferenceResponses,
   200: { content: { "application/json": { schema: z.record(z.string(), z.unknown()) }, "text/event-stream": { schema: z.string() } }, description: "The engine's own reply, byte for byte: JSON, or its server-sent events when `stream` is true, with the identity headers. Abort the request to cancel." },
-  400: { content: { "application/json": { schema: z.union([UnknownModelSchema, CodingRequestRefusedSchema]) } }, description: "Unknown role or model id, a role other than coding, or a thinking budget that is not a number." },
+  400: { content: { "application/json": { schema: z.union([UnknownModelSchema, CodingRequestRefusedSchema]) } }, description: "Unknown role or model id, a role other than coding, a thinking budget that is not a number, chat_template_kwargs that is not an object, or (Responses) a previous_response_id: send the whole conversation with every request." },
   501: { content: { "application/json": { schema: WireNotServedSchema } }, description: "The engine bound to the coding role does not serve this wire; `error` says what to use instead. The engine is not started to find out." },
 } as const;
 const messagesRoute = createRoute({ method: "post", path: "/messages", tags: ["Roles"], summary: "Anthropic Messages for the coding role (the engine's native wire)", request: { body: { content: { "application/json": { schema: MessagesRequestSchema } } } }, responses: codingWireResponses });
