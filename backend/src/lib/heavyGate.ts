@@ -54,6 +54,8 @@ export const isolationRules = {
   maxPauseMs: (): number => num("STACK_ISOLATION_MAX_PAUSE_MS", 10 * 60_000),
   /** The longest one pause of the coding engine lasts (a chat request burst); then it is continued by force and runs forcedRunMs before it can be stopped again. */
   codingMaxPauseMs: (): number => num("STACK_ISOLATION_CODING_MAX_PAUSE_MS", 120_000),
+  /** Splash probes its native child every 10 s and restarts it (failing the request) when it does not answer within 30 s, so a Splash coding pause stays well under that. */
+  codingSplashMaxPauseMs: (): number => num("STACK_ISOLATION_CODING_SPLASH_MAX_PAUSE_MS", 20_000),
   /** After a forced resume the worker runs this long before it can be paused again. */
   forcedRunMs: (): number => num("STACK_ISOLATION_FORCED_RUN_MS", 60_000),
   /** A request that has been in flight this long is a leak (a stream nobody closed), not a conversation; it stops counting. */
@@ -375,3 +377,8 @@ export function endWithStream(body: ReadableStream<Uint8Array> | null, end: () =
 
 // A Stack that exits for any reason leaves no worker stopped.
 process.on("exit", () => { try { heavyGate.resumeEverything("exit"); } catch { /* nothing more to do */ } });
+
+/** The longest one pause of the coding engine named `engine` lasts. */
+export function codingPauseBoundMs(engine: string | null): number {
+  return engine === "splash" ? Math.min(isolationRules.codingMaxPauseMs(), isolationRules.codingSplashMaxPauseMs()) : isolationRules.codingMaxPauseMs();
+}

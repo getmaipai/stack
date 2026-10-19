@@ -10,7 +10,7 @@ import { app } from "@/app";
 import { __resetEventsForTests } from "@/lib/events";
 import { __resetHealthForTests } from "@/lib/health";
 import { __resetGovernorForTests } from "@/lib/governor";
-import { heavyGate, isolationRules, PausableProcess, setProtectedPidProvider, type PausableWorker } from "@/lib/heavyGate";
+import { codingPauseBoundMs, heavyGate, isolationRules, PausableProcess, setProtectedPidProvider, type PausableWorker } from "@/lib/heavyGate";
 import { clearModelsForTests, upsertModel } from "@/lib/modelStore";
 import { codingEngineStatus, getProcess, requestRole, resetSupervisorForTests, scriptedProcess, setMachineTier, setSupervisorFactoryForTests, setSupervisorTimeoutsForTests, streamRole, unloadIdleRole, unloadJitForGovernor } from "@/lib/supervisor";
 import { __resetSettingsForTests, updateSettings } from "@/settings";
@@ -98,6 +98,15 @@ const startRequest = async () => {
   expect(await until(() => waiting.length > 0)).toBe(true);
   return { pending };
 };
+
+test("a Splash coding pause is bounded at 20 s so its liveness probe does not restart the engine; llama-server keeps 120 s", () => {
+  delete process.env.STACK_ISOLATION_CODING_MAX_PAUSE_MS; delete process.env.STACK_ISOLATION_CODING_SPLASH_MAX_PAUSE_MS;
+  expect(codingPauseBoundMs("splash")).toBe(20_000);
+  expect(codingPauseBoundMs("llama-server")).toBe(120_000);
+  process.env.STACK_ISOLATION_CODING_MAX_PAUSE_MS = "5000";
+  expect(codingPauseBoundMs("splash")).toBe(5_000);
+  delete process.env.STACK_ISOLATION_CODING_MAX_PAUSE_MS;
+});
 
 test("the defaults: yield to chat on, a pause bounded at 120 s, 60 s of running before the next", () => {
   delete process.env.STACK_ISOLATION_CODING_MAX_PAUSE_MS; delete process.env.STACK_ISOLATION_FORCED_RUN_MS;

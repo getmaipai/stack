@@ -2519,6 +2519,7 @@ three things the job workers do not use: it yields to every interactive request 
 - **Bound.** One pause lasts at most 120 s. Then the process is continued by force (`isolation.resume_forced`), runs for 60 s
   (`STACK_ISOLATION_FORCED_RUN_MS`, the music rule) and is stopped again if chat is still busy. In a long chat burst coding therefore
   runs about a third of the time; it is slowed, never starved.
+- **Splash bound (2026-10-19, real run).** Splash probes its native child every 10 s and restarts it, failing the in-flight request, when the child is stopped for about 30 s. So while Splash serves coding the pause is bounded at 20 s (`STACK_ISOLATION_CODING_SPLASH_MAX_PAUSE_MS`), then the forced resume and the 60 s run follow as above. llama-server keeps 120 s. A real run showed a 20 s stop recovers and a 45 s stop fails the answer.
 - **A request that arrives while chat is busy** follows the music rule: the engine starts if it was not loaded (the start is not
   paused, because the lease attaches after the post-load check), the request attaches the lease and the process is stopped at once, then
   continued at chat's quiet moment. An already loaded engine is stopped before it works.

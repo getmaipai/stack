@@ -53,7 +53,7 @@ import { logger } from "@/lib/log";
 import { readGgufFacts } from "@/lib/gguf";
 import { estimatorAvailable, largestAdmittedContext, placedOnProcessor, runGgufParser, type GgufEstimate } from "@/lib/fitPlan";
 import { getGovernorStatus } from "@/lib/governor";
-import { heavyGate, isolationRules, PausableProcess, setProtectedPidProvider, type Lease, type PausableWorker } from "@/lib/heavyGate";
+import { codingPauseBoundMs, heavyGate, isolationRules, PausableProcess, setProtectedPidProvider, type Lease, type PausableWorker } from "@/lib/heavyGate";
 import { readMlxKvBytesPerToken } from "@/lib/mlxMemory";
 
 export type EngineKind = "spawned" | "managed" | "url";
@@ -982,7 +982,7 @@ function codingYieldBegin(processRecord: RoleProcess): void {
   if (!processRecord.pausable) return;
   const held = codingYield.get(processRecord);
   if (held) { held.holds++; return; }
-  const lease = heavyGate.attach({ role: "coding", worker: processRecord.pausable, skipCoding: true, maxPauseMs: isolationRules.codingMaxPauseMs, enabled: () => codingYieldsToChat() });
+  const lease = heavyGate.attach({ role: "coding", worker: processRecord.pausable, skipCoding: true, maxPauseMs: () => codingPauseBoundMs(processRecord.engine), enabled: () => codingYieldsToChat() });
   codingYield.set(processRecord, { lease, holds: 1 });
 }
 
