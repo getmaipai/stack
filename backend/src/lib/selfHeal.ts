@@ -44,7 +44,7 @@ let rules: Rules = { ...SELF_HEAL_RULES, backoffMs: [...SELF_HEAL_RULES.backoffM
 
 /** Roles that load on a request and are evicted when idle: a crash of one
  * with nobody using it needs no restart; the next request starts it. */
-const ON_DEMAND_ROLES: RoleId[] = ["vision", "image"];
+const ON_DEMAND_ROLES: RoleId[] = ["vision", "coding", "image"];
 
 export interface Clock { now(): number; after(ms: number, run: () => void): () => void; }
 const realClock: Clock = {

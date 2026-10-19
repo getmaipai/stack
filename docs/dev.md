@@ -2296,11 +2296,84 @@ gives `coding` its own model. S1 is the role and its per-tier binding only; ther
 default is 15 minutes (`coding.keep_warm_minutes`, S2). The 64 GB tier uses Splash in a later slice, unmeasured there, with the
 memory governor refusing when it does not fit and llama-server as the fallback. The Splash engine kind is a later slice too.
 
-**Still owed.** S2: the coding process (add `coding` to `SPAWNABLE_ROLES` and `JIT_ROLES`), the lease and the governor rule that an
-idle coding engine yields to a generator job while a busy one makes it wait and residents are never evicted, the idle unload,
-2 slots on p128, q8_0 KV and a 128k window in the launch (S1 put no `launch` block on the pin on purpose). S3: the wires
-`/v1/messages`, `/v1/messages/count_tokens`, `/v1/responses` (when the pinned build serves it) and `GET /v1/models` for the role
-(closes STACK-60 and STACK-61). S4 and S5 per the Home backlog row.
+**Still owed after S1.** S2 (below, done). S3: the wires `/v1/messages`, `/v1/messages/count_tokens`, `/v1/responses` (when the pinned
+build serves it) and `GET /v1/models` for the role (closes STACK-60 and STACK-61). S4 and S5 per the Home backlog row.
+
+### Slice S2: the coding engine on demand (CODE-STACK-01, 2026-10-18)
+
+Stack only; no wires added. The coding role now has its own llama-server process.
+
+**The planner's findings, checked in the code.** Confirmed: `lib/engineArgs.ts` line 90 hardcodes `"--reasoning", "off"` in
+`llamaServerArgs` for every llama-server process; `lib/supervisor.ts` had `SPAWNABLE_ROLES` (line 132), `JIT_ROLES = ["vision"]`
+(line 145) and `processRoleFor` (line 150), and the vision role is the pattern (jit admission, `yieldJitRolesTo`, unload callback);
+`daemon.ts` line 100 used only the global `stack.runtime.idle_unload_minutes` (default 30); `lib/governor.ts` has `idleTtlSeconds: 600`
+(line 10) and the idle limit `idleTtlSeconds + keepAliveSeconds` (line 448); the per-slot setting
+`stack.engines.llama_server.slots` is shared by every llama-server role; `warmedRoles()` could not hold coding (`WARM_ORDER` is
+chat, embed, judge, stt, tts), and S2 also filters it out. The S1 warning was right: the readiness check probed every role in state
+`installed`, and a probe is a real request, so coding would have been started by every check and kept warm by it. One finding went the
+other way: a resident engine's start unloads every loaded jit role first (`yieldJitRolesTo`, rule 4), coding included, so a chat
+restart or heal unloads a loaded coding engine (it waits for a request in flight to finish). That is the existing resident-first rule
+and is left alone.
+
+**What S2 did.**
+
+- `coding` joins `SPAWNABLE_ROLES` and `JIT_ROLES` (`processRoleFor` needed no change: the role has no `sharesModelWith`). It starts on the
+  first request through the normal `getProcess`, with the same post-load check as every role (its probe sends
+  `enable_thinking: false`, so a reasoning-on launch still passes).
+- Launch: `codingServerArgs` in `lib/engineArgs.ts`, a separate builder; `llamaServerArgs` and every other role's args are
+  unchanged (a test pins chat's exact list). The exact list, with the default settings on a 128 GB Mac:
+  `--model <gguf> --port <free port> --host 127.0.0.1 -c 131072 -fa on -ngl all --reasoning on --reasoning-budget 2000 -ub 1024
+  --no-webui --metrics --jinja --parallel 2 --kv-unified -ctk q8_0 -ctv q8_0 --offline`.
+- **Flags verified against `llama-server` b10797 `--help`** (read only): `-c/--ctx-size`, `-fa [on|off|auto]`, `-rea/--reasoning
+  [on|off|auto]`, `--reasoning-budget N` (-1 unrestricted, 0 immediate end, N>0 budget; env `LLAMA_ARG_THINK_BUDGET`), `-np/--parallel`,
+  `-kvu/--kv-unified`, `-ctk/-ctv` (q8_0 allowed), `--offline`, `--jinja`, `--metrics`, `--no-webui`, `-ub`, `-ngl`, `--host`.
+  **Not verifiable without loading a model:** (1) whether a per-request thinking budget is accepted by this build (`--help` lists only
+  the launch-level `--reasoning-budget`), so the launch-level budget carries the ceiling and S3's per-request clamp is a clamp on what
+  the client asks (a lower request budget is S3's to prove against the build); (2) that `--kv-unified` with `-np 2` gives one shared
+  128k pool as the help text says ("single unified KV buffer shared across all sequences"): without it, an explicit `-np 2` splits
+  `-c` into two 64k windows, because the help says unified is only the default when slots are automatic; (3) `--cache-reuse` is left
+  out of the coding launch (chat uses 256) because KV shifting is unmeasured on this model, and the engine's prompt cache and context
+  checkpoints stay at their defaults; S4's bench decides whether to add it; (4) that Qwen3.8-27B starts and answers with `--reasoning on`
+  under this build: the Studio trial used Splash and a different llama.cpp build, so the first real run is still owed (CODE-BENCH-01).
+- Settings, declared in `settings.ts` under a new section `engines.coding` ("Coding engine"): `stack.engines.coding.keep_warm_minutes`
+  (15, 1 to 1440, advanced, live), `.thinking_budget_ceiling` (2000, 0 to 32768, advanced, needs restart), `.slots` (0 = tier default:
+  2 on p128, 1 on p64; advanced, needs restart) and `.context_length` (131072, expert, needs restart; the window the start asks for).
+  The generic `engines.llama_server.*` settings are not read by the coding launch.
+- **Window fit.** The start asks for `context_length`, then steps down 98304, 65536, 49152, 32768 until the engine's own dry run
+  (`llama-fit-params` at q8_0 and flash attention, the same `peak-source` dry run every start logs) fits what the governor can admit now
+  without evicting anything (`admissionRoomBytes()`: the model budget less what is loaded, and free memory less the tier's margin). With
+  no dry run it falls back to the file size times the governor's 1.3.
+- **Lease.** A request in flight counts in `activeRequests`; the governor's unload callback (`unloadJitForGovernor`) declines while it is
+  above zero, so neither the keep-warm clock, a pressure eviction nor a generator job can cut a coding answer off. The governor idle
+  clock is touched at the start and at the end of every coding request, so keep-warm counts from the end of the last one.
+- **Keep-warm arithmetic.** `stack.engines.coding.keep_warm_minutes` x 60 is set as the coding item's own idle limit in the governor
+  (`setIdleTtlSeconds`), which replaces the 600 s jit limit for that item only; its `keepAliveSeconds` is 0, so the governor evicts when
+  `now - lastUsedAt >= minutes x 60 s` (15 min = 900 s), found by a poll every 5 s: exactly the setting, at most 5 s late. The daemon's
+  60 s idle tick gets `roleIdleMinutes: { coding: minutes }` and uses it in place of both runtime-wide limits (30 minutes, 10 on
+  battery), so a keep-warm longer than 30 minutes is not cut short and battery does not shorten it; it is a backstop at the same limit
+  (at most 60 s late). Changing the setting moves the loaded item's limit at once.
+- **Governor.** A coding item is admitted as `jit` with `yieldsToGenerators`. While a generator job (picture, clip, song) is the head of the
+  governor's queue and would be admitted if the yielding items were gone, the governor asks to unload them; coding declines while busy, so
+  the job waits (its existing "waiting for memory" line) and goes in on the poll after the request ends. Residents are never asked: only
+  items that declared `yieldsToGenerators` are. A job that coding's memory would not help is not made to evict it. Coding's own start is
+  queued behind residents and running generators for up to 15 s, never evicts anything, then fails with
+  `The coding model needs about X GB to load, and this computer has Y GB free after keeping Z GB back. Chat and the other always-on models
+  stay loaded. Wait for the picture, video or song job to finish, or close a large app, then send the request again.` (or the model-budget
+  variant naming "Memory for models"). A refusal leaves the role `installed` with that reason, not `offline`, retries after 3 s, and
+  self-heal never restarts it (`coding` joins vision and the picture engine as on-demand).
+- **Readiness and status.** The readiness check never probes coding (`runCheck()` skips it; an explicit `roleIds: ["coding"]` reports it
+  skipped), so it is neither started nor kept warm by the check. `GET /stack/v1/roles` is unchanged for every role and the coding row
+  gains an additive `coding: { state, keep_warm_minutes, idle_seconds, slots, slots_busy, cannot_fit_reason }`; `state` is `notInstalled`,
+  `installed` (on disk, unloaded), `loading`, `ready`, `busy` or `offline`, and the role's own `state` keeps the spec's enum (`loading`
+  shows as `loaded`). `cannot_fit_reason` (also the row's `reason` while `installed`) is the last memory refusal, or a model whose
+  estimated peak is over the model budget outright. `warmedRoles()` excludes coding.
+
+**Still owed.** S3: the wires `/v1/messages`, `/v1/messages/count_tokens`, `/v1/responses` (when the pinned build serves it),
+`GET /v1/models` role-scoped, and the per-request thinking clamp against `thinking_budget_ceiling`. S4: Home's side (the settings rows,
+keys and the gateway) and the first real load on the Studio, which settles flags (1) to (4) above and measures the real peak so the pin
+can carry a measured footprint. S5: the Splash engine kind. Not done in S2 and noted: the proactive fit hint does not run a dry run (it
+is the file-size estimate against the model budget until a start has been refused); the memory watchdog's refusal text for guarded
+starts still says "picture and video work" when it is what refuses a coding start, but the coding message replaces it for the person.
 
 ## Measured so far
 

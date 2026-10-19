@@ -200,6 +200,17 @@ test("an idle on-demand engine (picture) that dies is left for its next request;
   expect(pending()).toHaveLength(1);
 });
 
+test("CODE-STACK-01 S2: an idle coding engine that dies is left for its next request, and sweeping offline roles skips it; a busy one restarts", async () => {
+  await crash("coding");
+  expect(pending()).toHaveLength(0);
+  expect(sweepOffline()).toEqual([]);
+  expect(pending()).toHaveLength(0);
+  const busy = await getProcess("coding");
+  busy.activeRequests = 1;
+  reportEngineExit("coding", busy, exit());
+  expect(pending()).toHaveLength(1);
+});
+
 test("a stop by hand or a retire is not a crash", async () => {
   const processRecord = await getProcess("chat");
   processRecord.retired = true;

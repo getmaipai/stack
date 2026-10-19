@@ -4585,6 +4585,54 @@
                               "estimated"
                             ]
                           },
+                          "coding": {
+                            "type": "object",
+                            "properties": {
+                              "state": {
+                                "type": "string",
+                                "enum": [
+                                  "notInstalled",
+                                  "installed",
+                                  "loading",
+                                  "ready",
+                                  "busy",
+                                  "offline"
+                                ],
+                                "description": "notInstalled: no coding model on disk. installed: on disk and unloaded (a coding request loads it). loading: starting. ready: loaded and free. busy: serving a request. offline: it failed to start or exited."
+                              },
+                              "keep_warm_minutes": {
+                                "type": "integer",
+                                "description": "Minutes the engine stays loaded after its last request (stack.engines.coding.keep_warm_minutes)."
+                              },
+                              "idle_seconds": {
+                                "type": "integer",
+                                "nullable": true,
+                                "description": "Seconds since the last request ended while loaded and free; null when unloaded or busy."
+                              },
+                              "slots": {
+                                "type": "integer",
+                                "nullable": true,
+                                "description": "Server slots (concurrent requests); null when not installed."
+                              },
+                              "slots_busy": {
+                                "type": "integer",
+                                "description": "Requests in flight, at most slots."
+                              },
+                              "cannot_fit_reason": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Why the model cannot load now (it would not fit in memory beside the always-on models), with what to do; null when nothing is known to stop it."
+                              }
+                            },
+                            "required": [
+                              "state",
+                              "keep_warm_minutes",
+                              "idle_seconds",
+                              "slots",
+                              "slots_busy",
+                              "cannot_fit_reason"
+                            ]
+                          },
                           "pending_install": {
                             "type": "object",
                             "nullable": true,

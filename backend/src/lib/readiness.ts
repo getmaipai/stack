@@ -39,8 +39,15 @@ function fixFor(role: RoleId, reason: string): HealthFix {
   return { label: "Reinstall model", action: "reinstall_model" };
 }
 
+/** Roles the check never probes: a probe would load them (a fresh start) or keep them loaded (a request restarts the idle clock). The coding engine loads for the person who codes; its own post-load check proves it each time, and its state is on the role list (CODE-STACK-01 S2). */
+const NEVER_PROBED_ROLES: RoleId[] = ["coding"];
+
 async function checkRole(role: RoleId, options: CheckOptions): Promise<CheckRoleResult> {
   const started = performance.now();
+  if (NEVER_PROBED_ROLES.includes(role) && !options.requestRole) {
+    resolveHealth(`check-role.${role}`);
+    return { role, ok: false, skipped: true, ms: 0, reason: `Skipped: the ${role} engine loads when someone uses it, so the check does not start it.`, loadMs: null };
+  }
   const record = (ok: boolean, reason: string | null, loadMs: number | null, cause: string): CheckRoleResult => {
     if (ok) resolveHealth(`check-role.${role}`);
     else raise({ code: `check-role.${role}`, severity: "warning", title: `${ROLES[role].label} needs attention`, text: reason ?? `${role} did not answer the readiness check.`, cause, fix: fixFor(role, reason ?? "") });
@@ -105,6 +112,7 @@ export async function runFitTogetherCheck(options: Pick<CheckOptions, "fitGenera
 // state, and a "needs attention" item for it would be a false alarm.
 function installedRoles(): RoleId[] {
   return ROLE_IDS.filter((role) => {
+    if (NEVER_PROBED_ROLES.includes(role)) return false;
     const state = resolveRoleState(role).state;
     if (getRoleStatus(role).state === "stopped") return false;
     if (state === "offline") return processRoleFor(role) === role && roleIsBound(role);

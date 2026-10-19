@@ -5,7 +5,7 @@
 import { ROLE_IDS, READY_TTL_MS, type RoleId, type RoleState, type RoleStateRecord } from "@/roles";
 import { identityHeaders } from "@/lib/identity";
 import { getModel, isModelSelectable } from "@/lib/modelStore";
-import { getRoleStatus, identityCheck, lastRealRequestAt, processRoleFor, selectedModel } from "@/lib/supervisor";
+import { codingCannotFitReason, getRoleStatus, identityCheck, lastRealRequestAt, processRoleFor, selectedModel } from "@/lib/supervisor";
 import { videoRoleState } from "@/video/videoGen";
 import { musicRoleState } from "@/music/musicGen";
 import { imageEngineActive, imageRoleState } from "@/images/imageEngine";
@@ -75,6 +75,8 @@ export function resolveRoleState(role: RoleId): RoleStateRecord {
     return { state: "ready", since: now, checkedAt: new Date(last).toISOString() };
   }
   if (flat === "offline") return { state: "offline", since: now, reason: getRoleStatus(role).reason ?? "The engine is unavailable." };
+  // The coding model is on disk but cannot load now (it would not fit): said on the role, with what to do.
+  if (flat === "installed" && role === "coding") { const reason = codingCannotFitReason(); if (reason) return { state: "installed", since: now, reason }; }
   return { state: flat, since: now };
 }
 

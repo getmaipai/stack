@@ -58,7 +58,8 @@ let rerun: string | null = null;
 let warmed = new Set<RoleId>();
 
 export function warmupStatus(): WarmupStatus { return { ...status, roles: status.roles.map((row) => ({ ...row })) }; }
-export function warmedRoles(): RoleId[] { return [...warmed]; }
+/** The roles the idle unload spares. The coding engine is never among them: it loads while someone is coding and unloads after its own keep-warm minutes (CODE-STACK-01 S2). */
+export function warmedRoles(): RoleId[] { return [...warmed].filter((role) => role !== "coding"); }
 
 function candidatesNow(): WarmCandidate[] {
   const out: WarmCandidate[] = [];

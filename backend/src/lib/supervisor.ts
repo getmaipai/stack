@@ -12,7 +12,7 @@ import { withTimeout } from "@maipai/core/src/withTimeout";
 import { isCompiledBinary } from "@/lib/paths";
 import { ENGINE_READY_MARKER, installedEnginePin, selectEngineBinary, type ChatEngine, type EngineBinaryPin } from "@/lib/engineCatalog";
 import { managedEnv } from "@/lib/uvEnvironment";
-import { defaultKvCacheType, llamaServerArgs, mlxKvQuantFor, mlxServeArgs, type KvCacheType } from "@/lib/engineArgs";
+import { codingServerArgs, defaultKvCacheType, llamaServerArgs, mlxKvQuantFor, mlxServeArgs, type KvCacheType } from "@/lib/engineArgs";
 import { currentEngineBinary, currentEngineTag, engineBinaryPath, engineDir } from "@/lib/engineInstall";
 import { detectHardware, primaryBudgetBytes } from "@/lib/hardware";
 import { identityHeaders, modelFileName, readEngineIdentity, type EngineIdentity } from "@/lib/identity";
@@ -32,9 +32,9 @@ import { clearTtsEngineFailures, markTtsEngineFailed, resolveTtsEngine, TTS_ENGI
 import { STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
 import { comfyuiCommand, comfyuiEnv, comfyuiInstalled, COMFYUI_VERSION, linkCheckpoint, probeGenerator } from "@/generators/comfyui";
 import { basename } from "node:path";
-import { getRunState, refreshMeasuredPeak, release, setGovernorPid, startGovernor, touch as touchGovernor, withdraw as withdrawAdmission, type GovernorHandle, type GovernorTier } from "@/lib/governor";
+import { admissionRoomBytes, getRunState, refreshMeasuredPeak, release, setGovernorPid, setIdleTtlSeconds, startGovernor, touch as touchGovernor, withdraw as withdrawAdmission, type GovernorHandle, type GovernorTier } from "@/lib/governor";
 import { PROFILE_MODEL_BINDINGS, proposeProfile } from "@/profiles";
-import { AdmissionRefusedError, waitForAdmission, waitingReason } from "@/lib/admission";
+import { AdmissionRefusedError, governorPeak, waitForAdmission, waitingReason } from "@/lib/admission";
 import { emit } from "@/lib/events";
 import { MLX_PREFIX_CACHE_FLAG, mlxHeadroomBytes } from "@/lib/mlxMemory";
 import { raise, resolve as resolveHealth } from "@/lib/health";
@@ -43,7 +43,7 @@ import { getMemoryReader } from "@/lib/memory";
 import { classifyCrash, type CrashVerdict } from "@/lib/crashClassifier";
 import { memoryLevel } from "@/lib/memoryState";
 import { hfHubRoot } from "@/lib/store/layout";
-import { engineSettingValues, gpuLayersFor, settingValues, type GpuLayers } from "@/settings";
+import { engineSettingValues, gpuLayersFor, settingValues, type GpuLayers, type SettingValue } from "@/settings";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
 import { logger } from "@/lib/log";
 import { readGgufFacts } from "@/lib/gguf";
@@ -125,11 +125,16 @@ export class EngineUnavailableError extends Error {
   constructor(reason: string) { super(reason); this.name = "EngineUnavailableError"; this.reason = reason; }
 }
 
+/** A start the memory governor could not admit: the engine is fine, the computer is full. The role goes back to `installed` with the reason, never `offline`, and nothing resident is evicted to make room (CODE-STACK-01 S2). */
+export class EngineDoesNotFitError extends EngineUnavailableError {
+  constructor(reason: string) { super(reason); this.name = "EngineDoesNotFitError"; }
+}
+
 // The roles a llama-server process serves and the request each one's
 // post-load check sends. Roles that share chat's model run on chat's
 // process; embed has its own model and its own launch flag.
 const CHAT_WIRE_ROLES: RoleId[] = ROLE_IDS.filter((role) => ROLES[role].wire === "chat");
-const SPAWNABLE_ROLES: RoleId[] = ["chat", "judge", "embed", "vision", "stt", "tts", "image"];
+const SPAWNABLE_ROLES: RoleId[] = ["chat", "coding", "judge", "embed", "vision", "stt", "tts", "image"];
 /** The roles the speech worker serves: their runtime ships with the
  * Stack (sherpa-onnx-node in package.json), never as an engine build. */
 const SPEECH_ROLES: RoleId[] = ["stt"];
@@ -139,10 +144,12 @@ const MANAGED_ROLES: RoleId[] = ["tts", "image"];
 /** The generator roles: their process is admitted as `jit` (evicted
  * when idle) and each render is a job the queue admits on top. */
 const GENERATOR_ROLES: RoleId[] = ["image"];
-/** The roles loaded on a request and evicted when idle (VISION-01b): the
+/** The roles loaded on a request and evicted when idle (VISION-01b; the
+ * coding role joined with CODE-STACK-01 S2 and adds a lease, a keep-warm
+ * limit of its own and yielding to generator jobs): the
  * governor admits them as `jit`, they yield to a resident role's start,
  * and an admission never evicts or shrinks a resident. */
-const JIT_ROLES: RoleId[] = ["vision"];
+const JIT_ROLES: RoleId[] = ["vision", "coding"];
 export const SPEECH_PATH = "/tts";
 
 /** The role whose process serves this role: `coding`, `judge` and
@@ -210,6 +217,7 @@ const DEFAULT_POST_LOAD_TIMEOUT_MS = 120_000;
 const START_WAIT_MS = 15_000;
 const START_RETRY_BASE_MS = 5_000;
 const START_RETRY_CAP_MS = 5 * 60_000;
+const DOES_NOT_FIT_RETRY_MS = 3_000;
 const DEFAULT_COMPLETION_TIMEOUT_MS = 10 * 60_000;
 const LOAD_FLOOR_MS = 60_000;
 const LOAD_PER_GB_MS = 60_000;
@@ -406,6 +414,8 @@ interface RoleRuntime {
   lastRealRequestAt: number | null;
   startFailureCount: number;
   retryAfter: number;
+  /** Why the last start was refused for memory (the coding role); cleared by a start that worked. */
+  cannotFitReason?: string | null;
 }
 
 type ProcessFactory = (role: RoleId, modelId?: string) => Promise<RoleProcess>;
@@ -894,6 +904,129 @@ async function yieldJitRolesTo(role: RoleId): Promise<void> {
   }
 }
 
+// ---- the coding engine (CODE-STACK-01 S2) ----------------------------------
+
+const CODING_WINDOW_STEPS = [131_072, 98_304, 65_536, 49_152, 32_768];
+const CODING_WINDOW_FLOOR = 32_768;
+
+/** The coding process's launch settings, from `stack.engines.coding.*`:
+ * slots (0 = the tier's own: 2 on p128, 1 below), the thinking ceiling at
+ * the server, the keep-warm limit and the window it asks for. */
+export function codingLaunchSettings(values: Record<string, SettingValue> = settingValues()): { slots: number; thinkingBudgetTokens: number; keepWarmMinutes: number; contextLength: number } {
+  const number = (key: string, fallback: number): number => { const value = values[`stack.engines.coding.${key}`]; return typeof value === "number" && Number.isFinite(value) ? value : fallback; };
+  const slotsSetting = number("slots", 0);
+  return {
+    slots: slotsSetting > 0 ? Math.floor(slotsSetting) : machineTier === "p128" ? 2 : 1,
+    thinkingBudgetTokens: Math.max(0, Math.floor(number("thinking_budget_ceiling", 2000))),
+    keepWarmMinutes: Math.max(1, Math.floor(number("keep_warm_minutes", 15))),
+    contextLength: Math.max(8192, Math.floor(number("context_length", 131_072))),
+  };
+}
+
+/** The keep-warm limit in seconds, as the governor holds it for the coding item: it is evicted exactly this long after its last request ended (a poll every 5 s notices), and the daemon's idle tick unloads at the same limit as a backstop. */
+export function codingKeepWarmSeconds(): number { return codingLaunchSettings().keepWarmMinutes * 60; }
+
+/** Pushes the keep-warm setting into the governor (a live setting). */
+export function applyCodingKeepWarm(values?: Record<string, SettingValue>): void {
+  setIdleTtlSeconds("coding", codingLaunchSettings(values).keepWarmMinutes * 60);
+}
+
+/** The window the coding process starts with: the one asked for while the
+ * engine's own dry run says it fits in what the governor can admit now
+ * without evicting anything, else the next smaller step, down to 32,768.
+ * `peakBytes` is the dry run's reading at the chosen window (null when the
+ * dry run is not available), so the admission does not run it twice. */
+export async function codingContextFor(model: ModelRecord, desired: number): Promise<{ contextLength: number; dryRunPeakBytes: number | null }> {
+  const steps = [desired, ...CODING_WINDOW_STEPS.filter((step) => step < desired)].filter((step, index, all) => all.indexOf(step) === index);
+  let last = { contextLength: Math.min(desired, CODING_WINDOW_FLOOR), dryRunPeakBytes: null as number | null };
+  for (const step of steps) {
+    const dry = model.modelPath?.endsWith(".gguf") ? await dryRunFootprint(model.modelPath, step, { kvCacheType: "q8_0", flashAttention: true }) : null;
+    const peak = dry ?? Math.ceil((model.sizeBytes ?? 0) * 1.3);
+    last = { contextLength: step, dryRunPeakBytes: dry };
+    if (peak <= admissionRoomBytes()) return last;
+  }
+  return last;
+}
+
+/** What a person is told when the coding model cannot be admitted: the
+ * problem in their terms, then the next step. Nothing resident is stopped
+ * to make room, and the message says so. */
+export function codingMemoryMessage(input: { peakBytes: number; freeBytes: number; budgetBytes: number; marginBytes: number }): string {
+  const gb = (bytes: number) => `${(bytes / 1_073_741_824).toFixed(1)} GB`;
+  if (input.peakBytes > input.budgetBytes) return `The coding model needs about ${gb(input.peakBytes)}, but the memory set aside for models on this computer is ${gb(input.budgetBytes)}. Raise "Memory for models" in the Memory settings, then send the request again.`;
+  return `The coding model needs about ${gb(input.peakBytes)} to load, and this computer has ${gb(input.freeBytes)} free after keeping ${gb(input.marginBytes)} back. Chat and the other always-on models stay loaded. Wait for the picture, video or song job to finish, or close a large app, then send the request again.`;
+}
+
+function codingRefusal(request: Parameters<typeof waitForAdmission>[0]): string {
+  const status = getGovernorStatus();
+  return codingMemoryMessage({ peakBytes: governorPeak(request), freeBytes: status.freeMemoryBytes, budgetBytes: status.capBytes, marginBytes: status.marginBytes });
+}
+
+/** The state of the coding engine for the role list and the later health
+ * work: additive, read-only, and it never starts the process. */
+export interface CodingEngineStatus {
+  state: "notInstalled" | "installed" | "loading" | "ready" | "busy" | "offline";
+  keep_warm_minutes: number;
+  /** Seconds since the last request ended while the engine is loaded and free; null when unloaded or busy. */
+  idle_seconds: number | null;
+  slots: number | null;
+  slots_busy: number;
+  /** Why the model cannot be loaded now (the last refusal for memory, or a model larger than the model budget); null when nothing is known to stop it. */
+  cannot_fit_reason: string | null;
+}
+
+export function codingEngineStatus(): CodingEngineStatus {
+  const current = runtime("coding");
+  const settings = codingLaunchSettings();
+  const running = current.process && !current.process.retired ? current.process : null;
+  const base = getRoleStatus("coding");
+  const model = selectedModel("coding");
+  let state: CodingEngineStatus["state"];
+  if (running) state = running.activeRequests > 0 ? "busy" : "ready";
+  else if (current.starting || base.state === "loading") state = "loading";
+  else if (base.state === "offline") state = "offline";
+  else state = model && engineInstalledFor("coding") ? "installed" : "notInstalled";
+  const lastEnd = current.lastRealRequestAt;
+  return {
+    state,
+    keep_warm_minutes: settings.keepWarmMinutes,
+    idle_seconds: running && running.activeRequests === 0 && lastEnd !== null ? Math.max(0, Math.round((Date.now() - lastEnd) / 1000)) : null,
+    slots: running?.slots ?? (state === "notInstalled" ? null : settings.slots),
+    slots_busy: running ? Math.min(running.activeRequests, running.slots ?? settings.slots) : 0,
+    cannot_fit_reason: state === "installed" || state === "offline" ? codingCannotFitReason() : null,
+  };
+}
+
+/** Why coding cannot load right now, from facts at hand (no dry run, no process): the last refusal for memory, or a model whose estimated peak exceeds the model budget outright. */
+export function codingCannotFitReason(): string | null {
+  if (runtime("coding").process) return null;
+  const refused = runtime("coding").cannotFitReason ?? null;
+  if (refused) return refused;
+  const model = selectedModel("coding");
+  if (!model?.sizeBytes) return null;
+  const peak = Math.ceil((model.measuredFootprintBytes ?? model.sizeBytes * 1.3));
+  const status = getGovernorStatus();
+  return peak > status.capBytes ? codingMemoryMessage({ peakBytes: peak, freeBytes: status.freeMemoryBytes, budgetBytes: status.capBytes, marginBytes: status.marginBytes }) : null;
+}
+
+/** The governor's way to evict a jit item (idle, keep-warm or pressure):
+ * drains and unloads it. The coding engine is never unloaded while it
+ * serves a request (the lease), so a generator job waits for it and a
+ * long answer is never cut off by the idle clock. */
+export async function unloadJitForGovernor(id: string): Promise<boolean> {
+  const role = id as RoleId;
+  if (!JIT_ROLES.includes(role)) return false;
+  const current = runtimes.get(role);
+  if (!current?.process) return false;
+  if (role === "coding") {
+    if (current.process.activeRequests > 0) return false;
+    const keepWarmMs = codingKeepWarmSeconds() * 1000;
+    const idleLong = current.lastRealRequestAt !== null && Date.now() - current.lastRealRequestAt >= keepWarmMs - 6_000;
+    return unloadRole(role, idleLong ? `Unloaded after ${codingLaunchSettings().keepWarmMinutes} minutes without a coding request.` : "Unloaded to free memory for other work.");
+  }
+  return unloadRole(role, "Unloaded by the memory governor.");
+}
+
 /** Resident starts in progress: while any runs, a jit role does not
  * start, so nothing new is admitted beside a resident being sized. */
 let residentStarts = 0;
@@ -932,9 +1065,11 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
   }
   const declared = engineSettingValues("engines.llama_server");
   const config = { contextLength: declared.context_length, slots: declared.slots, threads: declared.threads, cacheRamMb: declared.cache_ram_mb, flashAttention: declared.flash_attention } as Record<string, number | boolean | string | string[]>;
+  // The coding role sizes its own window (codingContextFor) and never reaches the chat launch's context fit.
+  const codingRole = role === "coding";
   // A record with its own launch (vision) runs one slot, as its args say.
   const slots = declaredLaunchContext(model) !== null ? 1 : typeof config.slots === "number" && config.slots > 0 ? config.slots : 1;
-  const contextLength = resolvedContextLength ?? declaredLaunchContext(model) ?? (typeof config.contextLength === "number" && config.contextLength > 0 ? config.contextLength : engineForRole(role) === "omlx" ? omlxContextLength(model, config) : await contextForLaunch(model, config, slots, gpuLayersFor(role)));
+  const contextLength = resolvedContextLength ?? (codingRole ? codingLaunchSettings().contextLength : null) ?? declaredLaunchContext(model) ?? (typeof config.contextLength === "number" && config.contextLength > 0 ? config.contextLength : engineForRole(role) === "omlx" ? omlxContextLength(model, config) : await contextForLaunch(model, config, slots, gpuLayersFor(role)));
   if (engineForRole(role) === "omlx") {
     // oMLX (ENGINE-MLX-01): an environment the Stack built, serving the one
     // pinned MLX directory on loopback behind a random key. Offline, with
@@ -967,6 +1102,13 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
   const pin = installedEnginePin();
   if (!pin || !engineInstalled()) throw new EngineUnavailableError("No installed llama-server build is available for this machine.");
   const binary = launchBinary(pin);
+  if (role === "coding") {
+    // The coding role's own launch: thinking on under a server-side budget, q8_0 KV, one shared window, offline.
+    const coding = codingLaunchSettings();
+    const window = resolvedContextLength ?? coding.contextLength;
+    const args = codingServerArgs({ modelPath: model.modelPath!, port, contextLength: window, slots: coding.slots, thinkingBudgetTokens: coding.thinkingBudgetTokens });
+    return { command: [binary, ...args], engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength: window, slots: coding.slots, contextScope: "total across slots", kind: "spawned", imageInput: false, pictureTokensMax: null };
+  }
   const projector = launchProjectorFor(role, model);
   if (role === "vision" && !projector?.modelPath) throw new EngineUnavailableError(`The ${model.id} projector is not installed.`);
   const pictureTokensMax = projector?.modelPath ? declaredPictureTokensMax(model) : null;
@@ -1071,9 +1213,12 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   }
   if (!model?.modelPath) throw new EngineUnavailableError(`No verified and installed ${role} model is available.`);
   const launchConfig = engineSettingValues("engines.llama_server") as Record<string, number | boolean | string | string[]>;
-  const ownContext = declaredLaunchContext(model);
+  // The coding role: its slots and its window come from its own settings, and the window steps down until the engine's dry run fits what the governor can admit without evicting anything.
+  const coding = role === "coding" ? codingLaunchSettings() : null;
+  const codingWindow = coding ? await codingContextFor(model, coding.contextLength) : null;
+  const ownContext = coding ? codingWindow!.contextLength : declaredLaunchContext(model);
   const declaredContextLength = ownContext ?? launchConfig.context_length;
-  const slots = ownContext !== null ? 1 : typeof launchConfig.slots === "number" && launchConfig.slots > 0 ? launchConfig.slots : 1;
+  const slots = coding ? coding.slots : ownContext !== null ? 1 : typeof launchConfig.slots === "number" && launchConfig.slots > 0 ? launchConfig.slots : 1;
   const contextLength = typeof declaredContextLength === "number" && declaredContextLength > 0 ? declaredContextLength : engineForRole(role) === "omlx" ? omlxContextLength(model, launchConfig) : await contextForLaunch(model, { ...launchConfig, contextLength: 0 }, slots, gpuLayersFor(role));
   // The voice engine starts offline; what it may need beyond the pins
   // (the gated cloning weights, with a token and cloning turned on) the
@@ -1102,7 +1247,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   // A role placed on the processor is sized by the processor-side
   // estimate; the dry run (llama-fit-params) plans graphics-card layers.
   const onProcessor = gpuLayersFor(role) === 0;
-  const dryRunPeakBytes = engineForRole(role) === "llama-server" && !managed && !generator && !SPEECH_ROLES.includes(role) && model.modelPath.endsWith(".gguf")
+  const dryRunPeakBytes = coding ? codingWindow!.dryRunPeakBytes : engineForRole(role) === "llama-server" && !managed && !generator && !SPEECH_ROLES.includes(role) && model.modelPath.endsWith(".gguf")
     ? onProcessor
       ? (await runGgufParser({ target: { path: model.modelPath }, contextTokens: contextLength * slots, kvCacheType: defaultKvCacheType(), gpuLayers: 0 }))?.ramNonumaBytes ?? null
       : await dryRunFootprint(model.modelPath, contextLength * slots, { kvCacheType: defaultKvCacheType(), flashAttention: launchConfig.flash_attention !== false })
@@ -1128,7 +1273,11 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     headroomBytes: engineForRole(role) === "mlx-serve" && !managed && !generator && !SPEECH_ROLES.includes(role) ? mlxHeadroomBytes({ modelDir: model.modelPath!, contextTokens: contextLength }) : null,
     engine: generator ? "comfyui" : managed ? TTS_ENGINES[activeTtsChoice().engine].catalogEngine : SPEECH_ROLES.includes(role) ? "sherpa-onnx-node" : engineForRole(role) === "mlx-serve" ? "mlx-serve" : engineForRole(role) === "omlx" ? "oMLX" : "llama-server",
     pinned: pinnedModels.has(model.id),
+    // The coding engine gives way to a generator job while it is idle (CODE-STACK-01 S2).
+    ...(role === "coding" ? { yieldsToGenerators: true } : {}),
   };
+  // The coding engine's own keep-warm limit replaces the governor-wide idle limit for it.
+  if (role === "coding") applyCodingKeepWarm();
   let timedOut = false;
   // A stop or a restart during the wait (the generation moves) means
   // nobody wants this admission any more.
@@ -1137,8 +1286,10 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   try {
     admission = await waitForAdmission(request, { stillWanted: () => !timedOut && !stoppingAll && runtime(role).generation === startGeneration, timeoutMs: START_WAIT_MS, onGaveUp: () => { timedOut = true; } });
   } catch (error) {
+    if (role === "coding" && error instanceof AdmissionRefusedError) throw new EngineDoesNotFitError(codingRefusal(request));
     throw new EngineUnavailableError(error instanceof AdmissionRefusedError ? error.message.replace(/^\S+ needs about/, `The ${role} engine needs about`) : (error as Error).message);
   }
+  if (!admission && role === "coding" && !stoppingAll && runtime(role).generation === startGeneration) throw new EngineDoesNotFitError(codingRefusal(request));
   if (!admission) throw new EngineUnavailableError(stoppingAll ? "The Stack is stopping." : runtime(role).generation !== startGeneration ? `The ${role} engine was stopped while it waited for memory.` : `${waitingReason(role, request)} The ${role} engine waited ${Math.round(START_WAIT_MS / 1000)} s for memory and gave up.`);
 
   const port = await findFreePort();
@@ -1308,7 +1459,8 @@ export async function getProcess(requested: RoleId, modelId?: string): Promise<R
     return getProcess(role, modelId);
   }
   if (!current.starting && current.retryAfter > Date.now()) {
-    throw new EngineUnavailableError(current.status.reason ?? `The ${role} engine start is backing off after a failed admission.`);
+    const waiting = current.status.reason ?? `The ${role} engine start is backing off after a failed admission.`;
+    throw current.cannotFitReason ? new EngineDoesNotFitError(waiting) : new EngineUnavailableError(waiting);
   }
   if (!current.starting) {
     const generation = current.generation;
@@ -1326,6 +1478,7 @@ export async function getProcess(requested: RoleId, modelId?: string): Promise<R
       current.starting = null;
       current.startFailureCount = 0;
       current.retryAfter = 0;
+      current.cannotFitReason = null;
       current.lastRealRequestAt = Date.now();
       current.status = { kind: started.kind, state: "ready", reason: null, identity: started.identity, postLoadCheck: current.status.postLoadCheck, contextLength: started.contextLength ?? null, slots: started.slots ?? null, contextScope: started.contextScope ?? null };
       emit({ id: "engine.state", data: { engine: role, state: "ready" } });
@@ -1336,10 +1489,13 @@ export async function getProcess(requested: RoleId, modelId?: string): Promise<R
         current.starting = null;
         const reason = (error as Error).message;
         current.startFailureCount++;
-        const delay = Math.min(START_RETRY_CAP_MS, START_RETRY_BASE_MS * 2 ** Math.min(20, current.startFailureCount - 1));
+        // A refusal for memory is not a broken engine: the role stays `installed` with the reason, and a retry is allowed after a few seconds (the person may have closed something).
+        const noRoom = error instanceof EngineDoesNotFitError;
+        const delay = noRoom ? DOES_NOT_FIT_RETRY_MS : Math.min(START_RETRY_CAP_MS, START_RETRY_BASE_MS * 2 ** Math.min(20, current.startFailureCount - 1));
         current.retryAfter = Date.now() + delay;
-        current.status = { ...current.status, state: "offline", reason };
-        emitRoleState(role, "offline", reason);
+        current.cannotFitReason = noRoom ? reason : null;
+        current.status = { ...current.status, state: noRoom ? "installed" : "offline", reason };
+        emitRoleState(role, noRoom ? "installed" : "offline", reason);
       }
       throw error;
     });
@@ -1440,9 +1596,9 @@ export function watchProcessMemory(role: RoleId, pid: number, measured?: { model
     return current?.pid === pid && current.activeRequests > 0;
   }, onPeak: measured ? (_id, bytes) => { recordMeasuredFootprint(measured.modelId, bytes, measured.contextLength); } : undefined, unload: async (id) => {
     // Only a running jit process is evicted here; one still starting is
-    // left to its own start, so its admission stays counted.
-    if (!JIT_ROLES.includes(id as RoleId) || !runtimes.get(id as RoleId)?.process) return false;
-    return unloadRole(id as RoleId, "Unloaded by the memory governor.");
+    // left to its own start, so its admission stays counted. The coding
+    // engine also declines while it serves a request.
+    return unloadJitForGovernor(id);
   } });
 }
 
@@ -1569,13 +1725,15 @@ export async function unloadAllRoles(reason: string): Promise<RoleId[]> {
 /** Drains and unloads a role that has had no request for the declared
  * idle time (shorter on battery); the process is started again by the
  * next request. Returns true when something was unloaded. */
-export async function unloadIdleRole(requested: RoleId, options: { now?: Date; onBattery: boolean; idleMinutes: number; batteryIdleMinutes: number; keep?: RoleId[] }): Promise<boolean> {
+export interface IdleUnloadOptions { now?: Date; onBattery: boolean; idleMinutes: number; batteryIdleMinutes: number; keep?: RoleId[]; /** A role's own idle limit in minutes, in place of both runtime-wide limits: the coding engine's keep-warm setting. */ roleIdleMinutes?: Partial<Record<RoleId, number>> }
+
+export async function unloadIdleRole(requested: RoleId, options: IdleUnloadOptions): Promise<boolean> {
   const role = processRoleFor(requested);
   if (!options.onBattery && options.keep?.includes(role)) return false;
   const current = runtime(role);
   const processRecord = current.process;
   const last = current.lastRealRequestAt;
-  const idleMinutes = options.onBattery ? options.batteryIdleMinutes : options.idleMinutes;
+  const idleMinutes = options.roleIdleMinutes?.[role] ?? (options.onBattery ? options.batteryIdleMinutes : options.idleMinutes);
   const now = options.now ?? new Date();
   if (!processRecord || processRecord.activeRequests > 0 || last === null || now.getTime() - last < idleMinutes * 60_000) return false;
   current.generation++;
@@ -1587,7 +1745,7 @@ export async function unloadIdleRole(requested: RoleId, options: { now?: Date; o
   return true;
 }
 
-export async function unloadIdleRoles(options: { now?: Date; onBattery: boolean; idleMinutes: number; batteryIdleMinutes: number; keep?: RoleId[] }): Promise<RoleId[]> {
+export async function unloadIdleRoles(options: IdleUnloadOptions): Promise<RoleId[]> {
   const unloaded: RoleId[] = [];
   for (const role of runtimes.keys()) if (await unloadIdleRole(role, options)) unloaded.push(role);
   return unloaded;
@@ -1703,6 +1861,7 @@ export async function requestRole(requested: RoleId, path: string, body: Record<
     throw unavailable;
   } finally {
     processRecord.activeRequests--;
+    if (role === "coding") touchGovernor(role);
     if (current.process === processRecord && processRecord.activeRequests === 0) current.status = { ...current.status, state: "ready" };
   }
 }
@@ -1710,6 +1869,8 @@ export async function requestRole(requested: RoleId, path: string, body: Record<
 function finishStream(role: RoleId, processRecord: RoleProcess): void {
   const current = runtime(role);
   processRecord.activeRequests--;
+  // The coding engine's keep-warm clock counts from the end of its last request, not from its start.
+  if (role === "coding") touchGovernor(role);
   if (current.process === processRecord) {
     if (processRecord.activeRequests === 0) current.status = { ...current.status, state: "ready" };
     current.lastRealRequestAt = Date.now();

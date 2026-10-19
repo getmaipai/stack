@@ -54,11 +54,12 @@ export const ROLES = {
     endpoints: ["/v1/chat/completions"],
     quality: ["fast", "everyday", "best"],
   },
-  // CODE-STACK-01 S1: its own model (Qwen3.8-27B, bound on p64 and p128),
-  // loaded only while someone is coding and never chat's process. The
-  // process, lease and idle unload arrive with slice S2; until then the
-  // role reports "installed" once the model is on disk and a request
-  // answers that no engine can be started yet.
+  // CODE-STACK-01: its own model (Qwen3.8-27B, bound on p64 and p128),
+  // loaded only while someone is coding and never chat's process. S2: the
+  // first request starts its own llama-server process, a request in flight
+  // holds a lease, it unloads after `stack.engines.coding.keep_warm_minutes`
+  // idle, and an idle one yields to a picture, video or music job. Until
+  // loaded the role reports "installed" once the model is on disk.
   coding: {
     label: "Coding",
     wire: "chat",

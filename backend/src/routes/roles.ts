@@ -5,7 +5,7 @@ import type { AppEnv } from "@/types";
 import { resolveRoleState } from "@/lib/router";
 import { ROLE_IDS, RoleRecordSchema, ROLES } from "@/roles";
 import { isComponent, listModels } from "@/lib/modelStore";
-import { activeTtsChoice, getRoleStatus, identityCheck, pictureTokensMax, roleReadsPictures, selectableModels, selectedModel, ttsEngineInEffect } from "@/lib/supervisor";
+import { activeTtsChoice, codingEngineStatus, getRoleStatus, identityCheck, pictureTokensMax, roleReadsPictures, selectableModels, selectedModel, ttsEngineInEffect } from "@/lib/supervisor";
 import { listJobs } from "@/lib/jobs";
 import { roleCheck } from "@/lib/readiness";
 import { TTS_ENGINES } from "@/speech/ttsEngines";
@@ -13,7 +13,15 @@ import { TTS_ENGINES } from "@/speech/ttsEngines";
 const CheckSchema = z.object({ state: z.enum(["not checked", "passed", "failed", "skipped"]), at: z.string().nullable(), reason: z.string().nullable(), stale: z.boolean() });
 const IdentitySchema = z.object({ ok: z.boolean(), expected: z.string().nullable(), actual: z.string().nullable(), reason: z.string().nullable() });
 const PendingInstallSchema = z.object({ job: z.string(), model: z.string().nullable(), purpose: z.string().nullable(), percent: z.number() });
-const RoleViewSchema = RoleRecordSchema.extend({ pending_install: PendingInstallSchema.nullable(), check: CheckSchema, identity: IdentitySchema, ...ChatRoleContextSchema.shape, models: z.array(z.object({ id: z.string(), name: z.string() })).optional(), picture_tokens_max: z.number().int().nullable().optional(), reads_pictures: z.boolean().optional(), tts: z.object({ engine: z.string(), requested: z.string(), tags: z.array(z.string()), fallback_reason: z.string().nullable() }).optional() });
+const CodingStatusSchema = z.object({
+  state: z.enum(["notInstalled", "installed", "loading", "ready", "busy", "offline"]).openapi({ description: "notInstalled: no coding model on disk. installed: on disk and unloaded (a coding request loads it). loading: starting. ready: loaded and free. busy: serving a request. offline: it failed to start or exited." }),
+  keep_warm_minutes: z.number().int().openapi({ description: "Minutes the engine stays loaded after its last request (stack.engines.coding.keep_warm_minutes)." }),
+  idle_seconds: z.number().int().nullable().openapi({ description: "Seconds since the last request ended while loaded and free; null when unloaded or busy." }),
+  slots: z.number().int().nullable().openapi({ description: "Server slots (concurrent requests); null when not installed." }),
+  slots_busy: z.number().int().openapi({ description: "Requests in flight, at most slots." }),
+  cannot_fit_reason: z.string().nullable().openapi({ description: "Why the model cannot load now (it would not fit in memory beside the always-on models), with what to do; null when nothing is known to stop it." }),
+});
+const RoleViewSchema = RoleRecordSchema.extend({ coding: CodingStatusSchema.optional(), pending_install: PendingInstallSchema.nullable(), check: CheckSchema, identity: IdentitySchema, ...ChatRoleContextSchema.shape, models: z.array(z.object({ id: z.string(), name: z.string() })).optional(), picture_tokens_max: z.number().int().nullable().optional(), reads_pictures: z.boolean().optional(), tts: z.object({ engine: z.string(), requested: z.string(), tags: z.array(z.string()), fallback_reason: z.string().nullable() }).optional() });
 
 const rolesRoute = createRoute({ method: "get", path: "/", tags: ["Roles"], summary: "Every declared role and its current state", responses: { 200: { content: { "application/json": { schema: z.object({ roles: z.array(RoleViewSchema) }) } }, description: "Declaration; derived state with since, checkedAt on ready and the reason a role is only loaded; the bound model; the launched context length, slot count and whether context is per slot or total; what the last readiness run said; the identity check." } } });
 
@@ -42,6 +50,6 @@ rolesRoutes.openapi(rolesRoute, (c) => c.json({
     const slots = status.slots ?? null;
     const perSlot = contextLength;
     const total = perSlot === null ? null : perSlot * (slots ?? 1);
-    return { id, ...ROLES[id], state, pending_install: pendingInstall(id), reason: state.reason ?? null, model: model ? { id: model.id, sizeBytes: model.sizeBytes, measuredFootprintBytes: model.measuredFootprintBytes, measuredContextLength: model.measuredContextLength, estimated: model.measuredFootprintBytes === null, imageInput: roleReadsPictures(id, model) } : null, check: roleCheck(id), identity: identityCheck(id), ...(id === "chat" ? { context_length: contextLength, context_per_slot: perSlot, context_total: total, slots, context_scope: status.contextScope ?? null, models: selectableModels(id), picture_tokens_max: pictureTokensMax(id) } : {}), ...(id === "chat" || id === "vision" ? { reads_pictures: roleReadsPictures(id, model) } : {}), ...(id === "tts" ? { tts: ttsView() } : {}) };
+    return { id, ...ROLES[id], state, pending_install: pendingInstall(id), reason: state.reason ?? null, model: model ? { id: model.id, sizeBytes: model.sizeBytes, measuredFootprintBytes: model.measuredFootprintBytes, measuredContextLength: model.measuredContextLength, estimated: model.measuredFootprintBytes === null, imageInput: roleReadsPictures(id, model) } : null, check: roleCheck(id), identity: identityCheck(id), ...(id === "chat" ? { context_length: contextLength, context_per_slot: perSlot, context_total: total, slots, context_scope: status.contextScope ?? null, models: selectableModels(id), picture_tokens_max: pictureTokensMax(id) } : {}), ...(id === "chat" || id === "vision" ? { reads_pictures: roleReadsPictures(id, model) } : {}), ...(id === "tts" ? { tts: ttsView() } : {}), ...(id === "coding" ? { coding: codingEngineStatus() } : {}) };
   }),
 }, 200));

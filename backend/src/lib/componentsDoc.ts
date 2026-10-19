@@ -79,6 +79,7 @@ export function renderComponentsDoc(catalog: ComponentsCatalog): string {
     lines.push("");
     const shares = catalog.shares?.[role];
     if (shares) { lines.push(`Shares \`${shares}\`'s model and process unless bound elsewhere; the rows below are \`${shares}\`'s pins seen from this role.`); lines.push(""); }
+    if (role === "coding") { lines.push("Runs on its own on-demand llama-server process (not chat's), started by the first coding request and unloaded after `stack.engines.coding.keep_warm_minutes` idle (default 15); the memory governor admits it as an on-demand item that yields to a picture, video or music job and never evicts a resident model."); lines.push(""); }
     lines.push("Engines per platform:");
     lines.push("");
     lines.push("| Engine | Build | Platform | Status |");
@@ -86,7 +87,7 @@ export function renderComponentsDoc(catalog: ComponentsCatalog): string {
     // llama-server's pins serve the chat wire's roles; a tool pin (uv)
     // serves the role its name maps to.
     const pins = catalog.engines.filter((pin) => LLAMA_ROLES.has(role) ? engineRole(pin.name) === "chat" : engineRole(pin.name) === role);
-    for (const pin of pins) lines.push(`| \`${pin.id}\` | ${pin.tag} | ${pin.platform} ${pin.arch}${pin.requiresNvidia ? " (NVIDIA)" : ""} | ${pin.verified ? "pinned, verified" : "pinned, not yet verified"}${pin.tool === "uv" ? ` (the tool that builds the ${role} environment)` : catalog.managed.some((runtime) => runtime.name === pin.name) ? " (the engine's source; its environment is the row below)" : pin.name === "mlx-serve" ? (role === "embed" ? " (the second chat engine; the embed role stays on llama-server)" : role === "vision" ? " (the second chat engine; the vision role stays on llama-server, which loads its projector)" : role === "coding" ? " (the second chat engine; the coding role stays on llama-server until its own engine slice lands)" : " (the second chat engine, chosen by `stack.engines.chat.engine`)") : ""} |`);
+    for (const pin of pins) lines.push(`| \`${pin.id}\` | ${pin.tag} | ${pin.platform} ${pin.arch}${pin.requiresNvidia ? " (NVIDIA)" : ""} | ${pin.verified ? "pinned, verified" : "pinned, not yet verified"}${pin.tool === "uv" ? ` (the tool that builds the ${role} environment)` : catalog.managed.some((runtime) => runtime.name === pin.name) ? " (the engine's source; its environment is the row below)" : pin.name === "mlx-serve" ? (role === "embed" ? " (the second chat engine; the embed role stays on llama-server)" : role === "vision" ? " (the second chat engine; the vision role stays on llama-server, which loads its projector)" : role === "coding" ? " (the second chat engine; the coding role runs its own llama-server process, and a Splash engine kind is a later slice)" : " (the second chat engine, chosen by `stack.engines.chat.engine`)") : ""} |`);
     const modelRole = shares ?? role;
     for (const runtime of catalog.managed.filter((candidate) => candidate.roles.includes(modelRole))) lines.push(`| \`${runtime.name}\` | ${runtime.version} | ${runtime.platforms} | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |`);
     const runtimes = catalog.runtimes.filter((runtime) => runtime.roles.includes(modelRole));

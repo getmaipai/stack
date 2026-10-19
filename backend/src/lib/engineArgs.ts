@@ -133,3 +133,45 @@ export function llamaServerArgs(options: LlamaServerArgsOptions): string[] {
   if (options.embeddings) args.push("--embeddings");
   return args;
 }
+
+export interface CodingServerArgsOptions {
+  modelPath: string;
+  port: number;
+  /** The window the coding process serves, in tokens: one KV pool shared by every slot (`--kv-unified`), so one long session may use all of it. */
+  contextLength: number;
+  /** Server slots: concurrent coding requests (2 on a 128 GB Mac, 1 on a 64 GB one). */
+  slots: number;
+  /** The most tokens the model may spend thinking before it answers, at the server (`--reasoning-budget`). */
+  thinkingBudgetTokens: number;
+}
+
+/** The coding role's own llama-server launch (CODE-STACK-01 S2). Not the
+ * chat launch: thinking is ON (the model reasons by default; a request's
+ * `chat_template_kwargs` may still turn it off) under a server-side token
+ * budget, the cache is q8_0 on every platform, the window is one shared
+ * KV pool, and the process never reaches the network (`--offline`; the
+ * build has no telemetry or update check of its own). Flag spellings are
+ * those of llama-server b10797 `--help`. `--cache-reuse` is left out on
+ * purpose: its KV shifting is not measured on this model, and the prompt
+ * cache and context checkpoints stay at the engine's defaults. */
+export function codingServerArgs(options: CodingServerArgsOptions): string[] {
+  const ubatch = Math.min(1024, options.contextLength);
+  return [
+    "--model", options.modelPath,
+    "--port", String(options.port),
+    "--host", "127.0.0.1",
+    "-c", String(options.contextLength),
+    "-fa", "on",
+    "-ngl", "all",
+    "--reasoning", "on",
+    "--reasoning-budget", String(options.thinkingBudgetTokens),
+    "-ub", String(ubatch),
+    "--no-webui",
+    "--metrics",
+    "--jinja",
+    "--parallel", String(options.slots),
+    "--kv-unified",
+    "-ctk", "q8_0", "-ctv", "q8_0",
+    "--offline",
+  ];
+}

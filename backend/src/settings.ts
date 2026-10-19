@@ -9,7 +9,7 @@ import { eq, like } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { meta } from "@/db/schema";
-import { defaultModelBudgetBytes, setGovernorMemorySettings } from "@/lib/governor";
+import { defaultModelBudgetBytes, setGovernorMemorySettings, setIdleTtlSeconds } from "@/lib/governor";
 import { setDownloadCapMbps } from "@/lib/download";
 import { StackSetting } from "@maipai/spec/stack/ts/stack-setting.js";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
@@ -29,6 +29,7 @@ export const SETTING_SECTIONS = [
   { id: "engines.chat", label: "Chat engine" },
   { id: "engines.embed", label: "Embeddings engine" },
   { id: "engines.vision", label: "Vision engine" },
+  { id: "engines.coding", label: "Coding engine" },
   { id: "engines.stt", label: "Voice in engine" },
   { id: "engines.tts", label: "Voice out engine" },
 ] as const;
@@ -92,6 +93,12 @@ export const SETTINGS: SettingDeclaration[] = [
   { ...stack, key: "stack.engines.llama_server.cache_ram_mb", selector: "number", range: { min: 0, max: 1_048_576 }, default: 0, label: "Cache RAM", help: "Optional cache reservation in megabytes.", section: { id: "engines.llama_server", order: 40 }, level: "expert", needs_restart: true },
   { ...stack, key: "stack.engines.llama_server.flash_attention", selector: "boolean", default: true, label: "Flash attention", help: "Use the faster attention implementation when supported.", section: { id: "engines.llama_server", order: 50 }, level: "advanced", needs_restart: true },
   ...GPU_LAYER_ROLES.map(gpuLayersSetting),
+  // The coding engine (CODE-STACK-01 S2): its own llama-server process,
+  // loaded by the first coding request and unloaded when idle.
+  { ...stack, key: "stack.engines.coding.keep_warm_minutes", selector: "number", range: { min: 1, max: 1440 }, default: 15, label: "Keep coding warm", help: "Minutes the coding model stays loaded after its last request. After that it unloads and the next coding request loads it again, which takes a few seconds to a minute.", section: { id: "engines.coding", order: 10 }, level: "advanced", needs_restart: false },
+  { ...stack, key: "stack.engines.coding.thinking_budget_ceiling", selector: "number", range: { min: 0, max: 32768 }, default: 2000, label: "Most thinking per answer", help: "The most tokens the coding model may spend thinking before it answers. Uncapped thinking looped on some questions in testing. 0 turns thinking off.", section: { id: "engines.coding", order: 20 }, level: "advanced", needs_restart: true },
+  { ...stack, key: "stack.engines.coding.slots", selector: "number", range: { min: 0, max: 8 }, default: 0, label: "Coding requests at once", help: "How many coding requests the model serves at the same time. 0 picks for this computer: 2 on a 128 GB Mac, 1 on a 64 GB one.", section: { id: "engines.coding", order: 30 }, level: "advanced", needs_restart: true },
+  { ...stack, key: "stack.engines.coding.context_length", selector: "number", range: { min: 8192, max: 262144 }, default: 131072, label: "Coding window", help: "The most text, in tokens, the coding model can hold at once, shared by its requests. The Stack starts with a smaller window when memory is short.", section: { id: "engines.coding", order: 40 }, level: "expert", needs_restart: true },
   ...urlBinding("chat", 10),
   ...urlBinding("embed", 10),
   ...urlBinding("vision", 10),
@@ -261,6 +268,8 @@ export function applySettingsToRuntime(): void {
     systemSustainedPolls: Number(values["stack.memory.sustained_polls"]),
   });
   setDownloadCapMbps(Number(values["stack.runtime.download_cap_mbps"]));
+  // The coding engine idles out after its own keep-warm minutes, not the governor-wide limit (CODE-STACK-01 S2).
+  setIdleTtlSeconds("coding", Number(values["stack.engines.coding.keep_warm_minutes"]) * 60);
 }
 
 export function __resetSettingsForTests(): void {

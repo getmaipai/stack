@@ -97,7 +97,8 @@ async function serve(): Promise<void> {
   sweepImageResults();
   const idle = setInterval(() => {
     const values = settingValues();
-    void unloadIdleRoles({ onBattery: onBattery(), idleMinutes: Number(values["stack.runtime.idle_unload_minutes"] ?? 30), batteryIdleMinutes: Number(values["stack.runtime.idle_unload_on_battery_minutes"] ?? 10), keep: keepWarmEnabled() ? warmedRoles() : [] }).catch(() => {});
+    // The coding engine unloads after its own keep-warm minutes, on battery or not, in place of the runtime-wide limits (CODE-STACK-01 S2).
+    void unloadIdleRoles({ onBattery: onBattery(), idleMinutes: Number(values["stack.runtime.idle_unload_minutes"] ?? 30), batteryIdleMinutes: Number(values["stack.runtime.idle_unload_on_battery_minutes"] ?? 10), keep: keepWarmEnabled() ? warmedRoles() : [], roleIdleMinutes: { coding: Number(values["stack.engines.coding.keep_warm_minutes"] ?? 15) } }).catch(() => {});
   }, 60_000);
   (idle as unknown as { unref?: () => void }).unref?.();
   let stopping = false;

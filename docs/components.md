@@ -32,6 +32,8 @@ Installed beside the model, never selected on its own: `muse-glimmer-30b-mmproj-
 
 ## coding (Coding)
 
+Runs on its own on-demand llama-server process (not chat's), started by the first coding request and unloaded after `stack.engines.coding.keep_warm_minutes` idle (default 15); the memory governor admits it as an on-demand item that yields to a picture, video or music job and never evicts a resident model.
+
 Engines per platform:
 
 | Engine | Build | Platform | Status |
@@ -43,7 +45,7 @@ Engines per platform:
 | `llama-server-b10797-macos-arm64` | b10797 | darwin arm64 | pinned, verified |
 | `llama-server-b11476-linux-cuda-x64` | b11476 | linux x64 (NVIDIA) | pinned, not yet verified |
 | `llama-server-b10797-win-cuda-x64` | b10797 | win32 x64 (NVIDIA) | pinned, not yet verified |
-| `mlx-serve-v26.9.4-macos-arm64` | v26.9.4 | darwin arm64 | pinned, verified (the second chat engine; the coding role stays on llama-server until its own engine slice lands) |
+| `mlx-serve-v26.9.4-macos-arm64` | v26.9.4 | darwin arm64 | pinned, verified (the second chat engine; the coding role runs its own llama-server process, and a Splash engine kind is a later slice) |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|

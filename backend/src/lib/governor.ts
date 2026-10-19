@@ -43,6 +43,8 @@ export interface GovernorRequest {
   pinned?: boolean;
   keepAliveSeconds?: number;
   pid?: number | null;
+  /** A `jit` item that gives way to a generator job: while a generator waits for memory the item's unload is asked at once, and the supervisor's unload declines while the item serves a request (CODE-STACK-01 S2). */
+  yieldsToGenerators?: boolean;
 }
 
 export interface GovernorHandle {
@@ -95,6 +97,7 @@ interface LoadedInternal extends GovernorLoadedModel {
   headroomBytes: number;
   processBreaches: number;
   keepAliveSeconds: number;
+  yieldsToGenerators: boolean;
 }
 
 interface GovernorTuning {
@@ -122,6 +125,8 @@ let pressurePolls = 0;
 let memoryReadingDegraded = false;
 let lastDegradedProbeError: string | null = null;
 let runState: RunState = "running";
+/** An item's own idle limit in seconds, in place of the governor-wide one: the coding engine's keep-warm setting (CODE-STACK-01 S2). */
+const idleTtlOverrides = new Map<string, number>();
 const loaded = new Map<string, LoadedInternal>();
 type QueuedEntry = { request: GovernorRequest; settled: boolean; admitted: Promise<GovernorHandle | { refused: true; reason: string }>; resolve: (result: GovernorHandle | { refused: true; reason: string }) => void };
 const queue: QueuedEntry[] = [];
@@ -168,7 +173,7 @@ function loadedItemFor(request: GovernorRequest): LoadedInternal {
     peakBytes: peak.bytes,
     measured: peak.measured,
     lastUsedAt: nowIso(),
-    idleTtlSeconds: tuning.idleTtlSeconds,
+    idleTtlSeconds: idleTtlOverrides.get(request.id) ?? tuning.idleTtlSeconds,
     pinned: request.pinned ?? false,
     pid: request.pid ?? null,
     peakBaselineBytes: null,
@@ -177,7 +182,20 @@ function loadedItemFor(request: GovernorRequest): LoadedInternal {
     headroomBytes: request.headroomBytes ?? 0,
     processBreaches: 0,
     keepAliveSeconds: request.kind === "generator" ? 0 : request.keepAliveSeconds ?? 0,
+    yieldsToGenerators: request.kind === "jit" && request.yieldsToGenerators === true,
   };
+}
+
+/** Sets (or, with null, clears) one item's own idle limit. The item is evicted exactly `seconds` after its last touch (the poll checks every `pollMs`), counted from the last request's end. It applies to the item already loaded and to the next admission. */
+export function setIdleTtlSeconds(id: string, seconds: number | null): void {
+  if (seconds === null) idleTtlOverrides.delete(id); else idleTtlOverrides.set(id, Math.max(1, Math.floor(seconds)));
+  const item = loaded.get(id);
+  if (item) item.idleTtlSeconds = idleTtlOverrides.get(id) ?? tuning.idleTtlSeconds;
+}
+
+/** What a new admission could use right now without evicting anything: the model budget less what is loaded, and the free memory less the tier's working margin; whichever is smaller. */
+export function admissionRoomBytes(): number {
+  return Math.max(0, Math.min(effectiveCapBytes() - loadedBytes(), freeMemoryBytes - workingMargin()));
 }
 
 export function peakFor(request: GovernorRequest): { bytes: number; measured: boolean } {
@@ -232,6 +250,13 @@ function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
   if (generatorBusy) return false;
   const cap = effectiveCapBytes();
   return loadedBytes() + peakBytes <= cap && freeMemoryBytes - peakBytes >= workingMargin();
+}
+
+/** Whether the request would be admitted if `freedBytes` of loaded jit memory were gone. The memory watchdog's gate is not asked: it reads real memory, which the item to be evicted still holds. */
+function wouldAdmitAfterFreeing(request: GovernorRequest, peakBytes: number, freedBytes: number): boolean {
+  if (memoryReadingDegraded || pressure !== "normal") return false;
+  if (request.kind === "generator" && [...loaded.values()].some((item) => item.kind === "generator")) return false;
+  return loadedBytes() - freedBytes + peakBytes <= effectiveCapBytes() && freeMemoryBytes + freedBytes - peakBytes >= workingMargin();
 }
 
 export async function admit(request: GovernorRequest): Promise<GovernorHandle | { queued: true; position: number; admitted: Promise<GovernorHandle | { refused: true; reason: string }> } | { refused: true; reason: string }> {
@@ -445,7 +470,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
           item.processBreaches = 0;
         }
       }
-      const idleLimit = (item.idleTtlSeconds + item.keepAliveSeconds) * 1000;
+      const idleLimit = ((idleTtlOverrides.get(item.id) ?? item.idleTtlSeconds) + item.keepAliveSeconds) * 1000;
       const idle = now - new Date(item.lastUsedAt).getTime() >= idleLimit;
       if (item.kind === "generator" && pressure === "critical") {
         await options.abort?.(item.id);
@@ -469,6 +494,31 @@ export function startGovernor(options: StartGovernorOptions): () => void {
       }
     }
     if (memoryReadingDegraded) return;
+    // A generator job waiting for memory asks the idle coding engine to go
+    // when that would make room (CODE-STACK-01 S2). The supervisor's unload
+    // declines while a coding request is in flight, so a busy engine makes
+    // the job wait; it is asked again on the next poll. Residents are never
+    // asked: only items that declared `yieldsToGenerators` are.
+    if (options.unload && queue.length > 0) {
+      const head = queue.find((entry) => !entry.settled);
+      if (head && head.request.kind === "generator") {
+        const yielding = [...loaded.values()].filter((item) => item.kind === "jit" && item.yieldsToGenerators && !item.evicting && !item.pinned);
+        const headPeak = peakFor(head.request).bytes;
+        if (yielding.length > 0 && !canAdmit(head.request, headPeak) && wouldAdmitAfterFreeing(head.request, headPeak, yielding.reduce((sum, item) => sum + item.peakBytes, 0))) {
+          const unload = options.unload;
+          for (const item of yielding) {
+            item.evicting = true;
+            void (async () => {
+              let unloaded: boolean | void = undefined;
+              try { unloaded = await unload(item.id); } catch { unloaded = false; }
+              if (unloaded === false) { item.evicting = false; return; }
+              decide("Unloaded", "A picture, video or music job was waiting and the model was idle.", item.id);
+              if (loaded.get(item.id) === item) loaded.delete(item.id);
+            })();
+          }
+        }
+      }
+    }
     // Every poll tries the queue head, not only on a pressure or floor edge:
     // a request can be queued by the working margin alone (free dipped under
     // peak + margin while an engine loaded) with neither edge ever firing.
@@ -504,6 +554,7 @@ export function __resetGovernorForTests(): void {
   metalCapBytes = null;
   admissionGate = null;
   loaded.clear();
+  idleTtlOverrides.clear();
   queue.length = 0;
   refusalCounts.clear();
   decisions.length = 0;
