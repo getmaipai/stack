@@ -2696,12 +2696,15 @@ Splash (`tests/helpers/fake-splash.ts`, started through a fake bundled `python3`
 the offline switches, the renamed model, the pause and stop of the whole tree, the stop of a started-but-wrong engine with no orphan, the
 fallback warning, the governor admission by the estimate.
 
-**Still owed.** S4 (remove a whole engine build). The engine contract suite against Splash (ENGINE-SPLASH-01: tool turns, streaming shapes,
-thinking blocks, cancellation reaching the engine, timing fields) and the Splash row of `ENGINE_CODING_WIRES` becoming a contract result. A scratch-Stack
-run on a real Splash (below). Client compatibility checks (real Claude Code, OpenCode). Home H1 (Settings install and remove for the Splash engine
-and the coding model together, calling `POST /stack/v1/engines/splash/install`) and H2 (push the settings). The privacy page row for the
-install-time downloads (CODE-PRIVACY-01: the Splash archive from github.com, the draft from Hugging Face through the Stack's downloader).
-A staged Splash update through `stagingPin` (the install route's tag pattern). `docs/BACKLOG.md` in the home repo records S5a as landed when the coordinator lands it.
+**Still owed.** S4 (remove a whole engine build). The real Splash engine contract suite (ENGINE-SPLASH-01: tool turns, timing fields, and the
+remaining real-engine checks) and the Splash row of `ENGINE_CODING_WIRES` becoming a contract result. The Stack-side scripted contract in
+`tests/splashContract.test.ts` now exercises scripted JSON and streaming responses for chat completions, Messages, count_tokens and Responses,
+and verifies the served-name rename that avoids Splash's unknown-model 404 and the configured 20 s pause bound; `tests/splashTree.test.ts`
+continues to cover real supervisor startup, readiness, pause/resume and fallback. These tests do not replace the real Splash run below. Client
+compatibility checks (real Claude Code, OpenCode). Home H1 (Settings install and remove for the Splash engine and the coding model together,
+calling `POST /stack/v1/engines/splash/install`) and H2 (push the settings). The privacy page row for the install-time downloads
+(CODE-PRIVACY-01: the Splash archive from github.com, the draft from Hugging Face through the Stack's downloader). `docs/BACKLOG.md` in the home
+repo records S5a as landed when the coordinator lands it.
 
 **Only a real scratch-Stack run on Splash can settle.** That `--announce-served-name`, `--max-context 131072` and `--idle-release off` are accepted
 by 1.3.2 as read from its option parser (the one real test did not pass them); that the real Splash answers the Stack's own probe, sampling fields

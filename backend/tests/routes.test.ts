@@ -3,6 +3,7 @@
 // nothing needs a key because nothing but loopback is listening.
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import * as fs from "node:fs";
+import { join } from "node:path";
 import { app } from "@/app";
 import { serveOptions } from "@/daemon";
 import { __resetHealthForTests, raise } from "@/lib/health";
@@ -155,10 +156,22 @@ test("the engine routes start, stop and restart the chat role", async () => {
   expect((await app.request("/stack/v1/engines/nope/start", { method: "POST" })).status).toBe(404);
 });
 
-test("a stopped role's current build can be removed; a rollback to a tag that is not installed is refused; a staged build needs a full pin", async () => {
-  const { mkdirSync, rmSync } = await import("node:fs");
+test("a stopped role's current build can be removed; a rollback to a tag that is not installed is refused; staging accepts Catalog version tags", async () => {
+  const { mkdirSync, rmSync, writeFileSync } = await import("node:fs");
+  const { createHash } = await import("node:crypto");
+  const { mkdtempSync, readFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
   const { engineTagRoot } = await import("@/lib/store/layout");
   const { swapEngine } = await import("@/updates/engines");
+  const scratch = mkdtempSync(join(tmpdir(), "stack-stage-route-"));
+  const bundle = join(scratch, "bundle"); mkdirSync(bundle);
+  writeFileSync(join(bundle, "llama-server"), "#!/bin/sh\necho staged\n");
+  const archivePath = join(scratch, "archive.tar.gz");
+  const tar = Bun.spawnSync(["tar", "-czf", archivePath, "-C", scratch, "bundle"]);
+  expect(tar.exitCode).toBe(0);
+  const archive = readFileSync(archivePath); const archiveHash = createHash("sha256").update(archive).digest("hex");
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = Object.assign(async () => new Response(archive), { preconnect: originalFetch.preconnect });
   const root = engineTagRoot("llama-server", "b1").replace(/\/b1$/, "");
   try {
     mkdirSync(engineTagRoot("llama-server", "b1"), { recursive: true });
@@ -166,14 +179,37 @@ test("a stopped role's current build can be removed; a rollback to a tag that is
     writeFileSync(join(engineTagRoot("llama-server", "b1"), ".engine-ready"), "now");
     await swapEngine("llama-server", "b1");
     expect((await app.request("/stack/v1/updates/engines/llama-server/rollback", json({ tag: "b9" }))).status).toBe(400);
-    expect((await app.request("/stack/v1/engines/llama-server/install", json({ tag: "b2", url: "https://github.com/x/y.tar.gz" }))).status).toBe(400);
+    const stagedUrl = "https://example.test/engine.tar.gz";
+    const invalid = await app.request("/stack/v1/engines/llama-server/install", json({ tag: "latest", url: stagedUrl, sha256: archiveHash, size: archive.length }));
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toMatchObject({ error: "Invalid input" });
+    const versionStage = await app.request("/stack/v1/engines/llama-server/install", json({ tag: "1.3.2", url: stagedUrl, sha256: archiveHash, size: archive.length }));
+    expect(versionStage.status).toBe(202);
+    const versionJob = await versionStage.json() as { job: string };
+    const waitForJob = async (id: string) => {
+      const end = Date.now() + 3_000;
+      while (Date.now() < end) {
+        const current = await app.request(`/stack/v1/jobs/${id}`);
+        const job = (await current.json() as { job: { state: string; result?: { ok: boolean }; reason?: string } }).job;
+        if (job.state === "done" || job.state === "failed") return job;
+        await Bun.sleep(10);
+      }
+      throw new Error(`The engine stage job ${id} did not finish.`);
+    };
+    expect(await waitForJob(versionJob.job)).toMatchObject({ state: "done", result: { engine: "llama-server-1.3.2" } });
+    expect(versionStage.status).toBe(202);
+    const buildStage = await app.request("/stack/v1/engines/llama-server/install", json({ tag: "b10797", url: stagedUrl, sha256: archiveHash, size: archive.length }));
+    expect(buildStage.status).toBe(202);
+    const buildJob = await buildStage.json() as { job: string; engine: string; staged: boolean };
+    expect(buildJob).toMatchObject({ engine: "llama-server-b10797", staged: true });
+    expect(await waitForJob(buildJob.job)).toMatchObject({ state: "done", result: { engine: "llama-server-b10797" } });
     // A tag already on disk with another checksum is never re-described.
     const { writeEngineManifest } = await import("@/lib/store/manifests");
     writeEngineManifest({ kind: "engine", name: "llama-server", tag: "b1", assetUrl: "https://github.com/x/b1.tar.gz", sizeBytes: 1, sha256: "a".repeat(64), extractedAt: new Date().toISOString(), blobs: [] });
     expect((await app.request("/stack/v1/engines/llama-server/install", json({ tag: "b1", url: "https://github.com/x/b1.tar.gz", sha256: "b".repeat(64), size: 1 }))).status).toBe(409);
     // With its role stopped, the current build may be removed.
     expect((await app.request("/stack/v1/engines/llama-server/builds/b1", { method: "DELETE" })).status).toBe(200);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally { globalThis.fetch = originalFetch; rmSync(root, { recursive: true, force: true }); rmSync(scratch, { recursive: true, force: true }); }
 });
 
 test("the model routes refuse a pull without full provenance and list records with their state", async () => {

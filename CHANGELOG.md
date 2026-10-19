@@ -8,6 +8,10 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ## [Unreleased]
 
+### Fixed
+
+- Engine builds staged by URL accept the Catalog engine-index tag format, including Splash `1.3.2` and llama-server `b10797`; malformed tags are rejected before a download. The schema reuses the Catalog's one tag validator. Added a Stack-side Splash coding-wire contract for JSON and streaming shapes, model-name rewriting and the 20-second pause limit (CODE-STACK-01 S5a).
+
 ### Changed
 
 - Coding runs on Splash, about four times faster, on an Apple silicon Mac with an M3 chip or newer, 64 GB of memory or more and macOS 26.4 or later; every other computer, and any Mac where Splash does not start, keeps llama-server. Splash is installed from the pinned release (`POST /stack/v1/engines/splash/install`), its draft model (3.8 GB) installs and is removed with the coding model, the Stack lays Splash's model cache out itself by hardlink so Splash downloads nothing and runs offline, and the whole Splash process tree pauses for chat, stops cleanly and leaves nothing behind. New settings `stack.engines.coding.engine` (auto, splash or llama-server) and `stack.engines.coding.splash_cache_gb` (8); `GET /stack/v1/roles` says which engine serves coding and why (`coding.engine`, `engine_requested`, `engine_reason`); a Splash that fails to start falls back to llama-server for the same request with a repair item. The update check now accepts version tags such as `1.3.2` in the Catalog's engine index (it accepted build numbers only, which would have rejected the whole index once Splash was in it) (CODE-STACK-01 S5a).

@@ -26,6 +26,7 @@ import { createJob, finishJob, getJob, jobSignal, updateJob } from "@/lib/jobs";
 import { emit } from "@/lib/events";
 import { requestEngineRestart, selfHealSummary } from "@/lib/selfHeal";
 import { ROLE_IDS } from "@/roles";
+import { EngineIndexEntrySchema } from "@/updates/catalog";
 
 const EngineSchema = z.object({
   id: z.string(), name: z.string(), label: z.string(), platform: z.string(), arch: z.string(), verified: z.boolean(),
@@ -39,7 +40,7 @@ const listRoute = createRoute({ method: "get", path: "/", tags: ["Engines"], sum
 // With tag, url, sha256 and size, that archive is staged beside the
 // current build under the tag and not activated: the first half of an
 // update, or a rollback target; PUT /{name}/current does the swap.
-const StageSchema = z.object({ tag: z.string().regex(/^b[0-9]+(-[0-9a-z-]+)?$/), url: z.string().url(), sha256: z.string().length(64), size: z.number().int().nonnegative() });
+const StageSchema = z.object({ tag: EngineIndexEntrySchema.shape.tag, url: z.string().url(), sha256: z.string().length(64), size: z.number().int().nonnegative() });
 const installRoute = createRoute({ method: "post", path: "/{name}/install", tags: ["Engines"], summary: "Install this machine's pinned build, or stage a build by url and checksum (progress on the event feed)", request: { params: nameParam, body: { content: { "application/json": { schema: z.union([z.object({}).strict(), StageSchema]) } } } }, responses: { 202: { content: { "application/json": { schema: z.object({ job: z.string(), engine: z.string(), staged: z.boolean() }) } }, description: "The download job." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "No pin for that engine on this machine." }, 409: { content: { "application/json": { schema: ErrorSchema } }, description: "The tag is already installed with a different checksum." } } });
 const controlRoute = (action: "start" | "stop" | "restart") => createRoute({ method: "post", path: `/{name}/${action}`, tags: ["Engines"], summary: `${action[0]!.toUpperCase()}${action.slice(1)} an engine`, request: { params: nameParam }, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.boolean(), reason: z.string().optional() }) } }, description: "The outcome." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown engine." } } });
 const currentRoute = createRoute({ method: "put", path: "/{name}/current", tags: ["Engines"], summary: "Select an installed build (drain, swap, post-load check, rollback on failure)", request: { params: nameParam, body: { content: { "application/json": { schema: z.object({ tag: z.string() }) } } } }, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.literal(true), tag: z.string() }) } }, description: "The build is current." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "The tag is not installed or the swap failed and was rolled back." } } });

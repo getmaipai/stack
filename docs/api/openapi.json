@@ -5868,7 +5868,7 @@
                     "properties": {
                       "tag": {
                         "type": "string",
-                        "pattern": "^b[0-9]+(-[0-9a-z-]+)?$"
+                        "pattern": "^(b[0-9]+|v?[0-9]+(\\.[0-9]+)*)$"
                       },
                       "url": {
                         "type": "string",

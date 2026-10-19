@@ -54,7 +54,10 @@ Bun.serve({
       // Splash answers 404 to a model name it does not serve.
       if (body.model !== undefined && body.model !== served) return Response.json({ error: { message: "model not found", code: "model_not_found" } }, { status: 404 });
       if (url.pathname === "/v1/chat/completions") return Response.json({ id: "chatcmpl-1", object: "chat.completion", model: served, choices: [{ index: 0, message: { role: "assistant", content: "OK" }, finish_reason: "stop" }], usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 } });
-      return Response.json({ ok: true });
+      if (url.pathname === "/v1/messages") return Response.json({ id: "msg_fake", type: "message", role: "assistant", model: served, content: [{ type: "text", text: "Splash 1.3.2 reply." }], stop_reason: "end_turn", usage: { input_tokens: 3, output_tokens: 4 } });
+      if (url.pathname === "/v1/messages/count_tokens") return Response.json({ input_tokens: 3 });
+      if (url.pathname === "/v1/responses") return Response.json({ id: "resp_fake", object: "response", status: "completed", model: served, output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text: "Splash 1.3.2 reply." }] }], usage: { input_tokens: 3, output_tokens: 4 } });
+      return new Response("not found", { status: 404 });
     }
     return new Response("not found", { status: 404 });
   },
