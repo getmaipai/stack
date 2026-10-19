@@ -17,9 +17,12 @@ const CodingStatusSchema = z.object({
   state: z.enum(["notInstalled", "installed", "loading", "ready", "busy", "offline"]).openapi({ description: "notInstalled: no coding model on disk. installed: on disk and unloaded (a coding request loads it). loading: starting. ready: loaded and free. busy: serving a request. offline: it failed to start or exited." }),
   keep_warm_minutes: z.number().int().openapi({ description: "Minutes the engine stays loaded after its last request (stack.engines.coding.keep_warm_minutes)." }),
   idle_seconds: z.number().int().nullable().openapi({ description: "Seconds since the last request ended while loaded and free; null when unloaded or busy." }),
-  slots: z.number().int().nullable().openapi({ description: "Server slots (concurrent requests); null when not installed." }),
+  slots: z.number().int().nullable().openapi({ description: "Server slots (concurrent requests); null when not installed. On Splash this is the number of requests expected to run at once; Splash queues the rest itself." }),
   slots_busy: z.number().int().openapi({ description: "Requests in flight, at most slots." }),
   cannot_fit_reason: z.string().nullable().openapi({ description: "Why the model cannot load now (it would not fit in memory beside the always-on models), with what to do; null when nothing is known to stop it." }),
+  engine: z.enum(["llama-server", "splash"]).openapi({ description: "The engine serving coding: the running process's while one runs, otherwise the one the next start chooses. splash is the faster engine on an Apple silicon Mac with an M3 chip or newer, 64 GB of memory or more and macOS 26.4 or later; llama-server everywhere else and when Splash did not start." }),
+  engine_requested: z.enum(["auto", "llama-server", "splash"]).openapi({ description: "What stack.engines.coding.engine asks for." }),
+  engine_reason: z.string().nullable().openapi({ description: "Why the faster engine is not in use though it was wanted (not installed, its draft missing, did not start, or forced off), with what to do; null when nothing is amiss, including on a computer Splash never runs on." }),
 });
 const RoleViewSchema = RoleRecordSchema.extend({ coding: CodingStatusSchema.optional(), pending_install: PendingInstallSchema.nullable(), check: CheckSchema, identity: IdentitySchema, ...ChatRoleContextSchema.shape, models: z.array(z.object({ id: z.string(), name: z.string() })).optional(), picture_tokens_max: z.number().int().nullable().optional(), reads_pictures: z.boolean().optional(), tts: z.object({ engine: z.string(), requested: z.string(), tags: z.array(z.string()), fallback_reason: z.string().nullable() }).optional() });
 

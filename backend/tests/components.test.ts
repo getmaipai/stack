@@ -334,7 +334,8 @@ test("the coding model is a removable component on p128 and p64 (not required), 
     expect(coding).toBeDefined();
     expect(coding.requirement).toBe("optional");
     expect(coding.plan_need).toBe("recommended");
-    expect(coding.full_bytes).toBe(16_464_440_224);
+    // On Apple silicon the unit carries Splash's 3.8 GB draft beside the model (S5a); elsewhere the model alone.
+    expect(coding.full_bytes).toBe(process.platform === "darwin" && process.arch === "arm64" ? 16_464_440_224 + 3_848_817_896 : 16_464_440_224);
     expect(coding.install_block).toBeNull();
     // The chat models are still required; the coding model is the only coding row.
     expect(list.components.find((c) => c.id === "muse-glimmer-30b-q4-k-xl")!.requirement).toBe("required");

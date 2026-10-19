@@ -285,10 +285,11 @@ test("a model larger than the model budget is reported on the role before any re
 });
 
 test("the role list reports coding honestly and never starts it; the readiness check never starts it either", async () => {
-  const body = await (await app.request("/stack/v1/roles")).json() as { roles: Array<{ id: string; state: { state: string }; coding?: { state: string; keep_warm_minutes: number; idle_seconds: number | null; slots: number | null; slots_busy: number; cannot_fit_reason: string | null } }> };
+  const body = await (await app.request("/stack/v1/roles")).json() as { roles: Array<{ id: string; state: { state: string }; coding?: { state: string; keep_warm_minutes: number; idle_seconds: number | null; slots: number | null; slots_busy: number; cannot_fit_reason: string | null; engine: string; engine_requested: string; engine_reason: string | null } }> };
   const coding = body.roles.find((role) => role.id === "coding")!;
   expect(coding.state.state).toBe("installed");
-  expect(coding.coding).toEqual({ state: "installed", keep_warm_minutes: 15, idle_seconds: null, slots: 2, slots_busy: 0, cannot_fit_reason: null });
+  // The engine fields (S5a): llama-server here, because no hardware facts were given and Splash is not installed; nothing is amiss, so no reason.
+  expect(coding.coding).toEqual({ state: "installed", keep_warm_minutes: 15, idle_seconds: null, slots: 2, slots_busy: 0, cannot_fit_reason: null, engine: "llama-server", engine_requested: "auto", engine_reason: null });
   expect(body.roles.filter((role) => role.id !== "coding").every((role) => role.coding === undefined)).toBe(true);
   const run = await runCheck();
   expect(started.includes("coding")).toBe(false);

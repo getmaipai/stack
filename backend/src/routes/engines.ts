@@ -74,7 +74,9 @@ enginesRoutes.openapi(listRoute, async (c) => {
     // (uv) or a source pin (ComfyUI), and never a chat engine that is
     // installed but not running.
     const isChat = engineRole(pin.name) === "chat";
-    const runsTheRole = isChat ? runningEngine("chat") === pin.name : !pin.tool || pin.tool === "llama-server";
+    // The coding role runs on llama-server or Splash, chosen by stack.engines.coding.engine: only the build whose process serves it is compared.
+    const isCoding = engineRole(pin.name) === "coding";
+    const runsTheRole = isChat ? runningEngine("chat") === pin.name : isCoding ? runningEngine("coding") === pin.name : !pin.tool || pin.tool === "llama-server";
     const running = runsTheRole ? status.identity?.build ?? null : null;
     const version = deriveEngineVersionState({ running, currentTag: currentEngine(pin.name), newestTag: selected?.id === pin.id ? pin.tag : null, needsRestart: isChat && pin.name === chosenChatEngine && needsRestart });
     return { id: pin.id, name: pin.name, label: pin.label, platform: pin.platform, arch: pin.arch, verified: pin.verified, installed: existsSync(join(engineDir(pin), ENGINE_READY_MARKER)), matchesThisMachine: selected?.id === pin.id, ...version, directory: engineDir(pin), roleState: status.state, roleReason: status.reason };
@@ -252,6 +254,8 @@ enginesRoutes.openapi(currentRoute, async (c) => {
     // A chat engine the setting has not chosen swaps its link only: no
     // process to drain, and nothing to restart that would prove the build.
     if (unchosenChatEngine(name)) await swapEngine(name, tag);
+    // The coding engine is on demand: it is drained, and the next coding request starts the new build (a build that does not start falls back to llama-server) rather than loading 20 GB here.
+    else if (role === "coding") await swapEngine(name, tag, { drain: () => stopRole(role, "Draining for an engine change.") });
     else await swapEngine(name, tag, { drain: () => stopRole(role, "Draining for an engine change."), postLoadCheck: async () => { await restartRole(role); await getProcess(role); return true; } });
     return c.json({ ok: true as const, tag }, 200);
   } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 400); }

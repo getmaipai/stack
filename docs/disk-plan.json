@@ -16,18 +16,18 @@
     "p32.needed_bytes": 28503105738,
     "p32.home_required_free_bytes": 3176323277,
     "p32.ai_required_free_bytes": 30604414790,
-    "p64.required_free_bytes": 82918044682,
+    "p64.required_free_bytes": 87536626157,
     "p64.minimum_required_free_bytes": 34279601493,
-    "p64.everything_required_free_bytes": 124645290487,
-    "p64.needed_bytes": 69641637206,
+    "p64.everything_required_free_bytes": 129263871963,
+    "p64.needed_bytes": 73490455102,
     "p64.home_required_free_bytes": 3176323277,
-    "p64.ai_required_free_bytes": 79741721405,
-    "p128.required_free_bytes": 173288787597,
+    "p64.ai_required_free_bytes": 84360302880,
+    "p128.required_free_bytes": 177907369072,
     "p128.minimum_required_free_bytes": 34279601493,
-    "p128.everything_required_free_bytes": 283476040235,
-    "p128.needed_bytes": 145077053412,
+    "p128.everything_required_free_bytes": 288094621710,
+    "p128.needed_bytes": 148925871308,
     "p128.home_required_free_bytes": 3176323277,
-    "p128.ai_required_free_bytes": 170112464320
+    "p128.ai_required_free_bytes": 174731045795
   },
   "tiers": {
     "p16": {
@@ -584,15 +584,16 @@
         {
           "id": "coding",
           "label": "Coding AI (Qwen3.8 27B)",
-          "note": "Writes code for the coding tools you connect. It loads only while someone is coding. Skip it if your household does not want coding.",
+          "note": "Writes code for the coding tools you connect. It loads only while someone is coding. On a Mac with an M3 chip or newer it includes a 3.8 GB helper that makes it about four times faster. Skip it if your household does not want coding.",
           "kind": "model",
           "need": "recommended",
           "selectable": true,
-          "download_bytes": 16464440224,
-          "installed_bytes": 16464440224,
+          "download_bytes": 20313258120,
+          "installed_bytes": 20313258120,
           "peak_temp_bytes": 0,
           "model_ids": [
-            "qwen3.8-27b-ud-q4-k-m"
+            "qwen3.8-27b-ud-q4-k-m",
+            "qwen3.8-27b-dflash2-draft"
           ],
           "engines": [],
           "installed": false,
@@ -882,11 +883,11 @@
         }
       ],
       "default": {
-        "download_bytes": 64218044297,
-        "installed_bytes": 66382037378,
+        "download_bytes": 68066862193,
+        "installed_bytes": 70230855274,
         "peak_temp_bytes": 3259599828,
-        "needed_bytes": 69641637206,
-        "required_free_bytes": 82918044682
+        "needed_bytes": 73490455102,
+        "required_free_bytes": 87536626157
       },
       "minimum": {
         "download_bytes": 25529840047,
@@ -896,11 +897,11 @@
         "required_free_bytes": 34279601493
       },
       "everything": {
-        "download_bytes": 96799722167,
-        "installed_bytes": 99759950655,
+        "download_bytes": 100648540063,
+        "installed_bytes": 103608768551,
         "peak_temp_bytes": 4933349701,
-        "needed_bytes": 104693300356,
-        "required_free_bytes": 124645290487
+        "needed_bytes": 108542118252,
+        "required_free_bytes": 129263871963
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -1014,15 +1015,16 @@
         {
           "id": "coding",
           "label": "Coding AI (Qwen3.8 27B)",
-          "note": "Writes code for the coding tools you connect. It loads only while someone is coding. Skip it if your household does not want coding.",
+          "note": "Writes code for the coding tools you connect. It loads only while someone is coding. On a Mac with an M3 chip or newer it includes a 3.8 GB helper that makes it about four times faster. Skip it if your household does not want coding.",
           "kind": "model",
           "need": "recommended",
           "selectable": true,
-          "download_bytes": 16464440224,
-          "installed_bytes": 16464440224,
+          "download_bytes": 20313258120,
+          "installed_bytes": 20313258120,
           "peak_temp_bytes": 0,
           "model_ids": [
-            "qwen3.8-27b-ud-q4-k-m"
+            "qwen3.8-27b-ud-q4-k-m",
+            "qwen3.8-27b-dflash2-draft"
           ],
           "engines": [],
           "installed": false,
@@ -1405,11 +1407,11 @@
         }
       ],
       "default": {
-        "download_bytes": 138550137367,
-        "installed_bytes": 141058670921,
+        "download_bytes": 142398955263,
+        "installed_bytes": 144907488817,
         "peak_temp_bytes": 4018382491,
-        "needed_bytes": 145077053412,
-        "required_free_bytes": 173288787597
+        "needed_bytes": 148925871308,
+        "required_free_bytes": 177907369072
       },
       "minimum": {
         "download_bytes": 25529840047,
@@ -1419,11 +1421,11 @@
         "required_free_bytes": 34279601493
       },
       "everything": {
-        "download_bytes": 228181820931,
-        "installed_bytes": 231486589892,
+        "download_bytes": 232030638827,
+        "installed_bytes": 235335407788,
         "peak_temp_bytes": 5692132364,
-        "needed_bytes": 237178722256,
-        "required_free_bytes": 283476040235
+        "needed_bytes": 241027540152,
+        "required_free_bytes": 288094621710
       },
       "measured_on": "2026-10-17",
       "default_selected": [

@@ -178,3 +178,48 @@ export function codingServerArgs(options: CodingServerArgsOptions): string[] {
     "--offline",
   ];
 }
+
+export interface SplashArgsOptions {
+  /** `<owner>/<repo>:<variant>` of the target in Splash's hub cache. */
+  model: string;
+  /** The target's commit: a 40-hex revision needs no `refs/` entry and no Hub request. */
+  revision: string;
+  port: number;
+  /** The name the engine serves and reports: the pin's id (`--served-model-name` with `--announce-served-name`). */
+  servedModelName: string;
+  /** Thinking tokens a request that sets none may spend, at the server (`--thinking-token-budget`): the ceiling setting. */
+  thinkingBudgetTokens: number;
+  /** The coding window (`--max-context` can only lower Splash's own limit). */
+  contextLength: number;
+  /** Disk Splash may use for its temporary SSD cache, in whole GB; 0 turns the cache off (`--max-cache-disk 0`). */
+  cacheGb: number;
+}
+
+/** The arguments after `install/launcher.py` for the coding role on Splash (CODE-STACK-01 S5a). Flag spellings are Splash 1.3.2's
+ * `serve --help`. `--offline` (with HF_HUB_OFFLINE=1 in the environment) means no Hugging Face request, the model and its draft
+ * being the files the Stack laid out; `--language-only` skips the vision encoder; thinking is capped at the server the way
+ * llama-server's `--reasoning-budget` caps it (reasoning effort medium and 2,000 tokens scored 10 of 10 on the Studio bench;
+ * uncapped thinking lost 3 of 10); `--idle-release off` leaves keep-warm to the Stack; the SSD cache is bounded (Splash's default is up to 32 GiB of temporary files) and not persistent;
+ * loopback only, so no `--api-key`; no chat page. The Neural Engine stays on (the benchmark's setting), and `--draft-model` is
+ * left to Splash's own pairing for the Qwen3.8-27B family (`incoai/Qwen3.8-27B-DFlash2`), which is the draft the Stack pinned
+ * and laid out, and the only one in its cache. */
+export function splashArgs(options: SplashArgsOptions): string[] {
+  return [
+    "serve",
+    "--model", options.model,
+    "--revision", options.revision,
+    "--offline",
+    "--host", "127.0.0.1",
+    "--port", String(options.port),
+    "--language-only",
+    "--served-model-name", options.servedModelName,
+    "--announce-served-name",
+    "--default-reasoning-effort", "medium",
+    "--thinking-token-budget", String(options.thinkingBudgetTokens),
+    "--max-context", String(options.contextLength),
+    "--max-cache-disk", options.cacheGb > 0 ? `${options.cacheGb}G` : "0",
+    // Splash frees its weights after 10 idle minutes by default; the Stack owns keep-warm (stack.engines.coding.keep_warm_minutes) and unloads the whole engine itself.
+    "--idle-release", "off",
+    "--no-webui",
+  ];
+}

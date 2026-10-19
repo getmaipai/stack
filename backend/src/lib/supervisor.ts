@@ -11,11 +11,11 @@ import { createServer } from "node:net";
 import { dirname, join } from "node:path";
 import { withTimeout } from "@maipai/core/src/withTimeout";
 import { isCompiledBinary } from "@/lib/paths";
-import { ENGINE_READY_MARKER, installedEnginePin, selectEngineBinary, type ChatEngine, type EngineBinaryPin } from "@/lib/engineCatalog";
+import { ENGINE_READY_MARKER, installedEnginePin, selectEngineBinary, type CodingEngine, type EngineBinaryPin } from "@/lib/engineCatalog";
 import { managedEnv } from "@/lib/uvEnvironment";
-import { codingServerArgs, defaultKvCacheType, llamaServerArgs, mlxKvQuantFor, mlxServeArgs, type KvCacheType } from "@/lib/engineArgs";
+import { codingServerArgs, defaultKvCacheType, llamaServerArgs, mlxKvQuantFor, mlxServeArgs, splashArgs, type KvCacheType } from "@/lib/engineArgs";
 import { currentEngineBinary, currentEngineTag, engineBinaryPath, engineDir } from "@/lib/engineInstall";
-import { detectHardware, primaryBudgetBytes } from "@/lib/hardware";
+import { detectAppleChip, detectHardware, primaryBudgetBytes } from "@/lib/hardware";
 import { identityHeaders, modelFileName, readEngineIdentity, type EngineIdentity } from "@/lib/identity";
 import { getModel, isComponent, isModelSelectable, listModels, recordMeasuredFootprint, type ModelRecord } from "@/lib/modelStore";
 import { readFileSync } from "node:fs";
@@ -30,7 +30,10 @@ import { newLaunchKey, omlxCommand, omlxEnv, omlxInstalled, omlxSupportedHere, O
 import { OmlxEngineClient } from "@/chat/omlxClient";
 import { CHAT_ENGINE_SETTING, clearChatEngineFailures, FALLBACK_AFTER_FAILURES, markChatEngineFailed, resolveChatEngine, type ChatEngineChoice, type ChatEngineId } from "@/lib/chatEngines";
 import { clearTtsEngineFailures, markTtsEngineFailed, resolveTtsEngine, TTS_ENGINE_SETTING, TTS_ENGINES, type TtsEngineChoice, type TtsEngineId } from "@/speech/ttsEngines";
-import { STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
+import { STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
+import { clearCodingEngineFailures, codingEngineFailure, CODING_ENGINE_SETTING, markCodingEngineFailed, resolveCodingEngine, SPLASH_CACHE_GB_DEFAULT, SPLASH_CACHE_GB_SETTING, splashEnv, splashFootprintEstimateBytes, type CodingEngineChoice, type SplashFacts } from "@/lib/splash";
+import { layOutSplashCache, SplashLayoutError } from "@/lib/splashStore";
+import { TreeSnapshot, treeMemoryBytes } from "@/lib/processTree";
 import { comfyuiCommand, comfyuiEnv, comfyuiInstalled, COMFYUI_VERSION, linkCheckpoint, probeGenerator } from "@/generators/comfyui";
 import { basename } from "node:path";
 import { admissionRoomBytes, getRunState, refreshMeasuredPeak, release, setGovernorPid, setIdleTtlSeconds, startGovernor, touch as touchGovernor, withdraw as withdrawAdmission, type GovernorHandle, type GovernorTier } from "@/lib/governor";
@@ -209,6 +212,15 @@ class OpenAIEngineClient implements EngineClient {
       return response.ok;
     } catch { return false; }
   }
+}
+
+/** Splash answers 404 to a model name it does not serve, and the coding wires carry the role name (`coding`) or whatever a client sent: every request to it is renamed to the one name it serves (the pin's id, `--served-model-name`). */
+export class ServedNameClient implements EngineClient {
+  constructor(private readonly inner: EngineClient, private readonly servedName: string) {}
+  get baseUrl(): string { return this.inner.baseUrl; }
+  request(path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<{ status: number; body: unknown }> { return this.inner.request(path, { ...body, model: this.servedName }, signal); }
+  stream(path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<Response> { return this.inner.stream!(path, { ...body, model: this.servedName }, signal); }
+  health(): Promise<boolean> { return this.inner.health(); }
 }
 
 // ---- timeouts and probes --------------------------------------------------
@@ -465,7 +477,7 @@ async function acquireRequestProcess(requested: RoleId, modelId?: string): Promi
 // The build that runs is the one the store's `current` link names (the
 // swap and the rollback flip that link); before any swap it is the
 // machine's pin, which the first install activated.
-function engineInstalled(name: ChatEngine = "llama-server"): boolean {
+function engineInstalled(name: string = "llama-server"): boolean {
   const current = currentEngineBinary(name, name);
   if (current.state === "ready") return true;
   if (current.state === "unready") return false;
@@ -503,7 +515,33 @@ export function activeChatChoice(): ChatEngineChoice {
 export function chatEngine(): ChatEngineId {
   return activeChatChoice().engine;
 }
+// ---- the coding role's engine (CODE-STACK-01 S5a) --------------------------------------
+
+/** What the machine says about itself, set once at the daemon's start (and by the suite). Unset means unknown, which Splash refuses. */
+let codingMachine: Omit<SplashFacts, "tier"> | null = null;
+export function setCodingMachineFacts(facts: Omit<SplashFacts, "tier"> | null): void { codingMachine = facts; }
+/** An engine forced for the length of one start (the fallback to llama-server for the request that Splash could not serve). */
+let forcedCodingEngine: CodingEngine | null = null;
+
+/** Whether Splash's draft is installed: the pinned component record, verified and on disk. */
+function splashDraftInstalled(): boolean { return componentModel("coding", "draft") !== null; }
+function codingModelInstalled(): boolean {
+  return listModels().some((model) => model.roles.includes("coding") && !isComponent(model) && isModelSelectable(model) && !!model.modelPath);
+}
+
+/** Which engine the next coding start runs: the setting, then the machine (Apple M3 or newer, 36 GB or more, macOS 26.4 or later, the 64 and 128 GB tiers), then what is installed, then what failed to start this run. A start that fell back to llama-server for one request forces it for that start. */
+export function activeCodingChoice(): CodingEngineChoice {
+  const requested = settingValues()[CODING_ENGINE_SETTING];
+  if (forcedCodingEngine) return { engine: forcedCodingEngine, requested: requested === "splash" ? "splash" : requested === "llama-server" ? "llama-server" : "auto", reason: null };
+  const machine = codingMachine ?? { platform: process.platform, arch: process.arch, chipGeneration: null, chipName: null, memoryGb: 0, osVersion: null };
+  return resolveCodingEngine({ setting: requested, facts: { ...machine, tier: machineTier }, splashInstalled: engineInstalled("splash"), draftReady: splashDraftInstalled(), modelReady: codingModelInstalled() });
+}
+
+/** The engine the model records are chosen for: a GGUF serves both coding engines, so the role's records are not filtered by engine. */
+function recordEngineFor(role: RoleId): string | null { return role === "coding" ? null : engineForRole(role); }
+
 function engineForRole(role: RoleId): string | null {
+  if (role === "coding") return activeCodingChoice().engine;
   // The vision projector is a llama-server feature (mtmd); the MLX
   // engine choice for chat never moves it.
   if (role === "vision") return "llama-server";
@@ -576,7 +614,7 @@ export function engineInstalledFor(role: RoleId): boolean {
     return !!model && projectorFor(model) !== null && engineInstalled("llama-server");
   }
   const engine = engineForRole(role);
-  return engine === "omlx" ? chatEngineInstalled("omlx") : engineInstalled(engine === "mlx-serve" ? "mlx-serve" : "llama-server");
+  return engine === "omlx" ? chatEngineInstalled("omlx") : engineInstalled(engine === "mlx-serve" || engine === "splash" ? engine : "llama-server");
 }
 
 function initialStatus(role: RoleId): RoleStatus {
@@ -702,7 +740,7 @@ export function selectedModel(role: RoleId): ModelRecord | null {
   // A record names the engine it is for; the chat wire's chosen engine
   // decides which records can serve it (a GGUF for llama-server, an MLX
   // directory for mlx-serve), both installed side by side.
-  const engine = engineForRole(role);
+  const engine = recordEngineFor(role);
   const selectable = listModels().filter((model) => servesRole(model, role, engine));
   const preferred = preferredModels.get(role);
   const profileModel = machineTier ? PROFILE_MODEL_BINDINGS[machineTier]?.[role] : undefined;
@@ -713,14 +751,14 @@ export function selectedModel(role: RoleId): ModelRecord | null {
  * Kept beside selection so the API and dispatcher share the same
  * provenance, file and engine-compatibility rules. */
 export function selectableModels(role: RoleId): Array<{ id: string; name: string }> {
-  const engine = engineForRole(role);
+  const engine = recordEngineFor(role);
   return listModels()
     .filter((model) => servesRole(model, role, engine))
     .map(({ id }) => ({ id, name: id }));
 }
 
 function selectableModel(role: RoleId, modelId: string): ModelRecord | null {
-  const engine = engineForRole(role);
+  const engine = recordEngineFor(role);
   return listModels().find((model) => model.id === modelId && servesRole(model, role, engine)) ?? null;
 }
 
@@ -767,7 +805,7 @@ export function speechWorkerCommand(
   return [runtime.execPath, ...(viaBun ? [runtime.main] : []), ...workerArgs];
 }
 
-export interface LaunchPlan { command: string[]; engine: string; build: string; stdin: "pipe" | "ignore"; contextLength: number; slots?: number; contextScope?: "total across slots" | "per slot"; kind: "spawned" | "managed"; env?: Record<string, string>; healthPath?: string; /** A client of the engine's own (oMLX's wire differs a little from llama-server's). */ client?: (baseUrl: string) => EngineClient; /** What the engine cannot report about itself: the Stack knows both. */ identity?: { build: string; model: string }; /** A projector was loaded: the process reads pictures. */ imageInput?: boolean; /** The most tokens one picture takes in this process, when the record declares it. */ pictureTokensMax?: number | null; }
+export interface LaunchPlan { command: string[]; engine: string; build: string; stdin: "pipe" | "ignore"; contextLength: number; slots?: number; contextScope?: "total across slots" | "per slot"; kind: "spawned" | "managed"; env?: Record<string, string>; healthPath?: string; /** A client of the engine's own (oMLX's wire differs a little from llama-server's). */ client?: (baseUrl: string) => EngineClient; /** What the engine cannot report about itself: the Stack knows both. */ identity?: { build: string; model: string }; /** A projector was loaded: the process reads pictures. */ imageInput?: boolean; /** The engine is a tree of processes (Splash: the launcher that becomes the server, and the native engine under it): a pause, a stop and a memory reading reach every member. */ tree?: boolean; /** Run after the engine is healthy: proves it serves the model the Stack launched (Splash lists its served name); throws EngineUnavailableError when it does not. */ verifyServed?: (baseUrl: string) => Promise<void>; /** The most tokens one picture takes in this process, when the record declares it. */ pictureTokensMax?: number | null; }
 
 /** The refusal text when the fit plan cannot admit the minimum context:
  * what went wrong in the person's terms, then the next step (org STYLE.md,
@@ -1026,6 +1064,12 @@ export interface CodingEngineStatus {
   slots_busy: number;
   /** Why the model cannot be loaded now (the last refusal for memory, or a model larger than the model budget); null when nothing is known to stop it. */
   cannot_fit_reason: string | null;
+  /** The engine serving coding: the running process's while one runs, else the one the next start chooses. */
+  engine: CodingEngine;
+  /** What the setting asks for. */
+  engine_requested: "auto" | CodingEngine;
+  /** Why the faster engine is not in use though it was wanted (plain words); null when nothing is amiss. */
+  engine_reason: string | null;
 }
 
 export function codingEngineStatus(): CodingEngineStatus {
@@ -1047,7 +1091,16 @@ export function codingEngineStatus(): CodingEngineStatus {
     slots: running?.slots ?? (state === "notInstalled" ? null : settings.slots),
     slots_busy: running ? Math.min(running.activeRequests, running.slots ?? settings.slots) : 0,
     cannot_fit_reason: state === "installed" || state === "offline" ? codingCannotFitReason() : null,
+    ...codingEngineFields(running),
   };
+}
+
+function codingEngineFields(running: RoleProcess | null): Pick<CodingEngineStatus, "engine" | "engine_requested" | "engine_reason"> {
+  const choice = activeCodingChoice();
+  const serving = running?.engine === "splash" || running?.engine === "llama-server" ? running.engine : choice.engine;
+  // A running llama-server under a Splash choice is the fallback: say why.
+  const reason = serving === choice.engine ? choice.reason : codingEngineFailure() ? `Splash did not start (${codingEngineFailure()!.reason}), so coding is using the slower engine, llama-server.` : null;
+  return { engine: serving, engine_requested: choice.requested, engine_reason: reason };
 }
 
 /** The engine the coding role runs on, from what is configured and installed, without starting anything (S3: the wire check reads it before a request can start the engine). */
@@ -1137,6 +1190,7 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
   // A record with its own launch (vision) runs one slot, as its args say.
   const slots = declaredLaunchContext(model) !== null ? 1 : typeof config.slots === "number" && config.slots > 0 ? config.slots : 1;
   const contextLength = resolvedContextLength ?? (codingRole ? codingLaunchSettings().contextLength : null) ?? declaredLaunchContext(model) ?? (typeof config.contextLength === "number" && config.contextLength > 0 ? config.contextLength : engineForRole(role) === "omlx" ? omlxContextLength(model, config) : await contextForLaunch(model, config, slots, gpuLayersFor(role)));
+  if (codingRole && engineForRole(role) === "splash") return splashLaunchPlan(model, port, resolvedContextLength ?? codingLaunchSettings().contextLength);
   if (engineForRole(role) === "omlx") {
     // oMLX (ENGINE-MLX-01): an environment the Stack built, serving the one
     // pinned MLX directory on loopback behind a random key. Offline, with
@@ -1181,6 +1235,47 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
   const pictureTokensMax = projector?.modelPath ? declaredPictureTokensMax(model) : null;
   const args = llamaServerArgs({ modelPath: model.modelPath!, port, config, contextLength, kvCacheType: defaultKvCacheType(), gpuLayers: gpuLayersFor(role), embeddings: role === "embed", projectorPath: projector?.modelPath ?? undefined, onePictureSlot: role === "vision", imageMaxTokens: pictureTokensMax ?? undefined, chatTemplateKwargs: declaredChatTemplateKwargs(model) ?? undefined });
   return { command: [binary, ...args], engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength, slots, contextScope: "per slot", kind: "spawned", imageInput: !!projector?.modelPath, pictureTokensMax };
+}
+
+/** The coding role on Splash (CODE-STACK-01 S5a): the bundled Python runs the launcher, which becomes the server and starts the native engine under it. The Stack lays out the hub cache first (hardlinks of its own pinned files), so the engine starts offline and downloads nothing; a layout it cannot make is a plain-words refusal that sends the request to llama-server. */
+export function splashLaunchPlan(model: ModelRecord, port: number, contextLength: number): LaunchPlan {
+  const pin = installedEnginePin("splash");
+  if (!pin || !engineInstalled("splash")) throw new EngineUnavailableError("No installed Splash build is available for this machine.");
+  const launcher = launchBinary(pin);
+  // The pin's tool is `engine/splash`; the program's root is two levels up.
+  const root = dirname(dirname(launcher));
+  let layout: ReturnType<typeof layOutSplashCache>;
+  try { layout = layOutSplashCache(getModel); } catch (error) { if (error instanceof SplashLayoutError) throw new EngineUnavailableError(error.message); throw error; }
+  const values = settingValues();
+  const cacheSetting = values[SPLASH_CACHE_GB_SETTING];
+  const cacheGb = typeof cacheSetting === "number" && Number.isFinite(cacheSetting) ? Math.max(0, Math.floor(cacheSetting)) : SPLASH_CACHE_GB_DEFAULT;
+  const coding = codingLaunchSettings(values);
+  const tag = currentEngineTag("splash") ?? pin.tag;
+  const args = splashArgs({ model: layout.model, revision: layout.revision, port, servedModelName: model.id, thinkingBudgetTokens: coding.thinkingBudgetTokens, contextLength, cacheGb });
+  return {
+    command: [join(root, "python", "bin", "python3"), "-u", join(root, "install", "launcher.py"), ...args],
+    engine: "splash", build: tag, stdin: "ignore", contextLength,
+    // Splash schedules requests itself (its queue is 32 deep); `slots` is the number of coding requests Home should expect to run at once, reported, not enforced.
+    slots: coding.slots, contextScope: "total across slots", kind: "spawned", imageInput: false, pictureTokensMax: null,
+    env: splashEnv(layout), healthPath: "/ready", tree: true,
+    client: (baseUrl) => new ServedNameClient(new OpenAIEngineClient(baseUrl, "/ready"), model.id),
+    // Splash has no /props: the Stack knows both what it launched and which file it linked.
+    identity: { build: `splash-${tag}`, model: modelFileName(model.modelPath!) },
+    verifyServed: (baseUrl) => verifySplashServes(baseUrl, model.id),
+  };
+}
+
+/** The readiness identity check: the engine on this port lists the served name the Stack gave it and calls itself Splash. */
+export async function verifySplashServes(baseUrl: string, servedName: string): Promise<void> {
+  let listed: Array<{ id?: unknown; owned_by?: unknown }> = [];
+  try {
+    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/models`, { signal: AbortSignal.timeout(5_000) });
+    const body = await response.json().catch(() => null) as { data?: unknown } | null;
+    if (response.ok && Array.isArray(body?.data)) listed = body.data as typeof listed;
+  } catch { /* said below */ }
+  const match = listed.find((entry) => entry.id === servedName);
+  if (!match) throw new EngineUnavailableError(`Splash started but does not serve ${servedName} (it lists ${listed.map((entry) => String(entry.id)).join(", ") || "nothing"}), so coding is not using it.`);
+  if (match.owned_by !== "splash") throw new EngineUnavailableError(`The engine on the coding port did not identify itself as Splash (it says ${String(match.owned_by)}), so coding is not using it.`);
 }
 
 // ---- unexpected exits (ROBUST-01) -----------------------------------------
@@ -1274,6 +1369,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
       : role === "image" ? "The ComfyUI environment is not built on this machine."
       : engineForRole(role) === "mlx-serve" ? "No installed mlx-serve build is available for this machine."
       : engineForRole(role) === "omlx" ? "The oMLX environment or its model is not installed on this machine."
+      : engineForRole(role) === "splash" ? "Splash or its draft model is not installed on this machine."
       : role === "tts" ? (activeTtsChoice().engine === "chatterbox-turbo" ? "The Chatterbox Turbo files are not all installed." : pocketTtsInstalled() ? "The tts tokenizer or default voice is not installed." : "The Pocket TTS environment is not built on this machine.")
       : "No installed llama-server build is available for this machine.";
     throw new EngineUnavailableError(reason);
@@ -1282,7 +1378,10 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   const launchConfig = engineSettingValues("engines.llama_server") as Record<string, number | boolean | string | string[]>;
   // The coding role: its slots and its window come from its own settings, and the window steps down until the engine's dry run fits what the governor can admit without evicting anything.
   const coding = role === "coding" ? codingLaunchSettings() : null;
-  const codingWindow = coding ? await codingContextFor(model, coding.contextLength) : null;
+  // On Splash there is no `llama-fit-params`: the window is the setting's (Splash's key-value cache is small) and the governor's figure is an estimate, until the post-load reading of the process tree replaces it.
+  const onSplash = coding !== null && engineForRole(role) === "splash";
+  const splashEstimate = onSplash ? splashFootprintEstimateBytes({ weightsBytes: model.sizeBytes ?? 0, draftBytes: componentModel("coding", "draft")?.sizeBytes ?? STACK_CODING_DRAFT_MODEL.download!.approx_bytes, contextTokens: coding!.contextLength }) : null;
+  const codingWindow = coding ? (onSplash ? { contextLength: coding.contextLength, dryRunPeakBytes: splashEstimate } : await codingContextFor(model, coding.contextLength)) : null;
   const ownContext = coding ? codingWindow!.contextLength : declaredLaunchContext(model);
   const declaredContextLength = ownContext ?? launchConfig.context_length;
   const slots = coding ? coding.slots : ownContext !== null ? 1 : typeof launchConfig.slots === "number" && launchConfig.slots > 0 ? launchConfig.slots : 1;
@@ -1322,7 +1421,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   if (engineForRole(role) === "llama-server" && !managed && !generator && !SPEECH_ROLES.includes(role) && model.modelPath.endsWith(".gguf") && !dryRunPeakBytes && !model.measuredFootprintBytes && !(typeof declaredContextLength === "number" && declaredContextLength > 0)) {
     throw new EngineUnavailableError("The fit plan could not estimate the launched context for the memory governor; install the GGUF parser or set an explicit context length.");
   }
-  logger.appendLine(JSON.stringify({ event: "governor.peak-source", role, source: dryRunPeakBytes ? "dry-run" : "none", bytes: dryRunPeakBytes }));
+  logger.appendLine(JSON.stringify({ event: "governor.peak-source", role, source: onSplash ? "splash-estimate" : dryRunPeakBytes ? "dry-run" : "none", bytes: dryRunPeakBytes }));
   // A projector loads beside the model (the vision role's, or a chat
   // model's that reads pictures): its bytes count too. The fit tool sizes
   // the language model alone, so the projector is added.
@@ -1335,10 +1434,10 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     // A jit role's pin carries the whole-machine cost measured on a real
     // load (weights the engine maps are not in the process footprint),
     // and the larger of that and the store's own reading is the peak.
-    measuredPeakBytes: JIT_ROLES.includes(role) && pinMeasured !== null ? Math.max(pinMeasured, model.measuredFootprintBytes ?? 0) : model.measuredFootprintBytes,
+    measuredPeakBytes: onSplash ? null : JIT_ROLES.includes(role) && pinMeasured !== null ? Math.max(pinMeasured, model.measuredFootprintBytes ?? 0) : model.measuredFootprintBytes,
     dryRunPeakBytes: dryRunPeakBytes === null ? null : dryRunPeakBytes + projectorBytes,
     headroomBytes: engineForRole(role) === "mlx-serve" && !managed && !generator && !SPEECH_ROLES.includes(role) ? mlxHeadroomBytes({ modelDir: model.modelPath!, contextTokens: contextLength }) : null,
-    engine: generator ? "comfyui" : managed ? TTS_ENGINES[activeTtsChoice().engine].catalogEngine : SPEECH_ROLES.includes(role) ? "sherpa-onnx-node" : engineForRole(role) === "mlx-serve" ? "mlx-serve" : engineForRole(role) === "omlx" ? "oMLX" : "llama-server",
+    engine: generator ? "comfyui" : managed ? TTS_ENGINES[activeTtsChoice().engine].catalogEngine : SPEECH_ROLES.includes(role) ? "sherpa-onnx-node" : engineForRole(role) === "mlx-serve" ? "mlx-serve" : engineForRole(role) === "omlx" ? "oMLX" : onSplash ? "splash" : "llama-server",
     pinned: pinnedModels.has(model.id),
     // The coding engine gives way to a generator job while it is idle (CODE-STACK-01 S2).
     ...(role === "coding" ? { yieldsToGenerators: true } : {}),
@@ -1378,6 +1477,8 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   };
   const handle = spawnEngine();
   setGovernorPid(role, handle.pid);
+  // Splash is a tree of processes: remembered by command so a stop or a crash leaves no member holding memory.
+  const tree = plan.tree ? new TreeSnapshot(handle.pid) : null;
   const client = plan.client ? plan.client(`http://127.0.0.1:${port}`) : new OpenAIEngineClient(`http://127.0.0.1:${port}`, plan.healthPath);
   const stderrText = handle.stderr ? new Response(handle.stderr).text() : Promise.resolve("");
   let exited = false;
@@ -1390,6 +1491,8 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     void exitFailure.catch(() => {});
     const loadStartedAt = performance.now();
     await Promise.race([waitHealthy(client, loadTimeoutForModel(model.sizeBytes), () => !exited), exitFailure]);
+    // The engine answered; it must also be the engine and the model the Stack launched.
+    if (plan.verifyServed) await plan.verifyServed(client.baseUrl);
     let identity = plan.identity ? { host: "local" as const, build: plan.identity.build, model: plan.identity.model, healthy: true } : await readEngineIdentity(client.baseUrl, undefined, plan.healthPath);
     // A managed engine exposes no build or model of its own; the Stack
     // knows both: the version it installed, and the model it linked (the
@@ -1402,8 +1505,10 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     // mlx-serve's /props carries no build_info or model_path: the build
     // is the pin's tag, the model the directory the Stack launched.
     if (plan.engine === "mlx-serve") identity = { ...identity, build: identity.build ?? `mlx-serve-${plan.build}`, model: identity.model ?? basename(model.modelPath!) };
-    const check = await postLoadCheck(role, client, handle.pid);
-    const keepsFootprint = keepsMeasuredFootprint(model, plan.imageInput === true);
+    const check = await postLoadCheck(role, client, tree ? null : handle.pid);
+    // A tree's weights are held by its native child: the reading is the whole tree's, and it is not stored on the model (the llama-server reading belongs to the same pin).
+    if (tree) { tree.refresh(); check.actualBytes = treeMemoryBytes(handle.pid, (member) => getMemoryReader().processMemoryBytes(member)); }
+    const keepsFootprint = tree ? false : keepsMeasuredFootprint(model, plan.imageInput === true);
     const readsPictures = plan.imageInput === true && (role === "vision" || await picturesProbeOk(client));
     if (plan.imageInput === true && !readsPictures) raise({ code: `picture-check-failed.${role}`, severity: "warning", title: "Chat cannot read pictures right now", text: `The ${model.id} projector loaded but did not read the check picture; chat answers text only until it restarts.`, cause: "picture check failed", fix: { label: "Restart engine", action: "restart_engine" } });
     else resolveHealth(`picture-check-failed.${role}`);
@@ -1420,17 +1525,27 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     resolveHealth(`post-load-check-failed.${role}`);
     const loadedRevision = plan.kind === "managed" && !GENERATOR_ROLES.includes(role) ? (plan.engine === "chatterbox-turbo" ? model.revision : loadedWeightsRepo()?.revision) ?? null : null;
     // The coding engine is the one engine the isolation gate may stop (it yields to chat); no other engine gets a pausable handle.
-    const codingPausable = role === "coding" && plan.kind === "spawned" ? new PausableProcess(handle.pid, handle.exited, { engine: true }) : undefined;
+    const codingPausable = role === "coding" && plan.kind === "spawned" ? new PausableProcess(handle.pid, handle.exited, { engine: true, tree: plan.tree === true }) : undefined;
     const processRecord: RoleProcess = {
       role, kind: plan.kind, client, identity, engine: plan.engine, contextLength: plan.contextLength, slots: plan.slots, contextScope: plan.contextScope, modelId: model.id, modelRevision: loadedRevision ?? model.revision, imageInput: readsPictures, projectorLoaded: plan.imageInput === true, pictureTokensMax: readsPictures ? plan.pictureTokensMax ?? null : null, pid: handle.pid, port, activeRequests: 0, retired: false,
       governorHandle: admission,
-      stopGovernor: watchProcessMemory(role, handle.pid, keepsFootprint ? { modelId: model.id, contextLength } : undefined),
+      stopGovernor: watchProcessMemory(role, handle.pid, keepsFootprint ? { modelId: model.id, contextLength } : undefined, tree ? (pid) => Promise.resolve(treeMemoryBytes(pid, (member) => getMemoryReader().processMemoryBytes(member))) : undefined),
       ...(role === "coding" && plan.kind === "spawned" ? { pausable: codingPausable } : {}),
-      // A stopped process holds SIGTERM until it runs again, so it continues first.
-      stop: async () => { codingPausable?.resume(); handle.kill(); await handle.exited; },
+      // A stopped process holds SIGTERM until it runs again, so it continues first. A tree is asked to stop from its root, given a few seconds, and then every member that is still running is stopped, so nothing is left holding memory.
+      stop: async () => {
+        codingPausable?.resume();
+        if (!tree) { handle.kill(); await handle.exited; return; }
+        tree.refresh();
+        handle.kill();
+        await Promise.race([handle.exited, new Promise((done) => setTimeout(done, 8_000))]);
+        await tree.stopAll();
+        await handle.exited;
+      },
     };
     const spawnedAt = Date.now();
     void handle.exited.then(async (exitCode) => {
+      // A tree whose root went away on its own: whatever of it is left is stopped now.
+      if (tree) void tree.stopAll(3_000);
       // The last stderr lines say why it died (the memory manager's kill
       // leaves none); read with a short bound so a held pipe never stalls the report.
       const tail = await Promise.race([stderrText, new Promise<string>((resolve) => setTimeout(() => resolve(""), 500))]).catch(() => "");
@@ -1438,7 +1553,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     });
     return processRecord;
   } catch (error) {
-    handle.kill();
+    if (tree) { tree.refresh(); handle.kill(); await tree.stopAll(3_000); } else handle.kill();
     const message = (error as Error).message;
     emit({ id: "engine.state", data: { engine: role, state: "offline", reason: message } });
     raise({ code: exited ? `engine.crashed.${role}` : `post-load-check-failed.${role}`, severity: "error", title: `${ROLES[role].label} engine failed to start`, text: message, cause: message, fix: { label: "Restart engine", action: "restart_engine" } });
@@ -1463,6 +1578,7 @@ async function startOne(role: RoleId, modelId?: string): Promise<RoleProcess> {
   if (bound) return startUrlProcess(role, bound.url);
   if (role === "tts") return startVoiceWithFallback(modelId);
   if (role === "chat") return startChatWithFallback(modelId);
+  if (role === "coding") return startCodingWithFallback(modelId);
   return startSpawnedProcess(role, modelId);
 }
 
@@ -1490,6 +1606,35 @@ async function startChatWithFallback(modelId?: string, start: (role: RoleId, mod
 }
 /** The fallback with the spawn replaced, for the suite. */
 export const startChatWithFallbackForTests = startChatWithFallback;
+
+/** Splash is the coding engine where the machine qualifies and it is installed with its draft; llama-server is the fallback (CODE-STACK-01 S5a). A Splash start that fails (a crash, a layout it cannot make, an engine that does not serve the model, a refusal for memory) sends the same request to llama-server, raises a warning that says what happened, that coding is on the slower engine and what to do, and, unless it was only a refusal for memory, keeps coding on llama-server until the coding engine is restarted. A refusal for memory is not held against Splash: the next start tries it again. The warning clears when a Splash start works. */
+async function startCodingWithFallback(modelId?: string, start: (role: RoleId, modelId?: string) => Promise<RoleProcess> = startSpawnedProcess): Promise<RoleProcess> {
+  const choice = activeCodingChoice();
+  if (choice.engine !== "splash") {
+    // An admin who asked for Splash and is not getting it is told why, once, as a warning; `auto` on a Mac that cannot run it says nothing.
+    // A failure already raised its own warning, which stays until a Splash start works.
+    if (!codingEngineFailure()) {
+      if (choice.requested === "splash" && choice.reason) raise({ code: "coding.engine-fallback", severity: "warning", title: "Splash is not running; coding is on llama-server", text: choice.reason, cause: choice.reason, fix: { label: "Restart engine", action: "restart_engine" } });
+      else if (choice.requested !== "splash") resolveHealth("coding.engine-fallback");
+    }
+    return start("coding", modelId);
+  }
+  try {
+    const started = await start("coding", modelId);
+    resolveHealth("coding.engine-fallback");
+    return started;
+  } catch (error) {
+    if (stoppingAll) throw error;
+    const reason = error instanceof Error ? error.message : String(error);
+    const noRoom = error instanceof EngineDoesNotFitError;
+    if (!noRoom) markCodingEngineFailed(reason);
+    raise({ code: "coding.engine-fallback", severity: "warning", title: "Splash did not start; coding is on llama-server", text: `${/[.!?]$/.test(reason) ? reason : `${reason}.`} Coding is using the slower engine, llama-server, ${noRoom ? "for this request. Wait for the picture, video or song job to finish, or close a large app." : "until the coding engine is restarted. Restart the coding engine to try Splash again."}`, cause: reason, fix: { label: "Restart engine", action: "restart_engine" } });
+    forcedCodingEngine = "llama-server";
+    try { return await start("coding", modelId); } finally { forcedCodingEngine = null; }
+  }
+}
+/** The fallback with the spawn replaced, for the suite. */
+export const startCodingWithFallbackForTests = startCodingWithFallback;
 
 /** A voice engine other than Pocket TTS that cannot start (a crash, a
  * memory refusal, a load that never finished) falls back to Pocket TTS
@@ -1649,6 +1794,9 @@ export async function setMachineTierFromHardware(): Promise<{ tier: GovernorTier
   const hardware = await detectHardware();
   const tier = proposeProfile(hardware)?.id as GovernorTier | undefined;
   setMachineTier(tier);
+  // What the coding role's engine choice needs to know about this Mac (CODE-STACK-01 S5a).
+  const chip = await detectAppleChip();
+  setCodingMachineFacts({ platform: hardware.platform, arch: hardware.arch, chipGeneration: chip?.generation ?? null, chipName: chip?.name ?? null, memoryGb: hardware.totalRamGb, osVersion: hardware.osVersion });
   // The daemon's own pid: no loaded item carries it, so this watch only
   // keeps the reading and the tier, never restarts anything.
   return { tier: tier ?? null, stop: startGovernor({ pid: process.pid, tier: machineTier }) };
@@ -1659,10 +1807,10 @@ export async function setMachineTierFromHardware(): Promise<{ tier: GovernorTier
  * idle), carrying the machine's tier. With `measured`, a rise in this
  * run's peak is stored for the model, so the next admission and fit plan
  * start from the latest run. */
-export function watchProcessMemory(role: RoleId, pid: number, measured?: { modelId: string; contextLength: number }): () => void {
+export function watchProcessMemory(role: RoleId, pid: number, measured?: { modelId: string; contextLength: number }, processMemory?: (pid: number) => Promise<number | null>): () => void {
   // `unload` is the governor's way to evict a `jit` role (idle, or under
   // pressure): it drains and stops that role's process, never chat's.
-  return startGovernor({ pid, tier: machineTier, restart: async () => { await restartRole(role); }, busy: () => {
+  return startGovernor({ pid, tier: machineTier, ...(processMemory ? { processMemory } : {}), restart: async () => { await restartRole(role); }, busy: () => {
     const current = runtimes.get(role)?.process;
     return current?.pid === pid && current.activeRequests > 0;
   }, onPeak: measured ? (_id, bytes) => { recordMeasuredFootprint(measured.modelId, bytes, measured.contextLength); } : undefined, unload: async (id) => {
@@ -1741,6 +1889,7 @@ export async function recycleRole(requested: RoleId): Promise<void> {
   const role = processRoleFor(requested);
   if (role === "tts") clearTtsEngineFailures();
   if (role === "chat") clearChatEngineFailures();
+  if (role === "coding") clearCodingEngineFailures();
   const current = runtime(role);
   current.generation++;
   const previous = current.process;

@@ -2560,6 +2560,156 @@ a pause of up to 120 s; that the Responses converter honours `chat_template_kwar
 leaves `/props` `model_path` and the identity check alone (item 3); that the dry run's figure for the extension-less path matches the
 21.9 GB seen (item 5); the Splash decode speed against 27.6 tokens/s (S5).
 
+### Slice S5a: Splash is the coding engine on Apple silicon (CODE-STACK-01, 2026-10-18)
+
+Stack only; tests use the scripted engine and a stand-in for Splash's process tree, never a real model. Catalog C1 (Splash 1.3.2 in
+`engines/index.json`) had landed. The measured reason: Splash serves the same Qwen3.8-27B weights at about 124 tokens/s against 27.6 on
+llama-server b10797, 10 of 10 on the coding suite, and it ran clean offline (home `docs/plans/local-coding-phase1-2026-10-18.md`).
+
+**What was found about Splash's store (the hard question).** Read from the release archive's `install/*.py` and `server/*.py`, then
+proved once on this Mac. Splash can run entirely from files the Stack lays out; it needs no Splash-managed download, so the Stack's pin
+rule holds.
+
+- (a) **A Stack-laid hub cache works.** `install/hub.py` reads `huggingface_hub.constants.HF_HUB_CACHE`, so `HF_HUB_CACHE` (or `HF_HOME`)
+  names the cache. It reads `models--<owner>--<repo>/snapshots/<commit>/<file>`. A target named with `--revision <40-hex commit>` needs no
+  `refs/` entry and no Hub request (`Repository.resolve` returns the cached snapshot when `HF_HUB_OFFLINE` is set; `_cached_commits`
+  returns a hex revision as it is). The draft is found by `refs/main` (`_cached_commits` with no revision reads `refs/main`). A blob that
+  sits at `blobs/<64-hex sha256>` is described by that name; Splash does not hash it (`assembly._digest`), so a 16 GB model is not read
+  again. A blob under any other name is hashed once, when the assembly is built.
+- (b) **State is relocatable.** `install/paths.py` puts everything at `Path.home() / "Library/Application Support/Splash"` (`models/`,
+  `runtime/`), `server/thinking.py` puts `thinking.key` there too, `server/crash_trace.py` writes `Library/Logs/Splash`. All follow `$HOME`.
+  The SSD cache's temporary files follow `TMPDIR` (the start line printed the folder). `--cache-dir` only applies to `--persistent-cache`,
+  which the Stack leaves off.
+- (c) **A fresh state folder assembles and starts with `--offline`.** `--offline` sets `HF_HUB_OFFLINE=1`; the first start assembles the
+  model from the cache into `HOME/Library/Application Support/Splash/models/.resolved/<hash>` (links to the snapshot files, a record,
+  the GGUF's metadata and tokenizer, which Splash derives from the GGUF itself, so no second repository is needed). It does not need an
+  already assembled install.
+- (d) **The draft.** `incoai/Qwen3.8-27B-DFlash2` at commit `015e795645c74b1a0eeef3b570031fb62e769bc5`, Apache-2.0 (HF API, 2026-10-18),
+  two files: `config.json` (1,239 bytes, a git blob, sha256 `873e3556509b…` hashed from the download and the local copy) and
+  `model.safetensors` (3,848,817,896 bytes, sha256 `67fc76d68dc5…` = the LFS oid, confirmed by the HEAD request's `x-linked-etag`).
+  `README.md` and `assets/` are not needed.
+
+**The one real test** (scratch folders under the session scratchpad; the Stack's pinned GGUF and the draft hardlinked into a hub cache laid
+out as above; `HOME`, `TMPDIR`, `HF_HUB_CACHE` pointing there; `HF_HUB_OFFLINE=1`, `DO_NOT_TRACK=1`; run under `sandbox-exec` with a profile
+that denies every network operation except loopback; port 8895; 128 GB Mac with about 40 GB free). `python3 -u install/launcher.py serve
+--model unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M --revision 4ca72078… --offline --host 127.0.0.1 --port 8895 --language-only
+--served-model-name qwen3.8-27b-ud-q4-k-m --default-reasoning-effort medium --thinking-token-budget 2000 --max-cache-disk 8G --no-webui`:
+the log said "Could not reach the Hub (HF_HUB_OFFLINE is set); installing … from the Hub cache", selected the GGUF, "Installing …
+draft incoai/Qwen3.8-27B-DFlash2; vision disabled", loaded the weights in 2.5 s and reached `Ready` in 8 s from a fresh state folder, with
+the SSD cache in the scratch `TMPDIR`. `/v1/models` listed the loaded id and the served name, owned by `splash`; a chat request answered 391 for
+17 times 23 with the reasoning separated; a second request ran at 112 tokens/s (284 tokens); `/v1/messages`, `/v1/responses` and
+`/v1/messages/count_tokens` each answered 200 to a plain request. With the server and its native child stopped (SIGSTOP to both pids) a
+request timed out and `/health` answered again after SIGCONT. SIGTERM to the server ended both processes within 3 seconds. The process
+tree is two processes: the Python launcher, which `exec`s into the server, and `engine/splash serve-native` as its child (the child's parent
+is the server). Nothing was left running afterwards. What the test did not cover: the governor's memory reading of the tree, the Splash tool
+turns, thinking blocks and streaming shapes on the wires (the engine contract suite is still owed).
+
+**What the Stack lays out** (`lib/splashStore.ts`). Under `data/splash/`: `hub/` (the cache Splash reads), `home/` (Splash's `HOME`) and
+`tmp/` (its `TMPDIR`, emptied at every launch). At every Splash launch `layOutSplashCache()` checks the pins and links them in, cheap and idempotent:
+
+- The target is `models--unsloth--Qwen3.8-27B-GGUF/blobs/<sha256>`, a **hardlink** of the file the Stack verified (`data/models/imports/<id>/<sha256>`),
+  with `snapshots/<commit>/Qwen3.8-27B-UD-Q4_K_M.gguf -> ../../blobs/<sha256>` and `refs/main`. The draft is `models--incoai--Qwen3.8-27B-DFlash2/`
+  with both files the same way. Never a copy: if the volume refuses a hardlink a symlink is used (Splash then hashes the file once at
+  assembly); if that fails too, the launch is refused in plain words and the request goes to llama-server.
+- It refuses, in plain words naming the next step, when the coding model or the draft is not installed and verified, is not the pinned
+  sha256 or revision, or a file is not the pinned size. Splash never sees a file the Stack has not pinned. Hashes are the Stack's downloader's
+  (`installCatalogModel` verifies every file of the draft; a wrong byte fails the install and raises the existing checksum health item).
+- Anything else in the two repository folders (an earlier pin's snapshot or blob) is removed, so the cache holds exactly the pins.
+- `removeModel` of the coding model or the draft removes `data/splash/` (`releaseSplashLayoutFor`), so the disk is freed (a hardlink keeps the
+  bytes alive otherwise). The pinned file itself is never removed by that.
+
+**The pins.** `SPLASH_PIN` in `engineCatalog.ts` (name `splash`, tag `1.3.2`, darwin arm64, the Catalog entry's url, sha256 `c3deb1dd…` and
+74,590,927 bytes; `tool` is `engine/splash`, which proves the install; the installer flattens the archive's one top folder, leaving
+`engine/`, `python/`, `install/`, `server/` in `data/engines/splash/1.3.2/`), installed by the existing installer
+(`POST /stack/v1/engines/splash/install` with no body) with the sha256 verified by the downloader. `STACK_CODING_DRAFT_MODEL`
+(`qwen3.8-27b-dflash2-draft`, role `coding`, `component: "draft"`, engine `splash`, a directory model of the two files above) is named by the
+coding model's new `companions` field. The first-run plan and the components list add it beside the coding model, removable with it, where
+Splash can run: Apple silicon on p64 and p128 and not a chip known to be older than an M3 (an unread chip counts as possible, so
+`docs/disk-plan.json` is the same everywhere). The disk plan's `coding` row grows from 16.5 to 20.3 GB and its note says why. The draft is a
+component: never selected, never the role's model, and only Splash reads it.
+
+**Which engine runs** (`lib/splash.ts`, `activeCodingChoice()` in the supervisor). `engineForRole("coding")` is `splash` when all of these hold
+and `llama-server` otherwise: the setting `stack.engines.coding.engine` is not `llama-server`; the machine is darwin arm64 with an M3 or newer
+chip (`detectAppleChip()` reads `machdep.cpu.brand_string` once at the daemon's start, because core's `HardwareInfo` has no chip field), at
+least 36 GB, macOS 26.4 or later, and the tier is p64 or p128; the Splash build is installed; the coding model and the draft are installed;
+no Splash start has failed this run. Unread facts (no daemon start) refuse Splash. `ENGINE_ROLE` and `engineRole` map `splash` to `coding`
+(both needed the entry; `engineRole` defaults unknown names to `chat`). The model records are chosen without an engine filter for `coding`,
+because one GGUF serves both engines (`recordEngineFor`).
+
+**The launch** (`splashArgs()` in `engineArgs.ts`, `splashLaunchPlan()` and `splashEnv()`): the bundled `python/bin/python3 -u install/launcher.py serve`
+with `--model <repo>:<variant from the pin> --revision <commit> --offline --host 127.0.0.1 --port <free> --language-only --served-model-name
+<pin id> --announce-served-name --default-reasoning-effort medium --thinking-token-budget <ceiling> --max-context <window> --max-cache-disk
+<splash_cache_gb>G --idle-release off --no-webui`. No `--api-key` (loopback), no `--persistent-cache`, no `--draft-model` (Splash pairs the
+Qwen3.8-27B family with the draft in the cache, the one tested), the Neural Engine left on (the benchmark's setting; it is local compute).
+`--max-context` can only lower Splash's own limit and keeps the window the `/v1/models?role=coding` route reports. `--idle-release off` leaves
+keep-warm to the Stack (Splash's default frees the weights after 10 minutes while the Stack would still count them). The environment is the
+Stack's minus its secrets, `HF_TOKEN`, `HF_ENDPOINT`, `SPLASH_API_KEY` and any `PYTHON*`, plus `HOME`, `HF_HOME`, `HF_HUB_CACHE`, `TMPDIR`,
+`HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, `HF_HUB_DISABLE_TELEMETRY=1`, `DO_NOT_TRACK=1`. The llama-server coding launch is unchanged.
+
+**Readiness and identity.** The health path is `/ready` (503 until the model is loaded; the server binds first and accepts only when the runtime
+is ready). Then `verifySplashServes()` reads `/v1/models` and requires the pin id, owned by `splash`; then the existing one-token post-load
+completion; then the existing identity check against the file the Stack linked (Splash has no `/props`, so the plan carries the identity,
+as oMLX's does). Splash answers 404 to a model name it does not serve and the coding wires carry the role name, so every request to it goes
+through `ServedNameClient`, which renames `model` to the pin id. An engine that answers a wire path with 404 is still mapped to the 501; the
+Splash row of `ENGINE_CODING_WIRES` is true for all three wires from the smoke test above.
+
+**Memory.** There is no `llama-fit-params` for Splash, so the governor's figure is an **estimate** (`splashFootprintEstimateBytes`): the weights plus
+the draft times 1.08, plus 8,192 bytes per window token (23,012,060,594 bytes at 131,072 tokens, 21.4 GiB), calibrated on the one reading
+(the 27B Q4 with its draft ran at about 21 to 23 GB on the Studio). It is not measured on a 64 GB Mac. It enters the governor as the dry-run
+figure (the log's `governor.peak-source` says `splash-estimate`), the request is admitted as a `jit` item that yields to generators like
+llama-server's, and after the post-load check the governor's figure becomes the reading of the whole process tree, which is never stored on the
+model (the stored footprint belongs to the llama-server run of the same pin). The governor's runaway watch reads the tree too.
+
+**Fallback and health** (`startCodingWithFallback`, the voice and chat fallback pattern). A Splash start that fails (a crash, a layout it cannot
+make, an engine that does not serve the model, a refusal for memory) goes to llama-server for the same request, raises the warning
+`coding.engine-fallback` ("Splash did not start; coding is on llama-server": the reason, that coding is using the slower engine, and what to do),
+and, unless it was only a refusal for memory, keeps coding on llama-server until the coding engine is restarted (`recycleRole` clears the
+memory). A refusal for memory is not held against Splash. A forced `splash` on a Mac that cannot run it gets one warning with the reason; `auto` on
+such a Mac says nothing. The warning clears when a Splash start works. `GET /stack/v1/roles` `coding` gains `engine`, `engine_requested` and
+`engine_reason`. The engine list marks the running Splash build; the rollback fix and `PUT /engines/splash/current` drain the coding engine and leave
+the next request to start the new build.
+
+**Yield, keep-warm and the process tree** (`lib/processTree.ts`). Only the server's pid is the Stack's child, but only its native child works, so
+the signals go to the tree: `PausableProcess({ engine: true, tree: true })` sends SIGSTOP to every descendant (deepest first) and the pid, and SIGCONT
+to the pid and everything it holds at the resume (the paused pids are written to `isolation-paused.json` for a crashed Stack). The engine's
+`stop` continues the tree, asks the root to stop, waits 8 s, then `TreeSnapshot.stopAll()` signals every remembered member that is still the
+same command (SIGTERM, 5 s, SIGKILL); an unexpected exit of the root and a failed start do the same, so no orphan holds 20 GB. Keep-warm, the
+lease and the 120 s pause bound are the S2 and S3b mechanisms, unchanged.
+
+**Settings.** `stack.engines.coding.engine` (`auto`, `splash`, `llama-server`; advanced; needs a restart; section "Coding engine") and
+`stack.engines.coding.splash_cache_gb` (0 to 64, default 8; expert; needs a restart). `slots` is reported for Splash and not enforced (Splash
+queues 32 requests itself).
+
+**Found along the way.** (1) The update check's `EngineIndexEntrySchema` accepted only `b<digits>` tags, so the whole engine index would have been
+rejected ("did not match its declared shape") as soon as the Catalog published Splash (`1.3.2`); uv and ComfyUI already used version tags in the
+Catalog's source. The pattern now matches the Catalog's own schema. `POST /engines/{name}/install`'s staging body still takes `b<digits>` tags
+only, so a staged Splash build by URL is not possible yet. (2) Splash's 404 for an unknown model name (above). (3) Splash's default idle release (above).
+
+**Tests.** `tests/codingSplash.test.ts` (33): the machine rules (M2, 32 GB, old macOS, wrong tier, unknown chip, forced engine), the choice and its reasons, the
+failure memory, the pins, the exact launch list and environment, the estimate, the layout (hardlinks, refs, idempotence, stale pruning, refusals,
+removal), the draft's hash verification through the real installer with a fake downloader, the readiness identity check, the renaming client, the
+fallback (a failed start, a refusal for memory, both engines failing, a forced Splash on a Mac that cannot run it), the settings, the engine index.
+`tests/splashTree.test.ts` (18): real `sh` and `sleep` trees for the pause, the resume, the gate's yield to chat, the kill and the no-orphan rules
+(a root killed by SIGKILL, a member that ignores SIGTERM, a reused pid), and the real start path (`getProcess("coding")`) with a stand-in for
+Splash (`tests/helpers/fake-splash.ts`, started through a fake bundled `python3`): the launch line and environment as Splash receives them,
+the offline switches, the renamed model, the pause and stop of the whole tree, the stop of a started-but-wrong engine with no orphan, the
+fallback warning, the governor admission by the estimate.
+
+**Still owed.** S4 (remove a whole engine build). The engine contract suite against Splash (ENGINE-SPLASH-01: tool turns, streaming shapes,
+thinking blocks, cancellation reaching the engine, timing fields) and the Splash row of `ENGINE_CODING_WIRES` becoming a contract result. A scratch-Stack
+run on a real Splash (below). Client compatibility checks (real Claude Code, OpenCode). Home H1 (Settings install and remove for the Splash engine
+and the coding model together, calling `POST /stack/v1/engines/splash/install`) and H2 (push the settings). The privacy page row for the
+install-time downloads (CODE-PRIVACY-01: the Splash archive from github.com, the draft from Hugging Face through the Stack's downloader).
+A staged Splash update through `stagingPin` (the install route's tag pattern). `docs/BACKLOG.md` in the home repo records S5a as landed when the coordinator lands it.
+
+**Only a real scratch-Stack run on Splash can settle.** That `--announce-served-name`, `--max-context 131072` and `--idle-release off` are accepted
+by 1.3.2 as read from its option parser (the one real test did not pass them); that the real Splash answers the Stack's own probe, sampling fields
+(`top_k`, `presence_penalty`), `chat_template_kwargs.enable_thinking: false` and a thinking budget on all three wires (it validates the fields it
+receives); that `/ready` stays 503 until the model is loaded, so the start waits for it; the memory the governor reads for the tree (against the
+23.0 GB estimate), on a 64 GB Mac and on the 128 GB one; the yield bringing chat back to its idle latency with Splash stopped mid-answer, and
+decode continuing after a pause of up to 120 s; the fallback end to end by a Splash that cannot start for a real reason; and
+that a hardlinked pin assembles without hashing (the blob name is its sha256).
+
 ## Measured so far
 
 On an Apple silicon Mac (2026-09-18, a temporary copy of the owner's

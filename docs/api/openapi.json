@@ -5287,7 +5287,7 @@
                               "slots": {
                                 "type": "integer",
                                 "nullable": true,
-                                "description": "Server slots (concurrent requests); null when not installed."
+                                "description": "Server slots (concurrent requests); null when not installed. On Splash this is the number of requests expected to run at once; Splash queues the rest itself."
                               },
                               "slots_busy": {
                                 "type": "integer",
@@ -5297,6 +5297,28 @@
                                 "type": "string",
                                 "nullable": true,
                                 "description": "Why the model cannot load now (it would not fit in memory beside the always-on models), with what to do; null when nothing is known to stop it."
+                              },
+                              "engine": {
+                                "type": "string",
+                                "enum": [
+                                  "llama-server",
+                                  "splash"
+                                ],
+                                "description": "The engine serving coding: the running process's while one runs, otherwise the one the next start chooses. splash is the faster engine on an Apple silicon Mac with an M3 chip or newer, 64 GB of memory or more and macOS 26.4 or later; llama-server everywhere else and when Splash did not start."
+                              },
+                              "engine_requested": {
+                                "type": "string",
+                                "enum": [
+                                  "auto",
+                                  "llama-server",
+                                  "splash"
+                                ],
+                                "description": "What stack.engines.coding.engine asks for."
+                              },
+                              "engine_reason": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Why the faster engine is not in use though it was wanted (not installed, its draft missing, did not start, or forced off), with what to do; null when nothing is amiss, including on a computer Splash never runs on."
                               }
                             },
                             "required": [
@@ -5305,7 +5327,10 @@
                               "idle_seconds",
                               "slots",
                               "slots_busy",
-                              "cannot_fit_reason"
+                              "cannot_fit_reason",
+                              "engine",
+                              "engine_requested",
+                              "engine_reason"
                             ]
                           },
                           "pending_install": {

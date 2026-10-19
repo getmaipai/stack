@@ -35,9 +35,10 @@ export type ModelIndex = z.infer<typeof ModelIndexSchema>;
 
 // The Catalog's engine index (catalog/engines/index.json, published as a
 // signed envelope in the package index's shape by tools/src/engine-index.ts):
-// one entry per name, upstream build tag, platform and arch.
+// one entry per name, upstream build tag (llama.cpp's `b10797`, or a version such as Splash's `1.3.2` and uv's `0.12.17`, the pattern the Catalog's own
+// schema checks), platform and arch.
 export const EngineIndexEntrySchema = z.object({
-  name: z.string(), tag: z.string().regex(/^b[0-9]+$/), platform: z.string(), arch: z.string(),
+  name: z.string(), tag: z.string().regex(/^(b[0-9]+|v?[0-9]+(\.[0-9]+)*)$/), platform: z.string(), arch: z.string(),
   url: z.string().url(), sha256: z.string().length(64), size: z.number().int().nonnegative(), licence: z.string().optional(),
   requires: z.array(z.string()).optional(), extra: z.array(z.object({ url: z.string().url(), sha256: z.string().length(64), size: z.number().int().nonnegative(), label: z.string().optional() })).optional(), notes: z.string().optional(),
 });

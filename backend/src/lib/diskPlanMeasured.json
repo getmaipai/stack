@@ -95,6 +95,10 @@
       "download_bytes": 16464440224,
       "installed_bytes": 16464440224
     },
+    "qwen3.8-27b-dflash2-draft": {
+      "download_bytes": 3848817896,
+      "installed_bytes": 3848817896
+    },
     "qwen3-4b-q4-k-m": {
       "download_bytes": 2497280256,
       "installed_bytes": 2497280256

@@ -10,7 +10,7 @@
 import { existsSync, lstatSync, readdirSync, rmSync, statSync, unlinkSync } from "node:fs";
 import { basename, join } from "node:path";
 import { lastUsedOf } from "@/lib/componentUse";
-import { detectHardware, type HardwareInfo } from "@/lib/hardware";
+import { detectHardware, knownAppleChip, type HardwareInfo } from "@/lib/hardware";
 import { createJob, finishJob, getJob, jobSignal, listJobs, updateJob } from "@/lib/jobs";
 import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
@@ -24,6 +24,7 @@ import { bumpStackGeneration } from "@/lib/stackGeneration";
 import { releaseHfFile } from "@/lib/store/hfCache";
 import { engineCurrentPath } from "@/lib/store/layout";
 import { selectEngineBinary } from "@/lib/engineCatalog";
+import { splashDraftPossible } from "@/lib/splash";
 import { ensureEngine } from "@/lib/engineInstall";
 import { uvEnvironmentReady } from "@/lib/uvEnvironment";
 import { loadedRoleForModel, selectedModel } from "@/lib/supervisor";
@@ -158,7 +159,8 @@ export function componentDefs(): UnitDef[] {
   const units: UnitDef[] = [];
   const generic = (primary: CatalogModelLike, group: ComponentGroup, serves: string, usedBy: string[], env?: EnvDef): UnitDef => {
     const projector = primary.imageInput ? STACK_MODELS.find((pin) => pin.id === primary.imageInput!.projector) : undefined;
-    const parts = STACK_MODELS.filter((pin) => pin.component && pin.role === primary.role && pin.engine === primary.engine && !projectorIds.has(pin.id));
+    // Parts of the same engine, and the companions the model names (the coding model's Splash draft, CODE-STACK-01 S5a), install and remove together.
+    const parts = STACK_MODELS.filter((pin) => pin.component && pin.role === primary.role && (pin.engine === primary.engine || ((primary.companions ?? []).includes(pin.id) && splashDraftPossible({ platform: process.platform, arch: process.arch }, knownAppleChip()))) && !projectorIds.has(pin.id));
     const text = LABELS[primary.id] ?? { label: primary.id, summary: "" };
     return {
       id: primary.id, label: text.label, summary: text.summary, group, role: primary.role, pins: dedupe([primary, ...(projector ? [projector] : []), ...(primary.role === "chat" || primary.role === "judge" || primary.role === "vision" || primary.role === "embed" ? [] : parts)], (pin) => pin.id),

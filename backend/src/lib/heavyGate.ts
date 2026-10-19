@@ -38,6 +38,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { join } from "node:path";
 import { logger } from "@/lib/log";
 import { dataDir } from "@/lib/paths";
+import { processTree } from "@/lib/processTree";
 
 /** The roles whose requests are interactive (the turn pipeline and voice). The memory judge, embeddings and rerank are background work and never pause a job. */
 export const INTERACTIVE_ROLES = ["chat", "coding", "vision", "router", "stt", "tts"] as const;
@@ -108,32 +109,46 @@ export function recoverPausedWorkers(): number {
 
 interface DeadlineEntry { fire: () => void; remaining: number; armedAt: number; timer: ReturnType<typeof setTimeout> | null; }
 
-/** Wraps a spawned worker's pid. `kill` and every other way out continue it first, because a stopped process holds a SIGTERM until it runs again. */
+/** Wraps a spawned worker's pid. `kill` and every other way out continue it first, because a stopped process holds a SIGTERM until it runs again.
+ * With `tree` the pause and the resume reach the pid and everything it started (Splash is a launcher process and a native engine child, and only the child does the work: CODE-STACK-01 S5a). */
 export class PausableProcess implements PausableWorker {
   private isPaused = false;
   private alive = true;
   private readonly deadlines = new Set<DeadlineEntry>();
   private readonly engine: boolean;
-  constructor(readonly pid: number | null, exited?: Promise<unknown>, options: { engine?: boolean } = {}) {
+  private readonly tree: boolean;
+  /** The pids the last pause stopped; the resume continues these and whatever the tree holds by then. */
+  private stopped: number[] = [];
+  constructor(readonly pid: number | null, exited?: Promise<unknown>, options: { engine?: boolean; tree?: boolean } = {}) {
     this.engine = options.engine === true;
-    void exited?.then(() => { this.alive = false; this.isPaused = false; if (this.pid !== null) { pausedNow.delete(this.pid); writePausedFile(); } }, () => {});
+    this.tree = options.tree === true;
+    void exited?.then(() => { this.alive = false; this.isPaused = false; for (const stoppedPid of this.stopped) pausedNow.delete(stoppedPid); if (this.pid !== null) pausedNow.delete(this.pid); this.stopped = []; writePausedFile(); }, () => {});
   }
   get paused(): boolean { return this.isPaused; }
 
   pause(): boolean {
     if (this.isPaused || !this.alive || !safePid(this.pid, this.engine)) return false;
-    try { process.kill(this.pid, "SIGSTOP"); } catch { return false; }
+    // The deepest members first, so the process that does the work stops before the one that waits on it.
+    const targets = this.tree ? processTree(this.pid).reverse() : [this.pid];
+    let any = false;
+    for (const target of targets) { try { process.kill(target, "SIGSTOP"); any = true; this.stopped.push(target); } catch { /* gone, or not ours */ } }
+    if (!any) return false;
     this.isPaused = true;
     for (const entry of this.deadlines) if (entry.timer) { clearTimeout(entry.timer); entry.timer = null; entry.remaining = Math.max(0, entry.remaining - (Date.now() - entry.armedAt)); }
-    pausedNow.set(this.pid, commandOf(this.pid)); writePausedFile();
+    for (const target of this.stopped) pausedNow.set(target, commandOf(target));
+    writePausedFile();
     return true;
   }
 
   resume(): boolean {
     if (!this.isPaused) return false;
     this.isPaused = false;
-    if (this.pid !== null) { pausedNow.delete(this.pid); writePausedFile(); }
-    if (this.alive && this.pid !== null) { try { process.kill(this.pid, "SIGCONT"); } catch { /* gone */ } }
+    // The root first (it reads the child's output), then the rest; a member that started during the pause is continued too, which does nothing to one that was never stopped.
+    const targets = this.alive && this.pid !== null ? [...new Set([this.pid, ...this.stopped.slice().reverse(), ...(this.tree ? processTree(this.pid) : [])])] : [];
+    for (const target of this.stopped) pausedNow.delete(target);
+    this.stopped = [];
+    writePausedFile();
+    for (const target of targets) { try { process.kill(target, "SIGCONT"); } catch { /* gone */ } }
     for (const entry of this.deadlines) this.arm(entry);
     return true;
   }

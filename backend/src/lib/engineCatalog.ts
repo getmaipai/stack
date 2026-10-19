@@ -271,14 +271,38 @@ export const MLX_SERVE_PIN: EngineBinaryPin = {
 };
 ENGINE_BINARIES.push(MLX_SERVE_PIN);
 
+/** The coding role's fast engine on Apple silicon (CODE-STACK-01 S5a): Inco's Splash, Apache-2.0. The release archive is a Python
+ * program with its own bundled interpreter (`python/`), a native engine (`engine/splash`) and the launcher
+ * (`install/launcher.py`), wrapped in one top folder that the installer flattens; `engine/splash` proves the install. The url,
+ * checksum and size are the Catalog's `engines/index.json` entry (CODE-STACK-01 C1, catalog 4020d5f), verified by download on
+ * 2026-10-18. Splash is only ever started offline, from files the Stack pinned and laid out itself (lib/splash.ts). */
+export const SPLASH_PIN: EngineBinaryPin = {
+  id: "splash-1.3.2-macos-arm64",
+  name: "splash",
+  tag: "1.3.2",
+  platform: "darwin",
+  arch: "arm64",
+  tool: "engine/splash",
+  requiresNvidia: false,
+  label: "Splash (macOS 26.4 or later, Apple silicon M3 or newer), 1.3.2",
+  docsUrl: "https://github.com/incoai/splash",
+  archive: { label: "Splash (macOS arm64)", url: "https://github.com/incoai/splash/releases/download/1.3.2/splash-1.3.2-arm64-macos26.tar.gz", sha256: "c3deb1dd971461ffafcf6b82c318789d6698b22aa865e490a11a0ed943686c0b", approxBytes: 74_590_927 },
+  verified: true,
+};
+ENGINE_BINARIES.push(SPLASH_PIN);
+
+/** The coding role's engines, one chosen by `stack.engines.coding.engine`. */
+export const CODING_ENGINES = ["llama-server", "splash"] as const;
+export type CodingEngine = typeof CODING_ENGINES[number];
+
 /** The chat wire's engines, one chosen by `stack.engines.chat.engine`. */
 export const CHAT_ENGINES = ["llama-server", "mlx-serve", "omlx"] as const;
 export type ChatEngine = typeof CHAT_ENGINES[number];
 
 /** The role each engine name serves, for the routes that act on "the
  * engine's role" (start, stop, restart, the swap's drain). */
-export type EngineRole = "chat" | "tts" | "image" | "video" | "music";
-export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", "mlx-serve": "chat", omlx: "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", comfyui: "image", "video-gen": "video", "music-gen": "music", "image-gen": "image" };
+export type EngineRole = "chat" | "coding" | "tts" | "image" | "video" | "music";
+export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", splash: "coding", "mlx-serve": "chat", omlx: "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", comfyui: "image", "video-gen": "video", "music-gen": "music", "image-gen": "image" };
 export function engineRole(name: string): EngineRole { return ENGINE_ROLE[name] ?? "chat"; }
 
 /** Runtimes the Stack assembles from pinned wheels through uv, in an

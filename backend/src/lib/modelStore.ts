@@ -16,6 +16,7 @@ import { readModelManifest, removeModelManifest, writeModelManifest } from "@/li
 import { readHfFile, writeHfFile } from "@/lib/store/hfCache";
 import { raise } from "@/lib/health";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
+import { releaseSplashLayoutFor } from "@/lib/splashStore";
 
 export const ModelSourceSchema = z.enum(["catalog", "huggingface", "lm-studio"]);
 
@@ -77,6 +78,10 @@ export interface CatalogModelLike {
   /** A piece the role's engine loads beside its model (the `stt` voice
    * activity detector), never a model a person selects. */
   component?: string;
+  /** The ids of the component pins that install and remove together with
+   * this model whatever engine they are for (the coding model's Splash
+   * draft, CODE-STACK-01 S5a); the projector keeps its own `imageInput`. */
+  companions?: string[];
   /** `archive`: the download is a tar or zip package extracted next to
    * itself; `modelPath` is the extracted directory. `hub_file`: the file
    * is placed in the Stack's Hugging Face hub cache at the record's
@@ -571,6 +576,8 @@ export function removeModel(id: string): boolean {
   if (existsSync(own) && !isStoreFixedDir(own) && realpathSync(own).startsWith(realpathSync(modelsDir) + sep)) rmSync(own, { recursive: true, force: true });
   removeModelManifest(id);
   db.delete(models).where(eq(models.id, id)).run();
+  // The coding model and its Splash draft are hardlinked into Splash's own hub cache (CODE-STACK-01 S5a); removing either removes the layout, or the disk would not be freed.
+  releaseSplashLayoutFor(id);
   emit({ id: "model.installed", data: { model: id, removed: true } });
   bumpStackGeneration(`model ${id} removed`);
   return true;

@@ -32,7 +32,7 @@ Installed beside the model, never selected on its own: `muse-glimmer-30b-mmproj-
 
 ## coding (Coding)
 
-Runs on its own on-demand llama-server process (not chat's), started by the first coding request and unloaded after `stack.engines.coding.keep_warm_minutes` idle (default 15); the memory governor admits it as an on-demand item that yields to a picture, video or music job and never evicts a resident model. While a chat, voice or picture-reading request is answered it is paused for at most 120 s at a time (`stack.engines.coding.yield_to_chat`, default on), so chat stays as fast as when coding is idle.
+Runs on its own on-demand process (not chat's): Splash on an Apple silicon Mac with an M3 chip or newer, 64 GB of memory or more and macOS 26.4 or later (about 124 tokens/s against 27.6 on llama-server, measured on the same weights), and llama-server everywhere else and whenever Splash cannot start (`stack.engines.coding.engine`: auto, llama-server or splash). Started by the first coding request and unloaded after `stack.engines.coding.keep_warm_minutes` idle (default 15); the memory governor admits it as an on-demand item that yields to a picture, video or music job and never evicts a resident model. While a chat, voice or picture-reading request is answered it is paused for at most 120 s at a time (`stack.engines.coding.yield_to_chat`, default on), so chat stays as fast as when coding is idle.
 
 Engines per platform:
 
@@ -45,7 +45,8 @@ Engines per platform:
 | `llama-server-b10797-macos-arm64` | b10797 | darwin arm64 | pinned, verified |
 | `llama-server-b11476-linux-cuda-x64` | b11476 | linux x64 (NVIDIA) | pinned, not yet verified |
 | `llama-server-b10797-win-cuda-x64` | b10797 | win32 x64 (NVIDIA) | pinned, not yet verified |
-| `mlx-serve-v26.9.4-macos-arm64` | v26.9.4 | darwin arm64 | pinned, verified (the second chat engine; the coding role runs its own llama-server process, and a Splash engine kind is a later slice) |
+| `mlx-serve-v26.9.4-macos-arm64` | v26.9.4 | darwin arm64 | pinned, verified (the second chat engine; the coding role runs its own process and never mlx-serve) |
+| `splash-1.3.2-macos-arm64` | 1.3.2 | darwin arm64 | pinned, verified (the coding engine on Apple silicon with an M3 chip or newer, 36 GB or more and macOS 26.4 or later; its draft model is installed with the coding model; llama-server is the fallback) |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
@@ -53,6 +54,8 @@ Engines per platform:
 | p32 | not available |  |  |  |  |  |  |  | not available |
 | p64 | on demand | `qwen3.8-27b-ud-q4-k-m` | UD-Q4_K_M | 15.33 GB | not measured | not measured | Apache-2.0 | unsloth/Qwen3.8-27B-GGUF @ 4ca720788d1e01f1bff70c033e0d0028fd02e502 | pinned |
 | p128 | on demand | `qwen3.8-27b-ud-q4-k-m` | UD-Q4_K_M | 15.33 GB | not measured | not measured | Apache-2.0 | unsloth/Qwen3.8-27B-GGUF @ 4ca720788d1e01f1bff70c033e0d0028fd02e502 | pinned |
+
+Installed beside the model, never selected on its own: `qwen3.8-27b-dflash2-draft` (draft, 3.58 GB, Apache-2.0, incoai/Qwen3.8-27B-DFlash2 @ 015e795645c74b1a0eeef3b570031fb62e769bc5).
 
 ## judge (Judge)
 

@@ -242,7 +242,8 @@ test("an engine that cannot fit answers 503 and names the memory and what to do"
 });
 
 test("a wire the coding engine does not serve is a 501 with a plain sentence, and the engine is never started to find out", async () => {
-  setCodingEngineForTests("splash");
+  // An engine that serves none of the three wires (no row in ENGINE_CODING_WIRES): Splash has one since S5a.
+  setCodingEngineForTests("some-other-engine");
   for (const [path, body] of [["/v1/messages", messagesBody], ["/v1/messages/count_tokens", messagesBody], ["/v1/responses", { ...responsesBody, stream: true }]] as const) {
     const response = await post(path, body);
     expect(response.status).toBe(501);

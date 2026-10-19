@@ -3,7 +3,8 @@
 // fields of a pull (`POST /stack/v1/models`), straight from the shipped
 // pins. Pure: the route supplies the hardware and the installed set.
 import { PROFILE_MODEL_BINDINGS, sizeMachine, type ProfileTier } from "@/profiles";
-import type { HardwareInfo, MemorySource } from "@/lib/hardware";
+import { knownAppleChip, type HardwareInfo, type MemorySource } from "@/lib/hardware";
+import { splashDraftWanted } from "@/lib/splash";
 import { STACK_CHAT_MODEL, STACK_IMAGE_ENGINE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
 import { tierDefaultTtsEngine } from "@/speech/ttsEngines";
 import type { CatalogModelLike } from "@/lib/modelStore";
@@ -104,6 +105,8 @@ export function plannedPinsFor(tier: ProfileTier, target: { platform: string; ar
       const smaller = (pin.download?.approx_bytes ?? 0) > (STACK_CHAT_MODEL.download?.approx_bytes ?? 0);
       if (smaller) { add(STACK_CHAT_MODEL, true); add(pin); } else add(pin, true);
     } else add(pin, false, REMOVABLE_ROLES.includes(role));
+    // A model's companions install and remove with it (the coding model's Splash draft, CODE-STACK-01 S5a), where the engine that reads them can run.
+    if (role === "coding") for (const id of pin.companions ?? []) { const part = STACK_MODELS.find((candidate) => candidate.id === id); if (part && splashDraftWanted(target, tier.id, knownAppleChip())) add(part, false, true); }
     // A bound model that reads pictures brings its projector (VISION-03a).
     const projector = pin.imageInput ? STACK_MODELS.find((candidate) => candidate.id === pin.imageInput!.projector) : undefined;
     for (const part of STACK_MODELS.filter((candidate) => candidate.role === role && candidate.component && candidate.engine === pin.engine && !projectors.has(candidate.id))) add(part);

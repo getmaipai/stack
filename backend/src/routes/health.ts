@@ -5,7 +5,7 @@ import { componentIdOfFailureCode, startComponentInstall } from "@/lib/component
 import { apiRouter, ErrorSchema, idParamSchema } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { ignore, list as listHealth, resolve } from "@/lib/health";
-import { chatEngine, getProcess, restartRole, stopRole, unloadAllRoles } from "@/lib/supervisor";
+import { chatEngine, getProcess, restartRole, runningEngine, stopRole, unloadAllRoles } from "@/lib/supervisor";
 import { ENGINE_BINARIES, engineRole, selectEngineBinary } from "@/lib/engineCatalog";
 import { rollbackEngine, currentEngine, engineOfFailedSwap, previousEngine } from "@/updates/engines";
 import { ROLE_IDS, type RoleId } from "@/roles";
@@ -43,7 +43,10 @@ export async function runFix(code: string): Promise<{ ok: boolean; result: strin
       const previous = previousEngine(engine);
       if (!previous) return { ok: false, result: "No previous build is recorded to roll back to." };
       const runsChat = engineRole(engine) === "chat" && chatEngine() === engine;
+      // The coding engine is on demand: drained, and the next coding request starts the build the link now names.
+      const runsCoding = engineRole(engine) === "coding" && runningEngine("coding") === engine;
       if (runsChat) await stopRole("chat", "Draining for a rollback.");
+      if (runsCoding) await stopRole("coding", "Draining for a rollback.");
       await rollbackEngine(engine, previous);
       if (runsChat) await restartRole("chat");
       resolve(code);

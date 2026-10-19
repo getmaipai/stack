@@ -28,10 +28,12 @@ export const CODING_GENERATION_PATHS: readonly string[] = ["/v1/chat/completions
  * three: its server library carries `/v1/messages`, `/v1/messages/count_tokens`
  * and `/v1/responses` (and `/v1/responses/input_tokens`), checked with
  * `strings` on libllama-server-impl.dylib (docs/dev.md, CODE-STACK-01 S3).
- * An engine not listed serves none of them. S5 adds the Splash row once its
- * wires pass the engine contract suite. */
+ * An engine not listed serves none of them. The Splash row is S5a's, claimed
+ * from a real smoke test and not yet from the engine contract suite. */
 export const ENGINE_CODING_WIRES: Record<string, Record<CodingWire, boolean>> = {
   "llama-server": { messages: true, count_tokens: true, responses: true },
+  // Splash 1.3.2 (CODE-STACK-01 S5a): all three answered 200 on a real run (a plain "hi" turn on Messages and on Responses, a one-message body on count_tokens). The engine contract suite (ENGINE-SPLASH-01) has not run, so tool turns, streaming shapes and thinking blocks are still unproven. An engine that answers 404 for a path is mapped to a 501 anyway.
+  splash: { messages: true, count_tokens: true, responses: true },
 };
 
 export function engineServesWire(engine: string | null, wire: CodingWire): boolean {

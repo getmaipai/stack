@@ -197,6 +197,7 @@ export const STACK_CODING_MODEL: CatalogModelLike = {
   license: "Apache-2.0",
   revision: QWEN38_27B_REVISION,
   engine: "llama-server",
+  companions: ["qwen3.8-27b-dflash2-draft"],
   sizing: { profile: "p64", quantization: "UD-Q4_K_M" },
   download: {
     url: hfUrl(`${QWEN38_27B_REPO}/resolve/${QWEN38_27B_REVISION}/Qwen3.8-27B-UD-Q4_K_M.gguf`),
@@ -204,6 +205,40 @@ export const STACK_CODING_MODEL: CatalogModelLike = {
     approx_bytes: 16_464_440_224,
   },
   sampling: { temperature: 1.0, top_p: 0.95, top_k: 20, presence_penalty: 0.0, source: "Qwen/Qwen3.8-27B model card, Best Practices, Thinking Mode (the card has no coding-only set; its SWE-bench runs used temperature 1.0 and top_p 0.95)" },
+};
+
+// The coding model's Splash draft (CODE-STACK-01 S5a): Inco's DFlash2 draft for
+// Qwen3.8-27B, the speculative-decoding model Splash pairs with the target to reach
+// about 124 tokens/s on the Studio against 27.6 on llama-server. incoai/Qwen3.8-27B-DFlash2
+// at commit 015e7956 (huggingface.co/api/models, 2026-10-18); Apache-2.0 (the repository's
+// metadata). Two files: config.json (1,239 bytes, a plain git blob, so its sha256 was hashed
+// from the download) and model.safetensors (BF16, 3,848,817,896 bytes, sha256 = the
+// repository's git-lfs oid, confirmed by the HEAD request's x-linked-etag). It installs and
+// is removed with the coding model (`companions` on the coding pin), is installed only where
+// Splash can run, and only Splash reads it: llama-server and every other engine ignore it.
+// The Stack lays both files into Splash's own hub-cache folder by hardlink (lib/splashStore.ts)
+// and Splash never downloads them: the Stack's downloader verifies the hashes here.
+export const QWEN38_27B_DRAFT_REPO = "incoai/Qwen3.8-27B-DFlash2";
+const QWEN38_27B_DRAFT_REVISION = "015e795645c74b1a0eeef3b570031fb62e769bc5";
+export const STACK_CODING_DRAFT_MODEL: CatalogModelLike = {
+  id: "qwen3.8-27b-dflash2-draft",
+  role: "coding",
+  component: "draft",
+  repo: QWEN38_27B_DRAFT_REPO,
+  license: "Apache-2.0",
+  revision: QWEN38_27B_DRAFT_REVISION,
+  engine: "splash",
+  sizing: { profile: "p64", quantization: "BF16" },
+  download: {
+    url: hfUrl(`${QWEN38_27B_DRAFT_REPO}/resolve/${QWEN38_27B_DRAFT_REVISION}/model.safetensors`),
+    sha256: "67fc76d68dc5a9415511a4f394ef744d67510cd20e93b37cc2cc7d28e4bab65c",
+    approx_bytes: 3_848_817_896,
+    directory: "Qwen3.8-27B-DFlash2",
+    files: [
+      { path: "config.json", sha256: "873e3556509b0da06e29654ba00d4944888d4b5e8a33afde25f7eb27d321e980", bytes: 1_239 },
+      { path: "model.safetensors", sha256: "67fc76d68dc5a9415511a4f394ef744d67510cd20e93b37cc2cc7d28e4bab65c", bytes: 3_848_817_896 },
+    ],
+  },
 };
 
 // The `vision` pins (VISION-01b): Qwen's own GGUF of Qwen3-VL-4B-Instruct,
@@ -907,7 +942,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_DETAILED_MODELS, ...STACK_MUSIC_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_DETAILED_MODELS, ...STACK_MUSIC_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a
