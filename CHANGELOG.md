@@ -8,6 +8,10 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ## [Unreleased]
 
+### Added
+
+- Voices made from a reference clip on the Chatterbox Turbo engine (VOICES-02). `POST /v1/audio/speech` takes an optional `temperature` (0.1 to 2.0) and `pitch_semitones` (-12 to 12) beside `voice_url`; `voice_url` may be the address of a clip (WAV, MP3 or FLAC, 6 to 30 seconds) on the household's own network. The engine caches the prepared clip per sha256, passes the temperature to the model for that job only and restores its default voice after, and shifts the output pitch with the formants kept (numpy and scipy, no new dependency); a voice without a pitch skips the shift. A value out of range is refused with a plain message before the engine hears it. The clip tokenizer (S3TokenizerV2, 495 MB, pinned by commit and sha256) is fetched once, on the first clip voice.
+
 ### Fixed
 
 - Engine builds staged by URL accept the Catalog engine-index tag format, including Splash `1.3.2` and llama-server `b10797`; malformed tags are rejected before a download. The schema reuses the Catalog's one tag validator. Added a Stack-side Splash coding-wire contract for JSON and streaming shapes, model-name rewriting and the 20-second pause limit (CODE-STACK-01 S5a).
