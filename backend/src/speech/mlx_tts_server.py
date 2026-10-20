@@ -18,13 +18,18 @@ worker thread (MLX streams are per thread); the HTTP threads only queue jobs
 and write chunks, so /health answers while a synthesis runs.
 """
 import argparse
+import collections
+import hashlib
 import json
 import os
 import queue
 import struct
 import sys
+import tempfile
 import threading
 import time
+import urllib.error
+import urllib.request
 from email.parser import BytesParser
 from email.policy import HTTP
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -34,6 +39,11 @@ import numpy as np
 SAMPLE_RATE = 24000
 STREAM_INTERVAL_SECONDS = 1.0
 PRIME_TEXT = "Hello there. This is the voice, warming up."
+MAX_CLIP_BYTES = 20 * 1024 * 1024
+
+
+class ClipError(Exception):
+    """A reference voice request the person can fix and retry."""
 
 
 def wav_header(sample_rate: int) -> bytes:
@@ -129,21 +139,94 @@ class ChatterboxTurbo:
         from mlx_audio.tts.utils import load_model
         self.model = load_model(repo)
         self.sample_rate = int(getattr(self.model, "sample_rate", SAMPLE_RATE))
+        self.default_conds = getattr(self.model, "_conds", None)
+        self.clips = collections.OrderedDict()
+        self.clip_dir = tempfile.mkdtemp(prefix="mlx-tts-clips-")
+        self.cloner_ready = self.cloner_in_cache()
 
-    def stream(self, text: str, voice: str | None):
-        # The repo's own conditioning is the default voice; a reference clip (cloning)
-        # arrives in a later slice with the S3 tokenizer pinned beside it.
-        for result in self.model.generate(text=text, stream=True, streaming_interval=STREAM_INTERVAL_SECONDS):
-            yield np.array(result.audio).reshape(-1)
+    def cloner_in_cache(self) -> bool:
+        try:
+            from huggingface_hub import try_to_load_from_cache
+            return isinstance(try_to_load_from_cache("mlx-community/S3TokenizerV2", "model.safetensors"), str)
+        except Exception:
+            return False
+
+    def ensure_tokenizer(self) -> None:
+        if self.cloner_ready:
+            return
+        try:
+            from huggingface_hub import hf_hub_download
+            import mlx.core as mx
+            path = hf_hub_download("mlx-community/S3TokenizerV2", "model.safetensors", local_files_only=True)
+            weights = mx.load(path)
+            if hasattr(self.model._s3tokenizer, "sanitize"):
+                weights = self.model._s3tokenizer.sanitize(weights)
+            self.model._s3tokenizer.load_weights(list(weights.items()), strict=False)
+            mx.eval(self.model._s3tokenizer.parameters())
+            self.cloner_ready = True
+        except Exception as error:
+            raise ClipError("Voice cloning is not ready: the speech helper file is missing. Restart the voice engine, then try the voice again.") from error
+
+    def fetch_clip(self, address: str) -> bytes:
+        try:
+            with urllib.request.urlopen(address, timeout=15) as response:
+                data = response.read(MAX_CLIP_BYTES + 1)
+        except (urllib.error.URLError, OSError) as error:
+            raise ClipError("The reference recording could not be fetched from Home. Check that Home is running, then try the voice again.") from error
+        if not data:
+            raise ClipError("The reference recording is empty. Choose a recording between 6 and 30 seconds long.")
+        if len(data) > MAX_CLIP_BYTES:
+            raise ClipError("The reference recording is too large. Choose a recording under 20 MB.")
+        return data
+
+    def clip_seconds(self, path: str) -> float:
+        from mlx_audio.utils import load_audio
+        return len(load_audio(path, sample_rate=SAMPLE_RATE)) / SAMPLE_RATE
+
+    def stream(self, text: str, voice: str | None, temperature: float | None = None, pitch: float = 0.0):
+        try:
+            if voice and (voice.startswith("http://") or voice.startswith("https://")):
+                data = self.fetch_clip(voice)
+                key = hashlib.sha256(data).hexdigest()
+                if key in self.clips:
+                    self.clips.move_to_end(key)
+                else:
+                    path = os.path.join(self.clip_dir, key)
+                    with open(path, "wb") as clip_file:
+                        clip_file.write(data)
+                    seconds = self.clip_seconds(path)
+                    if seconds < 6.0 or seconds > 30.0:
+                        raise ClipError(f"The reference recording must be 6 to 30 seconds long; this one is {seconds:.1f} seconds.")
+                    self.ensure_tokenizer()
+                    self.model.prepare_conditionals(path)
+                    self.clips[key] = self.model._conds
+                    if len(self.clips) > 8:
+                        self.clips.popitem(last=False)
+                self.model._conds = self.clips[key]
+
+            generate_options = {"text": text, "stream": True, "streaming_interval": STREAM_INTERVAL_SECONDS}
+            if temperature is not None:
+                generate_options["temperature"] = temperature
+            if abs(pitch) < 0.001:
+                for result in self.model.generate(**generate_options):
+                    yield np.array(result.audio).reshape(-1)
+            else:
+                chunks = [np.array(result.audio).reshape(-1) for result in self.model.generate(**generate_options)]
+                audio = np.concatenate(chunks) if chunks else np.array([], dtype=np.float32)
+                yield pitch_shift(audio, self.sample_rate, pitch)
+        finally:
+            self.model._conds = self.default_conds
 
 
 ENGINES = {ChatterboxTurbo.id: ChatterboxTurbo}
 
 
 class Job:
-    def __init__(self, text: str, voice: str | None):
+    def __init__(self, text: str, voice: str | None, temperature: float | None = None, pitch: float = 0.0):
         self.text = text
         self.voice = voice
+        self.temperature = temperature
+        self.pitch = pitch
         self.out: "queue.Queue" = queue.Queue()
         self.cancelled = threading.Event()
 
@@ -182,7 +265,7 @@ def worker(engine_id: str, repo: str) -> None:
         if job is None:
             return
         try:
-            for chunk in engine.stream(job.text, job.voice):
+            for chunk in engine.stream(job.text, job.voice, job.temperature, job.pitch):
                 if job.cancelled.is_set():
                     break
                 job.out.put(to_pcm16(chunk))
@@ -210,6 +293,28 @@ def read_form(handler: BaseHTTPRequestHandler) -> dict:
     return {key: values[0] for key, values in parse_qs(body.decode("utf-8", "replace")).items()}
 
 
+def parse_job_fields(form: dict) -> tuple[float | None, float]:
+    temperature_value = form.get("temperature")
+    temperature = None
+    if temperature_value is not None and str(temperature_value).strip():
+        try:
+            temperature = float(temperature_value)
+        except (TypeError, ValueError):
+            temperature = None
+        if temperature is None or not 0.1 <= temperature <= 2.0:
+            raise ClipError("The sampling temperature must be a number from 0.1 to 2.0.")
+    pitch_value = form.get("pitch_semitones")
+    pitch = 0.0
+    if pitch_value is not None and str(pitch_value).strip():
+        try:
+            pitch = float(pitch_value)
+        except (TypeError, ValueError):
+            pitch = None
+        if pitch is None or not -12.0 <= pitch <= 12.0:
+            raise ClipError("The pitch offset must be a number from -12 to 12 semitones.")
+    return temperature, pitch
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -229,7 +334,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if self.path == "/health":
             if STATE["ready"]:
-                return self.reply_json(200, {"status": "ok"})
+                return self.reply_json(200, {"status": "ok", "cloning": bool(STATE["engine"].cloner_ready)})
             return self.reply_json(503, {"status": "loading" if not STATE["error"] else "failed", "error": STATE["error"]})
         if self.path == "/tags":
             engine = STATE["engine"]
@@ -248,11 +353,20 @@ class Handler(BaseHTTPRequestHandler):
         text = str(form.get("text") or "").strip()
         if not text:
             return self.reply_json(400, {"detail": "text is required."})
-        job = Job(text, form.get("voice_url") or None)
+        try:
+            temperature, pitch = parse_job_fields(form)
+        except ClipError as error:
+            return self.reply_json(400, {"detail": str(error)})
+        voice = form.get("voice_url") or None
+        if voice and not (str(voice).startswith("http://") or str(voice).startswith("https://")):
+            voice = None
+        job = Job(text, voice, temperature, pitch)
         JOBS.put(job)
         first = job.out.get()
         if isinstance(first, Exception):
-            return self.reply_json(500, {"detail": f"{type(first).__name__}: {first}"})
+            status = 400 if isinstance(first, ClipError) else 500
+            detail = str(first) if isinstance(first, ClipError) else f"{type(first).__name__}: {first}"
+            return self.reply_json(status, {"detail": detail})
         self.send_response(200)
         self.send_header("Content-Type", "audio/wav")
         self.send_header("Transfer-Encoding", "chunked")

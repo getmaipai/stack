@@ -1,6 +1,8 @@
 import os
 import sys
+import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 from scipy.signal import lfilter
@@ -104,6 +106,137 @@ class TestPitchShift(unittest.TestCase):
         out = server.pitch_shift(x, SR, 2.0)
         self.assertTrue(np.all(np.isfinite(out)))
         self.assertLessEqual(float(np.max(np.abs(out))), 1.0)
+
+
+class ReferenceClipTests(unittest.TestCase):
+    class FakeModel:
+        sample_rate = 24000
+
+        def __init__(self):
+            self._conds = "default"
+            self.prepared = []
+            self.generated = []
+            self.prepare_count = 0
+            self.raise_generate = False
+
+        def prepare_conditionals(self, path):
+            self.prepared.append(path)
+            self.prepare_count += 1
+            self._conds = f"conds-{self.prepare_count}"
+
+        def generate(self, text, stream, streaming_interval, **kwargs):
+            self.generated.append((kwargs, self._conds))
+            if self.raise_generate:
+                raise RuntimeError("generation failed")
+            yield type("Result", (), {"audio": np.array([0.1, 0.2], dtype=np.float32)})()
+            yield type("Result", (), {"audio": np.array([0.3], dtype=np.float32)})()
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.engine = server.ChatterboxTurbo.__new__(server.ChatterboxTurbo)
+        self.engine.model = self.FakeModel()
+        self.engine.sample_rate = 24000
+        self.engine.default_conds = "default"
+        self.engine.clips = __import__("collections").OrderedDict()
+        self.engine.clip_dir = self.temp.name
+        self.engine.cloner_ready = True
+        self.current_clip = b"clip-a"
+        self.seconds = 10.0
+        self.engine.fetch_clip = lambda _address: self.current_clip
+        self.engine.clip_seconds = lambda _path: self.seconds
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def run_stream(self, voice="http://home/clip", **kwargs):
+        return list(self.engine.stream("hello", voice, **kwargs))
+
+    def test_temperature_passed_only_when_given(self):
+        self.run_stream(voice=None, temperature=1.05)
+        self.assertEqual(self.engine.model.generated[-1][0], {"temperature": 1.05})
+        self.run_stream(voice=None)
+        self.assertNotIn("temperature", self.engine.model.generated[-1][0])
+
+    def test_clip_conditioning_restored_after_job_and_error(self):
+        self.run_stream()
+        self.assertEqual(self.engine.model.generated[-1][1], "conds-1")
+        self.assertEqual(self.engine.model._conds, "default")
+        self.engine.model.raise_generate = True
+        with self.assertRaises(RuntimeError):
+            self.run_stream()
+        self.assertEqual(self.engine.model._conds, "default")
+
+    def test_clip_cache_reuses_and_distinguishes_bytes(self):
+        self.run_stream()
+        self.run_stream()
+        self.assertEqual(len(self.engine.model.prepared), 1)
+        self.current_clip = b"clip-b"
+        self.run_stream()
+        self.assertEqual(len(self.engine.model.prepared), 2)
+
+    def test_ninth_clip_drops_least_recently_used(self):
+        for i in range(8):
+            self.current_clip = f"clip-{i}".encode()
+            self.run_stream()
+        self.current_clip = b"clip-1"
+        self.run_stream()  # make the first entry recently used
+        self.current_clip = b"clip-8"
+        self.run_stream()
+        self.assertEqual(len(self.engine.clips), 8)
+        self.current_clip = b"clip-0"
+        self.run_stream()
+        self.assertEqual(len(self.engine.model.prepared), 10)
+
+    def test_clip_duration_out_of_range_refuses_before_preparation(self):
+        for seconds in (5.0, 31.0):
+            self.seconds = seconds
+            with self.assertRaises(server.ClipError) as caught:
+                self.run_stream()
+            self.assertIn("6 to 30 seconds", str(caught.exception))
+            self.assertIn(f"{seconds:.1f}", str(caught.exception))
+        self.assertEqual(self.engine.model.prepared, [])
+
+    def test_pitch_zero_bypasses_shift_and_nonzero_shifts_once(self):
+        with patch.object(server, "pitch_shift", side_effect=AssertionError("called")):
+            chunks = self.run_stream(voice=None, pitch=0.0)
+        self.assertEqual(len(chunks), 2)
+        seen = []
+        shifted = np.array([0.7], dtype=np.float32)
+
+        def shift(audio, sample_rate, semitones):
+            seen.append((audio.copy(), sample_rate, semitones))
+            return shifted
+
+        with patch.object(server, "pitch_shift", side_effect=shift):
+            chunks = self.run_stream(voice=None, pitch=-1.0)
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(seen[0][1:], (24000, -1.0))
+        np.testing.assert_array_equal(seen[0][0], np.array([0.1, 0.2, 0.3], dtype=np.float32))
+        self.assertEqual(len(chunks), 1)
+        np.testing.assert_array_equal(chunks[0], shifted)
+
+    def test_missing_cloner_weights_refuses(self):
+        self.engine.cloner_ready = False
+        with patch.dict(sys.modules, {"huggingface_hub": type("Hub", (), {
+            "hf_hub_download": staticmethod(lambda *args, **kwargs: (_ for _ in ()).throw(OSError("missing")))
+        })()}):
+            with self.assertRaises(server.ClipError) as caught:
+                self.run_stream()
+        self.assertIn("Voice cloning is not ready", str(caught.exception))
+
+    def test_parse_job_fields_ranges_and_missing_values(self):
+        for value in ("0.05", "2.5", "abc"):
+            with self.assertRaises(server.ClipError) as caught:
+                server.parse_job_fields({"temperature": value})
+            self.assertEqual(str(caught.exception), "The sampling temperature must be a number from 0.1 to 2.0.")
+        for value in ("13", "-13"):
+            with self.assertRaises(server.ClipError) as caught:
+                server.parse_job_fields({"pitch_semitones": value})
+            self.assertEqual(str(caught.exception), "The pitch offset must be a number from -12 to 12 semitones.")
+        self.assertEqual(server.parse_job_fields({"temperature": "0.1", "pitch_semitones": "-12"}), (0.1, -12.0))
+        self.assertEqual(server.parse_job_fields({"temperature": "2.0", "pitch_semitones": "12"}), (2.0, 12.0))
+        self.assertEqual(server.parse_job_fields({"temperature": "", "pitch_semitones": ""}), (None, 0.0))
+        self.assertEqual(server.parse_job_fields({}), (None, 0.0))
 
 
 if __name__ == "__main__":
