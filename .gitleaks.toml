@@ -4,6 +4,8 @@ title = "MaiPai Stack gitleaks config"
 useDefault = true
 
 [allowlist]
+# A model file name in the Splash tests reads as a generic key to the scanner.
+regexes = ['''qwen3\.8-27b-ud-q4-k-m''']
 paths = [
   '''(^|/)node_modules(/|$)''',
   '''(^|/)data(/|$)''',
