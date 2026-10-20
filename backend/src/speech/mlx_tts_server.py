@@ -42,6 +42,18 @@ PRIME_TEXT = "Hello there. This is the voice, warming up."
 MAX_CLIP_BYTES = 20 * 1024 * 1024
 
 
+def clip_extension(data: bytes) -> str | None:
+    """The file extension the decoder needs, read from the bytes (a name without one is refused by the decoder). Only the
+    formats it reads without ffmpeg, which this machine does not have: WAV, MP3 and FLAC."""
+    if data[:4] == b"RIFF" and data[8:12] == b"WAVE":
+        return "wav"
+    if data[:4] == b"fLaC":
+        return "flac"
+    if data[:3] == b"ID3" or (len(data) > 1 and data[0] == 0xFF and data[1] & 0xE0 == 0xE0):
+        return "mp3"
+    return None
+
+
 class ClipError(Exception):
     """A reference voice request the person can fix and retry."""
 
@@ -191,7 +203,10 @@ class ChatterboxTurbo:
                 if key in self.clips:
                     self.clips.move_to_end(key)
                 else:
-                    path = os.path.join(self.clip_dir, key)
+                    extension = clip_extension(data)
+                    if extension is None:
+                        raise ClipError("This recording is not a WAV, MP3 or FLAC file. Save it as one of those and choose it again.")
+                    path = os.path.join(self.clip_dir, f"{key}.{extension}")
                     with open(path, "wb") as clip_file:
                         clip_file.write(data)
                     seconds = self.clip_seconds(path)

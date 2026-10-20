@@ -140,7 +140,7 @@ class ReferenceClipTests(unittest.TestCase):
         self.engine.clips = __import__("collections").OrderedDict()
         self.engine.clip_dir = self.temp.name
         self.engine.cloner_ready = True
-        self.current_clip = b"clip-a"
+        self.current_clip = b"RIFF\0\0\0\0WAVEclip-a"
         self.seconds = 10.0
         self.engine.fetch_clip = lambda _address: self.current_clip
         self.engine.clip_seconds = lambda _path: self.seconds
@@ -170,20 +170,20 @@ class ReferenceClipTests(unittest.TestCase):
         self.run_stream()
         self.run_stream()
         self.assertEqual(len(self.engine.model.prepared), 1)
-        self.current_clip = b"clip-b"
+        self.current_clip = b"RIFF\0\0\0\0WAVEclip-b"
         self.run_stream()
         self.assertEqual(len(self.engine.model.prepared), 2)
 
     def test_ninth_clip_drops_least_recently_used(self):
         for i in range(8):
-            self.current_clip = f"clip-{i}".encode()
+            self.current_clip = b"RIFF\0\0\0\0WAVE" + f"clip-{i}".encode()
             self.run_stream()
-        self.current_clip = b"clip-1"
+        self.current_clip = b"RIFF\0\0\0\0WAVEclip-1"
         self.run_stream()  # make the first entry recently used
-        self.current_clip = b"clip-8"
+        self.current_clip = b"RIFF\0\0\0\0WAVEclip-8"
         self.run_stream()
         self.assertEqual(len(self.engine.clips), 8)
-        self.current_clip = b"clip-0"
+        self.current_clip = b"RIFF\0\0\0\0WAVEclip-0"
         self.run_stream()
         self.assertEqual(len(self.engine.model.prepared), 10)
 
@@ -237,6 +237,18 @@ class ReferenceClipTests(unittest.TestCase):
         self.assertEqual(server.parse_job_fields({"temperature": "2.0", "pitch_semitones": "12"}), (2.0, 12.0))
         self.assertEqual(server.parse_job_fields({"temperature": "", "pitch_semitones": ""}), (None, 0.0))
         self.assertEqual(server.parse_job_fields({}), (None, 0.0))
+
+
+class ClipFormatTests(unittest.TestCase):
+    def test_extension_is_read_from_the_bytes(self):
+        self.assertEqual(server.clip_extension(b"RIFF\0\0\0\0WAVEfmt "), "wav")
+        self.assertEqual(server.clip_extension(b"fLaC\0\0"), "flac")
+        self.assertEqual(server.clip_extension(b"ID3\4\0"), "mp3")
+        self.assertEqual(server.clip_extension(b"\xff\xfb\x90\x00"), "mp3")
+
+    def test_formats_that_need_ffmpeg_are_refused(self):
+        for data in (b"OggS\0\2", b"\x1aE\xdf\xa3webm", b"\0\0\0\x20ftypM4A "):
+            self.assertIsNone(server.clip_extension(data))
 
 
 if __name__ == "__main__":
