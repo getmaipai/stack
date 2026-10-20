@@ -13,6 +13,7 @@ import { codingEngineName, codingLaunchSettings, codingServedModel, EngineUnavai
 import { listModels, ProvenanceIncompleteError } from "@/lib/modelStore";
 import { DownloadVerificationError } from "@/lib/download";
 import { POCKET_TTS_GATED_REPO } from "@/speech/pocketTts";
+import { prepareChatterboxVoice, voiceSettingsRefusal } from "@/speech/chatterboxClones";
 import { ensureCloningWeights, prepareVoice, voiceNeedsCloning, VoiceRefusedError } from "@/speech/voices";
 import { hasJobRunner, submitJob, waitForJob } from "@/lib/jobs";
 import { endWithStream, heavyGate } from "@/lib/heavyGate";
@@ -42,6 +43,9 @@ const TranscriptionResponseSchema = z.object({ text: z.string() });
 const SpeechFormSchema = z.object({
   text: z.string().min(1),
   voice_url: z.string().min(1).optional(),
+  /** VOICES-02: the voice's own sampling temperature (0.1 to 2.0) and pitch offset in semitones (-12 to 12); the Chatterbox engine only. */
+  temperature: z.coerce.number().optional(),
+  pitch_semitones: z.coerce.number().optional(),
   model: z.string().min(1).optional().openapi({ example: "tts" }),
   timeout_ms: z.coerce.number().int().positive().optional(),
 });
@@ -275,14 +279,18 @@ v1Routes.openapi(speechRoute, async (c) => {
     // cloning weights waits for them and for an engine that loaded them.
     // Only Pocket TTS names its voices by preset or path; the MLX engine
     // speaks its one built-in voice, so a voice Home saved from Pocket's
-    // list (or none) is not an error there (VOICE-STUDIO-01).
+    // list (or none) is not an error there (VOICE-STUDIO-01). A clip
+    // address on the household's network is the one voice it takes
+    // besides, with the voice's own temperature and pitch (VOICES-02).
     const pocket = ttsEngineInEffect() === "pocket";
-    const voice = pocket ? await prepareVoice(form.voice_url, { signal: controller.signal }) : undefined;
+    const refusal = voiceSettingsRefusal(form.temperature, form.pitch_semitones);
+    if (refusal) return jsonReply(c, { error: refusal, reason: "voice-setting-out-of-range" }, 400, identityHeaders(null));
+    const voice = pocket ? await prepareVoice(form.voice_url, { signal: controller.signal }) : await prepareChatterboxVoice(form.voice_url, { signal: controller.signal });
     if (pocket && voiceNeedsCloning(voice)) await ensureCloningLoaded(resolution.role, controller.signal);
     // ISOLATION-01: speech is interactive from the ask until the last audio is sent (a heavy job is paused meanwhile).
     const end = heavyGate.begin(resolution.role);
     let spoken: Awaited<ReturnType<typeof speakRole>>;
-    try { spoken = await speakRole(resolution.role, speechForm(form.text, voice), controller.signal); } catch (error) { end(); throw error; }
+    try { spoken = await speakRole(resolution.role, speechForm(form.text, voice, pocket || !voice ? {} : { temperature: form.temperature, pitch_semitones: form.pitch_semitones }), controller.signal); } catch (error) { end(); throw error; }
     for (const [name, value] of Object.entries(spoken.headers)) c.header(name, value);
     if (!spoken.body) { end(); return new Response(JSON.stringify({ error: spoken.status === 499 ? "Request cancelled" : spoken.status === 504 ? "The engine timed out." : "The engine did not answer." }), { status: spoken.status, headers: { ...spoken.headers, "content-type": "application/json" } }); }
     return new Response(endWithStream(spoken.body, end), { status: spoken.status, headers: { ...spoken.headers, "content-type": spoken.contentType ?? "audio/wav", "cache-control": "no-cache" } });

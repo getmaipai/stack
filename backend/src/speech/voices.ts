@@ -169,7 +169,7 @@ export function voiceNeedsCloning(voiceUrl: string | undefined, presets = POCKET
   return true;
 }
 
-function privateHost(host: string): boolean {
+export function privateHost(host: string): boolean {
   if (host === "localhost" || host.endsWith(".local") || host.endsWith(".home.arpa")) return true;
   const v4 = host.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
   if (v4) { const [a, b] = [Number(v4[1]), Number(v4[2])]; return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254); }

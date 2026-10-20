@@ -283,10 +283,16 @@ export async function measureProcessMemoryBytes(pid: number | null): Promise<num
  * render (a persona-roster name, never household text). */
 export const PROBE_SENTENCE = "Clover, the kitchen light is on.";
 /** spec/voice's /tts form: `text`, and a voice only when named. */
-export function speechForm(text: string, voiceUrl?: string): FormData {
+/** What the scripted engine received on the speech path, one object per request (for the suite). */
+export const scriptedSpeechLog: Array<Record<string, string>> = [];
+
+export function speechForm(text: string, voiceUrl?: string, voice: { temperature?: number; pitch_semitones?: number } = {}): FormData {
   const form = new FormData();
   form.append("text", text);
   if (voiceUrl) form.append("voice_url", voiceUrl);
+  // VOICES-02: a voice made from a clip carries its own sampling temperature and pitch offset (a zero offset is no shift).
+  if (voice.temperature !== undefined) form.append("temperature", String(voice.temperature));
+  if (voice.pitch_semitones !== undefined && voice.pitch_semitones !== 0) form.append("pitch_semitones", String(voice.pitch_semitones));
   return form;
 }
 /** The speech wire's probe: the form through the engine's own shape, the
@@ -2208,8 +2214,9 @@ export function scriptedProcess(role: RoleId, overrides: Partial<RoleProcess> = 
       if (path !== SPEECH_PATH) return json({ error: "Not found." }, 404);
       const form = init.body instanceof FormData ? init.body : null;
       const voice = form?.get("voice_url");
-      // The real engine takes a preset name or an hf:// path it can read offline; anything else is its own 400.
-      if (typeof voice === "string" && voice && !(voice in POCKET_TTS_PRESET_VOICES) && !voice.startsWith("hf://")) return new Response(JSON.stringify({ detail: `Unknown voice ${voice}.` }), { status: 400, headers: { "content-type": "application/json" } });
+      if (form) scriptedSpeechLog.push(Object.fromEntries([...form.entries()].map(([name, value]) => [name, String(value)])));
+      // The real engine takes a preset name, an hf:// path it can read offline or (Chatterbox) a clip address; anything else is its own 400.
+      if (typeof voice === "string" && voice && !(voice in POCKET_TTS_PRESET_VOICES) && !voice.startsWith("hf://") && !/^https?:\/\//.test(voice)) return new Response(JSON.stringify({ detail: `Unknown voice ${voice}.` }), { status: 400, headers: { "content-type": "application/json" } });
       // A 24 kHz mono 16-bit WAV in two chunks: the header with the
       // placeholder data size Pocket TTS writes, then a beat of silence.
       const header = new Uint8Array(44);

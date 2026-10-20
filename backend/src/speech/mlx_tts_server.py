@@ -47,6 +47,76 @@ def to_pcm16(samples) -> bytes:
     return (np.clip(audio, -1.0, 1.0) * 32767.0).astype("<i2").tobytes()
 
 
+def pitch_shift(audio, sample_rate: int, semitones: float):
+    """Shift the pitch of mono float audio by `semitones` (negative lowers), keeping the formants (the vocal-tract
+    resonances) where they were, so a voice sounds like the same person at another pitch. Same length as the input."""
+    if abs(semitones) <= 0.001:
+        return audio
+    from fractions import Fraction
+    from scipy.signal import resample_poly
+
+    x = np.asarray(audio, dtype=np.float64).reshape(-1)
+    n = len(x)
+    n_fft, hop, lifter = 2048, 512, 40
+    half = n_fft // 2 + 1
+    ratio = 2.0 ** (semitones / 12.0)
+    window = np.hanning(n_fft + 1)[:n_fft]
+    expected = 2.0 * np.pi * np.arange(half) * hop / n_fft  # phase a bin advances per hop
+
+    def stft(signal):
+        padded = np.concatenate([np.zeros(n_fft // 2), signal, np.zeros(n_fft)])
+        count = (len(padded) - n_fft) // hop + 1
+        index = np.arange(n_fft)[None, :] + hop * np.arange(count)[:, None]
+        return np.fft.rfft(padded[index] * window, axis=1)
+
+    def istft(spectrum, length):
+        count = spectrum.shape[0]
+        out = np.zeros(hop * (count - 1) + n_fft)
+        weight = np.zeros_like(out)
+        frames = np.fft.irfft(spectrum, n_fft, axis=1) * window
+        for m in range(count):
+            out[m * hop:m * hop + n_fft] += frames[m]
+            weight[m * hop:m * hop + n_fft] += window ** 2
+        out = out / np.maximum(weight, 1e-8)
+        return out[n_fft // 2:n_fft // 2 + length]
+
+    def envelope(spectrum):
+        # Cepstral liftering: keeping only the first quefrencies leaves the smooth resonance shape, not the harmonics.
+        log_mag = np.log(np.abs(spectrum) + 1e-10)
+        cepstrum = np.fft.irfft(log_mag, n_fft, axis=1)
+        cepstrum[:, lifter:n_fft - lifter + 1] = 0.0
+        return np.exp(np.fft.rfft(cepstrum, axis=1).real)
+
+    # Phase-vocoder time stretch by `ratio`, then play it back `ratio` times faster: the pitch moves by `ratio`, the length returns.
+    source = stft(x)
+    frames_in = source.shape[0]
+    stretched_len = int(round(n * ratio))
+    frames_out = max(2, stretched_len // hop + 2)
+    spectrum = np.empty((frames_out, half), dtype=np.complex128)
+    phase = np.angle(source[0])
+    for m in range(frames_out):
+        position = min(m / ratio, frames_in - 1.0001)
+        a = int(position)
+        frac = position - a
+        magnitude = (1.0 - frac) * np.abs(source[a]) + frac * np.abs(source[a + 1])
+        if m:
+            delta = np.angle(source[a + 1]) - np.angle(source[a]) - expected
+            phase = phase + expected + (delta + np.pi) % (2.0 * np.pi) - np.pi
+        spectrum[m] = magnitude * np.exp(1j * phase)
+    stretched = istft(spectrum, stretched_len)
+    fraction = Fraction(ratio).limit_denominator(1000)
+    shifted = resample_poly(stretched, fraction.denominator, fraction.numerator)
+    shifted = np.pad(shifted, (0, max(0, n - len(shifted))))[:n]
+
+    # Put the original resonances back: scale each frame so its smooth envelope matches the original's at the same moment.
+    moved = stft(shifted)
+    gain = np.clip(envelope(source[:moved.shape[0]]) / envelope(moved[:source.shape[0]]), 0.25, 4.0)
+    count = min(len(gain), moved.shape[0])
+    moved[:count] *= gain[:count]
+    out = istft(moved, n)
+    return np.clip(out, -1.0, 1.0).astype(np.float32)
+
+
 class ChatterboxTurbo:
     """Chatterbox Turbo 350M through the mlx-audio port (MIT code; the weights card
     says Apache-2.0, upstream MIT). Tags are plain bracketed words in the text."""

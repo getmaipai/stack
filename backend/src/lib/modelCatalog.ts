@@ -496,6 +496,30 @@ export const STACK_TTS_CHATTERBOX_PARTS: CatalogModelLike[] = CHATTERBOX_FILES.m
   download: { url: hfUrl(`${CHATTERBOX_REPO}/resolve/${CHATTERBOX_REVISION}/${part.file}`), sha256: part.sha256, approx_bytes: part.bytes, hub_file: part.file },
 }));
 
+// VOICES-02: the reference-clip tokenizer a cloned voice is encoded through (S3TokenizerV2, 495 MB), pinned by commit,
+// sha256 and size like every file here but fetched on the first clip voice rather than with the first-run plan: the
+// default voice never needs it, and a household that never makes a voice never pays the disk. Like the gated Pocket
+// cloning weights it is not part of STACK_MODELS (the engine runs without it). The repository declares no licence of
+// its own; it is the MLX conversion of CosyVoice2-0.5B's speech tokenizer (FunAudioLLM, Apache-2.0).
+export const CHATTERBOX_CLONER_REPO = "mlx-community/S3TokenizerV2";
+export const CHATTERBOX_CLONER_REVISION = "e0c9886f0e1c35ae85b1f27277416fb19fc72bec";
+export const STACK_TTS_CHATTERBOX_CLONER: CatalogModelLike = {
+  id: "chatterbox-cloner-s3-tokenizer-v2",
+  role: "tts",
+  component: "chatterbox-cloner",
+  repo: CHATTERBOX_CLONER_REPO,
+  license: "Apache-2.0",
+  revision: CHATTERBOX_CLONER_REVISION,
+  engine: CHATTERBOX_ENGINE,
+  sizing: { profile: "p64", quantization: "n/a" },
+  download: {
+    url: hfUrl(`${CHATTERBOX_CLONER_REPO}/resolve/${CHATTERBOX_CLONER_REVISION}/model.safetensors`),
+    sha256: "928726bc1f206a613d36b8f49e297eae9c5593a21bf9b92ddfe2c23f85eb92cc",
+    approx_bytes: 494_868_984,
+    hub_file: "model.safetensors",
+  },
+};
+
 // The `image` pin (STACK-13b): Stable Diffusion 1.5, the EMA-only
 // single-file checkpoint, the smallest mainstream file ComfyUI's plain
 // checkpoint loader takes, from the maintained mirror of the original
