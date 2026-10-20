@@ -1677,6 +1677,14 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "temperature": {
+                    "type": "number",
+                    "nullable": true
+                  },
+                  "pitch_semitones": {
+                    "type": "number",
+                    "nullable": true
+                  },
                   "model": {
                     "type": "string",
                     "minLength": 1,
