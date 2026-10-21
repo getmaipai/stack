@@ -95,7 +95,7 @@ test("PUT /roots saves the declaration and GET shows it; a bad folder is a 422 w
   expect((await bad.json() as any).code).toBe("root_refused");
   const status = await (await app.request("/stack/v1/media")).json() as any;
   expect(status.media.roots.read).toEqual([root]);
-  expect(status.media.kinds).toEqual(["media.probe", "media.fetch", "media.transcode", "media.preview", "media.setup"]);
+  expect(status.media.kinds).toEqual(["media.probe", "media.fetch", "media.transcode", "media.preview", "media.companion_clip", "media.setup"]);
   expect(status.media.lane).toMatchObject({ name: "idle", cap: 64, queued: 0 });
   expect(status.media.tools.map((tool: any) => tool.name)).toEqual(["ffmpeg", "ffprobe", "yt-dlp"]);
   expect(status.media.quiet_policy).toEqual({ failures: 4, minutes: 30 });
