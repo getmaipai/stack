@@ -748,7 +748,9 @@ export function selectedModel(role: RoleId): ModelRecord | null {
   // directory for mlx-serve), both installed side by side.
   const engine = recordEngineFor(role);
   const selectable = listModels().filter((model) => servesRole(model, role, engine));
-  const preferred = preferredModels.get(role);
+  // The session's "load this" first, then the choice Home stored in the setting (it survives a restart).
+  const stored = role === "chat" ? String(settingValues()["stack.engines.chat.model"] ?? "") : "";
+  const preferred = preferredModels.get(role) ?? (stored || undefined);
   const profileModel = machineTier ? PROFILE_MODEL_BINDINGS[machineTier]?.[role] : undefined;
   return selectable.find((model) => model.id === preferred) ?? selectable.find((model) => model.id === profileModel) ?? selectable[0] ?? null;
 }

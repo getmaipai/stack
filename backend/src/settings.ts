@@ -93,6 +93,8 @@ export const SETTINGS: SettingDeclaration[] = [
   { ...stack, key: "stack.engines.llama_server.threads", selector: "number", range: { min: 0, max: 256 }, default: 0, label: "CPU threads", help: "CPU threads used by the engine. Zero lets the engine choose.", section: { id: "engines.llama_server", order: 30 }, level: "expert", needs_restart: true },
   { ...stack, key: "stack.engines.llama_server.cache_ram_mb", selector: "number", range: { min: 0, max: 1_048_576 }, default: 0, label: "Cache RAM", help: "Optional cache reservation in megabytes.", section: { id: "engines.llama_server", order: 40 }, level: "expert", needs_restart: true },
   { ...stack, key: "stack.engines.llama_server.flash_attention", selector: "boolean", default: true, label: "Flash attention", help: "Use the faster attention implementation when supported.", section: { id: "engines.llama_server", order: 50 }, level: "advanced", needs_restart: true },
+  // MODEL-SWITCH-01: the chat model the person chose in Home (Settings, Models). Empty means the machine tier's own model. Written by the Stack when a chat model is loaded from Home, so the choice survives a restart; a model that is no longer installed falls back to the tier's model.
+  { ...stack, key: "stack.engines.chat.model", selector: "text", default: "", label: "Chat model", help: "The id of the installed chat model to run. Leave empty for the model this computer's memory size gets by default. Home sets this when you choose a chat model in Settings, Models.", section: { id: "engines.chat", order: 7 }, level: "expert", needs_restart: false },
   ...GPU_LAYER_ROLES.map(gpuLayersSetting),
   // The coding engine (CODE-STACK-01 S2): its own llama-server process,
   // loaded by the first coding request and unloaded when idle.

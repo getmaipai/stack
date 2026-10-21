@@ -114,6 +114,54 @@ export const STACK_CHAT_MUSE_30B_M_MODEL: CatalogModelLike = {
   sampling: MUSE_30B_SAMPLING,
 };
 
+// MODEL-SWITCH-01 / CHAT-TPS-04 (2026-10-21): Qwen3.6-35B-A3B, an optional
+// chat model an admin installs and chooses in Home Settings, Models. It is
+// not bound to any tier: Muse stays the household default (STACK-MUSE-01).
+// Mixture of experts, 35B stored and 3B active per token, 40 layers (10
+// full-attention layers beside 30 Gated DeltaNet layers), 2 KV heads,
+// 262,144 context, Apache-2.0 on the card. Unsloth's GGUF repository,
+// pinned to one revision; sha256 and sizes are the repository's git-lfs
+// oids. The template reasons by default; the engine's `--reasoning off`
+// (every chat launch) turns that off, and a request's own
+// `chat_template_kwargs: { enable_thinking: true }` turns it back on for
+// one turn. The model has no `/nothink` soft switch. Sampling is the
+// card's non-thinking set. The F16 projector (0.9 GB) loads beside the
+// weights in the one chat process, so the model reads pictures.
+const QWEN36_35B_REPO = "unsloth/Qwen3.6-35B-A3B-GGUF";
+const QWEN36_35B_REVISION = "a483e9e6cbd595906af30beda3187c2663a1118c";
+export const STACK_CHAT_QWEN36_35B_PROJECTOR: CatalogModelLike = {
+  id: "qwen3-6-35b-a3b-mmproj-f16",
+  role: "chat",
+  component: "projector",
+  repo: QWEN36_35B_REPO,
+  license: "Apache-2.0",
+  revision: QWEN36_35B_REVISION,
+  engine: "llama-server",
+  sizing: { profile: "p64", quantization: "F16" },
+  download: {
+    url: hfUrl(`${QWEN36_35B_REPO}/resolve/${QWEN36_35B_REVISION}/mmproj-F16.gguf`),
+    sha256: "8971ee4f331ff0a4c609374f32984b3d4e6dc086c0aa35f1d637fad1829e887f",
+    approx_bytes: 899_283_680,
+  },
+};
+export const STACK_CHAT_QWEN36_35B_MODEL: CatalogModelLike = {
+  id: "qwen3-6-35b-a3b-ud-q4-k-xl",
+  role: "chat",
+  repo: QWEN36_35B_REPO,
+  license: "Apache-2.0",
+  revision: QWEN36_35B_REVISION,
+  engine: "llama-server",
+  sizing: { profile: "p64", quantization: "UD-Q4_K_XL" },
+  download: {
+    url: hfUrl(`${QWEN36_35B_REPO}/resolve/${QWEN36_35B_REVISION}/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf`),
+    sha256: "707a55a8a4397ecde44de0c499d3e68c1ad1d240d1da65826b4949d1043f4450",
+    approx_bytes: 22_360_456_160,
+  },
+  imageInput: { projector: STACK_CHAT_QWEN36_35B_PROJECTOR.id },
+  launch: { imageMaxTokens: 2560 },
+  sampling: { temperature: 0.7, top_p: 0.8, top_k: 20, presence_penalty: 1.5, source: "Qwen/Qwen3.6-35B-A3B model card, non-thinking (instruct) sampling" },
+};
+
 // ENGINE-MLX-01: the same Muse Glimmer 30B as an MLX 4-bit directory, for
 // the oMLX chat engine (docs/design/chat-engine-comparison-2026-10-17.md in
 // Home). mlx-community's conversion of meta-models/Muse-Glimmer-30B (the
@@ -966,7 +1014,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_DETAILED_MODELS, ...STACK_MUSIC_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_DETAILED_MODELS, ...STACK_MUSIC_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

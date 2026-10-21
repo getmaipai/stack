@@ -2748,3 +2748,36 @@ a season without an unplanned restart, survived every update with
 rollback proven at least once, and its measured profiles have matched
 what a fresh install sees on three machines it has never seen. The list
 grows here.
+
+## An optional chat model: Qwen3.6-35B-A3B (MODEL-SWITCH-01, 2026-10-21)
+
+Muse stays the chat pin on every tier above 24 GB (STACK-MUSE-01). Beside it
+the Stack pins one optional chat model that no tier installs and Home offers
+in Settings, AI models: `unsloth/Qwen3.6-35B-A3B-GGUF` at revision
+`a483e9e` (Apache-2.0; mixture of experts, 35B stored and 3B active, 40
+layers of which 10 hold a KV cache, 262144 context), file
+`Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf` (22,360,456,160 bytes) and the picture
+file `mmproj-F16.gguf` (899,283,680 bytes), both with the repository's
+git-lfs hashes. Ids: `qwen3-6-35b-a3b-ud-q4-k-xl` and
+`qwen3-6-35b-a3b-mmproj-f16`.
+
+- **Thinking.** The template reasons by default. Every chat launch already
+  passes `--reasoning off`, so it answers at once; a request that sends
+  `chat_template_kwargs: { enable_thinking: true }` thinks for that turn.
+  There is no `/nothink` soft switch, so the record pins no template
+  variable.
+- **Sampling.** The card's non-thinking set (temperature 0.7, top_p 0.8,
+  top_k 20, presence_penalty 1.5) fills what a request leaves out.
+- **Launch.** The ordinary chat launch fits: every layer on the GPU, flash
+  attention, `--jinja`, q8_0 KV cache, the projector with
+  `--image-max-tokens 2560`. Measured on a 128 GB Mac Studio: 262144 context
+  admitted, 27.0 GB resident, loaded in 8 s from a warm file cache.
+- **Template check.** `/apply-template` shows the system message and the
+  tools reach the model and tool calls parse. The template drops a system
+  message that follows the first user message, so a caller must fold late
+  system messages into the first (Home does: `foldLateSystemMessages`).
+- **The chosen model survives a restart.** `POST /stack/v1/models/{id}/actions`
+  with `load` now also writes `stack.engines.chat.model`; `selectedModel`
+  reads it after the session's own preference. An uninstalled or unservable
+  id falls back to the tier's model.
+
