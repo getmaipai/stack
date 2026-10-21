@@ -10,6 +10,7 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Added
 
+- `media.companion_clip` on the media job lane: removes green or magenta key backgrounds (or accepts alpha video), fits a loop or one-shot, and writes a transparent still plus compact H.264 and optional AV1 companion clips with the premultiplied-colour and matte player contract (CMEDIA-STACK-01).
 - An optional chat model, Qwen3.6-35B-A3B (Unsloth UD-Q4_K_XL and its F16 picture file, pinned at one revision), that no tier installs. Home pulls it and loads it with `POST /stack/v1/models` and `.../actions`; the chosen chat model is stored in the new setting `stack.engines.chat.model` so it survives a restart, and an id that is no longer installed falls back to the tier's model (MODEL-SWITCH-01).
 - Voices made from a reference clip on the Chatterbox Turbo engine (VOICES-02). `POST /v1/audio/speech` takes an optional `temperature` (0.1 to 2.0) and `pitch_semitones` (-12 to 12) beside `voice_url`; `voice_url` may be the address of a clip (WAV, MP3 or FLAC, 6 to 30 seconds) on the household's own network. The engine caches the prepared clip per sha256, passes the temperature to the model for that job only and restores its default voice after, and shifts the output pitch with the formants kept (numpy and scipy, no new dependency); a voice without a pitch skips the shift. A value out of range is refused with a plain message before the engine hears it. The clip tokenizer (S3TokenizerV2, 495 MB, pinned by commit and sha256) is fetched once, on the first clip voice.
 

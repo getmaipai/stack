@@ -71,6 +71,19 @@ export const PreviewInput = z.object({
 }).strict();
 export type PreviewInput = z.infer<typeof PreviewInput>;
 
+export const CompanionClipInput = z.object({
+  path: Path,
+  output_dir: Path.optional(),
+  output_name: z.string().min(1).max(200).optional(),
+  key: z.enum(["#00FF00", "#FF00FF", "none"]),
+  kind: z.enum(["loop", "oneshot"]),
+  min_seconds: z.number().min(1).max(10),
+  max_seconds: z.number().min(1).max(10),
+  colours: z.array(z.string().regex(/^#[0-9A-F]{6}$/)).max(8).default([]),
+  max_bytes: z.number().int().min(1).max(20_000_000).default(614400),
+}).strict().refine((input) => input.min_seconds <= input.max_seconds, { path: ["min_seconds"], message: "must be at most max_seconds" });
+export type CompanionClipInput = z.infer<typeof CompanionClipInput>;
+
 export const SetupInput = z.object({ person_initiated: z.boolean().default(true) }).strict();
 
 /** The sentence a bad input gets: the first problem, in words. */

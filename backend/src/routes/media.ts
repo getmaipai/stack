@@ -1,6 +1,6 @@
 // MEDIA-STACK-01: the media service's state and the two things Home sets on
-// it. The work itself runs as jobs (kinds media.probe, media.fetch,
-// media.transcode, media.preview, media.setup on POST /stack/v1/jobs).
+// it. The work itself runs as jobs on POST /stack/v1/jobs, including
+// media.companion_clip.
 import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter, ErrorSchema } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
