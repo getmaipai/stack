@@ -227,3 +227,16 @@ test("a switch that waits too long gives up in plain words and stays in normal m
   expect(order).not.toContain("residents-stopped");
   __setWaitTuningForTests(2_000, 30 * 60_000);
 });
+
+test("while the large coding mode holds generators, a picture, video or song request is refused up front in plain words", async () => {
+  const { registerJobRunner, submitJob, __resetJobsForTests, REFUSED_BY_MODE_TEXT } = await import("@/lib/jobs");
+  __resetJobsForTests();
+  registerJobRunner("held_test", async () => ({ ok: true }), { generator: { role: "image", memory: () => ({ requestedBytes: 1 }) } });
+  setCodingModeActive(true);
+  const refused = submitJob({ kind: "held_test", role: "image" });
+  expect(refused).toMatchObject({ refused: true, code: "coding_mode", reason: REFUSED_BY_MODE_TEXT });
+  expect(REFUSED_BY_MODE_TEXT).not.toMatch(/mode|coding/i);
+  setCodingModeActive(false);
+  expect("job" in submitJob({ kind: "held_test", role: "image" })).toBe(true);
+  __resetJobsForTests();
+});

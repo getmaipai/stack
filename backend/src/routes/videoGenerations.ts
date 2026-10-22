@@ -238,7 +238,7 @@ videoV1Routes.openapi(postRoute, async (c) => {
   const loraIds = loras.map((lora) => lora.record.id);
   stashClip(token, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, likeness: checks, preview: body.preview !== false });
   const submitted = submitJob({ kind: VIDEO_JOB_KIND, role: "video", input: { token, size: `${size.width}x${size.height}`, seconds, seed, quality, mode: image ? "image-to-video" : "text-to-video", lora_ids: loraIds, likeness: checks.length > 0 } });
-  if ("refused" in submitted) return fail(c, 503, "unsupported", submitted.reason);
+  if ("refused" in submitted) return fail(c, 503, submitted.code ?? "unsupported", submitted.reason);
   const settled = await waitForJob(submitted.job.id, body.timeout_ms ?? DEFAULT_WAIT_MS);
   const created = Math.floor(new Date(submitted.job.createdAt).getTime() / 1000);
   if (!settled || settled.state === "queued" || settled.state === "running" || settled.state === "stalled") return reply(c, { created, job: submitted.job.id, data: [] }, 202);

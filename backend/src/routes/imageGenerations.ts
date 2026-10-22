@@ -273,7 +273,7 @@ export async function generateImages<T extends Context>(c: T, body: ImageGenerat
     loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, initImage, strength: body.strength ?? 0.6, image: null, mask: null, region: null, feather: 0, likeness: checks, derived, preview: body.preview !== false,
   });
   const submitted = submitJob({ kind: IMAGE_JOB_KIND, role: "image", input: { token, family, mode: "generate", quantize, size: `${size.width}x${size.height}`, steps, seed, count, lora_ids: loraIds, image_to_image: initImage !== null, likeness: checks.length > 0 } });
-  if ("refused" in submitted) return fail(c, 503, "unsupported", submitted.reason);
+  if ("refused" in submitted) return fail(c, 503, submitted.code ?? "unsupported", submitted.reason);
   return waitAndReply(c, submitted.job.id, submitted.job.createdAt, body.timeout_ms ?? DEFAULT_WAIT_MS);
 }
 
@@ -338,7 +338,7 @@ export async function editImages<T extends Context>(c: T, form: EditForm) {
   const token = crypto.randomUUID();
   stashImage(token, { op: "edit", prompt: instruction, negativePrompt: null, family, quantize: null, width: 0, height: 0, steps, seed, count: 1, loras: [], loraIds: [], initImage: null, strength: 0, image, mask, region: region ?? null, feather, references: refs, likeness: checks, derived });
   const submitted = submitJob({ kind: IMAGE_EDIT_JOB_KIND, role: "image", input: { token, family, mode: "edit", quantize: null, steps, seed, count: 1, lora_ids: [], masked: mask !== null || region !== null, likeness: checks.length > 0, references: refs.length } });
-  if ("refused" in submitted) return fail(c, 503, "unsupported", submitted.reason);
+  if ("refused" in submitted) return fail(c, 503, submitted.code ?? "unsupported", submitted.reason);
   return waitAndReply(c, submitted.job.id, submitted.job.createdAt, form.timeout_ms ?? DEFAULT_WAIT_MS);
 }
 

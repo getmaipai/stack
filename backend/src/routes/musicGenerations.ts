@@ -249,7 +249,7 @@ musicV1Routes.openapi(postRoute, async (c) => {
   stashSong(token, { fields: { ...fields, ...(seed !== undefined ? { seed } : {}) }, source, historyKey: musicHistoryKey(body.task, fields.duration_s) });
   // The job record holds the task, length, quality and seed, never a word of the request.
   const submitted = submitJob({ kind: edit ? MUSIC_EDIT_JOB_KIND : MUSIC_JOB_KIND, role: "music", input: { token, task: body.task, ...(fields.duration_s !== undefined ? { duration_s: fields.duration_s } : {}), ...(checked.quality ? { quality: checked.quality } : {}), ...(seed !== undefined ? { seed } : {}) } });
-  if ("refused" in submitted) { unstashSong(token); return fail(c, 503, "unsupported", submitted.reason); }
+  if ("refused" in submitted) { unstashSong(token); return fail(c, 503, submitted.code ?? "unsupported", submitted.reason); }
   const settled = await waitForJob(submitted.job.id, body.timeout_ms ?? DEFAULT_WAIT_MS);
   const created = Math.floor(new Date(submitted.job.createdAt).getTime() / 1000);
   if (!settled || settled.state === "queued" || settled.state === "running" || settled.state === "stalled") return reply(c, { created, job: submitted.job.id, data: [] }, 202);

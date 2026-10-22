@@ -9,7 +9,7 @@
 // submit for it is refused with a reason rather than left queued.
 import { emit } from "@/lib/events";
 import { noteComponentUse } from "@/lib/componentUse";
-import { admit, getGovernorStatus, getRunState, peakFor, release, withdraw, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
+import { admit, generatorsHeldByMode, getGovernorStatus, getRunState, peakFor, release, withdraw, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
 import { heavyGate } from "@/lib/heavyGate";
 import { PAUSED_LOW_MEMORY, waitingText, WatchdogRules } from "@/lib/memoryState";
 import { StackJob, StackJobState } from "@maipai/spec/stack/ts/stack-job.js";
@@ -46,6 +46,11 @@ export interface JobRunnerOptions {
 }
 
 /** A runner throws this to fail its job and still hand Home a structured result (a code to branch on). */
+/** What a person is told when picture, video and music work is held back for the large coding mode. Plain words: no mention of modes. */
+export const REFUSED_BY_MODE_TEXT = "Home is busy with a big job right now, so pictures, videos and songs are paused. Please try again later.";
+/** The status line of a job that was already waiting when the hold began. */
+export const HELD_BY_MODE_TEXT = "Home is busy with a big job. This starts again when it is done.";
+
 export class JobFailure extends Error {
   constructor(message: string, readonly result?: unknown) { super(message); }
 }
@@ -155,6 +160,7 @@ export function submitJob(input: { kind: string; role?: string | null; input?: R
     void pumpLane(lane.name);
     return { job: jobs.get(job.id)! };
   }
+  if (runner.options.generator && generatorsHeldByMode()) return { refused: true, code: "coding_mode", reason: REFUSED_BY_MODE_TEXT };
   if (runner.options.generator) {
     const role = runner.options.generator.role;
     const queue = queues.get(role) ?? [];
@@ -282,7 +288,7 @@ async function admitJob(jobId: string, request: GovernorRequest): Promise<Govern
   const answer = await admit(request);
   if ("refused" in answer) throw new Error(answer.reason);
   if (!("queued" in answer)) return answer;
-  updateJob(jobId, { status: waitingText(peak, answer.position) });
+  updateJob(jobId, { status: generatorsHeldByMode() ? HELD_BY_MODE_TEXT : waitingText(peak, answer.position) });
   const signal = controller?.signal;
   let pauseTimer: ReturnType<typeof setInterval> | null = null;
   let waitTimer: ReturnType<typeof setTimeout> | null = null;
@@ -296,7 +302,14 @@ async function admitJob(jobId: string, request: GovernorRequest): Promise<Govern
           })
         : new Promise<never>(() => {}),
       new Promise<never>((_, reject) => {
-        waitTimer = setTimeout(() => reject(new NoMemoryError(`There was not enough free memory to start this within ${Math.round(admissionWaitMs() / 60_000 * 10) / 10} minutes (${waitingText(peak, 0).replace("waiting for memory: ", "")}). Close big apps, or try again in a few minutes.`)), admissionWaitMs());
+        // Held back by the large coding mode is not a memory shortage: keep waiting, in plain words, until it ends.
+        const arm = (): void => {
+          waitTimer = setTimeout(() => {
+            if (generatorsHeldByMode()) { updateJob(jobId, { status: HELD_BY_MODE_TEXT }); arm(); return; }
+            reject(new NoMemoryError(`There was not enough free memory to start this within ${Math.round(admissionWaitMs() / 60_000 * 10) / 10} minutes (${waitingText(peak, 0).replace("waiting for memory: ", "")}). Close big apps, or try again in a few minutes.`));
+          }, admissionWaitMs());
+        };
+        arm();
       }),
       new Promise<never>((_, reject) => {
         pauseTimer = setInterval(() => {

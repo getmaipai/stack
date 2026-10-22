@@ -145,6 +145,8 @@ function nowIso(): string {
 
 let codingModeActive = false;
 export function setCodingModeActive(active: boolean): void { codingModeActive = active; }
+/** True while the large coding mode holds picture, video and music work back. */
+export function generatorsHeldByMode(): boolean { return codingModeActive; }
 
 function decide(decision: string, reason: string, model: string, reasonCode?: "coding_mode"): void {
   decisions.unshift({ at: nowIso(), decision, reason, model, ...(reasonCode ? { reasonCode } : {}) });
