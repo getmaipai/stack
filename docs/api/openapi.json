@@ -15451,6 +15451,7 @@
                       "type": "string",
                       "enum": [
                         "stable",
+                        "waiting",
                         "switching",
                         "failed"
                       ]
