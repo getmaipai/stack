@@ -9,25 +9,80 @@ export const COMPANION_CLIP_LIMITS = {
 } as const;
 export const COMPANION_CLIP_FPS = 24;
 export const COMPANION_CLIP_SIZE = 480;
-const KEY_ALPHA_START = 5, KEY_ALPHA_END = 245, KEY_DESPILL_TOLERANCE = 8;
+/** Lower edge of the existing pure-key alpha ramp. */
+export const KEY_ALPHA_START = 5;
+/** Upper edge of the existing pure-key alpha ramp. */
+export const KEY_ALPHA_END = 245;
+/** Maximum green left over a foreground channel on pure-key edges. */
+export const KEY_DESPILL_TOLERANCE = 8;
+/** Minimum estimated keyness for enabling muted-key hue keying. */
+export const HUE_KEYNESS_MIN = 30;
+/** Minimum estimated keyness that keeps the original pure-key formula. */
+export const PURE_KEYNESS_MIN = 200;
+/** Foreground keyness at or below this point stays opaque in the hue regime. */
+export const HUE_ALPHA_T0 = 12;
+/** Upper clamp for the hue-regime foreground transition. */
+export const HUE_ALPHA_T1_MAX = 44;
 
-export function keyOutRgba(pixels: Uint8Array, key: [number, number, number], signal?: AbortSignal): void {
+type FrameSize = { width: number; height: number };
+
+/** Estimate each background channel from every other pixel in the outer two-pixel ring. */
+export function estimateBackground(frame: Uint8Array, width: number, height: number): [number, number, number] {
+  const channels: [number[], number[], number[]] = [[], [], []];
+  for (let y = 0; y < height; y += 2) for (let x = 0; x < width; x += 2) {
+    if (x >= 2 && x < width - 2 && y >= 2 && y < height - 2) continue;
+    const offset = (y * width + x) * 4;
+    for (let c = 0; c < 3; c++) channels[c]!.push(frame[offset + c]!);
+  }
+  const median = (values: number[]) => {
+    values.sort((a, b) => a - b);
+    const middle = Math.floor(values.length / 2);
+    return values.length % 2 ? values[middle]! : Math.round((values[middle - 1]! + values[middle]!) / 2);
+  };
+  return [median(channels[0]), median(channels[1]), median(channels[2])];
+}
+
+function pureKeyAlpha(channels: [number, number, number], key: [number, number, number]): number {
+  const keyCoverage = key[1] === 255
+    ? Math.min(channels[1], 255 - channels[0], 255 - channels[2]) / 255
+    : Math.min(channels[0], channels[2], 255 - channels[1]) / 255;
+  const rawAlpha = Math.max(0, Math.min(1, 1 - keyCoverage)) * 255;
+  return Math.round(Math.max(0, Math.min(1, (rawAlpha - KEY_ALPHA_START) / (KEY_ALPHA_END - KEY_ALPHA_START))) * 255);
+}
+
+/** Third argument accepts dimensions for keying, or the legacy abort signal. */
+export function keyOutRgba(pixels: Uint8Array, key: [number, number, number], sizeOrSignal?: FrameSize | AbortSignal, signal?: AbortSignal): void {
+  const size = sizeOrSignal && "width" in sizeOrSignal ? sizeOrSignal : undefined;
+  const abortSignal = size ? signal : sizeOrSignal as AbortSignal | undefined;
+  // Calls without dimensions retain the original pure-key behaviour for compatibility.
+  const background = size ? estimateBackground(pixels, size.width, size.height) : key;
+  const bgKeyness = key[1] === 255 ? background[1] - Math.max(background[0], background[2]) : Math.min(background[0], background[2]) - background[1];
+  const regime = size && bgKeyness >= HUE_KEYNESS_MIN && bgKeyness < PURE_KEYNESS_MIN ? "hue" : "pure";
+  const t0 = HUE_ALPHA_T0, t1 = Math.max(t0 + 16, Math.min(HUE_ALPHA_T1_MAX, bgKeyness * 0.75));
   for (let offset = 0; offset < pixels.length; offset += 4) {
-    if ((offset & 0xffff) === 0 && signal?.aborted) throw new Error("Cancelled.");
-    const channels = [pixels[offset]!, pixels[offset + 1]!, pixels[offset + 2]!];
-    const keyCoverage = key[1] === 255
-      ? Math.min(channels[1]!, 255 - channels[0]!, 255 - channels[2]!) / 255
-      : Math.min(channels[0]!, channels[2]!, 255 - channels[1]!) / 255;
-    const rawAlpha = Math.max(0, Math.min(1, 1 - keyCoverage)) * 255;
-    const alpha = Math.round(Math.max(0, Math.min(1, (rawAlpha - KEY_ALPHA_START) / (KEY_ALPHA_END - KEY_ALPHA_START))) * 255);
+    if ((offset & 0xffff) === 0 && abortSignal?.aborted) throw new Error("Cancelled.");
+    const channels: [number, number, number] = [pixels[offset]!, pixels[offset + 1]!, pixels[offset + 2]!];
+    let alpha: number;
+    if (regime === "hue") {
+      const keyness = key[1] === 255 ? channels[1] - Math.max(channels[0], channels[2]) : Math.min(channels[0], channels[2]) - channels[1];
+      alpha = Math.round(Math.max(0, Math.min(1, 1 - (keyness - t0) / (t1 - t0))) * 255);
+    } else alpha = pureKeyAlpha(channels, key);
     pixels[offset + 3] = Math.min(pixels[offset + 3]!, alpha);
     if (alpha > 0 && alpha < 255) {
       const coverage = alpha / 255;
-      for (let channel = 0; channel < 3; channel++) {
-        const foreground = (channels[channel]! - key[channel]! * (1 - coverage)) / coverage;
-        pixels[offset + channel] = Math.max(0, Math.min(255, Math.round(foreground)));
+      if (regime === "hue") {
+        for (let channel = 0; channel < 3; channel++) {
+          const foreground = (channels[channel]! - background[channel]! * (1 - coverage)) / coverage;
+          pixels[offset + channel] = Math.max(0, Math.min(255, Math.round(foreground)));
+        }
+        if (key[1] === 255) pixels[offset + 1] = Math.min(pixels[offset + 1]!, Math.max(pixels[offset]!, pixels[offset + 2]!) + 6);
+      } else {
+        for (let channel = 0; channel < 3; channel++) {
+          const foreground = (channels[channel]! - key[channel]! * (1 - coverage)) / coverage;
+          pixels[offset + channel] = Math.max(0, Math.min(255, Math.round(foreground)));
+        }
+        if (key[1] === 255) pixels[offset + 1] = Math.min(pixels[offset + 1]!, Math.max(pixels[offset]!, pixels[offset + 2]!) + KEY_DESPILL_TOLERANCE);
       }
-      if (key[1] === 255) pixels[offset + 1] = Math.min(pixels[offset + 1]!, Math.max(pixels[offset]!, pixels[offset + 2]!) + KEY_DESPILL_TOLERANCE);
     }
   }
 }

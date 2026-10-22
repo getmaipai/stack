@@ -335,7 +335,7 @@ function blendRawFrame(target: Uint8Array, fd: number, index: number, weight: nu
 }
 function smoothRawMatte(rawPath: string, frameCount: number, frameBytes: number, key: "#00FF00" | "#FF00FF" | "none", signal: AbortSignal): void {
   const fd = openSync(rawPath, "r+");
-  const keyFrame = (n: number) => { const frame = readRawFrame(fd, n, frameBytes); if (key !== "none") keyOutRgba(frame, key === "#00FF00" ? [0, 255, 0] : [255, 0, 255], signal); return frame; };
+  const keyFrame = (n: number) => { const frame = readRawFrame(fd, n, frameBytes); if (key !== "none") keyOutRgba(frame, key === "#00FF00" ? [0, 255, 0] : [255, 0, 255], { width: frameBytes / 4 / COMPANION_CLIP_SIZE, height: COMPANION_CLIP_SIZE }, signal); return frame; };
   const med = (a: number, b: number, c: number) => a > b ? (b > c ? b : Math.min(a, c)) : (a > c ? a : Math.min(b, c));
   try {
     if (frameCount === 1) { const only = keyFrame(0); writeRawFrame(fd, 0, only); return; }
