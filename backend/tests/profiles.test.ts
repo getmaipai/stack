@@ -124,6 +124,6 @@ test("the coding binding does not touch chat or the judge on any tier", () => {
   expect(PROFILE_MODEL_BINDINGS.p32).toEqual({ chat: "muse-glimmer-30b-q4-k-m", judge: "qwen3-4b-q4-k-m" });
   for (const id of ["p64", "p128"] as const) expect(PROFILE_MODEL_BINDINGS[id]).toEqual({ chat: "muse-glimmer-30b-q4-k-xl", judge: "qwen3-4b-q4-k-m", coding: "qwen3.8-27b-ud-q4-k-m" });
   // The coding model, and Splash's draft beside it (S5a), a component that no tier binds and nothing selects.
-  expect(STACK_MODELS.filter((pin) => pin.role === "coding").map((pin) => pin.id)).toEqual(["qwen3.8-27b-ud-q4-k-m", "qwen3.8-27b-dflash2-draft"]);
-  expect(STACK_MODELS.filter((pin) => pin.role === "coding" && !pin.component).map((pin) => pin.id)).toEqual(["qwen3.8-27b-ud-q4-k-m"]);
+  expect(STACK_MODELS.filter((pin) => pin.role === "coding").map((pin) => pin.id)).toEqual(["qwen3.8-27b-ud-q4-k-m", "qwen3.8-27b-dflash2-draft", "ornith-1-5-122b-mlx-4bit", "ornith-1-5-122b-dflash2-draft"]);
+  expect(STACK_MODELS.filter((pin) => pin.role === "coding" && !pin.component).map((pin) => pin.id)).toEqual(["qwen3.8-27b-ud-q4-k-m", "ornith-1-5-122b-mlx-4bit"]);
 });

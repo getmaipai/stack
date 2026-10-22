@@ -46,7 +46,7 @@ Engines per platform:
 | `llama-server-b11476-linux-cuda-x64` | b11476 | linux x64 (NVIDIA) | pinned, not yet verified |
 | `llama-server-b10797-win-cuda-x64` | b10797 | win32 x64 (NVIDIA) | pinned, not yet verified |
 | `mlx-serve-v26.9.4-macos-arm64` | v26.9.4 | darwin arm64 | pinned, verified (the second chat engine; the coding role runs its own process and never mlx-serve) |
-| `splash-1.3.2-macos-arm64` | 1.3.2 | darwin arm64 | pinned, verified (the coding engine on Apple silicon with an M3 chip or newer, 36 GB or more and macOS 26.4 or later; its draft model is installed with the coding model; llama-server is the fallback) |
+| `splash-1.3.2-ornith.1-macos-arm64` | 1.3.2-ornith.1 | darwin arm64 | pinned, verified (the coding engine on Apple silicon with an M3 chip or newer, 36 GB or more and macOS 26.4 or later; its draft model is installed with the coding model; llama-server is the fallback) |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
@@ -55,7 +55,9 @@ Engines per platform:
 | p64 | on demand | `qwen3.8-27b-ud-q4-k-m` | UD-Q4_K_M | 15.33 GB | not measured | not measured | Apache-2.0 | unsloth/Qwen3.8-27B-GGUF @ 4ca720788d1e01f1bff70c033e0d0028fd02e502 | pinned |
 | p128 | on demand | `qwen3.8-27b-ud-q4-k-m` | UD-Q4_K_M | 15.33 GB | not measured | not measured | Apache-2.0 | unsloth/Qwen3.8-27B-GGUF @ 4ca720788d1e01f1bff70c033e0d0028fd02e502 | pinned |
 
-Installed beside the model, never selected on its own: `qwen3.8-27b-dflash2-draft` (draft, 3.58 GB, Apache-2.0, incoai/Qwen3.8-27B-DFlash2 @ 015e795645c74b1a0eeef3b570031fb62e769bc5).
+Also pinned, started only when chosen (Home's "load this model"): `ornith-1-5-122b-mlx-4bit` (MLX-4bit, 64.86 GB, MIT, ezoushen/ornith-1.5-122b-mlx-4bit @ e30487752c2fcb9157ec970060a2a018be94563c, optional p128 coding choice; not selected by default).
+
+Installed beside the model, never selected on its own: `qwen3.8-27b-dflash2-draft` (draft, 3.58 GB, Apache-2.0, incoai/Qwen3.8-27B-DFlash2 @ 015e795645c74b1a0eeef3b570031fb62e769bc5); `ornith-1-5-122b-dflash2-draft` (draft, 1.73 GB, Apache-2.0, incoai/Ornith-1.5-122B-DFlash2 @ 9baefc1bec85c08193ab442e0ca5f7057669b61d).
 
 ## judge (Judge)
 

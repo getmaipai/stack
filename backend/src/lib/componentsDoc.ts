@@ -55,7 +55,7 @@ function minimumProfileIndex(model: CatalogModelLike): number {
   return index < 0 ? PROFILE_ORDER.length - 1 : index;
 }
 function fits(model: CatalogModelLike, profile: ProfileTier): boolean {
-  return PROFILE_ORDER.indexOf(profile.id) >= minimumProfileIndex(model);
+  return PROFILE_ORDER.indexOf(profile.id) >= minimumProfileIndex(model) && !(model.role === "coding" && model.id === "ornith-1-5-122b-mlx-4bit");
 }
 /** The largest pin that fits: the highest minimum profile, then the
  * biggest file, never the array's order. */
@@ -121,7 +121,7 @@ export function renderComponentsDoc(catalog: ComponentsCatalog): string {
     const alsoPinned = pinned.filter((model) => !shown.has(model.id));
     if (alsoPinned.length && shown.size > 0) {
       lines.push("");
-      lines.push(`Also pinned, started only when chosen (Home's "load this model"): ${alsoPinned.map((model) => `\`${model.id}\` (${quantization(model)}, ${gb(model.download?.approx_bytes)}, ${model.license ?? "licence unknown"}, ${model.repo ?? "catalog"} @ ${model.revision ?? "unknown"}${model.imageInput ? ", reads pictures" : ""})`).join("; ")}.`);
+      lines.push(`Also pinned, started only when chosen (Home's "load this model"): ${alsoPinned.map((model) => `\`${model.id}\` (${quantization(model)}, ${gb(model.download?.approx_bytes)}, ${model.license ?? "licence unknown"}, ${model.repo ?? "catalog"} @ ${model.revision ?? "unknown"}${model.role === "coding" ? ", optional p128 coding choice; not selected by default" : model.imageInput ? ", reads pictures" : ""})`).join("; ")}.`);
     }
     if (components.length) {
       lines.push("");

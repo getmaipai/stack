@@ -45,7 +45,7 @@ function pinFor(role: RoleId, tier: ProfileTier): CatalogModelLike | null {
   const own = bound ? STACK_MODELS.find((pin) => pin.id === bound) : undefined;
   // Without a binding: the shipped pin for the role, the engine the role
   // runs by default (llama-server for the chat wire), not a component.
-  return own ?? STACK_MODELS.find((pin) => pin.role === role && !pin.component && pin.engine !== "mlx-serve" && pin.engine !== "omlx") ?? null;
+  return own ?? STACK_MODELS.find((pin) => pin.role === role && !pin.component && pin.engine !== "mlx-serve" && pin.engine !== "omlx" && (role !== "coding" || pin.id === "qwen3.8-27b-ud-q4-k-m")) ?? null;
 }
 
 function view(pin: CatalogModelLike, installed: Set<string>, starter: boolean, removable = false): PlanModel | null {
@@ -109,7 +109,7 @@ export function plannedPinsFor(tier: ProfileTier, target: { platform: string; ar
     if (role === "coding") for (const id of pin.companions ?? []) { const part = STACK_MODELS.find((candidate) => candidate.id === id); if (part && splashDraftWanted(target, tier.id, knownAppleChip())) add(part, false, true); }
     // A bound model that reads pictures brings its projector (VISION-03a).
     const projector = pin.imageInput ? STACK_MODELS.find((candidate) => candidate.id === pin.imageInput!.projector) : undefined;
-    for (const part of STACK_MODELS.filter((candidate) => candidate.role === role && candidate.component && candidate.engine === pin.engine && !projectors.has(candidate.id))) add(part);
+    for (const part of STACK_MODELS.filter((candidate) => candidate.role === role && candidate.component && candidate.engine === pin.engine && !projectors.has(candidate.id) && (role !== "coding" || (pin.companions ?? []).includes(candidate.id)))) add(part);
     add(projector ?? null);
     // oMLX's MLX build of the model is not in the first-run plan: llama-server
     // is the default on every tier (ENGINE-MLX-02), and the 19 GB MLX weights

@@ -4,25 +4,25 @@
 // the 16 GB and 3.8 GB files the pins name are sparse files that take no disk.
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, readdirSync, rmSync, statSync, truncateSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, readdirSync, rmSync, statSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { app } from "@/app";
 import { ENGINE_CODING_WIRES, engineServesWire } from "@/lib/codingWire";
 import { codingServerArgs, splashArgs } from "@/lib/engineArgs";
 import { CODING_ENGINES, ENGINE_BINARIES, ENGINE_READY_MARKER, ENGINE_ROLE, engineRole, SPLASH_PIN, selectEngineBinary } from "@/lib/engineCatalog";
-import { engineDir } from "@/lib/engineInstall";
+import { currentEngineBinary, engineDir } from "@/lib/engineInstall";
 import { __resetEventsForTests } from "@/lib/events";
 import { __resetGovernorForTests } from "@/lib/governor";
 import { __resetHealthForTests, list as listHealth } from "@/lib/health";
 import { __resetAppleChipForTests, __setAppleChipForTests, parseAppleChip, type HardwareInfo } from "@/lib/hardware";
 import { buildInstallPlan, plannedPinsFor } from "@/lib/installPlan";
-import { QWEN38_27B_DRAFT_REPO, STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_MODELS } from "@/lib/modelCatalog";
+import { QWEN38_27B_DRAFT_REPO, STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_MODELS } from "@/lib/modelCatalog";
 import { clearModelsForTests, getModel, installCatalogModel, removeModel, upsertModel } from "@/lib/modelStore";
 import { modelsDir } from "@/lib/paths";
 import { PROFILE_TIERS } from "@/profiles";
 import { clearCodingEngineFailures, codingEngineFailure, markCodingEngineFailed, macosVersion, requestedCodingEngine, resolveCodingEngine, SPLASH_KV_BYTES_PER_TOKEN, SPLASH_OVERHEAD_FACTOR, splashDraftPossible, splashDraftWanted, splashEnv, splashFootprintEstimateBytes, splashUnsupportedReason, type SplashFacts } from "@/lib/splash";
 import { layOutSplashCache, releaseSplashLayoutFor, splashHomeDir, splashHubDir, splashRoot, splashTmpDir, SplashLayoutError } from "@/lib/splashStore";
-import { activeCodingChoice, codingEngineStatus, EngineDoesNotFitError, EngineUnavailableError, getRoleStatus, recycleRole, resetSupervisorForTests, scriptedProcess, selectableModels, selectedModel, ServedNameClient, setCodingMachineFacts, setMachineTier, splashLaunchPlan, startCodingWithFallbackForTests, engineInstalledFor, verifySplashServes, type EngineClient } from "@/lib/supervisor";
+import { activeCodingChoice, codingEngineStatus, EngineDoesNotFitError, EngineUnavailableError, getRoleStatus, recycleRole, resetSupervisorForTests, scriptedProcess, selectableModels, selectedModel, ServedNameClient, setCodingMachineFacts, setMachineTier, preferModel, splashLaunchPlan, startCodingWithFallbackForTests, engineInstalledFor, verifySplashServes, type EngineClient } from "@/lib/supervisor";
 import { applyPendingSettings, __resetSettingsForTests, updateSettings } from "@/settings";
 import { EngineIndexSchema } from "@/updates/catalog";
 
@@ -190,15 +190,35 @@ test("the draft is a pinned component of the coding model: a directory of two ve
   for (const file of draft.download!.files!) expect(file.sha256).toMatch(/^[0-9a-f]{64}$/);
   // The coding model names it, so the two install and remove together; no other pin names it.
   expect(STACK_CODING_MODEL.companions).toEqual([draft.id]);
-  expect(STACK_MODELS.filter((pin) => pin.companions).map((pin) => pin.id)).toEqual([STACK_CODING_MODEL.id]);
+  expect(STACK_MODELS.filter((pin) => pin.id === STACK_CODING_MODEL.id || pin.id === STACK_CODING_HEAVY_MODEL.id).map((pin) => pin.id)).toEqual([STACK_CODING_MODEL.id, STACK_CODING_HEAVY_MODEL.id]);
   expect(STACK_MODELS.filter((pin) => pin.id === draft.id)).toHaveLength(1);
   // A component is never selected as a model.
   expect(draft.component).toBe("draft");
 });
 
+test("Ornith heavy pins are fully hashed multi-file p128 coding records and stay out of first-run plans", () => {
+  for (const pin of [STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL]) {
+    expect(pin.revision).toMatch(/^[0-9a-f]{40}$/);
+    expect(pin.download!.sha256).toMatch(/^[0-9a-f]{64}$/);
+    const files = pin.download!.files!;
+    expect(new Set(files.map((file) => file.path)).size).toBe(files.length);
+    for (const file of files) expect(file.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(pin.download!.approx_bytes).toBe(files.reduce((sum, file) => sum + file.bytes, 0));
+    expect(STACK_MODELS).toContain(pin);
+  }
+  expect(STACK_CODING_HEAVY_MODEL).toMatchObject({ id: "ornith-1-5-122b-mlx-4bit", role: "coding", engine: "splash", license: "MIT", sizing: { profile: "p128", quantization: "MLX-4bit" } });
+  expect(STACK_CODING_HEAVY_DRAFT_MODEL).toMatchObject({ id: "ornith-1-5-122b-dflash2-draft", component: "draft", license: "Apache-2.0" });
+  expect(STACK_CODING_HEAVY_MODEL.companions).toEqual([STACK_CODING_HEAVY_DRAFT_MODEL.id]);
+  for (const tier of PROFILE_TIERS) {
+    const planIds = plannedPinsFor(tier).map(({ pin }) => pin.id);
+    expect(planIds).not.toContain(STACK_CODING_HEAVY_MODEL.id);
+    expect(planIds).not.toContain(STACK_CODING_HEAVY_DRAFT_MODEL.id);
+  }
+});
+
 test("Splash is a pinned engine build for macOS on Apple silicon, found by name, serving the coding role", () => {
-  expect(SPLASH_PIN).toMatchObject({ id: "splash-1.3.2-macos-arm64", name: "splash", tag: "1.3.2", platform: "darwin", arch: "arm64", tool: "engine/splash", requiresNvidia: false, verified: true });
-  expect(SPLASH_PIN.archive).toEqual({ label: "Splash (macOS arm64)", url: "https://github.com/incoai/splash/releases/download/1.3.2/splash-1.3.2-arm64-macos26.tar.gz", sha256: "c3deb1dd971461ffafcf6b82c318789d6698b22aa865e490a11a0ed943686c0b", approxBytes: 74_590_927 });
+  expect(SPLASH_PIN).toMatchObject({ id: "splash-1.3.2-ornith.1-macos-arm64", name: "splash", tag: "1.3.2-ornith.1", platform: "darwin", arch: "arm64", tool: "engine/splash", requiresNvidia: false, verified: true });
+  expect(SPLASH_PIN.archive).toEqual({ label: "Splash (macOS arm64)", githubDigest: "b438df121e6b1b2d66d50687062ca1f5521bc0063ea1d1147338714a6f982d57", url: "https://github.com/getmaipai/stack/releases/download/engine-splash-1.3.2-ornith.1/splash-1.3.2-ornith.1-arm64-macos26.tar.gz", sha256: "b438df121e6b1b2d66d50687062ca1f5521bc0063ea1d1147338714a6f982d57", approxBytes: 75_874_298 });
   expect(ENGINE_BINARIES).toContain(SPLASH_PIN);
   expect(ENGINE_ROLE.splash).toBe("coding");
   expect(engineRole("splash")).toBe("coding");
@@ -211,8 +231,15 @@ test("Splash is a pinned engine build for macOS on Apple silicon, found by name,
   expect(selectEngineBinary(hardware("darwin", "x64"), "splash")).toBeNull();
 });
 
+test("the suffixed Splash tag resolves to its installed directory and launch plan", () => {
+  const dir = installSplashEngine();
+  symlinkSync(SPLASH_PIN.tag, join(engineDir(SPLASH_PIN), "..", "current"));
+  expect(currentEngineBinary("splash", "engine/splash")).toMatchObject({ state: "ready", path: join(dir, "engine/splash") });
+  expect(SPLASH_PIN.tag).toBe("1.3.2-ornith.1");
+});
+
 test("the engine index's Splash entry (a version tag, not a build number) parses, and a malformed tag is still refused", () => {
-  const entry = { name: "splash", tag: "1.3.2", platform: "darwin", arch: "arm64", url: SPLASH_PIN.archive.url, sha256: SPLASH_PIN.archive.sha256, size: SPLASH_PIN.archive.approxBytes, licence: "Apache-2.0" };
+  const entry = { name: "splash", tag: "1.3.2-ornith.1", platform: "darwin", arch: "arm64", url: SPLASH_PIN.archive.url, sha256: SPLASH_PIN.archive.sha256, size: SPLASH_PIN.archive.approxBytes, licence: "Apache-2.0" };
   const llama = { name: "llama-server", tag: "b10797", platform: "darwin", arch: "arm64", url: "https://github.com/ggml-org/llama.cpp/releases/download/b10797/x.tar.gz", sha256: "a".repeat(64), size: 1 };
   expect(EngineIndexSchema.safeParse({ version: "2026-10-18", engines: [llama, entry] }).success).toBe(true);
   // uv and ComfyUI were already in the Catalog's index with version tags.
@@ -360,6 +387,21 @@ macTest("the coding model serves both engines: it is still the selected model wh
   expect(selectedModel("coding")?.id).toBe("qwen3.8-27b-ud-q4-k-m");
 });
 
+test("the heavy coding target requires its p128 preference; defaults remain the 27B", () => {
+  setMachineTier("p128");
+  installCodingRecords();
+  upsertModel({ id: STACK_CODING_HEAVY_MODEL.id, roles: ["coding"], source: "catalog", provenance: {}, revision: STACK_CODING_HEAVY_MODEL.revision!, sha256: STACK_CODING_HEAVY_MODEL.download!.sha256, licence: "MIT", verifiedAt: new Date().toISOString(), modelPath: "/tmp/ornith-heavy" });
+  expect(selectedModel("coding")?.id).toBe("qwen3.8-27b-ud-q4-k-m");
+  expect(selectableModels("coding").map(({ id }) => id)).toContain(STACK_CODING_HEAVY_MODEL.id);
+  preferModel("coding", STACK_CODING_HEAVY_MODEL.id);
+  expect(selectedModel("coding")?.id).toBe(STACK_CODING_HEAVY_MODEL.id);
+  for (const tier of ["p16", "p32", "p64"] as const) {
+    setMachineTier(tier);
+    expect(selectableModels("coding").map(({ id }) => id)).not.toContain(STACK_CODING_HEAVY_MODEL.id);
+    expect(selectedModel("coding")?.id).toBe("qwen3.8-27b-ud-q4-k-m");
+  }
+});
+
 // ---- providing the files ---------------------------------------------------------------------
 
 test("the Stack lays Splash's hub cache out by hardlink from its pinned files, in the hub's own layout, and Splash never needs the network", () => {
@@ -390,6 +432,36 @@ test("the Stack lays Splash's hub cache out by hardlink from its pinned files, i
   expect(layout.placed.every((entry) => entry.how === "hardlink")).toBe(true);
   // Never a copy: the data directory holds the model once.
   expect(readdirSync(join(targetFolder, "blobs"))).toEqual([model.download!.sha256]);
+});
+
+test("the general Splash layout links a fake multi-file target and draft under their own hub revisions", () => {
+  const fakePin = (id: string, repo: string, revision: string, fileDefs: Array<{ path: string; sha256: string; bytes: number }>): typeof STACK_CODING_MODEL => ({
+    ...STACK_CODING_MODEL, id, repo, revision, companions: [], sizing: { profile: "p128", quantization: "fake" }, download: {
+      url: `https://huggingface.co/${repo}/resolve/${revision}/${fileDefs[0]!.path}`, sha256: fileDefs[0]!.sha256,
+      approx_bytes: fileDefs.reduce((sum, file) => sum + file.bytes, 0), files: fileDefs,
+    },
+  });
+  const targetFiles = [{ path: "weights/a.bin", sha256: "a".repeat(64), bytes: 3 }, { path: "config.json", sha256: "b".repeat(64), bytes: 5 }];
+  const draftFiles = [{ path: "draft.bin", sha256: "c".repeat(64), bytes: 7 }, { path: "config.json", sha256: "d".repeat(64), bytes: 11 }];
+  const target = fakePin("fake-target", "test/target", "1".repeat(40), targetFiles);
+  const draft = { ...fakePin("fake-draft", "test/draft", "2".repeat(40), draftFiles), component: "draft" as const };
+  const models = new Map<string, ReturnType<typeof getModel>>();
+  for (const pin of [target, draft]) {
+    const directory = join(modelsDir, "imports", pin.id); mkdirSync(directory, { recursive: true });
+    for (const file of pin.download!.files!) sparse(join(directory, file.path), file.bytes);
+    models.set(pin.id, { id: pin.id, roles: ["coding"], source: "catalog", provenance: {}, revision: pin.revision!, sha256: pin.download!.sha256, sizeBytes: pin.download!.approx_bytes, licence: "MIT", verifiedAt: new Date().toISOString(), modelPath: directory, engineRequirements: { engine: "splash", ...(pin.component ? { component: pin.component } : {}) } } as never);
+  }
+  const layout = layOutSplashCache((id) => models.get(id) ?? null, target, draft);
+  expect(layout.model).toBe("test/target");
+  for (const [pin, files] of [[target, targetFiles], [draft, draftFiles]] as const) {
+    const folder = join(splashHubDir(), `models--${pin.repo!.replaceAll("/", "--")}`);
+    for (const file of files) {
+      const blob = join(folder, "blobs", file.sha256);
+      expect(statSync(blob).ino).toBe(statSync(join(modelsDir, "imports", pin.id, file.path)).ino);
+      expect(readlinkSync(join(folder, "snapshots", pin.revision!, file.path))).toBe(`${"../".repeat(file.path.split("/").length + 1)}blobs/${file.sha256}`);
+    }
+    expect(readFileSync(join(folder, "refs", "main"), "utf8")).toBe(pin.revision!);
+  }
 });
 
 test("laying the cache out again changes nothing, replaces a stale or foreign link, drops files of an earlier pin, and empties the temporary folder", () => {
@@ -432,7 +504,7 @@ test("a pin that is missing, differs or has a file of the wrong size is refused 
   installCodingRecords();
   // A model file that is not the verified size, and a model record that is not the pinned bytes.
   truncateSync(getModel(STACK_CODING_MODEL.id)!.modelPath!, 1_000);
-  refuses(/coding model file is 1000 bytes but the pin says 16464440224/);
+  refuses(/qwen3\.8-27b-ud-q4-k-m file is 1000 bytes but the pin says 16464440224/);
   installCodingRecords();
   upsertModel({ ...getModel(STACK_CODING_MODEL.id)!, sha256: "0".repeat(64) });
   refuses(/not the pinned qwen3\.8-27b-ud-q4-k-m \(revision 4ca72078\)/);
@@ -458,6 +530,16 @@ test("removing the coding model or its draft removes the layout, so the disk is 
   expect(statSync(modelPath).nlink).toBe(1);
   // With the draft gone, the next launch refuses instead of laying out half of it.
   expect(() => layOutSplashCache(getModel)).toThrow(SplashLayoutError);
+});
+
+test("removing either Ornith pin invalidates its Splash layout", () => {
+  mkdirSync(splashRoot(), { recursive: true });
+  writeFileSync(join(splashRoot(), "sentinel"), "x");
+  releaseSplashLayoutFor(STACK_CODING_HEAVY_MODEL.id);
+  expect(existsSync(splashRoot())).toBe(false);
+  mkdirSync(splashRoot(), { recursive: true }); writeFileSync(join(splashRoot(), "sentinel"), "x");
+  releaseSplashLayoutFor(STACK_CODING_HEAVY_DRAFT_MODEL.id);
+  expect(existsSync(splashRoot())).toBe(false);
 });
 
 test("the draft installs through the Stack's own downloader and every file is checked against its pinned hash; a wrong byte is refused", async () => {
@@ -500,7 +582,7 @@ macTest("the launch plan runs the bundled Python with the launcher, lays the cac
     updateSettings({ "stack.engines.coding.splash_cache_gb": 3, "stack.engines.coding.thinking_budget_ceiling": 1500 }); applyPendingSettings();
     const model = selectedModel("coding")!;
     const plan = splashLaunchPlan(model, 8812, 131_072);
-    expect(plan).toMatchObject({ engine: "splash", build: "1.3.2", kind: "spawned", stdin: "ignore", contextLength: 131_072, slots: 2, contextScope: "total across slots", healthPath: "/ready", tree: true, imageInput: false, identity: { build: "splash-1.3.2", model: STACK_CODING_MODEL.download!.sha256 } });
+    expect(plan).toMatchObject({ engine: "splash", build: "1.3.2-ornith.1", kind: "spawned", stdin: "ignore", contextLength: 131_072, slots: 2, contextScope: "total across slots", healthPath: "/ready", tree: true, imageInput: false, identity: { build: "splash-1.3.2-ornith.1", model: STACK_CODING_MODEL.download!.sha256 } });
     expect(plan.command).toEqual([
       join(root, "python", "bin", "python3"), "-u", join(root, "install", "launcher.py"),
       "serve", "--model", "unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M", "--revision", "4ca720788d1e01f1bff70c033e0d0028fd02e502", "--offline", "--host", "127.0.0.1", "--port", "8812",
