@@ -187,12 +187,43 @@ test("a heavy start waits out a resident engine that is still starting, then giv
   await expect(retryWhileResidentStarts(async () => { throw new Error("out of memory"); }, 1_000, 1)).rejects.toThrow("out of memory");
 });
 
-test("switching into coding mode is refused while a picture, video or song is being made, and works after", async () => {
+test("switching into coding mode while pictures are being made holds new ones, waits for the running ones, then switches", async () => {
+  const { __setWaitTuningForTests, homeModeSwitching } = await import("@/lib/homeMode");
+  __setWaitTuningForTests(5, 5_000);
+  let busy = true;
+  runtime.generating = () => busy;
+  const done = switchHomeMode("coding");
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  expect(homeModeView().state).toBe("waiting");
+  expect(homeModeSwitching()).toBe(false);
+  expect(order).toEqual(["transition"]);
+  busy = false;
+  await done;
+  expect(currentHomeMode()).toBe("coding");
+  expect(order.slice(0, 3)).toEqual(["transition", "transition", "residents-stopped"]);
+});
+
+test("a switch that is waiting for generation can be cancelled by asking for normal", async () => {
+  const { __setWaitTuningForTests } = await import("@/lib/homeMode");
+  __setWaitTuningForTests(5, 5_000);
+  runtime.generating = () => true;
+  const done = switchHomeMode("coding");
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  await switchHomeMode("normal");
+  await done;
+  expect(currentHomeMode()).toBe("normal");
+  expect(homeModeView().state).toBe("stable");
+  expect(order).toContain("bind:normal");
+  expect(order).not.toContain("residents-stopped");
+});
+
+test("a switch that waits too long gives up in plain words and stays in normal mode", async () => {
+  const { __setWaitTuningForTests } = await import("@/lib/homeMode");
+  __setWaitTuningForTests(5, 40);
   runtime.generating = () => true;
   await expect(switchHomeMode("coding")).rejects.toThrow("still being made");
   expect(currentHomeMode()).toBe("normal");
-  expect(order).toEqual([]);
-  runtime.generating = () => false;
-  await switchHomeMode("coding");
-  expect(currentHomeMode()).toBe("coding");
+  expect(homeModeView().state).toBe("failed");
+  expect(order).not.toContain("residents-stopped");
+  __setWaitTuningForTests(2_000, 30 * 60_000);
 });

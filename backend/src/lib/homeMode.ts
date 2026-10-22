@@ -6,7 +6,8 @@ import { eq } from "drizzle-orm";
 import { logHomeModeEvent, type StackHomeModeLogReason } from "@/lib/log";
 
 export type HomeMode = "normal" | "coding";
-export type HomeModeState = "stable" | "switching" | "failed";
+/** `waiting`: coding was asked for while pictures, videos or songs were being made; new ones are held and chat keeps working. */
+export type HomeModeState = "stable" | "waiting" | "switching" | "failed";
 export type HomeModeFailure = StackHomeModeLogReason;
 export interface HomeModeChecks { engine: boolean; pieces: boolean; hardware: boolean; memory: boolean; bench: boolean }
 export interface HomeModeMemory { plan_bytes: number; budget_bytes: number }
@@ -40,6 +41,9 @@ const FAILURE_KEY = "coding.home_mode.failure";
 let mode: HomeMode = "normal";
 let target: HomeMode = "normal";
 let state: HomeModeState = "stable";
+let cancelWait = false;
+const waitTuning = { pollMs: 2_000, maxMs: 30 * 60_000 };
+export function __setWaitTuningForTests(pollMs: number, maxMs: number): void { waitTuning.pollMs = pollMs; waitTuning.maxMs = maxMs; }
 let reason: string | null = null;
 let running = false;
 let runtime: HomeModeRuntime | null = null;
@@ -73,7 +77,7 @@ export function currentHomeMode(): HomeMode { return mode; }
 export function homeModeTarget(): HomeMode { return target; }
 export function homeModeEnteringCoding(): boolean { return target === "coding" && state === "switching"; }
 export function homeModeLeavingCoding(): boolean { return target === "normal" && state === "switching"; }
-export function homeModeSwitching(): boolean { return running; }
+export function homeModeSwitching(): boolean { return running && state === "switching"; }
 export function homeModeFailure(reasonText: string, category: HomeModeFailure = "start_failed"): void {
   mode = "normal"; target = "normal"; state = "failed"; reason = reasonText;
   saveFailure(reasonText);
@@ -91,13 +95,34 @@ export function homeModeView(): HomeModeView {
 
 export async function switchHomeMode(next: HomeMode): Promise<void> {
   if (!runtime) throw new HomeModeError("Home mode is not available yet.");
+  if (state === "waiting" && next === "normal") { cancelWait = true; return; }
   if (running) throw new HomeModeError("A Home mode change is already running.");
   const availability = runtime.inspect();
   if (next === "coding" && !availability.available) throw new HomeModeError("reason" in availability ? String((availability as { reason?: string }).reason) : "The large coding mode is not available on this computer.");
   if (next === mode) throw new HomeModeError(`Home is already in ${mode} mode.`);
-  if (next === "coding" && runtime.generating?.()) throw new HomeModeError("A picture, video or song is still being made. Wait for it to finish, then switch to Coding mode.");
   running = true; target = next; state = "switching"; reason = null;
   log("home_mode_switch_started");
+  if (next === "coding" && runtime.generating?.()) {
+    // Hold new pictures, videos and songs now, let the running ones finish, then switch.
+    runtime.transition();
+    state = "waiting"; cancelWait = false;
+    const deadline = Date.now() + waitTuning.maxMs;
+    while (runtime.generating() && !cancelWait && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, waitTuning.pollMs));
+    if (cancelWait || runtime.generating()) {
+      const timedOut = !cancelWait;
+      cancelWait = false;
+      runtime.bind("normal"); runtime.persistMode("normal");
+      mode = "normal"; target = "normal"; running = false;
+      if (timedOut) {
+        state = "failed"; reason = "A picture, video or song was still being made after 30 minutes, so Home stayed in Normal mode. Try again when it is done.";
+        saveFailure(reason); log("home_mode_switch_failed", { reason: "start_failed" });
+        throw new HomeModeError(reason);
+      }
+      state = "stable"; reason = null; saveFailure(null);
+      return;
+    }
+    state = "switching";
+  }
   let phase: "stop" | "start" | "check" = "stop";
   try {
     runtime.transition();
