@@ -186,3 +186,13 @@ test("a heavy start waits out a resident engine that is still starting, then giv
   await expect(retryWhileResidentStarts(async () => { throw new Error("The coding engine waits while a resident engine starts."); }, 20, 5)).rejects.toThrow("waits while");
   await expect(retryWhileResidentStarts(async () => { throw new Error("out of memory"); }, 1_000, 1)).rejects.toThrow("out of memory");
 });
+
+test("switching into coding mode is refused while a picture, video or song is being made, and works after", async () => {
+  runtime.generating = () => true;
+  await expect(switchHomeMode("coding")).rejects.toThrow("still being made");
+  expect(currentHomeMode()).toBe("normal");
+  expect(order).toEqual([]);
+  runtime.generating = () => false;
+  await switchHomeMode("coding");
+  expect(currentHomeMode()).toBe("coding");
+});

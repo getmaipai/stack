@@ -108,6 +108,7 @@ export async function setupHomeModeRuntime(initial: HomeMode): Promise<void> {
     bind: (mode) => { setCodingModeActive(mode === "coding"); emitHomeModeReady(); },
     transition: () => { setCodingModeActive(true); emitHomeModeTransition(); },
     persistMode: (mode) => { updateSettings({ "stack.engines.coding.home_mode": mode }); },
+    generating: () => getGovernorStatus().loaded.some((entry) => entry.kind === "generator"),
     pins: () => JSON.stringify([currentEngineTag("splash") ?? "", STACK_CODING_HEAVY_MODEL.revision, STACK_CODING_HEAVY_DRAFT_MODEL.revision]),
   };
   configureHomeMode(adapter); initializeHomeMode("normal");

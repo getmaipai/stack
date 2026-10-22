@@ -26,6 +26,8 @@ export interface HomeModeRuntime {
   transition(): void;
   persistMode(mode: HomeMode): void;
   pins(): string;
+  /** True while a picture, video or song job holds memory; the large model cannot load beside it. */
+  generating?(): boolean;
 }
 export class HomeModeError extends Error {
   readonly reason: string;
@@ -93,6 +95,7 @@ export async function switchHomeMode(next: HomeMode): Promise<void> {
   const availability = runtime.inspect();
   if (next === "coding" && !availability.available) throw new HomeModeError("reason" in availability ? String((availability as { reason?: string }).reason) : "The large coding mode is not available on this computer.");
   if (next === mode) throw new HomeModeError(`Home is already in ${mode} mode.`);
+  if (next === "coding" && runtime.generating?.()) throw new HomeModeError("A picture, video or song is still being made. Wait for it to finish, then switch to Coding mode.");
   running = true; target = next; state = "switching"; reason = null;
   log("home_mode_switch_started");
   let phase: "stop" | "start" | "check" = "stop";
