@@ -78,7 +78,7 @@ export interface GovernorStatus {
   queue: Array<{ id: string; position: number; kind: GovernorKind }>;
 }
 
-export interface GovernorDecision { at: string; decision: string; reason: string; model: string; }
+export interface GovernorDecision { at: string; decision: string; reason: string; model: string; reasonCode?: "coding_mode"; }
 
 interface LoadedInternal extends GovernorLoadedModel {
   /** Which admission this entry is: a release or an eviction removes
@@ -143,8 +143,11 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-function decide(decision: string, reason: string, model: string): void {
-  decisions.unshift({ at: nowIso(), decision, reason, model });
+let codingModeActive = false;
+export function setCodingModeActive(active: boolean): void { codingModeActive = active; }
+
+function decide(decision: string, reason: string, model: string, reasonCode?: "coding_mode"): void {
+  decisions.unshift({ at: nowIso(), decision, reason, model, ...(reasonCode ? { reasonCode } : {}) });
   if (decisions.length > 200) decisions.length = 200;
 }
 
@@ -243,6 +246,7 @@ export function setAdmissionGate(gate: AdmissionGate | null): void { admissionGa
 export function gateVerdict(request: GovernorRequest, peakBytes: number): { ok: true } | { ok: false; reason: string } { return admissionGate ? admissionGate(request, peakBytes) : { ok: true }; }
 
 function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
+  if (codingModeActive && request.kind === "generator") return false;
   if (memoryReadingDegraded) return false;
   if (!gateVerdict(request, peakBytes).ok) return false;
   if (pressure !== "normal") return false;
@@ -278,7 +282,8 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
     const entry: QueuedEntry = { request, settled: false, admitted, resolve: resolveQueued };
     queue.push(entry);
     const gated = gateVerdict(request, peak.bytes);
-    decide("Queued", !gated.ok ? gated.reason : pressure !== "normal" ? `Memory pressure is ${pressure}.` : "The current memory budget cannot admit the request.", request.id);
+    const heldByMode = codingModeActive && request.kind === "generator";
+    decide("Queued", heldByMode ? "The large coding mode is holding picture, video and music work." : !gated.ok ? gated.reason : pressure !== "normal" ? `Memory pressure is ${pressure}.` : "The current memory budget cannot admit the request.", request.id, heldByMode ? "coding_mode" : undefined);
     return { queued: true, position: queue.length, admitted };
   }
   refusalCounts.delete(request.id);
@@ -501,7 +506,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
     // asked: only items that declared `yieldsToGenerators` are.
     if (options.unload && queue.length > 0) {
       const head = queue.find((entry) => !entry.settled);
-      if (head && head.request.kind === "generator") {
+        if (!codingModeActive && head && head.request.kind === "generator") {
         const yielding = [...loaded.values()].filter((item) => item.kind === "jit" && item.yieldsToGenerators && !item.evicting && !item.pinned);
         const headPeak = peakFor(head.request).bytes;
         if (yielding.length > 0 && !canAdmit(head.request, headPeak) && wouldAdmitAfterFreeing(head.request, headPeak, yielding.reduce((sum, item) => sum + item.peakBytes, 0))) {
@@ -551,6 +556,7 @@ export function __setGovernorTuningForTestsOnly(overrides: Partial<GovernorTunin
 }
 
 export function __resetGovernorForTests(): void {
+  codingModeActive = false;
   metalCapBytes = null;
   admissionGate = null;
   loaded.clear();

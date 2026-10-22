@@ -304,6 +304,7 @@ export const STACK_CODING_HEAVY_MODEL: CatalogModelLike = {
   license: "MIT",
   revision: ORNITH_122B_REVISION,
   engine: "splash",
+  modeVerdict: "pending",
   companions: ["ornith-1-5-122b-dflash2-draft"],
   sizing: { profile: "p128", quantization: "MLX-4bit" },
   download: {

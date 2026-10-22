@@ -33,6 +33,7 @@ import { startMemoryWatchdog } from "@/lib/memoryWatchdog";
 import { execFileSync } from "node:child_process";
 import { readMetalCapBytes } from "@/lib/metalCap";
 import { setMetalCapBytes, getGovernorStatus } from "@/lib/governor";
+import { setupHomeModeRuntime } from "@/lib/homeModeRuntime";
 
 /** Bun's default request body limit is 128 MB; a LoRA upload (VIDEO-GEN-03) may be up to 2 GB, so the limit leaves room for it. Every route checks its own size. */
 export const MAX_REQUEST_BODY_BYTES = 2 * 1024 * 1024 * 1024 + 64 * 1024 * 1024;
@@ -55,6 +56,7 @@ async function serve(): Promise<void> {
   for (const id of reconcilePinDeclarations(STACK_MODELS)) console.log(`Updated the record of ${id} to match its pin.`);
   // The governor's working margin follows the machine's tier from here on.
   const { tier, stop: stopTierWatch } = await setMachineTierFromHardware();
+  await setupHomeModeRuntime(settingValues()["stack.engines.coding.home_mode"] === "coding" ? "coding" : "normal");
   void readMetalCapBytes().then((bytes) => {
     const previousCapBytes = getGovernorStatus().capBytes;
     setMetalCapBytes(bytes);

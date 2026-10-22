@@ -74,6 +74,7 @@ export interface CatalogModelLike {
   license?: string;
   revision?: string;
   engine?: string;
+  modeVerdict?: "pending" | "offer" | "offer_with_limits" | "do_not_offer";
   sizing?: unknown;
   /** A piece the role's engine loads beside its model (the `stt` voice
    * activity detector), never a model a person selects. */

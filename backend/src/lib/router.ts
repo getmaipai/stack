@@ -9,6 +9,7 @@ import { codingCannotFitReason, getRoleStatus, identityCheck, lastRealRequestAt,
 import { videoRoleState } from "@/video/videoGen";
 import { musicRoleState } from "@/music/musicGen";
 import { imageEngineActive, imageRoleState } from "@/images/imageEngine";
+import { currentHomeMode, homeModeSwitching } from "@/lib/homeMode";
 
 export interface RoleResolution { role: RoleId; modelId: string | null; }
 
@@ -59,6 +60,7 @@ function flatState(role: RoleId): RoleState {
 }
 
 export function resolveRoleState(role: RoleId): RoleStateRecord {
+  if (homeModeSwitching() && ["chat", "judge", "router"].includes(role)) return { state: "loaded", since: new Date().toISOString(), cause: "mode_change" };
   // The video role has no process the supervisor spawns: its worker lives in the video service.
   if (role === "video") return videoRoleState();
   // The music role likewise: its worker lives in the music service.

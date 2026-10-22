@@ -34,6 +34,7 @@ export const RoleStateRecordSchema = z.object({
   since: z.string(),
   checkedAt: z.string().optional(),
   reason: z.string().nullable().optional(),
+  cause: z.string().optional(),
 });
 export type RoleStateRecord = z.infer<typeof RoleStateRecordSchema>;
 

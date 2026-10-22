@@ -5223,6 +5223,9 @@
                               "reason": {
                                 "type": "string",
                                 "nullable": true
+                              },
+                              "cause": {
+                                "type": "string"
                               }
                             },
                             "required": [
@@ -15409,6 +15412,243 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/coding/mode": {
+      "get": {
+        "tags": [
+          "Coding"
+        ],
+        "summary": "Home's current mode switch status",
+        "responses": {
+          "200": {
+            "description": "Mode, transition, availability checks, self-test and memory plan.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "normal",
+                        "coding"
+                      ]
+                    },
+                    "target": {
+                      "type": "string",
+                      "enum": [
+                        "normal",
+                        "coding"
+                      ]
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "stable",
+                        "switching",
+                        "failed"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "available": {
+                      "type": "boolean"
+                    },
+                    "checks": {
+                      "type": "object",
+                      "properties": {
+                        "engine": {
+                          "type": "boolean"
+                        },
+                        "pieces": {
+                          "type": "boolean"
+                        },
+                        "hardware": {
+                          "type": "boolean"
+                        },
+                        "memory": {
+                          "type": "boolean"
+                        },
+                        "bench": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "engine",
+                        "pieces",
+                        "hardware",
+                        "memory",
+                        "bench"
+                      ]
+                    },
+                    "self_test": {
+                      "type": "object",
+                      "properties": {
+                        "passed_at": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "stale": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "passed_at",
+                        "stale"
+                      ]
+                    },
+                    "memory": {
+                      "type": "object",
+                      "properties": {
+                        "plan_bytes": {
+                          "type": "number"
+                        },
+                        "budget_bytes": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "plan_bytes",
+                        "budget_bytes"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "mode",
+                    "target",
+                    "state",
+                    "reason",
+                    "available",
+                    "checks",
+                    "self_test",
+                    "memory"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Coding"
+        ],
+        "summary": "Change Home mode",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "normal",
+                      "coding"
+                    ]
+                  }
+                },
+                "required": [
+                  "mode"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The mode transaction has started.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accepted": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "accepted"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The mode is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A switch is active or the requested mode is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "reason"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/coding/mode/self-test": {
+      "post": {
+        "tags": [
+          "Coding"
+        ],
+        "summary": "Run the Home mode self-test",
+        "responses": {
+          "202": {
+            "description": "The self-test has started.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accepted": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "accepted"
+                  ]
                 }
               }
             }

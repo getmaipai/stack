@@ -16,6 +16,7 @@ import { logger } from "@/lib/log";
 import { currentMachineTier, engineInstalledFor, getProcess, processRoleFor, requestRole, selectedModel } from "@/lib/supervisor";
 import type { RoleId } from "@/roles";
 import { settingValues } from "@/settings";
+import { currentHomeMode } from "@/lib/homeMode";
 
 /** Most important first: a role later in the list is dropped first when
  * the machine cannot hold them all. */
@@ -65,6 +66,7 @@ function candidatesNow(): WarmCandidate[] {
   const out: WarmCandidate[] = [];
   const seen = new Set<RoleId>();
   for (const role of WARM_ORDER) {
+    if (currentHomeMode() === "coding" && (role === "chat" || role === "judge")) continue;
     const owner = processRoleFor(role);
     if (seen.has(owner)) continue;
     const model = selectedModel(owner);
@@ -138,7 +140,7 @@ async function run(trigger: string): Promise<WarmupStatus> {
 /** Warm the machine now. A call while a warm-up runs joins it. With the
  * setting off it only records that nothing was warmed. */
 export function warmUp(trigger = "request"): Promise<WarmupStatus> {
-  if (!keepWarmEnabled()) return Promise.resolve(warmupStatus());
+  if (!keepWarmEnabled() && currentHomeMode() !== "coding") return Promise.resolve(warmupStatus());
   // A trigger during a run (a second model finished installing) reruns
   // once at the end, so the candidates are read again.
   if (running) { rerun = trigger; return running; }

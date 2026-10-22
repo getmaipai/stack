@@ -21,6 +21,7 @@ import { installPlanRoutes } from "@/routes/installPlan";
 import { settingsRoutes } from "@/routes/settings";
 import { declarationRoutes } from "@/routes/declarations";
 import { voicesRoutes } from "@/routes/voices";
+import { homeModeRoutes } from "@/routes/homeMode";
 import { fitPlanRoutes } from "@/routes/fitPlan";
 import { warmupRoutes } from "@/routes/warmup";
 import { searchRoutes } from "@/routes/search";
@@ -113,5 +114,6 @@ app.route("/stack/v1/likeness", likenessRoutes);
 app.route("/stack/v1/settings", settingsRoutes);
 app.route("/stack/v1", declarationRoutes);
 app.route("/stack/v1/voices", voicesRoutes);
+app.route("/stack/v1", homeModeRoutes);
 
 app.notFound((c) => c.json({ error: "Not found" }, 404));

@@ -193,6 +193,9 @@ export interface SplashArgsOptions {
   contextLength: number;
   /** Disk Splash may use for its temporary SSD cache, in whole GB; 0 turns the cache off (`--max-cache-disk 0`). */
   cacheGb: number;
+  defaultReasoningEffort?: "none" | "medium";
+  maxMemory?: string;
+  decodeShare?: number;
 }
 
 /** The arguments after `install/launcher.py` for the coding role on Splash (CODE-STACK-01 S5a). Flag spellings are Splash 1.3.2's
@@ -214,10 +217,12 @@ export function splashArgs(options: SplashArgsOptions): string[] {
     "--language-only",
     "--served-model-name", options.servedModelName,
     "--announce-served-name",
-    "--default-reasoning-effort", "medium",
+    "--default-reasoning-effort", options.defaultReasoningEffort ?? "medium",
     "--thinking-token-budget", String(options.thinkingBudgetTokens),
     "--max-context", String(options.contextLength),
     "--max-cache-disk", options.cacheGb > 0 ? `${options.cacheGb}G` : "0",
+    ...(options.maxMemory ? ["--max-memory", options.maxMemory] : []),
+    ...(options.decodeShare !== undefined ? ["--decode-share", options.decodeShare.toFixed(1)] : []),
     // Splash frees its weights after 10 idle minutes by default; the Stack owns keep-warm (stack.engines.coding.keep_warm_minutes) and unloads the whole engine itself.
     "--idle-release", "off",
     "--no-webui",

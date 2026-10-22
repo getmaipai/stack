@@ -6,7 +6,7 @@
 // exit watch, the drain) are the same here, keyed by role.
 import { noteComponentUse } from "@/lib/componentUse";
 import { existsSync } from "node:fs";
-import { CODING_GENERATION_PATHS, dropClientSampling } from "@/lib/codingWire";
+import { CODING_GENERATION_PATHS, clampThinking, dropClientSampling } from "@/lib/codingWire";
 import { createServer } from "node:net";
 import { dirname, join } from "node:path";
 import { withTimeout } from "@maipai/core/src/withTimeout";
@@ -30,7 +30,7 @@ import { newLaunchKey, omlxCommand, omlxEnv, omlxInstalled, omlxSupportedHere, O
 import { OmlxEngineClient } from "@/chat/omlxClient";
 import { CHAT_ENGINE_SETTING, clearChatEngineFailures, FALLBACK_AFTER_FAILURES, markChatEngineFailed, resolveChatEngine, type ChatEngineChoice, type ChatEngineId } from "@/lib/chatEngines";
 import { clearTtsEngineFailures, markTtsEngineFailed, resolveTtsEngine, TTS_ENGINE_SETTING, TTS_ENGINES, type TtsEngineChoice, type TtsEngineId } from "@/speech/ttsEngines";
-import { STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
+import { STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
 import { clearCodingEngineFailures, codingEngineFailure, CODING_ENGINE_SETTING, markCodingEngineFailed, resolveCodingEngine, SPLASH_CACHE_GB_DEFAULT, SPLASH_CACHE_GB_SETTING, splashEnv, splashFootprintEstimateBytes, type CodingEngineChoice, type SplashFacts } from "@/lib/splash";
 import { layOutSplashCache, SplashLayoutError } from "@/lib/splashStore";
 import { TreeSnapshot, treeMemoryBytes } from "@/lib/processTree";
@@ -55,6 +55,7 @@ import { estimatorAvailable, largestAdmittedContext, placedOnProcessor, runGgufP
 import { getGovernorStatus } from "@/lib/governor";
 import { codingPauseBoundMs, heavyGate, isolationRules, PausableProcess, setProtectedPidProvider, type Lease, type PausableWorker } from "@/lib/heavyGate";
 import { readMlxKvBytesPerToken } from "@/lib/mlxMemory";
+import { currentHomeMode, homeModeEnteringCoding, homeModeLeavingCoding, homeModeSwitching } from "@/lib/homeMode";
 
 export type EngineKind = "spawned" | "managed" | "url";
 export type EngineStatus = RoleState | "loading" | "busy" | "stopped";
@@ -161,10 +162,19 @@ export const SPEECH_PATH = "/tts";
 /** The role whose process serves this role: `coding`, `judge` and
  * `router` share chat's model and process unless bound elsewhere. */
 export function processRoleFor(role: RoleId): RoleId {
+  if (currentHomeMode() === "coding" && !homeModeLeavingCoding() && ["chat", "judge", "router"].includes(role)) return "coding";
   const definition = ROLES[role] as { sharesModelWith?: RoleId };
   if (role === "judge" && machineTier && PROFILE_MODEL_BINDINGS[machineTier]?.judge) return role;
   if (role === "judge" && !machineTier) return "chat";
   return definition.sharesModelWith ?? role;
+}
+
+/** The existing role.state feed is also Home's mode transition signal. */
+export function emitHomeModeTransition(): void {
+  for (const role of ["chat", "judge", "router"] as const) emitRoleState(role, "loaded", undefined, "mode_change");
+}
+export function emitHomeModeReady(): void {
+  for (const role of ["chat", "judge", "router"] as const) if (getRoleStatus(role).state === "ready") emitRoleState(role, "ready", undefined, "mode_change");
 }
 
 // ---- the client -----------------------------------------------------------
@@ -447,11 +457,11 @@ setProtectedPidProvider(() => [...runtimes.values()].map((current) => current.pr
 const lastRoleStateLog = new Map<RoleId, string>();
 const requestLocks = new Map<RoleId, Promise<void>>();
 
-function emitRoleState(role: RoleId, state: RoleState, reason?: string): void {
-  const signature = `${state}\n${reason ?? ""}`;
+function emitRoleState(role: RoleId, state: RoleState, reason?: string, cause?: string): void {
+  const signature = `${state}\n${reason ?? ""}\n${cause ?? ""}`;
   if (lastRoleStateLog.get(role) === signature) return;
   lastRoleStateLog.set(role, signature);
-  const data = { role, state, since: new Date().toISOString(), ...(reason ? { reason } : {}) };
+  const data = { role, state, since: new Date().toISOString(), ...(reason ? { reason } : {}), ...(cause ? { cause } : {}) };
   logger.appendLine(JSON.stringify({ event: "role.state", ...data }));
   emit({ id: "role.state", data });
 }
@@ -542,12 +552,18 @@ export function activeCodingChoice(): CodingEngineChoice {
   const machine = codingMachine ?? { platform: process.platform, arch: process.arch, chipGeneration: null, chipName: null, memoryGb: 0, osVersion: null };
   return resolveCodingEngine({ setting: requested, facts: { ...machine, tier: machineTier }, splashInstalled: engineInstalled("splash"), draftReady: splashDraftInstalled(), modelReady: codingModelInstalled() });
 }
+export function codingModeHardwareEligible(): boolean {
+  const machine = codingMachine;
+  const version = machine?.osVersion?.match(/^(\d+)\.(\d+)/);
+  return machineTier === "p128" && process.platform === "darwin" && process.arch === "arm64" && !!machine && (machine.chipGeneration ?? 0) >= 3 && !!version && (Number(version[1]) > 26 || (Number(version[1]) === 26 && Number(version[2]) >= 4));
+}
+export function splashInstalledForHomeMode(): boolean { return engineInstalled("splash"); }
 
 /** The engine the model records are chosen for: a GGUF serves both coding engines, so the role's records are not filtered by engine. */
 function recordEngineFor(role: RoleId): string | null { return role === "coding" ? null : engineForRole(role); }
 
 function engineForRole(role: RoleId): string | null {
-  if (role === "coding") return activeCodingChoice().engine;
+  if (role === "coding") return currentHomeMode() === "coding" || homeModeEnteringCoding() ? "splash" : activeCodingChoice().engine;
   // The vision projector is a llama-server feature (mtmd); the MLX
   // engine choice for chat never moves it.
   if (role === "vision") return "llama-server";
@@ -742,6 +758,14 @@ function servesRole(model: ModelRecord, role: RoleId, engine: string | null): bo
 }
 
 export function selectedModel(role: RoleId): ModelRecord | null {
+  if (currentHomeMode() === "coding" && ["chat", "judge", "router"].includes(role)) {
+    const heavy = getModel(STACK_CODING_HEAVY_MODEL.id);
+    return heavy && isModelSelectable(heavy) && !!heavy.modelPath ? heavy : null;
+  }
+  if (role === "coding" && currentHomeMode() === "coding") {
+    const heavy = getModel(STACK_CODING_HEAVY_MODEL.id);
+    return heavy && isModelSelectable(heavy) && !!heavy.modelPath ? heavy : null;
+  }
   if (role === "judge" && (!machineTier || !PROFILE_MODEL_BINDINGS[machineTier]?.judge)) return selectedModel("chat");
   // A record names the engine it is for; the chat wire's chosen engine
   // decides which records can serve it (a GGUF for llama-server, an MLX
@@ -761,6 +785,7 @@ export function selectedModel(role: RoleId): ModelRecord | null {
  * Kept beside selection so the API and dispatcher share the same
  * provenance, file and engine-compatibility rules. */
 export function selectableModels(role: RoleId): Array<{ id: string; name: string }> {
+  if (currentHomeMode() === "coding" && ["chat", "judge", "router"].includes(role)) return selectedModel("chat") ? [{ id: STACK_CODING_HEAVY_MODEL.id, name: STACK_CODING_HEAVY_MODEL.id }] : [];
   const engine = recordEngineFor(role);
   return listModels()
     .filter((model) => servesRole(model, role, engine) && (role !== "coding" || model.id !== STACK_CODING_HEAVY_MODEL.id || machineTier === "p128"))
@@ -1261,7 +1286,13 @@ export function splashLaunchPlan(model: ModelRecord, port: number, contextLength
   const cacheGb = typeof cacheSetting === "number" && Number.isFinite(cacheSetting) ? Math.max(0, Math.floor(cacheSetting)) : SPLASH_CACHE_GB_DEFAULT;
   const coding = codingLaunchSettings(values);
   const tag = currentEngineTag("splash") ?? pin.tag;
-  const args = splashArgs({ model: layout.model, revision: layout.revision, port, servedModelName: model.id, thinkingBudgetTokens: coding.thinkingBudgetTokens, contextLength, cacheGb });
+  const modeCoding = currentHomeMode() === "coding" || homeModeEnteringCoding();
+  const governor = getGovernorStatus();
+  const stayingBytes = modeCoding ? governor.loaded.filter((item) => !["chat", "judge", "coding"].includes(item.id)).reduce((sum, item) => sum + item.peakBytes, 0) : 0;
+  const draftRecord = model.id === STACK_CODING_HEAVY_MODEL.id ? getModel(STACK_CODING_HEAVY_DRAFT_MODEL.id) : componentModel("coding", "draft");
+  const estimate = splashFootprintEstimateBytes({ weightsBytes: model.sizeBytes ?? 0, draftBytes: draftRecord?.sizeBytes ?? STACK_CODING_HEAVY_DRAFT_MODEL.download!.approx_bytes, contextTokens: contextLength });
+  const maxMemoryBytes = modeCoding ? Math.max(1, Math.min(governor.capBytes - stayingBytes, estimate + governor.marginBytes)) : null;
+  const args = splashArgs({ model: layout.model, revision: layout.revision, port, servedModelName: model.id, thinkingBudgetTokens: coding.thinkingBudgetTokens, contextLength, cacheGb, ...(modeCoding ? { defaultReasoningEffort: "none" as const, maxMemory: `${Math.max(1, Math.floor(maxMemoryBytes! / 1_073_741_824))}G`, decodeShare: 1.0 } : {}) });
   return {
     command: [join(root, "python", "bin", "python3"), "-u", join(root, "install", "launcher.py"), ...args],
     engine: "splash", build: tag, stdin: "ignore", contextLength,
@@ -1438,7 +1469,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   const projectorBytes = launchProjectorFor(role, model)?.sizeBytes ?? 0;
   const pinMeasured = measuredPeakFromPin(model);
   const request = {
-    id: role, kind: JIT_ROLES.includes(role) ? "jit" as const : "resident" as const,
+    id: role, kind: JIT_ROLES.includes(role) && !(role === "coding" && (currentHomeMode() === "coding" || homeModeEnteringCoding())) ? "jit" as const : "resident" as const,
     requestedBytes: managed && !generator ? (model.measuredFootprintBytes ?? TTS_ENGINES[activeTtsChoice().engine].estimatedFootprintBytes) : (model.sizeBytes ?? 0) + projectorBytes,
     modelFileBytes: managed && !generator ? null : (model.sizeBytes ?? 0) + projectorBytes || null,
     // A jit role's pin carries the whole-machine cost measured on a real
@@ -1450,7 +1481,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     engine: generator ? "comfyui" : managed ? TTS_ENGINES[activeTtsChoice().engine].catalogEngine : SPEECH_ROLES.includes(role) ? "sherpa-onnx-node" : engineForRole(role) === "mlx-serve" ? "mlx-serve" : engineForRole(role) === "omlx" ? "oMLX" : onSplash ? "splash" : "llama-server",
     pinned: pinnedModels.has(model.id),
     // The coding engine gives way to a generator job while it is idle (CODE-STACK-01 S2).
-    ...(role === "coding" ? { yieldsToGenerators: true } : {}),
+    ...(role === "coding" ? { yieldsToGenerators: !(currentHomeMode() === "coding" || homeModeEnteringCoding()), pinned: currentHomeMode() === "coding" || homeModeEnteringCoding() || pinnedModels.has(model.id) } : {}),
   };
   // The coding engine's own keep-warm limit replaces the governor-wide idle limit for it.
   if (role === "coding") applyCodingKeepWarm();
@@ -1588,7 +1619,7 @@ async function startOne(role: RoleId, modelId?: string): Promise<RoleProcess> {
   if (bound) return startUrlProcess(role, bound.url);
   if (role === "tts") return startVoiceWithFallback(modelId);
   if (role === "chat") return startChatWithFallback(modelId);
-  if (role === "coding") return startCodingWithFallback(modelId);
+  if (role === "coding") return currentHomeMode() === "coding" || homeModeEnteringCoding() ? startSpawnedProcess("coding", STACK_CODING_HEAVY_MODEL.id) : startCodingWithFallback(modelId);
   return startSpawnedProcess(role, modelId);
 }
 
@@ -1959,6 +1990,7 @@ export interface IdleUnloadOptions { now?: Date; onBattery: boolean; idleMinutes
 
 export async function unloadIdleRole(requested: RoleId, options: IdleUnloadOptions): Promise<boolean> {
   const role = processRoleFor(requested);
+  if (role === "coding" && (currentHomeMode() === "coding" || homeModeEnteringCoding())) return false;
   if (!options.onBattery && options.keep?.includes(role)) return false;
   const current = runtime(role);
   const processRecord = current.process;
@@ -2063,19 +2095,28 @@ export function withPinSampling(modelId: string | null, body: Record<string, unk
  * client sampling dropped); the token-count paths carry no sampling. Every other
  * role keeps its rule: the pin fills only what the request left out, on
  * `/v1/chat/completions` when not streaming and on any path when streaming. */
-function samplingFor(role: RoleId, path: string, modelId: string | null, body: Record<string, unknown>, streaming: boolean): Record<string, unknown> {
-  if (role === "coding") return CODING_GENERATION_PATHS.includes(path) ? withPinSampling(modelId, dropClientSampling(body)) : body;
+function samplingFor(role: RoleId, requested: RoleId, path: string, modelId: string | null, body: Record<string, unknown>, streaming: boolean): Record<string, unknown> {
+  if (role === "coding" && requested === "coding") return CODING_GENERATION_PATHS.includes(path) ? withPinSampling(modelId, dropClientSampling(body)) : body;
   return withPinSampling(streaming || path === "/v1/chat/completions" ? modelId : null, body);
 }
 
+export function applyHomeModeCodingDefaults(requested: RoleId, body: Record<string, unknown>): Record<string, unknown> {
+  if (requested !== "coding" || currentHomeMode() !== "coding") return body;
+  const out = { ...body };
+  if (out.reasoning_effort === undefined) out.reasoning_effort = "medium";
+  if (out.thinking_budget_tokens === undefined) out.thinking_budget_tokens = codingLaunchSettings().thinkingBudgetTokens;
+  return clampThinking(out, codingLaunchSettings().thinkingBudgetTokens);
+}
+
 export async function requestRole(requested: RoleId, path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<RoleReply> {
+  if (homeModeSwitching() && ["chat", "judge", "router", "coding"].includes(requested)) throw new EngineUnavailableError("Home is changing modes. Try the request again in a few seconds.");
   const role = processRoleFor(requested);
   const requestedModel = typeof body.model === "string" && body.model !== requested ? body.model : undefined;
   const processRecord = await acquireRequestProcess(requested, requestedModel);
   const current = runtime(role);
   try {
     const completionMs = typeof body.timeout_ms === "number" && body.timeout_ms > 0 ? body.timeout_ms : (timeoutOverrides.completionMs ?? DEFAULT_COMPLETION_TIMEOUT_MS);
-    const dispatchBody = samplingFor(role, path, processRecord.modelId, requestedModel && processRecord.kind !== "url" ? { ...body, model: role } : body, false);
+    const dispatchBody = samplingFor(role, requested, path, processRecord.modelId, requestedModel && processRecord.kind !== "url" ? { ...applyHomeModeCodingDefaults(requested, body), model: role } : applyHomeModeCodingDefaults(requested, body), false);
     const timedOut = () => new EngineUnavailableError(`Engine request timed out after ${Math.ceil(completionMs / 1000)}s.`);
     const answered = processRecord.client.request(path, dispatchBody, signal);
     const result = await (role === "coding" ? withActiveTimeout(answered, completionMs, () => codingPausedMs(processRecord), timedOut) : withTimeout(answered, completionMs, timedOut));
@@ -2135,13 +2176,14 @@ function trackedStream(role: RoleId, processRecord: RoleProcess, upstream: Reada
 }
 
 export async function streamRole(requested: RoleId, path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<RoleStreamReply> {
+  if (homeModeSwitching() && ["chat", "judge", "router", "coding"].includes(requested)) throw new EngineUnavailableError("Home is changing modes. Try the request again in a few seconds.");
   const role = processRoleFor(requested);
   const requestedModel = typeof body.model === "string" && body.model !== requested ? body.model : undefined;
   const processRecord = await acquireRequestProcess(requested, requestedModel);
   const current = runtime(role);
   try {
     if (!processRecord.client.stream) throw new EngineUnavailableError("The engine does not support streaming.");
-    const dispatchBody = samplingFor(role, path, processRecord.modelId, requestedModel && processRecord.kind !== "url" ? { ...body, model: role } : body, true);
+    const dispatchBody = samplingFor(role, requested, path, processRecord.modelId, requestedModel && processRecord.kind !== "url" ? { ...applyHomeModeCodingDefaults(requested, body), model: role } : applyHomeModeCodingDefaults(requested, body), true);
     const response = await processRecord.client.stream(path, { ...dispatchBody, stream: true }, signal);
     if (response.status >= 500 && (continueForHealth(processRecord), !await processRecord.client.health())) throw new EngineUnavailableError(`Engine returned HTTP ${response.status} and is no longer healthy.`);
     const contentType = response.headers.get("content-type") ?? undefined;
