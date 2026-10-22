@@ -304,7 +304,10 @@ export const STACK_CODING_HEAVY_MODEL: CatalogModelLike = {
   license: "MIT",
   revision: ORNITH_122B_REVISION,
   engine: "splash",
-  modeVerdict: "pending",
+  // 2026-10-22, provisional: measured on a 128 GB machine through a real mode switch (self-test with a tool call and a thinking
+  // turn, hard coding tasks the 27B fails, a coding task through Home's gateway). The household chat bench (CHAT-AB-01: tool
+  // decision, repetition, companion voice, contention) is still owed, so minors keep thinking off and no tools (rule 8).
+  modeVerdict: "offer_with_limits",
   companions: ["ornith-1-5-122b-dflash2-draft"],
   sizing: { profile: "p128", quantization: "MLX-4bit" },
   download: {
