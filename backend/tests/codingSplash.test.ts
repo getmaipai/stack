@@ -571,6 +571,15 @@ test("the draft installs through the Stack's own downloader and every file is ch
   for (const id of ["draft-test", "draft-test-2", "draft-test-3"]) { removeModel(id); rmSync(join(modelsDir, id), { recursive: true, force: true }); }
 });
 
+// The heavy coding model (Home's coding mode) lays out its own pair; MODE-STACK-01b launched it with the 27B pair and refused ("not installed").
+test("a Splash launch lays out the heavy pair for the heavy model and the 27B pair for every other model", async () => {
+  const { splashPairFor } = await import("@/lib/splashStore");
+  const { STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL } = await import("@/lib/modelCatalog");
+  expect(splashPairFor(STACK_CODING_HEAVY_MODEL.id)).toEqual({ pin: STACK_CODING_HEAVY_MODEL, draftPin: STACK_CODING_HEAVY_DRAFT_MODEL });
+  expect(splashPairFor(STACK_CODING_MODEL.id)).toEqual({ pin: STACK_CODING_MODEL, draftPin: STACK_CODING_DRAFT_MODEL });
+  expect(splashPairFor("anything-else")).toEqual({ pin: STACK_CODING_MODEL, draftPin: STACK_CODING_DRAFT_MODEL });
+});
+
 // ---- the launch plan ------------------------------------------------------------------------
 
 macTest("the launch plan runs the bundled Python with the launcher, lays the cache out first, and sets the exact environment", () => {

@@ -40,7 +40,9 @@ function checks(): { checks: HomeModeChecks; reason: string | null; memory: Home
   const pieces = modelInstalled(STACK_CODING_HEAVY_MODEL.id) && modelInstalled(STACK_CODING_HEAVY_DRAFT_MODEL.id);
   const hardware = codingModeHardwareEligible();
   const planned = memoryPlan();
-  const benchVerdict = STACK_CODING_HEAVY_MODEL.modeVerdict ?? "pending";
+  // STACK_HOME_MODE_VERDICT_TEST is for the measurement run only (MODE-BENCH-01 has to enter the mode before a verdict can be recorded). A household never sets it.
+  const testVerdict = process.env.STACK_HOME_MODE_VERDICT_TEST;
+  const benchVerdict = testVerdict === "offer" || testVerdict === "offer_with_limits" ? testVerdict : STACK_CODING_HEAVY_MODEL.modeVerdict ?? "pending";
   const bench = benchVerdict === "offer" || benchVerdict === "offer_with_limits";
   const result: HomeModeChecks = { engine, pieces, hardware, memory: planned.fits, bench };
   const reason = !bench ? benchVerdict === "do_not_offer" ? "The large coding model did not pass its measurements on this kind of computer." : "The large coding model has not been measured on this kind of computer yet."
@@ -82,9 +84,10 @@ export async function setupHomeModeRuntime(initial: HomeMode): Promise<void> {
         if (role === owner || (role === "judge" && owner === "judge")) await unloadRole(owner, "Home is changing modes.");
       }
     },
-    startHeavy: async () => { await getProcess("coding", STACK_CODING_HEAVY_MODEL.id); },
+    startHeavy: async () => { setCodingModeActive(true); await getProcess("coding", STACK_CODING_HEAVY_MODEL.id); },
     stopHeavy: async () => { await unloadRole("coding", "Home is changing modes."); },
     startResidents: async () => {
+      setCodingModeActive(false);
       await getProcess("chat");
       if (getRoleStatus("judge").state !== "notInstalled") await getProcess("judge");
     },

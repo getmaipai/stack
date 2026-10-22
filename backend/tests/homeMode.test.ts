@@ -156,3 +156,24 @@ test("the post-load check sends three real OpenAI chat requests and requires tex
   expect(sent[1]?.body.tools).toBeDefined();
   expect(sent[2]?.body).toMatchObject({ reasoning_effort: "low", thinking_budget_tokens: 128 });
 });
+
+test("coding yields to chat only in normal mode: in coding mode the coding process is the chat process", async () => {
+  const { codingYieldsToChat } = await import("@/lib/supervisor");
+  const { initializeHomeMode } = await import("@/lib/homeMode");
+  initializeHomeMode("normal");
+  expect(codingYieldsToChat({})).toBe(true);
+  expect(codingYieldsToChat({ "stack.engines.coding.yield_to_chat": false })).toBe(false);
+  initializeHomeMode("coding");
+  expect(codingYieldsToChat({})).toBe(false);
+  initializeHomeMode("normal");
+});
+
+test("leaving coding mode, chat resolves to its own model while the residents start", async () => {
+  const { selectedModel } = await import("@/lib/supervisor");
+  await switchHomeMode("coding");
+  let during: string | undefined = "unset"; let processRole = "";
+  runtime.startResidents = async () => { during = selectedModel("chat")?.id; processRole = processRoleFor("chat"); };
+  await switchHomeMode("normal");
+  expect(during).not.toBe("ornith-1-5-122b-mlx-4bit");
+  expect(processRole).toBe("chat");
+});

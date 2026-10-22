@@ -32,7 +32,7 @@ import { CHAT_ENGINE_SETTING, clearChatEngineFailures, FALLBACK_AFTER_FAILURES, 
 import { clearTtsEngineFailures, markTtsEngineFailed, resolveTtsEngine, TTS_ENGINE_SETTING, TTS_ENGINES, type TtsEngineChoice, type TtsEngineId } from "@/speech/ttsEngines";
 import { STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
 import { clearCodingEngineFailures, codingEngineFailure, CODING_ENGINE_SETTING, markCodingEngineFailed, resolveCodingEngine, SPLASH_CACHE_GB_DEFAULT, SPLASH_CACHE_GB_SETTING, splashEnv, splashFootprintEstimateBytes, type CodingEngineChoice, type SplashFacts } from "@/lib/splash";
-import { layOutSplashCache, SplashLayoutError } from "@/lib/splashStore";
+import { layOutSplashCache, SplashLayoutError, splashPairFor } from "@/lib/splashStore";
 import { TreeSnapshot, treeMemoryBytes } from "@/lib/processTree";
 import { comfyuiCommand, comfyuiEnv, comfyuiInstalled, COMFYUI_VERSION, linkCheckpoint, probeGenerator } from "@/generators/comfyui";
 import { basename } from "node:path";
@@ -758,7 +758,7 @@ function servesRole(model: ModelRecord, role: RoleId, engine: string | null): bo
 }
 
 export function selectedModel(role: RoleId): ModelRecord | null {
-  if (currentHomeMode() === "coding" && ["chat", "judge", "router"].includes(role)) {
+  if (currentHomeMode() === "coding" && !homeModeLeavingCoding() && ["chat", "judge", "router"].includes(role)) {
     const heavy = getModel(STACK_CODING_HEAVY_MODEL.id);
     return heavy && isModelSelectable(heavy) && !!heavy.modelPath ? heavy : null;
   }
@@ -1007,6 +1007,8 @@ export function codingKeepWarmSeconds(): number { return codingLaunchSettings().
 
 /** `stack.engines.coding.yield_to_chat` (default true), read live: an admin can turn the yield off and the engine continues at once. */
 export function codingYieldsToChat(values: Record<string, SettingValue> = settingValues()): boolean {
+  // In Home's coding mode the coding process IS the chat process: yielding to chat would pause the engine that is answering it (a 20 second wait on every request, found by the end to end run).
+  if (currentHomeMode() === "coding" || homeModeEnteringCoding()) return false;
   return values["stack.engines.coding.yield_to_chat"] !== false;
 }
 
@@ -1280,7 +1282,8 @@ export function splashLaunchPlan(model: ModelRecord, port: number, contextLength
   // The pin's tool is `engine/splash`; the program's root is two levels up.
   const root = dirname(dirname(launcher));
   let layout: ReturnType<typeof layOutSplashCache>;
-  try { layout = layOutSplashCache(getModel); } catch (error) { if (error instanceof SplashLayoutError) throw new EngineUnavailableError(error.message); throw error; }
+  const pair = splashPairFor(model.id);
+  try { layout = layOutSplashCache(getModel, pair.pin, pair.draftPin); } catch (error) { if (error instanceof SplashLayoutError) throw new EngineUnavailableError(error.message); throw error; }
   const values = settingValues();
   const cacheSetting = values[SPLASH_CACHE_GB_SETTING];
   const cacheGb = typeof cacheSetting === "number" && Number.isFinite(cacheSetting) ? Math.max(0, Math.floor(cacheSetting)) : SPLASH_CACHE_GB_DEFAULT;
@@ -1421,7 +1424,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   const coding = role === "coding" ? codingLaunchSettings() : null;
   // On Splash there is no `llama-fit-params`: the window is the setting's (Splash's key-value cache is small) and the governor's figure is an estimate, until the post-load reading of the process tree replaces it.
   const onSplash = coding !== null && engineForRole(role) === "splash";
-  const splashEstimate = onSplash ? splashFootprintEstimateBytes({ weightsBytes: model.sizeBytes ?? 0, draftBytes: componentModel("coding", "draft")?.sizeBytes ?? STACK_CODING_DRAFT_MODEL.download!.approx_bytes, contextTokens: coding!.contextLength }) : null;
+  const splashEstimate = onSplash ? splashFootprintEstimateBytes({ weightsBytes: model.sizeBytes ?? 0, draftBytes: getModel(splashPairFor(model.id).draftPin.id)?.sizeBytes ?? splashPairFor(model.id).draftPin.download!.approx_bytes, contextTokens: coding!.contextLength }) : null;
   const codingWindow = coding ? (onSplash ? { contextLength: coding.contextLength, dryRunPeakBytes: splashEstimate } : await codingContextFor(model, coding.contextLength)) : null;
   const ownContext = coding ? codingWindow!.contextLength : declaredLaunchContext(model);
   const declaredContextLength = ownContext ?? launchConfig.context_length;

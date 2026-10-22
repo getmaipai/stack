@@ -132,6 +132,11 @@ function layOutRepo(repo: LayoutRepo, placed: SplashLayout["placed"]): void {
   for (const name of existsSync(blobs) ? readdirSync(blobs) : []) if (!keepBlobs.has(name)) rmSync(join(blobs, name), { force: true });
 }
 
+/** The target and draft pins a Splash launch for this model id lays out: the heavy pair for the heavy coding model (Home's coding mode), the 27B pair for everything else. */
+export function splashPairFor(modelId: string): { pin: CatalogModelLike; draftPin: CatalogModelLike } {
+  return modelId === STACK_CODING_HEAVY_MODEL.id ? { pin: STACK_CODING_HEAVY_MODEL, draftPin: STACK_CODING_HEAVY_DRAFT_MODEL } : { pin: STACK_CODING_MODEL, draftPin: STACK_CODING_DRAFT_MODEL };
+}
+
 /** Lays the pinned target and draft out as Splash's hub cache, creates its state and temporary folders (the temporary one emptied), and returns what the launch needs. Idempotent and cheap: stat calls and a few links. Throws SplashLayoutError, in plain words, when it cannot. */
 export function layOutSplashCache(getModel: (id: string) => ModelRecord | null, pin: CatalogModelLike = STACK_CODING_MODEL, draftPin: CatalogModelLike = STACK_CODING_DRAFT_MODEL): SplashLayout {
   const { target, draft, variant } = splashRepositories(getModel, pin, draftPin);
