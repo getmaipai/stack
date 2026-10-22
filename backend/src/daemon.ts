@@ -19,6 +19,7 @@ import { STACK_MODELS } from "@/lib/modelCatalog";
 import { startSelfHeal } from "@/lib/selfHeal";
 import { ddgsSupervisor } from "@/search/ddgsSidecar";
 import { imageTools, sweepImageToolsTmp } from "@/imagetools/imageTools";
+import { lookService } from "@/look/look";
 import { heavyGate, recoverPausedWorkers } from "@/lib/heavyGate";
 import { hostLimiter } from "@/media/hosts";
 import { sweepJobDirs } from "@/media/paths";
@@ -119,6 +120,7 @@ async function serve(): Promise<void> {
     // longer than WatchdogSec must not be mistaken for a hang.
     await ddgsSupervisor.stop().catch(() => {});
     imageTools.stop();
+    lookService.stop();
     videoGen.stop();
     musicGen.stop();
     imageGen.stop();

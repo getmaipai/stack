@@ -687,6 +687,7 @@ function imageToolPin(id: string, component: string, repo: string, revision: str
   };
 }
 export const STACK_IMAGE_TOOL_MODELS: CatalogModelLike[] = [
+  { id: "image-tool-yolox-nano", role: "image", component: "tool-look", repo: "Megvii-BaseDetection/YOLOX", license: "Apache-2.0", revision: "0.1.1rc0", engine: "image-tools", sizing: { profile: "p16", quantization: "fp32" }, download: { url: "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_nano.onnx", sha256: "c789161ed43c8269fcd4e67c67eeeb4e80c622da2eb296a20bc6007bd18a0b7d", approx_bytes: 3_659_407 }, measured: { footprintBytes: 150_000_000, contextLength: 0, hardware: "Apple M5 Max, 128 GB unified memory" } },
   imageToolPin("image-tool-isnet-general", "tool-isnet-general", "imgly/isnet-general-onnx", "440dea96dd4a3b06bbbf5abec3e26569dd7ec49f", "onnx/model.onnx", "MIT", "cc2c9f5c1751b9737cb81e708ff0c5e9542c2205daed22418a4fd2ab5d4c481a", 176_149_806, 3_400_000_000),
   imageToolPin("image-tool-lama-big", "tool-lama", "Carve/LaMa-ONNX", "c3c0c9e468934d62e79c329e35d82dd09ff8c444", "lama_fp32.onnx", "Apache-2.0", "1faef5301d78db7dda502fe59966957ec4b79dd64e16f03ed96913c7a4eb68d6", 208_044_816, 2_000_000_000),
   imageToolPin("image-tool-realesrgan-general-x4v3", "tool-realesrgan", "Heliosoph/realesrgan-onnx", "488e5dda07333179f229a6205d92135eea4c25e9", "realesr-general-x4v3.onnx", "BSD-3-Clause", "09b757accd747d7e423c1d352b3e8f23e77cc5742d04bae958d4eb8082b76fa4", 4_871_181, 1_500_000_000),

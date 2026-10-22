@@ -6,6 +6,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { imageTools } from "@/imagetools/imageTools";
+import { lookService } from "@/look/look";
 
 const StatusSchema = z.object({
   state: z.enum(["unsupported", "needs-setup", "building", "idle", "running"]).openapi({ description: "needs-setup: nothing is running; the first edit builds the environment (first time only) and starts the worker, which stops by itself when idle." }),
@@ -19,4 +20,4 @@ const StatusSchema = z.object({
 const getRoute = createRoute({ method: "get", path: "/", tags: ["Image tools"], summary: "The image tools' state, models and limits", responses: { 200: { content: { "application/json": { schema: z.object({ image_tools: StatusSchema }) } }, description: "Additive. Home enables Remove background, Erase and Upscale from this." } } });
 
 export const imageToolsRoutes = apiRouter<AppEnv>();
-imageToolsRoutes.openapi(getRoute, (c) => c.json({ image_tools: imageTools.status() }, 200));
+imageToolsRoutes.openapi(getRoute, (c) => c.json({ image_tools: imageTools.status(), look: lookService.status() }, 200));

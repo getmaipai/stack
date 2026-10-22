@@ -366,6 +366,12 @@ happened, what to do) and `code`: 413 `too_large`, 422 `mask_required` `mask_emp
 The worker is one Python process that starts on the first edit and exits after about two minutes idle; it holds a pinned 4 GB governor admission
 while it lives. Pictures, masks and results are never logged or written beyond the request. Design: Home `docs/design/image-tools-2026-10-17.md`.
 
+## Look (LOOK-01)
+
+`POST /v1/images/looks` takes multipart `image` (one JPEG, at most 2 MB), `source` (the caller's source id) and `detail` (`fast` or `detailed`, default `fast`). Fast returns one `LookResult`: household object labels with counts, scores and fractional boxes; light, a majority upper-wall colour when available, object and scene tags; `cost: { ms, tier: "fast" }` and `expires_in_s: 90`. Cached live tracks may appear with `stale: true` for up to 90 seconds. `detailed` returns 422 `detail_unavailable` until that tier is built. Refusals are `{ error, code }`: 413 `too_large`, 415 `not_jpeg`, 422 `detail_unavailable`, 429 `too_fast` (12 per source per minute), 503 `model_missing` or `no_memory`, 500 `failed`.
+
+`GET /stack/v1/image-tools` includes `look: { state, models, reason }`. Install the separate Look component in Home's Engines page. It uses the existing `image-tools` Python environment and a 600 MB governor admission, and pauses while chat works. The JPEG travels as bytes over worker stdin and is decoded in memory. Nothing is stored or logged but counts and elapsed milliseconds. There is no route to retrieve a previous result. Design: Home `docs/design/look-component-2026-10-22.md`.
+
 ## Media service (MEDIA-STACK-01)
 
 The Stack does the heavy media work for Home so Home never runs ffmpeg or yt-dlp itself: read a file's codecs, fetch a link a person chose,

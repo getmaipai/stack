@@ -121,7 +121,7 @@ export function plannedPinsFor(tier: ProfileTier, target: { platform: string; ar
   }
   // The image tools (remove background, erase, upscale; about 390 MB, one worker that loads on demand) are small enough for every tier
   // that has a plan; the governor decides at the first edit whether memory allows it (IMAGETOOLS-01).
-  for (const pin of STACK_IMAGE_TOOL_MODELS) add(pin);
+  for (const pin of STACK_IMAGE_TOOL_MODELS.filter((candidate) => candidate.component !== "tool-look")) add(pin);
   return planned;
 }
 

@@ -8,6 +8,7 @@ import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import packageJson from "../../package.json";
 import { v1Routes } from "@/routes/v1";
+import { lookRoutes } from "@/routes/look";
 import { rolesRoutes } from "@/routes/roles";
 import { enginesRoutes } from "@/routes/engines";
 import { modelsRoutes } from "@/routes/models";
@@ -87,6 +88,7 @@ app.get("/api/docs", apiReference({ url: "/api/openapi.json" }));
 // upgrade is never read as a POST body.
 app.route(SESSION_PATH, speechRoutes);
 app.route("/v1", v1Routes);
+app.route("/v1", lookRoutes);
 app.route("/v1/videos", videoV1Routes);
 app.route("/v1/audio/music", musicV1Routes);
 app.route("/v1/images", imageV1Routes);

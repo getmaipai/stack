@@ -134,6 +134,7 @@ const LABELS: Record<string, { label: string; summary: string }> = {
   "chatterbox-turbo-fp16": { label: "Voice: Chatterbox Turbo", summary: "A more expressive speaking voice for larger computers." },
   wakeword: { label: "Wake word (Hey MaiPai)", summary: "Lets a speaker or robot wake up when someone says the wake word." },
   "image-tools": { label: "Picture tools", summary: "Remove a background, erase an object, upscale or resize a picture." },
+  "tool-look": { label: "Look", summary: "Names household objects, wall colour and light in a picture." },
   "flux2-klein-4b": { label: "Pictures: FLUX.2 Klein 4B", summary: "The everyday picture model. Makes and edits pictures in a few seconds." },
   "z-image-turbo": { label: "Pictures: Z-Image-Turbo", summary: "A higher-detail picture model for the largest computers. A big download." },
   "ace-step-1-5-turbo": { label: "Music: ACE-Step 1.5", summary: "Makes and changes songs in chat" },
@@ -199,6 +200,8 @@ export function componentDefs(): UnitDef[] {
     usedBy: () => ["The picture editor"],
     busy: () => { const state = imageTools.status().state; return state === "running" || state === "building" ? "A picture edit is running right now." : null; },
   });
+  const lookPin = STACK_IMAGE_TOOL_MODELS.find((pin) => pin.component === "tool-look");
+  if (lookPin) units.push({ id: "tool-look", ...LABELS["tool-look"]!, group: "tools", role: "image", pins: [lookPin], envs: [envTools], usedBy: () => ["Look at a picture"], busy: () => null });
   units.push({
     id: STACK_VIDEO_MODELS[0]!.id, ...LABELS[STACK_VIDEO_MODELS[0]!.id]!, group: "video", role: "video", pins: STACK_VIDEO_MODELS, envs: [envVideo], tiers: ["p128"],
     platformBlock: () => videoAvailability().code === "unsupported" ? videoAvailability().reason : null,

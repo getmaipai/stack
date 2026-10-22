@@ -127,8 +127,9 @@ test("pictures wait in memory only between the route and the runner, and results
 });
 
 test("the three pins are verified components of the image role with licences, never a selectable image model", () => {
-  expect(STACK_IMAGE_TOOL_MODELS.map((pin) => pin.id).sort()).toEqual(Object.values(IMAGE_TOOL_MODEL_IDS).sort());
-  for (const pin of STACK_IMAGE_TOOL_MODELS) {
+  const editorPins = STACK_IMAGE_TOOL_MODELS.filter((pin) => pin.id !== "image-tool-yolox-nano");
+  expect(editorPins.map((pin) => pin.id).sort()).toEqual(Object.values(IMAGE_TOOL_MODEL_IDS).sort());
+  for (const pin of editorPins) {
     expect(pin.role).toBe("image");
     expect(pin.component).toBeTruthy();
     expect(pin.engine).toBe("image-tools");

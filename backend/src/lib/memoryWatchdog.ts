@@ -121,11 +121,12 @@ export interface WatchdogActions {
 
 async function defaultUnloadIdleWorkers(): Promise<string[]> {
   const stopped: string[] = [];
-  const [{ imageGen }, { videoGen }, { musicGen }, { imageTools }, supervisor] = await Promise.all([import("@/images/imageEngine"), import("@/video/videoGen"), import("@/music/musicGen"), import("@/imagetools/imageTools"), import("@/lib/supervisor")]);
+  const [{ imageGen }, { videoGen }, { musicGen }, { imageTools }, { lookService }, supervisor] = await Promise.all([import("@/images/imageEngine"), import("@/video/videoGen"), import("@/music/musicGen"), import("@/imagetools/imageTools"), import("@/look/look"), import("@/lib/supervisor")]);
   if (imageGen.stopIfIdle()) stopped.push("pictures");
   if (videoGen.stopIfIdle()) stopped.push("video");
   if (musicGen.stopIfIdle()) stopped.push("music");
   if (imageTools.stopIfIdle()) stopped.push("image tools");
+  if (lookService.stopIfIdle()) stopped.push("look");
   const last = supervisor.lastRealRequestAt("tts");
   const state = supervisor.getRoleStatus("tts").state;
   if ((state === "ready" || state === "loaded") && (last === null || Date.now() - last > 60_000) && await supervisor.unloadRole("tts", "Unloaded: this computer is low on memory.").catch(() => false)) stopped.push("voice engine");

@@ -147,7 +147,7 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   const planned = plannedPinsFor(tier);
   const projectors = new Set(STACK_MODELS.flatMap((pin) => pin.imageInput ? [pin.imageInput.projector] : []));
   const chatterbox = new Set(STACK_MODELS.filter((pin) => pin.engine === CHATTERBOX_ENGINE).map((pin) => pin.id));
-  const imageTools = new Set(STACK_IMAGE_TOOL_MODELS.map((pin) => pin.id));
+  const imageTools = new Set(STACK_IMAGE_TOOL_MODELS.filter((pin) => pin.component !== "tool-look").map((pin) => pin.id));
   const plannedWhere = (test: (pin: CatalogModelLike) => boolean) => planned.map((entry) => entry.pin).filter(test);
   const chat = plannedWhere((pin) => pin.role === "chat" && !projectors.has(pin.id));
   const bigChat = chat.find((pin) => !/qwen3-1\.7b/.test(pin.id)) ?? chat[0];
@@ -179,6 +179,8 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   if (better.length) rows.push(modelRow({ id: "voice-better", label: "Voice (Chatterbox)", note: "A more expressive spoken voice. Pocket TTS stays as the fallback.", need: "recommended", engines: ["engine:voice-better", "engine:python"] }, better));
   const tools = plannedWhere((pin) => imageTools.has(pin.id));
   if (tools.length) rows.push(modelRow({ id: "image-tools", label: "Edit pictures tools", note: "Remove a background, erase something, make a picture bigger.", need: "recommended", engines: ["engine:image-tools", "engine:python"] }, tools));
+  const look = STACK_IMAGE_TOOL_MODELS.filter((pin) => pin.component === "tool-look");
+  if (look.length) rows.push(modelRow({ id: "tool-look", label: "Look at pictures", note: "Name household objects, wall colour and light. Runs only when Home sends a picture.", need: "optional", engines: ["engine:image-tools", "engine:python"] }, look));
   if (!tier.notAvailable.includes("image")) {
     rows.push(modelRow({ id: "pictures", label: "Make pictures (FLUX.2 Klein)", note: "Makes pictures from a sentence, and edits yours.", need: "recommended", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_KLEIN_MODELS));
     if (TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "pictures-zimage", label: "More picture styles (Z-Image Turbo)", note: "A second picture maker with a different look. Optional.", need: "optional", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_ZIMAGE_MODELS));

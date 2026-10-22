@@ -6,25 +6,25 @@
   "installer": {
     "p16.required_free_bytes": 15028926546,
     "p16.minimum_required_free_bytes": 13731452373,
-    "p16.everything_required_free_bytes": 15028926546,
+    "p16.everything_required_free_bytes": 15033317835,
     "p16.needed_bytes": 12876596138,
     "p16.home_required_free_bytes": 3176323277,
     "p16.ai_required_free_bytes": 11852603270,
     "p32.required_free_bytes": 33780738066,
     "p32.minimum_required_free_bytes": 30802869180,
-    "p32.everything_required_free_bytes": 33780738066,
+    "p32.everything_required_free_bytes": 33785129355,
     "p32.needed_bytes": 28503105738,
     "p32.home_required_free_bytes": 3176323277,
     "p32.ai_required_free_bytes": 30604414790,
     "p64.required_free_bytes": 87536626157,
     "p64.minimum_required_free_bytes": 34279601493,
-    "p64.everything_required_free_bytes": 129263871963,
+    "p64.everything_required_free_bytes": 129268263251,
     "p64.needed_bytes": 73490455102,
     "p64.home_required_free_bytes": 3176323277,
     "p64.ai_required_free_bytes": 84360302880,
     "p128.required_free_bytes": 177907369072,
     "p128.minimum_required_free_bytes": 34279601493,
-    "p128.everything_required_free_bytes": 288094621710,
+    "p128.everything_required_free_bytes": 288099012998,
     "p128.needed_bytes": 148925871308,
     "p128.home_required_free_bytes": 3176323277,
     "p128.ai_required_free_bytes": 174731045795
@@ -149,6 +149,26 @@
           "basis": "pins"
         },
         {
+          "id": "tool-look",
+          "label": "Look at pictures",
+          "note": "Name household objects, wall colour and light. Runs only when Home sends a picture.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 3659407,
+          "installed_bytes": 3659407,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "image-tool-yolox-nano"
+          ],
+          "engines": [
+            "engine:image-tools",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -224,11 +244,11 @@
         "required_free_bytes": 13731452373
       },
       "everything": {
-        "download_bytes": 9117412829,
-        "installed_bytes": 10761652040,
+        "download_bytes": 9121072236,
+        "installed_bytes": 10765311447,
         "peak_temp_bytes": 2114944098,
-        "needed_bytes": 12876596138,
-        "required_free_bytes": 15028926546
+        "needed_bytes": 12880255545,
+        "required_free_bytes": 15033317835
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -394,6 +414,26 @@
           "basis": "pins"
         },
         {
+          "id": "tool-look",
+          "label": "Look at pictures",
+          "note": "Name household objects, wall colour and light. Runs only when Home sends a picture.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 3659407,
+          "installed_bytes": 3659407,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "image-tool-yolox-nano"
+          ],
+          "engines": [
+            "engine:image-tools",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -469,11 +509,11 @@
         "required_free_bytes": 30802869180
       },
       "everything": {
-        "download_bytes": 24743922429,
-        "installed_bytes": 26388161640,
+        "download_bytes": 24747581836,
+        "installed_bytes": 26391821047,
         "peak_temp_bytes": 2114944098,
-        "needed_bytes": 28503105738,
-        "required_free_bytes": 33780738066
+        "needed_bytes": 28506765145,
+        "required_free_bytes": 33785129355
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -706,6 +746,26 @@
           "basis": "pins"
         },
         {
+          "id": "tool-look",
+          "label": "Look at pictures",
+          "note": "Name household objects, wall colour and light. Runs only when Home sends a picture.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 3659407,
+          "installed_bytes": 3659407,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "image-tool-yolox-nano"
+          ],
+          "engines": [
+            "engine:image-tools",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "pictures",
           "label": "Make pictures (FLUX.2 Klein)",
           "note": "Makes pictures from a sentence, and edits yours.",
@@ -897,11 +957,11 @@
         "required_free_bytes": 34279601493
       },
       "everything": {
-        "download_bytes": 100648540063,
-        "installed_bytes": 103608768551,
+        "download_bytes": 100652199470,
+        "installed_bytes": 103612427958,
         "peak_temp_bytes": 4933349701,
-        "needed_bytes": 108542118252,
-        "required_free_bytes": 129263871963
+        "needed_bytes": 108545777659,
+        "required_free_bytes": 129268263251
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -1128,6 +1188,26 @@
             "image-tool-isnet-general",
             "image-tool-lama-big",
             "image-tool-realesrgan-general-x4v3"
+          ],
+          "engines": [
+            "engine:image-tools",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "tool-look",
+          "label": "Look at pictures",
+          "note": "Name household objects, wall colour and light. Runs only when Home sends a picture.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 3659407,
+          "installed_bytes": 3659407,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "image-tool-yolox-nano"
           ],
           "engines": [
             "engine:image-tools",
@@ -1421,11 +1501,11 @@
         "required_free_bytes": 34279601493
       },
       "everything": {
-        "download_bytes": 232030638827,
-        "installed_bytes": 235335407788,
+        "download_bytes": 232034298234,
+        "installed_bytes": 235339067195,
         "peak_temp_bytes": 5692132364,
-        "needed_bytes": 241027540152,
-        "required_free_bytes": 288094621710
+        "needed_bytes": 241031199559,
+        "required_free_bytes": 288099012998
       },
       "measured_on": "2026-10-17",
       "default_selected": [

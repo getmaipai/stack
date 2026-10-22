@@ -2631,6 +2631,306 @@
         }
       }
     },
+    "/v1/images/looks": {
+      "post": {
+        "tags": [
+          "Roles"
+        ],
+        "summary": "Name what is in one picture (household objects, wall colour, light), in memory only",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "source": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "description": "Which camera this picture is from (a robot's device id). Only a key for the 90 second memory of what it has seen."
+                  },
+                  "detail": {
+                    "type": "string",
+                    "enum": [
+                      "fast",
+                      "detailed"
+                    ],
+                    "default": "fast",
+                    "description": "`fast` names things with the on-computer detector. `detailed` is not available yet (422 detail_unavailable)."
+                  }
+                },
+                "required": [
+                  "image",
+                  "source"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A LookResult (spec look-result) plus expires_in_s. Nothing is stored or logged but counts; ask again for a new look.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "objects": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "integer"
+                          },
+                          "score": {
+                            "type": "number"
+                          },
+                          "box": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            }
+                          },
+                          "uncertain": {
+                            "type": "boolean",
+                            "enum": [
+                              false
+                            ]
+                          },
+                          "stale": {
+                            "type": "boolean",
+                            "enum": [
+                              true
+                            ]
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "count",
+                          "score",
+                          "box",
+                          "uncertain"
+                        ]
+                      }
+                    },
+                    "scene": {
+                      "type": "object",
+                      "properties": {
+                        "light": {
+                          "type": "string",
+                          "enum": [
+                            "dark",
+                            "dim",
+                            "bright"
+                          ]
+                        },
+                        "colours": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "tags": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string"
+                              },
+                              "score": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "label",
+                              "score"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "light",
+                        "colours",
+                        "tags"
+                      ]
+                    },
+                    "cost": {
+                      "type": "object",
+                      "properties": {
+                        "ms": {
+                          "type": "number"
+                        },
+                        "tier": {
+                          "type": "string",
+                          "enum": [
+                            "fast"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "ms",
+                        "tier"
+                      ]
+                    },
+                    "expires_in_s": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "objects",
+                    "scene",
+                    "cost",
+                    "expires_in_s"
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The picture is over 2 MB.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Not a complete JPEG.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "detail=detailed is not available yet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "More than 12 pictures a minute from one source.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Look failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The Look part is not installed, not enough memory, or this computer cannot run it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/videos/generations": {
       "post": {
         "tags": [
