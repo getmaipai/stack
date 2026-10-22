@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { CompanionClipInput } from "@/media/commands";
-import { COMPANION_CLIP_LIMITS, companionReasons, fitCompanionFrames, keyOutRgba, medianMatte } from "@/media/companionClip";
+import { COLOUR_MATCH_STRENGTH, COMPANION_CLIP_LIMITS, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionMetrics, companionReasons, fitCompanionFrames, keyOutRgba, medianMatte } from "@/media/companionClip";
 
 test("keying preserves a red character over either key and clears pure key pixels", () => {
   const green = new Uint8Array([255, 0, 0, 255, 0, 255, 0, 255]);
@@ -49,9 +49,41 @@ test("loop fitting finds a period and reports a small gap, and still selects a b
 test("one-shot crossfades its last six frames to the first pose", () => {
   const frames = Array.from({ length: 48 }, (_, n) => new Uint8Array([n, 0, 0, 255]));
   const fitted = fitCompanionFrames(frames, 1, 1, "oneshot", 1, 2);
-  expect(fitted.frames.length).toBe(48);
-  expect(fitted.frames[47]![0]).toBe(fitted.frames[0]![0]);
+  expect(fitted.frames.length).toBe(33);
+  expect(fitted.settle_skipped_frames).toBe(15);
+  expect(fitted.frames[32]![0]).toBe(fitted.frames[0]![0]);
   expect(fitted.loop_gap).toBe(0);
+});
+
+test("one-shot skips the oversized settling frames before blending to its settled first pose", () => {
+  const frames = Array.from({ length: 48 }, (_, n) => {
+    const frame = new Uint8Array(100 * 100 * 4);
+    const radius = n < ONESHOT_SETTLE_FRAMES ? 26 : 20;
+    for (let y = 0; y < 100; y++) for (let x = 0; x < 100; x++) {
+      const i = (y * 100 + x) * 4;
+      if ((x - 50) ** 2 + (y - 50) ** 2 <= radius ** 2) frame.set([220, 180, 40, 255], i);
+    }
+    return frame;
+  });
+  const fitted = fitCompanionFrames(frames, 100, 100, "oneshot", 1, 2);
+  const areas = fitted.frames.map((frame) => { let count = 0; for (let i = 3; i < frame.length; i += 4) if (frame[i]! > 128) count++; return count; });
+  expect(fitted.settle_skipped_frames).toBe(ONESHOT_SETTLE_FRAMES);
+  expect(fitted.frames.length).toBe(48 - ONESHOT_SETTLE_FRAMES);
+  expect(areas[0]! / areas[10]!).toBeGreaterThan(0.95);
+  expect(areas[0]! / areas[10]!).toBeLessThan(1.05);
+  expect(fitted.loop_gap).toBeLessThan(COMPANION_CLIP_LIMITS.loop_gap);
+});
+
+test("palette matching moves a saturated yellow clip toward a softer reference", () => {
+  const clip = new Uint8Array([248, 200, 8, 255, 0, 0, 0, 0]);
+  const reference = new Uint8Array([248, 200, 72, 255, 0, 0, 0, 0]);
+  const before = companionMetrics([clip], 2, 1, ["#F8C848"]);
+  const matched = clip.slice();
+  applyColourMatch([matched], [reference], COLOUR_MATCH_STRENGTH);
+  const after = companionMetrics([matched], 2, 1, ["#000000"], [reference]);
+  expect(matched[2]).toBeGreaterThan(clip[2]!);
+  expect(Math.abs(matched[2]! - reference[2]!)).toBeLessThanOrEqual(Math.abs(clip[2]! - reference[2]!) / 2);
+  expect(after.colour_distance).toBeLessThan(before.colour_distance!);
 });
 
 test("the report limit decisions cover every quality reason", () => {
@@ -65,4 +97,5 @@ test("companion clip input applies defaults, validates duration bounds and refus
   expect(CompanionClipInput.safeParse({ path: "/clip.mp4", key: "none", kind: "loop", min_seconds: 4, max_seconds: 3 }).success).toBe(false);
   expect(CompanionClipInput.safeParse({ path: "/clip.mp4", key: "none", kind: "loop", min_seconds: 1, max_seconds: 3, fps: 30 }).success).toBe(false);
   expect(CompanionClipInput.safeParse({ path: "/clip.mp4", key: "none", kind: "loop", min_seconds: 1, max_seconds: 3, colours: ["#aabbcc"] }).success).toBe(false);
+  expect(CompanionClipInput.safeParse({ path: "/clip.mp4", key: "none", kind: "loop", min_seconds: 1, max_seconds: 3, palette_reference: "not-base64!" }).success).toBe(false);
 });

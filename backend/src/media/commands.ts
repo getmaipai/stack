@@ -80,6 +80,7 @@ export const CompanionClipInput = z.object({
   min_seconds: z.number().min(1).max(10),
   max_seconds: z.number().min(1).max(10),
   colours: z.array(z.string().regex(/^#[0-9A-F]{6}$/)).max(8).default([]),
+  palette_reference: z.string().max(28_000_000).regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/).optional(),
   max_bytes: z.number().int().min(1).max(20_000_000).default(614400),
 }).strict().refine((input) => input.min_seconds <= input.max_seconds, { path: ["min_seconds"], message: "must be at most max_seconds" });
 export type CompanionClipInput = z.infer<typeof CompanionClipInput>;

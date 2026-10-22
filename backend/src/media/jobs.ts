@@ -14,7 +14,7 @@ import { probeFile, type ProbeResult } from "./probe";
 import { idleArgv, spawnRunner, type Runner, type RunResult } from "./run";
 import { defaultToolbox, MediaToolError, type MediaToolbox } from "./tools";
 import { mkdirSync } from "node:fs";
-import { COMPANION_CLIP_FPS, COMPANION_CLIP_SIZE, companionCrop, companionMetrics, companionReasons, downscaleRgba4, frameDifference, keyOutRgba, selectCompanionWindow } from "./companionClip";
+import { COLOUR_MATCH_STRENGTH, COMPANION_CLIP_FPS, COMPANION_CLIP_SIZE, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionCrop, companionMetrics, companionReasons, downscaleRgba4, frameDifference, keyOutRgba, selectCompanionWindow } from "./companionClip";
 
 export const MEDIA_KINDS = ["media.probe", "media.fetch", "media.transcode", "media.preview", "media.companion_clip", "media.setup"] as const;
 export type MediaKind = typeof MEDIA_KINDS[number];
@@ -279,7 +279,7 @@ export const COMPANION_STACK_FILTER = "[0:v]format=gbrap,split=2[c][m0];[m0]alph
 const COMPANION_MAX_SOURCE_BYTES = 64 * 1024 * 1024;
 const COMPANION_MAX_SOURCE_SECONDS = 12;
 const extOkay = (path: string) => [".mp4", ".mov", ".webm"].includes(extname(path).toLowerCase());
-const alphaPixelFormat = (pixel: string | null) => !!pixel && /(?:yuva|gbrap|rgba|bgra|argb|abgr|ya\d|pal8)/i.test(pixel);
+export const alphaPixelFormat = (pixel: string | null) => !!pixel && /(?:yuva|gbrap|rgba|bgra|argb|abgr|ya\d|pal8)/i.test(pixel);
 
 async function decodeRgbaToFile(ffmpeg: string, path: string, width: number, rawPath: string, signal: AbortSignal, progress: JobProgress, forceVp9Alpha = false): Promise<number> {
   const frameBytes = width * COMPANION_CLIP_SIZE * 4;
@@ -408,12 +408,14 @@ async function runCompanionClip(job: Job, signal: AbortSignal, progress: JobProg
   if (source.duration_s > COMPANION_MAX_SOURCE_SECONDS) throw fail({ code: "bad_input", message: "The clip is longer than 12 seconds. Use a clip of 10 seconds or less." });
   if (source.size_bytes > COMPANION_MAX_SOURCE_BYTES) throw fail({ code: "bad_input", message: "The clip is larger than 64 MB. Export a smaller clip and try again." });
   const stream = source.streams.find((entry) => entry.type === "video" && !entry.cover_art);
-  const alpha = alphaPixelFormat(stream?.pix_fmt ?? null);
+  const taggedAlpha = source.tags.alpha_mode === "1";
+  const formatAlpha = alphaPixelFormat(stream?.pix_fmt ?? null);
+  const alpha = formatAlpha || taggedAlpha;
   if (input.key === "none" && !alpha) throw fail({ code: "no_alpha", message: "This clip has no transparent background. Use a clip on a plain green or magenta background and tell Home which one." });
   const width = Math.max(2, Math.round(((source.width ?? 480) * COMPANION_CLIP_SIZE / Math.max(1, source.height ?? 480)) / 2) * 2);
   let partials: string[] = [], created: string[] = [];
   try {
-    const forceVp9Alpha = input.key === "none" && extname(src).toLowerCase() === ".webm" && stream?.codec === "vp9";
+    const forceVp9Alpha = input.key === "none" && taggedAlpha && !formatAlpha && extname(src).toLowerCase() === ".webm" && stream?.codec === "vp9";
     const rawDecoded = join(workDir, ".companion-decoded.rgba"); partials.push(rawDecoded);
     const frameBytes = width * COMPANION_CLIP_SIZE * 4;
     const frameCount = await decodeRgbaToFile(tools.ffmpeg!, src, width, rawDecoded, signal, progress, forceVp9Alpha);
@@ -431,6 +433,20 @@ async function runCompanionClip(job: Job, signal: AbortSignal, progress: JobProg
     }
     catch (error) { if (error instanceof Error && error.message.includes("shorter")) throw fail({ code: "too_short", message: "The clip is shorter than this state needs. Make it again." }); throw error; }
     const keptFrames = readKeptFrames(rawDecoded, window.start, window.length, frameBytes);
+    let referenceFrames: Uint8Array[] | undefined, colourMatchApplied = false;
+    if (input.palette_reference) {
+      const referencePath = join(workDir, ".companion-palette-reference.png"), referenceRaw = join(workDir, ".companion-palette-reference.rgba");
+      partials.push(referencePath, referenceRaw);
+      writeFileSync(referencePath, Buffer.from(input.palette_reference, "base64"), { mode: 0o600 });
+      const referenceResult = await mediaDeps.run([tools.ffmpeg!, "-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-i", referencePath, "-frames:v", "1", "-vf", "scale=480:480:flags=lanczos,format=rgba", "-f", "rawvideo", "-pix_fmt", "rgba", referenceRaw], { signal });
+      if (referenceResult.aborted || signal.aborted) throw new Error("Cancelled.");
+      if (referenceResult.code !== 0 || sizeOf(referenceRaw) !== 480 * 480 * 4) throw fail({ code: "bad_input", message: "The palette reference could not be read as an image." });
+      const referenceFd = openSync(referenceRaw, "r");
+      try { referenceFrames = [readRawFrame(referenceFd, 0, 480 * 480 * 4)]; } finally { closeSync(referenceFd); }
+      colourMatchApplied = applyColourMatch(keptFrames, referenceFrames, COLOUR_MATCH_STRENGTH);
+      rmSync(referencePath, { force: true }); rmSync(referenceRaw, { force: true });
+      partials = partials.filter((path) => path !== referencePath && path !== referenceRaw);
+    }
     let loopGap = 0;
     const blendFrame = (frame: Uint8Array, toward: Uint8Array, weight: number) => { for (let i = 0; i < frame.length; i++) frame[i] = Math.round(frame[i]! * (1 - weight) + toward[i]! * weight); };
     if (input.kind === "oneshot") {
@@ -446,7 +462,7 @@ async function runCompanionClip(job: Job, signal: AbortSignal, progress: JobProg
       }
       loopGap = frameDifference(keptFrames[keptFrames.length - 1]!, keptFrames[0]!, width, COMPANION_CLIP_SIZE, signal);
     }
-    const metrics = companionMetrics(keptFrames, width, COMPANION_CLIP_SIZE, input.colours);
+    const metrics = companionMetrics(keptFrames, width, COMPANION_CLIP_SIZE, input.colours, referenceFrames);
     const keptFrameCount = keptFrames.length;
     const crop = companionCrop(keptFrames, width, COMPANION_CLIP_SIZE);
     const rawCrop = join(workDir, ".companion-crop.rgba"), rawScaled = join(workDir, ".companion-scaled.rgba"); partials.push(rawCrop, rawScaled);
@@ -487,7 +503,7 @@ async function runCompanionClip(job: Job, signal: AbortSignal, progress: JobProg
     if (hasAv1) files.push(await encode("libsvtav1", 24, "clip.av1.mp4", 80, 20));
     const seconds = keptFrameCount / COMPANION_CLIP_FPS;
     const reasons = companionReasons({ ...metrics, loop_gap: loopGap }, seconds, input.min_seconds, input.max_seconds);
-    const report = { seconds, frames: keptFrameCount, fps: COMPANION_CLIP_FPS, width: 480, height: 960, files, av1: hasAv1, loop_gap: loopGap, ...metrics, ok: reasons.length === 0, reasons };
+    const report = { seconds, frames: keptFrameCount, fps: COMPANION_CLIP_FPS, width: 480, height: 960, files, av1: hasAv1, loop_gap: loopGap, settle_skipped_frames: input.kind === "oneshot" ? Math.min(ONESHOT_SETTLE_FRAMES, Math.max(0, frameCount - 24)) : 0, colour_match: { applied: colourMatchApplied, strength: COLOUR_MATCH_STRENGTH }, ...metrics, ok: reasons.length === 0, reasons };
     writeFileSync(reportPath, JSON.stringify(report, null, 2), { mode: 0o600 });
     rmSync(rawCrop, { force: true }); rmSync(rawScaled, { force: true });
     progress({ status: "encoding", percent: 100 });

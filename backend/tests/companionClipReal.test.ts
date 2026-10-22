@@ -14,7 +14,7 @@ const ffmpeg = "/Users/jessetorres/.cache/uv/archive-v0/_tZvViE2XqBtGyd7/imageio
 const priorNoNice = process.env.STACK_MEDIA_NO_NICE;
 process.env.STACK_MEDIA_NO_NICE = "1";
 const real = existsSync(ffmpeg) ? test : test.skip;
-let root = "", green = "", magenta = "";
+let root = "", green = "", magenta = "", alphaWebm = "";
 let passthroughRun: (argv: string[], options?: RunOptions) => Promise<RunResult>;
 
 async function command(args: string[]): Promise<void> {
@@ -26,6 +26,10 @@ async function makeCircle(path: string, colour: string): Promise<void> {
   const circle = `color=c=red:s=64x64:r=24:d=3,format=rgba,geq=r='255':g='0':b='0':a='if(lte((X-32)^2+(Y-32)^2,900),255,0)'`;
   const position = `[0:v][1:v]overlay=x='128+55*cos(2*PI*t/3)':y='58+35*sin(2*PI*t/3)':shortest=1,format=yuv420p`;
   await command(["-f", "lavfi", "-i", background, "-f", "lavfi", "-i", circle, "-filter_complex", position, "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", path]);
+}
+async function makeAlphaWebm(path: string): Promise<void> {
+  const rgba = "color=c=red:s=320x180:r=24:d=3,format=rgba,geq=r='255':g='20':b='10':a='if(lte((X-160)^2+(Y-90)^2,3600),255,0)'";
+  await command(["-f", "lavfi", "-i", rgba, "-an", "-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-auto-alt-ref", "0", path]);
 }
 async function submit(input: Record<string, unknown>) {
   const id = await start(input);
@@ -65,9 +69,9 @@ beforeAll(async () => {
   if (!existsSync(ffmpeg)) return;
   __resetJobsForTests(); __resetRootsForTests();
   root = realpathSync(mkdtempSync(join(tmpdir(), "companion-real-")));
-  green = join(root, "green.mp4"); magenta = join(root, "magenta.mp4");
+  green = join(root, "green.mp4"); magenta = join(root, "magenta.mp4"); alphaWebm = join(root, "alpha.webm");
   setRoots({ read: [root], write: [root] });
-  await makeCircle(green, "#00FF00"); await makeCircle(magenta, "#FF00FF");
+  await makeCircle(green, "#00FF00"); await makeCircle(magenta, "#FF00FF"); await makeAlphaWebm(alphaWebm);
   passthroughRun = async (argv, options) => {
       if (argv[0] === "/test/ffprobe") {
         const path = argv[argv.length - 1]!;
@@ -75,7 +79,8 @@ beforeAll(async () => {
         const facts = parseProbe(probed.stderr);
         const duration = /Duration: (\d+):(\d+):(\d+(?:\.\d+)?)/.exec(probed.stderr);
         const seconds = duration ? Number(duration[1]) * 3600 + Number(duration[2]) * 60 + Number(duration[3]) : null;
-        const raw = { format: { format_name: path.endsWith(".mp4") ? "mov,mp4,m4a" : "png", duration: seconds === null ? null : String(seconds) }, streams: facts.videoCodec ? [{ index: 0, codec_type: "video", codec_name: facts.videoCodec, width: facts.width, height: facts.height, pix_fmt: facts.pixelFormat, avg_frame_rate: "24/1", disposition: { attached_pic: 0 } }] : [] };
+        const isAlphaWebm = path === alphaWebm;
+        const raw = { format: { format_name: path.endsWith(".mp4") ? "mov,mp4,m4a" : path.endsWith(".webm") ? "matroska,webm" : "png", duration: seconds === null ? null : String(seconds) }, streams: facts.videoCodec || isAlphaWebm ? [{ index: 0, codec_type: "video", codec_name: isAlphaWebm ? "vp9" : facts.videoCodec, width: isAlphaWebm ? 320 : facts.width, height: isAlphaWebm ? 180 : facts.height, pix_fmt: isAlphaWebm ? "yuv420p" : facts.pixelFormat, avg_frame_rate: "24/1", tags: isAlphaWebm ? { alpha_mode: "1" } : {}, disposition: { attached_pic: 0 } }] : [] };
         return { code: 0, stdout: JSON.stringify(raw), stderr: "", aborted: false };
       }
       return spawnRunner(argv, options);
@@ -126,6 +131,17 @@ real("wrong character colours fail quality, and opaque input with key none fails
   expect(wrong.result.ok).toBe(false); expect(wrong.result.reasons.join(" ")).toContain("colours");
   const noAlpha = await submit({ path: green, key: "none", kind: "loop", min_seconds: 1, max_seconds: 3, output_dir: root, output_name: "no-alpha" });
   expect(noAlpha.state).toBe("failed"); expect(noAlpha.result.failure.code).toBe("no_alpha");
+}, 180_000);
+
+real("VP9 WebM alpha_mode is detected and its transparency survives decoding", async () => {
+  const done = await submit({ path: alphaWebm, key: "none", kind: "loop", min_seconds: 3, max_seconds: 3, output_dir: root, output_name: "alpha-mode" });
+  expect(done.state).toBe("done");
+  const still = await rawRgba(join(root, "alpha-mode", "still.png"), 0);
+  const corner = (0 * 480 + 0) * 4;
+  const centre = (240 * 480 + 240) * 4;
+  expect(still[corner + 3]).toBeLessThan(10);
+  expect(still[centre + 3]).toBeGreaterThan(240);
+  expect(pixel(still, 240, 240)[0]).toBeGreaterThan(200);
 }, 180_000);
 
 real("cancelling during encoding removes every generated and partial file", async () => {

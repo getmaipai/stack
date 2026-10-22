@@ -9,6 +9,8 @@ export const COMPANION_CLIP_LIMITS = {
 } as const;
 export const COMPANION_CLIP_FPS = 24;
 export const COMPANION_CLIP_SIZE = 480;
+export const ONESHOT_SETTLE_FRAMES = 15;
+export const COLOUR_MATCH_STRENGTH = 0.7;
 /** Lower edge of the existing pure-key alpha ramp. */
 export const KEY_ALPHA_START = 5;
 /** Upper edge of the existing pure-key alpha ramp. */
@@ -141,7 +143,10 @@ export function frameDifference4(a: Uint8Array, b: Uint8Array): number {
 export function selectCompanionWindow(frames: Uint8Array[], kind: "loop" | "oneshot", count: number, minSeconds: number, maxSeconds: number, signal?: AbortSignal): { start: number; length: number } {
   const min = Math.ceil(minSeconds * COMPANION_CLIP_FPS), max = Math.floor(maxSeconds * COMPANION_CLIP_FPS);
   if (count < min) throw new Error("The clip is shorter than this state needs. Make it again.");
-  if (kind === "oneshot") return { start: 0, length: Math.min(count, max) };
+  if (kind === "oneshot") {
+    const settle = Math.min(ONESHOT_SETTLE_FRAMES, Math.max(0, count - 24));
+    return { start: settle, length: Math.min(count - settle, max) };
+  }
   let start = 0, length = Math.min(count, max), best = Number.POSITIVE_INFINITY;
   const maxStart = Math.min(12 * COMPANION_CLIP_FPS, count - min);
   for (let s = 0; s <= maxStart; s += COMPANION_CLIP_FPS) for (let n = min; n <= Math.min(max, count - s - 1); n++) {
@@ -152,7 +157,7 @@ export function selectCompanionWindow(frames: Uint8Array[], kind: "loop" | "ones
   return { start, length };
 }
 
-export interface FitFrames { frames: Uint8Array[]; start: number; loop_gap: number; }
+export interface FitFrames { frames: Uint8Array[]; start: number; loop_gap: number; settle_skipped_frames: number; }
 const blend = (target: Uint8Array, toward: Uint8Array, weight: number) => {
   for (let i = 0; i < target.length; i++) target[i] = Math.round(target[i]! * (1 - weight) + toward[i]! * weight);
 };
@@ -160,7 +165,8 @@ const blend = (target: Uint8Array, toward: Uint8Array, weight: number) => {
 export function fitCompanionFrames(frames: Uint8Array[], width: number, height: number, kind: "loop" | "oneshot", minSeconds: number, maxSeconds: number, signal?: AbortSignal): FitFrames {
   const min = Math.ceil(minSeconds * COMPANION_CLIP_FPS), max = Math.floor(maxSeconds * COMPANION_CLIP_FPS);
   if (frames.length < min) throw new Error("The clip is shorter than this state needs. Make it again.");
-  let start = 0, length = Math.min(frames.length, max);
+  const settleSkipped = kind === "oneshot" ? Math.min(ONESHOT_SETTLE_FRAMES, Math.max(0, frames.length - 24)) : 0;
+  let start = settleSkipped, length = Math.min(frames.length - settleSkipped, max);
   if (kind === "loop") {
     let best = Number.POSITIVE_INFINITY;
     const maxStart = Math.min(12 * COMPANION_CLIP_FPS, frames.length - min);
@@ -186,10 +192,41 @@ export function fitCompanionFrames(frames: Uint8Array[], width: number, height: 
       blend(kept[index]!, frames[start + length + i]!, (i + 1) / fade);
     }
   }
-  return { frames: kept, start, loop_gap: frameDifference(kept[kept.length - 1]!, kept[0]!, width, height, signal) };
+  return { frames: kept, start, loop_gap: frameDifference(kept[kept.length - 1]!, kept[0]!, width, height, signal), settle_skipped_frames: settleSkipped };
 }
 
-export function companionMetrics(frames: Uint8Array[], width: number, height: number, colours: string[]) {
+function opaqueColourStats(frames: Uint8Array[]) {
+  const count = [0, 0, 0], sum = [0, 0, 0], squares = [0, 0, 0];
+  for (const frame of frames) for (let i = 0; i < frame.length; i += 4) if (frame[i + 3]! > 200) for (let c = 0; c < 3; c++) {
+    const value = frame[i + c]!; count[c]!++; sum[c]! += value; squares[c]! += value * value;
+  }
+  return { mean: sum.map((value, c) => count[c] ? value / count[c]! : 0), std: sum.map((value, c) => count[c] ? Math.sqrt(Math.max(0, squares[c]! / count[c]! - (value / count[c]!) ** 2)) : 0), count: count[0]! };
+}
+
+/** Match opaque RGB channel statistics while preserving straight, un-premultiplied colour. */
+export function applyColourMatch(frames: Uint8Array[], referenceFrames: Uint8Array[], strength = COLOUR_MATCH_STRENGTH): boolean {
+  const source = opaqueColourStats(frames), reference = opaqueColourStats(referenceFrames);
+  if (!source.count || !reference.count) return false;
+  const gains = source.mean.map((mean, c) => source.std[c]! > 0.5 ? reference.std[c]! / source.std[c]! : 1);
+  const offsets = source.mean.map((mean, c) => reference.mean[c]! - mean * gains[c]!);
+  for (const frame of frames) for (let i = 0; i < frame.length; i += 4) for (let c = 0; c < 3; c++) {
+    const original = frame[i + c]!;
+    const fitted = Math.max(0, Math.min(255, original * gains[c]! + offsets[c]!));
+    frame[i + c] = Math.round(original * (1 - strength) + fitted * strength);
+  }
+  return true;
+}
+
+function referencePalette(frames: Uint8Array[]): Array<[number, number, number]> {
+  const palette = new Map<number, [number, number, number]>();
+  for (const frame of frames) for (let i = 0; i < frame.length && palette.size < 256; i += 4) if (frame[i + 3]! > 200) {
+    const colour: [number, number, number] = [frame[i]!, frame[i + 1]!, frame[i + 2]!];
+    palette.set((colour[0] << 16) | (colour[1] << 8) | colour[2], colour);
+  }
+  return [...palette.values()];
+}
+
+export function companionMetrics(frames: Uint8Array[], width: number, height: number, colours: string[], referenceFrames?: Uint8Array[]) {
   const areas: number[] = [], shares: number[] = [];
   for (const frame of frames) {
     let opaque = 0;
@@ -199,8 +236,9 @@ export function companionMetrics(frames: Uint8Array[], width: number, height: nu
   const sortedAreas = areas.filter((v) => v > 0).sort((a, b) => a - b);
   const area_ratio = sortedAreas.length ? sortedAreas[sortedAreas.length - 1]! / sortedAreas[0]! : Infinity;
   let colour_distance: number | undefined;
-  if (colours.length && frames.length) {
-    const parsed = colours.map((hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number]);
+  const referenceColours = referenceFrames ? referencePalette(referenceFrames) : [];
+  if ((referenceColours.length || colours.length) && frames.length) {
+    const parsed = referenceColours.length ? referenceColours : colours.map((hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number]);
     const middle = frames[Math.floor(frames.length / 2)]!; let sum = 0, count = 0;
     for (let i = 0; i < middle.length; i += 4) if (middle[i + 3]! > 200) {
       let nearest = Infinity;
