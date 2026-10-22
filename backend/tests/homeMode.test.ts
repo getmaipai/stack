@@ -177,3 +177,12 @@ test("leaving coding mode, chat resolves to its own model while the residents st
   expect(during).not.toBe("ornith-1-5-122b-mlx-4bit");
   expect(processRole).toBe("chat");
 });
+
+test("a heavy start waits out a resident engine that is still starting, then gives up at the limit", async () => {
+  const { retryWhileResidentStarts } = await import("@/lib/homeModeRuntime");
+  let calls = 0;
+  const value = await retryWhileResidentStarts(async () => { calls++; if (calls < 3) throw new Error("The coding engine waits while a resident engine starts."); return "up"; }, 1_000, 1);
+  expect(value).toBe("up"); expect(calls).toBe(3);
+  await expect(retryWhileResidentStarts(async () => { throw new Error("The coding engine waits while a resident engine starts."); }, 20, 5)).rejects.toThrow("waits while");
+  await expect(retryWhileResidentStarts(async () => { throw new Error("out of memory"); }, 1_000, 1)).rejects.toThrow("out of memory");
+});

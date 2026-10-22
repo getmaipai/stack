@@ -70,6 +70,19 @@ export async function checkHomeModeOpenAIWire(client: Pick<EngineClient, "reques
   const thinking = await client.request("/v1/chat/completions", { ...base, reasoning_effort: "low", thinking_budget_tokens: 128 });
   if (thinking.status < 200 || thinking.status >= 300 || !textReply(thinking.body)) throw new Error("The large coding model did not complete its thinking check.");
 }
+/** A resident engine that is still warming up holds the large model back (its start guard throws). A mode switch waits for it
+ * instead of failing, up to `waitMs`, because a switch right after boot is a normal thing to do. */
+export async function retryWhileResidentStarts<T>(start: () => Promise<T>, waitMs = 5 * 60_000, pauseMs = 1_000): Promise<T> {
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    try { return await start(); }
+    catch (error) {
+      const waiting = error instanceof Error && error.message.includes("waits while a resident engine starts");
+      if (!waiting || Date.now() >= deadline) throw error;
+      await new Promise((resolve) => setTimeout(resolve, pauseMs));
+    }
+  }
+}
 async function postLoadCodingCheck(): Promise<void> {
   const process = await getProcess("coding", STACK_CODING_HEAVY_MODEL.id);
   await checkHomeModeOpenAIWire(process.client);
@@ -84,7 +97,7 @@ export async function setupHomeModeRuntime(initial: HomeMode): Promise<void> {
         if (role === owner || (role === "judge" && owner === "judge")) await unloadRole(owner, "Home is changing modes.");
       }
     },
-    startHeavy: async () => { setCodingModeActive(true); await getProcess("coding", STACK_CODING_HEAVY_MODEL.id); },
+    startHeavy: async () => { setCodingModeActive(true); await retryWhileResidentStarts(() => getProcess("coding", STACK_CODING_HEAVY_MODEL.id)); },
     stopHeavy: async () => { await unloadRole("coding", "Home is changing modes."); },
     startResidents: async () => {
       setCodingModeActive(false);
