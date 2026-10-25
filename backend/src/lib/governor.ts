@@ -1,6 +1,7 @@
 import { emit } from "@/lib/events";
 import { getMemoryReader, type MemoryPressure, type MemoryReader } from "@/lib/memory";
 import { raise, resolve as resolveHealth } from "@/lib/health";
+import { ROLES } from "@/roles";
 
 const GB = 1_073_741_824;
 
@@ -8,6 +9,7 @@ export const GovernorRules = {
   pollMs: 5_000,
   queueMax: 4,
   idleTtlSeconds: 600,
+  warmEvictionGraceMs: 2 * 60_000,
   systemLowWaterPct: 0.1,
   systemLowWaterFloorBytes: GB,
   systemSustainedPolls: 2,
@@ -28,12 +30,15 @@ export const GovernorRules = {
 } as const;
 
 export type GovernorKind = "resident" | "jit" | "generator";
+export type GovernorClass = "reserved" | "warm" | "burst";
 export type GovernorTier = keyof typeof GovernorRules.tiers;
 export type RunState = "running" | "pausing" | "paused";
 
 export interface GovernorRequest {
   id: string;
   kind: GovernorKind;
+  class?: GovernorClass;
+  role?: string;
   requestedBytes: number;
   modelFileBytes?: number | null;
   measuredPeakBytes?: number | null;
@@ -50,6 +55,7 @@ export interface GovernorRequest {
 export interface GovernorHandle {
   id: string;
   kind: GovernorKind;
+  class?: GovernorClass;
   requestedBytes: number;
   token?: number;
 }
@@ -57,6 +63,7 @@ export interface GovernorHandle {
 export interface GovernorLoadedModel {
   id: string;
   kind: GovernorKind;
+  class: GovernorClass;
   peakBytes: number;
   measured: boolean;
   lastUsedAt: string;
@@ -75,7 +82,7 @@ export interface GovernorStatus {
   tier: GovernorTier;
   marginBytes: number;
   loaded: GovernorLoadedModel[];
-  queue: Array<{ id: string; position: number; kind: GovernorKind }>;
+  queue: Array<{ id: string; position: number; kind: GovernorKind; class: GovernorClass }>;
 }
 
 export interface GovernorDecision { at: string; decision: string; reason: string; model: string; reasonCode?: "coding_mode"; }
@@ -153,6 +160,14 @@ function decide(decision: string, reason: string, model: string, reasonCode?: "c
   if (decisions.length > 200) decisions.length = 200;
 }
 
+function requestClass(request: GovernorRequest): GovernorClass {
+  return request.class ?? ROLES[request.role as keyof typeof ROLES]?.memoryClass ?? ROLES[request.id as keyof typeof ROLES]?.memoryClass ?? (request.kind === "resident" ? "reserved" : request.kind === "jit" ? "warm" : "burst");
+}
+
+function taggedRequest(request: GovernorRequest): GovernorRequest {
+  return { ...request, class: requestClass(request) };
+}
+
 export function setMetalCapBytes(bytes: number | null): void { metalCapBytes = bytes; }
 function effectiveCapBytes(): number {
   const osCap = Math.max(0, totalMemoryBytes - tuning.osMarginBytes);
@@ -175,6 +190,7 @@ function loadedItemFor(request: GovernorRequest): LoadedInternal {
     evicting: false,
     id: request.id,
     kind: request.kind,
+    class: requestClass(request),
     peakBytes: peak.bytes,
     measured: peak.measured,
     lastUsedAt: nowIso(),
@@ -201,6 +217,60 @@ export function setIdleTtlSeconds(id: string, seconds: number | null): void {
 /** What a new admission could use right now without evicting anything: the model budget less what is loaded, and the free memory less the tier's working margin; whichever is smaller. */
 export function admissionRoomBytes(): number {
   return Math.max(0, Math.min(effectiveCapBytes() - loadedBytes(), freeMemoryBytes - workingMargin()));
+}
+
+/** Whether a request fits with every non-reserved item removed. */
+export function fitsEver(request: GovernorRequest): boolean {
+  const peakBytes = peakFor(request).bytes;
+  const reservedBytes = [...loaded.values()].filter((item) => item.class === "reserved").reduce((sum, item) => sum + item.peakBytes, 0);
+  const modelRoom = Math.max(0, effectiveCapBytes() - reservedBytes);
+  const workingRoom = Math.max(0, totalMemoryBytes - reservedBytes - workingMargin());
+  return peakBytes <= modelRoom && peakBytes <= workingRoom;
+}
+
+export function neverFitReason(request: GovernorRequest): string {
+  const peak = peakFor(request).bytes;
+  const reservedBytes = [...loaded.values()].filter((item) => item.class === "reserved").reduce((sum, item) => sum + item.peakBytes, 0);
+  const afterChat = Math.max(0, Math.min(effectiveCapBytes() - reservedBytes, totalMemoryBytes - reservedBytes - workingMargin()));
+  const role = request.role ?? request.id;
+  const label = role === "image" ? "picture" : ROLES[role as keyof typeof ROLES]?.label.toLowerCase() ?? "request";
+  const needs = (peak / GB).toFixed(1);
+  const available = (afterChat / GB).toFixed(1);
+  if (role === "video") return `This video needs about ${needs} GB of memory and this computer has ${available} GB for pictures and videos after chat. Try a shorter clip, or ask an admin to turn video off for this computer.`;
+  if (role === "image") return `This picture needs about ${needs} GB of memory and this computer has ${available} GB for pictures and videos after chat. Try a smaller picture, or ask an admin to choose a smaller picture model.`;
+  return `This ${label} needs about ${needs} GB of memory and this computer has ${available} GB for jobs after chat. Try a smaller ${label} or ask an admin to turn it off for this computer.`;
+}
+
+export interface EvictionRoom {
+  roomBytes: number;
+  evictionOrder: string[];
+}
+
+/** Room a request could use after eligible idle items are unloaded. */
+export function roomAfterEviction(request: GovernorRequest, busy: (id: string) => boolean = () => false, now = Date.now()): EvictionRoom {
+  const targetClass = requestClass(request);
+  const classRank: Record<GovernorClass, number> = { reserved: 0, warm: 1, burst: 2 };
+  const evictionRank = (item: LoadedInternal): number => {
+    if (item.class === "burst") return item.id.includes("tool") ? 1 : 0;
+    if (item.id.includes("vision")) return 1;
+    if (item.id.includes("edit")) return 2;
+    if (item.id.includes("coding")) return 3;
+    return 4;
+  };
+  const candidates = [...loaded.values()].filter((item) => {
+    if (item.class === "reserved" || item.pinned || item.evicting || busy(item.id)) return false;
+    const warmGracePassed = item.class === "warm" && now - new Date(item.lastUsedAt).getTime() >= GovernorRules.warmEvictionGraceMs;
+    if (classRank[item.class] < classRank[targetClass] && !warmGracePassed) return false;
+    if (item.class === "warm" && !warmGracePassed) return false;
+    return true;
+  }).sort((a, b) => classRank[b.class] - classRank[a.class] || evictionRank(a) - evictionRank(b) || new Date(a.lastUsedAt).getTime() - new Date(b.lastUsedAt).getTime());
+  let roomBytes = admissionRoomBytes();
+  const evictionOrder: string[] = [];
+  for (const item of candidates) {
+    evictionOrder.push(item.id);
+    roomBytes += item.peakBytes;
+  }
+  return { roomBytes, evictionOrder };
 }
 
 export function peakFor(request: GovernorRequest): { bytes: number; measured: boolean } {
@@ -265,9 +335,15 @@ function wouldAdmitAfterFreeing(request: GovernorRequest, peakBytes: number, fre
   return loadedBytes() - freedBytes + peakBytes <= effectiveCapBytes() && freeMemoryBytes + freedBytes - peakBytes >= workingMargin();
 }
 
-export async function admit(request: GovernorRequest): Promise<GovernorHandle | { queued: true; position: number; admitted: Promise<GovernorHandle | { refused: true; reason: string }> } | { refused: true; reason: string }> {
+export async function admit(request: GovernorRequest): Promise<GovernorHandle | { queued: true; position: number; class: GovernorClass; admitted: Promise<GovernorHandle | { refused: true; reason: string }> } | { refused: true; reason: string }> {
+  request = taggedRequest(request);
   if (runState !== "running") { decide("Refused", "The Stack is paused.", request.id); return { refused: true, reason: "The Stack is paused." }; }
   const peak = peakFor(request);
+  if (!fitsEver(request)) {
+    const reason = neverFitReason(request);
+    decide("Refused", reason, request.id);
+    return { refused: true, reason };
+  }
   if (memoryReadingDegraded) {
     decide("Refused", "The memory reading is unavailable.", request.id);
     return { refused: true, reason: "The memory reading is unavailable." };
@@ -278,7 +354,7 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
     if (refusals >= 3) raise({ code: "admission-refused-repeatedly", severity: "warning", title: "Work is waiting for memory", text: `The governor has deferred ${request.id} repeatedly.`, cause: "The current memory budget cannot admit the request.", fix: { label: "Free memory", action: "free_memory" } });
     if (queue.length >= tuning.queueMax) { decide("Refused", "The governor queue is full.", request.id); return { refused: true, reason: "The governor queue is full." }; }
     const existing = queue.findIndex((entry) => entry.request.id === request.id);
-    if (existing >= 0) return { queued: true, position: existing + 1, admitted: queue[existing]!.admitted };
+    if (existing >= 0) return { queued: true, position: existing + 1, class: requestClass(request), admitted: queue[existing]!.admitted };
     let resolveQueued!: (result: GovernorHandle | { refused: true; reason: string }) => void;
     const admitted: Promise<GovernorHandle | { refused: true; reason: string }> = new Promise<GovernorHandle | { refused: true; reason: string }>((resolve) => { resolveQueued = resolve; });
     const entry: QueuedEntry = { request, settled: false, admitted, resolve: resolveQueued };
@@ -286,14 +362,14 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
     const gated = gateVerdict(request, peak.bytes);
     const heldByMode = codingModeActive && request.kind === "generator";
     decide("Queued", heldByMode ? "The large coding mode is holding picture, video and music work." : !gated.ok ? gated.reason : pressure !== "normal" ? `Memory pressure is ${pressure}.` : "The current memory budget cannot admit the request.", request.id, heldByMode ? "coding_mode" : undefined);
-    return { queued: true, position: queue.length, admitted };
+    return { queued: true, position: queue.length, class: requestClass(request), admitted };
   }
   refusalCounts.delete(request.id);
   resolveHealth("admission-refused-repeatedly");
   const item = loadedItemFor(request);
   loaded.set(request.id, item);
   decide("Admitted", "The current memory budget has room.", request.id);
-  return { id: request.id, kind: request.kind, requestedBytes: peak.bytes, token: item.token };
+  return { id: request.id, kind: request.kind, class: requestClass(request), requestedBytes: peak.bytes, token: item.token };
 }
 
 /** A request on a loaded item: its idle clock starts again. */
@@ -330,7 +406,7 @@ function settleAdmission(entry: QueuedEntry): void {
   loaded.set(entry.request.id, item);
   decide("Admitted", "The current memory budget has room.", entry.request.id);
   entry.settled = true;
-  entry.resolve({ id: entry.request.id, kind: entry.request.kind, requestedBytes: item.peakBytes, token: item.token });
+  entry.resolve({ id: entry.request.id, kind: entry.request.kind, class: requestClass(entry.request), requestedBytes: item.peakBytes, token: item.token });
 }
 
 export function release(handle: GovernorHandle): void {
@@ -372,7 +448,7 @@ export function getGovernorStatus(): GovernorStatus {
     tier: activeTier,
     marginBytes: workingMargin(),
     loaded: [...loaded.values()].map(({ peakBaselineBytes: _baseline, runPeakBytes: _runPeak, recordedPeakBytes: _recorded, processBreaches: _breaches, keepAliveSeconds: _keepAlive, token: _token, evicting: _evicting, ...item }) => item),
-    queue: queue.map((entry, index) => ({ id: entry.request.id, position: index + 1, kind: entry.request.kind })),
+    queue: queue.map((entry, index) => ({ id: entry.request.id, position: index + 1, kind: entry.request.kind, class: requestClass(entry.request) })),
   };
 }
 
@@ -485,7 +561,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
       }
       // Only a watch that can unload evicts: forgetting a jit item whose
       // process still runs would hide its memory from every admission.
-      if (item.kind === "jit" && options.unload && !item.evicting && !item.pinned && (idle || pressure !== "normal")) {
+      if (item.kind === "jit" && item.class !== "reserved" && options.unload && !options.busy?.(item.id) && !item.evicting && !item.pinned && (idle || pressure !== "normal")) {
         // Not awaited: an unload drains requests in flight, and this poll
         // (another process's RSS watch among them) never waits on it. The
         // entry goes when its own process is gone, never a newer one.
@@ -496,7 +572,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
           let unloaded: boolean | void = undefined;
           try { unloaded = await unload(item.id); } catch { unloaded = false; }
           if (unloaded === false) { item.evicting = false; return; }
-          if (loaded.get(item.id) === item) loaded.delete(item.id);
+          if (loaded.get(item.id) === item) { loaded.delete(item.id); freeMemoryBytes += item.peakBytes; }
         })();
       }
     }
@@ -520,7 +596,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
               try { unloaded = await unload(item.id); } catch { unloaded = false; }
               if (unloaded === false) { item.evicting = false; return; }
               decide("Unloaded", "A picture, video or music job was waiting and the model was idle.", item.id);
-              if (loaded.get(item.id) === item) loaded.delete(item.id);
+              if (loaded.get(item.id) === item) { loaded.delete(item.id); freeMemoryBytes += item.peakBytes; }
             })();
           }
         }
@@ -540,6 +616,29 @@ export function startGovernor(options: StartGovernorOptions): () => void {
         if (!canAdmit(entry.request, peakFor(entry.request).bytes)) break;
         settleAdmission(entry);
         queue.splice(index, 1);
+      }
+      const head = queue[0];
+      if (head && options.unload && !head.settled && !canAdmit(head.request, peakFor(head.request).bytes)) {
+        const required = peakFor(head.request).bytes;
+        const room = roomAfterEviction(head.request, (id) => options.busy?.(id) ?? false, now);
+        if (room.roomBytes >= required) {
+          let available = admissionRoomBytes();
+          for (const id of room.evictionOrder) {
+            if (available >= required) break;
+            const item = loaded.get(id);
+            if (!item || item.evicting) continue;
+            item.evicting = true;
+            const unload = options.unload;
+            void (async () => {
+              let unloaded: boolean | void = undefined;
+              try { unloaded = await unload(id); } catch { unloaded = false; }
+              if (unloaded === false) { item.evicting = false; return; }
+              decide("Unloaded", `The ${requestClass(head.request)} request needed room.`, id);
+              if (loaded.get(id) === item) { loaded.delete(id); freeMemoryBytes += item.peakBytes; }
+            })();
+            available += item.peakBytes;
+          }
+        }
       }
     }
   }

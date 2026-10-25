@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { app } from "@/app";
 import { __resetEventsForTests, eventsAfter } from "@/lib/events";
-import { __resetJobsForTests, __setJobQueueTimingForTests, cancelJob, createJob, finishJob, getJob, jobSignal, registerJobRunner, submitJob, updateJob, waitForJob } from "@/lib/jobs";
+import { __resetJobsForTests, __setAdmissionWaitForTests, __setJobQueueTimingForTests, cancelJob, createJob, finishJob, getJob, jobSignal, registerJobRunner, submitJob, updateJob, waitForJob } from "@/lib/jobs";
 import { heavyGate } from "@/lib/heavyGate";
-import { __resetGovernorForTests } from "@/lib/governor";
+import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, release, type GovernorHandle } from "@/lib/governor";
 import { __resetMemoryStateForTests, memoryLevel, setMemoryLevel } from "@/lib/memoryState";
 
-beforeEach(() => { __resetJobsForTests(); __resetEventsForTests(); __resetGovernorForTests(); __resetMemoryStateForTests(); heavyGate.reset(); });
-afterEach(() => { __setJobQueueTimingForTests(null); heavyGate.reset(); });
+const GB = 1_073_741_824;
+
+beforeEach(() => { __resetJobsForTests(); __resetEventsForTests(); __resetGovernorForTests(); __setGovernorTuningForTestsOnly({ totalMemoryBytes: 64 * GB, freeMemoryBytes: 32 * GB, tier: "p64" }); __resetMemoryStateForTests(); heavyGate.reset(); });
+afterEach(() => { __setJobQueueTimingForTests(null); __setAdmissionWaitForTests(null); heavyGate.reset(); });
 
 test("a queued generator waits for interactive work and its four second tail", async () => {
   let now = 0;
@@ -60,6 +62,22 @@ test("a queued generator stays queued at WARN and starts when memory returns to 
   await waitForJob(submitted.job.id, 200);
   expect(getJob(submitted.job.id)?.state).toBe("done");
   expect(started).toBe(true);
+});
+
+test("a fitting job stays queued past the configured admission wait and runs when memory frees", async () => {
+  __setAdmissionWaitForTests(20);
+  const holder = await admit({ id: "other-work", kind: "generator", class: "burst", requestedBytes: GB }) as GovernorHandle;
+  let ran = false;
+  registerJobRunner("waiting-picture", async () => { ran = true; return {}; }, { generator: { role: "image", memory: () => ({ requestedBytes: GB }) } });
+  const submitted = submitJob({ kind: "waiting-picture" });
+  if ("refused" in submitted) throw new Error(submitted.reason);
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  expect(getJob(submitted.job.id)).toMatchObject({ state: "running", status: expect.stringContaining("waiting for memory") });
+  expect(getJob(submitted.job.id)?.status).not.toBe("no_memory");
+  release(holder);
+  for (let index = 0; index < 20 && !ran; index++) await new Promise((resolve) => setTimeout(resolve, 5));
+  expect(ran).toBe(true);
+  expect(getJob(submitted.job.id)).toMatchObject({ state: "done" });
 });
 
 test("a kind with no runner is refused with a reason, not left queued", async () => {

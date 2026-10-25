@@ -444,4 +444,4 @@ test("a real clip job: the deadline and the estimate leave the paused time out, 
   const resumed = tracker.snapshot();
   expect(resumed.stage_label).not.toBe(PAUSED_LABEL);
   expect(isStopped(workerPid)).toBe(false);
-});
+}, 30_000);

@@ -4,7 +4,7 @@
 // the route, and one live read-only check against this computer's numbers.
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { app } from "@/app";
-import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, getGovernorStatus, release, setAdmissionGate } from "@/lib/governor";
+import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, getGovernorStatus, release, setAdmissionGate, startGovernor } from "@/lib/governor";
 import { __resetHealthForTests, list as listHealth } from "@/lib/health";
 import { __resetJobsForTests, cancelGeneratorsForMemory, getJob, registerJobRunner, submitJob, waitForJob, __setAdmissionWaitForTests } from "@/lib/jobs";
 import { __setSystemSamplerForTests, parseEtime, parseProcessTable, type ProcessRow, type SystemSample, type SystemSampler } from "@/lib/memory/system";
@@ -145,21 +145,28 @@ test("at WARN or CRITICAL a new generative start waits whatever the free memory"
   expect(verdict.ok ? "" : verdict.reason).toContain("low on memory");
 });
 
-test("a job that waits the whole window for memory fails with no_memory and the numbers", async () => {
+test("a fitting job stays queued past the old window and runs when memory frees", async () => {
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: TOTAL, freeMemoryBytes: 100 * GB, tier: "p128" });
   setLatestSample(sample({ availableBytes: 15 * GB }));
   setAdmissionGate(admissionVerdict);
-  __setAdmissionWaitForTests(60);
   let ran = false;
   registerJobRunner("image_test", async () => { ran = true; return {}; }, { generator: { role: "image", memory: () => ({ requestedBytes: 13.5 * GB }) } });
-  const submitted = submitJob({ kind: "image_test" });
-  if ("refused" in submitted) throw new Error(submitted.reason);
-  const settled = await waitForJob(submitted.job.id, 3000);
-  expect(ran).toBe(false);
-  expect(settled?.state).toBe("failed");
-  expect(settled?.status).toBe("no_memory");
-  expect(settled?.reason).toContain("not enough free memory");
-  expect(getGovernorStatus().queue).toEqual([]);
+  let reading = sample({ availableBytes: 15 * GB, freeBytes: 100 * GB });
+  const stop = startGovernor({ pid: -1, pollMs: 2, memoryReader: { read: () => ({ ...reading, availablePercent: 80 }), processMemoryBytes: () => null } });
+  try {
+    const submitted = submitJob({ kind: "image_test" });
+    if ("refused" in submitted) throw new Error(submitted.reason);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(ran).toBe(false);
+    expect(getJob(submitted.job.id)).toMatchObject({ state: "running", status: expect.stringContaining("waiting for memory") });
+    expect(getGovernorStatus().queue.map((entry) => entry.id)).toEqual([submitted.job.id]);
+    setLatestSample(sample({ availableBytes: 40 * GB }));
+    reading = sample({ availableBytes: 40 * GB, freeBytes: 100 * GB });
+    const settled = await waitForJob(submitted.job.id, 3_000);
+    expect(ran).toBe(true);
+    expect(settled?.state).toBe("done");
+    expect(getGovernorStatus().queue).toEqual([]);
+  } finally { stop(); }
 });
 
 // ---- the actions ----

@@ -237,7 +237,7 @@ test("a generator job that coding's memory would not help is not made to evict i
   __setGovernorTuningForTestsOnly({ freeMemoryBytes: 10 * GB });
   // 40 GB for the job cannot fit even with coding gone (chat holds 30 of the 40 GB budget).
   const job = await admit({ id: "video-job", kind: "generator", requestedBytes: 40 * GB, measuredPeakBytes: 40 * GB });
-  expect(job).toMatchObject({ queued: true });
+  expect(job).toMatchObject({ refused: true, reason: expect.stringContaining("This request needs about 40.0 GB of memory") });
   const asked: string[] = [];
   const reader = { read: () => ({ totalBytes: 48 * GB, freeBytes: 10 * GB, availablePercent: 20, pressure: "normal" as const, degraded: false }), processMemoryBytes: () => null };
   const stop = startGovernor({ pid: -1, pollMs: 2, memoryReader: reader, unload: async (id) => { asked.push(id); return false; } });

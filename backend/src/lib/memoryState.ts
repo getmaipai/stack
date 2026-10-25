@@ -32,7 +32,7 @@ export const WatchdogRules = {
   /** Critical this long is the chat role's turn to be restarted. */
   chatRestartAfterMs: 60_000,
   chatRestartCooldownMs: 10 * 60_000,
-  /** A generative job waits this long for memory, then fails with no_memory. */
+  /** Kept for configuration compatibility; fitting generator requests do not expire. */
   admissionWaitMs: 180_000,
   orphanMinAgeSeconds: 90,
   orphanKillGraceMs: 15_000,

@@ -5448,6 +5448,14 @@
                               "installed"
                             ]
                           },
+                          "memoryClass": {
+                            "type": "string",
+                            "enum": [
+                              "reserved",
+                              "warm",
+                              "burst"
+                            ]
+                          },
                           "endpoints": {
                             "type": "array",
                             "items": {
@@ -5809,6 +5817,7 @@
                           "label",
                           "wire",
                           "residency",
+                          "memoryClass",
                           "endpoints",
                           "quality",
                           "id",

@@ -42,5 +42,6 @@ test("capacity no is never admitted, and yes is admitted with ample free memory"
   });
   expect(capacityPlan.verdict).toBe("no");
   const queued = await admit({ id: "chat", kind: "resident", requestedBytes: capacityPlan.roles[0]!.peak.high! });
-  expect(queued).toMatchObject({ queued: true });
+  expect(queued).toMatchObject({ refused: true, reason: expect.stringContaining("This chat needs about 1.0 GB of memory") });
+  expect(getGovernorStatus().queue).toEqual([]);
 });

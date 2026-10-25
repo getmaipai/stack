@@ -3,15 +3,16 @@
 // spec's StackJob. A generator job (image, video, music) waits in its
 // role's queue, one in flight per role, and runs only once the governor
 // admits it (one generator at a time across roles, the budget's say);
-// a job the budget refuses fails with the governor's reason, never
-// hangs. A download or an install created by another module runs as
-// that module drives it. Until a runner is registered for a kind, a
+// a never-fit request fails with the governor's reason; a fitting request
+// stays queued until memory frees or the person cancels. A download or an
+// install created by another module runs as that module drives it. Until a runner is registered for a kind, a
 // submit for it is refused with a reason rather than left queued.
 import { emit } from "@/lib/events";
 import { noteComponentUse } from "@/lib/componentUse";
-import { admit, generatorsHeldByMode, getGovernorStatus, getRunState, peakFor, release, withdraw, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
+import { admit, fitsEver, generatorsHeldByMode, getRunState, neverFitReason, peakFor, release, withdraw, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
 import { heavyGate, isolationRules } from "@/lib/heavyGate";
-import { memoryLevel, PAUSED_LOW_MEMORY, waitingText, WatchdogRules } from "@/lib/memoryState";
+import { memoryLevel, PAUSED_LOW_MEMORY, waitingText } from "@/lib/memoryState";
+import { ROLES } from "@/roles";
 import { StackJob, StackJobState } from "@maipai/spec/stack/ts/stack-job.js";
 
 export const JobStateSchema = StackJobState;
@@ -259,11 +260,6 @@ function renumber(role: string): void {
   queue.forEach((job, index) => { const current = jobs.get(job.id); if (current && current.state === "queued" && current.position !== index + 1) touch(current, { position: index + 1 }); });
 }
 
-/** A generative job that waited the whole admission window for memory: it fails with the status `no_memory`. */
-export class NoMemoryError extends Error {
-  constructor(message: string) { super(message); this.name = "NoMemoryError"; }
-}
-
 /** Runs the next queued job of a role when none is in flight: it asks
  * the governor for room, waits on the governor's own promise when told
  * to (its poll settles it when memory frees), fails the job with the
@@ -292,9 +288,9 @@ async function pump(role: string): Promise<void> {
   touch(jobs.get(next.id)!, { state: "running", status: "waiting for memory" });
   let handle: GovernorHandle;
   try {
-    handle = await admitJob(next.id, { id: next.id, kind: "generator", ...runner.options.generator.memory(jobs.get(next.id)!) });
+    handle = await admitJob(next.id, { id: next.id, role, class: ROLES[role as keyof typeof ROLES]?.memoryClass ?? "burst", kind: "generator", ...runner.options.generator.memory(jobs.get(next.id)!) });
   } catch (error) {
-    finishJob(next.id, { ok: false, reason: error instanceof Error ? error.message : String(error), ...(error instanceof NoMemoryError ? { status: "no_memory" } : {}) });
+    finishJob(next.id, { ok: false, reason: error instanceof Error ? error.message : String(error) });
     settle();
     return;
   }
@@ -318,9 +314,8 @@ function governorPeak(request: GovernorRequest): number {
 async function admitJob(jobId: string, request: GovernorRequest): Promise<GovernorHandle> {
   // A peak the budget can never hold is refused now with the numbers,
   // not queued for memory that will not come.
-  const status = getGovernorStatus();
   const peak = governorPeak(request);
-  if (peak > status.capBytes) throw new Error(`The render needs about ${gb(peak)} GB; the memory budget for models is ${gb(status.capBytes)} GB.`);
+  if (!fitsEver(request)) throw new Error(neverFitReason(request));
   const controller = controllers.get(jobId);
   const answer = await admit(request);
   if ("refused" in answer) throw new Error(answer.reason);
@@ -328,7 +323,6 @@ async function admitJob(jobId: string, request: GovernorRequest): Promise<Govern
   updateJob(jobId, { status: generatorsHeldByMode() ? HELD_BY_MODE_TEXT : waitingText(peak, answer.position) });
   const signal = controller?.signal;
   let pauseTimer: ReturnType<typeof setInterval> | null = null;
-  let waitTimer: ReturnType<typeof setTimeout> | null = null;
   try {
     const settled = await Promise.race([
       answer.admitted,
@@ -338,16 +332,6 @@ async function admitJob(jobId: string, request: GovernorRequest): Promise<Govern
             signal.addEventListener("abort", () => reject(new Error("Cancelled by Home.")), { once: true });
           })
         : new Promise<never>(() => {}),
-      new Promise<never>((_, reject) => {
-        // Held back by the large coding mode is not a memory shortage: keep waiting, in plain words, until it ends.
-        const arm = (): void => {
-          waitTimer = setTimeout(() => {
-            if (generatorsHeldByMode()) { updateJob(jobId, { status: HELD_BY_MODE_TEXT }); arm(); return; }
-            reject(new NoMemoryError(`There was not enough free memory to start this within ${Math.round(admissionWaitMs() / 60_000 * 10) / 10} minutes (${waitingText(peak, 0).replace("waiting for memory: ", "")}). Close big apps, or try again in a few minutes.`));
-          }, admissionWaitMs());
-        };
-        arm();
-      }),
       new Promise<never>((_, reject) => {
         pauseTimer = setInterval(() => {
           if (getRunState() !== "running") { if (pauseTimer) clearInterval(pauseTimer); reject(new Error("The Stack is paused.")); }
@@ -361,15 +345,11 @@ async function admitJob(jobId: string, request: GovernorRequest): Promise<Govern
     throw error;
   } finally {
     if (pauseTimer) clearInterval(pauseTimer);
-    if (waitTimer) clearTimeout(waitTimer);
   }
 }
 
-let admissionWaitOverrideMs: number | null = null;
-function admissionWaitMs(): number { return admissionWaitOverrideMs ?? Number(process.env.STACK_ADMISSION_WAIT_MS ?? WatchdogRules.admissionWaitMs); }
-export function __setAdmissionWaitForTests(ms: number | null): void { admissionWaitOverrideMs = ms; }
+export function __setAdmissionWaitForTests(_ms: number | null): void {}
 
-function gb(bytes: number): string { return (bytes / 1_073_741_824).toFixed(1); }
 
 
 export function cancelJob(id: string): Job | null {

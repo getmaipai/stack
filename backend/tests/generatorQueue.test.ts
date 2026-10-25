@@ -85,11 +85,13 @@ test("a second render queues behind the first with its position and runs after i
 });
 
 test("a render the budget can never hold is refused with the numbers, not left waiting", async () => {
-  scriptedSidecar({ requestedBytes: 64 * GB });
+  const sidecar = scriptedSidecar({ requestedBytes: 64 * GB });
   const job = submit("too big");
-  const failed = await waitForJob(job.id, 1_000);
+  const failed = await waitForJob(job.id, 100);
   expect(failed?.state).toBe("failed");
-  expect(failed?.reason).toMatch(/needs about 64\.0 GB; the memory budget for models is/);
+  expect(failed?.reason).toBe("This picture needs about 64.0 GB of memory and this computer has 24.0 GB for pictures and videos after chat. Try a smaller picture, or ask an admin to choose a smaller picture model.");
+  expect(sidecar.started).toEqual([]);
+  expect(getGovernorStatus().queue).toEqual([]);
 });
 
 test("while the governor holds another generator, the job waits in the governor's queue and runs when that one releases", async () => {

@@ -5,6 +5,8 @@ import {
   admit,
   getGovernorStatus,
   getGovernorDecisions,
+  fitsEver,
+  roomAfterEviction,
   setGovernorMemorySettings,
   setMetalCapBytes,
   defaultModelBudgetBytes,
@@ -12,6 +14,7 @@ import {
   refreshMeasuredPeak,
   startGovernor,
   withdraw,
+  touch,
   type GovernorHandle,
 } from "@/lib/governor";
 import { scriptedMemoryReader } from "@/lib/memory/scripted";
@@ -45,6 +48,54 @@ test("rule 1 grants an admission and reports an estimated peak", async () => {
   const result = await admit({ id: "resident-chat", kind: "resident", requestedBytes: GB, modelFileBytes: GB, engine: "llama-server" });
   expect("id" in result).toBe(true);
   expect(getGovernorStatus().loaded[0]).toMatchObject({ id: "resident-chat", peakBytes: Math.ceil(GB * 1.3), measured: false });
+});
+
+test("fitsEver refuses only a peak that cannot fit after reserved memory and margin", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 64 * GB, freeMemoryBytes: 64 * GB, tier: "p64" });
+  await admit({ id: "chat", kind: "resident", class: "reserved", requestedBytes: 28 * GB, measuredPeakBytes: 28 * GB });
+  const video = { id: "video", kind: "generator" as const, class: "burst" as const, requestedBytes: 33 * GB };
+  expect(fitsEver(video)).toBe(false);
+  expect(await admit(video)).toMatchObject({ refused: true, reason: "This video needs about 33.0 GB of memory and this computer has 24.0 GB for pictures and videos after chat. Try a shorter clip, or ask an admin to turn video off for this computer." });
+  const picture = { id: "picture", kind: "generator" as const, class: "warm" as const, requestedBytes: 20 * GB };
+  expect(fitsEver(picture)).toBe(true);
+  __setGovernorTuningForTestsOnly({ freeMemoryBytes: 10 * GB });
+  expect(await admit(picture)).toMatchObject({ queued: true });
+});
+
+test("a fitting queued request stays queued beyond ten minutes and admits when memory frees", async () => {
+  let now = Date.parse("2026-10-25T12:00:00.000Z");
+  let free = 10 * GB;
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 64 * GB, freeMemoryBytes: free, tier: "p16" });
+  const queued = await admit({ id: "picture", kind: "generator", class: "warm", requestedBytes: 20 * GB });
+  expect(queued).toMatchObject({ queued: true, position: 1 });
+  const stop = startGovernor({ pid: 1, pollMs: 1, now: () => now, freeMemory: () => free, totalMemory: () => 64 * GB });
+  stops.push(stop);
+  now += 10 * 60_000;
+  await Bun.sleep(10);
+  expect(getGovernorStatus().queue).toMatchObject([{ id: "picture", position: 1 }]);
+  free = 40 * GB;
+  now += 1_000;
+  const admitted = (queued as { admitted: Promise<unknown> }).admitted;
+  const result = await Promise.race([admitted, Bun.sleep(100).then(() => "still waiting")]);
+  expect(result).toMatchObject({ id: "picture" });
+});
+
+test("roomAfterEviction orders idle warm models and protects reserved and busy entries", async () => {
+  let now = Date.now();
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 100 * GB, tier: "p128" });
+  await admit({ id: "chat", kind: "resident", class: "reserved", requestedBytes: 10 * GB });
+  await admit({ id: "picture-pool", kind: "jit", class: "warm", requestedBytes: 15 * GB });
+  await admit({ id: "edit-model", kind: "jit", class: "warm", requestedBytes: 10 * GB });
+  await admit({ id: "video", kind: "generator", class: "burst", requestedBytes: 12 * GB });
+  touch("picture-pool");
+  touch("edit-model");
+  const stop = startGovernor({ pid: 1, pollMs: 1, now: () => now, busy: (id) => id === "video", unload: () => true });
+  stops.push(stop);
+  now += 2 * 60_000 + 1_000;
+  const room = roomAfterEviction({ id: "video-next", kind: "generator", class: "burst", requestedBytes: 20 * GB }, (id) => id === "video", now);
+  expect(room.evictionOrder).toEqual(["edit-model", "picture-pool"]);
+  expect(room.evictionOrder).not.toContain("chat");
+  expect(room.evictionOrder).not.toContain("video");
 });
 
 test("p16 admits chat, voice, speech and embed with realistic 13 GiB starting free memory", async () => {
@@ -172,12 +223,12 @@ test("rule 3 restarts a resident model after sustained RSS overage", async () =>
   expect(restarts).toBeGreaterThan(0);
 });
 
-test("rule 4 exposes a cap and refuses an admission over it", async () => {
+test("rule 4 exposes a cap and refuses a request that can never fit", async () => {
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 16 * GB, freeMemoryBytes: 16 * GB });
   const admitted = await admit({ id: "large", kind: "resident", requestedBytes: 7 * GB });
   expect("id" in admitted).toBe(true);
   expect(getGovernorStatus().capBytes).toBe(8 * GB);
-  expect(await admit({ id: "too-large", kind: "resident", requestedBytes: 2 * GB })).toMatchObject({ queued: true });
+  expect(await admit({ id: "too-large", kind: "resident", requestedBytes: 2 * GB })).toMatchObject({ refused: true, reason: expect.stringContaining("2.0 GB") });
 });
 
 test("Metal cap lowers the 128 GiB budget and admission ceiling", async () => {
@@ -185,7 +236,7 @@ test("Metal cap lowers the 128 GiB budget and admission ceiling", async () => {
   setMetalCapBytes(96 * GB);
   expect(getGovernorStatus().capBytes).toBe(96 * GB);
   expect(defaultModelBudgetBytes()).toBe(96 * GB);
-  expect(await admit({ id: "over-metal", kind: "resident", requestedBytes: 100 * GB })).toMatchObject({ queued: true });
+  expect(await admit({ id: "over-metal", kind: "resident", requestedBytes: 100 * GB })).toMatchObject({ refused: true, reason: expect.stringContaining("100.0 GB") });
 });
 
 test("null Metal cap preserves the OS-margin budget, and smaller OS margin wins", () => {
@@ -198,10 +249,9 @@ test("null Metal cap preserves the OS-margin budget, and smaller OS margin wins"
   expect(getGovernorStatus().capBytes).toBe(16 * GB);
 });
 
-test("a live model budget setting changes admission and records refusal", async () => {
+test("a live model budget setting refuses a request that can never fit", async () => {
   setGovernorMemorySettings({ modelBudgetBytes: 2 * GB });
-  expect(await admit({ id: "too-large", kind: "resident", requestedBytes: 3 * GB })).toMatchObject({ queued: true });
-  for (let index = 0; index < 4; index++) await admit({ id: `queued-${index}`, kind: "resident", requestedBytes: 3 * GB });
+  expect(await admit({ id: "too-large", kind: "resident", requestedBytes: 3 * GB })).toMatchObject({ refused: true });
   expect(await admit({ id: "refused", kind: "resident", requestedBytes: 3 * GB })).toMatchObject({ refused: true });
   expect(getGovernorDecisions().some((item) => item.decision === "Refused" && item.model === "refused")).toBe(true);
 });
