@@ -27,9 +27,10 @@ import { logger } from "@/lib/log";
 import { getSystemSampler, type ProcessRow, type SystemSample, type SystemSampler } from "@/lib/memory/system";
 import { cancelGeneratorsForMemory, runningGeneratorKinds } from "@/lib/jobs";
 import { setAdmissionGate } from "@/lib/governor";
-import { admissionVerdict, latestSample, levelSince, memoryLevel, orphanReaperEnabled, recordAction, recentActions, reserveBytes, setLatestSample, setMemoryLevel, watchdogEnabled, WatchdogRules, type WatchdogLevel } from "@/lib/memoryState";
+import { admissionVerdict, chatPagedOut, latestSample, levelSince, memoryLevel, orphanReaperEnabled, recordAction, recentActions, reserveBytes, setChatPagedOut, setLatestSample, setMemoryLevel, watchdogEnabled, WatchdogRules, type WatchdogLevel } from "@/lib/memoryState";
 import { engineRoot } from "@/lib/store/layout";
 import { dirname } from "node:path";
+import { getRoleStatus } from "@/lib/supervisor";
 
 const GB = 1_073_741_824;
 function gb(bytes: number): string { return (bytes / GB).toFixed(1); }
@@ -40,6 +41,19 @@ export interface LadderState { level: WatchdogLevel; enter: number; clear: numbe
 export function newLadder(): LadderState { return { level: "normal", enter: 0, clear: 0 }; }
 
 export interface LadderReading { sample: SystemSample; swapGrowthBytes: number; reserve: number; }
+type SwapoutsSample = SystemSample & { swapouts?: number };
+
+/** Read the cumulative counter beside the memory sample on macOS. */
+function swapoutsOf(sample: SystemSample): number | null {
+  const supplied = (sample as SwapoutsSample).swapouts;
+  if (supplied !== undefined) return supplied;
+  if (process.platform !== "darwin") return null;
+  try {
+    const output = Bun.spawnSync(["vm_stat"], { stdout: "pipe", stderr: "ignore" }).stdout.toString();
+    const match = /^Swapouts:\s+(\d+)/m.exec(output);
+    return match ? Number(match[1]) : null;
+  } catch { return null; }
+}
 
 /** What the readings call for, ignoring history. */
 export function rawLevel(reading: LadderReading): WatchdogLevel {
@@ -73,6 +87,13 @@ export function stepLadder(ladder: LadderState, reading: LadderReading): LadderS
     return clear >= WatchdogRules.clearSamples ? { level: ladder.level === "critical" ? "warn" : "normal", enter: 0, clear: 0 } : { ...ladder, enter: 0, clear };
   }
   return { ...ladder, enter: 0, clear: 0 };
+}
+
+/** A chat pageout skips only the ordinary two-sample entry delay for WARN. */
+function stepLadderForChatPageout(ladder: LadderState, reading: LadderReading, chatPagedOut: boolean): LadderState {
+  const next = stepLadder(ladder, reading);
+  if (!chatPagedOut || ladder.level !== "normal" || rawLevel(reading) !== "normal") return next;
+  return { level: "warn", enter: 0, clear: 0 };
 }
 
 // ---- orphan matching (pure) ----
@@ -154,11 +175,12 @@ export interface WatchdogOptions {
   kill?: (pid: number, signal: "SIGTERM" | "SIGKILL") => void;
   /** Re-reads a pid's command line, to prove it is still the process that was judged an orphan. */
   commandOf?: (pid: number) => string | null;
+  chatLoaded?: () => boolean;
 }
 
 export interface TopConsumer { pid: number; name: string; bytes: number; stack: boolean; }
 export interface MemoryReport {
-  watchdog: { enabled: boolean; level: WatchdogLevel; since: string; reserve_bytes: number; generation_paused: boolean };
+  watchdog: { enabled: boolean; level: WatchdogLevel; since: string; reserve_bytes: number; generation_paused: boolean; chat_paged_out: boolean };
   memory: { total_bytes: number; available_bytes: number; free_bytes: number; wired_bytes: number; compressor_bytes: number; swap_used_bytes: number; swap_total_bytes: number; swap_growth_bytes_30s: number; pressure_level: number; pressure: string; sampled_at: string } | null;
   stack: { bytes: number; processes: Array<{ pid: number; name: string; bytes: number }> };
   top_consumers: TopConsumer[];
@@ -189,6 +211,8 @@ export class MemoryWatchdog {
   private terminated = new Map<number, { at: number; command: string; killed: boolean }>();
   private busy = false;
   private itemRaised = false;
+  private chatLoaded: () => boolean;
+  private previousSwapouts: number | null = null;
 
   constructor(options: WatchdogOptions = {}) {
     this.sampler = options.sampler ?? getSystemSampler();
@@ -201,6 +225,7 @@ export class MemoryWatchdog {
     this.commandOf = options.commandOf ?? ((pid) => {
       try { return Bun.spawnSync(["ps", "-o", "command=", "-p", String(pid)], { stdout: "pipe", stderr: "ignore" }).stdout.toString().trim() || null; } catch { return null; }
     });
+    this.chatLoaded = options.chatLoaded ?? (() => ["ready", "loaded", "busy"].includes(getRoleStatus("chat").state));
   }
 
   private swapGrowth(): number {
@@ -221,6 +246,10 @@ export class MemoryWatchdog {
     this.busy = true;
     try {
       const sample = this.sampler.sample();
+      const swapouts = swapoutsOf(sample);
+      const swapoutsRose = swapouts !== null && this.previousSwapouts !== null && swapouts > this.previousSwapouts;
+      if (swapouts !== null) this.previousSwapouts = swapouts;
+      setChatPagedOut(swapoutsRose && this.chatLoaded());
       this.ring.push(sample);
       if (this.ring.length > WatchdogRules.ringSize) this.ring.shift();
       setLatestSample(sample);
@@ -230,7 +259,7 @@ export class MemoryWatchdog {
       if (!watchdogEnabled() || sample.degraded) { if (memoryLevel() !== "normal") this.leave(); return; }
       const reserve = reserveBytes(sample.totalBytes);
       const previous = this.ladder.level;
-      this.ladder = stepLadder(this.ladder, { sample, swapGrowthBytes: this.swapGrowth(), reserve });
+      this.ladder = stepLadderForChatPageout(this.ladder, { sample, swapGrowthBytes: this.swapGrowth(), reserve }, chatPagedOut());
       if (this.ladder.level !== previous) {
         setMemoryLevel(this.ladder.level, this.now());
         this.record(this.ladder.level, "level", `${previous} to ${this.ladder.level}: ${gb(sample.availableBytes)} GB available, ${gb(reserve)} GB reserve, kernel level ${sample.pressureLevel}, swap ${gb(sample.swapUsedBytes)} GB`);
@@ -249,6 +278,7 @@ export class MemoryWatchdog {
     if (this.itemRaised) { resolveHealth("memory-low"); resolveHealth("memory-critical"); this.itemRaised = false; }
     if (this.ladder.level !== "normal") { this.ladder = newLadder(); setMemoryLevel("normal", this.now()); }
     this.criticalSince = null;
+    setChatPagedOut(false);
   }
 
   private consumers(): TopConsumer[] {
@@ -371,7 +401,7 @@ export class MemoryWatchdog {
     const growth = this.swapGrowth();
     const level = memoryLevel();
     return {
-      watchdog: { enabled: watchdogEnabled(), level, since: new Date(levelSince()).toISOString(), reserve_bytes: sample ? reserveBytes(sample.totalBytes) : 0, generation_paused: level !== "normal" },
+      watchdog: { enabled: watchdogEnabled(), level, since: new Date(levelSince()).toISOString(), reserve_bytes: sample ? reserveBytes(sample.totalBytes) : 0, generation_paused: level !== "normal", chat_paged_out: chatPagedOut() },
       memory: sample ? { total_bytes: sample.totalBytes, available_bytes: sample.availableBytes, free_bytes: sample.freeBytes, wired_bytes: sample.wiredBytes, compressor_bytes: sample.compressorBytes, swap_used_bytes: sample.swapUsedBytes, swap_total_bytes: sample.swapTotalBytes, swap_growth_bytes_30s: growth, pressure_level: sample.pressureLevel, pressure: sample.pressure, sampled_at: new Date(sample.at).toISOString() } : null,
       stack: { bytes: own.reduce((total, row) => total + row.rssBytes, 0), processes: own.sort((a, b) => b.rssBytes - a.rssBytes).slice(0, 10).map((row) => ({ pid: row.pid, name: row.name, bytes: row.rssBytes })) },
       top_consumers: this.consumers(),

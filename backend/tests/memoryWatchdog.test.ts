@@ -16,8 +16,8 @@ const GB = 1_073_741_824;
 const TOTAL = 128 * GB;
 const ENGINES = "/data/stack/engines";
 
-function sample(over: Partial<SystemSample> = {}, at = Date.now()): SystemSample {
-  return { at, totalBytes: TOTAL, availableBytes: 60 * GB, freeBytes: 40 * GB, wiredBytes: 30 * GB, compressorBytes: GB, swapUsedBytes: 1 * GB, swapTotalBytes: 2 * GB, pressureLevel: 1, pressure: "normal", degraded: false, ...over };
+function sample(over: Partial<SystemSample> & { swapouts?: number } = {}, at = Date.now()): SystemSample & { swapouts: number } {
+  return { at, totalBytes: TOTAL, availableBytes: 60 * GB, freeBytes: 40 * GB, wiredBytes: 30 * GB, compressorBytes: GB, swapUsedBytes: 1 * GB, swapTotalBytes: 2 * GB, swapouts: 0, pressureLevel: 1, pressure: "normal", degraded: false, ...over };
 }
 
 function row(over: Partial<ProcessRow> & { pid: number }): ProcessRow {
@@ -212,6 +212,51 @@ test("CRITICAL cancels the running job first, then the judge, and restarts chat 
   await dog.tick();
   expect(actions.log.filter((entry) => entry === "restart-chat")).toHaveLength(1);
   expect(actions.notified).toHaveLength(1);
+});
+
+test("rising swapouts while chat is loaded enters WARN at once and reports paged out", async () => {
+  const sampler = fakeSampler();
+  const actions = fakeActions();
+  const dog = new MemoryWatchdog({ sampler, actions, chatLoaded: () => true, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null });
+  sampler.next = sample({ swapouts: 10 });
+  await dog.tick();
+  sampler.next = sample({ swapouts: 11 });
+  await dog.tick();
+  expect(memoryLevel()).toBe("warn");
+  expect(dog.report().watchdog.chat_paged_out).toBe(true);
+});
+
+test("a paged-out chat clears once swapouts stop rising", async () => {
+  const sampler = fakeSampler();
+  const dog = new MemoryWatchdog({ sampler, chatLoaded: () => true, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null });
+  sampler.next = sample({ swapouts: 10 });
+  await dog.tick();
+  sampler.next = sample({ swapouts: 11 });
+  await dog.tick();
+  expect(memoryLevel()).toBe("warn");
+  for (let i = 0; i < 6; i++) await dog.tick();
+  expect(memoryLevel()).toBe("normal");
+  expect(dog.report().watchdog.chat_paged_out).toBe(false);
+});
+
+test("rising swapouts without chat loaded and flat swapouts do not change the level", async () => {
+  const sampler = fakeSampler();
+  const dog = new MemoryWatchdog({ sampler, chatLoaded: () => false, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null });
+  sampler.next = sample({ swapouts: 10 });
+  await dog.tick();
+  sampler.next = sample({ swapouts: 11 });
+  await dog.tick();
+  expect(memoryLevel()).toBe("normal");
+  expect(dog.report().watchdog.chat_paged_out).toBe(false);
+
+  const flat = fakeSampler();
+  const flatDog = new MemoryWatchdog({ sampler: flat, chatLoaded: () => true, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null });
+  flat.next = sample({ swapouts: 10 });
+  await flatDog.tick();
+  flat.next = sample({ swapouts: 10 });
+  await flatDog.tick();
+  expect(memoryLevel()).toBe("normal");
+  expect(flatDog.report().watchdog.chat_paged_out).toBe(false);
 });
 
 test("swap growing fast is critical even with memory available", async () => {

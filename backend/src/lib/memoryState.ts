@@ -53,9 +53,10 @@ interface MemoryState {
   level: WatchdogLevel;
   since: number;
   latest: SystemSample | null;
+  chatPagedOut: boolean;
   actions: WatchdogAction[];
 }
-const state: MemoryState = { level: "normal", since: Date.now(), latest: null, actions: [] };
+const state: MemoryState = { level: "normal", since: Date.now(), latest: null, chatPagedOut: false, actions: [] };
 
 export function watchdogEnabled(): boolean { return settingValues()["stack.memory.watchdog"] !== false; }
 export function orphanReaperEnabled(): boolean { return settingValues()["stack.memory.reap_orphans"] !== false; }
@@ -71,12 +72,14 @@ export function levelSince(): number { return state.since; }
 export function setMemoryLevel(level: WatchdogLevel, now = Date.now()): void { if (state.level !== level) { state.level = level; state.since = now; } }
 export function latestSample(): SystemSample | null { return state.latest; }
 export function setLatestSample(sample: SystemSample): void { state.latest = sample; }
+export function chatPagedOut(): boolean { return state.chatPagedOut; }
+export function setChatPagedOut(pagedOut: boolean): void { state.chatPagedOut = pagedOut; }
 export function recordAction(level: WatchdogLevel, action: string, detail: string): void {
   state.actions.unshift({ at: new Date().toISOString(), level, action, detail });
   if (state.actions.length > 50) state.actions.length = 50;
 }
 export function recentActions(): WatchdogAction[] { return [...state.actions]; }
-export function __resetMemoryStateForTests(): void { state.level = "normal"; state.since = Date.now(); state.latest = null; state.actions = []; }
+export function __resetMemoryStateForTests(): void { state.level = "normal"; state.since = Date.now(); state.latest = null; state.chatPagedOut = false; state.actions = []; }
 
 function gb(bytes: number): string { return (bytes / GB).toFixed(1); }
 
