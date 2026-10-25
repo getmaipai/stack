@@ -382,6 +382,54 @@
     "ornith-1-5-122b-dflash2-draft": {
       "download_bytes": 1860569628,
       "installed_bytes": 1860569628
+    },
+    "ernie-image-turbo": {
+      "download_bytes": 9992362400,
+      "installed_bytes": 9992362400
+    },
+    "ernie-image-turbo-transformer-diffusion-pytorch-model-00002-of-00002": {
+      "download_bytes": 6074662728,
+      "installed_bytes": 6074662728
+    },
+    "ernie-image-turbo-transformer-diffusion-pytorch-model-safetensors-index": {
+      "download_bytes": 38947,
+      "installed_bytes": 38947
+    },
+    "ernie-image-turbo-transformer-config": {
+      "download_bytes": 422,
+      "installed_bytes": 422
+    },
+    "ernie-image-turbo-text-encoder-model": {
+      "download_bytes": 7698241104,
+      "installed_bytes": 7698241104
+    },
+    "ernie-image-turbo-text-encoder-config": {
+      "download_bytes": 1678,
+      "installed_bytes": 1678
+    },
+    "ernie-image-turbo-vae-diffusion-pytorch-model": {
+      "download_bytes": 168120878,
+      "installed_bytes": 168120878
+    },
+    "ernie-image-turbo-vae-config": {
+      "download_bytes": 836,
+      "installed_bytes": 836
+    },
+    "ernie-image-turbo-tokenizer-tokenizer": {
+      "download_bytes": 17078110,
+      "installed_bytes": 17078110
+    },
+    "ernie-image-turbo-tokenizer-tokenizer-config": {
+      "download_bytes": 379,
+      "installed_bytes": 379
+    },
+    "ernie-image-turbo-scheduler-scheduler-config": {
+      "download_bytes": 482,
+      "installed_bytes": 482
+    },
+    "ernie-image-turbo-model-index": {
+      "download_bytes": 547,
+      "installed_bytes": 547
     }
   }
 }

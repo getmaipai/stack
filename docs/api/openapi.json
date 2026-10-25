@@ -1869,7 +1869,7 @@
                 "properties": {
                   "model": {
                     "type": "string",
-                    "description": "`image` (the default), or a picture model id from GET /stack/v1/image (`flux2-klein-4b`, `z-image-turbo`). Choosing a LoRA selects the base model it was made for."
+                    "description": "`image` (the default), or a picture model id from GET /stack/v1/image (`flux2-klein-4b`, `z-image-turbo`, `ernie-image-turbo`). Choosing a LoRA selects the base model it was made for."
                   },
                   "prompt": {
                     "type": "string",
@@ -1902,7 +1902,7 @@
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 30,
-                    "description": "Denoising steps. Default 4 for Klein, 9 for Z-Image-Turbo (the distilled models need no more)."
+                    "description": "Denoising steps. Default 4 for Klein, 9 for Z-Image-Turbo, or 8 for ERNIE-Image-Turbo."
                   },
                   "loras": {
                     "type": "array",

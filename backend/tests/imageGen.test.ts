@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { app } from "@/app";
 import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, getGovernorStatus } from "@/lib/governor";
 import { __resetJobsForTests, getJob, listJobs } from "@/lib/jobs";
-import { STACK_IMAGE_ENGINE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_MODELS } from "@/lib/modelCatalog";
+import { STACK_IMAGE_ENGINE_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_MODELS } from "@/lib/modelCatalog";
 import { MANAGED_RUNTIMES } from "@/lib/engineCatalog";
 import { resolveRoleState } from "@/lib/router";
 import { detectImageBase, imageLoras, parseHfLoraUrl, startLoraInstall } from "@/images/loras";
@@ -246,6 +246,21 @@ test("Z-Image-Turbo runs when named, with its own steps, and a smaller tier refu
   expect((await post({ prompt: "a fox", timeout_ms: 5000 })).status).toBe(503);
 });
 
+test("ERNIE-Image-Turbo runs when named and remains create-only", async () => {
+  imageGen.useDeps(scripted());
+  __setInstalledFamiliesForTests(["flux2-klein-4b", "z-image-turbo", "ernie-image-turbo"]);
+  const response = await post({ model: "ernie-image-turbo", prompt: "a bakery sign reading FRESH PIES", timeout_ms: 5000 });
+  expect(response.status).toBe(200);
+  expect(requests[0]).toMatchObject({ family: "ernie-image-turbo", steps: 8, quantize: 8 });
+  const form = new FormData();
+  form.set("operation", "edit"); form.set("image_source", "uploaded");
+  form.set("image", new File([pngBytes(640, 480)], "in.png", { type: "image/png" }));
+  form.set("instruction", "change the sign"); form.set("timeout_ms", "5000");
+  // The public edit route is intentionally fixed to Klein; there is no caller supplied edit model.
+  expect((await app.request("/v1/images/edits", { method: "POST", body: form })).status).toBe(200);
+  expect(requests[1]).toMatchObject({ op: "edit", family: "flux2-klein-4b" });
+});
+
 test("a failed picture reports the engine's sentence and code; an out-of-memory worker is replaced", async () => {
   imageGen.useDeps(scripted((request) => ({ id: request.id, ok: false, code: "out_of_memory", error: "There was not enough memory for that picture. Try a smaller size." })));
   const response = await post({ prompt: "x", timeout_ms: 5000 });
@@ -390,7 +405,7 @@ test("a changed LoRA file is not used; the library routes add, edit and remove",
   expect(await patched.json()).toMatchObject({ name: "renamed", strength_default: 0.7 });
   const listed = await (await app.request("/stack/v1/image/loras")).json() as { loras: unknown[]; base_models: string[] };
   expect(listed.loras).toHaveLength(2);
-  expect(listed.base_models).toEqual(["flux2-klein-4b", "z-image-turbo"]);
+  expect(listed.base_models).toEqual(["flux2-klein-4b", "z-image-turbo", "ernie-image-turbo"]);
   expect((await app.request(`/stack/v1/image/loras/${made.id}`, { method: "DELETE" })).status).toBe(200);
   expect((await app.request(`/stack/v1/image/loras/${made.id}`, { method: "DELETE" })).status).toBe(404);
 });
@@ -548,9 +563,11 @@ test("GET /stack/v1/image reports state, models, limits, edit and what to instal
   const body = await (await app.request("/stack/v1/image")).json() as { image: Record<string, any> };
   const image = body.image;
   expect(image).toMatchObject({ state: "needs-setup", available: true, tier: "p128", default_model: "flux2-klein-4b", loras_supported: true, idle_unload_s: 600, edit: { generative: true, masked: true, model: "flux2-klein-4b" } });
-  expect(image.models.map((m: { id: string }) => m.id)).toEqual(["flux2-klein-4b", "z-image-turbo"]);
+  expect(image.models.map((m: { id: string }) => m.id)).toEqual(["flux2-klein-4b", "z-image-turbo", "ernie-image-turbo"]);
   expect(image.models[0]).toMatchObject({ installed: true, default: true, edit: true, steps_default: 4, peak_gb: 15, quantize: 8, available: true });
   expect(image.models[1]).toMatchObject({ steps_default: 9, edit: false, peak_gb: 34 });
+  expect(image.models[2]).toMatchObject({ label: "ERNIE-Image-Turbo", steps_default: 8, edit: false, peak_gb: 21 });
+  expect(image.models[2].install.models).toHaveLength(12);
   expect(image.limits).toMatchObject({ min_side: 256, max_side: 2048, size_step: 16, max_n: 4, max_loras: 4, queue_max: 4 });
   expect(image.memory.fits).toBe(true);
   __setInstalledFamiliesForTests([]);
@@ -564,7 +581,7 @@ test("GET /stack/v1/image reports state, models, limits, edit and what to instal
 });
 
 test("the pins: every file has a revision, sha256, size, hub path and Apache-2.0; ids are unique; only the files mflux reads", () => {
-  for (const pins of [STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_ZIMAGE_MODELS]) {
+  for (const pins of [STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_IMAGE_ERNIE_MODELS]) {
     expect(pins[0]!.component).toBeUndefined();
     for (const pin of pins) {
       expect(pin.role).toBe("image");
@@ -574,14 +591,15 @@ test("the pins: every file has a revision, sha256, size, hub path and Apache-2.0
       expect(pin.download!.sha256).toMatch(/^[0-9a-f]{64}$/);
       expect(pin.download!.approx_bytes).toBeGreaterThan(0);
       expect(pin.download!.url).toContain(`/resolve/${pin.revision}/${pin.download!.hub_file}`);
-      expect(pin.download!.hub_file).toMatch(/^(vae|transformer|text_encoder|tokenizer)\/|^(added_tokens\.json|chat_template\.jinja)$/);
+      expect(pin.download!.hub_file).toMatch(/^(vae|transformer|text_encoder|tokenizer|scheduler)\/|^(added_tokens\.json|chat_template\.jinja|model_index\.json)$/);
     }
     expect(pins.slice(1).every((pin) => !!pin.component)).toBe(true);
   }
   const ids = STACK_MODELS.map((pin) => pin.id);
   expect(new Set(ids).size).toBe(ids.length);
   expect(STACK_IMAGE_KLEIN_MODELS.reduce((sum, pin) => sum + pin.download!.approx_bytes, 0)).toBeLessThan(16_100_000_000);
-  expect(STACK_IMAGE_ENGINE_MODELS).toHaveLength(STACK_IMAGE_KLEIN_MODELS.length + STACK_IMAGE_ZIMAGE_MODELS.length);
+  expect(STACK_IMAGE_ERNIE_MODELS).toHaveLength(12);
+  expect(STACK_IMAGE_ENGINE_MODELS).toHaveLength(STACK_IMAGE_KLEIN_MODELS.length + STACK_IMAGE_ZIMAGE_MODELS.length + STACK_IMAGE_ERNIE_MODELS.length);
   const runtime = MANAGED_RUNTIMES.find((entry) => entry.name === "image-gen")!;
   expect(runtime.roles).toEqual(["image"]);
   expect(imageRequirementsFileFor("darwin", "arm64")).toBeTruthy();
@@ -598,6 +616,7 @@ test("sizing, quantization, peaks and progress follow the measured table", () =>
   expect(peakBytes("flux2-klein-4b", "generate", 8, 1)).toBe(16_000_000_000);
   expect(peakBytes("flux2-klein-4b", "edit", null, 0)).toBe(18_000_000_000);
   expect(peakBytes("z-image-turbo", "generate", 8, 0)).toBe(34_000_000_000);
+  expect(peakBytes("ernie-image-turbo", "generate", 8, 0)).toBe(21_000_000_000);
   expect(IMAGE_FAMILIES["flux2-klein-4b"].edit).toBe(true);
   expect(overallPercent("loading", 100)).toBe(5);
   expect(overallPercent("rendering", 100)).toBe(99);

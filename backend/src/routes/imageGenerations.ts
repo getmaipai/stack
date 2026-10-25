@@ -42,13 +42,13 @@ const LoraEntry = z.object({
   strength: z.number().min(0).max(2).optional().openapi({ description: "Alias of `scale`." }),
 });
 export const ImageGenerationBodySchema = z.object({
-  model: z.string().optional().openapi({ description: "`image` (the default), or a picture model id from GET /stack/v1/image (`flux2-klein-4b`, `z-image-turbo`). Choosing a LoRA selects the base model it was made for." }),
+  model: z.string().optional().openapi({ description: "`image` (the default), or a picture model id from GET /stack/v1/image (`flux2-klein-4b`, `z-image-turbo`, `ernie-image-turbo`). Choosing a LoRA selects the base model it was made for." }),
   prompt: z.string().trim().min(1).max(IMAGE_MAX_PROMPT_CHARS),
   negative_prompt: z.string().max(IMAGE_MAX_PROMPT_CHARS).optional().openapi({ description: "Accepted. The distilled models run without guidance, so it has no effect on the picture." }),
   size: z.string().regex(/^\d{3,4}x\d{3,4}$/).optional().openapi({ description: `<width>x<height>, each 256 to 2048 and a multiple of 16. Default ${IMAGE_DEFAULT_SIZE}.`, example: IMAGE_DEFAULT_SIZE }),
   n: z.number().int().min(1).max(IMAGE_MAX_COUNT).optional().openapi({ description: `Pictures to make, 1 to ${IMAGE_MAX_COUNT}, seeds seed, seed+1, and so on. Default 1.` }),
   seed: z.number().int().min(0).max(4_294_967_295).optional(),
-  steps: z.number().int().min(1).max(30).optional().openapi({ description: "Denoising steps. Default 4 for Klein, 9 for Z-Image-Turbo (the distilled models need no more)." }),
+  steps: z.number().int().min(1).max(30).optional().openapi({ description: "Denoising steps. Default 4 for Klein, 9 for Z-Image-Turbo, or 8 for ERNIE-Image-Turbo." }),
   loras: z.array(LoraEntry).max(MAX_LORAS_PER_IMAGE).optional().openapi({ description: "LoRAs from the household library (GET /stack/v1/image/loras), by id or sha256, with a scale. Home decides which ids this caller may name." }),
   audience: z.enum(["all-ages", "adult"]).optional().openapi({ description: "Who the picture is for, set by Home from the person's age band and the surface. Default all-ages. An adult-only LoRA in the list with audience all-ages is refused (422 lora_not_allowed)." }),
   init_image: z.string().optional().openapi({ description: "Image to image: the starting picture, base64 (a data: URL is fine), PNG, JPEG or WebP, at most 40 MB." }),

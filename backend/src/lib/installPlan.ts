@@ -5,11 +5,12 @@
 import { PROFILE_MODEL_BINDINGS, sizeMachine, type ProfileTier } from "@/profiles";
 import { knownAppleChip, type HardwareInfo, type MemorySource } from "@/lib/hardware";
 import { splashDraftWanted } from "@/lib/splash";
-import { STACK_CHAT_MODEL, STACK_IMAGE_ENGINE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
+import { STACK_CHAT_MODEL, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
 import { tierDefaultTtsEngine } from "@/speech/ttsEngines";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import type { RoleId } from "@/roles";
 import { ROLES } from "@/roles";
+import type { ImageFamilyId } from "@/images/models";
 
 export interface PlanModel {
   id: string; role: RoleId; repo?: string; url: string; sha256: string; approx_bytes: number; licence: string; revision: string;
@@ -77,9 +78,9 @@ export function musicInstallModels(installedIds: Iterable<string> = []): PlanMod
 }
 
 /** The pins the picture generator needs, in the shape of a pull, for the image status route: Home installs a family when the person turns pictures on (FLUX.2 Klein 4B by default; Z-Image-Turbo is offered on the biggest computers). Not in the first-run plan, the way no generator is. */
-export function imageInstallModels(family: "flux2-klein-4b" | "z-image-turbo", installedIds: Iterable<string> = []): PlanModel[] {
+export function imageInstallModels(family: ImageFamilyId, installedIds: Iterable<string> = []): PlanModel[] {
   const installed = new Set(installedIds);
-  const pins = family === "flux2-klein-4b" ? STACK_IMAGE_KLEIN_MODELS : STACK_IMAGE_ENGINE_MODELS.filter((pin) => !STACK_IMAGE_KLEIN_MODELS.includes(pin));
+  const pins = family === "flux2-klein-4b" ? STACK_IMAGE_KLEIN_MODELS : family === "z-image-turbo" ? STACK_IMAGE_ZIMAGE_MODELS : STACK_IMAGE_ERNIE_MODELS;
   return pins.flatMap((pin) => view(pin, installed, false) ?? []);
 }
 

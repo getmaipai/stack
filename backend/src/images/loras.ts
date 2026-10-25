@@ -10,7 +10,7 @@ import { dataDir } from "@/lib/paths";
 import { createJob, finishJob, jobSignal, updateJob, type Job } from "@/lib/jobs";
 import { createLoraLibrary, LoraError, MAX_LORA_BYTES, type SafetensorsInfo, type LoraRecord } from "@/lib/media/loraLibrary";
 
-export const IMAGE_LORA_BASES = ["flux2-klein-4b", "z-image-turbo"] as const;
+export const IMAGE_LORA_BASES = ["flux2-klein-4b", "z-image-turbo", "ernie-image-turbo"] as const;
 export type ImageLoraBase = typeof IMAGE_LORA_BASES[number];
 export const MAX_LORAS_PER_IMAGE = 4;
 

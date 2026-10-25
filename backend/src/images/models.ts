@@ -9,7 +9,7 @@
 import { existsSync } from "node:fs";
 import { getGovernorStatus } from "@/lib/governor";
 import { getModel } from "@/lib/modelStore";
-import { STACK_IMAGE_ENGINE_MODELS, STACK_IMAGE_KLEIN_ID, STACK_IMAGE_ZIMAGE_ID } from "@/lib/modelCatalog";
+import { STACK_IMAGE_ENGINE_MODELS, STACK_IMAGE_ERNIE_ID, STACK_IMAGE_KLEIN_ID, STACK_IMAGE_ZIMAGE_ID } from "@/lib/modelCatalog";
 import { IMAGE_LORA_BASES, type ImageLoraBase } from "@/images/loras";
 import type { CatalogModelLike } from "@/lib/modelStore";
 
@@ -38,6 +38,7 @@ const GB = 1_000_000_000;
 export const IMAGE_FAMILIES: Record<ImageFamilyId, ImageFamily> = {
   "flux2-klein-4b": { id: "flux2-klein-4b", catalogId: STACK_IMAGE_KLEIN_ID, label: "FLUX.2 Klein 4B", licence: "Apache-2.0", stepsDefault: 4, stepsMax: 12, peak: { gen8: 15 * GB, gen4: 13 * GB, edit: 18 * GB }, loraExtraBytes: 1 * GB, edit: true, tiers: ["p32", "p64", "p128"], warmSeconds: 4.0 },
   "z-image-turbo": { id: "z-image-turbo", catalogId: STACK_IMAGE_ZIMAGE_ID, label: "Z-Image-Turbo", licence: "Apache-2.0", stepsDefault: 9, stepsMax: 20, peak: { gen8: 34 * GB, gen4: 34 * GB, edit: 0 }, loraExtraBytes: 1 * GB, edit: false, tiers: ["p128"], warmSeconds: 12.9 },
+  "ernie-image-turbo": { id: "ernie-image-turbo", catalogId: STACK_IMAGE_ERNIE_ID, label: "ERNIE-Image-Turbo", licence: "Apache-2.0", stepsDefault: 8, stepsMax: 20, peak: { gen8: 21 * GB, gen4: 21 * GB, edit: 0 }, loraExtraBytes: 1 * GB, edit: false, tiers: ["p64", "p128"], warmSeconds: 22 },
 };
 export const DEFAULT_FAMILY: ImageFamilyId = "flux2-klein-4b";
 

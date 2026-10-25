@@ -324,7 +324,7 @@ async function ensureCloningLoaded(role: RoleId, signal: AbortSignal): Promise<v
 v1Routes.openapi(imagesRoute, (c) => {
   const body = c.req.valid("json") as ImageGenerationBody;
   const model = body.model ?? "image";
-  if (imageEngineActive() && (model === "image" || model === "flux2-klein-4b" || model === "z-image-turbo")) return generateImages(c, body) as never;
+  if (imageEngineActive() && (model === "image" || model === "flux2-klein-4b" || model === "z-image-turbo" || model === "ernie-image-turbo")) return generateImages(c, body) as never;
   return reply(c, "job", { ...body, model }) as never;
 });
 

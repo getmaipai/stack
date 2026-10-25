@@ -1,6 +1,6 @@
 import { hfUrl } from "@/lib/hf";
 import type { CatalogModelLike } from "@/lib/modelStore";
-import { KLEIN_4B_FILES, KLEIN_4B_PRIMARY, KLEIN_4B_REPO, KLEIN_4B_REVISION, ZIMAGE_TURBO_FILES, ZIMAGE_TURBO_PRIMARY, ZIMAGE_TURBO_REPO, ZIMAGE_TURBO_REVISION, type ImagePinFile } from "@/images/pins";
+import { ERNIE_IMAGE_TURBO_FILES, ERNIE_IMAGE_TURBO_PRIMARY, ERNIE_IMAGE_TURBO_REPO, ERNIE_IMAGE_TURBO_REVISION, KLEIN_4B_FILES, KLEIN_4B_PRIMARY, KLEIN_4B_REPO, KLEIN_4B_REVISION, ZIMAGE_TURBO_FILES, ZIMAGE_TURBO_PRIMARY, ZIMAGE_TURBO_REPO, ZIMAGE_TURBO_REVISION, type ImagePinFile } from "@/images/pins";
 
 // The first standalone Stack chat pin: an official Qwen GGUF, small enough
 // for p16 while retaining a useful local conversation experience. The
@@ -994,6 +994,7 @@ export const STACK_VIDEO_DETAILED_MODELS: CatalogModelLike[] = [STACK_VIDEO_DETA
 export const IMAGE_ENGINE_NAME = "mflux";
 export const STACK_IMAGE_KLEIN_ID = "flux2-klein-4b";
 export const STACK_IMAGE_ZIMAGE_ID = "z-image-turbo";
+export const STACK_IMAGE_ERNIE_ID = "ernie-image-turbo";
 function imageFamily(id: string, repo: string, revision: string, primary: string, files: ImagePinFile[], profile: string, footprint: number): CatalogModelLike[] {
   const pin = (file: ImagePinFile): CatalogModelLike["download"] => ({ url: hfUrl(`${repo}/resolve/${revision}/${file.file}`), sha256: file.sha256, approx_bytes: file.bytes, hub_file: file.file });
   const main = files.find((file) => file.file === primary)!;
@@ -1003,7 +1004,8 @@ function imageFamily(id: string, repo: string, revision: string, primary: string
 }
 export const STACK_IMAGE_KLEIN_MODELS = imageFamily(STACK_IMAGE_KLEIN_ID, KLEIN_4B_REPO, KLEIN_4B_REVISION, KLEIN_4B_PRIMARY, KLEIN_4B_FILES, "p32", 13_500_000_000);
 export const STACK_IMAGE_ZIMAGE_MODELS = imageFamily(STACK_IMAGE_ZIMAGE_ID, ZIMAGE_TURBO_REPO, ZIMAGE_TURBO_REVISION, ZIMAGE_TURBO_PRIMARY, ZIMAGE_TURBO_FILES, "p128", 30_100_000_000);
-export const STACK_IMAGE_ENGINE_MODELS: CatalogModelLike[] = [...STACK_IMAGE_KLEIN_MODELS, ...STACK_IMAGE_ZIMAGE_MODELS];
+export const STACK_IMAGE_ERNIE_MODELS = imageFamily(STACK_IMAGE_ERNIE_ID, ERNIE_IMAGE_TURBO_REPO, ERNIE_IMAGE_TURBO_REVISION, ERNIE_IMAGE_TURBO_PRIMARY, ERNIE_IMAGE_TURBO_FILES, "p64", 15_000_000_000);
+export const STACK_IMAGE_ENGINE_MODELS: CatalogModelLike[] = [...STACK_IMAGE_KLEIN_MODELS, ...STACK_IMAGE_ZIMAGE_MODELS, ...STACK_IMAGE_ERNIE_MODELS];
 
 // Nomic's official GGUF conversion, pinned to the Hub revision whose
 // Q4_K_M file matches the household's existing embedding model.

@@ -49,3 +49,20 @@ export const ZIMAGE_TURBO_FILES: ImagePinFile[] = [
   { file: "vae/config.json", sha256: "e80af1e64a71883a9d10c3159d2e493e5934508da57852f6a180ae6ae63b14bd", bytes: 805 },
   { file: "vae/diffusion_pytorch_model.safetensors", sha256: "f5b59a26851551b67ae1fe58d32e76486e1e812def4696a4bea97f16604d40a3", bytes: 167666902 },
 ];
+export const ERNIE_IMAGE_TURBO_REPO = "baidu/ERNIE-Image-Turbo";
+export const ERNIE_IMAGE_TURBO_REVISION = "bc68c81e2a1730a394d5fc9fae70713dee940140";
+export const ERNIE_IMAGE_TURBO_PRIMARY = "transformer/diffusion_pytorch_model-00001-of-00002.safetensors";
+export const ERNIE_IMAGE_TURBO_FILES: ImagePinFile[] = [
+  { file: "transformer/diffusion_pytorch_model-00001-of-00002.safetensors", sha256: "7704ba8363a3f10e3ee11cb66044f0e87a2a342c1c116aea7cdbf664cd509a8b", bytes: 9992362400 },
+  { file: "transformer/diffusion_pytorch_model-00002-of-00002.safetensors", sha256: "438e3e4784af84e10d961e516bbceddaabe1ecc4a6b607519e9020eadcc86c07", bytes: 6074662728 },
+  { file: "transformer/diffusion_pytorch_model.safetensors.index.json", sha256: "cdd72f1fd19be0eb582c73dc94498765ed2b3925822495ce13c5cf526204aa9c", bytes: 38947 },
+  { file: "transformer/config.json", sha256: "fe20c18f4ab08b728bf117ff83f5d5b440f2a8baca9f7999b94017819478ba10", bytes: 422 },
+  { file: "text_encoder/model.safetensors", sha256: "c2188c5b3d759ac35e3770056153fdcb348276bd1d10f0443a60a2bdcbb6ff7b", bytes: 7698241104 },
+  { file: "text_encoder/config.json", sha256: "2c975219345634ee6b5d47172267b530f32f55ca02fef0787eb45285418e3614", bytes: 1678 },
+  { file: "vae/diffusion_pytorch_model.safetensors", sha256: "ca70d2202afe6415bdbcb8793ba8cd99fd159cfe6192381504d6c4d3036e0f04", bytes: 168120878 },
+  { file: "vae/config.json", sha256: "4d5ba5e01de06d589dd46e2955ab97e2b0968703dce31b9ebe1d2a38c141836d", bytes: 836 },
+  { file: "tokenizer/tokenizer.json", sha256: "577575622324b2e099e2648be26bdeb5e5815ffe66d7004e9e3ddbf421db6bf1", bytes: 17078110 },
+  { file: "tokenizer/tokenizer_config.json", sha256: "dfd5e67b652177f3e697dd67b0792bef7779c66522f47f502af2ce1715c5ec59", bytes: 379 },
+  { file: "scheduler/scheduler_config.json", sha256: "96031c39fcd4651aeaa07fa6b64262b9332967199e0b89c3a4694db127756f34", bytes: 482 },
+  { file: "model_index.json", sha256: "2a483750fcc40efff027e9bd77f4ea8fc56b18beb65e486f8f0c6d214bedd409", bytes: 547 },
+];
