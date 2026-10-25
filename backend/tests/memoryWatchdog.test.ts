@@ -444,6 +444,20 @@ test("GET /stack/v1/memory returns the numbers, the level and the recent actions
   expect(latestSample()).not.toBeNull();
 });
 
+test("GET /stack/v1/memory reports class totals, budget, margin and burst queue depth", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: TOTAL, freeMemoryBytes: 80 * GB, tier: "p128" });
+  await admit({ id: "chat", kind: "resident", class: "reserved", requestedBytes: 21 * GB });
+  await admit({ id: "picture-pool", kind: "jit", class: "warm", requestedBytes: 16 * GB });
+  __setGovernorTuningForTestsOnly({ freeMemoryBytes: 10 * GB });
+  setLatestSample(sample({ pressureLevel: 2, pressure: "warn", freeBytes: 10 * GB }));
+  await admit({ id: "video-one", kind: "generator", class: "burst", requestedBytes: GB });
+  await admit({ id: "video-two", kind: "generator", class: "burst", requestedBytes: GB });
+  const response = await app.request("/stack/v1/memory");
+  const body = await response.json() as { ledger: { reserved_bytes: number; warm_bytes: number; burst_bytes: number; budget_bytes: number; working_margin_bytes: number; free_bytes: number; queue_depth: { burst: number }; chat_paged_out: boolean } };
+  expect(response.status).toBe(200);
+  expect(body.ledger).toMatchObject({ reserved_bytes: 21 * GB, warm_bytes: 16 * GB, burst_bytes: 0, budget_bytes: 120 * GB, working_margin_bytes: 20 * GB, free_bytes: 10 * GB, queue_depth: { burst: 2 }, chat_paged_out: false });
+});
+
 test("while the Stack is stopping a request gets 503 stack_restarting with Retry-After", async () => {
   beginStopping();
   const response = await app.request("/stack/v1/health");
