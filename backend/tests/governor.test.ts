@@ -170,7 +170,7 @@ test("the image pool admission becomes one warm governor item and is reused for 
   expect(getGovernorStatus().loaded).toMatchObject([{ id: "image-pool", kind: "jit", class: "warm", peakBytes: 14 * GB, measured: true }]);
 
   const edit = await admit({ id: "image-pool", kind: "generator", class: "warm", requestedBytes: 29 * GB, retainWarm: true }) as GovernorHandle;
-  expect(edit.token).toBe(create.token);
+  expect(edit.token).not.toBe(create.token); // a reused pool item gets a fresh token, so the finished job's handle is stale
   expect(getGovernorStatus().loaded).toHaveLength(1);
   expect(getGovernorStatus().loaded[0]).toMatchObject({ id: "image-pool", kind: "generator", peakBytes: 29 * GB });
   release(edit);

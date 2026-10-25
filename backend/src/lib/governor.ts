@@ -435,6 +435,7 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
     existing.measured = peak.measured;
     existing.lastUsedAt = nowIso();
     existing.evicting = false;
+    existing.token = nextToken++;
     existing.keepAliveSeconds = 0;
     existing.yieldsToGenerators = false;
     const handle: GovernorHandle = { id: request.id, kind: request.kind, class: requestClass(request), requestedBytes: peak.bytes, token: existing.token, retainWarm: request.retainWarm };
@@ -488,6 +489,7 @@ function settleAdmission(entry: QueuedEntry): void {
     existing.measured = peakFor(entry.request).measured;
     existing.lastUsedAt = nowIso();
     existing.evicting = false;
+    existing.token = nextToken++;
     const handle: GovernorHandle = { id: entry.request.id, kind: entry.request.kind, class: requestClass(entry.request), requestedBytes: existing.peakBytes, token: existing.token, retainWarm: entry.request.retainWarm };
     decide("Admitted", "The current memory budget has room.", entry.request.id);
     if (borrowsFlexBand) flexBandBorrowerToken = existing.token;
