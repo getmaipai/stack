@@ -9,7 +9,7 @@
 // submit for it is refused with a reason rather than left queued.
 import { emit } from "@/lib/events";
 import { noteComponentUse } from "@/lib/componentUse";
-import { admit, fitsEver, generatorsHeldByMode, getRunState, neverFitReason, peakFor, release, withdraw, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
+import { admit, fitsEver, generatorsHeldByMode, getRunState, GovernorRules, neverFitReason, peakFor, release, withdraw, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
 import { heavyGate, isolationRules } from "@/lib/heavyGate";
 import { memoryLevel, PAUSED_LOW_MEMORY, waitingText } from "@/lib/memoryState";
 import { ROLES } from "@/roles";
@@ -288,7 +288,9 @@ async function pump(role: string): Promise<void> {
   touch(jobs.get(next.id)!, { state: "running", status: "waiting for memory" });
   let handle: GovernorHandle;
   try {
-    handle = await admitJob(next.id, { id: next.id, role, class: ROLES[role as keyof typeof ROLES]?.memoryClass ?? "burst", kind: "generator", ...runner.options.generator.memory(jobs.get(next.id)!) });
+    const imagePool = role === "image" && (next.kind === "image_generation" || next.kind === "image_edit_generative");
+    const imageEdit = imagePool && next.kind === "image_edit_generative";
+    handle = await admitJob(next.id, { id: imagePool ? "image-pool" : next.id, role, class: ROLES[role as keyof typeof ROLES]?.memoryClass ?? "burst", kind: "generator", ...(imagePool ? { retainWarm: true } : {}), ...(imageEdit ? { poolPeakBytes: GovernorRules.imagePoolPeakBytes } : {}), ...runner.options.generator.memory(jobs.get(next.id)!) });
   } catch (error) {
     finishJob(next.id, { ok: false, reason: error instanceof Error ? error.message : String(error) });
     settle();

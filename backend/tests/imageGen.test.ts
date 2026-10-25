@@ -15,7 +15,7 @@ import { resolveRoleState } from "@/lib/router";
 import { detectImageBase, imageLoras, parseHfLoraUrl, startLoraInstall } from "@/images/loras";
 import { registerImageJobs, pngSize } from "@/images/jobs";
 import { commitResult, readResult, resultsRoot, sweepResults, workDir } from "@/images/results";
-import { ImageGenService, imageEngineActive, imageGen, imageRoleState, imageRequirementsFileFor, overallPercent, workerHandle, type ImageGenDeps, type WorkerEvent, type WorkerHandle, type WorkerReply, type WorkerRequest } from "@/images/imageEngine";
+import { ImageGenService, imageEngineActive, imageGen, imagePoolGrowthFits, imageRoleState, imageRequirementsFileFor, overallPercent, workerHandle, type ImageGenDeps, type WorkerEvent, type WorkerHandle, type WorkerReply, type WorkerRequest } from "@/images/imageEngine";
 import { __setInstalledFamiliesForTests, IMAGE_FAMILIES, parseSize, peakBytes, quantizeFor } from "@/images/models";
 import { __resetProvenanceForTests, wasGeneratedHere } from "@/video/provenance";
 import { LoraError, scanWords } from "@/lib/media/loraLibrary";
@@ -142,7 +142,7 @@ test("pictures are made, polled to done, fetched, and deleted; the picture is th
   expect((await app.request(`/v1/images/generations/${body.job}`, { method: "DELETE" })).status).toBe(200);
   expect((await get(body.data[0]!.url)).status).toBe(404);
   expect((await get(`/v1/images/generations/${body.job}`)).status).toBe(404);
-  expect(getGovernorStatus().loaded).toHaveLength(0);
+  expect(getGovernorStatus().loaded).toMatchObject([{ id: "image-pool", kind: "jit", class: "warm", peakBytes: 13_500_000_000, measured: true }]);
   expect(existsSync(workDir(body.job))).toBe(false);
 });
 
@@ -163,7 +163,7 @@ test("neither the prompt nor an input picture is kept in a job record, on the fe
   expect(existsSync(requests[0]!.init_image!)).toBe(false);
 });
 
-test("past timeout_ms the answer is 202 with the job; status shows queue and phase; cancel stops the worker between steps and returns the memory", async () => {
+test("past timeout_ms the answer is 202 with the job; status shows queue and phase; cancel stops the request and retains the warm pool", async () => {
   imageGen.useDeps(scripted(async (request, emit) => { emit({ id: request.id, event: "phase", phase: "rendering", percent: 40 }); await new Promise(() => {}); return okReply(request); }));
   const response = await post({ prompt: "a boat", timeout_ms: 30 });
   expect(response.status).toBe(202);
@@ -179,7 +179,7 @@ test("past timeout_ms the answer is 202 with the job; status shows queue and pha
   expect(cancelled).toEqual([body.job]);
   expect(getJob(body.job)!.state).toBe("cancelled");
   expect((await (await get(`/v1/images/generations/${body.job}`)).json() as Record<string, unknown>).state).toBe("cancelled");
-  expect(getGovernorStatus().loaded).toHaveLength(0);
+  expect(getGovernorStatus().loaded).toMatchObject([{ id: "image-pool", kind: "jit", class: "warm" }]);
 });
 
 test("a second picture waits in line behind the first; a video job in flight holds pictures back; the line is capped", async () => {
@@ -271,6 +271,46 @@ test("the worker exits after the idle time and starts again on the next picture;
   expect(imageGen.workerAlive).toBe(false);
   await post({ prompt: "z", timeout_ms: 5000 });
   expect(spawned).toBe(2);
+});
+
+test("the create and edit requests share the Klein pool; fallback growth is checked and a later create selects the create slot", async () => {
+  imageGen.useDeps(scripted(okReply, { poolGrowthFits: () => false }));
+  const grown = await post({ prompt: "create", timeout_ms: 5000 });
+  expect(grown.status).toBe(200);
+  const form = (instruction: string) => {
+    const data = new FormData();
+    data.set("operation", "edit"); data.set("image_source", "uploaded");
+    data.set("image", new File([pngBytes(640, 480)], "in.png", { type: "image/png" }));
+    data.set("instruction", instruction); data.set("timeout_ms", "5000");
+    return app.request("/v1/images/edits", { method: "POST", body: data });
+  };
+  expect((await form("first edit")).status).toBe(200);
+  expect((await form("second edit")).status).toBe(200);
+  expect((await post({ prompt: "create after fallback", timeout_ms: 5000 })).status).toBe(200);
+  expect(requests.map(({ op, pool_strategy, create_family, edit_family }) => ({ op, pool_strategy, create_family, edit_family }))).toEqual([
+    { op: "generate", pool_strategy: "single", create_family: "flux2-klein-4b", edit_family: "flux2-klein-4b" },
+    { op: "edit", pool_strategy: "single", create_family: "flux2-klein-4b", edit_family: "flux2-klein-4b" },
+    { op: "edit", pool_strategy: "single", create_family: "flux2-klein-4b", edit_family: "flux2-klein-4b" },
+    { op: "generate", pool_strategy: "single", create_family: "flux2-klein-4b", edit_family: "flux2-klein-4b" },
+  ]);
+  const status = getGovernorStatus();
+  expect(imagePoolGrowthFits(18_000_000_000, { ...status, capBytes: 20_000_000_000, freeMemoryBytes: 90 * GB, loaded: [{ id: "image-job", kind: "generator", class: "burst", peakBytes: 18_000_000_000, measured: true, lastUsedAt: new Date().toISOString(), idleTtlSeconds: 600, pinned: false, pid: null }] })).toBe(false);
+  expect(imagePoolGrowthFits(18_000_000_000, { ...status, capBytes: 80 * GB, freeMemoryBytes: 90 * GB, loaded: [{ id: "image-job", kind: "generator", class: "burst", peakBytes: 18_000_000_000, measured: true, lastUsedAt: new Date().toISOString(), idleTtlSeconds: 600, pinned: false, pid: null }] })).toBe(true);
+});
+
+test("a create followed by two edits requests both pool models and keeps the same edit slot warm", async () => {
+  imageGen.useDeps(scripted(okReply, { poolGrowthFits: () => true }));
+  const form = () => {
+    const data = new FormData();
+    data.set("operation", "edit"); data.set("image_source", "uploaded");
+    data.set("image", new File([pngBytes(640, 480)], "in.png", { type: "image/png" }));
+    data.set("instruction", "edit this picture"); data.set("timeout_ms", "5000");
+    return app.request("/v1/images/edits", { method: "POST", body: data });
+  };
+  expect((await post({ prompt: "create", timeout_ms: 5000 })).status).toBe(200);
+  expect((await form()).status).toBe(200);
+  expect((await form()).status).toBe(200);
+  expect(requests.map(({ op, pool_strategy }) => [op, pool_strategy])).toEqual([["generate", "pool"], ["edit", "pool"], ["edit", "pool"]]);
 });
 
 // ---- LoRAs ----

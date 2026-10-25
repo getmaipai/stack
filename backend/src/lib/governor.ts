@@ -19,6 +19,7 @@ export const GovernorRules = {
   /** A run's peak is written back to the store only when it rises by at
    * least this much, so a slowly filling cache is not a write per poll. */
   peakRecordStepBytes: 64 * 1_048_576,
+  imagePoolPeakBytes: 29_000_000_000,
   osMarginBytes: 8 * GB,
   /** Rule Q8: only one picture may borrow this much of the working margin. */
   q8FlexBandBytes: 4 * GB,
@@ -54,6 +55,11 @@ export interface GovernorRequest {
   pid?: number | null;
   /** A `jit` item that gives way to a generator job: while a generator waits for memory the item's unload is asked at once, and the supervisor's unload declines while the item serves a request (CODE-STACK-01 S2). */
   yieldsToGenerators?: boolean;
+  /** Reuses the picture worker's single warm ledger entry between jobs. */
+  retainWarm?: boolean;
+  /** For an edit, reserve the two-model pool when it fits, otherwise use
+   * the request's one-model peak. */
+  poolPeakBytes?: number;
 }
 
 export interface GovernorHandle {
@@ -62,6 +68,7 @@ export interface GovernorHandle {
   class?: GovernorClass;
   requestedBytes: number;
   token?: number;
+  retainWarm?: boolean;
 }
 
 export interface GovernorLoadedModel {
@@ -143,6 +150,11 @@ type QueuedEntry = { request: GovernorRequest; settled: boolean; admitted: Promi
 const queue: QueuedEntry[] = [];
 const refusalCounts = new Map<string, number>();
 const decisions: GovernorDecision[] = [];
+let imagePoolUnload: (() => boolean | Promise<boolean>) | null = null;
+
+/** The image worker is managed by its service, not the role supervisor.
+ * Its stable warm item still uses the governor's normal eviction path. */
+export function setImagePoolUnload(unload: (() => boolean | Promise<boolean>) | null): void { imagePoolUnload = unload; }
 
 const initialMemory = getMemoryReader().read();
 totalMemoryBytes = initialMemory.totalBytes;
@@ -263,7 +275,7 @@ export function roomAfterEviction(request: GovernorRequest, busy: (id: string) =
     return 4;
   };
   const candidates = [...loaded.values()].filter((item) => {
-    if (item.class === "reserved" || item.pinned || item.evicting || busy(item.id)) return false;
+    if (item.class === "reserved" || item.pinned || item.evicting || item.kind === "generator" || busy(item.id)) return false;
     const warmGracePassed = item.class === "warm" && now - new Date(item.lastUsedAt).getTime() >= GovernorRules.warmEvictionGraceMs;
     if (classRank[item.class] < classRank[targetClass] && !warmGracePassed) return false;
     if (item.class === "warm" && !warmGracePassed) return false;
@@ -306,6 +318,28 @@ export function refreshMeasuredPeak(handle: GovernorHandle, processBytes: number
   item.recordedPeakBytes = bytes;
 }
 
+/** Records the image worker's measured live pool peak under its stable
+ * ledger id. The image job owns the handle, while the resident pool keeps
+ * that same governor item after the handle is released. */
+export function refreshMeasuredPeakById(id: string, processBytes: number): void {
+  const item = loaded.get(id);
+  if (!item || !Number.isFinite(processBytes) || processBytes <= 0) return;
+  const bytes = Math.ceil(processBytes);
+  item.peakBytes = bytes;
+  item.measured = true;
+  item.peakBaselineBytes = null;
+  item.runPeakBytes = 0;
+  item.recordedPeakBytes = bytes;
+}
+
+/** A managed worker exited, so its warm reservation is no longer resident. */
+export function forgetLoadedItem(id: string): void {
+  const item = loaded.get(id);
+  if (!item) return;
+  loaded.delete(id);
+  freeMemoryBytes += item.peakBytes;
+}
+
 function loadedBytes(): number {
   return [...loaded.values()].reduce((sum, item) => sum + item.peakBytes, 0);
 }
@@ -339,11 +373,13 @@ function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
   if (memoryReadingDegraded) return false;
   if (!gateVerdict(request, peakBytes).ok) return false;
   if (pressure !== "normal") return false;
-  const generatorBusy = request.kind === "generator" && [...loaded.values()].some((item) => item.kind === "generator");
+  const existing = loaded.get(request.id);
+  const generatorBusy = request.kind === "generator" && [...loaded.values()].some((item) => item.kind === "generator" && item !== existing);
   if (generatorBusy) return false;
   const cap = effectiveCapBytes();
-  if (loadedBytes() + peakBytes > cap) return false;
-  return freeMemoryBytes - peakBytes >= workingMargin() || usesFlexBand(request, peakBytes);
+  const growth = Math.max(0, peakBytes - (existing?.peakBytes ?? 0));
+  if (loadedBytes() + growth > cap) return false;
+  return freeMemoryBytes - growth >= workingMargin() || usesFlexBand(request, growth);
 }
 
 /** Whether the request would be admitted if `freedBytes` of loaded jit memory were gone. The memory watchdog's gate is not asked: it reads real memory, which the item to be evicted still holds. */
@@ -356,6 +392,12 @@ function wouldAdmitAfterFreeing(request: GovernorRequest, peakBytes: number, fre
 export async function admit(request: GovernorRequest): Promise<GovernorHandle | { queued: true; position: number; class: GovernorClass; admitted: Promise<GovernorHandle | { refused: true; reason: string }> } | { refused: true; reason: string }> {
   request = taggedRequest(request);
   if (runState !== "running") { decide("Refused", "The Stack is paused.", request.id); return { refused: true, reason: "The Stack is paused." }; }
+  if (request.poolPeakBytes && request.poolPeakBytes > request.requestedBytes) {
+    const pooledRequest: GovernorRequest = { ...request, requestedBytes: request.poolPeakBytes, measuredPeakBytes: null, dryRunPeakBytes: null, modelFileBytes: null, poolPeakBytes: undefined };
+    const pooledPeak = peakFor(pooledRequest).bytes;
+    if (fitsEver(pooledRequest) && canAdmit(pooledRequest, pooledPeak)) request = pooledRequest;
+    else request = { ...request, poolPeakBytes: undefined };
+  }
   const peak = peakFor(request);
   if (!fitsEver(request)) {
     const reason = neverFitReason(request);
@@ -385,11 +427,26 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
   refusalCounts.delete(request.id);
   resolveHealth("admission-refused-repeatedly");
   const borrowsFlexBand = usesFlexBand(request, peak.bytes);
+  const existing = loaded.get(request.id);
+  if (existing) {
+    existing.kind = request.kind;
+    existing.class = requestClass(request);
+    existing.peakBytes = peak.bytes;
+    existing.measured = peak.measured;
+    existing.lastUsedAt = nowIso();
+    existing.evicting = false;
+    existing.keepAliveSeconds = 0;
+    existing.yieldsToGenerators = false;
+    const handle: GovernorHandle = { id: request.id, kind: request.kind, class: requestClass(request), requestedBytes: peak.bytes, token: existing.token, retainWarm: request.retainWarm };
+    decide("Admitted", "The current memory budget has room.", request.id);
+    if (borrowsFlexBand) flexBandBorrowerToken = existing.token;
+    return handle;
+  }
   const item = loadedItemFor(request);
   loaded.set(request.id, item);
   if (borrowsFlexBand) flexBandBorrowerToken = item.token;
   decide("Admitted", "The current memory budget has room.", request.id);
-  return { id: request.id, kind: request.kind, class: requestClass(request), requestedBytes: peak.bytes, token: item.token };
+  return { id: request.id, kind: request.kind, class: requestClass(request), requestedBytes: peak.bytes, token: item.token, retainWarm: request.retainWarm };
 }
 
 /** A request on a loaded item: its idle clock starts again. */
@@ -423,18 +480,46 @@ export function resumeAll(): void { setRunState("running"); }
 
 function settleAdmission(entry: QueuedEntry): void {
   const borrowsFlexBand = usesFlexBand(entry.request, peakFor(entry.request).bytes);
+  const existing = loaded.get(entry.request.id);
+  if (existing) {
+    existing.kind = entry.request.kind;
+    existing.class = requestClass(entry.request);
+    existing.peakBytes = peakFor(entry.request).bytes;
+    existing.measured = peakFor(entry.request).measured;
+    existing.lastUsedAt = nowIso();
+    existing.evicting = false;
+    const handle: GovernorHandle = { id: entry.request.id, kind: entry.request.kind, class: requestClass(entry.request), requestedBytes: existing.peakBytes, token: existing.token, retainWarm: entry.request.retainWarm };
+    decide("Admitted", "The current memory budget has room.", entry.request.id);
+    if (borrowsFlexBand) flexBandBorrowerToken = existing.token;
+    entry.settled = true;
+    entry.resolve(handle);
+    return;
+  }
   const item = loadedItemFor(entry.request);
   loaded.set(entry.request.id, item);
   if (borrowsFlexBand) flexBandBorrowerToken = item.token;
   decide("Admitted", "The current memory budget has room.", entry.request.id);
   entry.settled = true;
-  entry.resolve({ id: entry.request.id, kind: entry.request.kind, class: requestClass(entry.request), requestedBytes: item.peakBytes, token: item.token });
+  entry.resolve({ id: entry.request.id, kind: entry.request.kind, class: requestClass(entry.request), requestedBytes: item.peakBytes, token: item.token, retainWarm: entry.request.retainWarm });
 }
 
 export function release(handle: GovernorHandle): void {
   const item = loaded.get(handle.id);
   // An older admission's handle frees nothing, so it admits nothing.
   if (!item || (handle.token !== undefined && item.token !== handle.token)) return;
+  if (handle.retainWarm) {
+    item.kind = "jit";
+    item.class = "warm";
+    item.idleTtlSeconds = idleTtlOverrides.get(item.id) ?? tuning.idleTtlSeconds;
+    item.lastUsedAt = nowIso();
+    item.pid = null;
+    item.peakBaselineBytes = null;
+    item.runPeakBytes = 0;
+    item.recordedPeakBytes = 0;
+    item.processBreaches = 0;
+    item.keepAliveSeconds = 0;
+    return;
+  }
   loaded.delete(handle.id);
   if (item.token === flexBandBorrowerToken) flexBandBorrowerToken = null;
   if (memoryReadingDegraded) return;
@@ -552,6 +637,10 @@ export function startGovernor(options: StartGovernorOptions): () => void {
     if (pressure !== "normal" && (systemBreaches === tuning.systemSustainedPolls || kernelPressure !== "normal")) emit({ id: "pressure", data: { pressure, free_memory_bytes: Math.round(freeMemoryBytes), floor_bytes: Math.round(floor), available_percent: Math.max(0, Math.min(100, availablePercent)) } });
     const processReader = options.processMemory ?? ((pid: number) => Promise.resolve(memoryReader.processMemoryBytes(pid)));
     const now = options.now?.() ?? Date.now();
+    const unloadItem = options.unload ?? (imagePoolUnload ? (id: string) => {
+      if (id !== "image-pool") return false;
+      return imagePoolUnload ? imagePoolUnload() : false;
+    } : undefined);
     for (const item of [...loaded.values()]) {
       // The runaway watch compares this process's memory with its own
       // post-load reading (never a figure an earlier run stored), so a
@@ -589,12 +678,12 @@ export function startGovernor(options: StartGovernorOptions): () => void {
       }
       // Only a watch that can unload evicts: forgetting a jit item whose
       // process still runs would hide its memory from every admission.
-      if (item.kind === "jit" && item.class !== "reserved" && options.unload && !options.busy?.(item.id) && !item.evicting && !item.pinned && (idle || pressure !== "normal")) {
+      if ((item.kind === "jit" || (item.id === "image-pool" && item.kind !== "generator")) && item.class !== "reserved" && unloadItem && !options.busy?.(item.id) && !item.evicting && !item.pinned && (idle || pressure !== "normal")) {
         // Not awaited: an unload drains requests in flight, and this poll
         // (another process's RSS watch among them) never waits on it. The
         // entry goes when its own process is gone, never a newer one.
         item.evicting = true;
-        const unload = options.unload;
+        const unload = unloadItem;
         decide("Unloaded", pressure !== "normal" ? `Memory pressure is ${pressure}.` : "The model was idle.", item.id);
         void (async () => {
           let unloaded: boolean | void = undefined;
@@ -610,13 +699,13 @@ export function startGovernor(options: StartGovernorOptions): () => void {
     // declines while a coding request is in flight, so a busy engine makes
     // the job wait; it is asked again on the next poll. Residents are never
     // asked: only items that declared `yieldsToGenerators` are.
-    if (options.unload && queue.length > 0) {
+    if (unloadItem && queue.length > 0) {
       const head = queue.find((entry) => !entry.settled);
         if (!codingModeActive && head && head.request.kind === "generator") {
         const yielding = [...loaded.values()].filter((item) => item.kind === "jit" && item.yieldsToGenerators && !item.evicting && !item.pinned);
         const headPeak = peakFor(head.request).bytes;
         if (yielding.length > 0 && !canAdmit(head.request, headPeak) && wouldAdmitAfterFreeing(head.request, headPeak, yielding.reduce((sum, item) => sum + item.peakBytes, 0))) {
-          const unload = options.unload;
+          const unload = unloadItem;
           for (const item of yielding) {
             item.evicting = true;
             void (async () => {
@@ -646,7 +735,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
         queue.splice(index, 1);
       }
       const head = queue[0];
-      if (head && options.unload && !head.settled && !canAdmit(head.request, peakFor(head.request).bytes)) {
+      if (head && unloadItem && !head.settled && !canAdmit(head.request, peakFor(head.request).bytes)) {
         const required = peakFor(head.request).bytes;
         const room = roomAfterEviction(head.request, (id) => options.busy?.(id) ?? false, now);
         if (room.roomBytes >= required) {
@@ -656,7 +745,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
             const item = loaded.get(id);
             if (!item || item.evicting) continue;
             item.evicting = true;
-            const unload = options.unload;
+            const unload = unloadItem;
             void (async () => {
               let unloaded: boolean | void = undefined;
               try { unloaded = await unload(id); } catch { unloaded = false; }

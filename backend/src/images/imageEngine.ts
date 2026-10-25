@@ -2,17 +2,17 @@
 // (the default) and Z-Image-Turbo, run by mflux (MIT, pinned in a hashed
 // requirements file) on the Apple GPU inside one managed Python 3.12
 // environment (the same uv builder as the voice engines, the image tools and
-// the video engine) and one worker process that exists only while picture
-// work does: it starts on the first request, waits ten minutes for the next
-// one, then exits and gives its memory back. Never resident at boot, never
-// kept warm. The weights are pinned model records in the hub cache, so the
-// worker needs no network at run time and runs with HF_HUB_OFFLINE=1.
+// the video engine). One worker starts on the first request and exits after
+// the configured idle window. It keeps the create model warm and can load the
+// edit model beside it when the governor reports room. The weights are pinned
+// model records in the hub cache, so the worker needs no network at run time
+// and runs with HF_HUB_OFFLINE=1.
 //
-// Memory: a job holds one governor admission (15 GB for a Klein picture, 18 GB
-// for a bf16 edit, 34 GB for Z-Image-Turbo) from the first byte loaded to the
-// last picture written. The job queue takes that admission before this service
-// is called, and the governor lets one generator job run at a time across
-// pictures and video; this file never talks to the governor for a run.
+// The job queue takes its per-request governor admission before this service is
+// called. When an edit grows the warm pool, this service checks the remaining
+// budget for the planned 29 GB pair and tells the worker to keep both models
+// or swap one at a time. The governor lets one generator job run at a time
+// across pictures and video.
 //
 // Safety posture: the model has no filter and the Stack makes no decision about
 // who is in a picture or who is asking. The Stack enforces what it can know:
@@ -25,12 +25,12 @@ import { lowMemoryRefusal } from "@/lib/memoryState";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MANAGED_RUNTIMES } from "@/lib/engineCatalog";
-import { getGovernorStatus } from "@/lib/governor";
+import { forgetLoadedItem, getGovernorStatus, GovernorRules, refreshMeasuredPeakById, setIdleTtlSeconds, setImagePoolUnload } from "@/lib/governor";
 import { log } from "@/lib/log";
 import { engineTagRoot } from "@/lib/store/layout";
 import { ensureUvEnvironment, managedEnv, uvEnvironmentReady, uvVenvPath, uvVenvPython, type UvEnvironmentSpec } from "@/lib/uvEnvironment";
 import { READY_TTL_MS, type RoleStateRecord } from "@/roles";
-import { familyInstalled, familySnapshot, IMAGE_FAMILIES, imageAvailability, installedFamilies, type ImageFamilyId } from "@/images/models";
+import { familyInstalled, familySnapshot, IMAGE_FAMILIES, imageAvailability, installedFamilies, peakBytes, type ImageFamilyId } from "@/images/models";
 import darwinArm64Requirements from "./image-gen.darwin-arm64.requirements.txt" with { type: "file" };
 import workerScript from "./mflux_worker.py" with { type: "file" };
 
@@ -67,6 +67,7 @@ export function ensureImageGenEnvironment(onProgress: (phase: string) => void = 
 
 export interface WorkerRequest {
   id: string; op: "generate" | "edit"; family: ImageFamilyId; quantize: number | null; model_dir: string; loras: Array<[string, number]>;
+  create_family?: ImageFamilyId; edit_family?: ImageFamilyId; pool_strategy?: "pool" | "single";
   prompt: string; width?: number; height?: number; steps: number; seed: number; count?: number; out_dir: string;
   init_image?: string; strength?: number; image?: string; mask?: string; references?: string[]; region?: [number, number, number, number]; feather?: number;
   /** GENPREVIEW-01: write a small preview picture (`<out_dir>/preview.jpg`) after each denoising step. */
@@ -93,6 +94,8 @@ export interface ImageGenDeps {
   spawn: () => Promise<WorkerHandle>;
   /** The snapshot folder of an installed family, or null. */
   snapshot: (family: ImageFamilyId) => string | null;
+  /** Test seam for the governor's incremental pool-growth verdict. */
+  poolGrowthFits?: (activeRequestPeakBytes: number) => boolean;
 }
 
 export const defaultImageGenDeps: ImageGenDeps = {
@@ -217,6 +220,7 @@ export class ImageGenService {
 
   /** Runs one request, one at a time. The caller (the job runner) holds the governor admission. Throws an ImageError that says what to do. */
   run(input: ImageRunInput, options: ImageRunOptions): Promise<ImageRunResult> {
+    setIdleTtlSeconds("image-pool", Math.ceil(idleMs() / 1000));
     const next = this.chain.then(() => this.execute(input, options), () => this.execute(input, options));
     this.chain = next.catch(() => {});
     return next;
@@ -245,6 +249,7 @@ export class ImageGenService {
     if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
     const worker = this.worker; this.worker = null;
     worker?.kill();
+    forgetLoadedItem("image-pool");
   }
 
   /** Stops the worker now (shutdown, a repair, or a test). */
@@ -272,6 +277,7 @@ export class ImageGenService {
       mkdirSync(input.outDir, { recursive: true, mode: 0o700 });
       const request: WorkerRequest = {
         id: options.jobId, op: input.op, family: input.family, quantize: input.quantize, model_dir: modelDir, loras: input.loras, prompt: input.prompt, steps: input.steps, seed: input.seed, out_dir: input.outDir,
+        create_family: input.family, edit_family: "flux2-klein-4b", pool_strategy: (this.deps.poolGrowthFits?.(peakBytes(input.family, input.op, input.quantize, input.loras.length)) ?? getGovernorStatus().loaded.some((item) => item.id === "image-pool" && item.peakBytes >= IMAGE_POOL_PEAK_BYTES)) ? "pool" : "single",
         ...(input.width !== undefined ? { width: input.width, height: input.height } : {}), ...(input.count !== undefined ? { count: input.count } : {}),
         ...(input.preview && input.op === "generate" ? { preview: true } : {}), ...(input.initImage ? { init_image: input.initImage, strength: input.strength } : {}), ...(input.image ? { image: input.image } : {}), ...(input.mask ? { mask: input.mask } : {}), ...(input.references && input.references.length > 0 ? { references: input.references } : {}), ...(input.region ? { region: input.region } : {}), ...(input.feather !== undefined ? { feather: input.feather } : {}),
       };
@@ -298,6 +304,7 @@ export class ImageGenService {
         if (reply.code === "out_of_memory" || reply.code === "timeout" || reply.code === "worker_stopped") this.stopWorker();
         throw new ImageError(reply.code ?? "failed", MESSAGE_BY_CODE[reply.code ?? ""] ?? reply.error ?? "The picture could not be made.", STATUS_BY_CODE[reply.code ?? "failed"] ?? 500);
       }
+      if (reply.peak_bytes && reply.peak_bytes > 0) refreshMeasuredPeakById("image-pool", reply.peak_bytes);
       this.lastSuccessAt = Date.now();
       return { seeds: reply.seeds ?? [input.seed], ms: reply.ms ?? 0, peakBytes: reply.peak_bytes ?? null, width: reply.width ?? null, height: reply.height ?? null };
     } finally {
@@ -310,7 +317,20 @@ export class ImageGenService {
   }
 }
 
+export const IMAGE_POOL_PEAK_BYTES = GovernorRules.imagePoolPeakBytes;
+
+/** Decide whether the existing picture admission has room to grow to the planned two-model pool. */
+export function imagePoolGrowthFits(activeRequestPeakBytes: number, status = getGovernorStatus()): boolean {
+  void activeRequestPeakBytes;
+  const pool = status.loaded.find((item) => item.id === "image-pool");
+  const current = pool?.peakBytes ?? 0;
+  const growth = Math.max(0, GovernorRules.imagePoolPeakBytes - current);
+  const loaded = status.loaded.reduce((sum, item) => sum + item.peakBytes, 0);
+  return loaded + growth <= status.capBytes && status.freeMemoryBytes - growth >= status.marginBytes;
+}
+
 export const imageGen = new ImageGenService();
+setImagePoolUnload(() => imageGen.stopIfIdle());
 
 /** Whether the mflux path serves the image role on this computer: its weights are installed, so it, and not the ComfyUI checkpoint, answers. */
 export function imageEngineActive(service: ImageGenService = imageGen): boolean { return service.supported() && service.hasModels(); }

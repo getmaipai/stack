@@ -46,7 +46,7 @@ mx.set_cache_limit(MLX_CACHE_LIMIT_BYTES)
 THUMB_SIDE = 384
 PREVIEW_SIDE = 256
 
-state = {"key": None, "model": None, "family": None, "steps": 0, "on_step": None, "preview": None, "prev": None}
+state = {"models": {}, "family": None, "steps": 0, "on_step": None, "preview": None, "prev": None}
 inbox: "queue.Queue[dict]" = queue.Queue()
 running = {"id": None}
 
@@ -140,20 +140,29 @@ def reader():
 
 
 def free_model():
-    state["model"] = None
-    state["key"] = None
+    state["models"].clear()
     gc.collect()
     mx.clear_cache()
 
 
 def build(request, mode):
-    family = request["family"]
+    family = request.get("create_family" if mode == "gen" else "edit_family", request["family"])
     quantize = request.get("quantize")
     loras = [(path, float(scale)) for path, scale in request.get("loras", [])]
     key = (family, mode, quantize, tuple(loras), request["model_dir"])
-    if state["key"] == key and state["model"] is not None:
-        return state["model"]
-    free_model()
+    role = "create" if mode == "gen" else "edit"
+    if request.get("pool_strategy") == "single":
+        other = "edit" if role == "create" else "create"
+        state["models"].pop(other, None)
+        gc.collect()
+        mx.clear_cache()
+    cached = state["models"].get(role)
+    if cached and cached[0] == key:
+        state["family"] = family
+        return cached[1]
+    state["models"].pop(role, None)
+    gc.collect()
+    mx.clear_cache()
     lora_paths = [path for path, _ in loras] or None
     lora_scales = [scale for _, scale in loras] or None
     common = dict(quantize=quantize, model_path=request["model_dir"], lora_paths=lora_paths, lora_scales=lora_scales, bake_lora=False)
@@ -175,7 +184,8 @@ def build(request, mode):
     else:
         raise ValueError("unknown_family")
     model.callbacks.register(Progress())
-    state.update(key=key, model=model, family=family)
+    state["models"][role] = (key, model)
+    state["family"] = family
     return model
 
 

@@ -162,6 +162,79 @@ test("roomAfterEviction orders idle warm models and protects reserved and busy e
   expect(room.evictionOrder).not.toContain("video");
 });
 
+test("the image pool admission becomes one warm governor item and is reused for a larger edit", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 100 * GB, tier: "p128" });
+  const create = await admit({ id: "image-pool", kind: "generator", class: "warm", requestedBytes: 15 * GB, measuredPeakBytes: 15 * GB, retainWarm: true }) as GovernorHandle;
+  refreshMeasuredPeak(create, 14 * GB);
+  release(create);
+  expect(getGovernorStatus().loaded).toMatchObject([{ id: "image-pool", kind: "jit", class: "warm", peakBytes: 14 * GB, measured: true }]);
+
+  const edit = await admit({ id: "image-pool", kind: "generator", class: "warm", requestedBytes: 29 * GB, retainWarm: true }) as GovernorHandle;
+  expect(edit.token).toBe(create.token);
+  expect(getGovernorStatus().loaded).toHaveLength(1);
+  expect(getGovernorStatus().loaded[0]).toMatchObject({ id: "image-pool", kind: "generator", peakBytes: 29 * GB });
+  release(edit);
+  expect(getGovernorStatus().loaded).toHaveLength(1);
+});
+
+test("an image edit reserves the full pool when it fits and stays at one-model size when it does not", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 90 * GB, tier: "p128" });
+  const full = await admit({ id: "image-pool", kind: "generator", class: "warm", requestedBytes: 18 * GB, measuredPeakBytes: 18 * GB, poolPeakBytes: 29_000_000_000, retainWarm: true }) as GovernorHandle;
+  expect(getGovernorStatus().loaded[0]).toMatchObject({ peakBytes: 29_000_000_000 });
+  release(full);
+
+  __resetGovernorForTests();
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 40 * GB, tier: "p128" });
+  const fallback = await admit({ id: "image-pool", kind: "generator", class: "warm", requestedBytes: 18 * GB, measuredPeakBytes: 18 * GB, poolPeakBytes: 29_000_000_000, retainWarm: true }) as GovernorHandle;
+  expect(getGovernorStatus().loaded[0]).toMatchObject({ peakBytes: 18 * GB, measured: true });
+  release(fallback);
+});
+
+test("an idle image pool unloads through the governor after its warm window and a busy pool is protected", async () => {
+  let now = Date.now();
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 100 * GB, tier: "p128" });
+  const handle = await admit({ id: "image-pool", kind: "generator", class: "warm", requestedBytes: 15 * GB, retainWarm: true }) as GovernorHandle;
+  release(handle);
+  let busy = true;
+  const unloaded: string[] = [];
+  const stop = startGovernor({ pid: 1, pollMs: 1, now: () => now, busy: (id) => id === "image-pool" && busy, unload: (id) => { unloaded.push(id); return true; } });
+  stops.push(stop);
+  now += 11 * 60_000;
+  await Bun.sleep(10);
+  expect(unloaded).not.toContain("image-pool");
+  busy = false;
+  await Bun.sleep(50);
+  expect(unloaded).toContain("image-pool");
+  await Bun.sleep(5);
+  expect(getGovernorStatus().loaded).toEqual([]);
+});
+
+test("a burst video waits for the warm grace, unloads the idle image pool, then is admitted", async () => {
+  let now = Date.now();
+  let free = 100 * GB;
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: free, tier: "p128" });
+  const pool = await admit({ id: "image-pool", kind: "generator", class: "warm", requestedBytes: 29 * GB, retainWarm: true }) as GovernorHandle;
+  free = 40 * GB;
+  __setGovernorTuningForTestsOnly({ freeMemoryBytes: free });
+  const video = await admit({ id: "video-job", kind: "generator", class: "burst", requestedBytes: 44 * GB });
+  expect(video).toMatchObject({ queued: true });
+  expect(roomAfterEviction({ id: "video-next", kind: "generator", class: "burst", requestedBytes: 44 * GB }, () => false, now + 3 * 60_000).evictionOrder).not.toContain("image-pool");
+  release(pool);
+  expect(getGovernorStatus().loaded).toMatchObject([{ id: "image-pool", kind: "jit", class: "warm" }]);
+  const unloaded: string[] = [];
+  const stop = startGovernor({ pid: 1, pollMs: 1, now: () => now, freeMemory: () => free, totalMemory: () => 128 * GB, unload: (id) => { unloaded.push(id); if (id === "image-pool") free += 29 * GB; return true; } });
+  stops.push(stop);
+  await Bun.sleep(10);
+  expect(unloaded).not.toContain("image-pool");
+  now += 2 * 60_000 + 5_000;
+  expect(roomAfterEviction({ id: "video-next", kind: "generator", class: "burst", requestedBytes: 44 * GB }, () => false, now).evictionOrder).toContain("image-pool");
+  await Bun.sleep(30);
+  expect(unloaded).toContain("image-pool");
+  const result = await Promise.race([(video as { admitted: Promise<unknown> }).admitted, Bun.sleep(200).then(() => "waiting")]);
+  expect(result).toMatchObject({ id: "video-job", kind: "generator" });
+  expect(unloaded).toContain("image-pool");
+});
+
 test("p16 admits chat, voice, speech and embed with realistic 13 GiB starting free memory", async () => {
   const memory = 24 * GB;
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: memory, freeMemoryBytes: 13 * GB, tier: "p16" });
