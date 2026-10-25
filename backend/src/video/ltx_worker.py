@@ -24,6 +24,7 @@ import os
 import subprocess
 import sys
 import time
+import mlx.core as mx
 
 import video_worker as base
 from video_worker import FPS, emit, phase, stage
@@ -38,6 +39,10 @@ MAX_PIXELS = 768 * 448
 SIZE_STEP = 64
 UPSCALER = "ltx-2.3-spatial-upscaler-x2-1.1.safetensors"
 PREVIEW_SIDE = 480
+
+# 10% of the 44.1 GB measured video footprint in memory-management-2026-10-25 section 4.1.
+MLX_CACHE_LIMIT_BYTES = int(4.41 * (1 << 30))
+mx.set_cache_limit(MLX_CACHE_LIMIT_BYTES)
 
 _state = {"gen": None, "loras": [], "steps_done": 0, "steps_total": 11}
 
@@ -263,8 +268,6 @@ def _finish(frames, wav, output, poster, ffmpeg):
 
 
 def generate(request):
-    import mlx.core as mx
-
     width, height, frames = int(request["width"]), int(request["height"]), int(request["num_frames"])
     if frames < 9 or frames > MAX_FRAMES or (frames - 1) % 8:
         raise ValueError("frames must be 8n+1 and at most %d" % MAX_FRAMES)

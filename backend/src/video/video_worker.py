@@ -27,6 +27,7 @@ import re
 import sys
 import time
 import traceback
+import mlx.core as mx
 
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
@@ -39,6 +40,10 @@ FPS = 24
 MAX_PIXELS = 832 * 480
 MAX_REFERENCE_PIXELS = 40_000_000
 PREVIEW_SIDE = 480
+
+# 10% of the 44.1 GB measured video footprint in memory-management-2026-10-25 section 4.1.
+MLX_CACHE_LIMIT_BYTES = int(4.41 * (1 << 30))
+mx.set_cache_limit(MLX_CACHE_LIMIT_BYTES)
 
 _real_out = sys.stdout
 _current = {"id": None, "dmd_sigmas": [1.0, 0.757, 0.522, 0.0], "tokenizer_dir": None, "poster": None, "t": 0.0}
@@ -291,7 +296,6 @@ def _prepare_reference(path):
 
 def generate(request):
     global _gen
-    import mlx.core as mx
 
     width, height, frames = int(request["width"]), int(request["height"]), int(request["num_frames"])
     if frames < 5 or frames > MAX_FRAMES or (frames - 1) % 4:

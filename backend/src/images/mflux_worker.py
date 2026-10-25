@@ -39,6 +39,10 @@ from PIL import Image, ImageFilter  # noqa: E402
 from mflux.models.common.config.model_config import ModelConfig  # noqa: E402
 from mflux.utils.exceptions import StopImageGenerationException  # noqa: E402
 
+# 10% of the 29 GB planned picture-pool peak in memory-management-2026-10-25 section 4.1.
+MLX_CACHE_LIMIT_BYTES = int(2.9 * (1 << 30))
+mx.set_cache_limit(MLX_CACHE_LIMIT_BYTES)
+
 THUMB_SIDE = 384
 PREVIEW_SIDE = 256
 

@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fetchMlxRepoFacts, MLX_IDLE_FACTOR, MLX_KV_PEAK_FACTOR, MLX_KV_PEAK_FACTOR_LOW, MLX_PREFIX_CACHE_BYTES, MLX_UNKNOWN_HEADROOM_BYTES, mlxHeadroomBytes, parseMlxKvBytesPerToken, pickGgufFile, readMlxKvBytesPerToken } from "@/lib/mlxMemory";
@@ -146,4 +146,18 @@ test("matches GGUF quant names by whole segment", () => {
 
 test("returns null for an empty GGUF file list", () => {
   expect(pickGgufFile([])).toBeNull();
+});
+
+test("every long-lived MLX worker caps its cache at startup and clears it after each job", () => {
+  const workers = [
+    "../src/images/mflux_worker.py",
+    "../src/video/video_worker.py",
+    "../src/video/ltx_worker.py",
+    "../src/music/music_worker.py",
+  ];
+  for (const relative of workers) {
+    const source = readFileSync(join(import.meta.dir, relative), "utf8");
+    expect(source, relative).toContain("mx.set_cache_limit(");
+    expect(source, relative).toContain("mx.clear_cache()");
+  }
 });
