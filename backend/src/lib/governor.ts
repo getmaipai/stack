@@ -20,6 +20,10 @@ export const GovernorRules = {
    * least this much, so a slowly filling cache is not a write per poll. */
   peakRecordStepBytes: 64 * 1_048_576,
   osMarginBytes: 8 * GB,
+  /** Rule Q8: only one picture may borrow this much of the working margin. */
+  q8FlexBandBytes: 4 * GB,
+  /** Rule Q8: free memory after a flex-band admission must stay above this floor. */
+  q8FlexFloorBytes: 16 * GB,
   engineMultipliers: { "llama-server": 1.3, "mlx-serve": 1.4, oMLX: 1.4, default: 1.3 },
   tiers: {
     p16: { workingMarginBytes: 4 * GB },
@@ -183,6 +187,7 @@ export function setGovernorMemorySettings(values: { modelBudgetBytes?: number; s
 export function getGovernorDecisions(): GovernorDecision[] { return [...decisions]; }
 
 let nextToken = 1;
+let flexBandBorrowerToken: number | null = null;
 function loadedItemFor(request: GovernorRequest): LoadedInternal {
   const peak = peakFor(request);
   return {
@@ -309,6 +314,18 @@ function workingMargin(): number {
   return GovernorRules.tiers[activeTier].workingMarginBytes;
 }
 
+function usesFlexBand(request: GovernorRequest, peakBytes: number): boolean {
+  const freeAfterAdmission = freeMemoryBytes - peakBytes;
+  return request.role === "image"
+    && requestClass(request) === "warm"
+    && pressure === "normal"
+    && flexBandBorrowerToken === null
+    && freeAfterAdmission < workingMargin()
+    && workingMargin() - freeAfterAdmission <= GovernorRules.q8FlexBandBytes
+    && freeAfterAdmission >= GovernorRules.q8FlexFloorBytes
+    && loadedBytes() + peakBytes <= effectiveCapBytes();
+}
+
 /** The memory watchdog's say on a start, from the whole machine's real
  * numbers (lib/memoryWatchdog.ts). One hook, so every generative start
  * (picture, clip, image tools, voice engine) asks it the same way. */
@@ -325,7 +342,8 @@ function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
   const generatorBusy = request.kind === "generator" && [...loaded.values()].some((item) => item.kind === "generator");
   if (generatorBusy) return false;
   const cap = effectiveCapBytes();
-  return loadedBytes() + peakBytes <= cap && freeMemoryBytes - peakBytes >= workingMargin();
+  if (loadedBytes() + peakBytes > cap) return false;
+  return freeMemoryBytes - peakBytes >= workingMargin() || usesFlexBand(request, peakBytes);
 }
 
 /** Whether the request would be admitted if `freedBytes` of loaded jit memory were gone. The memory watchdog's gate is not asked: it reads real memory, which the item to be evicted still holds. */
@@ -366,8 +384,10 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
   }
   refusalCounts.delete(request.id);
   resolveHealth("admission-refused-repeatedly");
+  const borrowsFlexBand = usesFlexBand(request, peak.bytes);
   const item = loadedItemFor(request);
   loaded.set(request.id, item);
+  if (borrowsFlexBand) flexBandBorrowerToken = item.token;
   decide("Admitted", "The current memory budget has room.", request.id);
   return { id: request.id, kind: request.kind, class: requestClass(request), requestedBytes: peak.bytes, token: item.token };
 }
@@ -402,8 +422,10 @@ export async function pauseAll(): Promise<void> {
 export function resumeAll(): void { setRunState("running"); }
 
 function settleAdmission(entry: QueuedEntry): void {
+  const borrowsFlexBand = usesFlexBand(entry.request, peakFor(entry.request).bytes);
   const item = loadedItemFor(entry.request);
   loaded.set(entry.request.id, item);
+  if (borrowsFlexBand) flexBandBorrowerToken = item.token;
   decide("Admitted", "The current memory budget has room.", entry.request.id);
   entry.settled = true;
   entry.resolve({ id: entry.request.id, kind: entry.request.kind, class: requestClass(entry.request), requestedBytes: item.peakBytes, token: item.token });
@@ -414,9 +436,15 @@ export function release(handle: GovernorHandle): void {
   // An older admission's handle frees nothing, so it admits nothing.
   if (!item || (handle.token !== undefined && item.token !== handle.token)) return;
   loaded.delete(handle.id);
+  if (item.token === flexBandBorrowerToken) flexBandBorrowerToken = null;
   if (memoryReadingDegraded) return;
-  const next = queue.shift();
-  if (next && !next.settled) settleAdmission(next);
+  while (queue.length > 0) {
+    const next = queue[0]!;
+    if (next.settled) { queue.shift(); continue; }
+    if (!canAdmit(next.request, peakFor(next.request).bytes)) break;
+    queue.shift();
+    settleAdmission(next);
+  }
 }
 
 /** Removes a queued request before it is admitted and settles its
@@ -661,6 +689,7 @@ export function __resetGovernorForTests(): void {
   metalCapBytes = null;
   admissionGate = null;
   loaded.clear();
+  flexBandBorrowerToken = null;
   idleTtlOverrides.clear();
   queue.length = 0;
   refusalCounts.clear();

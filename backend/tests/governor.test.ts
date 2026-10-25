@@ -62,6 +62,70 @@ test("fitsEver refuses only a peak that cannot fit after reserved memory and mar
   expect(await admit(picture)).toMatchObject({ queued: true });
 });
 
+test("Q8 admits a picture in the 4 GiB flex band and returns it on release", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 39 * GB, tier: "p128" });
+  const picture = { id: "picture", role: "image", kind: "generator" as const, class: "warm" as const, requestedBytes: 20 * GB };
+
+  const result = await admit(picture);
+  expect(result).toMatchObject({ id: "picture", class: "warm" });
+  expect(getGovernorStatus().freeMemoryBytes - picture.requestedBytes).toBeGreaterThanOrEqual(16 * GB);
+  release(result as GovernorHandle);
+  expect(getGovernorStatus().loaded).toHaveLength(0);
+});
+
+test("Q8 does not admit a video in the flex band", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 39 * GB, tier: "p128" });
+  expect(await admit({ id: "video", role: "video", kind: "generator", class: "burst", requestedBytes: 20 * GB })).toMatchObject({ queued: true, position: 1 });
+});
+
+test("Q8 allows one borrower and admits the next picture after release", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 39 * GB, tier: "p128" });
+  const first = await admit({ id: "picture-one", role: "image", kind: "generator", class: "warm", requestedBytes: 20 * GB }) as GovernorHandle;
+  const second = await admit({ id: "picture-two", role: "image", kind: "generator", class: "warm", requestedBytes: 20 * GB });
+  expect(second).toMatchObject({ queued: true, position: 1 });
+  release(first);
+  const next = (second as { admitted: Promise<unknown> }).admitted;
+  expect(await next).toMatchObject({ id: "picture-two" });
+});
+
+test("Q8 never holds back a reserved request while the band is borrowed", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 39 * GB, tier: "p128" });
+  const picture = await admit({ id: "picture-borrower", role: "image", kind: "generator", class: "warm", requestedBytes: 20 * GB }) as GovernorHandle;
+  const resident = await admit({ id: "resident-waiting", kind: "resident", class: "reserved", requestedBytes: GB });
+  expect(resident).toMatchObject({ id: "resident-waiting" });
+  release(picture);
+});
+
+test("Q8 does not use the flex band at warn or critical pressure", async () => {
+  for (const pressure of ["warn", "critical"] as const) {
+    __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 39 * GB, tier: "p128" });
+    const stop = startGovernor({ pid: 1, pollMs: 1, memoryReader: scriptedMemoryReader([
+      { totalBytes: 128 * GB, freeBytes: 39 * GB, availablePercent: 25, pressure, degraded: false },
+    ]) });
+    stops.push(stop);
+    await Bun.sleep(5);
+    expect(getGovernorStatus().pressure).toBe(pressure);
+    expect(await admit({ id: `picture-${pressure}`, role: "image", kind: "generator", class: "warm", requestedBytes: 20 * GB })).toMatchObject({ queued: true });
+    stop();
+    await Bun.sleep(5);
+    __resetGovernorForTests();
+  }
+});
+
+test("Q8 never lets a picture flex admission leave less than 16 GiB free", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 35 * GB, tier: "p128" });
+  expect(await admit({ id: "picture-floor", role: "image", kind: "generator", class: "warm", requestedBytes: 20 * GB })).toMatchObject({ queued: true });
+});
+
+test("Q8 release after a failed picture returns the band", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 39 * GB, tier: "p128" });
+  const failedPicture = await admit({ id: "picture-failed", role: "image", kind: "generator", class: "warm", requestedBytes: 20 * GB }) as GovernorHandle;
+  const waitingPicture = await admit({ id: "picture-waiting", role: "image", kind: "generator", class: "warm", requestedBytes: 20 * GB });
+  expect(waitingPicture).toMatchObject({ queued: true });
+  release(failedPicture);
+  expect(await (waitingPicture as { admitted: Promise<unknown> }).admitted).toMatchObject({ id: "picture-waiting" });
+});
+
 test("a fitting queued request stays queued beyond ten minutes and admits when memory frees", async () => {
   let now = Date.parse("2026-10-25T12:00:00.000Z");
   let free = 10 * GB;
