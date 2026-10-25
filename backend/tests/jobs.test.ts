@@ -1,9 +1,66 @@
-import { beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
 import { app } from "@/app";
 import { __resetEventsForTests, eventsAfter } from "@/lib/events";
-import { __resetJobsForTests, cancelJob, createJob, finishJob, getJob, jobSignal, registerJobRunner, submitJob, updateJob } from "@/lib/jobs";
+import { __resetJobsForTests, __setJobQueueTimingForTests, cancelJob, createJob, finishJob, getJob, jobSignal, registerJobRunner, submitJob, updateJob, waitForJob } from "@/lib/jobs";
+import { heavyGate } from "@/lib/heavyGate";
+import { __resetGovernorForTests } from "@/lib/governor";
+import { __resetMemoryStateForTests, memoryLevel, setMemoryLevel } from "@/lib/memoryState";
 
-beforeEach(() => { __resetJobsForTests(); __resetEventsForTests(); });
+beforeEach(() => { __resetJobsForTests(); __resetEventsForTests(); __resetGovernorForTests(); __resetMemoryStateForTests(); heavyGate.reset(); });
+afterEach(() => { __setJobQueueTimingForTests(null); heavyGate.reset(); });
+
+test("a queued generator waits for interactive work and its four second tail", async () => {
+  let now = 0;
+  const sleepers: Array<() => void> = [];
+  __setJobQueueTimingForTests({ now: () => now, sleep: (ms) => new Promise((resolve) => sleepers.push(() => { now += ms; resolve(); })) });
+  let started = false;
+  registerJobRunner("image", async () => { started = true; return {}; }, { generator: { role: "image", memory: () => ({ requestedBytes: 1 }) } });
+  const end = heavyGate.begin("chat");
+  const submitted = submitJob({ kind: "image", role: "image" });
+  if ("refused" in submitted) throw new Error(submitted.reason);
+  await Promise.resolve();
+  expect(getJob(submitted.job.id)?.state).toBe("queued");
+  end();
+  const advance = async (ms: number) => {
+    while (now < ms) {
+      await Promise.resolve();
+      const next = sleepers.shift();
+      if (!next) return;
+      next();
+      await Promise.resolve(); await Promise.resolve();
+    }
+  };
+  await advance(3999);
+  expect(started).toBe(false);
+  expect(getJob(submitted.job.id)?.state).toBe("queued");
+  await advance(4100);
+  await waitForJob(submitted.job.id, 200);
+  expect(started).toBe(true);
+  expect(getJob(submitted.job.id)?.state).toBe("done");
+});
+
+test("a queued generator stays queued at WARN and starts when memory returns to normal", async () => {
+  let now = 0;
+  const sleepers: Array<() => void> = [];
+  __setJobQueueTimingForTests({ now: () => now, sleep: (ms) => new Promise((resolve) => sleepers.push(() => { now += ms; resolve(); })) });
+  let started = false;
+  registerJobRunner("image", async () => { started = true; return {}; }, { generator: { role: "image", memory: () => ({ requestedBytes: 1 }) } });
+  setMemoryLevel("warn");
+  const submitted = submitJob({ kind: "image", role: "image" });
+  if ("refused" in submitted) throw new Error(submitted.reason);
+  await Promise.resolve();
+  expect(getJob(submitted.job.id)?.state).toBe("queued");
+  expect(started).toBe(false);
+  setMemoryLevel("normal");
+  for (let i = 0; i < 161 && !started; i += 1) {
+    await Promise.resolve();
+    sleepers.shift()?.();
+    await Promise.resolve(); await Promise.resolve();
+  }
+  await waitForJob(submitted.job.id, 200);
+  expect(getJob(submitted.job.id)?.state).toBe("done");
+  expect(started).toBe(true);
+});
 
 test("a kind with no runner is refused with a reason, not left queued", async () => {
   const result = submitJob({ kind: "image", role: "image" });

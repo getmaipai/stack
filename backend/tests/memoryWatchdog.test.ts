@@ -170,14 +170,15 @@ function watchdogWith(sampler: ReturnType<typeof fakeSampler>, actions = fakeAct
   return { dog, advance: (ms: number) => { clock += ms; }, actions };
 }
 
-test("WARN refuses new work, cancels queued jobs and unloads idle workers; it never cancels the running job", async () => {
+test("WARN holds queued jobs and unloads idle workers; it never cancels queued or running jobs", async () => {
   const sampler = fakeSampler();
   const { dog, actions } = watchdogWith(sampler);
   actions.queued.push("job-q"); actions.running.push("job-r");
   sampler.next = sample({ pressureLevel: 2, pressure: "warn", availableBytes: 40 * GB });
   await dog.tick(); await dog.tick();
   expect(memoryLevel()).toBe("warn");
-  expect(actions.log).toContain("cancel-queued");
+  expect(actions.log).not.toContain("cancel-queued");
+  expect(actions.queued).toEqual(["job-q"]);
   expect(actions.log).toContain("unload-idle");
   expect(actions.log).not.toContain("cancel-running");
   expect(actions.log).not.toContain("evict-judge");

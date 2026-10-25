@@ -10,8 +10,8 @@
 import { emit } from "@/lib/events";
 import { noteComponentUse } from "@/lib/componentUse";
 import { admit, generatorsHeldByMode, getGovernorStatus, getRunState, peakFor, release, withdraw, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
-import { heavyGate } from "@/lib/heavyGate";
-import { PAUSED_LOW_MEMORY, waitingText, WatchdogRules } from "@/lib/memoryState";
+import { heavyGate, isolationRules } from "@/lib/heavyGate";
+import { memoryLevel, PAUSED_LOW_MEMORY, waitingText, WatchdogRules } from "@/lib/memoryState";
 import { StackJob, StackJobState } from "@maipai/spec/stack/ts/stack-job.js";
 
 export const JobStateSchema = StackJobState;
@@ -64,12 +64,42 @@ const runners = new Map<string, RegisteredRunner>();
 const queues = new Map<string, Job[]>();
 /** The generator job in flight per role, if any. */
 const inFlight = new Map<string, string>();
+const pumping = new Set<string>();
 /** Queued jobs per idle lane, the job running on each lane, and the settle function that frees a running job's lane (callable once). */
 const laneQueues = new Map<string, Job[]>();
 const laneRunning = new Map<string, string>();
 const laneSettles = new Map<string, () => void>();
 const laneTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const KEEP_FINISHED = 200;
+let queueNow = Date.now;
+let queueSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Test clock for the start-rule wait. */
+export function __setJobQueueTimingForTests(options: { now?: () => number; sleep?: (ms: number) => Promise<void> } | null): void {
+  queueNow = options?.now ?? Date.now;
+  queueSleep = options?.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+}
+
+async function waitToStart(role: string): Promise<void> {
+  let quietSince: number | null = null;
+  let observedInteractive = false;
+  while (true) {
+    if (!(queues.get(role)?.length)) return;
+    const interactive = heavyGate.status().interactive_in_flight > 0;
+    if (interactive) observedInteractive = true;
+    const level = memoryLevel();
+    if (level !== "normal" || interactive) {
+      quietSince = null;
+      await queueSleep(25);
+      continue;
+    }
+    if (!observedInteractive) return;
+    if (quietSince === null) quietSince = queueNow();
+    const remaining = isolationRules.tailMs() - (queueNow() - quietSince);
+    if (remaining <= 0) return;
+    await queueSleep(Math.min(25, remaining));
+  }
+}
 
 /** ISOLATION-01: the job card's stage string while the Stack has stopped the worker so a chat or voice request runs at full speed (rule S6: the existing status field, no new surface). */
 export const PAUSED_FOR_CHAT = "paused: chat";
@@ -240,7 +270,14 @@ export class NoMemoryError extends Error {
  * governor's reason when refused or paused, and releases the admission
  * however the run ends. */
 async function pump(role: string): Promise<void> {
-  if (inFlight.has(role)) return;
+  if (inFlight.has(role) || pumping.has(role)) return;
+  if (!(queues.get(role)?.length)) return;
+  if (heavyGate.status().interactive_in_flight > 0 || memoryLevel() !== "normal") {
+    pumping.add(role);
+    await waitToStart(role);
+    pumping.delete(role);
+    if (inFlight.has(role)) return;
+  }
   const queue = queues.get(role) ?? [];
   const next = queue.shift();
   if (!next) return;
@@ -411,6 +448,7 @@ export async function waitForJob(id: string, timeoutMs: number): Promise<Job | n
 export function __resetJobsForTests(): void {
   for (const controller of controllers.values()) controller.abort();
   for (const timer of laneTimers.values()) clearTimeout(timer);
-  controllers.clear(); pausedJobs.clear(); jobs.clear(); runners.clear(); queues.clear(); inFlight.clear();
+  controllers.clear(); pausedJobs.clear(); jobs.clear(); runners.clear(); queues.clear(); inFlight.clear(); pumping.clear();
+  __setJobQueueTimingForTests(null);
   laneQueues.clear(); laneRunning.clear(); laneSettles.clear(); laneTimers.clear();
 }

@@ -311,8 +311,6 @@ export class MemoryWatchdog {
     if (now - this.lastActionAt < 10_000 && level !== "critical") return;
     const reason = "Paused: this computer is low on memory. Try again once it recovers.";
     if (level === "warn") {
-      const queued = this.actions.cancelQueued(reason);
-      if (queued.length > 0) this.record(level, "cancel-queued", `${queued.length} queued job(s) cancelled`);
       const stopped = await this.actions.unloadIdleWorkers();
       if (stopped.length > 0) this.record(level, "unload-idle", stopped.join(", "));
       this.lastActionAt = now;
