@@ -119,6 +119,10 @@
       "download_bytes": 107600538,
       "installed_bytes": 232393984
     },
+    "parakeet-tdt-0.6b-v2-int8": {
+      "download_bytes": 482468385,
+      "installed_bytes": 661190513
+    },
     "silero-vad": {
       "download_bytes": 643854,
       "installed_bytes": 643854
