@@ -16,18 +16,18 @@
     "p32.needed_bytes": 28503105738,
     "p32.home_required_free_bytes": 3176323277,
     "p32.ai_required_free_bytes": 30604414790,
-    "p64.required_free_bytes": 116277236370,
-    "p64.minimum_required_free_bytes": 34279601493,
-    "p64.everything_required_free_bytes": 158008873464,
-    "p64.needed_bytes": 97440963613,
+    "p64.required_free_bytes": 117553133371,
+    "p64.minimum_required_free_bytes": 35555498494,
+    "p64.everything_required_free_bytes": 159284770465,
+    "p64.needed_bytes": 98584622511,
     "p64.home_required_free_bytes": 3176323277,
-    "p64.ai_required_free_bytes": 113100913094,
-    "p128.required_free_bytes": 206647979285,
-    "p128.minimum_required_free_bytes": 34279601493,
-    "p128.everything_required_free_bytes": 316839623212,
-    "p128.needed_bytes": 172876379819,
+    "p64.ai_required_free_bytes": 114376810094,
+    "p128.required_free_bytes": 207923876286,
+    "p128.minimum_required_free_bytes": 35555498494,
+    "p128.everything_required_free_bytes": 318115520212,
+    "p128.needed_bytes": 174020038717,
     "p128.home_required_free_bytes": 3176323277,
-    "p128.ai_required_free_bytes": 203471656008
+    "p128.ai_required_free_bytes": 204747553009
   },
   "tiers": {
     "p16": {
@@ -663,12 +663,13 @@
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 108244392,
-          "installed_bytes": 233037838,
-          "peak_temp_bytes": 107600538,
+          "download_bytes": 590712777,
+          "installed_bytes": 894228351,
+          "peak_temp_bytes": 590068923,
           "model_ids": [
-            "moonshine-tiny-en-int8",
-            "silero-vad"
+            "parakeet-tdt-0.6b-v2-int8",
+            "silero-vad",
+            "moonshine-tiny-en-int8"
           ],
           "engines": [],
           "installed": false,
@@ -974,25 +975,25 @@
         }
       ],
       "default": {
-        "download_bytes": 92017370704,
-        "installed_bytes": 94181363785,
-        "peak_temp_bytes": 3259599828,
-        "needed_bytes": 97440963613,
-        "required_free_bytes": 116277236370
+        "download_bytes": 92499839089,
+        "installed_bytes": 94842554298,
+        "peak_temp_bytes": 3742068213,
+        "needed_bytes": 98584622511,
+        "required_free_bytes": 117553133371
       },
       "minimum": {
-        "download_bytes": 25529840047,
-        "installed_bytes": 27043509565,
-        "peak_temp_bytes": 1827390015,
-        "needed_bytes": 28870899580,
-        "required_free_bytes": 34279601493
+        "download_bytes": 26012308432,
+        "installed_bytes": 27704700078,
+        "peak_temp_bytes": 2309858400,
+        "needed_bytes": 30014558478,
+        "required_free_bytes": 35555498494
       },
       "everything": {
-        "download_bytes": 124602707981,
-        "installed_bytes": 127562936469,
-        "peak_temp_bytes": 4933349701,
-        "needed_bytes": 132496286170,
-        "required_free_bytes": 158008873464
+        "download_bytes": 125085176366,
+        "installed_bytes": 128224126982,
+        "peak_temp_bytes": 5415818086,
+        "needed_bytes": 133639945068,
+        "required_free_bytes": 159284770465
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -1146,12 +1147,13 @@
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 108244392,
-          "installed_bytes": 233037838,
-          "peak_temp_bytes": 107600538,
+          "download_bytes": 590712777,
+          "installed_bytes": 894228351,
+          "peak_temp_bytes": 590068923,
           "model_ids": [
-            "moonshine-tiny-en-int8",
-            "silero-vad"
+            "parakeet-tdt-0.6b-v2-int8",
+            "silero-vad",
+            "moonshine-tiny-en-int8"
           ],
           "engines": [],
           "installed": false,
@@ -1550,25 +1552,25 @@
         }
       ],
       "default": {
-        "download_bytes": 166349463774,
-        "installed_bytes": 168857997328,
-        "peak_temp_bytes": 4018382491,
-        "needed_bytes": 172876379819,
-        "required_free_bytes": 206647979285
+        "download_bytes": 166831932159,
+        "installed_bytes": 169519187841,
+        "peak_temp_bytes": 4500850876,
+        "needed_bytes": 174020038717,
+        "required_free_bytes": 207923876286
       },
       "minimum": {
-        "download_bytes": 25529840047,
-        "installed_bytes": 27043509565,
-        "peak_temp_bytes": 1827390015,
-        "needed_bytes": 28870899580,
-        "required_free_bytes": 34279601493
+        "download_bytes": 26012308432,
+        "installed_bytes": 27704700078,
+        "peak_temp_bytes": 2309858400,
+        "needed_bytes": 30014558478,
+        "required_free_bytes": 35555498494
       },
       "everything": {
-        "download_bytes": 255984806745,
-        "installed_bytes": 259289575706,
-        "peak_temp_bytes": 5692132364,
-        "needed_bytes": 264981708070,
-        "required_free_bytes": 316839623212
+        "download_bytes": 256467275130,
+        "installed_bytes": 259950766219,
+        "peak_temp_bytes": 6174600749,
+        "needed_bytes": 266125366968,
+        "required_free_bytes": 318115520212
       },
       "measured_on": "2026-10-17",
       "default_selected": [

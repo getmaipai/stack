@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { buildInstallPlan } from "@/lib/installPlan";
 import { primaryBudgetBytes, sizingMemory, type HardwareInfo } from "@/lib/hardware";
-import { proposeProfile } from "@/profiles";
+import { proposeProfile, PROFILE_MODEL_BINDINGS } from "@/profiles";
 import { STACK_MODELS } from "@/lib/modelCatalog";
 import { app } from "@/app";
 
@@ -70,7 +70,7 @@ test("plan: the starter is first, then chat, stt, tts, embed, judge", () => {
   const plan = buildInstallPlan(hw({ unifiedMemoryGb: 64, totalRamGb: 64 }));
   expect(plan.models[0]).toMatchObject({ id: "qwen3-1.7b-q8-0", starter: true });
   expect(plan.models.filter((model) => model.starter)).toHaveLength(1);
-  expect(plan.models.filter((model) => !model.component).map((model) => model.role)).toEqual(["chat", "chat", "stt", "tts", "tts", "embed", "judge", "coding"]);
+  expect(plan.models.filter((model) => !model.component).map((model) => model.role)).toEqual(["chat", "chat", "stt", "stt", "tts", "tts", "embed", "judge", "coding"]);
   // STACK-MUSE-01: above 24 GB the bound chat is Muse Glimmer 30B, so the
   // 8B is not in this plan at all.
   expect(plan.models[1]).toMatchObject({ id: "muse-glimmer-30b-q4-k-xl", starter: false });
@@ -158,4 +158,14 @@ test("route: the plan's coding model carries removable: true in the response", a
   // The route sizes from the real machine first; the override only applies when none is detected, so assert the shape either way.
   for (const entry of entries) expect(entry.removable).toBe(true);
   expect(body.models.filter((model) => model.removable).every((model) => model.id === "qwen3.8-27b-ud-q4-k-m" || model.id === "qwen3.8-27b-dflash2-draft")).toBe(true);
+});
+
+test("plan: stt is Parakeet with Moonshine beside it as the fallback on p64 and p128, Moonshine alone on p16 and p32 (STT-PARAKEET-03)", () => {
+  const sttIds = (gb: number) => buildInstallPlan(hw({ unifiedMemoryGb: gb, totalRamGb: gb })).models.filter((model) => model.role === "stt" && !model.component).map((model) => model.id);
+  expect(sttIds(16)).toEqual(["moonshine-tiny-en-int8"]);
+  expect(sttIds(32)).toEqual(["moonshine-tiny-en-int8"]);
+  expect(sttIds(64)).toEqual(["parakeet-tdt-0.6b-v2-int8", "moonshine-tiny-en-int8"]);
+  expect(sttIds(128)).toEqual(["parakeet-tdt-0.6b-v2-int8", "moonshine-tiny-en-int8"]);
+  for (const gb of [16, 32, 64, 128]) expect(buildInstallPlan(hw({ unifiedMemoryGb: gb, totalRamGb: gb })).models.filter((model) => model.id === "silero-vad")).toHaveLength(1);
+  expect(Object.entries(PROFILE_MODEL_BINDINGS).map(([tier, bound]) => [tier, bound?.stt])).toEqual([["p16", "moonshine-tiny-en-int8"], ["p32", "moonshine-tiny-en-int8"], ["p64", "parakeet-tdt-0.6b-v2-int8"], ["p128", "parakeet-tdt-0.6b-v2-int8"]]);
 });

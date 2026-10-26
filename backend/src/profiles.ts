@@ -79,10 +79,10 @@ export const PROFILE_TIERS: ProfileTier[] = [
  * model from p64 (CODE-STACK-01 S1): Qwen3.8-27B at UD-Q4_K_M, loaded only
  * while someone is coding; p16 and p32 have no coding. */
 export const PROFILE_MODEL_BINDINGS: Partial<Record<ProfileTier["id"], Partial<Record<RoleId, string>>>> = {
-  p16: { chat: "qwen3-8b-instruct-q4-k-m" },
-  p32: { chat: "muse-glimmer-30b-q4-k-m", judge: "qwen3-4b-q4-k-m" },
-  p64: { chat: "muse-glimmer-30b-q4-k-xl", judge: "qwen3-4b-q4-k-m", coding: "qwen3.8-27b-ud-q4-k-m" },
-  p128: { chat: "muse-glimmer-30b-q4-k-xl", judge: "qwen3-4b-q4-k-m", coding: "qwen3.8-27b-ud-q4-k-m" },
+  p16: { chat: "qwen3-8b-instruct-q4-k-m", stt: "moonshine-tiny-en-int8" },
+  p32: { chat: "muse-glimmer-30b-q4-k-m", judge: "qwen3-4b-q4-k-m", stt: "moonshine-tiny-en-int8" },
+  p64: { chat: "muse-glimmer-30b-q4-k-xl", judge: "qwen3-4b-q4-k-m", coding: "qwen3.8-27b-ud-q4-k-m", stt: "parakeet-tdt-0.6b-v2-int8" },
+  p128: { chat: "muse-glimmer-30b-q4-k-xl", judge: "qwen3-4b-q4-k-m", coding: "qwen3.8-27b-ud-q4-k-m", stt: "parakeet-tdt-0.6b-v2-int8" },
 };
 
 /** The tier this machine's sizing memory (see `sizingMemory`) clears, and

@@ -24,3 +24,4 @@ repo redistributes are listed here as they are added.
 The Stack downloads a pinned release at run time and does not vendor it.
 - ajv (MIT) - https://ajv.js.org (validating the wire-shape fixtures against their JSON Schemas in the test suite)
 - ajv-formats (MIT) - https://github.com/ajv-validator/ajv-formats (the date-time format for those schemas)
+- Parakeet TDT 0.6B v2 (NVIDIA, CC-BY-4.0) - https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2 (the speech-to-text model for the 64 GB and 128 GB tiers, converted for sherpa-onnx by k2-fsa; downloaded at run time, not vendored)
