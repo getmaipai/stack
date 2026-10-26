@@ -21,7 +21,7 @@ import { raise, resolve as resolveHealth } from "@/lib/health";
 import { logger } from "@/lib/log";
 import { listJobs, runningGeneratorKinds } from "@/lib/jobs";
 import { lowMemoryRefusal } from "@/lib/memoryState";
-import { classifyCrash, type CrashVerdict } from "@/lib/crashClassifier";
+import { classifyCrash, HOST_FAULT_VERDICT, isHostFault, type CrashVerdict } from "@/lib/crashClassifier";
 import { getRunState } from "@/lib/governor";
 import { settingValues } from "@/settings";
 import { healStart, recycleRole, isStoppingAll, offlineRolesWithoutProcess, roleGeneration, roleHasProcess, roleManuallyStopped, setCrashListener, setRestartListener, type CrashReport } from "@/lib/supervisor";
@@ -36,6 +36,8 @@ export const SELF_HEAL_RULES = {
   healthyResetMs: 10 * 60_000,
   /** How often a restart that is held back (install, low memory) looks again. */
   gateRecheckMs: 15_000,
+  /** How often a restart held back by a host fault (the Metal compiler not answering) looks again. */
+  hostFaultRecheckMs: 60_000,
   /** How often the sweep looks for a role that is offline with no process. */
   sweepMs: 20_000,
 } as const;
@@ -206,10 +208,18 @@ export function onEngineCrash(report: CrashReport): void {
   heal.crashedAt ??= now;
   heal.verdict = report.verdict;
   heal.tail = report.stderrTail;
+  if (report.verdict.kind === "host_fault") { waitForHost(report.role, heal, report.verdict); return; }
   heal.failures.push(now);
   if (heal.open) return;
   if (!report.verdict.retryHelps) { openCircuit(report.role, heal, "Starting it again would fail the same way."); return; }
   afterFailure(report.role, heal, now);
+}
+
+/** The host, not the engine, is at fault: no failure is counted and the circuit stays closed; the restart waits and tries again. */
+function waitForHost(role: RoleId, heal: RoleHeal, verdict: CrashVerdict): void {
+  if (heal.open) return;
+  raiseWaiting(role, verdict, `The Stack waits for it and tries again every ${seconds(rules.hostFaultRecheckMs)}.`);
+  schedule(role, heal, rules.hostFaultRecheckMs);
 }
 
 function enqueue(role: RoleId): Promise<void> {
@@ -240,6 +250,11 @@ async function attempt(role: RoleId): Promise<void> {
       heal.crashedAt = null;
       resolveHealth(itemCode(role));
       record({ id: `${role}:${crashedAt}:healed`, kind: "healed", at: new Date(now).toISOString(), role, cause: heal.verdict?.cause ?? "", causeKind: heal.verdict?.kind ?? "unknown", seconds: Math.max(0, Math.round((now - crashedAt) / 1000)), crashedAt: new Date(crashedAt).toISOString(), attempts: heal.failures.length });
+      return;
+    }
+    if (isHostFault(result.reason)) {
+      heal.verdict = HOST_FAULT_VERDICT;
+      if (roleGeneration(role) === heal.generation) waitForHost(role, heal, heal.verdict);
       return;
     }
     heal.failures.push(now);

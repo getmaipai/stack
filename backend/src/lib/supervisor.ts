@@ -44,6 +44,7 @@ import { MLX_PREFIX_CACHE_FLAG, mlxHeadroomBytes } from "@/lib/mlxMemory";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { ROLES, ROLE_IDS, type RoleId, type RoleState } from "@/roles";
 import { getMemoryReader } from "@/lib/memory";
+import { metalHostFault } from "@/lib/hostProbe";
 import { classifyCrash, describeStartFailure, stderrEvidence, type CrashVerdict } from "@/lib/crashClassifier";
 import { memoryLevel } from "@/lib/memoryState";
 import { hfHubRoot } from "@/lib/store/layout";
@@ -1505,6 +1506,14 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   const port = await findFreePort();
   let plan: LaunchPlan;
   try { plan = await launchPlan(role, model, port, contextLength); } catch (error) { release(admission); throw error; }
+  // A host that cannot compile a Metal shader fails every Metal engine start; say so once, before spawning.
+  const hostFault = await metalHostFault(plan.engine);
+  if (hostFault) {
+    release(admission);
+    emit({ id: "engine.state", data: { engine: role, state: "offline", reason: hostFault } });
+    logger.appendLine(JSON.stringify({ event: "engine.exit", role, phase: "host-probe", cause: hostFault }));
+    throw new EngineUnavailableError(hostFault);
+  }
   const spawnEngine = () => {
     try {
       return Bun.spawn(plan.command, { stdout: "ignore", stderr: "pipe", stdin: plan.stdin, env: plan.env ?? { ...process.env, HF_HUB_CACHE: hfHubRoot } });

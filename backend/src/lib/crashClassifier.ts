@@ -2,7 +2,7 @@
 // person can act on. The inputs are only what the Stack saw: the exit
 // code, the signal, the last stderr lines, and the machine's memory level
 // at that moment. An unknown cause says it is unknown; it never guesses.
-export type CrashKind = "out_of_memory" | "killed" | "missing_file" | "port_in_use" | "bad_config" | "unknown";
+export type CrashKind = "out_of_memory" | "killed" | "missing_file" | "port_in_use" | "bad_config" | "host_fault" | "unknown";
 
 export interface CrashEvidence {
   exitCode: number | null;
@@ -27,8 +27,17 @@ const MISSING = /no such file or directory|file not found|failed to open|cannot 
 const PORT = /address already in use|EADDRINUSE|failed to bind|bind failed|port .* in use/i;
 const CONFIG = /invalid (argument|option|value)|unknown (argument|option|flag)|unrecognized (argument|option)|error: argument|usage:|bad config|unsupported (architecture|model)/i;
 
+export const METAL_COMPILER_SENTENCE = "The Mac's graphics compiler is not responding. Restart the Mac, then chat starts again on its own.";
+const METAL_COMPILER = /MTLCompilerService|ggml_metal_library/i;
+
+/** True when a failure reason is the host's fault: waiting for the host, not retrying, is the fix. */
+export const isHostFault = (reason: string): boolean => reason.startsWith(METAL_COMPILER_SENTENCE);
+
+export const HOST_FAULT_VERDICT: CrashVerdict = { kind: "host_fault", cause: METAL_COMPILER_SENTENCE, fix: "Restart the Mac; the Stack tries again by itself once the compiler answers.", retryHelps: true };
+
 export function classifyCrash(evidence: CrashEvidence): CrashVerdict {
   const text = evidence.stderrTail.join("\n");
+  if (METAL_COMPILER.test(text)) return HOST_FAULT_VERDICT;
   const signal = evidence.signal?.toUpperCase() ?? null;
   const killedBySignal = signal === "SIGKILL" || evidence.exitCode === 137;
   if (OOM.test(text) || (killedBySignal && evidence.memoryLevel && evidence.memoryLevel !== "normal")) {
@@ -43,7 +52,6 @@ export function classifyCrash(evidence: CrashEvidence): CrashVerdict {
   return { kind: "unknown", cause: `The engine stopped on its own${evidence.exitCode !== null ? ` (exit code ${evidence.exitCode})` : signal ? ` (${signal})` : ""} and left no clear reason.`, fix: "The engine restarts itself; the last log lines are in the details.", retryHelps: true };
 }
 
-const METAL_COMPILER = /MTLCompilerService|ggml_metal_library/i;
 const ERROR_LINE = /(^|\s)E\s|error|failed|unable to/i;
 const FIRST_ERRORS = 5;
 const TAIL_LINES = 5;
@@ -62,7 +70,7 @@ export function stderrEvidence(stderr: string, tailLines = TAIL_LINES, firstErro
 
 /** Why an engine that exited before becoming healthy did so: a known cause in one sentence, else the exit code with the first errors and the tail. */
 export function describeStartFailure(exitCode: number | string | null, stderr: string): string {
-  if (METAL_COMPILER.test(stderr)) return "The Mac's graphics compiler is not responding. Restart the Mac, then chat starts again on its own.";
+  if (METAL_COMPILER.test(stderr)) return METAL_COMPILER_SENTENCE;
   if (OOM.test(stderr)) return "The computer ran out of memory while the engine was loading. Close big apps or choose a smaller model; the engine starts again once memory recovers.";
   const lines = stderrEvidence(stderr).join(" | ");
   const text = `Engine exited before becoming healthy (code ${exitCode})${lines ? `: ${lines}` : "."}`;

@@ -20,6 +20,10 @@ import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { afterEach } from "bun:test";
 import { GOVERNOR_MEMORY_DEFAULT } from "./governorMemoryDefault";
+import { setMetalProbeForTests } from "../src/lib/hostProbe";
+
+// A test run never asks the real Metal compiler.
+setMetalProbeForTests(async () => null);
 
 const tmpRoot = realpathSync(tmpdir());
 const scratchRoot = resolve(import.meta.dir, "..", "data-test");
