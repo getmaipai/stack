@@ -69,9 +69,19 @@ export function stderrEvidence(stderr: string, tailLines = TAIL_LINES, firstErro
 }
 
 /** Why an engine that exited before becoming healthy did so: a known cause in one sentence, else the exit code with the first errors and the tail. */
+const OOM_START_SENTENCE = "The computer ran out of memory while the engine was loading. Close big apps or choose a smaller model; the engine starts again once memory recovers.";
+
+/** The reason itself when it is one of the classified plain sentences Home may show as written, else null (raw engine text never qualifies). */
+export function plainReasonOf(reason: string | null | undefined): string | null {
+  if (!reason) return null;
+  if (reason.startsWith(METAL_COMPILER_SENTENCE)) return METAL_COMPILER_SENTENCE;
+  if (reason.startsWith(OOM_START_SENTENCE)) return OOM_START_SENTENCE;
+  return null;
+}
+
 export function describeStartFailure(exitCode: number | string | null, stderr: string): string {
   if (METAL_COMPILER.test(stderr)) return METAL_COMPILER_SENTENCE;
-  if (OOM.test(stderr)) return "The computer ran out of memory while the engine was loading. Close big apps or choose a smaller model; the engine starts again once memory recovers.";
+  if (OOM.test(stderr)) return OOM_START_SENTENCE;
   const lines = stderrEvidence(stderr).join(" | ");
   const text = `Engine exited before becoming healthy (code ${exitCode})${lines ? `: ${lines}` : "."}`;
   return text.length > REASON_MAX ? `${text.slice(0, REASON_MAX)}…` : text;

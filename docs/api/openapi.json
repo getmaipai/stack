@@ -5678,6 +5678,11 @@
                               "percent"
                             ]
                           },
+                          "plain_reason": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "The offline reason as one classified plain sentence (the Mac's graphics compiler not answering, or out of memory), safe to show as written; null for every other reason. `state.reason` keeps the raw reason."
+                          },
                           "check": {
                             "type": "object",
                             "properties": {
@@ -5824,6 +5829,7 @@
                           "state",
                           "reason",
                           "pending_install",
+                          "plain_reason",
                           "check",
                           "identity"
                         ]
