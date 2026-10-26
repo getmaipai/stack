@@ -70,21 +70,21 @@ test("home and AI parts add up to the whole within a byte per part", () => {
   }
 });
 
-test("tiers: p16 and p32 have no generators, p64 has Klein and ERNIE, p128 adds Z-Image and video as optional extras", () => {
+test("tiers: p16 and p32 have no generators, p64 has Klein and ERNIE, p128 adds Z-Image and Quick video; Detailed video is an optional extra", () => {
   const ids = (tier: string) => buildDiskPlan(PROFILE_TIERS.find((t) => t.id === tier)!).rows.map((row) => row.id);
   for (const tier of ["p16", "p32"]) for (const id of ["pictures", "pictures-ernie", "pictures-zimage", "video", "voice-better"]) expect(ids(tier)).not.toContain(id);
   expect(ids("p64")).toContain("pictures");
   expect(ids("p64")).toContain("pictures-ernie");
   expect(ids("p64")).toContain("voice-better");
-  for (const id of ["pictures-zimage", "video"]) expect(ids("p64")).not.toContain(id);
+  for (const id of ["pictures-zimage", "video", "video-detailed"]) expect(ids("p64")).not.toContain(id);
   const p128 = buildDiskPlan(PROFILE_TIERS.find((t) => t.id === "p128")!);
-  for (const id of ["pictures-zimage", "video"]) { const row = p128.rows.find((r) => r.id === id)!; expect(row.need).toBe("optional"); expect(p128.default_selected).not.toContain(id); }
-  expect(p128.rows.find((r) => r.id === "pictures")!.need).toBe("recommended");
+  for (const id of ["pictures-zimage", "video-detailed"]) { const row = p128.rows.find((r) => r.id === id)!; expect(row.need).toBe("optional"); expect(p128.default_selected).not.toContain(id); }
+  expect(p128.rows.find((r) => r.id === "pictures")!.need).toBe("required");
   for (const tier of ["p64", "p128"]) {
     const plan = buildDiskPlan(PROFILE_TIERS.find((candidate) => candidate.id === tier)!);
     const klein = plan.rows.find((row) => row.id === "pictures")!;
     const ernie = plan.rows.find((row) => row.id === "pictures-ernie")!;
-    expect(klein).toMatchObject({ label: "Change pictures (FLUX.2 Klein)", note: "Recommended. Edits the pictures you already have, and makes new ones when ERNIE is not installed.", need: "recommended" });
+    expect(klein).toMatchObject({ label: "Change pictures (FLUX.2 Klein)", note: "Needed. Edits the pictures you already have, and makes new ones when ERNIE is not installed.", need: "required" });
     expect(ernie).toMatchObject({ label: "Make pictures (ERNIE)", note: "Recommended. Draws words in pictures correctly. Makes new pictures from a sentence.", need: "recommended" });
     expect(plan.default_selected).toContain("pictures");
     expect(plan.default_selected).toContain("pictures-ernie");
@@ -104,13 +104,14 @@ test("turning an optional row on or off moves the total by that row and its engi
   const base = diskTotalsFor(plan, plan.default_selected);
   const video = plan.rows.find((r) => r.id === "video")!;
   const videoEngine = plan.rows.find((r) => r.id === "engine:video")!;
-  const withVideo = diskTotalsFor(plan, [...plan.default_selected, "video"]);
-  // Detailed video is on by default and brings the video engine, so Quick video adds only its own weights.
-  expect(plan.default_selected).toContain("video-detailed");
-  expect(withVideo.installed_bytes - base.installed_bytes).toBe(video.installed_bytes);
-  const noDetailed = diskTotalsFor(plan, plan.default_selected.filter((id) => id !== "video-detailed"));
-  const withBoth = diskTotalsFor(plan, [...plan.default_selected.filter((id) => id !== "video-detailed"), "video"]);
-  expect(withBoth.installed_bytes - noDetailed.installed_bytes).toBe(video.installed_bytes + videoEngine.installed_bytes);
+  const detailed = plan.rows.find((r) => r.id === "video-detailed")!;
+  // Quick video is on by default and brings the video engine, so Detailed video adds only its own weights.
+  expect(plan.default_selected).toContain("video");
+  const withDetailed = diskTotalsFor(plan, [...plan.default_selected, "video-detailed"]);
+  expect(withDetailed.installed_bytes - base.installed_bytes).toBe(detailed.installed_bytes);
+  const noVideo = diskTotalsFor(plan, plan.default_selected.filter((id) => id !== "video"));
+  const withBoth = diskTotalsFor(plan, [...plan.default_selected.filter((id) => id !== "video"), "video-detailed"]);
+  expect(withBoth.installed_bytes - noVideo.installed_bytes).toBe(detailed.installed_bytes + videoEngine.installed_bytes);
   const zimage = plan.rows.find((r) => r.id === "pictures-zimage")!;
   const withZ = diskTotalsFor(plan, [...plan.default_selected, "pictures-zimage"]);
   expect(withZ.installed_bytes - base.installed_bytes).toBe(zimage.installed_bytes); // the picture engine is already counted for Klein
@@ -128,7 +129,9 @@ test("rows already on this computer are marked installed", () => {
   const ids = plannedPinsFor(tier).map((entry) => entry.pin.id);
   const plan = buildDiskPlan(tier, ids);
   expect(plan.rows.find((r) => r.id === "chat")!.installed).toBe(true);
-  expect(plan.rows.find((r) => r.id === "pictures")!.installed).toBe(false);
+  // Klein is in the first-run plan on p64 (a required row), ERNIE is not.
+  expect(plan.rows.find((r) => r.id === "pictures")!.installed).toBe(true);
+  expect(plan.rows.find((r) => r.id === "pictures-ernie")!.installed).toBe(false);
 });
 
 test("the shipped export (docs/disk-plan.json) matches the code: bun run gen:disk-plan", () => {
@@ -143,12 +146,19 @@ test("route: the install plan carries the disk plan for its tier", async () => {
   expect(body.disk?.tier).toBe(body.tier!);
   expect(body.disk?.rows.map((row) => row.id)).toContain("chat");
   expect(body.disk!.default.required_free_bytes).toBeGreaterThan(10 * GB);
-  // Every picture and video row's pins are offered as pull bodies, none of them in the first-run models.
   const full = body as unknown as { models: Array<{ id: string }>; optional_models: Array<{ id: string }>; disk: { rows: Array<{ id: string; model_ids: string[] }> } };
+  // Every picture and video row's pins are offered as pull bodies.
   for (const id of ["pictures", "pictures-ernie", "pictures-zimage", "video"]) {
     const row = full.disk.rows.find((candidate) => candidate.id === id);
     if (!row) continue;
     expect(full.optional_models.map((m) => m.id).sort()).toEqual(expect.arrayContaining(row.model_ids.slice().sort()));
+  }
+  // Klein is required, so its pins are in the first-run models on a tier that has image; the other generator rows are not.
+  const klein = full.disk.rows.find((candidate) => candidate.id === "pictures");
+  if (klein) for (const modelId of klein.model_ids) expect(full.models.map((m) => m.id)).toContain(modelId);
+  for (const id of ["pictures-ernie", "pictures-zimage", "video"]) {
+    const row = full.disk.rows.find((candidate) => candidate.id === id);
+    if (!row) continue;
     for (const modelId of row.model_ids) expect(full.models.map((m) => m.id)).not.toContain(modelId);
   }
 });
@@ -168,19 +178,55 @@ test("oMLX is an optional row on p64 and p128 only, off by default, and its 19 G
   }
 });
 
-test("Detailed video (LTX-2.3) is recommended on p128 only: on by default, about 74 GB more free space, never in the first-run install plan (ENGINE-LTX-REC)", () => {
+test("pictures is required on every tier that makes pictures", () => {
+  for (const tier of PROFILE_TIERS) {
+    const plan = buildDiskPlan(tier);
+    const row = plan.rows.find((candidate) => candidate.id === "pictures");
+    if (tier.notAvailable.includes("image")) { expect(row).toBeUndefined(); continue; }
+    expect(row).toMatchObject({ label: "Change pictures (FLUX.2 Klein)", note: "Needed. Edits the pictures you already have, and makes new ones when ERNIE is not installed.", need: "required", selectable: false });
+    // A required part rides the first-run install plan: Klein's pins are planned on exactly the tiers that have a pictures row.
+    const planned = new Set(plannedPinsFor(tier).map((entry) => entry.pin.id));
+    for (const pin of STACK_IMAGE_KLEIN_MODELS) expect(planned.has(pin.id)).toBe(true);
+  }
+  for (const tier of ["p16", "p32"]) {
+    const planned = new Set(plannedPinsFor(PROFILE_TIERS.find((candidate) => candidate.id === tier)!).map((entry) => entry.pin.id));
+    for (const pin of STACK_IMAGE_KLEIN_MODELS) expect(planned.has(pin.id)).toBe(false);
+  }
+});
+
+test("video is recommended and video-detailed is optional on p128", () => {
+  const plan = buildDiskPlan(PROFILE_TIERS.find((t) => t.id === "p128")!);
+  expect(plan.rows.find((r) => r.id === "video")!).toMatchObject({ label: "Make videos (Wan2.2)", note: "Recommended. Makes a short clip from a sentence or a picture.", need: "recommended", selectable: true });
+  const detailed = plan.rows.find((r) => r.id === "video-detailed")!;
+  expect(detailed).toMatchObject({ label: "Detailed videos with sound (LTX-2.3)", need: "optional", selectable: true });
+  expect(detailed.note).toContain("Optional");
+  expect(detailed.note).toContain("74 GB");
+  expect(detailed.note).toContain("licence");
+  expect(detailed.note).not.toContain("On by default");
+  // Neither video row rides the first-run plan: Quick is a recommended row the person can turn off, Detailed an optional extra.
+  const planned = new Set(plannedPinsFor(PROFILE_TIERS.find((t) => t.id === "p128")!).map((entry) => entry.pin.id));
+  for (const pin of STACK_VIDEO_MODELS) expect(planned.has(pin.id)).toBe(false);
+});
+
+test("the p128 default selection includes video and excludes video-detailed", () => {
+  const plan = buildDiskPlan(PROFILE_TIERS.find((t) => t.id === "p128")!);
+  expect(plan.default_selected).toContain("pictures");
+  expect(plan.default_selected).toContain("video");
+  expect(plan.default_selected).not.toContain("video-detailed");
+});
+
+test("Detailed video (LTX-2.3) is optional on p128 only: off by default, about 74 GB more free space when turned on, never in the first-run install plan (AIMODELS-DATA-01)", () => {
   const p128 = buildDiskPlan(PROFILE_TIERS.find((t) => t.id === "p128")!);
   const row = p128.rows.find((r) => r.id === "video-detailed")!;
-  expect(row).toMatchObject({ need: "recommended", selectable: true });
-  expect(p128.default_selected).toContain("video-detailed");
+  expect(row).toMatchObject({ need: "optional", selectable: true });
+  expect(p128.default_selected).not.toContain("video-detailed");
   expect(row.download_bytes).toBeGreaterThan(70e9);
-  const without = diskTotalsFor(p128, p128.default_selected.filter((id) => id !== "video-detailed"));
-  expect(p128.default.required_free_bytes - without.required_free_bytes).toBeGreaterThan(70e9);
-  expect(p128.minimum.required_free_bytes).toBeLessThan(p128.default.required_free_bytes - 70e9);
+  const withDetailed = diskTotalsFor(p128, [...p128.default_selected, "video-detailed"]);
+  expect(withDetailed.required_free_bytes - p128.default.required_free_bytes).toBeGreaterThan(70e9);
   for (const tier of PROFILE_TIERS) {
     const plan = buildDiskPlan(tier);
     if (tier.id !== "p128") expect(plan.rows.find((r) => r.id === "video-detailed")).toBeUndefined();
-    // The install plan (what an install or an upgrade pulls on its own) never carries it: only the wizard's checked row or an explicit install does.
+    // The install plan (what an install or an upgrade pulls on its own) never carries it: only a checked row or an explicit install does.
     expect(plannedPinsFor(tier).some((entry) => row.model_ids.includes(entry.pin.id))).toBe(false);
   }
 });

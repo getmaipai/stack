@@ -60,7 +60,7 @@ function view(pin: CatalogModelLike, installed: Set<string>, starter: boolean, r
   };
 }
 
-/** The pins the video role needs (the weights and the tokenizer), in the shape of a pull, for the video status route: Home installs them when the person turns video on. They are not in the first-run plan, the way no generator is. */
+/** The pins the video role needs (the weights and the tokenizer), in the shape of a pull, for the video status route: Home installs them when the person turns the Quick video row on. Not in the first-run plan: the row is recommended, not required. */
 export function videoInstallModels(installedIds: Iterable<string> = []): PlanModel[] {
   const installed = new Set(installedIds);
   return STACK_VIDEO_MODELS.flatMap((pin) => view(pin, installed, false) ?? []);
@@ -71,13 +71,13 @@ export function videoDetailedInstallModels(installedIds: Iterable<string> = []):
   return STACK_VIDEO_DETAILED_MODELS.flatMap((pin) => view(pin, installed, false) ?? []);
 }
 
-/** The pins the music role needs (the shared pieces with the 1.7B planning LM, and the 0.6B planning LM), in the shape of a pull, for the music status route: Home installs them when the person turns music on. They are not in the first-run plan, the way no generator is. */
+/** The pins the music role needs (the shared pieces with the 1.7B planning LM, and the 0.6B planning LM), in the shape of a pull, for the music status route: Home installs them when the person turns music on. Not in the first-run plan: the row is optional. */
 export function musicInstallModels(installedIds: Iterable<string> = []): PlanModel[] {
   const installed = new Set(installedIds);
   return STACK_MUSIC_MODELS.flatMap((pin) => view(pin, installed, false) ?? []);
 }
 
-/** The pins the picture generator needs, in the shape of a pull, for the image status route: Home installs a family when the person turns pictures on (FLUX.2 Klein 4B by default; Z-Image-Turbo is offered on the biggest computers). Not in the first-run plan, the way no generator is. */
+/** The pins the picture generator needs, in the shape of a pull, for the image status route: Home installs a family when the person turns pictures on (FLUX.2 Klein 4B by default; Z-Image-Turbo is offered on the biggest computers). Klein is in the first-run plan on every tier that has image (AIMODELS-DATA-01); the other families are not. */
 export function imageInstallModels(family: ImageFamilyId, installedIds: Iterable<string> = []): PlanModel[] {
   const installed = new Set(installedIds);
   const pins = family === "flux2-klein-4b" ? STACK_IMAGE_KLEIN_MODELS : family === "z-image-turbo" ? STACK_IMAGE_ZIMAGE_MODELS : STACK_IMAGE_ERNIE_MODELS;
@@ -123,6 +123,9 @@ export function plannedPinsFor(tier: ProfileTier, target: { platform: string; ar
   // The image tools (remove background, erase, upscale; about 390 MB, one worker that loads on demand) are small enough for every tier
   // that has a plan; the governor decides at the first edit whether memory allows it (IMAGETOOLS-01).
   for (const pin of STACK_IMAGE_TOOL_MODELS.filter((candidate) => candidate.component !== "tool-look")) add(pin);
+  // The everyday picture model (FLUX.2 Klein) is a required disk-plan row on every tier that has
+  // image (AIMODELS-DATA-01), so the first run installs it: the one generator that is in the plan.
+  if (!tier.notAvailable.includes("image")) for (const pin of STACK_IMAGE_KLEIN_MODELS) add(pin);
   return planned;
 }
 
