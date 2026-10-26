@@ -42,3 +42,29 @@ export function classifyCrash(evidence: CrashEvidence): CrashVerdict {
   if (CONFIG.test(text)) return { kind: "bad_config", cause: "The engine refused its launch settings.", fix: "Reset the engine settings to their defaults, then restart the engine.", retryHelps: false };
   return { kind: "unknown", cause: `The engine stopped on its own${evidence.exitCode !== null ? ` (exit code ${evidence.exitCode})` : signal ? ` (${signal})` : ""} and left no clear reason.`, fix: "The engine restarts itself; the last log lines are in the details.", retryHelps: true };
 }
+
+const METAL_COMPILER = /MTLCompilerService|ggml_metal_library/i;
+const ERROR_LINE = /(^|\s)E\s|error|failed|unable to/i;
+const FIRST_ERRORS = 5;
+const TAIL_LINES = 5;
+const LINE_MAX = 240;
+const REASON_MAX = 1_200;
+
+const clip = (line: string): string => (line.length > LINE_MAX ? `${line.slice(0, LINE_MAX)}…` : line);
+
+/** The first error lines of an engine's stderr, then its last lines, each once and in log order. */
+export function stderrEvidence(stderr: string, tailLines = TAIL_LINES, firstErrors = FIRST_ERRORS): string[] {
+  const lines = stderr.trim().split("\n").map((l) => l.trim()).filter(Boolean);
+  const tailStart = Math.max(0, lines.length - tailLines);
+  const first = lines.slice(0, tailStart).filter((l) => ERROR_LINE.test(l)).slice(0, firstErrors);
+  return [...first, ...lines.slice(tailStart)].map(clip);
+}
+
+/** Why an engine that exited before becoming healthy did so: a known cause in one sentence, else the exit code with the first errors and the tail. */
+export function describeStartFailure(exitCode: number | string | null, stderr: string): string {
+  if (METAL_COMPILER.test(stderr)) return "The Mac's graphics compiler is not responding. Restart the Mac, then chat starts again on its own.";
+  if (OOM.test(stderr)) return "The computer ran out of memory while the engine was loading. Close big apps or choose a smaller model; the engine starts again once memory recovers.";
+  const lines = stderrEvidence(stderr).join(" | ");
+  const text = `Engine exited before becoming healthy (code ${exitCode})${lines ? `: ${lines}` : "."}`;
+  return text.length > REASON_MAX ? `${text.slice(0, REASON_MAX)}…` : text;
+}

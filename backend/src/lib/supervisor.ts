@@ -44,7 +44,7 @@ import { MLX_PREFIX_CACHE_FLAG, mlxHeadroomBytes } from "@/lib/mlxMemory";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { ROLES, ROLE_IDS, type RoleId, type RoleState } from "@/roles";
 import { getMemoryReader } from "@/lib/memory";
-import { classifyCrash, type CrashVerdict } from "@/lib/crashClassifier";
+import { classifyCrash, describeStartFailure, stderrEvidence, type CrashVerdict } from "@/lib/crashClassifier";
 import { memoryLevel } from "@/lib/memoryState";
 import { hfHubRoot } from "@/lib/store/layout";
 import { engineSettingValues, gpuLayersFor, settingValues, type GpuLayers, type SettingValue } from "@/settings";
@@ -1529,8 +1529,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   const exitPromise = handle.exited.then((code) => { exited = true; return code; });
   try {
     const exitFailure = exitPromise.then(async (code) => {
-      const lines = (await stderrText).trim().split("\n").slice(-5).join(" | ");
-      throw new EngineUnavailableError(`Engine exited before becoming healthy (code ${code})${lines ? `: ${lines}` : "."}`);
+      throw new EngineUnavailableError(describeStartFailure(code, await stderrText));
     });
     void exitFailure.catch(() => {});
     const loadStartedAt = performance.now();
@@ -1593,12 +1592,17 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
       // The last stderr lines say why it died (the memory manager's kill
       // leaves none); read with a short bound so a held pipe never stalls the report.
       const tail = await Promise.race([stderrText, new Promise<string>((resolve) => setTimeout(() => resolve(""), 500))]).catch(() => "");
-      reportEngineExit(role, processRecord, { exitCode: typeof exitCode === "number" ? exitCode : null, signal: handle.signalCode ?? null, stderrTail: tail.trim().split("\n").filter(Boolean).slice(-20), ranMs: Date.now() - spawnedAt }, check);
+      reportEngineExit(role, processRecord, { exitCode: typeof exitCode === "number" ? exitCode : null, signal: handle.signalCode ?? null, stderrTail: stderrEvidence(tail, 20), ranMs: Date.now() - spawnedAt }, check);
     });
     return processRecord;
   } catch (error) {
     if (tree) { tree.refresh(); handle.kill(); await tree.stopAll(3_000); } else handle.kill();
     const message = (error as Error).message;
+    if (exited) {
+      // A start that failed leaves the same log event as a crash, with the first errors and the tail.
+      const failedStderr = await Promise.race([stderrText, new Promise<string>((resolve) => setTimeout(() => resolve(""), 500))]).catch(() => "");
+      logger.appendLine(JSON.stringify({ event: "engine.exit", role, exitCode: handle.exitCode, signal: handle.signalCode ?? null, phase: "start", cause: message, stderrTail: stderrEvidence(failedStderr, 20) }));
+    }
     emit({ id: "engine.state", data: { engine: role, state: "offline", reason: message } });
     raise({ code: exited ? `engine.crashed.${role}` : `post-load-check-failed.${role}`, severity: "error", title: `${ROLES[role].label} engine failed to start`, text: message, cause: message, fix: { label: "Restart engine", action: "restart_engine" } });
     release(admission);
