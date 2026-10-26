@@ -32,7 +32,7 @@ const PlanSchema = z.object({
   memory_gb: z.number(), memory_source: z.enum(["unified", "graphics", "override", "unknown"]),
   models: z.array(PlanModelSchema), total_bytes: z.number().int(), remaining_bytes: z.number().int(), free_disk_bytes: z.number().int().nullable(), fits_disk: z.boolean().nullable(),
   disk: DiskPlanSchema.nullable(),
-  optional_models: z.array(PlanModelSchema).openapi({ description: "The pinned files of the disk plan's picture and video rows (FLUX.2 Klein, Z-Image Turbo, Wan2.2 and its tokenizer), shaped as pull bodies, for a wizard that installs a row the person turned on. Not part of `models`: the first-run set." }),
+  optional_models: z.array(PlanModelSchema).openapi({ description: "The pinned files of the disk plan's picture and video rows (FLUX.2 Klein, ERNIE-Image-Turbo, Z-Image Turbo, Wan2.2 and its tokenizer), shaped as pull bodies, for a wizard that installs a row the person turned on. Not part of `models`: the first-run set." }),
 });
 const planRoute = createRoute({
   method: "get", path: "/", tags: ["Install plan"], summary: "The models to install on this computer",
@@ -50,6 +50,7 @@ installPlanRoutes.openapi(planRoute, async (c) => {
   const rows = new Set(disk?.rows.map((row) => row.id) ?? []);
   const optional = [
     ...(rows.has("pictures") ? imageInstallModels("flux2-klein-4b", installedIds) : []),
+    ...(rows.has("pictures-ernie") ? imageInstallModels("ernie-image-turbo", installedIds) : []),
     ...(rows.has("pictures-zimage") ? imageInstallModels("z-image-turbo", installedIds) : []),
     ...(rows.has("video") ? videoInstallModels(installedIds) : []),
   ];

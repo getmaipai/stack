@@ -10,12 +10,13 @@
 import measured from "@/lib/diskPlanMeasured.json";
 import { PROFILE_TIERS, type ProfileTier } from "@/profiles";
 import {
-  CHATTERBOX_ENGINE, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS,
+  CHATTERBOX_ENGINE, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS,
   STACK_MODELS, STACK_MUSIC_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_DETAILED_MODELS,
 } from "@/lib/modelCatalog";
 import { OMLX_OPTIONAL_TIERS } from "@/lib/chatEngines";
 import { plannedPinsFor } from "@/lib/installPlan";
 import type { CatalogModelLike } from "@/lib/modelStore";
+import { IMAGE_FAMILIES } from "@/images/models";
 
 export type DiskNeed = "required" | "recommended" | "optional";
 export type DiskRowKind = "home" | "model" | "engine";
@@ -182,7 +183,8 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   const look = STACK_IMAGE_TOOL_MODELS.filter((pin) => pin.component === "tool-look");
   if (look.length) rows.push(modelRow({ id: "tool-look", label: "Look at pictures", note: "Name household objects, wall colour and light. Runs only when Home sends a picture.", need: "optional", engines: ["engine:image-tools", "engine:python"] }, look));
   if (!tier.notAvailable.includes("image")) {
-    rows.push(modelRow({ id: "pictures", label: "Make pictures (FLUX.2 Klein)", note: "Makes pictures from a sentence, and edits yours.", need: "recommended", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_KLEIN_MODELS));
+    rows.push(modelRow({ id: "pictures", label: "Change pictures (FLUX.2 Klein)", note: "Recommended. Edits the pictures you already have, and makes new ones when ERNIE is not installed.", need: "recommended", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_KLEIN_MODELS));
+    if (IMAGE_FAMILIES["ernie-image-turbo"].tiers.some((supportedTier) => supportedTier === tier.id)) rows.push(modelRow({ id: "pictures-ernie", label: "Make pictures (ERNIE)", note: "Recommended. Draws words in pictures correctly. Makes new pictures from a sentence.", need: "recommended", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_ERNIE_MODELS));
     if (TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "pictures-zimage", label: "More picture styles (Z-Image Turbo)", note: "A second picture maker with a different look. Optional.", need: "optional", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_ZIMAGE_MODELS));
   }
   if (!tier.notAvailable.includes("video")) rows.push(modelRow({ id: "video", label: "Make videos (Wan2.2)", note: "Makes a short clip from a sentence or a picture. Optional.", need: "optional", engines: ["engine:video", "engine:python"] }, STACK_VIDEO_MODELS));

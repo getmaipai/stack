@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildDiskPlan, diskPlanExport, diskTotalsFor } from "@/lib/diskPlan";
 import { plannedPinsFor } from "@/lib/installPlan";
-import { STACK_MODELS, STACK_VIDEO_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_ZIMAGE_MODELS } from "@/lib/modelCatalog";
+import { STACK_MODELS, STACK_VIDEO_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_ZIMAGE_MODELS } from "@/lib/modelCatalog";
 import measured from "@/lib/diskPlanMeasured.json";
 import { PROFILE_TIERS } from "@/profiles";
 import { app } from "@/app";
@@ -70,20 +70,32 @@ test("home and AI parts add up to the whole within a byte per part", () => {
   }
 });
 
-test("tiers: p16 and p32 have no generators, p64 has pictures but no video, p128 has Z-Image and video as optional extras", () => {
+test("tiers: p16 and p32 have no generators, p64 has Klein and ERNIE, p128 adds Z-Image and video as optional extras", () => {
   const ids = (tier: string) => buildDiskPlan(PROFILE_TIERS.find((t) => t.id === tier)!).rows.map((row) => row.id);
-  for (const tier of ["p16", "p32"]) for (const id of ["pictures", "pictures-zimage", "video", "voice-better"]) expect(ids(tier)).not.toContain(id);
+  for (const tier of ["p16", "p32"]) for (const id of ["pictures", "pictures-ernie", "pictures-zimage", "video", "voice-better"]) expect(ids(tier)).not.toContain(id);
   expect(ids("p64")).toContain("pictures");
+  expect(ids("p64")).toContain("pictures-ernie");
   expect(ids("p64")).toContain("voice-better");
   for (const id of ["pictures-zimage", "video"]) expect(ids("p64")).not.toContain(id);
   const p128 = buildDiskPlan(PROFILE_TIERS.find((t) => t.id === "p128")!);
   for (const id of ["pictures-zimage", "video"]) { const row = p128.rows.find((r) => r.id === id)!; expect(row.need).toBe("optional"); expect(p128.default_selected).not.toContain(id); }
   expect(p128.rows.find((r) => r.id === "pictures")!.need).toBe("recommended");
+  for (const tier of ["p64", "p128"]) {
+    const plan = buildDiskPlan(PROFILE_TIERS.find((candidate) => candidate.id === tier)!);
+    const klein = plan.rows.find((row) => row.id === "pictures")!;
+    const ernie = plan.rows.find((row) => row.id === "pictures-ernie")!;
+    expect(klein).toMatchObject({ label: "Change pictures (FLUX.2 Klein)", note: "Recommended. Edits the pictures you already have, and makes new ones when ERNIE is not installed.", need: "recommended" });
+    expect(ernie).toMatchObject({ label: "Make pictures (ERNIE)", note: "Recommended. Draws words in pictures correctly. Makes new pictures from a sentence.", need: "recommended" });
+    expect(plan.default_selected).toContain("pictures");
+    expect(plan.default_selected).toContain("pictures-ernie");
+    expect(ernie.download_bytes).toBe(STACK_IMAGE_ERNIE_MODELS.reduce((sum, pin) => sum + pin.download!.approx_bytes, 0));
+  }
   expect(p128.rows.find((r) => r.id === "video")!.download_bytes).toBe(STACK_VIDEO_MODELS.reduce((s, p) => s + p.download!.approx_bytes, 0));
   expect(p128.rows.find((r) => r.id === "pictures")!.download_bytes).toBe(STACK_IMAGE_KLEIN_MODELS.reduce((s, p) => s + p.download!.approx_bytes, 0));
   expect(p128.rows.find((r) => r.id === "pictures-zimage")!.download_bytes).toBe(STACK_IMAGE_ZIMAGE_MODELS.reduce((s, p) => s + p.download!.approx_bytes, 0));
-  // The sizes the owner quoted, to the gigabyte: Klein about 16, Z-Image about 33, video about 24 (23 on disk by du -h).
+  // The sizes the owner quoted, to the gigabyte: Klein about 16, ERNIE about 24, Z-Image about 33.
   expect(Math.round(p128.rows.find((r) => r.id === "pictures")!.installed_bytes / GB)).toBe(15);
+  expect(Math.round(p128.rows.find((r) => r.id === "pictures-ernie")!.installed_bytes / 1_000_000_000)).toBe(24);
   expect(Math.round(p128.rows.find((r) => r.id === "pictures-zimage")!.installed_bytes / GB)).toBe(31);
 });
 
@@ -102,9 +114,13 @@ test("turning an optional row on or off moves the total by that row and its engi
   const zimage = plan.rows.find((r) => r.id === "pictures-zimage")!;
   const withZ = diskTotalsFor(plan, [...plan.default_selected, "pictures-zimage"]);
   expect(withZ.installed_bytes - base.installed_bytes).toBe(zimage.installed_bytes); // the picture engine is already counted for Klein
+  const ernie = plan.rows.find((r) => r.id === "pictures-ernie")!;
+  const withoutErnie = diskTotalsFor(plan, plan.default_selected.filter((id) => id !== "pictures-ernie"));
+  expect(base.installed_bytes - withoutErnie.installed_bytes).toBe(ernie.installed_bytes);
   const noPictures = diskTotalsFor(plan, plan.default_selected.filter((id) => id !== "pictures"));
   const klein = plan.rows.find((r) => r.id === "pictures")!;
-  expect(base.installed_bytes - noPictures.installed_bytes).toBe(klein.installed_bytes + plan.rows.find((r) => r.id === "engine:pictures")!.installed_bytes);
+  // ERNIE remains selected, so the shared picture engine stays counted when Klein is removed.
+  expect(base.installed_bytes - noPictures.installed_bytes).toBe(klein.installed_bytes);
 });
 
 test("rows already on this computer are marked installed", () => {
@@ -129,7 +145,7 @@ test("route: the install plan carries the disk plan for its tier", async () => {
   expect(body.disk!.default.required_free_bytes).toBeGreaterThan(10 * GB);
   // Every picture and video row's pins are offered as pull bodies, none of them in the first-run models.
   const full = body as unknown as { models: Array<{ id: string }>; optional_models: Array<{ id: string }>; disk: { rows: Array<{ id: string; model_ids: string[] }> } };
-  for (const id of ["pictures", "pictures-zimage", "video"]) {
+  for (const id of ["pictures", "pictures-ernie", "pictures-zimage", "video"]) {
     const row = full.disk.rows.find((candidate) => candidate.id === id);
     if (!row) continue;
     expect(full.optional_models.map((m) => m.id).sort()).toEqual(expect.arrayContaining(row.model_ids.slice().sort()));

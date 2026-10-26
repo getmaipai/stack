@@ -16,18 +16,18 @@
     "p32.needed_bytes": 28503105738,
     "p32.home_required_free_bytes": 3176323277,
     "p32.ai_required_free_bytes": 30604414790,
-    "p64.required_free_bytes": 87536626157,
+    "p64.required_free_bytes": 116277236370,
     "p64.minimum_required_free_bytes": 34279601493,
-    "p64.everything_required_free_bytes": 129268263251,
-    "p64.needed_bytes": 73490455102,
+    "p64.everything_required_free_bytes": 158008873464,
+    "p64.needed_bytes": 97440963613,
     "p64.home_required_free_bytes": 3176323277,
-    "p64.ai_required_free_bytes": 84360302880,
-    "p128.required_free_bytes": 177907369072,
+    "p64.ai_required_free_bytes": 113100913094,
+    "p128.required_free_bytes": 206647979285,
     "p128.minimum_required_free_bytes": 34279601493,
-    "p128.everything_required_free_bytes": 288099012998,
-    "p128.needed_bytes": 148925871308,
+    "p128.everything_required_free_bytes": 316839623212,
+    "p128.needed_bytes": 172876379819,
     "p128.home_required_free_bytes": 3176323277,
-    "p128.ai_required_free_bytes": 174731045795
+    "p128.ai_required_free_bytes": 203471656008
   },
   "tiers": {
     "p16": {
@@ -767,8 +767,8 @@
         },
         {
           "id": "pictures",
-          "label": "Make pictures (FLUX.2 Klein)",
-          "note": "Makes pictures from a sentence, and edits yours.",
+          "label": "Change pictures (FLUX.2 Klein)",
+          "note": "Recommended. Edits the pictures you already have, and makes new ones when ERNIE is not installed.",
           "kind": "model",
           "need": "recommended",
           "selectable": true,
@@ -792,6 +792,37 @@
             "flux2-klein-4b-transformer-config",
             "flux2-klein-4b-vae-config",
             "flux2-klein-4b-vae-diffusion-pytorch-model"
+          ],
+          "engines": [
+            "engine:pictures",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "pictures-ernie",
+          "label": "Make pictures (ERNIE)",
+          "note": "Recommended. Draws words in pictures correctly. Makes new pictures from a sentence.",
+          "kind": "model",
+          "need": "recommended",
+          "selectable": true,
+          "download_bytes": 23950508511,
+          "installed_bytes": 23950508511,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "ernie-image-turbo",
+            "ernie-image-turbo-transformer-diffusion-pytorch-model-00002-of-00002",
+            "ernie-image-turbo-transformer-diffusion-pytorch-model-safetensors-index",
+            "ernie-image-turbo-transformer-config",
+            "ernie-image-turbo-text-encoder-model",
+            "ernie-image-turbo-text-encoder-config",
+            "ernie-image-turbo-vae-diffusion-pytorch-model",
+            "ernie-image-turbo-vae-config",
+            "ernie-image-turbo-tokenizer-tokenizer",
+            "ernie-image-turbo-tokenizer-tokenizer-config",
+            "ernie-image-turbo-scheduler-scheduler-config",
+            "ernie-image-turbo-model-index"
           ],
           "engines": [
             "engine:pictures",
@@ -943,11 +974,11 @@
         }
       ],
       "default": {
-        "download_bytes": 68066862193,
-        "installed_bytes": 70230855274,
+        "download_bytes": 92017370704,
+        "installed_bytes": 94181363785,
         "peak_temp_bytes": 3259599828,
-        "needed_bytes": 73490455102,
-        "required_free_bytes": 87536626157
+        "needed_bytes": 97440963613,
+        "required_free_bytes": 116277236370
       },
       "minimum": {
         "download_bytes": 25529840047,
@@ -957,11 +988,11 @@
         "required_free_bytes": 34279601493
       },
       "everything": {
-        "download_bytes": 100652199470,
-        "installed_bytes": 103612427958,
+        "download_bytes": 124602707981,
+        "installed_bytes": 127562936469,
         "peak_temp_bytes": 4933349701,
-        "needed_bytes": 108545777659,
-        "required_free_bytes": 129268263251
+        "needed_bytes": 132496286170,
+        "required_free_bytes": 158008873464
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -976,6 +1007,7 @@
         "voice-better",
         "image-tools",
         "pictures",
+        "pictures-ernie",
         "search"
       ]
     },
@@ -1218,8 +1250,8 @@
         },
         {
           "id": "pictures",
-          "label": "Make pictures (FLUX.2 Klein)",
-          "note": "Makes pictures from a sentence, and edits yours.",
+          "label": "Change pictures (FLUX.2 Klein)",
+          "note": "Recommended. Edits the pictures you already have, and makes new ones when ERNIE is not installed.",
           "kind": "model",
           "need": "recommended",
           "selectable": true,
@@ -1243,6 +1275,37 @@
             "flux2-klein-4b-transformer-config",
             "flux2-klein-4b-vae-config",
             "flux2-klein-4b-vae-diffusion-pytorch-model"
+          ],
+          "engines": [
+            "engine:pictures",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "pictures-ernie",
+          "label": "Make pictures (ERNIE)",
+          "note": "Recommended. Draws words in pictures correctly. Makes new pictures from a sentence.",
+          "kind": "model",
+          "need": "recommended",
+          "selectable": true,
+          "download_bytes": 23950508511,
+          "installed_bytes": 23950508511,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "ernie-image-turbo",
+            "ernie-image-turbo-transformer-diffusion-pytorch-model-00002-of-00002",
+            "ernie-image-turbo-transformer-diffusion-pytorch-model-safetensors-index",
+            "ernie-image-turbo-transformer-config",
+            "ernie-image-turbo-text-encoder-model",
+            "ernie-image-turbo-text-encoder-config",
+            "ernie-image-turbo-vae-diffusion-pytorch-model",
+            "ernie-image-turbo-vae-config",
+            "ernie-image-turbo-tokenizer-tokenizer",
+            "ernie-image-turbo-tokenizer-tokenizer-config",
+            "ernie-image-turbo-scheduler-scheduler-config",
+            "ernie-image-turbo-model-index"
           ],
           "engines": [
             "engine:pictures",
@@ -1487,11 +1550,11 @@
         }
       ],
       "default": {
-        "download_bytes": 142398955263,
-        "installed_bytes": 144907488817,
+        "download_bytes": 166349463774,
+        "installed_bytes": 168857997328,
         "peak_temp_bytes": 4018382491,
-        "needed_bytes": 148925871308,
-        "required_free_bytes": 177907369072
+        "needed_bytes": 172876379819,
+        "required_free_bytes": 206647979285
       },
       "minimum": {
         "download_bytes": 25529840047,
@@ -1501,11 +1564,11 @@
         "required_free_bytes": 34279601493
       },
       "everything": {
-        "download_bytes": 232034298234,
-        "installed_bytes": 235339067195,
+        "download_bytes": 255984806745,
+        "installed_bytes": 259289575706,
         "peak_temp_bytes": 5692132364,
-        "needed_bytes": 241031199559,
-        "required_free_bytes": 288099012998
+        "needed_bytes": 264981708070,
+        "required_free_bytes": 316839623212
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -1520,6 +1583,7 @@
         "voice-better",
         "image-tools",
         "pictures",
+        "pictures-ernie",
         "video-detailed",
         "search"
       ]

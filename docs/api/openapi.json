@@ -10296,7 +10296,7 @@
                           "installed"
                         ]
                       },
-                      "description": "The pinned files of the disk plan's picture and video rows (FLUX.2 Klein, Z-Image Turbo, Wan2.2 and its tokenizer), shaped as pull bodies, for a wizard that installs a row the person turned on. Not part of `models`: the first-run set."
+                      "description": "The pinned files of the disk plan's picture and video rows (FLUX.2 Klein, ERNIE-Image-Turbo, Z-Image Turbo, Wan2.2 and its tokenizer), shaped as pull bodies, for a wizard that installs a row the person turned on. Not part of `models`: the first-run set."
                     }
                   },
                   "required": [
