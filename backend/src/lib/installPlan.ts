@@ -5,7 +5,7 @@
 import { PROFILE_MODEL_BINDINGS, sizeMachine, type ProfileTier } from "@/profiles";
 import { knownAppleChip, type HardwareInfo, type MemorySource } from "@/lib/hardware";
 import { splashDraftWanted } from "@/lib/splash";
-import { STACK_CHAT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
+import { STACK_CHAT_MODEL, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
 import { tierDefaultTtsEngine } from "@/speech/ttsEngines";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import type { RoleId } from "@/roles";
@@ -112,9 +112,6 @@ export function plannedPinsFor(tier: ProfileTier, target: { platform: string; ar
     const projector = pin.imageInput ? STACK_MODELS.find((candidate) => candidate.id === pin.imageInput!.projector) : undefined;
     for (const part of STACK_MODELS.filter((candidate) => candidate.role === role && candidate.component && candidate.engine === pin.engine && !projectors.has(candidate.id) && (role !== "coding" || (pin.companions ?? []).includes(candidate.id)))) add(part);
     add(projector ?? null);
-    // The larger tiers' listening model is Parakeet (STT-PARAKEET-03); Moonshine tiny installs beside it as the
-    // fallback the Stack restarts the role on when Parakeet is missing or fails its probe.
-    if (role === "stt" && pin.id === STACK_STT_PARAKEET_V2_MODEL.id) add(STACK_STT_MODEL);
     // oMLX's MLX build of the model is not in the first-run plan: llama-server
     // is the default on every tier (ENGINE-MLX-02), and the 19 GB MLX weights
     // are fetched only when the admin chooses oMLX (an optional disk-plan row,

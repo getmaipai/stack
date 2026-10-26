@@ -10,7 +10,7 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Added
 
-- Parakeet TDT 0.6B v2 int8 as the speech-to-text model on the 64 GB and 128 GB tiers (STT-PARAKEET-01 and -03): about half to a third of the word errors of Moonshine tiny, at about 1.8 GB resident. The first-run plan installs Moonshine tiny beside it as the fallback; the 16 GB and 32 GB tiers keep Moonshine tiny, now bound explicitly.
+- Parakeet TDT 0.6B v2 int8 as the speech-to-text model on the 64 GB and 128 GB tiers (STT-PARAKEET-01 and -03): about half to a third of the word errors of Moonshine tiny, at about 1.8 GB resident. The 16 GB and 32 GB tiers keep Moonshine tiny, now bound explicitly.
 - Fast Look (LOOK-01 step 3a): `POST /v1/images/looks` runs pinned YOLOX-nano in memory, returns household object tracks and scene tags, and keeps no image or labels on disk or in logs. Detailed Look remains unavailable.
 - `media.companion_clip` now estimates each frame's actual key background from its border and removes muted or drifting green and magenta backgrounds with hue keying and colour unmixing (CMEDIA-KEY-01).
 - `media.companion_clip` on the media job lane: removes green or magenta key backgrounds (or accepts alpha video), fits a loop or one-shot, and writes a transparent still plus compact H.264 and optional AV1 companion clips with the premultiplied-colour and matte player contract (CMEDIA-STACK-01).

@@ -59,18 +59,18 @@ test("plan: every model is a complete pull body from a shipped pin", () => {
   const ids = plan.models.map((model) => model.id);
   expect(new Set(ids).size).toBe(ids.length);
   expect(ids).toContain("qwen3-4b-q4-k-m");
-  expect(ids).toContain("moonshine-tiny-en-int8");
+  expect(ids).toContain("parakeet-tdt-0.6b-v2-int8");
   expect(ids).toContain("silero-vad");
   expect(ids).toContain("pocket-tts-english-tokenizer");
   expect(ids).not.toContain("qwen3-vl-8b-instruct-mmproj-q8-0");
   expect(plan.models.find((model) => model.id === "pocket-tts-english")).toMatchObject({ hub_file: "languages/english/model.safetensors" });
-  expect(plan.models.find((model) => model.id === "moonshine-tiny-en-int8")).toMatchObject({ archive: true });
+  expect(plan.models.find((model) => model.id === "parakeet-tdt-0.6b-v2-int8")).toMatchObject({ archive: true });
 });
 test("plan: the starter is first, then chat, stt, tts, embed, judge", () => {
   const plan = buildInstallPlan(hw({ unifiedMemoryGb: 64, totalRamGb: 64 }));
   expect(plan.models[0]).toMatchObject({ id: "qwen3-1.7b-q8-0", starter: true });
   expect(plan.models.filter((model) => model.starter)).toHaveLength(1);
-  expect(plan.models.filter((model) => !model.component).map((model) => model.role)).toEqual(["chat", "chat", "stt", "stt", "tts", "tts", "embed", "judge", "coding"]);
+  expect(plan.models.filter((model) => !model.component).map((model) => model.role)).toEqual(["chat", "chat", "stt", "tts", "tts", "embed", "judge", "coding"]);
   // STACK-MUSE-01: above 24 GB the bound chat is Muse Glimmer 30B, so the
   // 8B is not in this plan at all.
   expect(plan.models[1]).toMatchObject({ id: "muse-glimmer-30b-q4-k-xl", starter: false });
@@ -160,12 +160,12 @@ test("route: the plan's coding model carries removable: true in the response", a
   expect(body.models.filter((model) => model.removable).every((model) => model.id === "qwen3.8-27b-ud-q4-k-m" || model.id === "qwen3.8-27b-dflash2-draft")).toBe(true);
 });
 
-test("plan: stt is Parakeet with Moonshine beside it as the fallback on p64 and p128, Moonshine alone on p16 and p32 (STT-PARAKEET-03)", () => {
+test("plan: stt is Parakeet alone on p64 and p128, Moonshine alone on p16 and p32 (STT-PARAKEET-03)", () => {
   const sttIds = (gb: number) => buildInstallPlan(hw({ unifiedMemoryGb: gb, totalRamGb: gb })).models.filter((model) => model.role === "stt" && !model.component).map((model) => model.id);
   expect(sttIds(16)).toEqual(["moonshine-tiny-en-int8"]);
   expect(sttIds(32)).toEqual(["moonshine-tiny-en-int8"]);
-  expect(sttIds(64)).toEqual(["parakeet-tdt-0.6b-v2-int8", "moonshine-tiny-en-int8"]);
-  expect(sttIds(128)).toEqual(["parakeet-tdt-0.6b-v2-int8", "moonshine-tiny-en-int8"]);
+  expect(sttIds(64)).toEqual(["parakeet-tdt-0.6b-v2-int8"]);
+  expect(sttIds(128)).toEqual(["parakeet-tdt-0.6b-v2-int8"]);
   for (const gb of [16, 32, 64, 128]) expect(buildInstallPlan(hw({ unifiedMemoryGb: gb, totalRamGb: gb })).models.filter((model) => model.id === "silero-vad")).toHaveLength(1);
   expect(Object.entries(PROFILE_MODEL_BINDINGS).map(([tier, bound]) => [tier, bound?.stt])).toEqual([["p16", "moonshine-tiny-en-int8"], ["p32", "moonshine-tiny-en-int8"], ["p64", "parakeet-tdt-0.6b-v2-int8"], ["p128", "parakeet-tdt-0.6b-v2-int8"]]);
 });
