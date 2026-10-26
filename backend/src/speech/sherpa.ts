@@ -13,6 +13,7 @@ export const RUNTIME_NAME = "sherpa-onnx-node";
 /** The Moonshine package the store extracts: four ONNX files and the
  * tokens, named as upstream ships them. */
 export const MOONSHINE_FILES = { preprocessor: "preprocess.onnx", encoder: "encode.int8.onnx", uncachedDecoder: "uncached_decode.int8.onnx", cachedDecoder: "cached_decode.int8.onnx", tokens: "tokens.txt" } as const;
+export const PARAKEET_FILES = { encoder: "encoder.int8.onnx", decoder: "decoder.int8.onnx", joiner: "joiner.int8.onnx", tokens: "tokens.txt" } as const;
 
 // Silero scores 512-sample windows at 16 kHz; frames from the wire are
 // any length, so the detector re-chunks them.
@@ -74,6 +75,30 @@ export function missingMoonshineFiles(dir: string): string[] {
   return Object.values(MOONSHINE_FILES).filter((file) => !existsSync(join(dir, file)));
 }
 
+export function missingParakeetFiles(dir: string): string[] {
+  return Object.values(PARAKEET_FILES).filter((file) => !existsSync(join(dir, file)));
+}
+
+export function recognizerKind(dir: string): "moonshine" | "parakeet" {
+  return existsSync(join(dir, PARAKEET_FILES.joiner)) ? "parakeet" : "moonshine";
+}
+
+function transcriber(recognizer: InstanceType<SherpaModule["OfflineRecognizer"]>): Transcriber {
+  let queue: Promise<unknown> = Promise.resolve();
+  return {
+    transcribe(samples) {
+      const run = queue.then(async () => {
+        const stream = recognizer.createStream();
+        stream.acceptWaveform({ samples, sampleRate: TARGET_SAMPLE_RATE });
+        await recognizer.decodeAsync(stream);
+        return recognizer.getResult(stream).text.trim();
+      });
+      queue = run.catch(() => {});
+      return run;
+    },
+  };
+}
+
 export function loadMoonshine(dir: string, threads = 2): Transcriber {
   const missing = missingMoonshineFiles(dir);
   if (missing.length) throw new Error(`The Moonshine package at ${dir} is missing ${missing.join(", ")}.`);
@@ -88,23 +113,21 @@ export function loadMoonshine(dir: string, threads = 2): Transcriber {
       debug: 0,
     },
   });
-  // Decodes run one at a time (the recognizer is one native object; the
-  // one-shot route while a session runs waits its turn here) and off the
-  // event loop through the binding's own async decode, so the worker
-  // keeps answering /health and reading frames while a partial decodes.
-  let queue: Promise<unknown> = Promise.resolve();
-  return {
-    transcribe(samples) {
-      const run = queue.then(async () => {
-        const stream = recognizer.createStream();
-        stream.acceptWaveform({ samples, sampleRate: TARGET_SAMPLE_RATE });
-        await recognizer.decodeAsync(stream);
-        return recognizer.getResult(stream).text.trim();
-      });
-      queue = run.catch(() => {});
-      return run;
+  return transcriber(recognizer);
+}
+
+export function loadParakeet(dir: string, threads = 2): Transcriber {
+  const missing = missingParakeetFiles(dir);
+  if (missing.length) throw new Error(`The Parakeet package at ${dir} is missing ${missing.join(", ")}.`);
+  const sherpa = loadModule();
+  const recognizer = new sherpa.OfflineRecognizer({
+    featConfig: { sampleRate: TARGET_SAMPLE_RATE, featureDim: 80 },
+    modelConfig: {
+      transducer: { encoder: join(dir, PARAKEET_FILES.encoder), decoder: join(dir, PARAKEET_FILES.decoder), joiner: join(dir, PARAKEET_FILES.joiner) },
+      tokens: join(dir, PARAKEET_FILES.tokens), modelType: "nemo_transducer", numThreads: threads, provider: "cpu", debug: 0,
     },
-  };
+  });
+  return transcriber(recognizer);
 }
 
 export function loadSilero(modelPath: string): VoiceDetector {

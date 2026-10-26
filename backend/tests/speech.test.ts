@@ -18,6 +18,7 @@ import { decodeWave, frameToSamples, resampleLinear, rms, toRecognizerRate } fro
 import { isLikelySpeech, SttSession, type Transcriber, type VoiceDetector } from "@/speech/session";
 import { SESSION_PATH, startSpeechServer, TRANSCRIBE_PATH } from "@/speech/server";
 import { parseWorkerArgs } from "@/speech/worker";
+import { loadParakeet, missingParakeetFiles, PARAKEET_FILES, recognizerKind } from "@/speech/sherpa";
 import { SttWireEvent } from "@maipai/spec/stack/ts/stt-wire-event.js";
 import { __resetSettingsForTests } from "@/settings";
 import { modelsDir } from "@/lib/paths";
@@ -25,6 +26,27 @@ import { modelsDir } from "@/lib/paths";
 const SENTENCE = "Clover, the kitchen light is on.";
 const clipPath = join(import.meta.dir, "..", "src", "speech", "fixtures", "clover-two-seconds.wav");
 const clip = decodeWave(new Uint8Array(readFileSync(clipPath)));
+
+test("Parakeet package validation lists exactly the absent files", () => {
+  const dir = join(tmpdir(), `maipai-parakeet-${Date.now()}`);
+  mkdirSync(dir, { recursive: true });
+  try {
+    expect(missingParakeetFiles(dir)).toEqual(Object.values(PARAKEET_FILES));
+    for (const file of Object.values(PARAKEET_FILES)) writeFileSync(join(dir, file), "");
+    expect(missingParakeetFiles(dir)).toEqual([]);
+    expect(recognizerKind(dir)).toBe("parakeet");
+    rmSync(join(dir, PARAKEET_FILES.joiner));
+    expect(recognizerKind(dir)).toBe("moonshine");
+    expect(() => loadParakeet(dir)).toThrow(`The Parakeet package at ${dir} is missing ${PARAKEET_FILES.joiner}.`);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("an empty Parakeet package error names its directory and all missing files", () => {
+  const dir = join(tmpdir(), `maipai-parakeet-empty-${Date.now()}`);
+  mkdirSync(dir, { recursive: true });
+  try { expect(() => loadParakeet(dir)).toThrow(`The Parakeet package at ${dir} is missing ${Object.values(PARAKEET_FILES).join(", ")}.`); }
+  finally { rmSync(dir, { recursive: true, force: true }); }
+});
 
 beforeEach(() => { __resetHealthForTests(); __resetSettingsForTests(); clearModelsForTests(); setSupervisorFactoryForTests(async (role) => scriptedProcess(role)); });
 afterEach(() => { setSupervisorFactoryForTests(null); resetSupervisorForTests(); clearModelsForTests(); });

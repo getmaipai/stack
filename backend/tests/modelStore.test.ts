@@ -18,7 +18,7 @@ import {
   upsertModel,
   ProvenanceIncompleteError,
 } from "@/lib/modelStore";
-import { STACK_CHAT_8B_MODEL, STACK_CHAT_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_EMBED_MODEL, STACK_JUDGE_MODEL, STACK_MODELS } from "@/lib/modelCatalog";
+import { STACK_CHAT_8B_MODEL, STACK_CHAT_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_EMBED_MODEL, STACK_JUDGE_MODEL, STACK_MODELS, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL } from "@/lib/modelCatalog";
 import { hfUrl } from "@/lib/hf";
 import { downloadUrl } from "@/lib/download";
 import { eq } from "drizzle-orm";
@@ -46,6 +46,18 @@ test("every shipped model pin registers through the catalog model boundary", () 
   for (const pin of STACK_MODELS) {
     expect(registerCatalogModel(pin).id).toBe(pin.id);
   }
+});
+
+test("Parakeet is an optional second stt pin and Moonshine remains the fallback", () => {
+  expect(STACK_MODELS).toContain(STACK_STT_MODEL);
+  expect(STACK_MODELS).toContain(STACK_STT_PARAKEET_V2_MODEL);
+  expect(STACK_MODELS.indexOf(STACK_STT_MODEL)).toBeLessThan(STACK_MODELS.indexOf(STACK_STT_PARAKEET_V2_MODEL));
+  expect(STACK_STT_PARAKEET_V2_MODEL).toMatchObject({ id: "parakeet-tdt-0.6b-v2-int8", role: "stt", download: { url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.tar.bz2", sha256: "157c157bc51155e03e37d2466522a3a737dd9c72bb25f36eb18912964161e1ad", archive: true } });
+  for (const pin of [STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL]) {
+    upsertModel({ id: pin.id, roles: ["stt"], source: "catalog", provenance: { package: `model:${pin.id}`, catalogId: pin.id }, revision: pin.revision!, sha256: pin.download!.sha256, sizeBytes: pin.download!.approx_bytes, licence: pin.license!, engineRequirements: { engine: pin.engine, sizing: pin.sizing }, verifiedAt: "2026-10-01T00:00:00.000Z", modelPath: join(fixtureDir, pin.id) });
+  }
+  setMachineTier(null);
+  expect(selectedModel("stt")?.id).toBe(STACK_STT_MODEL.id);
 });
 
 test("the household chat and judge pins match Home's hashes and file sizes", () => {

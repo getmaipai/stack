@@ -4,7 +4,7 @@
 // the wire on loopback, and exits when its stdin closes or it is
 // signalled, so a daemon that dies never leaves a worker behind.
 import { basename } from "node:path";
-import { loadMoonshine, loadSilero, RUNTIME_NAME, runtimeVersion } from "@/speech/sherpa";
+import { loadMoonshine, loadParakeet, loadSilero, recognizerKind, RUNTIME_NAME, runtimeVersion } from "@/speech/sherpa";
 import { startSpeechServer } from "@/speech/server";
 
 export interface WorkerArgs { role: "stt"; port: number; model: string; vad: string; threads: number; }
@@ -30,7 +30,7 @@ export function workerBuild(): string { return `${RUNTIME_NAME}-${runtimeVersion
 
 export async function runSpeechWorker(argv: string[]): Promise<void> {
   const args = parseWorkerArgs(argv);
-  const transcriber = loadMoonshine(args.model, args.threads);
+  const transcriber = recognizerKind(args.model) === "parakeet" ? loadParakeet(args.model, args.threads) : loadMoonshine(args.model, args.threads);
   const server = startSpeechServer({ port: args.port, build: workerBuild(), modelPath: args.model, transcriber, detector: () => loadSilero(args.vad) });
   console.log(`speech-worker ${args.role} listening on http://127.0.0.1:${server.port} with ${basename(args.model)}`);
   const stop = () => { server.stop(true); process.exit(0); };
