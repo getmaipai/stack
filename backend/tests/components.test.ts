@@ -269,6 +269,14 @@ test("the real component ids are unique and every required one is a pin of the i
   for (const row of list.components.filter((c) => c.requirement === "required")) expect(row.requirement_reason).toBe("Home installs this on a computer of this size.");
 });
 
+test("the Parakeet listening model shows a plain name, not its raw id", async () => {
+  __setComponentUnitsForTests(null);
+  createJob({ kind: "noop" });
+  const row = (await listComponents(hw())).components.find((c) => c.id === "parakeet-tdt-0.6b-v2-int8");
+  expect(row?.label).toBe("Listening: speech to text, more accurate");
+  expect(row?.summary).not.toBe("");
+});
+
 // ---- VIDEO-LTX-01: the Detailed video model's licence, size and gate ----
 
 test("the real list offers Detailed video on a 128 GB computer only: optional, its plain size, and the licence it needs accepted", async () => {

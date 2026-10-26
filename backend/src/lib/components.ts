@@ -130,6 +130,7 @@ const LABELS: Record<string, { label: string; summary: string }> = {
   "qwen3-4b-q4-k-m": { label: "Quick checks: Qwen3 4B", summary: "A small model for fast side tasks like titles and safety checks." },
   "nomic-embed-text-v1-5-q4-k-m": { label: "Memory and search model", summary: "Lets Home find the right memory or page by meaning." },
   "moonshine-tiny-en-int8": { label: "Listening: speech to text", summary: "Turns what you say into text. Runs on this computer." },
+  "parakeet-tdt-0.6b-v2-int8": { label: "Listening: speech to text, more accurate", summary: "A larger listening model that makes about three times fewer mistakes with names and background noise. Runs on this computer." },
   "pocket-tts-english": { label: "Voice: Pocket TTS", summary: "The standard speaking voice." },
   "chatterbox-turbo-fp16": { label: "Voice: Chatterbox Turbo", summary: "A more expressive speaking voice for larger computers." },
   wakeword: { label: "Wake word (Hey MaiPai)", summary: "Lets a speaker or robot wake up when someone says the wake word." },
