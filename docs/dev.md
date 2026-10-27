@@ -2781,3 +2781,16 @@ git-lfs hashes. Ids: `qwen3-6-35b-a3b-ud-q4-k-xl` and
   reads it after the session's own preference. An uninstalled or unservable
   id falls back to the tier's model.
 
+## An optional uncensored chat model: HauhauCS Qwen3.6 (2026-10-26)
+
+A second optional chat model beside Qwen3.6-35B-A3B, installed only when an
+admin chooses it in Home Settings, AI & Models, Chat, where Home shows an
+"Uncensored" badge. No tier binds or downloads it, and the Stack adds no
+screening code: Home's age and surface gates run in front of every model.
+Pinned to `HauhauCS/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive` at
+revision `f12a584` (Apache-2.0 on the card), file
+`...-Aggressive-Q4_K_M.gguf` (21,166,758,016 bytes) and its own picture
+projector `mmproj-...-Aggressive-f16.gguf` (899,283,072 bytes), both with the
+repository's git-lfs hashes. Ids: `qwen3-6-35b-a3b-uncensored-hauhaucs-q4-k-m`
+and `qwen3-6-35b-a3b-uncensored-hauhaucs-mmproj-f16`. Launch and sampling are
+the base model's. The "Uncensored" label is a catalog tag on Home's side.
