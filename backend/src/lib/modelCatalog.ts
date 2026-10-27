@@ -162,46 +162,44 @@ export const STACK_CHAT_QWEN36_35B_MODEL: CatalogModelLike = {
   sampling: { temperature: 0.7, top_p: 0.8, top_k: 20, presence_penalty: 1.5, source: "Qwen/Qwen3.6-35B-A3B model card, non-thinking (instruct) sampling" },
 };
 
-// Optional uncensored chat model (2026-10-26, owner request): HauhauCS's
-// "Aggressive" fine-tune of Qwen3.6-35B-A3B, Apache-2.0 on the card. An admin
-// installs it on purpose and chooses it in Home Settings; no tier binds or
-// downloads it, and Home labels it "Uncensored". Home's own age and surface
-// gates still run in front of it. One revision; sha256 and sizes are the
-// repository's git-lfs oids. It reads pictures through its own F16 projector
-// (never the unsloth one), which loads beside the weights in the chat process.
-const QWEN36_UNCENSORED_REPO = "HauhauCS/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive";
-const QWEN36_UNCENSORED_REVISION = "f12a584fecbeb5f20001130d8ecd66c9327ae685";
-export const STACK_CHAT_QWEN36_UNCENSORED_PROJECTOR: CatalogModelLike = {
-  id: "qwen3-6-35b-a3b-uncensored-hauhaucs-mmproj-f16",
+// Optional uncensored chat model: HauhauCS's Aggressive Qwen3.8-27B GGUF.
+// The publisher describes it as direct-answer with no refusal behavior and
+// minimal preamble. An admin installs it on purpose and chooses it in Home
+// Settings; no tier binds or downloads it. Home's age and surface gates still
+// apply. The model card's Q4_K_P and BF16 projector hashes are pinned below.
+const QWEN38_UNCENSORED_REPO = "HauhauCS/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-MTP-GGUF";
+const QWEN38_UNCENSORED_REVISION = "993a5971fda8f30dd1b7eb2654792ba4415c7460";
+export const STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR: CatalogModelLike = {
+  id: "qwen3-8-27b-uncensored-hauhaucs-mmproj-bf16",
   role: "chat",
   component: "projector",
-  repo: QWEN36_UNCENSORED_REPO,
+  repo: QWEN38_UNCENSORED_REPO,
   license: "Apache-2.0",
-  revision: QWEN36_UNCENSORED_REVISION,
+  revision: QWEN38_UNCENSORED_REVISION,
   engine: "llama-server",
-  sizing: { profile: "p64", quantization: "F16" },
+  sizing: { profile: "p64", quantization: "BF16" },
   download: {
-    url: hfUrl(`${QWEN36_UNCENSORED_REPO}/resolve/${QWEN36_UNCENSORED_REVISION}/mmproj-Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-f16.gguf`),
-    sha256: "c8e702344a81f8c226a914aa980ed6e1f604bce9374f1fed8e65c896908af414",
-    approx_bytes: 899_283_072,
+    url: hfUrl(`${QWEN38_UNCENSORED_REPO}/resolve/${QWEN38_UNCENSORED_REVISION}/mmproj-Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-BF16.gguf`),
+    sha256: "5681b690bcb8eb10cd28d62d078cb4e01521a3ea4880a3fc7d54de72de2dd142",
+    approx_bytes: 931_146_624,
   },
 };
-export const STACK_CHAT_QWEN36_UNCENSORED_MODEL: CatalogModelLike = {
-  id: "qwen3-6-35b-a3b-uncensored-hauhaucs-q4-k-m",
+export const STACK_CHAT_QWEN38_UNCENSORED_MODEL: CatalogModelLike = {
+  id: "qwen3-8-27b-uncensored-hauhaucs-q4-k-p",
   role: "chat",
-  repo: QWEN36_UNCENSORED_REPO,
+  repo: QWEN38_UNCENSORED_REPO,
   license: "Apache-2.0",
-  revision: QWEN36_UNCENSORED_REVISION,
+  revision: QWEN38_UNCENSORED_REVISION,
   engine: "llama-server",
-  sizing: { profile: "p64", quantization: "Q4_K_M" },
+  sizing: { profile: "p64", quantization: "Q4_K_P" },
   download: {
-    url: hfUrl(`${QWEN36_UNCENSORED_REPO}/resolve/${QWEN36_UNCENSORED_REVISION}/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf`),
-    sha256: "bbef58c37ce88820be9d98b6437f1cf4bac890c947bd55fc7b68e22098574231",
-    approx_bytes: 21_166_758_016,
+    url: hfUrl(`${QWEN38_UNCENSORED_REPO}/resolve/${QWEN38_UNCENSORED_REVISION}/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q4_K_P.gguf`),
+    sha256: "ba36dc3c2b2ff5e0aa5d71092a8894546996a6a119ae391803dda07cdc08516d",
+    approx_bytes: 17_923_393_664,
   },
-  imageInput: { projector: STACK_CHAT_QWEN36_UNCENSORED_PROJECTOR.id },
+  imageInput: { projector: STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR.id },
   launch: { imageMaxTokens: 2560 },
-  sampling: { temperature: 0.7, top_p: 0.8, top_k: 20, presence_penalty: 1.5, source: "Qwen/Qwen3.6-35B-A3B model card, non-thinking (instruct) sampling (the fine-tune's base model)" },
+  sampling: { temperature: 0.7, top_p: 0.8, top_k: 20, presence_penalty: 1.5, source: "Qwen/Qwen3.8-27B model card, instruct/non-thinking sampling (the fine-tune's base model)" },
 };
 
 // ENGINE-MLX-01: the same Muse Glimmer 30B as an MLX 4-bit directory, for
@@ -1157,7 +1155,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN36_UNCENSORED_MODEL, STACK_CHAT_QWEN36_UNCENSORED_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_DETAILED_MODELS, ...STACK_MUSIC_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_DETAILED_MODELS, ...STACK_MUSIC_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

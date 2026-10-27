@@ -2787,13 +2787,16 @@ A second optional chat model beside Qwen3.6-35B-A3B, installed only when an
 admin chooses it in Home Settings, AI & Models, Chat, where Home shows an
 "Uncensored" badge. No tier binds or downloads it, and the Stack adds no
 screening code: Home's age and surface gates run in front of every model.
-Pinned to `HauhauCS/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive` at
-revision `f12a584` (Apache-2.0 on the card), file
-`...-Aggressive-Q4_K_M.gguf` (21,166,758,016 bytes) and its own picture
-projector `mmproj-...-Aggressive-f16.gguf` (899,283,072 bytes), both with the
-repository's git-lfs hashes. Ids: `qwen3-6-35b-a3b-uncensored-hauhaucs-q4-k-m`
-and `qwen3-6-35b-a3b-uncensored-hauhaucs-mmproj-f16`. Launch and sampling are
-the base model's. The "Uncensored" label is a catalog tag on Home's side.
+Replaced 2026-10-27 with HauhauCS's Qwen3.8-27B Aggressive GGUF, pinned to
+revision `993a5971` (Apache-2.0 on the model card). The Q4_K_P weights are
+17,923,393,664 bytes (SHA-256
+`ba36dc3c2b2ff5e0aa5d71092a8894546996a6a119ae391803dda07cdc08516d`); the
+BF16 image projector is 931,146,624 bytes (SHA-256
+`5681b690bcb8eb10cd28d62d078cb4e01521a3ea4880a3fc7d54de72de2dd142`). The
+model id is `qwen3-8-27b-uncensored-hauhaucs-q4-k-p`; its template defaults
+thinking off, and the per-request switch can enable it. The publisher describes
+this Aggressive variant as direct-answer with minimal preamble and no refusal
+behavior. Tool use in Home remains to be measured.
 
 ## Diagnosing a failed picture (2026-10-27)
 
