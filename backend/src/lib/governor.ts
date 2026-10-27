@@ -116,6 +116,7 @@ interface LoadedInternal extends GovernorLoadedModel {
   processBreaches: number;
   keepAliveSeconds: number;
   yieldsToGenerators: boolean;
+  role: string | null;
 }
 
 interface GovernorTuning {
@@ -221,6 +222,7 @@ function loadedItemFor(request: GovernorRequest): LoadedInternal {
     processBreaches: 0,
     keepAliveSeconds: request.kind === "generator" ? 0 : request.keepAliveSeconds ?? 0,
     yieldsToGenerators: request.kind === "jit" && request.yieldsToGenerators === true,
+    role: request.role ?? null,
   };
 }
 
@@ -588,9 +590,18 @@ export interface StartGovernorOptions {
    * the next admission starts from the latest run, not the first. */
   onPeak?: (id: string, processBytes: number) => void;
   abort?: (id: string) => Promise<void> | void;
+  /** A video job is held for memory and nothing lighter freed enough: the
+   * caller restarts idle chat at a smaller window. Resolves false when
+   * chat is busy (asked again next poll). */
+  shrinkChat?: () => Promise<boolean>;
+  /** No video job is waiting or running: put chat's full window back. */
+  restoreChat?: () => Promise<boolean>;
+  chatWindowShrunk?: () => boolean;
   now?: () => number;
   tier?: GovernorTier;
 }
+
+let chatYieldBusy = false;
 
 export function startGovernor(options: StartGovernorOptions): () => void {
   activeTier = options.tier ?? activeTier;
@@ -721,6 +732,21 @@ export function startGovernor(options: StartGovernorOptions): () => void {
         }
       }
     }
+    // A video job still held after idle helpers were offered: chat is the
+    // priority, but its window may shrink once for the length of the job
+    // (DESIGN-chat-memory-yields-to-generators-2026-10-27). Video only.
+    if (options.shrinkChat && !chatYieldBusy) {
+      const videoWaiting = queue.some((entry) => !entry.settled && entry.request.kind === "generator" && entry.request.role === "video");
+      const videoRunning = [...loaded.values()].some((item) => item.kind === "generator" && item.role === "video");
+      const head = queue.find((entry) => !entry.settled);
+      if (head && head.request.kind === "generator" && head.request.role === "video" && !codingModeActive && !canAdmit(head.request, peakFor(head.request).bytes) && !options.chatWindowShrunk?.()) {
+        chatYieldBusy = true;
+        void options.shrinkChat().then((done) => { if (done) decide("Restarted", "A video job was waiting for memory, so chat was restarted once at a smaller window.", "chat"); }).catch(() => {}).finally(() => { chatYieldBusy = false; });
+      } else if (options.restoreChat && options.chatWindowShrunk?.() && !videoWaiting && !videoRunning) {
+        chatYieldBusy = true;
+        void options.restoreChat().then((done) => { if (done) decide("Restarted", "The video job is done, so chat has its full window back.", "chat"); }).catch(() => {}).finally(() => { chatYieldBusy = false; });
+      }
+    }
     // Every poll tries the queue head, not only on a pressure or floor edge:
     // a request can be queued by the working margin alone (free dipped under
     // peak + margin while an engine loaded) with neither edge ever firing.
@@ -776,6 +802,7 @@ export function __setGovernorTuningForTestsOnly(overrides: Partial<GovernorTunin
 }
 
 export function __resetGovernorForTests(): void {
+  chatYieldBusy = false;
   codingModeActive = false;
   metalCapBytes = null;
   admissionGate = null;

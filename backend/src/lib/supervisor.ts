@@ -1195,6 +1195,46 @@ export async function unloadJitForGovernor(id: string): Promise<boolean> {
   return unloadRole(role, "Unloaded by the memory governor.");
 }
 
+/** The smallest window chat is restarted at for a held video job
+ * (DESIGN-chat-memory-yields-to-generators-2026-10-27): history is
+ * re-sized from the engine's reported per-slot context, so nothing is lost. */
+export const CHAT_YIELD_FLOOR_TOKENS = 32_768;
+let chatWindowCapTokens: number | null = null;
+
+/** Applies the temporary chat window cap, never below the floor and
+ * never to a role other than chat. */
+export function capChatWindow(role: RoleId, contextLength: number): number {
+  if (role !== "chat" || chatWindowCapTokens === null) return contextLength;
+  return Math.min(contextLength, Math.max(chatWindowCapTokens, CHAT_YIELD_FLOOR_TOKENS));
+}
+
+export function chatWindowShrunk(): boolean { return chatWindowCapTokens !== null; }
+
+/** A video job is held for memory: restart idle chat once at the floor
+ * window. False while chat serves a request (asked again next poll), when
+ * chat is not running, or when its window is already at the floor. */
+export async function shrinkChatForVideo(): Promise<boolean> {
+  if (chatWindowCapTokens !== null) return true;
+  const current = runtimes.get("chat")?.process;
+  if (!current || current.kind !== "spawned" || current.retired || current.activeRequests > 0) return false;
+  chatWindowCapTokens = CHAT_YIELD_FLOOR_TOKENS;
+  await recycleRole("chat");
+  return true;
+}
+
+/** The video job is gone: put the full window back. Waits (returns false)
+ * while chat serves a request, so a conversation is never cut mid-answer. */
+export async function restoreChatWindow(): Promise<boolean> {
+  if (chatWindowCapTokens === null) return true;
+  const current = runtimes.get("chat")?.process;
+  if (current && current.activeRequests > 0) return false;
+  chatWindowCapTokens = null;
+  if (current && !current.retired) await recycleRole("chat");
+  return true;
+}
+
+export function __resetChatWindowForTests(): void { chatWindowCapTokens = null; }
+
 /** Resident starts in progress: while any runs, a jit role does not
  * start, so nothing new is admitted beside a resident being sized. */
 let residentStarts = 0;
@@ -1237,7 +1277,7 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
   const codingRole = role === "coding";
   // A record with its own launch (vision) runs one slot, as its args say.
   const slots = declaredLaunchContext(model) !== null ? 1 : typeof config.slots === "number" && config.slots > 0 ? config.slots : 1;
-  const contextLength = resolvedContextLength ?? (codingRole ? codingLaunchSettings().contextLength : null) ?? declaredLaunchContext(model) ?? (typeof config.contextLength === "number" && config.contextLength > 0 ? config.contextLength : engineForRole(role) === "omlx" ? omlxContextLength(model, config) : await contextForLaunch(model, config, slots, gpuLayersFor(role)));
+  const contextLength = capChatWindow(role, resolvedContextLength ?? (codingRole ? codingLaunchSettings().contextLength : null) ?? declaredLaunchContext(model) ?? (typeof config.contextLength === "number" && config.contextLength > 0 ? config.contextLength : engineForRole(role) === "omlx" ? omlxContextLength(model, config) : await contextForLaunch(model, config, slots, gpuLayersFor(role))));
   if (codingRole && engineForRole(role) === "splash") return splashLaunchPlan(model, port, resolvedContextLength ?? codingLaunchSettings().contextLength);
   if (engineForRole(role) === "omlx") {
     // oMLX (ENGINE-MLX-01): an environment the Stack built, serving the one
@@ -1440,7 +1480,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   const ownContext = coding ? codingWindow!.contextLength : declaredLaunchContext(model);
   const declaredContextLength = ownContext ?? launchConfig.context_length;
   const slots = coding ? coding.slots : ownContext !== null ? 1 : typeof launchConfig.slots === "number" && launchConfig.slots > 0 ? launchConfig.slots : 1;
-  const contextLength = typeof declaredContextLength === "number" && declaredContextLength > 0 ? declaredContextLength : engineForRole(role) === "omlx" ? omlxContextLength(model, launchConfig) : await contextForLaunch(model, { ...launchConfig, contextLength: 0 }, slots, gpuLayersFor(role));
+  const contextLength = capChatWindow(role, typeof declaredContextLength === "number" && declaredContextLength > 0 ? declaredContextLength : engineForRole(role) === "omlx" ? omlxContextLength(model, launchConfig) : await contextForLaunch(model, { ...launchConfig, contextLength: 0 }, slots, gpuLayersFor(role)));
   // The voice engine starts offline; what it may need beyond the pins
   // (the gated cloning weights, with a token and cloning turned on) the
   // Stack fetches first, once. A fetch that fails never stops the start:
@@ -1880,7 +1920,7 @@ export function watchProcessMemory(role: RoleId, pid: number, measured?: { model
   return startGovernor({ pid, tier: machineTier, ...(processMemory ? { processMemory } : {}), restart: async () => { await restartRole(role); }, busy: () => {
     const current = runtimes.get(role)?.process;
     return current?.pid === pid && current.activeRequests > 0;
-  }, onPeak: measured ? (_id, bytes) => { recordMeasuredFootprint(measured.modelId, bytes, measured.contextLength); } : undefined, unload: async (id) => {
+  }, onPeak: measured ? (_id, bytes) => { recordMeasuredFootprint(measured.modelId, bytes, measured.contextLength); } : undefined, shrinkChat: shrinkChatForVideo, restoreChat: restoreChatWindow, chatWindowShrunk, unload: async (id) => {
     // Only a running jit process is evicted here; one still starting is
     // left to its own start, so its admission stays counted. The coding
     // engine also declines while it serves a request.

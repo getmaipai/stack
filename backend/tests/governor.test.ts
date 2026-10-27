@@ -733,3 +733,35 @@ test("the old free-plus-inactive figure from the event still refuses the honest 
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: P16_TOTAL_BYTES, freeMemoryBytes: 8_800_010_240, tier: "p16" });
   expect(await admit(honestChat)).toMatchObject({ queued: true, position: 1 });
 });
+
+test("a video held for memory restarts idle chat once at a smaller window, and chat gets its window back after (CHAT-MEMORY-YIELD-01)", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 64 * GB, freeMemoryBytes: 10 * GB, tier: "p64" });
+  let free = 10 * GB;
+  let shrunk = false;
+  const calls: string[] = [];
+  const queued = await admit({ id: "video-job", role: "video", kind: "generator", class: "burst", requestedBytes: 30 * GB });
+  expect(queued).toMatchObject({ queued: true });
+  stops.push(startGovernor({
+    pid: 1, pollMs: 1, freeMemory: () => free, totalMemory: () => 64 * GB,
+    shrinkChat: async () => { calls.push("shrink"); shrunk = true; free = 50 * GB; return true; },
+    restoreChat: async () => { calls.push("restore"); shrunk = false; return true; },
+    chatWindowShrunk: () => shrunk,
+  }));
+  const handle = await Promise.race([(queued as { admitted: Promise<unknown> }).admitted, Bun.sleep(500).then(() => null)]) as GovernorHandle | null;
+  expect(handle).toMatchObject({ id: "video-job" });
+  expect(calls).toEqual(["shrink"]);
+  await Bun.sleep(20);
+  expect(calls).toEqual(["shrink"]); // still running: no restore, and no second shrink
+  release(handle!);
+  await Bun.sleep(50);
+  expect(calls).toEqual(["shrink", "restore"]);
+});
+
+test("a picture held for memory never shrinks chat", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 64 * GB, freeMemoryBytes: 10 * GB, tier: "p64" });
+  let called = false;
+  await admit({ id: "picture-job", role: "image", kind: "generator", class: "warm", requestedBytes: 30 * GB });
+  stops.push(startGovernor({ pid: 1, pollMs: 1, freeMemory: () => 10 * GB, totalMemory: () => 64 * GB, shrinkChat: async () => { called = true; return true; }, chatWindowShrunk: () => false }));
+  await Bun.sleep(30);
+  expect(called).toBe(false);
+});

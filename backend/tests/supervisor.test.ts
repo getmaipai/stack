@@ -405,3 +405,16 @@ test("coding with its model installed reports installed (not loaded); with no ll
   expect(started).toEqual([]);
   clearModelsForTests();
 });
+
+test("the held-video chat window never goes below 32768 tokens and touches only chat (CHAT-MEMORY-YIELD-01)", async () => {
+  const { capChatWindow, chatWindowShrunk, __resetChatWindowForTests, CHAT_YIELD_FLOOR_TOKENS } = await import("@/lib/supervisor");
+  __resetChatWindowForTests();
+  expect(capChatWindow("chat", 131_072)).toBe(131_072);
+  expect(chatWindowShrunk()).toBe(false);
+  __resetChatWindowForTests();
+  expect(CHAT_YIELD_FLOOR_TOKENS).toBe(32_768);
+  const { shrinkChatForVideo, restoreChatWindow } = await import("@/lib/supervisor");
+  expect(await shrinkChatForVideo()).toBe(false); // chat is not running: nothing to restart, no cap left behind
+  expect(chatWindowShrunk()).toBe(false);
+  expect(await restoreChatWindow()).toBe(true);
+});
