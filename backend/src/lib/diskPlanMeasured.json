@@ -99,6 +99,14 @@
       "download_bytes": 899283680,
       "installed_bytes": 899283680
     },
+    "qwen3-6-35b-a3b-uncensored-hauhaucs-q4-k-m": {
+      "download_bytes": 21166758016,
+      "installed_bytes": 21166758016
+    },
+    "qwen3-6-35b-a3b-uncensored-hauhaucs-mmproj-f16": {
+      "download_bytes": 899283072,
+      "installed_bytes": 899283072
+    },
     "qwen3.8-27b-ud-q4-k-m": {
       "download_bytes": 16464440224,
       "installed_bytes": 16464440224

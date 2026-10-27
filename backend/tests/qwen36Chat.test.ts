@@ -5,7 +5,8 @@
 import { afterEach, expect, test } from "bun:test";
 import { buildInstallPlan } from "@/lib/installPlan";
 import { type HardwareInfo } from "@/lib/hardware";
-import { STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_MODELS } from "@/lib/modelCatalog";
+import { PROFILE_MODEL_BINDINGS } from "@/profiles";
+import { STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN36_UNCENSORED_MODEL, STACK_CHAT_QWEN36_UNCENSORED_PROJECTOR, STACK_MODELS } from "@/lib/modelCatalog";
 import { clearModelsForTests, upsertModel } from "@/lib/modelStore";
 import { resetSupervisorForTests, selectedModel } from "@/lib/supervisor";
 import { __resetSettingsForTests, updateSettings } from "@/settings";
@@ -57,4 +58,32 @@ test("the chat model Home stored in the setting is the one that runs, and a miss
   expect(selectedModel("chat")?.id).toBe("chat-b");
   updateSettings({ "stack.engines.chat.model": "gone" });
   expect(selectedModel("chat")?.id).toBe("chat-a");
+});
+
+// Optional uncensored fine-tune (HauhauCS): pinned to its own revision, hashes and projector; never installed by default.
+test("the uncensored fine-tune is pinned to its own revision, hashes and projector", () => {
+  expect(STACK_MODELS).toContain(STACK_CHAT_QWEN36_UNCENSORED_MODEL);
+  expect(STACK_MODELS).toContain(STACK_CHAT_QWEN36_UNCENSORED_PROJECTOR);
+  expect(STACK_CHAT_QWEN36_UNCENSORED_MODEL).toMatchObject({
+    id: "qwen3-6-35b-a3b-uncensored-hauhaucs-q4-k-m", role: "chat", license: "Apache-2.0", engine: "llama-server",
+    repo: "HauhauCS/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive",
+    revision: "f12a584fecbeb5f20001130d8ecd66c9327ae685",
+    download: { sha256: "bbef58c37ce88820be9d98b6437f1cf4bac890c947bd55fc7b68e22098574231", approx_bytes: 21_166_758_016 },
+    imageInput: { projector: STACK_CHAT_QWEN36_UNCENSORED_PROJECTOR.id },
+  });
+  expect(STACK_CHAT_QWEN36_UNCENSORED_MODEL.download!.url).toBe("https://huggingface.co/HauhauCS/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/resolve/f12a584fecbeb5f20001130d8ecd66c9327ae685/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf");
+  expect(STACK_CHAT_QWEN36_UNCENSORED_PROJECTOR).toMatchObject({
+    component: "projector", revision: "f12a584fecbeb5f20001130d8ecd66c9327ae685",
+    download: { sha256: "c8e702344a81f8c226a914aa980ed6e1f604bce9374f1fed8e65c896908af414", approx_bytes: 899_283_072 },
+  });
+  expect(STACK_CHAT_QWEN36_UNCENSORED_PROJECTOR.download!.url).toContain("/resolve/f12a584fecbeb5f20001130d8ecd66c9327ae685/mmproj-Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-f16.gguf");
+});
+
+test("no tier installs or binds the uncensored fine-tune", () => {
+  for (const gb of [16, 32, 64, 128]) {
+    const ids = buildInstallPlan(hw(gb)).models.map((model) => model.id);
+    expect(ids).not.toContain(STACK_CHAT_QWEN36_UNCENSORED_MODEL.id);
+    expect(ids).not.toContain(STACK_CHAT_QWEN36_UNCENSORED_PROJECTOR.id);
+  }
+  expect(Object.values(PROFILE_MODEL_BINDINGS).flatMap((b) => Object.values(b))).not.toContain(STACK_CHAT_QWEN36_UNCENSORED_MODEL.id);
 });
