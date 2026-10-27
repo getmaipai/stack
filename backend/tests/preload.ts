@@ -99,10 +99,15 @@ if (!process.env.STACK_SCAN_ROOTS) {
 // resolve every cycle in the graph safely; only once it has fully
 // loaded is it safe to reach into @/lib/governor and @/lib/memory
 // directly.
-await import("@/app");
-const { __setGovernorTuningForTestsOnly } = await import("@/lib/governor");
+// The scripted reading is installed before the app loads: the governor
+// reads memory once at load, and the "Memory for models" setting takes its
+// default from that total. A real 24 GB laptop gave a 16 GB budget there and
+// refused every 20 GB test admission.
 const { __setMemoryReaderForTests } = await import("@/lib/memory");
 const { scriptedMemoryReader } = await import("@/lib/memory/scripted");
+__setMemoryReaderForTests(scriptedMemoryReader([GOVERNOR_MEMORY_DEFAULT]));
+await import("@/app");
+const { __setGovernorTuningForTestsOnly } = await import("@/lib/governor");
 __setGovernorTuningForTestsOnly({ totalMemoryBytes: GOVERNOR_MEMORY_DEFAULT.totalBytes, freeMemoryBytes: GOVERNOR_MEMORY_DEFAULT.freeBytes });
 
 // __resetGovernorForTests() (governor.test.ts, runState.test.ts) re-reads
