@@ -421,9 +421,8 @@ test("the held-video chat window never goes below 32768 tokens and touches only 
 
 test("stopping and restarting a role log an engine.retired line with the reason (issue 253)", async () => {
   const { logsDir } = await import("@/lib/paths");
-  const { logger } = await import("@/lib/log");
   const { stopRole, restartRole } = await import("@/lib/supervisor");
-  const lines = () => { logger.flush?.(); try { return readFileSync(join(logsDir, "stack.log"), "utf8"); } catch { return ""; } };
+  const lines = () => { try { return readFileSync(join(logsDir, "stack.log"), "utf8"); } catch { return ""; } };
   await getProcess("chat");
   await stopRole("chat", "Stopped by a test.");
   await getProcess("chat").catch(() => undefined);
