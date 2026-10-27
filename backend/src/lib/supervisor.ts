@@ -13,7 +13,7 @@ import { withTimeout } from "@maipai/core/src/withTimeout";
 import { isCompiledBinary } from "@/lib/paths";
 import { ENGINE_READY_MARKER, installedEnginePin, selectEngineBinary, type CodingEngine, type EngineBinaryPin } from "@/lib/engineCatalog";
 import { managedEnv } from "@/lib/uvEnvironment";
-import { codingServerArgs, defaultKvCacheType, llamaServerArgs, mlxKvQuantFor, mlxServeArgs, splashArgs, type KvCacheType } from "@/lib/engineArgs";
+import { codingServerArgs, defaultKvCacheType, llamaCacheRamMib, llamaServerArgs, mlxKvQuantFor, mlxServeArgs, splashArgs, type KvCacheType } from "@/lib/engineArgs";
 import { currentEngineBinary, currentEngineTag, engineBinaryPath, engineDir } from "@/lib/engineInstall";
 import { detectAppleChip, detectHardware, primaryBudgetBytes } from "@/lib/hardware";
 import { identityHeaders, modelFileName, readEngineIdentity, type EngineIdentity } from "@/lib/identity";
@@ -858,6 +858,9 @@ export function fitRefusalMessage(input: { modelId: string; peakBytes: number | 
   return `${input.modelId} was not started: it needs about ${gb(input.peakBytes)} of ${memory} to run its smallest context (8,192 tokens), and ${gb(input.budgetBytes)} is available. ${choice}, then start this engine again.`;
 }
 
+const LARGE_CHAT_MODEL_BYTES = 8_000_000_000;
+const HOST_OUTPUT_BUFFER_BYTES = 2_000_000_000;
+
 async function contextForLaunch(model: ModelRecord, config: Record<string, number | boolean | string | string[]>, slots = 1, gpuLayers: GpuLayers = "all"): Promise<number> {
   const onProcessor = gpuLayers === 0;
   const configured = config.contextLength;
@@ -880,9 +883,16 @@ async function contextForLaunch(model: ModelRecord, config: Record<string, numbe
   // (VISION-02b): the fit tool sizes the language model alone, so the
   // projector's bytes are added to every estimate the plan reads.
   const projectorBytes = projectorFor(model)?.sizeBytes ?? 0;
+  // The fit tool counts the device buffers only. A large chat model also
+  // fills host memory the tool never sees: the bounded prompt cache the
+  // Stack launches it with, and its output buffer (measured 2.0 GB for a
+  // 248k-token vocabulary, 2026-10-27). Small helpers (the judge, the
+  // embedder) stay under it.
+  const hostExtraBytes = (model.sizeBytes ?? 0) > LARGE_CHAT_MODEL_BYTES ? llamaCacheRamMib(config) * 1_048_576 + HOST_OUTPUT_BUFFER_BYTES : 0;
   const withProjector = async (estimate: Promise<GgufEstimate | null>): Promise<GgufEstimate | null> => {
     const value = await estimate;
-    return value && projectorBytes > 0 ? { ...value, vramNonumaBytes: value.vramNonumaBytes + projectorBytes, ramNonumaBytes: value.ramNonumaBytes + projectorBytes } : value;
+    const extraBytes = projectorBytes + hostExtraBytes;
+    return value && extraBytes > 0 ? { ...value, vramNonumaBytes: value.vramNonumaBytes + extraBytes, ramNonumaBytes: value.ramNonumaBytes + extraBytes } : value;
   };
   const cpuEstimateAt = (contextTokens: number) => model.modelPath?.endsWith(".gguf")
     ? withProjector(runGgufParser({ target: { path: model.modelPath }, contextTokens: contextTokens * slots, kvCacheType: defaultKvCacheType(), gpuLayers: 0 }))

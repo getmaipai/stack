@@ -66,6 +66,13 @@ export function kvCacheTypeFor(override: KvCacheOverride | undefined, platform: 
   return defaultKvCacheType(platform);
 }
 
+/** The host prompt cache a chat process may fill, in MiB: the setting when it is above zero, else this default. */
+export const LLAMA_CACHE_RAM_DEFAULT_MIB = 1024;
+export const LLAMA_CTX_CHECKPOINTS = 8;
+export function llamaCacheRamMib(config: { cacheRamMb?: unknown }): number {
+  return typeof config.cacheRamMb === "number" && config.cacheRamMb > 0 ? config.cacheRamMb : LLAMA_CACHE_RAM_DEFAULT_MIB;
+}
+
 export function llamaServerArgs(options: LlamaServerArgsOptions): string[] {
   const { config, contextLength } = options;
   // `-c` is the context size: the ceiling every other budget is
@@ -120,12 +127,23 @@ export function llamaServerArgs(options: LlamaServerArgsOptions): string[] {
   // and the engine's automatic slot count would split its short context.
   // A chat process keeps the slots its settings declare (the judge's
   // shared slot on p16), projector or not.
+  // Left on auto, llama-server b10797 picks four slots that share one
+  // cache pool, and each slot keeps its own recurrent-state snapshots on a
+  // hybrid model, so a chat process always spells the slots its settings
+  // declare (one by default).
   if (options.onePictureSlot) args.push("--parallel", "1");
-  else if (slots > 1) args.push("--parallel", String(slots));
+  else if (!options.embeddings) args.push("--parallel", String(Math.max(1, slots)));
   const threads = typeof config.threads === "number" ? config.threads : 0;
   if (threads > 0) args.push("--threads", String(threads));
-  const cacheRamMb = typeof config.cacheRamMb === "number" ? config.cacheRamMb : 0;
-  if (cacheRamMb > 0) args.push("--cache-ram-mb", String(cacheRamMb));
+  // The prompt cache that llama-server keeps in host memory defaults to
+  // 8 GiB and fills with use; the Stack bounds it so the memory it admits a
+  // chat process for is the memory the process stays within. `--cache-ram`
+  // is the flag b10797 knows (it rejects `--cache-ram-mb`). A recurrent
+  // snapshot is kept every few thousand tokens, so a handful are enough.
+  if (!options.embeddings) {
+    args.push("--cache-ram", String(llamaCacheRamMib(config)));
+    args.push("--ctx-checkpoints", String(LLAMA_CTX_CHECKPOINTS));
+  }
   // f16 is llama-server's default; auto means q8_0 on macOS and f16 elsewhere.
   const kvCacheType = options.kvCacheType ?? defaultKvCacheType();
   if (kvCacheType !== "f16") args.push("-ctk", kvCacheType, "-ctv", kvCacheType);

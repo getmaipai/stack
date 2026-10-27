@@ -100,7 +100,7 @@ test("while the governor holds another generator, the job waits in the governor'
   expect("id" in other).toBe(true);
   const job = submit("after the other");
   await new Promise((resolve) => setTimeout(resolve, 350));
-  expect(getJob(job.id)).toMatchObject({ state: "running", status: expect.stringContaining("waiting for memory (1 ahead): needs about") });
+  expect(getJob(job.id)).toMatchObject({ state: "running", status: expect.stringContaining("waiting for memory: needs about") });
   expect(sidecar.started).toEqual([]);
   release(other);
   const done = await waitForJob(job.id, 3_000);
@@ -192,7 +192,7 @@ test("a render queued for memory with nothing loaded runs once memory frees: the
   await Bun.sleep(10);
   const job = submit("when memory frees");
   await new Promise((resolve) => setTimeout(resolve, 300));
-  expect(getJob(job.id)).toMatchObject({ state: "running", status: expect.stringContaining("waiting for memory (1 ahead): needs about") });
+  expect(getJob(job.id)).toMatchObject({ state: "running", status: expect.stringContaining("waiting for memory: needs about") });
   expect(sidecar.started).toEqual([]);
   const done = await waitForJob(job.id, 4_000);
   expect(done?.state).toBe("done");

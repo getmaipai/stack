@@ -43,6 +43,9 @@ test("a Mac spawn gets the hub's full launch list over the declared defaults", (
     "--metrics",
     "--jinja",
     "--cache-reuse", "256",
+    "--parallel", "1",
+    "--cache-ram", "1024",
+    "--ctx-checkpoints", "8",
     "-ctk", "q8_0",
     "-ctv", "q8_0",
   ]);
@@ -73,16 +76,26 @@ test("declared slots, threads and cache RAM are spelled only when above one or z
   expect(args[p + 1]).toBe("2");
   const t = args.indexOf("--threads");
   expect(args[t + 1]).toBe("8");
-  const c = args.indexOf("--cache-ram-mb");
+  const c = args.indexOf("--cache-ram");
   expect(args[c + 1]).toBe("512");
+  expect(args).not.toContain("--cache-ram-mb");
+});
+
+test("a chat process always names one slot, a bounded host cache and few checkpoints; an embedding process names none of them", () => {
+  const args = llamaServerArgs({ modelPath, port: 8771, config: { ...declaredDefaults }, contextLength: 4096, kvCacheType: "q8_0" });
+  expect(args[args.indexOf("--parallel") + 1]).toBe("1");
+  expect(args[args.indexOf("--cache-ram") + 1]).toBe("1024");
+  expect(args[args.indexOf("--ctx-checkpoints") + 1]).toBe("8");
+  const embed = llamaServerArgs({ modelPath, port: 8771, config: { ...declaredDefaults }, contextLength: 4096, kvCacheType: "q8_0", embeddings: true });
+  for (const flag of ["--parallel", "--cache-ram", "--ctx-checkpoints"]) expect(embed).not.toContain(flag);
 });
 
 test("without KV quantization the -ctk/-ctv pair is absent", () => {
   const args = llamaServerArgs({ modelPath, port: 8771, config: declaredDefaults, contextLength: 4096, kvCacheType: "f16" });
   expect(args).not.toContain("-ctk");
   expect(args).not.toContain("-ctv");
-  expect(args[args.length - 2]).toBe("--cache-reuse");
-  expect(args[args.length - 1]).toBe("256");
+  expect(args.slice(-2)).toEqual(["--ctx-checkpoints", "8"]);
+  expect(args[args.indexOf("--cache-reuse") + 1]).toBe("256");
 });
 
 test("a small declared context caps -ub at it", () => {

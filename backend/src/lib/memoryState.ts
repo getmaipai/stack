@@ -111,9 +111,10 @@ export function admissionVerdict(request: Pick<GovernorRequest, "id" | "kind">, 
 
 /** The status line of a job waiting on memory: the numbers a person can act on. */
 export function waitingText(peakBytes: number, position: number): string {
+  // `position` is the job's own place in the queue (1 is first), so the jobs ahead of it are one fewer.
   const sample = currentSample();
   const reserve = reserveBytes(sample.totalBytes);
-  const ahead = position > 0 ? ` (${position} ahead)` : "";
+  const ahead = position > 1 ? ` (${position - 1} ahead)` : "";
   return `waiting for memory${ahead}: needs about ${gb(peakBytes)} GB, ${gb(sample.availableBytes)} GB available, ${gb(reserve)} GB kept in reserve`;
 }
 

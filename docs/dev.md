@@ -2801,3 +2801,15 @@ behavior. Tool use in Home remains to be measured.
 ## Diagnosing a failed picture (2026-10-27)
 
 A picture that fails inside the worker used to leave only "The picture engine failed on that request": the worker's stderr is drained and never kept, because a traceback can carry a prompt (rule 6a). Now the worker sends a `diag` object with its failure reply (the exception type, the last eight frames as `file:line in function`, and the message only for missing-module, missing-file and missing-attribute errors, with the prompt blanked), and the Stack writes one `image.worker_failed` line to `data/logs/stack.log` with the family, the operation, the code and that `diag`. Find it with `grep image.worker_failed <data>/logs/stack.log | tail`. Nothing a person typed is in it. The 2026-10-27 outage (every ERNIE picture failing on a missing mflux module) would have read `ModuleNotFoundError ... mflux_worker.py:181 in build` there.
+
+## Chat process memory is bounded and admitted honestly (2026-10-27)
+
+Measured on the Studio with the Qwen3.8-27B chat model: the Stack admitted it for 29.9 GB and it grew to 37.9 GB, so a
+queued video job (46 GB peak plus the 10.2 GB reserve) waited for memory that was never free. Causes, read from the live
+process: llama-server b10797 picked four slots on its own and kept an 8 GiB prompt cache plus 32 recurrent-state
+snapshots per slot in host memory, and the output buffer (2.0 GB for a 248k-token vocabulary) was never counted.
+
+The launch now always names `--parallel` (the declared slots, one by default), `--cache-ram` (the setting, else 1024 MiB;
+the old `--cache-ram-mb` spelling is rejected by b10797 and failed the launch) and `--ctx-checkpoints 8`. A chat model
+over 8 GB is admitted for the fit tool's device estimate plus the projector, the cache cap and a 2 GB output buffer. The
+waiting line counts only the jobs actually ahead of a job ("waiting for memory", then "(N ahead)" for N above zero).
