@@ -782,3 +782,12 @@ test("several pictures in one job: the fraction covers all of them and never goe
   expect(seen[4]!).toBeLessThan(0.5 + 1e-9);
   expect(IMAGE_STAGES.reduce((sum, item) => sum + item.weight, 0)).toBeCloseTo(1, 5);
 });
+
+test("the worker builds ERNIE from mflux 0.23.0's own ModelConfig, never a module that release lacks", () => {
+  // 2026-10-27: the worker imported mflux.models.common.config.config_resolution, which is not in the pinned 0.23.0, so every ERNIE picture
+  // failed with "The picture engine failed on that request" the moment the model loaded.
+  const worker = readFileSync(join(import.meta.dir, "../src/images/mflux_worker.py"), "utf8");
+  expect(worker).not.toContain("config_resolution");
+  expect(worker).toContain("ModelConfig.ernie_image_turbo()");
+  expect(readFileSync(join(import.meta.dir, "../src/images/image-gen.darwin-arm64.requirements.txt"), "utf8")).toContain("mflux==0.23.0");
+});

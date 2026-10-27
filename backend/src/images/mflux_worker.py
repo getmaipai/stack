@@ -178,10 +178,10 @@ def build(request, mode):
     elif family == "ernie-image-turbo":
         if mode == "edit":
             raise ValueError("unsupported_edit")
-        from mflux.models.common.config.config_resolution import ConfigResolution
         from mflux.models.ernie_image.variants.txt2img.ernie_image import ErnieImage
 
-        ernie_config = ConfigResolution.resolve_restricted("ernie-image-turbo", "ernie-image-turbo", model_path=None)
+        # mflux 0.23.0 (the pin) has the config on ModelConfig; ConfigResolution is not in that release.
+        ernie_config = ModelConfig.ernie_image_turbo()
         model = ErnieImage(model_config=ernie_config, **common)
     elif family == "z-image-turbo":
         if mode == "edit":
