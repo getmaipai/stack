@@ -2787,16 +2787,14 @@ A second optional chat model beside Qwen3.6-35B-A3B, installed only when an
 admin chooses it in Home Settings, AI & Models, Chat, where Home shows an
 "Uncensored" badge. No tier binds or downloads it, and the Stack adds no
 screening code: Home's age and surface gates run in front of every model.
-Replaced 2026-10-27 with HauhauCS's Qwen3.8-27B Aggressive GGUF, pinned to
-revision `993a5971` (Apache-2.0 on the model card). The Q4_K_P weights are
-17,923,393,664 bytes (SHA-256
-`ba36dc3c2b2ff5e0aa5d71092a8894546996a6a119ae391803dda07cdc08516d`); the
-BF16 image projector is 931,146,624 bytes (SHA-256
-`5681b690bcb8eb10cd28d62d078cb4e01521a3ea4880a3fc7d54de72de2dd142`). The
-model id is `qwen3-8-27b-uncensored-hauhaucs-q4-k-p`; its template defaults
-thinking off, and the per-request switch can enable it. The publisher describes
-this Aggressive variant as direct-answer with minimal preamble and no refusal
-behavior. Tool use in Home remains to be measured.
+Replaced 2026-10-27 with huihui-ai's abliterated Qwen3.8-27B (UD-IQ4_XS), after a short side-by-side on the Studio against the
+HauhauCS Aggressive Q4_K_P build it replaced: same answers on four reasoning puzzles, five facts, a 13-row tool corpus (11 of 13
+each, no false calls) and ten adult-allowed requests (no refusals in either), with a 3.5 GB smaller file. Pinned to repository
+revision `1c69098e` (Apache-2.0 on the model card). The weights are 14,403,496,864 bytes (SHA-256
+`d83adbbbaace8acdfcfe28004f779326176b9df00b4ec99dc6c24d749723d3b9`); the BF16 image projector is 931,145,888 bytes (SHA-256
+`c9a09064683620bea3d3bfed5d4462e1a97a7d2fff7e5045d6862a0a85eeb5b5`). The model id is `qwen3-8-27b-huihui-abliterated-iq4-xs`;
+its template defaults thinking off and the launch passes `--reasoning off`. The picture projector has not been tested with this
+file. Tool use in Home remains to be measured.
 
 ## Diagnosing a failed picture (2026-10-27)
 

@@ -99,13 +99,13 @@
       "download_bytes": 899283680,
       "installed_bytes": 899283680
     },
-    "qwen3-8-27b-uncensored-hauhaucs-q4-k-p": {
-      "download_bytes": 17923393664,
-      "installed_bytes": 17923393664
+    "qwen3-8-27b-huihui-abliterated-iq4-xs": {
+      "download_bytes": 14403496864,
+      "installed_bytes": 14403496864
     },
-    "qwen3-8-27b-uncensored-hauhaucs-mmproj-bf16": {
-      "download_bytes": 931146624,
-      "installed_bytes": 931146624
+    "qwen3-8-27b-huihui-abliterated-mmproj-bf16": {
+      "download_bytes": 931145888,
+      "installed_bytes": 931145888
     },
     "qwen3.8-27b-ud-q4-k-m": {
       "download_bytes": 16464440224,

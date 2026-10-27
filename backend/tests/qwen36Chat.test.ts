@@ -60,23 +60,23 @@ test("the chat model Home stored in the setting is the one that runs, and a miss
   expect(selectedModel("chat")?.id).toBe("chat-a");
 });
 
-// Optional uncensored model (HauhauCS): pinned to its own revision, hashes and projector; never installed by default.
-test("Qwen3.8 Aggressive is pinned to its own revision, hashes and projector", () => {
+// Optional uncensored model (huihui-ai abliterated): pinned to its own revision, hashes and projector; never installed by default.
+test("Huihui Qwen3.8 abliterated is pinned to its own revision, hashes and projector", () => {
   expect(STACK_MODELS).toContain(STACK_CHAT_QWEN38_UNCENSORED_MODEL);
   expect(STACK_MODELS).toContain(STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR);
   expect(STACK_CHAT_QWEN38_UNCENSORED_MODEL).toMatchObject({
-    id: "qwen3-8-27b-uncensored-hauhaucs-q4-k-p", role: "chat", license: "Apache-2.0", engine: "llama-server",
-    repo: "HauhauCS/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-MTP-GGUF",
-    revision: "993a5971fda8f30dd1b7eb2654792ba4415c7460",
-    download: { sha256: "ba36dc3c2b2ff5e0aa5d71092a8894546996a6a119ae391803dda07cdc08516d", approx_bytes: 17_923_393_664 },
+    id: "qwen3-8-27b-huihui-abliterated-iq4-xs", role: "chat", license: "Apache-2.0", engine: "llama-server",
+    repo: "huihui-ai/Huihui-Qwen3.8-27B-abliterated-GGUF",
+    revision: "1c69098e9c32db6dc06fc48f1d6cc75ad07da89e",
+    download: { sha256: "d83adbbbaace8acdfcfe28004f779326176b9df00b4ec99dc6c24d749723d3b9", approx_bytes: 14_403_496_864 },
     imageInput: { projector: STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR.id },
   });
-  expect(STACK_CHAT_QWEN38_UNCENSORED_MODEL.download!.url).toBe("https://huggingface.co/HauhauCS/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-MTP-GGUF/resolve/993a5971fda8f30dd1b7eb2654792ba4415c7460/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q4_K_P.gguf");
+  expect(STACK_CHAT_QWEN38_UNCENSORED_MODEL.download!.url).toBe("https://huggingface.co/huihui-ai/Huihui-Qwen3.8-27B-abliterated-GGUF/resolve/1c69098e9c32db6dc06fc48f1d6cc75ad07da89e/Huihui-Qwen3.8-27B-abliterated-UD-IQ4_XS.gguf");
   expect(STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR).toMatchObject({
-    component: "projector", revision: "993a5971fda8f30dd1b7eb2654792ba4415c7460",
-    download: { sha256: "5681b690bcb8eb10cd28d62d078cb4e01521a3ea4880a3fc7d54de72de2dd142", approx_bytes: 931_146_624 },
+    component: "projector", revision: "1c69098e9c32db6dc06fc48f1d6cc75ad07da89e",
+    download: { sha256: "c9a09064683620bea3d3bfed5d4462e1a97a7d2fff7e5045d6862a0a85eeb5b5", approx_bytes: 931_145_888 },
   });
-  expect(STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR.download!.url).toContain("/resolve/993a5971fda8f30dd1b7eb2654792ba4415c7460/mmproj-Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-BF16.gguf");
+  expect(STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR.download!.url).toContain("/resolve/1c69098e9c32db6dc06fc48f1d6cc75ad07da89e/mmproj-model-bf16.gguf");
 });
 
 test("no tier installs or binds the uncensored Qwen3.8 model", () => {

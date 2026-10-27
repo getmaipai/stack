@@ -162,15 +162,17 @@ export const STACK_CHAT_QWEN36_35B_MODEL: CatalogModelLike = {
   sampling: { temperature: 0.7, top_p: 0.8, top_k: 20, presence_penalty: 1.5, source: "Qwen/Qwen3.6-35B-A3B model card, non-thinking (instruct) sampling" },
 };
 
-// Optional uncensored chat model: HauhauCS's Aggressive Qwen3.8-27B GGUF.
-// The publisher describes it as direct-answer with no refusal behavior and
-// minimal preamble. An admin installs it on purpose and chooses it in Home
-// Settings; no tier binds or downloads it. Home's age and surface gates still
-// apply. The model card's Q4_K_P and BF16 projector hashes are pinned below.
-const QWEN38_UNCENSORED_REPO = "HauhauCS/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-MTP-GGUF";
-const QWEN38_UNCENSORED_REVISION = "993a5971fda8f30dd1b7eb2654792ba4415c7460";
+// Optional uncensored chat model: huihui-ai's abliterated Qwen3.8-27B GGUF
+// (UD-IQ4_XS), which replaced the HauhauCS Aggressive Q4_K_P build on
+// 2026-10-27 after a short side-by-side on this Mac (same answers on
+// reasoning, facts, tool calls and refusals; 3.5 GB smaller file). An admin
+// installs it on purpose and chooses it in Home Settings; no tier binds or
+// downloads it. Home's age and surface gates still apply. The file and
+// projector hashes below are the repository's git-lfs oids, one revision.
+const QWEN38_UNCENSORED_REPO = "huihui-ai/Huihui-Qwen3.8-27B-abliterated-GGUF";
+const QWEN38_UNCENSORED_REVISION = "1c69098e9c32db6dc06fc48f1d6cc75ad07da89e";
 export const STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR: CatalogModelLike = {
-  id: "qwen3-8-27b-uncensored-hauhaucs-mmproj-bf16",
+  id: "qwen3-8-27b-huihui-abliterated-mmproj-bf16",
   role: "chat",
   component: "projector",
   repo: QWEN38_UNCENSORED_REPO,
@@ -179,23 +181,23 @@ export const STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR: CatalogModelLike = {
   engine: "llama-server",
   sizing: { profile: "p64", quantization: "BF16" },
   download: {
-    url: hfUrl(`${QWEN38_UNCENSORED_REPO}/resolve/${QWEN38_UNCENSORED_REVISION}/mmproj-Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-BF16.gguf`),
-    sha256: "5681b690bcb8eb10cd28d62d078cb4e01521a3ea4880a3fc7d54de72de2dd142",
-    approx_bytes: 931_146_624,
+    url: hfUrl(`${QWEN38_UNCENSORED_REPO}/resolve/${QWEN38_UNCENSORED_REVISION}/mmproj-model-bf16.gguf`),
+    sha256: "c9a09064683620bea3d3bfed5d4462e1a97a7d2fff7e5045d6862a0a85eeb5b5",
+    approx_bytes: 931_145_888,
   },
 };
 export const STACK_CHAT_QWEN38_UNCENSORED_MODEL: CatalogModelLike = {
-  id: "qwen3-8-27b-uncensored-hauhaucs-q4-k-p",
+  id: "qwen3-8-27b-huihui-abliterated-iq4-xs",
   role: "chat",
   repo: QWEN38_UNCENSORED_REPO,
   license: "Apache-2.0",
   revision: QWEN38_UNCENSORED_REVISION,
   engine: "llama-server",
-  sizing: { profile: "p64", quantization: "Q4_K_P" },
+  sizing: { profile: "p64", quantization: "UD-IQ4_XS" },
   download: {
-    url: hfUrl(`${QWEN38_UNCENSORED_REPO}/resolve/${QWEN38_UNCENSORED_REVISION}/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q4_K_P.gguf`),
-    sha256: "ba36dc3c2b2ff5e0aa5d71092a8894546996a6a119ae391803dda07cdc08516d",
-    approx_bytes: 17_923_393_664,
+    url: hfUrl(`${QWEN38_UNCENSORED_REPO}/resolve/${QWEN38_UNCENSORED_REVISION}/Huihui-Qwen3.8-27B-abliterated-UD-IQ4_XS.gguf`),
+    sha256: "d83adbbbaace8acdfcfe28004f779326176b9df00b4ec99dc6c24d749723d3b9",
+    approx_bytes: 14_403_496_864,
   },
   imageInput: { projector: STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR.id },
   launch: { imageMaxTokens: 2560 },
