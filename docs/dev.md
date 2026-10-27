@@ -2794,3 +2794,7 @@ projector `mmproj-...-Aggressive-f16.gguf` (899,283,072 bytes), both with the
 repository's git-lfs hashes. Ids: `qwen3-6-35b-a3b-uncensored-hauhaucs-q4-k-m`
 and `qwen3-6-35b-a3b-uncensored-hauhaucs-mmproj-f16`. Launch and sampling are
 the base model's. The "Uncensored" label is a catalog tag on Home's side.
+
+## Diagnosing a failed picture (2026-10-27)
+
+A picture that fails inside the worker used to leave only "The picture engine failed on that request": the worker's stderr is drained and never kept, because a traceback can carry a prompt (rule 6a). Now the worker sends a `diag` object with its failure reply (the exception type, the last eight frames as `file:line in function`, and the message only for missing-module, missing-file and missing-attribute errors, with the prompt blanked), and the Stack writes one `image.worker_failed` line to `data/logs/stack.log` with the family, the operation, the code and that `diag`. Find it with `grep image.worker_failed <data>/logs/stack.log | tail`. Nothing a person typed is in it. The 2026-10-27 outage (every ERNIE picture failing on a missing mflux module) would have read `ModuleNotFoundError ... mflux_worker.py:181 in build` there.

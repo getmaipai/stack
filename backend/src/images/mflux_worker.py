@@ -357,6 +357,25 @@ def edit(request):
     return {"seeds": [seed], "ms": int((time.time() - started) * 1000), "peak_bytes": int(mx.get_peak_memory()), "width": width, "height": height}
 
 
+# Exception types whose message names a missing module, file or attribute, never a value the person typed.
+SAFE_MESSAGE_TYPES = ("ImportError", "ModuleNotFoundError", "AttributeError", "FileNotFoundError", "NotADirectoryError", "PermissionError")
+
+
+def diagnostics(error, request):
+    """What the Stack may log about a failure so it can be diagnosed later: the exception type, the last frames as file:line in function
+    (never the source line, never local values), and the message only for the types above, with the prompt blanked out. Rule 6a: a
+    prompt never reaches a log."""
+    frames = [f"{os.path.basename(frame.filename)}:{frame.lineno} in {frame.name}" for frame in traceback.extract_tb(error.__traceback__)[-8:]]
+    name = type(error).__name__
+    note = None
+    if name in SAFE_MESSAGE_TYPES:
+        note = str(error)[:200]
+        prompt = request.get("prompt")
+        if isinstance(prompt, str) and prompt:
+            note = note.replace(prompt, "[prompt]")
+    return {"type": name, "frames": frames, "message": note}
+
+
 CODES = {"unknown_family": "bad_request", "unsupported_edit": "unsupported_edit", "mask_empty": "mask_empty"}
 
 
@@ -382,7 +401,7 @@ def handle(request):
             code = "out_of_memory"
             free_model()
         sys.stderr.write(traceback.format_exc())
-        send({"id": rid, "ok": False, "code": code or "failed", "error": text if code else "The picture engine failed on that request."})
+        send({"id": rid, "ok": False, "code": code or "failed", "error": text if code else "The picture engine failed on that request.", "diag": diagnostics(error, request)})
     finally:
         running["id"] = None
         state.update(on_step=None, on_start=None, preview=None, prev=None)

@@ -791,3 +791,37 @@ test("the worker builds ERNIE from mflux 0.23.0's own ModelConfig, never a modul
   expect(worker).toContain("ModelConfig.ernie_image_turbo()");
   expect(readFileSync(join(import.meta.dir, "../src/images/image-gen.darwin-arm64.requirements.txt"), "utf8")).toContain("mflux==0.23.0");
 });
+
+test("a worker failure writes one image.worker_failed line to the Stack log with the failure's type and frames, and no prompt", async () => {
+  imageGen.useDeps(scripted((request) => ({ id: request.id, ok: false, code: "failed", error: "The picture engine failed on that request.", diag: { type: "ModuleNotFoundError", frames: ["mflux_worker.py:181 in build"], message: "No module named 'x'" } })));
+  const response = await post({ model: "image", prompt: "a secret paper boat", seed: 7, n: 1, size: "640x480", timeout_ms: 5000 });
+  expect(response.status).toBeGreaterThanOrEqual(400);
+  const log = readFileSync(join(process.env.STACK_DATA_DIR!, "logs", "stack.log"), "utf8");
+  const line = log.split("\n").filter((entry) => entry.includes('"event":"image.worker_failed"')).at(-1)!;
+  expect(JSON.parse(line)).toMatchObject({ event: "image.worker_failed", family: "flux2-klein-4b", op: "generate", code: "failed", diag: { type: "ModuleNotFoundError", frames: ["mflux_worker.py:181 in build"] } });
+  expect(log).not.toContain("secret paper boat");
+});
+
+test("the worker's diagnostics keep the exception type and frames, show a message only for missing-module style errors, and blank the prompt", () => {
+  const source = readFileSync(join(import.meta.dir, "../src/images/mflux_worker.py"), "utf8");
+  const start = source.indexOf("SAFE_MESSAGE_TYPES");
+  const end = source.indexOf("CODES = {");
+  const script = `import os, traceback\n${source.slice(start, end)}\n` + [
+    "def boom(): raise ModuleNotFoundError(\"No module named 'x' for secret paper boat\")",
+    "def bad(): raise ValueError('secret paper boat')",
+    "import json",
+    "out = []",
+    "for fn in (boom, bad):",
+    "    try: fn()",
+    "    except Exception as e: out.append(diagnostics(e, {'prompt': 'secret paper boat'}))",
+    "print(json.dumps(out))",
+  ].join("\n");
+  const run = Bun.spawnSync(["python3", "-c", script]);
+  expect(run.exitCode).toBe(0);
+  const [missing, value] = JSON.parse(run.stdout.toString()) as Array<{ type: string; frames: string[]; message: string | null }>;
+  expect(missing!.type).toBe("ModuleNotFoundError");
+  expect(missing!.message).toBe("No module named 'x' for [prompt]");
+  expect(missing!.frames.at(-1)).toContain("in boom");
+  expect(value).toMatchObject({ type: "ValueError", message: null });
+  expect(JSON.stringify(value)).not.toContain("secret");
+});

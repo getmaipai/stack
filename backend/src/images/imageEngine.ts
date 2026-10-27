@@ -26,7 +26,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MANAGED_RUNTIMES } from "@/lib/engineCatalog";
 import { forgetLoadedItem, getGovernorStatus, GovernorRules, refreshMeasuredPeakById, setIdleTtlSeconds, setImagePoolUnload } from "@/lib/governor";
-import { log } from "@/lib/log";
+import { log, logger } from "@/lib/log";
 import { engineTagRoot } from "@/lib/store/layout";
 import { ensureUvEnvironment, managedEnv, uvEnvironmentReady, uvVenvPath, uvVenvPython, type UvEnvironmentSpec } from "@/lib/uvEnvironment";
 import { READY_TTL_MS, type RoleStateRecord } from "@/roles";
@@ -78,7 +78,7 @@ export type WorkerEvent =
   | { id: string | null; event: "stage"; stage: string; n?: number; of?: number }
   | { id: string | null; event: "preview"; index: number; step: number; steps: number }
   | { id: string | null; event: "image"; index: number; seed: number };
-export interface WorkerReply { id: string | null; ok: boolean; code?: string; error?: string; seeds?: number[]; ms?: number; peak_bytes?: number; width?: number; height?: number; }
+export interface WorkerReply { id: string | null; ok: boolean; code?: string; error?: string; diag?: { type?: string; frames?: string[]; message?: string | null }; seeds?: number[]; ms?: number; peak_bytes?: number; width?: number; height?: number; }
 export interface WorkerHandle {
   send(request: WorkerRequest, options: { onEvent: (event: WorkerEvent) => void; deadlineMs: number }): Promise<WorkerReply>;
   cancel(id: string): void;
@@ -300,6 +300,8 @@ export class ImageGenService {
       } });
       const reply = await Promise.race([sent, aborted]);
       if (!reply.ok) {
+        // The worker's own words are never kept (a traceback can carry a prompt); this one line is the diagnosis: what failed, where, on which family.
+        logger.appendLine(JSON.stringify({ event: "image.worker_failed", family: input.family, op: request.op, code: reply.code ?? "failed", ...(reply.diag ? { diag: reply.diag } : {}) }));
         // A worker that failed mid-picture may hold a half-built graph; start the next one from a fresh process.
         if (reply.code === "out_of_memory" || reply.code === "timeout" || reply.code === "worker_stopped") this.stopWorker();
         throw new ImageError(reply.code ?? "failed", MESSAGE_BY_CODE[reply.code ?? ""] ?? reply.error ?? "The picture could not be made.", STATUS_BY_CODE[reply.code ?? "failed"] ?? 500);
