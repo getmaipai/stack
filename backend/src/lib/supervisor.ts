@@ -1446,7 +1446,7 @@ export async function healStart(requested: RoleId): Promise<{ ok: true } | { ok:
         current.process = null;
         current.status = { ...current.status, state: "offline", reason: failure };
         emitRoleState(role, "offline", failure);
-        void retire(started);
+        void retire(started, failure);
       }
       return { ok: false, reason: failure };
     }
@@ -1778,7 +1778,7 @@ export async function getProcess(requested: RoleId, modelId?: string): Promise<R
     const previous = current.process;
     current.process = null;
     current.status = { ...current.status, state: "loading", reason: null };
-    await retire(previous);
+    await retire(previous, "Replaced by a new launch.");
     return getProcess(role, modelId);
   }
   if (!current.starting && current.retryAfter > Date.now()) {
@@ -1793,7 +1793,7 @@ export async function getProcess(requested: RoleId, modelId?: string): Promise<R
       if (generation !== current.generation) {
         // Stopped or restarted while it loaded: its admission and memory
         // watch go with it, never left counted in the governor.
-        await retire(started);
+        await retire(started, "Stopped or restarted while it was loading.");
         if (current.starting === launch) current.starting = null;
         return getProcess(role, modelId);
       }
@@ -1939,7 +1939,10 @@ export function roleCanBeStartedByStack(requested: RoleId): boolean {
   return !runtime(role).process && !urlBindingFor(role) && SPAWNABLE_ROLES.includes(role);
 }
 
-async function retire(processRecord: RoleProcess): Promise<void> {
+/** Every stop of an engine process is logged with its reason, so a gap in
+ * an engine's uptime always has a line saying why (issue 253). */
+async function retire(processRecord: RoleProcess, reason: string): Promise<void> {
+  logger.appendLine(JSON.stringify({ event: "engine.retired", role: processRecord.role, pid: processRecord.pid, reason }));
   processRecord.retired = true;
   processRecord.stopGovernor?.();
   for (const close of processRecord.sessions ?? []) close();
@@ -2007,7 +2010,7 @@ export async function recycleRole(requested: RoleId): Promise<void> {
   current.retryAfter = 0;
   current.status = { ...current.status, state: "loading", reason: null };
   emit({ id: "engine.state", data: { engine: role, state: "loading" } });
-  if (previous) await retire(previous);
+  if (previous) await retire(previous, "Restarted.");
 }
 
 export async function stopRole(requested: RoleId, reason = "Stopped by Home."): Promise<void> {
@@ -2023,7 +2026,7 @@ export async function stopRole(requested: RoleId, reason = "Stopped by Home."): 
   current.status = { ...current.status, state: "stopped", reason };
   emit({ id: "engine.state", data: { engine: role, state: "stopped", reason } });
   emitRoleState(role, "installed", reason);
-  if (previous) await retire(previous);
+  if (previous) await retire(previous, reason);
 }
 
 /** Drains and unloads a role now, without marking it stopped: the next
@@ -2039,7 +2042,7 @@ export async function unloadRole(requested: RoleId, reason: string): Promise<boo
   current.starting = null;
   current.status = { ...current.status, state: "installed", reason };
   emit({ id: "engine.state", data: { engine: role, state: "installed", reason } });
-  if (processRecord) await retire(processRecord);
+  if (processRecord) await retire(processRecord, reason);
   return true;
 }
 
@@ -2069,7 +2072,7 @@ export async function unloadIdleRole(requested: RoleId, options: IdleUnloadOptio
   current.starting = null;
   current.status = { ...current.status, state: "installed", reason: `Unloaded after ${idleMinutes} minutes without a request.` };
   emit({ id: "engine.state", data: { engine: role, state: "installed", reason: `Unloaded after ${idleMinutes} minutes without a request.` } });
-  await retire(processRecord);
+  await retire(processRecord, `Unloaded after ${idleMinutes} minutes without a request.`);
   return true;
 }
 
@@ -2138,7 +2141,7 @@ export async function speakRole(requested: RoleId, form: FormData, signal?: Abor
     current.starting = null;
     current.status = { ...current.status, state: "offline", reason: unavailable.reason };
     emit({ id: "engine.state", data: { engine: role, state: "offline", reason: unavailable.reason } });
-    void retire(processRecord);
+    void retire(processRecord, unavailable.reason);
     throw unavailable;
   }
 }
@@ -2204,7 +2207,7 @@ export async function requestRole(requested: RoleId, path: string, body: Record<
     current.starting = null;
     current.status = { ...current.status, state: "offline", reason: unavailable.reason };
     emit({ id: "engine.state", data: { engine: role, state: "offline", reason: unavailable.reason } });
-    void retire(processRecord);
+    void retire(processRecord, unavailable.reason);
     throw unavailable;
   } finally {
     processRecord.activeRequests--;
@@ -2265,7 +2268,7 @@ export async function streamRole(requested: RoleId, path: string, body: Record<s
     current.starting = null;
     current.status = { ...current.status, state: "offline", reason: unavailable.reason };
     emit({ id: "engine.state", data: { engine: role, state: "offline", reason: unavailable.reason } });
-    void retire(processRecord);
+    void retire(processRecord, unavailable.reason);
     throw unavailable;
   }
 }
@@ -2397,7 +2400,7 @@ export async function runOnRole<T>(requested: RoleId, work: (processRecord: Role
       current.starting = null;
       current.status = { ...current.status, state: "offline", reason: unavailable.reason };
       emit({ id: "engine.state", data: { engine: role, state: "offline", reason: unavailable.reason } });
-      void retire(processRecord);
+      void retire(processRecord, unavailable.reason);
       throw unavailable;
     }
     throw error;
