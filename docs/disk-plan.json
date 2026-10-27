@@ -569,7 +569,7 @@
         },
         {
           "id": "chat-mlx",
-          "label": "Faster chat engine (oMLX, Apple silicon)",
+          "label": "Chat AI, Apple-chip build (Muse Glimmer 30B)",
           "note": "The chat AI as an MLX build, about 20 percent faster to answer but less reliable with tools in our tests. Optional; llama.cpp stays the default.",
           "kind": "model",
           "need": "optional",
@@ -1052,7 +1052,7 @@
         },
         {
           "id": "chat-mlx",
-          "label": "Faster chat engine (oMLX, Apple silicon)",
+          "label": "Chat AI, Apple-chip build (Muse Glimmer 30B)",
           "note": "The chat AI as an MLX build, about 20 percent faster to answer but less reliable with tools in our tests. Optional; llama.cpp stays the default.",
           "kind": "model",
           "need": "optional",

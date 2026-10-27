@@ -162,7 +162,7 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
     rows.push(modelRow({ id: "chat", label: `Chat AI (${chatName(bigChat!)})`, note: `The AI you talk to.${starter}`, need: "required", engines: chat.some((pin) => pin.engine === "omlx") ? ["engine:chat-mlx", "engine:python"] : [] }, chat));
   }
   // oMLX is an optional install on the tiers that have room (ENGINE-MLX-02: llama-server is the default everywhere).
-  if (OMLX_OPTIONAL_TIERS.includes(tier.id)) rows.push(modelRow({ id: "chat-mlx", label: "Faster chat engine (oMLX, Apple silicon)", note: "The chat AI as an MLX build, about 20 percent faster to answer but less reliable with tools in our tests. Optional; llama.cpp stays the default.", need: "optional", engines: ["engine:chat-mlx", "engine:python"] }, [STACK_CHAT_MUSE_30B_MLX_MODEL]));
+  if (OMLX_OPTIONAL_TIERS.includes(tier.id)) rows.push(modelRow({ id: "chat-mlx", label: `Chat AI, Apple-chip build (${chatName(STACK_CHAT_MUSE_30B_MLX_MODEL)})`, note: "The chat AI as an MLX build, about 20 percent faster to answer but less reliable with tools in our tests. Optional; llama.cpp stays the default.", need: "optional", engines: ["engine:chat-mlx", "engine:python"] }, [STACK_CHAT_MUSE_30B_MLX_MODEL]));
   const reads = plannedWhere((pin) => projectors.has(pin.id));
   if (reads.length) rows.push(modelRow({ id: "reads-pictures", label: "Reads pictures (projector)", note: "Lets the chat AI look at a picture you send it.", need: "recommended", engines: [] }, reads));
   const judge = plannedWhere((pin) => pin.role === "judge");
