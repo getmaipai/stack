@@ -535,6 +535,7 @@ export const STACK_STT_MODEL: CatalogModelLike = {
   // resident set after the post-load check, bun plus onnxruntime plus
   // the model; context is not a speech quantity.
   measured: { footprintBytes: 239_387_872, contextLength: 0, hardware: "Apple M4 Pro, 24 GB unified memory" },
+  companions: ["smart-turn-v3.2"],
 };
 // The optional Parakeet TDT 0.6B v2 int8 package from the same rolling
 // `asr-models` release. The checksum pins the asset because the tag can
@@ -555,6 +556,7 @@ export const STACK_STT_PARAKEET_V2_MODEL: CatalogModelLike = {
     archive: true,
   },
   measured: { footprintBytes: 1_940_000_000, contextLength: 0, hardware: "Apple M5 Max, 128 GB unified memory" },
+  companions: ["smart-turn-v3.2"],
 };
 export const STACK_VAD_MODEL: CatalogModelLike = {
   id: "silero-vad",

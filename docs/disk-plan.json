@@ -4,30 +4,30 @@
   "headroom_warn_bytes": 5368709120,
   "gib_bytes": 1073741824,
   "installer": {
-    "p16.required_free_bytes": 15028926546,
-    "p16.minimum_required_free_bytes": 13731452373,
-    "p16.everything_required_free_bytes": 15033317835,
-    "p16.needed_bytes": 12876596138,
+    "p16.required_free_bytes": 15039341565,
+    "p16.minimum_required_free_bytes": 13741867392,
+    "p16.everything_required_free_bytes": 15043732853,
+    "p16.needed_bytes": 12885275320,
     "p16.home_required_free_bytes": 3176323277,
-    "p16.ai_required_free_bytes": 11852603270,
-    "p32.required_free_bytes": 33780738066,
-    "p32.minimum_required_free_bytes": 30802869180,
-    "p32.everything_required_free_bytes": 33785129355,
-    "p32.needed_bytes": 28503105738,
+    "p16.ai_required_free_bytes": 11863018288,
+    "p32.required_free_bytes": 33791153085,
+    "p32.minimum_required_free_bytes": 30813284198,
+    "p32.everything_required_free_bytes": 33795544373,
+    "p32.needed_bytes": 28511784920,
     "p32.home_required_free_bytes": 3176323277,
-    "p32.ai_required_free_bytes": 30604414790,
-    "p64.required_free_bytes": 117166660052,
-    "p64.minimum_required_free_bytes": 56562197657,
-    "p64.everything_required_free_bytes": 158898297146,
-    "p64.needed_bytes": 98244627989,
+    "p32.ai_required_free_bytes": 30614829808,
+    "p64.required_free_bytes": 117177075071,
+    "p64.minimum_required_free_bytes": 56572612676,
+    "p64.everything_required_free_bytes": 158908712164,
+    "p64.needed_bytes": 98253307171,
     "p64.home_required_free_bytes": 3176323277,
-    "p64.ai_required_free_bytes": 113990336775,
-    "p128.required_free_bytes": 148291471440,
-    "p128.minimum_required_free_bytes": 56562197657,
-    "p128.everything_required_free_bytes": 317729046893,
-    "p128.needed_bytes": 124308434589,
+    "p64.ai_required_free_bytes": 114000751794,
+    "p128.required_free_bytes": 148301886458,
+    "p128.minimum_required_free_bytes": 56572612676,
+    "p128.everything_required_free_bytes": 317739461912,
+    "p128.needed_bytes": 124317113771,
     "p128.home_required_free_bytes": 3176323277,
-    "p128.ai_required_free_bytes": 145115148163
+    "p128.ai_required_free_bytes": 145125563181
   },
   "tiers": {
     "p16": {
@@ -93,12 +93,13 @@
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 108244392,
-          "installed_bytes": 233037838,
+          "download_bytes": 116923574,
+          "installed_bytes": 241717020,
           "peak_temp_bytes": 107600538,
           "model_ids": [
             "moonshine-tiny-en-int8",
-            "silero-vad"
+            "silero-vad",
+            "smart-turn-v3.2"
           ],
           "engines": [],
           "installed": false,
@@ -230,25 +231,25 @@
         }
       ],
       "default": {
-        "download_bytes": 9117412829,
-        "installed_bytes": 10761652040,
+        "download_bytes": 9126092011,
+        "installed_bytes": 10770331222,
         "peak_temp_bytes": 2114944098,
-        "needed_bytes": 12876596138,
-        "required_free_bytes": 15028926546
+        "needed_bytes": 12885275320,
+        "required_free_bytes": 15039341565
       },
       "minimum": {
-        "download_bytes": 8406382447,
-        "installed_bytes": 9920051965,
+        "download_bytes": 8415061629,
+        "installed_bytes": 9928731147,
         "peak_temp_bytes": 1827390015,
-        "needed_bytes": 11747441980,
-        "required_free_bytes": 13731452373
+        "needed_bytes": 11756121162,
+        "required_free_bytes": 13741867392
       },
       "everything": {
-        "download_bytes": 9121072236,
-        "installed_bytes": 10765311447,
+        "download_bytes": 9129751418,
+        "installed_bytes": 10773990629,
         "peak_temp_bytes": 2114944098,
-        "needed_bytes": 12880255545,
-        "required_free_bytes": 15033317835
+        "needed_bytes": 12888934727,
+        "required_free_bytes": 15043732853
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -358,12 +359,13 @@
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 108244392,
-          "installed_bytes": 233037838,
+          "download_bytes": 116923574,
+          "installed_bytes": 241717020,
           "peak_temp_bytes": 107600538,
           "model_ids": [
             "moonshine-tiny-en-int8",
-            "silero-vad"
+            "silero-vad",
+            "smart-turn-v3.2"
           ],
           "engines": [],
           "installed": false,
@@ -495,25 +497,25 @@
         }
       ],
       "default": {
-        "download_bytes": 24743922429,
-        "installed_bytes": 26388161640,
+        "download_bytes": 24752601611,
+        "installed_bytes": 26396840822,
         "peak_temp_bytes": 2114944098,
-        "needed_bytes": 28503105738,
-        "required_free_bytes": 33780738066
+        "needed_bytes": 28511784920,
+        "required_free_bytes": 33791153085
       },
       "minimum": {
-        "download_bytes": 22632563119,
-        "installed_bytes": 24146232637,
+        "download_bytes": 22641242301,
+        "installed_bytes": 24154911819,
         "peak_temp_bytes": 1827390015,
-        "needed_bytes": 25973622652,
-        "required_free_bytes": 30802869180
+        "needed_bytes": 25982301834,
+        "required_free_bytes": 30813284198
       },
       "everything": {
-        "download_bytes": 24747581836,
-        "installed_bytes": 26391821047,
+        "download_bytes": 24756261018,
+        "installed_bytes": 26400500229,
         "peak_temp_bytes": 2114944098,
-        "needed_bytes": 28506765145,
-        "required_free_bytes": 33785129355
+        "needed_bytes": 28515444327,
+        "required_free_bytes": 33795544373
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -663,12 +665,13 @@
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 483112239,
-          "installed_bytes": 661834367,
+          "download_bytes": 491791421,
+          "installed_bytes": 670513549,
           "peak_temp_bytes": 482468385,
           "model_ids": [
             "parakeet-tdt-0.6b-v2-int8",
-            "silero-vad"
+            "silero-vad",
+            "smart-turn-v3.2"
           ],
           "engines": [],
           "installed": false,
@@ -974,25 +977,25 @@
         }
       ],
       "default": {
-        "download_bytes": 92392238551,
-        "installed_bytes": 94610160314,
+        "download_bytes": 92400917733,
+        "installed_bytes": 94618839496,
         "peak_temp_bytes": 3634467675,
-        "needed_bytes": 98244627989,
-        "required_free_bytes": 117166660052
+        "needed_bytes": 98253307171,
+        "required_free_bytes": 117177075071
       },
       "minimum": {
-        "download_bytes": 42692528748,
-        "installed_bytes": 44626874795,
+        "download_bytes": 42701207930,
+        "installed_bytes": 44635553977,
         "peak_temp_bytes": 3009947903,
-        "needed_bytes": 47636822698,
-        "required_free_bytes": 56562197657
+        "needed_bytes": 47645501880,
+        "required_free_bytes": 56572612676
       },
       "everything": {
-        "download_bytes": 124977575828,
-        "installed_bytes": 127991732998,
+        "download_bytes": 124986255010,
+        "installed_bytes": 128000412180,
         "peak_temp_bytes": 5308217548,
-        "needed_bytes": 133299950546,
-        "required_free_bytes": 158898297146
+        "needed_bytes": 133308629728,
+        "required_free_bytes": 158908712164
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -1146,12 +1149,13 @@
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 483112239,
-          "installed_bytes": 661834367,
+          "download_bytes": 491791421,
+          "installed_bytes": 670513549,
           "peak_temp_bytes": 482468385,
           "model_ids": [
             "parakeet-tdt-0.6b-v2-int8",
-            "silero-vad"
+            "silero-vad",
+            "smart-turn-v3.2"
           ],
           "engines": [],
           "installed": false,
@@ -1550,25 +1554,25 @@
         }
       ],
       "default": {
-        "download_bytes": 117352722015,
-        "installed_bytes": 119915184251,
+        "download_bytes": 117361401197,
+        "installed_bytes": 119923863433,
         "peak_temp_bytes": 4393250338,
-        "needed_bytes": 124308434589,
-        "required_free_bytes": 148291471440
+        "needed_bytes": 124317113771,
+        "required_free_bytes": 148301886458
       },
       "minimum": {
-        "download_bytes": 42692528748,
-        "installed_bytes": 44626874795,
+        "download_bytes": 42701207930,
+        "installed_bytes": 44635553977,
         "peak_temp_bytes": 3009947903,
-        "needed_bytes": 47636822698,
-        "required_free_bytes": 56562197657
+        "needed_bytes": 47645501880,
+        "required_free_bytes": 56572612676
       },
       "everything": {
-        "download_bytes": 256359674592,
-        "installed_bytes": 259718372235,
+        "download_bytes": 256368353774,
+        "installed_bytes": 259727051417,
         "peak_temp_bytes": 6067000211,
-        "needed_bytes": 265785372446,
-        "required_free_bytes": 317729046893
+        "needed_bytes": 265794051628,
+        "required_free_bytes": 317739461912
       },
       "measured_on": "2026-10-17",
       "default_selected": [

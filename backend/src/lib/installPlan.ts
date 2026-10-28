@@ -110,7 +110,7 @@ export function plannedPinsFor(tier: ProfileTier, target: { platform: string; ar
     if (role === "coding") for (const id of pin.companions ?? []) { const part = STACK_MODELS.find((candidate) => candidate.id === id); if (part && splashDraftWanted(target, tier.id, knownAppleChip())) add(part, false, true); }
     // A bound model that reads pictures brings its projector (VISION-03a).
     const projector = pin.imageInput ? STACK_MODELS.find((candidate) => candidate.id === pin.imageInput!.projector) : undefined;
-    for (const part of STACK_MODELS.filter((candidate) => candidate.role === role && candidate.component && candidate.engine === pin.engine && !projectors.has(candidate.id) && (role !== "coding" || (pin.companions ?? []).includes(candidate.id)))) add(part);
+    for (const part of STACK_MODELS.filter((candidate) => candidate.role === role && candidate.component && (candidate.engine === pin.engine || (role === "stt" && (pin.companions ?? []).includes(candidate.id))) && !projectors.has(candidate.id) && (role !== "coding" || (pin.companions ?? []).includes(candidate.id)))) add(part);
     add(projector ?? null);
     // oMLX's MLX build of the model is not in the first-run plan: llama-server
     // is the default on every tier (ENGINE-MLX-02), and the 19 GB MLX weights

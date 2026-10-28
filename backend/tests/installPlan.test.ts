@@ -168,5 +168,7 @@ test("plan: stt is Parakeet alone on p64 and p128, Moonshine alone on p16 and p3
   expect(sttIds(64)).toEqual(["parakeet-tdt-0.6b-v2-int8"]);
   expect(sttIds(128)).toEqual(["parakeet-tdt-0.6b-v2-int8"]);
   for (const gb of [16, 32, 64, 128]) expect(buildInstallPlan(hw({ unifiedMemoryGb: gb, totalRamGb: gb })).models.filter((model) => model.id === "silero-vad")).toHaveLength(1);
+  // DUPLEX-02: the end-of-turn model rides along with the speech model on every tier.
+  for (const gb of [16, 32, 64, 128]) expect(buildInstallPlan(hw({ unifiedMemoryGb: gb, totalRamGb: gb })).models.filter((model) => model.id === "smart-turn-v3.2")).toHaveLength(1);
   expect(Object.entries(PROFILE_MODEL_BINDINGS).map(([tier, bound]) => [tier, bound?.stt])).toEqual([["p16", "moonshine-tiny-en-int8"], ["p32", "moonshine-tiny-en-int8"], ["p64", "parakeet-tdt-0.6b-v2-int8"], ["p128", "parakeet-tdt-0.6b-v2-int8"]]);
 });
