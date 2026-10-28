@@ -105,13 +105,12 @@ test("with the chat engine on Splash the household's Huihui record is still the 
   expect(selectableModels("chat").map((model) => model.id)).toContain(STACK_CHAT_QWEN38_UNCENSORED_MODEL.id);
 });
 
-test("a chat model that reads pictures stays on llama-server: Splash loads no projector, so the picture and video safety check would fail closed", () => {
+test("a chat model that declares picture input stays on Splash: pictures are read by the separate vision role, so chat keeps its speed", () => {
   const modelPath = installModel(STACK_CHAT_QWEN38_UNCENSORED_MODEL); installModel(STACK_CODING_DRAFT_MODEL); installChatEngine();
   updateSettings({ "stack.engines.chat.engine": "splash", "stack.engines.chat.model": STACK_CHAT_QWEN38_UNCENSORED_MODEL.id }); applyPendingSettings();
-  expect(chatEngine()).toBe("splash");
   const pin = STACK_CHAT_QWEN38_UNCENSORED_MODEL;
   upsertModel({ id: pin.id, roles: [pin.role], ...verified, revision: pin.revision!, sha256: pin.download!.sha256, sizeBytes: pin.download!.approx_bytes, modelPath, engineRequirements: { engine: pin.engine, launch: pin.launch, sampling: pin.sampling, imageInput: { projector: "chat-projector" } } });
-  expect(chatEngine()).toBe("llama-server");
+  expect(chatEngine()).toBe("splash");
   expect(selectedModel("chat")?.id).toBe(pin.id);
 });
 

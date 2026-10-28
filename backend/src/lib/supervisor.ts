@@ -564,10 +564,6 @@ function splashChatUnsupportedReason(): string | null {
   if (!macos || macos[0]! < 26 || (macos[0] === 26 && macos[1]! < 4)) return "Splash chat needs macOS 26.4 or later. Update macOS, or use llama-server.";
   const memoryGb = currentHardwareMemoryGb() || codingMachine?.memoryGb || 0;
   if (memoryGb < 36) return "Splash chat needs at least 36 GB of memory. Use llama-server on this Mac.";
-  // Splash loads no picture reader (its plan is language-only). Home's finished picture and clip checks send frames to chat and
-  // fail closed without one, so a model that reads pictures stays on llama-server, which loads its projector.
-  const chatModel = selectedModel("chat", "llama-server");
-  if (chatModel && declaresImageInput(chatModel)) return "Splash cannot read pictures, and the safety check on pictures and videos needs chat to.";
   return null;
 }
 
@@ -817,7 +813,7 @@ function servesRole(model: ModelRecord, role: RoleId, engine: string | null): bo
   return model.roles.includes(role) && !isComponent(model) && isModelSelectable(model) && !!model.modelPath && (!engine || !model.engineRequirements.engine || model.engineRequirements.engine === engine) && (role !== "vision" || declaresImageInput(model));
 }
 
-export function selectedModel(role: RoleId, recordEngine?: string): ModelRecord | null {
+export function selectedModel(role: RoleId): ModelRecord | null {
   if (currentHomeMode() === "coding" && !homeModeLeavingCoding() && ["chat", "judge", "router"].includes(role)) {
     const heavy = getModel(STACK_CODING_HEAVY_MODEL.id);
     return heavy && isModelSelectable(heavy) && !!heavy.modelPath ? heavy : null;
@@ -830,7 +826,7 @@ export function selectedModel(role: RoleId, recordEngine?: string): ModelRecord 
   // A record names the engine it is for; the chat wire's chosen engine
   // decides which records can serve it (a GGUF for llama-server, an MLX
   // directory for mlx-serve), both installed side by side.
-  const engine = recordEngine ?? recordEngineFor(role);
+  const engine = recordEngineFor(role);
   const selectable = listModels().filter((model) => servesRole(model, role, engine) && (role !== "coding" || (model.id !== STACK_CODING_HEAVY_MODEL.id || machineTier === "p128")));
   // The session's "load this" first, then the choice Home stored in the setting (it survives a restart).
   const stored = role === "chat" ? String(settingValues()["stack.engines.chat.model"] ?? "") : role === "coding" ? String(settingValues()["stack.engines.coding.model"] ?? "") : "";
