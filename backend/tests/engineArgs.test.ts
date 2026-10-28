@@ -45,6 +45,7 @@ test("a Mac spawn gets the hub's full launch list over the declared defaults", (
     "--cache-reuse", "256",
     "--parallel", "1",
     "--cache-ram", "1024",
+    "--checkpoint-min-step", "0",
     "--ctx-checkpoints", "8",
     "-ctk", "q8_0",
     "-ctv", "q8_0",
@@ -86,8 +87,9 @@ test("a chat process always names one slot, a bounded host cache and few checkpo
   expect(args[args.indexOf("--parallel") + 1]).toBe("1");
   expect(args[args.indexOf("--cache-ram") + 1]).toBe("1024");
   expect(args[args.indexOf("--ctx-checkpoints") + 1]).toBe("8");
+  expect(args[args.indexOf("--checkpoint-min-step") + 1]).toBe("0");
   const embed = llamaServerArgs({ modelPath, port: 8771, config: { ...declaredDefaults }, contextLength: 4096, kvCacheType: "q8_0", embeddings: true });
-  for (const flag of ["--parallel", "--cache-ram", "--ctx-checkpoints"]) expect(embed).not.toContain(flag);
+  for (const flag of ["--parallel", "--cache-ram", "--checkpoint-min-step", "--ctx-checkpoints"]) expect(embed).not.toContain(flag);
 });
 
 test("without KV quantization the -ctk/-ctv pair is absent", () => {

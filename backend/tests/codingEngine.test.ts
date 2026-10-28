@@ -72,7 +72,7 @@ test("the coding launch keeps thinking on under a budget, q8_0 on every platform
 
 test("the chat launch is unchanged by the coding launch: reasoning off, no budget, no offline flag", () => {
   const args = llamaServerArgs({ modelPath: "/m/chat.gguf", port: 8800, config: { slots: 1, threads: 0, cacheRamMb: 0, flashAttention: true }, contextLength: 4096, kvCacheType: "q8_0" });
-  expect(args).toEqual(["--model", "/m/chat.gguf", "--port", "8800", "--host", "127.0.0.1", "-c", "4096", "-fa", "on", "-ngl", "all", "--reasoning", "off", "-ub", "1024", "--no-webui", "--metrics", "--jinja", "--cache-reuse", "256", "--parallel", "1", "--cache-ram", "1024", "--ctx-checkpoints", "8", "-ctk", "q8_0", "-ctv", "q8_0"]);
+  expect(args).toEqual(["--model", "/m/chat.gguf", "--port", "8800", "--host", "127.0.0.1", "-c", "4096", "-fa", "on", "-ngl", "all", "--reasoning", "off", "-ub", "1024", "--no-webui", "--metrics", "--jinja", "--cache-reuse", "256", "--parallel", "1", "--cache-ram", "1024", "--checkpoint-min-step", "0", "--ctx-checkpoints", "8", "-ctk", "q8_0", "-ctv", "q8_0"]);
 });
 
 test("slots follow the tier unless the setting names a number; the budget and window come from the settings", () => {

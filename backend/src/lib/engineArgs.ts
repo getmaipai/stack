@@ -138,10 +138,15 @@ export function llamaServerArgs(options: LlamaServerArgsOptions): string[] {
   // The prompt cache that llama-server keeps in host memory defaults to
   // 8 GiB and fills with use; the Stack bounds it so the memory it admits a
   // chat process for is the memory the process stays within. `--cache-ram`
-  // is the flag b10797 knows (it rejects `--cache-ram-mb`). A recurrent
-  // snapshot is kept every few thousand tokens, so a handful are enough.
+  // is the flag b10797 knows (it rejects `--cache-ram-mb`). A recurrent model
+  // (Gated DeltaNet layers) restarts a prompt only from a saved snapshot, and
+  // the default spacing is 8192 tokens, so a 4.8k-token chat prompt had none and
+  // was reprocessed in full every turn (7 to 8 s). `--checkpoint-min-step 0`
+  // lets a snapshot land wherever the prompt ended; measured on the Studio, a
+  // repeat turn reused 4429 of 4451 tokens (0.6 s). Eight snapshots bound memory.
   if (!options.embeddings) {
     args.push("--cache-ram", String(llamaCacheRamMib(config)));
+    args.push("--checkpoint-min-step", "0");
     args.push("--ctx-checkpoints", String(LLAMA_CTX_CHECKPOINTS));
   }
   // f16 is llama-server's default; auto means q8_0 on macOS and f16 elsewhere.
