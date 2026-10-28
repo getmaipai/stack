@@ -16,8 +16,6 @@ import { StackSetting } from "@maipai/spec/stack/ts/stack-setting.js";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
 import { decryptSecret, encryptSecret } from "@/lib/secrets";
 import { ENGINE_BINARIES } from "@/lib/engineCatalog";
-import { describeSetting } from "@maipai/spec/interpreters/ts/describeSetting.js";
-import { SettingsKey } from "@maipai/spec/gen/ts/settings-key.js";
 
 export type SettingValue = number | boolean | string;
 
@@ -198,7 +196,8 @@ export function readSettings(options: { reveal?: boolean } = {}): StackSetting[]
     const pending = read(metaKey(declaration.key, "pending"));
     const inEffect = decode(read(metaKey(declaration.key, "in_effect")), declaration);
     const pendingValue = pending === null ? null : decode(pending, declaration);
-    const described = declaration.key === "stack.engines.chat.engine" ? describeSetting(SettingsKey.parse({ key: declaration.key, scope: "device", selector: "select", range: { options: (declaration.range as { options: Array<{ value: string }> }).options.map((option) => option.value) }, default: declaration.default, label: declaration.label, level: declaration.level, lives_in: "stack", honoured_by: ["home", "bot"], copy: declaration.copy }), { subjectBand: "adult", viewer: "admin", value: inEffect, effective: inEffect, source: "default" }) : null;
+    // The option copy comes straight from the declaration's spec copy fields. The spec interpreter (describeSetting) reads a vocab file at import time, which a compiled binary does not carry.
+    const described = declaration.key === "stack.engines.chat.engine" && declaration.copy ? { does: declaration.copy.does } : null;
     const { copy: _copy, ...stackDeclaration } = declaration;
     return StackSetting.parse({ ...stackDeclaration, ...(described ? { label: described.does, help: declaration.help } : {}), in_effect: options.reveal ? inEffect : redact(declaration, inEffect), pending: pendingValue === null ? null : options.reveal ? pendingValue : redact(declaration, pendingValue) });
   });
