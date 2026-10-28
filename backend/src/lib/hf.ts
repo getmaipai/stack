@@ -51,4 +51,5 @@ export async function resolveHuggingFace(repo: string, options: { revision?: str
   return { repo, name: info.name, revision, licence: licenceFrom(info.cardData) ?? licenceFrom(info), gated: info.gated !== false, files, role: roleFrom(info, files) };
 }
 
+export function huggingFaceFetch(): HfFetch { return hubFetch(); }
 export function __setHuggingFaceFetchForTests(value: HfFetch | null): void { fetchForTests = value; }

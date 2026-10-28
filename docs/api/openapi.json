@@ -7076,6 +7076,60 @@
         }
       }
     },
+    "/stack/v1/models/inspect": {
+      "post": {
+        "tags": [
+          "Models"
+        ],
+        "summary": "Read a Hugging Face model file's facts without downloading it",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "file": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "source"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Size, sha256, licence, architecture and the repository's sampling card; unreadable parts are null with a reason",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The source cannot be added, with what to do",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/models/{id}": {
       "delete": {
         "tags": [

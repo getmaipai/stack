@@ -22,6 +22,7 @@ import { updateSettings } from "@/settings";
 import { getProcess, isModelPinned, loadedRoleForModel, pinModel, preferModel, restartForNewProjector, restartRole, unloadRole, EngineUnavailableError } from "@/lib/supervisor";
 import { STACK_MODELS, STACK_WAKEWORD_MODELS } from "@/lib/modelCatalog";
 import { startModelInstall } from "@/lib/installJobs";
+import { InspectRefusal, inspectModel } from "@/lib/modelInspect";
 
 const ModelSchema = z.object({
   id: z.string(), roles: z.array(z.string()), state: z.enum(["notInstalled", "installed"]), runtimeState: z.enum(["loaded", "ready"]), pinned: z.boolean(),
@@ -35,6 +36,8 @@ const ActionSchema = z.object({ action: z.enum(["load", "unload", "pin", "unpin"
 const listRoute = createRoute({ method: "get", path: "/", tags: ["Models"], summary: "Installed and known models", responses: { 200: { content: { "application/json": { schema: z.object({ models: z.array(ModelSchema) }) } }, description: "Every model record with its provenance and state." } } });
 const pullRoute = createRoute({ method: "post", path: "/", tags: ["Models"], summary: "Install a pinned model (progress on the event feed)", request: { body: { content: { "application/json": { schema: PullSchema } } } }, responses: { 202: { content: { "application/json": { schema: z.object({ job: z.string(), model: z.string() }) } }, description: "The download job." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "Provenance incomplete, or an id that is not a plain name." } } });
 const importRoute = createRoute({ method: "post", path: "/import", tags: ["Models"], summary: "Import a local model file by verified link", request: { body: { content: { "application/json": { schema: ImportSchema } } } }, responses: { 200: { content: { "application/json": { schema: ModelSchema } }, description: "The imported model." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "The path is not a file." } } });
+const InspectSchema = z.object({ source: z.string().min(1), file: z.string().optional() });
+const inspectRoute = createRoute({ method: "post", path: "/inspect", tags: ["Models"], summary: "Read a Hugging Face model file's facts without downloading it", request: { body: { content: { "application/json": { schema: InspectSchema } } } }, responses: { 200: { content: { "application/json": { schema: z.record(z.string(), z.unknown()) } }, description: "Size, sha256, licence, architecture and the repository's sampling card; unreadable parts are null with a reason" }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "The source cannot be added, with what to do" } } });
 const removeRoute = createRoute({ method: "delete", path: "/{id}", tags: ["Models"], summary: "Remove a model", request: { params: idParamSchema("id") }, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.literal(true) }) } }, description: "Removed." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown model." } } });
 const actionRoute = createRoute({ method: "post", path: "/{id}/actions", tags: ["Models"], summary: "Load, unload, pin or unpin a model", request: { params: idParamSchema("id"), body: { content: { "application/json": { schema: ActionSchema } } } }, responses: { 200: { content: { "application/json": { schema: z.object({ modelId: z.string(), ok: z.boolean(), reason: z.string().optional() }) } }, description: "The outcome." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown model." } } });
 const catalogRoute = createRoute({ method: "get", path: "/catalog", tags: ["Models"], summary: "The pinned models this build ships", responses: { 200: { content: { "application/json": { schema: z.object({ models: z.array(z.record(z.string(), z.unknown())) }) } }, description: "The Stack's own pins (the Catalog index adds more once fetched)." } } });
@@ -117,6 +120,10 @@ modelsRoutes.openapi(importRoute, async (c) => {
     const record = upsertModel({ id: manifest.id, roles: body.roles, source: ModelSourceSchema.parse(manifest.source), provenance: { source: manifest.source, path: manifest.sourcePath }, revision: manifest.revision ?? "import", sha256: manifest.blobs[0]?.digest ?? null, sizeBytes: manifest.sizeBytes, licence: body.licence, modelPath: manifest.blobs[0]?.path ?? null, installedAt: now, verifiedAt: now });
     return c.json(modelView(record), 200);
   } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 400); }
+});
+modelsRoutes.openapi(inspectRoute, async (c) => {
+  try { return c.json(await inspectModel(c.req.valid("json")) as unknown as Record<string, unknown>, 200); }
+  catch (error) { if (error instanceof InspectRefusal) return c.json({ error: error.message }, 400); throw error; }
 });
 modelsRoutes.openapi(removeRoute, (c) => removeModel(c.req.valid("param").id) ? c.json({ ok: true as const }, 200) : c.json({ error: "Unknown model" }, 404));
 modelsRoutes.openapi(actionRoute, async (c) => {
