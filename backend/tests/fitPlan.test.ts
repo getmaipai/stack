@@ -335,3 +335,12 @@ test("a processor-placed role is checked against system memory, not free graphic
   // A mixed or sparse model is still not trusted for a processor estimate.
   expect(buildFitPlan({ ...placed, estimate: { ...nomic, expertCount: 8 }, cpuEstimate: { ...nomic, expertCount: 8 } }).verdict).toBe("unknown");
 });
+
+test("MODEL-ADD-01: parseGgufParserJson returns the shape when every part is stated, and none when one is missing", () => {
+  const root = JSON.parse(fixtureText);
+  root.metadata = { ...root.metadata, parameters: 1_720_000_000, bitsPerWeight: 4.85 };
+  root.architecture = { ...root.architecture, blockCount: 28, attentionHeadCountKV: 8, attentionKeyLength: 128, maximumContextLength: 40960 };
+  expect(parseGgufParserJson(JSON.stringify(root))?.shape).toEqual({ paramCountBillion: 1.7, bitsPerWeight: 4.85, layers: 28, kvHeads: 8, headDim: 128, maxContext: 40960 });
+  delete root.architecture.blockCount;
+  expect(parseGgufParserJson(JSON.stringify(root))?.shape).toBeUndefined();
+  });

@@ -29,10 +29,22 @@ export interface GgufEstimate {
   ramNonumaBytes: number;
   vramUmaBytes: number;
   vramNonumaBytes: number;
+  /** The layer shape the header states (gguf-parser's architecture and metadata); absent when any part is missing. */
+  shape?: GgufShape;
 }
+
+export interface GgufShape { paramCountBillion: number; bitsPerWeight: number; layers: number; kvHeads: number; headDim: number; maxContext: number }
 
 function isBytes(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && Number.isInteger(value) && value >= 0;
+}
+
+function readShape(root: Record<string, any>): GgufShape | undefined {
+  const arch = root?.architecture;
+  const meta = root?.metadata;
+  const positive = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
+  if (!positive(meta?.parameters) || !positive(meta?.bitsPerWeight) || !positive(arch?.blockCount) || !positive(arch?.attentionHeadCountKV) || !positive(arch?.attentionKeyLength) || !positive(arch?.maximumContextLength)) return undefined;
+  return { paramCountBillion: Math.round(meta.parameters / 1e8) / 10, bitsPerWeight: Math.round(meta.bitsPerWeight * 100) / 100, layers: arch.blockCount, kvHeads: arch.attentionHeadCountKV, headDim: arch.attentionKeyLength, maxContext: arch.maximumContextLength };
 }
 
 export function parseGgufParserJson(text: string): GgufEstimate | null {
@@ -49,7 +61,8 @@ export function parseGgufParserJson(text: string): GgufEstimate | null {
     if (expertCount !== undefined && expertCount !== null && !isBytes(expertCount)) return null;
     if (name !== undefined && name !== null && typeof name !== "string") return null;
     if (modelFileBytes !== undefined && !isBytes(modelFileBytes)) return null;
-    return { architecture, expertCount: expertCount ?? 0, name: name ?? null, ...(modelFileBytes === undefined ? {} : { modelFileBytes }), contextTokens: root.estimate.contextSize, fullOffloaded: item.fullOffloaded, ramUmaBytes: item.ram.uma, ramNonumaBytes: item.ram.nonuma, vramUmaBytes: vram.uma, vramNonumaBytes: vram.nonuma };
+    const shape = readShape(root);
+    return { architecture, expertCount: expertCount ?? 0, name: name ?? null, ...(modelFileBytes === undefined ? {} : { modelFileBytes }), contextTokens: root.estimate.contextSize, fullOffloaded: item.fullOffloaded, ramUmaBytes: item.ram.uma, ramNonumaBytes: item.ram.nonuma, vramUmaBytes: vram.uma, vramNonumaBytes: vram.nonuma, ...(shape ? { shape } : {}) };
   } catch { return null; }
 }
 

@@ -3,13 +3,13 @@
 // architecture from the file's header, and the repository's own sampling
 // card. Anything unreadable comes back null with a reason, never a guess.
 import { hfUrl, huggingFaceFetch, resolveHuggingFace } from "@/lib/hf";
-import { runGgufParser, VERIFIED_ARCHITECTURES } from "@/lib/fitPlan";
+import { runGgufParser, VERIFIED_ARCHITECTURES, type GgufShape } from "@/lib/fitPlan";
 
 export interface InspectedSampling { temperature?: number; top_p?: number; top_k?: number; min_p?: number; presence_penalty?: number }
 export interface InspectResult {
   repo: string; revision: string; file: string; url: string;
   sizeBytes: number | null; sha256: string | null; licence: string | null; gated: boolean;
-  architecture: { name: string; experts: number; verified: boolean; ramBytes: number; vramBytes: number } | null; architectureReason: string | null;
+  architecture: { name: string; experts: number; verified: boolean; ramBytes: number; vramBytes: number; shape: GgufShape | null } | null; architectureReason: string | null;
   sampling: InspectedSampling | null; samplingReason: string | null;
 }
 export class InspectRefusal extends Error {}
@@ -55,7 +55,7 @@ export async function inspectModel(input: { source: string; file?: string }): Pr
   if (!file.name.toLowerCase().endsWith(".gguf")) throw new InspectRefusal("Only GGUF model files can be added. Pick a .gguf file.");
   if (resolution.gated) throw new InspectRefusal(`${parsed.repo} is gated and needs a Hugging Face login, which MaiPai does not use. Pick an open model.`);
   const estimate = await runGgufParser({ target: { url: file.url }, contextTokens: 4096, kvCacheType: "q8_0", gpuLayers: "all" });
-  const architecture = estimate ? { name: estimate.architecture, experts: estimate.expertCount, verified: (VERIFIED_ARCHITECTURES as readonly string[]).includes(estimate.architecture), ramBytes: estimate.ramNonumaBytes, vramBytes: estimate.vramNonumaBytes } : null;
+  const architecture = estimate ? { name: estimate.architecture, experts: estimate.expertCount, verified: (VERIFIED_ARCHITECTURES as readonly string[]).includes(estimate.architecture), ramBytes: estimate.ramNonumaBytes, vramBytes: estimate.vramNonumaBytes, shape: estimate.shape ?? null } : null;
   const card = await readSampling(parsed.repo, resolution.revision);
   return { repo: parsed.repo, revision: resolution.revision, file: file.name, url: file.url, sizeBytes: file.sizeBytes, sha256: file.sha256, licence: resolution.licence, gated: resolution.gated, architecture, architectureReason: architecture ? null : "The file's header could not be read, so its architecture and memory use are unknown.", sampling: card.sampling, samplingReason: card.reason };
 }
