@@ -7,7 +7,7 @@ import { STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CODING_DRAFT_MODEL } from "@/
 import { clearModelsForTests, getModel, upsertModel } from "@/lib/modelStore";
 import { engineDir } from "@/lib/engineInstall";
 import { applyPendingSettings, __resetSettingsForTests, updateSettings } from "@/settings";
-import { SplashChatClient, chatEngine, selectableModels, selectedModel, resetSupervisorForTests, setCodingMachineFacts, setMachineTier, splashLaunchPlan, type EngineClient } from "@/lib/supervisor";
+import { SplashChatClient, chatEngine, mapsModelWeights, selectableModels, selectedModel, resetSupervisorForTests, setCodingMachineFacts, setMachineTier, splashLaunchPlan, type EngineClient } from "@/lib/supervisor";
 import { splashHubDir, splashHomeDir, splashRoot, splashTmpDir } from "@/lib/splashStore";
 import { __setAppleChipForTests } from "@/lib/hardware";
 import { __resetHealthForTests, list as listHealth } from "@/lib/health";
@@ -103,4 +103,10 @@ test("with the chat engine on Splash the household's Huihui record is still the 
   expect(chatEngine()).toBe("splash");
   expect(selectedModel("chat")?.id).toBe(STACK_CHAT_QWEN38_UNCENSORED_MODEL.id);
   expect(selectableModels("chat").map((model) => model.id)).toContain(STACK_CHAT_QWEN38_UNCENSORED_MODEL.id);
+});
+
+test("a Splash process's post-load memory reading is not stored as a footprint or used as the runaway baseline (it maps the model and grows while serving)", () => {
+  expect(mapsModelWeights("splash")).toBe(true);
+  expect(mapsModelWeights("llama-server")).toBe(false);
+  expect(mapsModelWeights(null)).toBe(false);
 });

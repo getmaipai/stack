@@ -792,6 +792,9 @@ export function pictureTokensMax(requested: RoleId): number | null {
 /** Whether a launch's memory reading is stored for its model: always,
  * except a model that reads pictures launched without its projector,
  * whose reading leaves the projector out (a review, VISION-02b). */
+/** Splash maps the model file, so its memory right after load (about 1 GB) is not what it holds while serving (the model's size). */
+export function mapsModelWeights(engine: string | null | undefined): boolean { return engine === "splash"; }
+
 export function keepsMeasuredFootprint(model: ModelRecord, launchedWithProjector: boolean): boolean {
   return !declaresImageInput(model) || launchedWithProjector;
 }
@@ -1679,8 +1682,10 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
       // A model that reads pictures, launched without its projector (not
       // installed yet), is not its usual footprint: that reading is not
       // stored, so a later launch with the projector never plans on it.
-      if (keepsFootprint) recordMeasuredFootprint(model.id, check.actualBytes, contextLength);
-      refreshMeasuredPeak(admission, check.actualBytes);
+      // Splash maps the model file: right after load it holds about 1 GB and grows to the model's size as it serves, so the post-load reading is neither a footprint to store nor a baseline for the runaway watch (which restarted chat mid-use).
+      const mappedWeights = mapsModelWeights(plan.engine);
+      if (keepsFootprint && !mappedWeights) recordMeasuredFootprint(model.id, check.actualBytes, contextLength);
+      if (!mappedWeights) refreshMeasuredPeak(admission, check.actualBytes);
     }
     runtime(role).status.postLoadCheck = check;
     resolveHealth(`engine.crashed.${role}`);
