@@ -7,7 +7,7 @@ import { STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CODING_DRAFT_MODEL } from "@/
 import { clearModelsForTests, getModel, upsertModel } from "@/lib/modelStore";
 import { engineDir } from "@/lib/engineInstall";
 import { applyPendingSettings, __resetSettingsForTests, updateSettings } from "@/settings";
-import { SplashChatClient, resetSupervisorForTests, setCodingMachineFacts, setMachineTier, splashLaunchPlan, type EngineClient } from "@/lib/supervisor";
+import { SplashChatClient, chatEngine, selectableModels, selectedModel, resetSupervisorForTests, setCodingMachineFacts, setMachineTier, splashLaunchPlan, type EngineClient } from "@/lib/supervisor";
 import { splashHubDir, splashHomeDir, splashRoot, splashTmpDir } from "@/lib/splashStore";
 import { __setAppleChipForTests } from "@/lib/hardware";
 import { __resetHealthForTests, list as listHealth } from "@/lib/health";
@@ -96,3 +96,11 @@ test("Splash chat client preserves streaming/tool/usage fields, reasoning split 
   const controller = new AbortController(); controller.abort(); await expect(client.stream("/v1/chat/completions", body, controller.signal)).rejects.toThrow();
 });
 
+
+test("with the chat engine on Splash the household's Huihui record is still the selected chat model (not the starter)", () => {
+  installModel(STACK_CHAT_QWEN38_UNCENSORED_MODEL); installModel(STACK_CODING_DRAFT_MODEL); installChatEngine();
+  updateSettings({ "stack.engines.chat.engine": "splash", "stack.engines.chat.model": STACK_CHAT_QWEN38_UNCENSORED_MODEL.id }); applyPendingSettings();
+  expect(chatEngine()).toBe("splash");
+  expect(selectedModel("chat")?.id).toBe(STACK_CHAT_QWEN38_UNCENSORED_MODEL.id);
+  expect(selectableModels("chat").map((model) => model.id)).toContain(STACK_CHAT_QWEN38_UNCENSORED_MODEL.id);
+});

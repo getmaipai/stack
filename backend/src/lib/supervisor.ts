@@ -602,7 +602,9 @@ export function codingModeHardwareEligible(): boolean {
 export function splashInstalledForHomeMode(): boolean { return engineInstalled("splash"); }
 
 /** The engine the model records are chosen for: a GGUF serves both coding engines, so the role's records are not filtered by engine. */
-function recordEngineFor(role: RoleId): string | null { return role === "coding" ? null : engineForRole(role); }
+// Splash serves the same GGUF records llama-server does (no record is tagged "splash"), so a chat
+// role on Splash must still list the llama-server records or it finds no model and falls back to the starter.
+function recordEngineFor(role: RoleId): string | null { if (role === "coding") return null; const engine = engineForRole(role); return engine === "splash" ? "llama-server" : engine; }
 
 function engineForRole(role: RoleId): string | null {
   if (role === "coding") return currentHomeMode() === "coding" || homeModeEnteringCoding() ? "splash" : activeCodingChoice().engine;
@@ -1773,7 +1775,7 @@ async function startChatWithFallback(modelId?: string, start: (role: RoleId, mod
     }
   }
   raise({ code: "chat.engine-fallback", severity: "warning", title: `${engine} did not start; chat is on llama-server`, text: reason, cause: reason, fix: { label: "Restart engine", action: "restart_engine" } });
-  return start("chat");
+  return start("chat", modelId);
 }
 /** The fallback with the spawn replaced, for the suite. */
 export const startChatWithFallbackForTests = startChatWithFallback;
