@@ -1657,6 +1657,99 @@
         }
       }
     },
+    "/v1/audio/endpoint": {
+      "post": {
+        "tags": [
+          "Roles"
+        ],
+        "summary": "End-of-turn check (one WAV of the utterance so far; the last 8 seconds are read)",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "SttEndpointResponse: whether the speaker has finished, with the probability.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "complete": {
+                      "type": "boolean"
+                    },
+                    "probability": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    }
+                  },
+                  "required": [
+                    "complete",
+                    "probability"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The file is not a 16-bit PCM WAV.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The end-of-turn model is not installed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/audio/speech": {
       "post": {
         "tags": [
@@ -7368,6 +7461,10 @@
                                 "type": "string",
                                 "minLength": 1
                               },
+                              "companion_id": {
+                                "type": "string",
+                                "nullable": true
+                              },
                               "label": {
                                 "type": "string",
                                 "minLength": 1
@@ -7550,6 +7647,10 @@
                                   "type": "string",
                                   "minLength": 1
                                 },
+                                "companion_id": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
                                 "label": {
                                   "type": "string",
                                   "minLength": 1
@@ -7722,6 +7823,10 @@
                               "id": {
                                 "type": "string",
                                 "minLength": 1
+                              },
+                              "companion_id": {
+                                "type": "string",
+                                "nullable": true
                               },
                               "label": {
                                 "type": "string",
@@ -7902,6 +8007,10 @@
                               "id": {
                                 "type": "string",
                                 "minLength": 1
+                              },
+                              "companion_id": {
+                                "type": "string",
+                                "nullable": true
                               },
                               "label": {
                                 "type": "string",
