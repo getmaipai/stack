@@ -219,6 +219,7 @@ export interface SplashArgsOptions {
   defaultReasoningEffort?: "none" | "medium";
   maxMemory?: string;
   decodeShare?: number;
+  languageOnly?: boolean;
 }
 
 /** The arguments after `install/launcher.py` for the coding role on Splash (CODE-STACK-01 S5a). Flag spellings are Splash 1.3.2's
@@ -237,7 +238,7 @@ export function splashArgs(options: SplashArgsOptions): string[] {
     "--offline",
     "--host", "127.0.0.1",
     "--port", String(options.port),
-    "--language-only",
+    ...(options.languageOnly === false ? [] : ["--language-only"]),
     "--served-model-name", options.servedModelName,
     "--announce-served-name",
     "--default-reasoning-effort", options.defaultReasoningEffort ?? "medium",

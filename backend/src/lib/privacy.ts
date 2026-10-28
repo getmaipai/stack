@@ -34,6 +34,15 @@ export const PRIVACY_ROWS: PrivacyRow[] = [
     hosts: ["huggingface.co", "github.com"],
   },
   {
+    id: "splash-chat-local-cache",
+    what: "Splash chat keeps conversation prefixes in a local SSD cache",
+    when: "Only while Splash chat is running; its bounded cache is emptied at every launch",
+    carries: "Nothing leaves this computer. Splash runs with --offline, HF_HUB_OFFLINE=1 and DO_NOT_TRACK=1; cache files stay under the Stack data directory",
+    receiver: "No network receiver; cache stays on this computer",
+    setting: null,
+    hosts: [],
+  },
+  {
     id: "wakeword-assets",
     what: "Downloading pinned wakeword assets for Home to serve to a robot",
     when: "Only when Home asks the Stack to install a wakeword asset using a model download job",

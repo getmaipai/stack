@@ -22,7 +22,7 @@ import { existsSync, linkSync, lstatSync, mkdirSync, readdirSync, readlinkSync, 
 import { basename, dirname, join, relative } from "node:path";
 import { dataDir } from "@/lib/paths";
 import type { CatalogModelLike, ModelRecord } from "@/lib/modelStore";
-import { STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL } from "@/lib/modelCatalog";
+import { STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_CHAT_QWEN38_UNCENSORED_MODEL } from "@/lib/modelCatalog";
 
 export const splashRoot = (): string => join(dataDir, "splash");
 /** The hub cache Splash reads (HF_HUB_CACHE): the Stack's own layout of the pinned files, not the store's `models/hub`. */
@@ -134,6 +134,7 @@ function layOutRepo(repo: LayoutRepo, placed: SplashLayout["placed"]): void {
 
 /** The target and draft pins a Splash launch for this model id lays out: the heavy pair for the heavy coding model (Home's coding mode), the 27B pair for everything else. */
 export function splashPairFor(modelId: string): { pin: CatalogModelLike; draftPin: CatalogModelLike } {
+  if (modelId === STACK_CHAT_QWEN38_UNCENSORED_MODEL.id) return { pin: STACK_CHAT_QWEN38_UNCENSORED_MODEL, draftPin: STACK_CODING_DRAFT_MODEL };
   return modelId === STACK_CODING_HEAVY_MODEL.id ? { pin: STACK_CODING_HEAVY_MODEL, draftPin: STACK_CODING_HEAVY_DRAFT_MODEL } : { pin: STACK_CODING_MODEL, draftPin: STACK_CODING_DRAFT_MODEL };
 }
 
@@ -153,6 +154,6 @@ export function layOutSplashCache(getModel: (id: string) => ModelRecord | null, 
 
 /** The coding model and its draft are the only ids whose removal affects the layout. */
 export function releaseSplashLayoutFor(id: string): void {
-  if (![STACK_CODING_MODEL.id, STACK_CODING_DRAFT_MODEL.id, STACK_CODING_HEAVY_MODEL.id, STACK_CODING_HEAVY_DRAFT_MODEL.id].includes(id)) return;
+  if (![STACK_CODING_MODEL.id, STACK_CODING_DRAFT_MODEL.id, STACK_CODING_HEAVY_MODEL.id, STACK_CODING_HEAVY_DRAFT_MODEL.id, STACK_CHAT_QWEN38_UNCENSORED_MODEL.id].includes(id)) return;
   try { rmSync(splashRoot(), { recursive: true, force: true }); } catch { /* a running engine's folder may refuse; the next layout repairs it */ }
 }

@@ -79,12 +79,14 @@ export type EngineUpdateRunner = (name: string, tag: string, target: StagingTarg
 export interface StagingTarget { url: string; sha256: string; size: number; requires?: string[]; extra?: Array<{ url: string; sha256: string; size: number; label?: string }> }
 const shippedTool = (name: string): string | undefined => ENGINE_BINARIES.find((pin) => pin.name === name)?.tool;
 export function stagingPin(name: string, tag: string, target: StagingTarget): EngineBinaryPin {
+  const base = ENGINE_BINARIES.find((pin) => pin.name === name);
+  const tool = base?.tool ?? (name === "splash-chat" ? "engine/splash" : undefined);
   return {
     id: `${name}-${tag}`, name, tag, platform: process.platform as "darwin" | "win32", arch: process.arch as "arm64" | "x64",
     requiresNvidia: target.requires?.includes("nvidia") ?? false, label: `${name} ${tag}`,
     archive: { label: `${name} ${tag}`, url: target.url, sha256: target.sha256, approxBytes: target.size },
     // The binary's name inside the archive is the engine's own (mlx-serve), read from the shipped pin of the same name.
-    ...(shippedTool(name) ? { tool: shippedTool(name) } : {}),
+    ...(tool ? { tool } : {}),
     ...(target.extra?.length ? { extraArchives: target.extra.map((archive) => ({ label: archive.label ?? `${name} ${tag} extra`, url: archive.url, sha256: archive.sha256, approxBytes: archive.size })) } : {}),
     verified: true,
   };

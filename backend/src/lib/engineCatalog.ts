@@ -292,18 +292,35 @@ export const SPLASH_PIN: EngineBinaryPin = {
 };
 ENGINE_BINARIES.push(SPLASH_PIN);
 
+/** Chat's opt-in Splash build is separate from the pinned coding fork: the
+ * latter remains on 1.3.2-ornith.1 until its own compatibility review. */
+export const SPLASH_CHAT_PIN: EngineBinaryPin = {
+  id: "splash-1.4.1-macos-arm64",
+  name: "splash-chat",
+  tag: "1.4.1",
+  platform: "darwin",
+  arch: "arm64",
+  tool: "engine/splash",
+  requiresNvidia: false,
+  label: "Splash chat (macOS 26.4 or later, Apple silicon M3 or newer), 1.4.1",
+  docsUrl: "https://github.com/incoai/splash",
+  archive: { label: "Splash 1.4.1 (macOS arm64)", url: "https://github.com/incoai/splash/releases/download/1.4.1/splash-1.4.1-arm64-macos26.tar.gz", sha256: "5746068dc652a4998267d55b1c6d59b545f1bc1e018131c6d8025022f7000d5c", approxBytes: 78_669_011 },
+  verified: true,
+};
+ENGINE_BINARIES.push(SPLASH_CHAT_PIN);
+
 /** The coding role's engines, one chosen by `stack.engines.coding.engine`. */
 export const CODING_ENGINES = ["llama-server", "splash"] as const;
 export type CodingEngine = typeof CODING_ENGINES[number];
 
 /** The chat wire's engines, one chosen by `stack.engines.chat.engine`. */
-export const CHAT_ENGINES = ["llama-server", "mlx-serve", "omlx"] as const;
+export const CHAT_ENGINES = ["llama-server", "mlx-serve", "omlx", "splash"] as const;
 export type ChatEngine = typeof CHAT_ENGINES[number];
 
 /** The role each engine name serves, for the routes that act on "the
  * engine's role" (start, stop, restart, the swap's drain). */
 export type EngineRole = "chat" | "coding" | "tts" | "image" | "video" | "music";
-export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", splash: "coding", "mlx-serve": "chat", omlx: "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", comfyui: "image", "video-gen": "video", "music-gen": "music", "image-gen": "image" };
+export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", splash: "coding", "splash-chat": "chat", "mlx-serve": "chat", omlx: "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", comfyui: "image", "video-gen": "video", "music-gen": "music", "image-gen": "image" };
 export function engineRole(name: string): EngineRole { return ENGINE_ROLE[name] ?? "chat"; }
 
 /** Runtimes the Stack assembles from pinned wheels through uv, in an
@@ -333,12 +350,13 @@ export const BUNDLED_RUNTIMES: BundledRuntime[] = [
 ];
 
 /** One definition of how a pin id names its engine and tag: a shipped
- * pin says so itself; a staged pin (`<name>-<tag>`, the tag starting
- * with the upstream build number) is split at its first `-b<digits>`. */
+ * pin says so itself; staged pins accept upstream build tags and semver tags. */
 export function engineNameTag(id: string): { name: string; tag: string } {
   const pin = ENGINE_BINARIES.find((candidate) => candidate.id === id);
   if (pin) return { name: pin.name, tag: pin.tag };
-  const match = id.match(/^(.*?)-(b\d+.*)$/);
+  const versioned = id.match(/^(.*?)-(\d+\.\d+\.\d+(?:[-+].*)?)$/);
+  if (versioned) return { name: versioned[1]!, tag: versioned[2]! };
+  const match = id.match(/^(.*?)-((?:b\d+.*)|(?:\d+\.\d+\.\d+(?:[-+].*)?))$/);
   return match ? { name: match[1]!, tag: match[2]! } : { name: id, tag: "legacy" };
 }
 export const DETECTED_ENGINE_VERSION_FLOORS: Record<string, string> = { ollama: "0.5.0", "lm-studio": "0.3.0", comfyui: "0.3.0", "mlx-serve": "0.1.0", omlx: "0.1.0", "llama-server": "b10797" };

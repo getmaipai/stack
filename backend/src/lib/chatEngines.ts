@@ -14,9 +14,9 @@
 // available as an opt-in: set `stack.engines.chat.engine` to `omlx`.
 import type { GovernorTier } from "@/lib/governor";
 
-export type ChatEngineId = "llama-server" | "mlx-serve" | "omlx";
+export type ChatEngineId = "llama-server" | "mlx-serve" | "omlx" | "splash";
 export const CHAT_ENGINE_SETTING = "stack.engines.chat.engine";
-export const CHAT_ENGINE_CHOICES = ["auto", "llama-server", "mlx-serve", "omlx"] as const;
+export const CHAT_ENGINE_CHOICES = ["auto", "llama-server", "mlx-serve", "omlx", "splash"] as const;
 
 /** Tiers with room for the 19.4 GB MLX weights beside the 4B judge, embeddings, a voice and the tier's working margin (the voice engine's rule, p64 and p128). oMLX is offered there as an optional install; it is never the default. */
 export const OMLX_OPTIONAL_TIERS: GovernorTier[] = ["p64", "p128"];
@@ -30,7 +30,7 @@ export function tierDefaultChatEngine(_tier?: GovernorTier | undefined | null, _
 
 /** What the setting asks for: a named engine, or the tier's default for `auto` (and for any unknown value). */
 export function requestedChatEngine(setting: unknown, tier: GovernorTier | undefined | null, platform: string = process.platform, arch: string = process.arch): ChatEngineId {
-  return setting === "llama-server" || setting === "mlx-serve" || setting === "omlx" ? setting : tierDefaultChatEngine(tier, platform, arch);
+  return setting === "llama-server" || setting === "mlx-serve" || setting === "omlx" || setting === "splash" ? setting : tierDefaultChatEngine(tier, platform, arch);
 }
 
 const failures = new Map<ChatEngineId, { count: number; reason: string }>();

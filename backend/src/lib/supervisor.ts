@@ -15,7 +15,7 @@ import { ENGINE_READY_MARKER, installedEnginePin, selectEngineBinary, type Codin
 import { managedEnv } from "@/lib/uvEnvironment";
 import { codingServerArgs, defaultKvCacheType, llamaCacheRamMib, llamaServerArgs, mlxKvQuantFor, mlxServeArgs, splashArgs, type KvCacheType } from "@/lib/engineArgs";
 import { currentEngineBinary, currentEngineTag, engineBinaryPath, engineDir } from "@/lib/engineInstall";
-import { detectAppleChip, detectHardware, primaryBudgetBytes } from "@/lib/hardware";
+import { detectAppleChip, detectHardware, primaryBudgetBytes, knownAppleChip } from "@/lib/hardware";
 import { identityHeaders, modelFileName, readEngineIdentity, type EngineIdentity } from "@/lib/identity";
 import { getModel, isComponent, isModelSelectable, listModels, recordMeasuredFootprint, type ModelRecord } from "@/lib/modelStore";
 import { readFileSync } from "node:fs";
@@ -30,7 +30,7 @@ import { newLaunchKey, omlxCommand, omlxEnv, omlxInstalled, omlxSupportedHere, O
 import { OmlxEngineClient } from "@/chat/omlxClient";
 import { CHAT_ENGINE_SETTING, clearChatEngineFailures, FALLBACK_AFTER_FAILURES, markChatEngineFailed, resolveChatEngine, type ChatEngineChoice, type ChatEngineId } from "@/lib/chatEngines";
 import { clearTtsEngineFailures, markTtsEngineFailed, resolveTtsEngine, TTS_ENGINE_SETTING, TTS_ENGINES, type TtsEngineChoice, type TtsEngineId } from "@/speech/ttsEngines";
-import { STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
+import { STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
 import { clearCodingEngineFailures, codingEngineFailure, CODING_ENGINE_SETTING, markCodingEngineFailed, resolveCodingEngine, SPLASH_CACHE_GB_DEFAULT, SPLASH_CACHE_GB_SETTING, splashEnv, splashFootprintEstimateBytes, type CodingEngineChoice, type SplashFacts } from "@/lib/splash";
 import { layOutSplashCache, SplashLayoutError, splashPairFor } from "@/lib/splashStore";
 import { TreeSnapshot, treeMemoryBytes } from "@/lib/processTree";
@@ -232,6 +232,27 @@ export class ServedNameClient implements EngineClient {
   request(path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<{ status: number; body: unknown }> { return this.inner.request(path, { ...body, model: this.servedName }, signal); }
   stream(path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<Response> { return this.inner.stream!(path, { ...body, model: this.servedName }, signal); }
   health(): Promise<boolean> { return this.inner.health(); }
+}
+
+/** Splash serves an OpenAI shaped chat wire; enforce the pinned Huihui sampling
+ * and Splash thinking controls at this final engine boundary. */
+export class SplashChatClient extends ServedNameClient {
+  constructor(inner: EngineClient, servedName: string, private readonly sampling: Record<string, unknown>) { super(inner, servedName); }
+  private body(body: Record<string, unknown>): Record<string, unknown> {
+    const out = { ...body };
+    for (const [key, value] of Object.entries(this.sampling)) if (key !== "source") out[key] = value;
+    const budget = Math.max(0, Math.floor(Number(out.thinking_budget_tokens ?? 2000)));
+    out.thinking_budget_tokens = Math.min(budget, Math.max(0, Math.floor(Number(this.sampling.thinking_budget_ceiling ?? 2000))));
+    return out;
+  }
+  private thinking(body: Record<string, unknown>): Record<string, unknown> {
+    const out = { ...body };
+    const kw = out.chat_template_kwargs && typeof out.chat_template_kwargs === "object" ? out.chat_template_kwargs as Record<string, unknown> : {};
+    if (out.reasoning_effort === "none" || kw.enable_thinking === false || (out.thinking && typeof out.thinking === "object" && (out.thinking as Record<string, unknown>).type === "disabled")) out.chat_template_kwargs = { ...kw, enable_thinking: false };
+    return out;
+  }
+  override request(path: string, body: Record<string, unknown>, signal?: AbortSignal) { return super.request(path, this.thinking(this.body(body)), signal); }
+  override stream(path: string, body: Record<string, unknown>, signal?: AbortSignal) { return super.stream(path, this.thinking(this.body(body)), signal); }
 }
 
 // ---- timeouts and probes --------------------------------------------------
@@ -495,11 +516,19 @@ async function acquireRequestProcess(requested: RoleId, modelId?: string): Promi
 // swap and the rollback flip that link); before any swap it is the
 // machine's pin, which the first install activated.
 function engineInstalled(name: string = "llama-server"): boolean {
-  const current = currentEngineBinary(name, name);
+  const tool = name === "splash-chat" || name === "splash" ? "engine/splash" : name;
+  const current = currentEngineBinary(name, tool);
   if (current.state === "ready") return true;
   if (current.state === "unready") return false;
   const pin = installedEnginePin(name);
   return !!pin && existsSync(join(engineDir(pin), ENGINE_READY_MARKER));
+}
+function chatSplashEngineInstalled(): boolean {
+  const pin = installedEnginePin("splash-chat");
+  if (!pin) return false;
+  const current = currentEngineBinary("splash-chat", "engine/splash");
+  if (current.state !== "none") return current.state === "ready";
+  return existsSync(join(engineDir(pin), ENGINE_READY_MARKER));
 }
 
 /** Whether a verified oMLX model record is on disk. */
@@ -507,11 +536,11 @@ function omlxModelInstalled(): boolean {
   return listModels().some((model) => model.roles.includes("chat") && model.engineRequirements.engine === "omlx" && isModelSelectable(model) && !!model.modelPath);
 }
 function chatEngineInstalled(id: ChatEngineId): boolean {
-  return id === "omlx" ? omlxInstalled() && omlxModelInstalled() : engineInstalled(id);
+  return id === "omlx" ? omlxInstalled() && omlxModelInstalled() : id === "splash" ? chatSplashEngineInstalled() && !!getModel(STACK_CHAT_QWEN38_UNCENSORED_MODEL.id)?.modelPath && !!getModel(STACK_CODING_DRAFT_MODEL.id)?.modelPath : engineInstalled(id);
 }
 /** What the choice checks: oMLX falls back to llama-server until it and its model are installed; an explicit mlx-serve is honoured as before (its start says what is missing). */
 function chatEngineAvailableForChoice(id: ChatEngineId): boolean {
-  return id === "omlx" ? chatEngineInstalled("omlx") : true;
+  return id === "omlx" || id === "splash" ? chatEngineInstalled(id) : true;
 }
 
 /** Which chat engine a start would choose: the setting (`auto` is the
@@ -521,9 +550,21 @@ export function activeChatChoice(): ChatEngineChoice {
   return resolveChatEngine({
     setting: settingValues()[CHAT_ENGINE_SETTING],
     tier: machineTier,
-    installed: chatEngineAvailableForChoice,
-    unsupported: (id) => id === "omlx" ? omlxSupportedHere().reason : null,
+    installed: (id) => id === "splash" ? chatEngineInstalled("splash") : chatEngineAvailableForChoice(id),
+    unsupported: (id) => id === "omlx" ? omlxSupportedHere().reason : id === "splash" ? splashChatUnsupportedReason() : null,
   });
+}
+
+function splashChatUnsupportedReason(): string | null {
+  const chip = knownAppleChip() ?? (codingMachine?.chipGeneration ? { generation: codingMachine.chipGeneration, name: codingMachine.chipName ?? "Apple chip" } : null);
+  const version = (codingMachine?.osVersion ?? "").match(/^(\d+)\.(\d+)/) ?? null;
+  const macos = version ? [Number(version[1]), Number(version[2])] : null;
+  if (process.platform !== "darwin" || process.arch !== "arm64") return "Splash chat needs an Apple silicon Mac.";
+  if (!chip || (chip.generation ?? 0) < 3) return "Splash chat needs an M3 chip or newer. Use llama-server on this Mac.";
+  if (!macos || macos[0]! < 26 || (macos[0] === 26 && macos[1]! < 4)) return "Splash chat needs macOS 26.4 or later. Update macOS, or use llama-server.";
+  const memoryGb = currentHardwareMemoryGb() || codingMachine?.memoryGb || 0;
+  if (memoryGb < 36) return "Splash chat needs at least 36 GB of memory. Use llama-server on this Mac.";
+  return null;
 }
 
 /** The chat wire's engine the settings and the machine choose
@@ -535,7 +576,7 @@ export function chatEngine(): ChatEngineId {
 // ---- the coding role's engine (CODE-STACK-01 S5a) --------------------------------------
 
 /** What the machine says about itself, set once at the daemon's start (and by the suite). Unset means unknown, which Splash refuses. */
-let codingMachine: Omit<SplashFacts, "tier"> | null = null;
+  let codingMachine: Omit<SplashFacts, "tier"> | null = null;
 export function setCodingMachineFacts(facts: Omit<SplashFacts, "tier"> | null): void { codingMachine = facts; }
 /** An engine forced for the length of one start (the fallback to llama-server for the request that Splash could not serve). */
 let forcedCodingEngine: CodingEngine | null = null;
@@ -623,6 +664,13 @@ function launchBinary(pin: EngineBinaryPin): string {
   return engineBinaryPath(pin);
 }
 
+function splashLauncher(pin: EngineBinaryPin): { root: string; executable: string } {
+  const engine = launchBinary(pin);
+  const root = dirname(dirname(engine));
+  const executable = join(root, "python", "bin", "python3");
+  return { root, executable };
+}
+
 /** Whether the role's engine is on this machine: the `current`
  * llama-server build for the chat wire, the bundled speech runtime plus
  * its detector component for the speech roles. */
@@ -632,12 +680,14 @@ export function engineInstalledFor(role: RoleId): boolean {
   if (SPEECH_ROLES.includes(role)) return componentModel(role, "vad") !== null;
   if (role === "tts") return ttsEngineInstalled(activeTtsChoice().engine);
   if (role === "image") return comfyuiInstalled();
+  if (role === "coding") return engineForRole(role) === "splash" ? engineInstalled("splash") : engineInstalled("llama-server");
   if (role === "vision") {
     const model = selectedModel(role);
     return !!model && projectorFor(model) !== null && engineInstalled("llama-server");
   }
   const engine = engineForRole(role);
-  return engine === "omlx" ? chatEngineInstalled("omlx") : engineInstalled(engine === "mlx-serve" || engine === "splash" ? engine : "llama-server");
+  if (role === "chat" && engine === "splash") return chatEngineInstalled("splash");
+  return engine === "omlx" ? chatEngineInstalled("omlx") : engineInstalled(engine === "mlx-serve" ? engine : "llama-server");
 }
 
 function initialStatus(role: RoleId): RoleStatus {
@@ -1278,6 +1328,7 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
   // A record with its own launch (vision) runs one slot, as its args say.
   const slots = declaredLaunchContext(model) !== null ? 1 : typeof config.slots === "number" && config.slots > 0 ? config.slots : 1;
   const contextLength = capChatWindow(role, resolvedContextLength ?? (codingRole ? codingLaunchSettings().contextLength : null) ?? declaredLaunchContext(model) ?? (typeof config.contextLength === "number" && config.contextLength > 0 ? config.contextLength : engineForRole(role) === "omlx" ? omlxContextLength(model, config) : await contextForLaunch(model, config, slots, gpuLayersFor(role))));
+  if (role === "chat" && engineForRole(role) === "splash") return splashLaunchPlan(model, port, contextLength, "splash-chat");
   if (codingRole && engineForRole(role) === "splash") return splashLaunchPlan(model, port, resolvedContextLength ?? codingLaunchSettings().contextLength);
   if (engineForRole(role) === "omlx") {
     // oMLX (ENGINE-MLX-01): an environment the Stack built, serving the one
@@ -1326,42 +1377,46 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
 }
 
 /** The coding role on Splash (CODE-STACK-01 S5a): the bundled Python runs the launcher, which becomes the server and starts the native engine under it. The Stack lays out the hub cache first (hardlinks of its own pinned files), so the engine starts offline and downloads nothing; a layout it cannot make is a plain-words refusal that sends the request to llama-server. */
-export function splashLaunchPlan(model: ModelRecord, port: number, contextLength: number): LaunchPlan {
-  const pin = installedEnginePin("splash");
-  if (!pin || !engineInstalled("splash")) throw new EngineUnavailableError("No installed Splash build is available for this machine.");
-  const launcher = launchBinary(pin);
+export function splashLaunchPlan(model: ModelRecord, port: number, contextLength: number, pinName = "splash"): LaunchPlan {
+  const pin = installedEnginePin(pinName);
+  if (!pin || !(pinName === "splash-chat" ? chatSplashEngineInstalled() : engineInstalled(pinName))) throw new EngineUnavailableError(`No installed ${pinName === "splash-chat" ? "Splash chat" : "Splash"} build is available for this machine.`);
+  const { root, executable } = splashLauncher(pin);
   // The pin's tool is `engine/splash`; the program's root is two levels up.
-  const root = dirname(dirname(launcher));
   let layout: ReturnType<typeof layOutSplashCache>;
   const pair = splashPairFor(model.id);
   try { layout = layOutSplashCache(getModel, pair.pin, pair.draftPin); } catch (error) { if (error instanceof SplashLayoutError) throw new EngineUnavailableError(error.message); throw error; }
   const values = settingValues();
-  const cacheSetting = values[SPLASH_CACHE_GB_SETTING];
-  const cacheGb = typeof cacheSetting === "number" && Number.isFinite(cacheSetting) ? Math.max(0, Math.floor(cacheSetting)) : SPLASH_CACHE_GB_DEFAULT;
+  const chatCacheSetting = values["stack.engines.chat.splash_cache_gb"];
+  const cacheSetting = pinName === "splash-chat" ? chatCacheSetting : values[SPLASH_CACHE_GB_SETTING];
+  const cacheGb = Math.min(64, typeof cacheSetting === "number" && Number.isFinite(cacheSetting) ? Math.max(0, Math.floor(cacheSetting)) : SPLASH_CACHE_GB_DEFAULT);
   const coding = codingLaunchSettings(values);
-  const tag = currentEngineTag("splash") ?? pin.tag;
+  const tag = currentEngineTag(pinName) ?? pin.tag;
   const modeCoding = currentHomeMode() === "coding" || homeModeEnteringCoding();
   const governor = getGovernorStatus();
   const stayingBytes = modeCoding ? governor.loaded.filter((item) => !["chat", "judge", "coding"].includes(item.id)).reduce((sum, item) => sum + item.peakBytes, 0) : 0;
-  const draftRecord = model.id === STACK_CODING_HEAVY_MODEL.id ? getModel(STACK_CODING_HEAVY_DRAFT_MODEL.id) : componentModel("coding", "draft");
-  const estimate = splashFootprintEstimateBytes({ weightsBytes: model.sizeBytes ?? 0, draftBytes: draftRecord?.sizeBytes ?? STACK_CODING_HEAVY_DRAFT_MODEL.download!.approx_bytes, contextTokens: contextLength });
+  const draftRecord = getModel(pair.draftPin.id);
+  const estimate = splashFootprintEstimateBytes({ weightsBytes: model.sizeBytes ?? 0, draftBytes: draftRecord?.sizeBytes ?? pair.draftPin.download!.approx_bytes, contextTokens: contextLength });
   const maxMemoryBytes = modeCoding ? Math.max(1, Math.min(governor.capBytes - stayingBytes, estimate + governor.marginBytes)) : null;
-  const args = splashArgs({ model: layout.model, revision: layout.revision, port, servedModelName: model.id, thinkingBudgetTokens: coding.thinkingBudgetTokens, contextLength, cacheGb, ...(modeCoding ? { defaultReasoningEffort: "none" as const, maxMemory: `${Math.max(1, Math.floor(maxMemoryBytes! / 1_073_741_824))}G`, decodeShare: 1.0 } : {}) });
+  const chatRole = pinName === "splash-chat";
+  const thinkingBudget = Math.max(0, Math.floor(Number(values["stack.engines.chat.thinking_budget_ceiling"] ?? 2000)));
+  const args = splashArgs({ model: layout.model, revision: layout.revision, port, servedModelName: model.id, thinkingBudgetTokens: chatRole ? thinkingBudget : coding.thinkingBudgetTokens, contextLength, cacheGb, languageOnly: !declaredReadsPictures(model), ...(modeCoding ? { defaultReasoningEffort: "none" as const, maxMemory: `${Math.max(1, Math.floor(maxMemoryBytes! / 1_073_741_824))}G`, decodeShare: 1.0 } : {}) });
+  const env = splashEnv(layout);
+  if (chatRole) env.DO_NOT_TRACK = "1";
   return {
-    command: [join(root, "python", "bin", "python3"), "-u", join(root, "install", "launcher.py"), ...args],
-    engine: "splash", build: tag, stdin: "ignore", contextLength,
+    command: [executable, "-u", join(root, "install", "launcher.py"), ...args],
+    engine: chatRole ? "splash-chat" : "splash", build: tag, stdin: "ignore", contextLength,
     // Splash schedules requests itself (its queue is 32 deep); `slots` is the number of coding requests Home should expect to run at once, reported, not enforced.
     slots: coding.slots, contextScope: "total across slots", kind: "spawned", imageInput: false, pictureTokensMax: null,
-    env: splashEnv(layout), healthPath: "/ready", tree: true,
-    client: (baseUrl) => new ServedNameClient(new OpenAIEngineClient(baseUrl, "/ready"), model.id),
+    env, healthPath: "/ready", tree: true,
+    client: (baseUrl) => chatRole ? new SplashChatClient(new OpenAIEngineClient(baseUrl, "/ready"), model.id, { ...(model.engineRequirements.sampling as Record<string, unknown> ?? {}), thinking_budget_ceiling: thinkingBudget }) : new ServedNameClient(new OpenAIEngineClient(baseUrl, "/ready"), model.id),
     // Splash has no /props: the Stack knows both what it launched and which file it linked.
     identity: { build: `splash-${tag}`, model: modelFileName(model.modelPath!) },
-    verifyServed: (baseUrl) => verifySplashServes(baseUrl, model.id),
+    verifyServed: (baseUrl) => verifySplashServes(baseUrl, model.id, chatRole ? "chat" : "coding"),
   };
 }
 
 /** The readiness identity check: the engine on this port lists the served name the Stack gave it and calls itself Splash. */
-export async function verifySplashServes(baseUrl: string, servedName: string): Promise<void> {
+export async function verifySplashServes(baseUrl: string, servedName: string, roleLabel = "coding"): Promise<void> {
   let listed: Array<{ id?: unknown; owned_by?: unknown }> = [];
   try {
     const response = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/models`, { signal: AbortSignal.timeout(5_000) });
@@ -1369,8 +1424,8 @@ export async function verifySplashServes(baseUrl: string, servedName: string): P
     if (response.ok && Array.isArray(body?.data)) listed = body.data as typeof listed;
   } catch { /* said below */ }
   const match = listed.find((entry) => entry.id === servedName);
-  if (!match) throw new EngineUnavailableError(`Splash started but does not serve ${servedName} (it lists ${listed.map((entry) => String(entry.id)).join(", ") || "nothing"}), so coding is not using it.`);
-  if (match.owned_by !== "splash") throw new EngineUnavailableError(`The engine on the coding port did not identify itself as Splash (it says ${String(match.owned_by)}), so coding is not using it.`);
+  if (!match) throw new EngineUnavailableError(`Splash started but does not serve ${servedName} (it lists ${listed.map((entry) => String(entry.id)).join(", ") || "nothing"}), so ${roleLabel} is not using it.`);
+  if (match.owned_by !== "splash") throw new EngineUnavailableError(`The engine on the ${roleLabel} port did not identify itself as Splash (it says ${String(match.owned_by)}), so ${roleLabel} is not using it.`);
 }
 
 // ---- unexpected exits (ROBUST-01) -----------------------------------------
@@ -1474,11 +1529,14 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   // The coding role: its slots and its window come from its own settings, and the window steps down until the engine's dry run fits what the governor can admit without evicting anything.
   const coding = role === "coding" ? codingLaunchSettings() : null;
   // On Splash there is no `llama-fit-params`: the window is the setting's (Splash's key-value cache is small) and the governor's figure is an estimate, until the post-load reading of the process tree replaces it.
-  const onSplash = coding !== null && engineForRole(role) === "splash";
-  const splashEstimate = onSplash ? splashFootprintEstimateBytes({ weightsBytes: model.sizeBytes ?? 0, draftBytes: getModel(splashPairFor(model.id).draftPin.id)?.sizeBytes ?? splashPairFor(model.id).draftPin.download!.approx_bytes, contextTokens: coding!.contextLength }) : null;
+  const onChatSplash = role === "chat" && engineForRole(role) === "splash";
+  const onSplash = (coding !== null && engineForRole(role) === "splash") || onChatSplash;
+  const splashPair = onSplash ? splashPairFor(model.id) : null;
+  const splashContext = onChatSplash ? Math.max(32_768, Math.floor(Number(settingValues()["stack.engines.chat.context_length"] ?? model.measuredContextLength ?? 131_072))) : coding?.contextLength ?? 0;
+  const splashEstimate = onSplash ? splashFootprintEstimateBytes({ weightsBytes: model.sizeBytes ?? 0, draftBytes: getModel(splashPair!.draftPin.id)?.sizeBytes ?? splashPair!.draftPin.download!.approx_bytes, contextTokens: splashContext }) : null;
   const codingWindow = coding ? (onSplash ? { contextLength: coding.contextLength, dryRunPeakBytes: splashEstimate } : await codingContextFor(model, coding.contextLength)) : null;
   const ownContext = coding ? codingWindow!.contextLength : declaredLaunchContext(model);
-  const declaredContextLength = ownContext ?? launchConfig.context_length;
+  const declaredContextLength = ownContext ?? (onChatSplash ? settingValues()["stack.engines.chat.context_length"] as number : launchConfig.context_length);
   const slots = coding ? coding.slots : ownContext !== null ? 1 : typeof launchConfig.slots === "number" && launchConfig.slots > 0 ? launchConfig.slots : 1;
   const contextLength = capChatWindow(role, typeof declaredContextLength === "number" && declaredContextLength > 0 ? declaredContextLength : engineForRole(role) === "omlx" ? omlxContextLength(model, launchConfig) : await contextForLaunch(model, { ...launchConfig, contextLength: 0 }, slots, gpuLayersFor(role)));
   // The voice engine starts offline; what it may need beyond the pins
@@ -1520,7 +1578,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   // A projector loads beside the model (the vision role's, or a chat
   // model's that reads pictures): its bytes count too. The fit tool sizes
   // the language model alone, so the projector is added.
-  const projectorBytes = launchProjectorFor(role, model)?.sizeBytes ?? 0;
+    const projectorBytes = launchProjectorFor(role, model)?.sizeBytes ?? 0;
   const pinMeasured = measuredPeakFromPin(model);
   const request = {
     id: role, kind: JIT_ROLES.includes(role) && !(role === "coding" && (currentHomeMode() === "coding" || homeModeEnteringCoding())) ? "jit" as const : "resident" as const,
@@ -1530,9 +1588,9 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     // load (weights the engine maps are not in the process footprint),
     // and the larger of that and the store's own reading is the peak.
     measuredPeakBytes: onSplash ? null : JIT_ROLES.includes(role) && pinMeasured !== null ? Math.max(pinMeasured, model.measuredFootprintBytes ?? 0) : model.measuredFootprintBytes,
-    dryRunPeakBytes: dryRunPeakBytes === null ? null : dryRunPeakBytes + projectorBytes,
+    dryRunPeakBytes: onSplash ? splashEstimate : dryRunPeakBytes === null ? null : dryRunPeakBytes + projectorBytes,
     headroomBytes: engineForRole(role) === "mlx-serve" && !managed && !generator && !SPEECH_ROLES.includes(role) ? mlxHeadroomBytes({ modelDir: model.modelPath!, contextTokens: contextLength }) : null,
-    engine: generator ? "comfyui" : managed ? TTS_ENGINES[activeTtsChoice().engine].catalogEngine : SPEECH_ROLES.includes(role) ? "sherpa-onnx-node" : engineForRole(role) === "mlx-serve" ? "mlx-serve" : engineForRole(role) === "omlx" ? "oMLX" : onSplash ? "splash" : "llama-server",
+    engine: generator ? "comfyui" : managed ? TTS_ENGINES[activeTtsChoice().engine].catalogEngine : SPEECH_ROLES.includes(role) ? "sherpa-onnx-node" : engineForRole(role) === "mlx-serve" ? "mlx-serve" : engineForRole(role) === "omlx" ? "oMLX" : onChatSplash ? "splash-chat" : onSplash ? "splash" : "llama-server",
     pinned: pinnedModels.has(model.id),
     // The coding engine gives way to a generator job while it is idle (CODE-STACK-01 S2).
     ...(role === "coding" ? { yieldsToGenerators: !(currentHomeMode() === "coding" || homeModeEnteringCoding()), pinned: currentHomeMode() === "coding" || homeModeEnteringCoding() || pinnedModels.has(model.id) } : {}),
@@ -1547,10 +1605,10 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   try {
     admission = await waitForAdmission(request, { stillWanted: () => !timedOut && !stoppingAll && runtime(role).generation === startGeneration, timeoutMs: START_WAIT_MS, onGaveUp: () => { timedOut = true; } });
   } catch (error) {
-    if (role === "coding" && error instanceof AdmissionRefusedError) throw new EngineDoesNotFitError(codingRefusal(request));
+    if ((role === "coding" || onChatSplash) && error instanceof AdmissionRefusedError) throw new EngineDoesNotFitError(codingRefusal(request));
     throw new EngineUnavailableError(error instanceof AdmissionRefusedError ? error.message.replace(/^\S+ needs about/, `The ${role} engine needs about`) : (error as Error).message);
   }
-  if (!admission && role === "coding" && !stoppingAll && runtime(role).generation === startGeneration) throw new EngineDoesNotFitError(codingRefusal(request));
+  if (!admission && (role === "coding" || onChatSplash) && !stoppingAll && runtime(role).generation === startGeneration) throw new EngineDoesNotFitError(codingRefusal(request));
   if (!admission) throw new EngineUnavailableError(stoppingAll ? "The Stack is stopping." : runtime(role).generation !== startGeneration ? `The ${role} engine was stopped while it waited for memory.` : `${waitingReason(role, request)} The ${role} engine waited ${Math.round(START_WAIT_MS / 1000)} s for memory and gave up.`);
 
   const port = await findFreePort();
@@ -1695,7 +1753,12 @@ async function startOne(role: RoleId, modelId?: string): Promise<RoleProcess> {
  * failed chat engine never leaves the household without chat. A restart
  * of the chat engine clears the memory and tries the chosen engine again. */
 async function startChatWithFallback(modelId?: string, start: (role: RoleId, modelId?: string) => Promise<RoleProcess> = startSpawnedProcess): Promise<RoleProcess> {
-  if (activeChatChoice().engine !== "omlx") return start("chat", modelId);
+  const choice = activeChatChoice();
+  if (choice.engine !== "omlx" && choice.engine !== "splash") {
+    if (choice.requested === "splash" && choice.reason) raise({ code: "chat.engine-fallback", severity: "warning", title: "Splash is not running; chat is on llama-server", text: choice.reason, cause: choice.reason, fix: { label: "Restart engine", action: "restart_engine" } });
+    return start("chat", modelId);
+  }
+  const engine = choice.engine;
   let reason = "";
   for (let attempt = 1; attempt <= FALLBACK_AFTER_FAILURES; attempt++) {
     try {
@@ -1705,10 +1768,11 @@ async function startChatWithFallback(modelId?: string, start: (role: RoleId, mod
     } catch (error) {
       if (stoppingAll) throw error;
       reason = error instanceof Error ? error.message : String(error);
-      markChatEngineFailed("omlx", reason);
+      if (error instanceof EngineDoesNotFitError) break;
+      markChatEngineFailed(engine, reason);
     }
   }
-  raise({ code: "chat.engine-fallback", severity: "warning", title: "oMLX did not start; chat is on llama-server", text: reason, cause: reason, fix: { label: "Restart engine", action: "restart_engine" } });
+  raise({ code: "chat.engine-fallback", severity: "warning", title: `${engine} did not start; chat is on llama-server`, text: reason, cause: reason, fix: { label: "Restart engine", action: "restart_engine" } });
   return start("chat");
 }
 /** The fallback with the spawn replaced, for the suite. */
@@ -1890,7 +1954,9 @@ export function identityCheck(requested: RoleId): { ok: boolean; expected: strin
  * the governor keeps the tier's working margin back (a Studio's 20 GB,
  * not the p16 default's 4 GB; STACK-06e). */
 let machineTier: GovernorTier | undefined;
-export function setMachineTier(tier: GovernorTier | null | undefined): void { machineTier = tier ?? undefined; }
+let machineMemoryGb = 0;
+export function setMachineTier(tier: GovernorTier | null | undefined): void { machineTier = tier ?? undefined; if (tier == null) machineMemoryGb = 0; }
+function currentHardwareMemoryGb(): number { return machineMemoryGb; }
 export function currentMachineTier(): GovernorTier | undefined { return machineTier; }
 /** Reads the hardware, sets the tier from the proposed profile, and
  * starts the governor's own memory watch with it, so the tier's margin
@@ -1899,6 +1965,7 @@ export function currentMachineTier(): GovernorTier | undefined { return machineT
  * and the watch's stop. */
 export async function setMachineTierFromHardware(): Promise<{ tier: GovernorTier | null; stop: () => void }> {
   const hardware = await detectHardware();
+  machineMemoryGb = hardware.totalRamGb;
   const tier = proposeProfile(hardware)?.id as GovernorTier | undefined;
   setMachineTier(tier);
   // What the coding role's engine choice needs to know about this Mac (CODE-STACK-01 S5a).
@@ -2151,7 +2218,7 @@ const SAMPLING_KEYS = ["temperature", "top_p", "top_k", "presence_penalty"] as c
  * on the pin), filled in only where the request said nothing. */
 export function withPinSampling(modelId: string | null, body: Record<string, unknown>): Record<string, unknown> {
   if (!modelId) return body;
-  const sampling = getModel(modelId)?.engineRequirements.sampling as Partial<Record<(typeof SAMPLING_KEYS)[number], unknown>> | undefined;
+    const sampling = getModel(modelId)?.engineRequirements.sampling as Partial<Record<(typeof SAMPLING_KEYS)[number], unknown>> | undefined;
   if (!sampling) return body;
   const filled = { ...body };
   for (const key of SAMPLING_KEYS) if (filled[key] === undefined && typeof sampling[key] === "number") filled[key] = sampling[key];
@@ -2167,6 +2234,15 @@ export function withPinSampling(modelId: string | null, body: Record<string, unk
 function samplingFor(role: RoleId, requested: RoleId, path: string, modelId: string | null, body: Record<string, unknown>, streaming: boolean): Record<string, unknown> {
   if (role === "coding" && requested === "coding") return CODING_GENERATION_PATHS.includes(path) ? withPinSampling(modelId, dropClientSampling(body)) : body;
   return withPinSampling(streaming || path === "/v1/chat/completions" ? modelId : null, body);
+}
+
+function splashChatRequestBody(role: RoleId, processRecord: RoleProcess, body: Record<string, unknown>): Record<string, unknown> {
+  if (role !== "chat" || processRecord.engine !== "splash-chat") return body;
+  const out = clampThinking(body, Math.max(0, Math.floor(Number(settingValues()["stack.engines.chat.thinking_budget_ceiling"] ?? settingValues()["stack.engines.coding.thinking_budget_ceiling"] ?? 2000))));
+  if (out.reasoning_effort === "none" || out.chat_template_kwargs && typeof out.chat_template_kwargs === "object" && (out.chat_template_kwargs as Record<string, unknown>).enable_thinking === false) {
+    out.chat_template_kwargs = { ...(out.chat_template_kwargs && typeof out.chat_template_kwargs === "object" ? out.chat_template_kwargs as Record<string, unknown> : {}), enable_thinking: false };
+  }
+  return out;
 }
 
 export function applyHomeModeCodingDefaults(requested: RoleId, body: Record<string, unknown>): Record<string, unknown> {
@@ -2185,7 +2261,7 @@ export async function requestRole(requested: RoleId, path: string, body: Record<
   const current = runtime(role);
   try {
     const completionMs = typeof body.timeout_ms === "number" && body.timeout_ms > 0 ? body.timeout_ms : (timeoutOverrides.completionMs ?? DEFAULT_COMPLETION_TIMEOUT_MS);
-    const dispatchBody = samplingFor(role, requested, path, processRecord.modelId, requestedModel && processRecord.kind !== "url" ? { ...applyHomeModeCodingDefaults(requested, body), model: role } : applyHomeModeCodingDefaults(requested, body), false);
+  const dispatchBody = splashChatRequestBody(role, processRecord, samplingFor(role, requested, path, processRecord.modelId, requestedModel && processRecord.kind !== "url" ? { ...applyHomeModeCodingDefaults(requested, body), model: role } : applyHomeModeCodingDefaults(requested, body), false));
     const timedOut = () => new EngineUnavailableError(`Engine request timed out after ${Math.ceil(completionMs / 1000)}s.`);
     const answered = processRecord.client.request(path, dispatchBody, signal);
     const result = await (role === "coding" ? withActiveTimeout(answered, completionMs, () => codingPausedMs(processRecord), timedOut) : withTimeout(answered, completionMs, timedOut));
@@ -2252,7 +2328,7 @@ export async function streamRole(requested: RoleId, path: string, body: Record<s
   const current = runtime(role);
   try {
     if (!processRecord.client.stream) throw new EngineUnavailableError("The engine does not support streaming.");
-    const dispatchBody = samplingFor(role, requested, path, processRecord.modelId, requestedModel && processRecord.kind !== "url" ? { ...applyHomeModeCodingDefaults(requested, body), model: role } : applyHomeModeCodingDefaults(requested, body), true);
+    const dispatchBody = splashChatRequestBody(role, processRecord, samplingFor(role, requested, path, processRecord.modelId, requestedModel && processRecord.kind !== "url" ? { ...applyHomeModeCodingDefaults(requested, body), model: role } : applyHomeModeCodingDefaults(requested, body), true));
     const response = await processRecord.client.stream(path, { ...dispatchBody, stream: true }, signal);
     if (response.status >= 500 && (continueForHealth(processRecord), !await processRecord.client.health())) throw new EngineUnavailableError(`Engine returned HTTP ${response.status} and is no longer healthy.`);
     const contentType = response.headers.get("content-type") ?? undefined;

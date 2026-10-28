@@ -16,11 +16,13 @@ import { StackSetting } from "@maipai/spec/stack/ts/stack-setting.js";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
 import { decryptSecret, encryptSecret } from "@/lib/secrets";
 import { ENGINE_BINARIES } from "@/lib/engineCatalog";
+import { describeSetting } from "@maipai/spec/interpreters/ts/describeSetting.js";
+import { SettingsKey } from "@maipai/spec/gen/ts/settings-key.js";
 
 export type SettingValue = number | boolean | string;
 
 /** The declaration half of a StackSetting: everything but the values. */
-export type SettingDeclaration = Omit<StackSetting, "in_effect" | "pending">;
+export type SettingDeclaration = Omit<StackSetting, "in_effect" | "pending"> & { copy?: { does: string; does_child?: string; does_teen?: string; title?: string; what_is_stored?: string; consent_adult_self?: string; consent_teen_self?: string; consent_child_parent?: string; consent_guest?: string; options?: Record<string, string>; option_labels?: Record<string, string> } };
 
 export const SETTING_SECTIONS = [
   { id: "memory", label: "Memory" },
@@ -87,7 +89,10 @@ export const SETTINGS: SettingDeclaration[] = [
   // llama-server on every tier (ENGINE-MLX-02; oMLX is opt-in); a name picks that engine. All are
   // installed side by side; the switch is this setting plus a restart, and
   // rollback is `llama-server`.
-  { ...stack, key: "stack.engines.chat.engine", selector: "select", range: { options: [{ value: "auto", label: "Automatic (llama-server)" }, { value: "omlx", label: "oMLX (MLX, Apple silicon)" }, { value: "llama-server", label: "llama-server (GGUF, Metal)" }, { value: "mlx-serve", label: "mlx-serve (MLX, Apple silicon)" }] }, default: "auto", label: "Chat engine", help: "Which engine answers the chat roles after the next restart. Automatic uses llama-server, which runs GGUF models on every computer and is the most reliable with tools in our tests. Choose oMLX only on an Apple silicon Mac with 64 GB or more if you want faster answers; it downloads about 20 GB and llama-server takes over if it does not start.", section: { id: "engines.chat", order: 5 }, level: "advanced", needs_restart: true },
+  { ...stack, key: "stack.engines.chat.engine", selector: "select", range: { options: [{ value: "auto", label: "Automatic (llama-server)" }, { value: "omlx", label: "oMLX (MLX, Apple silicon)" }, { value: "llama-server", label: "llama-server (GGUF, Metal)" }, { value: "mlx-serve", label: "mlx-serve (MLX, Apple silicon)" }, { value: "splash", label: "Splash 1.4.1 (Apple silicon M3 or newer)" }] }, default: "auto", label: "Chat engine", help: "Which engine answers the chat roles after the next restart. Automatic uses llama-server, which runs GGUF models on every computer and is the most reliable with tools in our tests. Choose Splash only on an M3 or newer Mac with macOS 26.4 and at least 36 GB of memory; it uses the installed Huihui chat model and its draft, keeps a bounded local cache, and llama-server takes over if it cannot start.", section: { id: "engines.chat", order: 5 }, level: "advanced", needs_restart: true, copy: { does: "Choose Splash 1.4.1 for chat on a supported Mac. It runs the installed Huihui model and draft, keeps a bounded local cache that is emptied at launch, and uses llama-server if Splash cannot start." } },
+  { ...stack, key: "stack.engines.chat.splash_cache_gb", selector: "number", range: { min: 0, max: 64 }, default: 4, label: "Splash chat cache", help: "The most disk, in GB, Splash may use to remember chat prefixes. Its cache is local and emptied each time the engine starts. 0 turns the cache off.", section: { id: "engines.chat", order: 6 }, level: "expert", needs_restart: true },
+  { ...stack, key: "stack.engines.chat.thinking_budget_ceiling", selector: "number", range: { min: 0, max: 32768 }, default: 2000, label: "Most thinking per answer", help: "The most tokens Splash may spend thinking before it answers. 0 turns thinking off.", section: { id: "engines.chat", order: 8 }, level: "advanced", needs_restart: true },
+  { ...stack, key: "stack.engines.chat.context_length", selector: "number", range: { min: 32768, max: 262144 }, default: 131072, label: "Chat window", help: "The most text, in tokens, the chat model can hold at once. The Stack starts with a smaller window when memory is short.", section: { id: "engines.chat", order: 9 }, level: "expert", needs_restart: true },
   { ...stack, key: "stack.engines.llama_server.context_length", selector: "number", range: { min: 0, max: 262_144 }, default: 0, label: "Context length", help: "Zero chooses the largest context that fits this computer and model; enter a positive value to set it explicitly.", section: { id: "engines.llama_server", order: 10 }, level: "advanced", needs_restart: true },
   { ...stack, key: "stack.engines.llama_server.slots", selector: "number", range: { min: 1, max: 16 }, default: 1, label: "Parallel slots", help: "How many requests the engine can serve concurrently.", section: { id: "engines.llama_server", order: 20 }, level: "advanced", needs_restart: true },
   { ...stack, key: "stack.engines.llama_server.threads", selector: "number", range: { min: 0, max: 256 }, default: 0, label: "CPU threads", help: "CPU threads used by the engine. Zero lets the engine choose.", section: { id: "engines.llama_server", order: 30 }, level: "expert", needs_restart: true },
@@ -193,7 +198,9 @@ export function readSettings(options: { reveal?: boolean } = {}): StackSetting[]
     const pending = read(metaKey(declaration.key, "pending"));
     const inEffect = decode(read(metaKey(declaration.key, "in_effect")), declaration);
     const pendingValue = pending === null ? null : decode(pending, declaration);
-    return StackSetting.parse({ ...declaration, in_effect: options.reveal ? inEffect : redact(declaration, inEffect), pending: pendingValue === null ? null : options.reveal ? pendingValue : redact(declaration, pendingValue) });
+    const described = declaration.key === "stack.engines.chat.engine" ? describeSetting(SettingsKey.parse({ key: declaration.key, scope: "device", selector: "select", range: { options: (declaration.range as { options: Array<{ value: string }> }).options.map((option) => option.value) }, default: declaration.default, label: declaration.label, level: declaration.level, lives_in: "stack", honoured_by: ["home", "bot"], copy: declaration.copy }), { subjectBand: "adult", viewer: "admin", value: inEffect, effective: inEffect, source: "default" }) : null;
+    const { copy: _copy, ...stackDeclaration } = declaration;
+    return StackSetting.parse({ ...stackDeclaration, ...(described ? { label: described.does, help: declaration.help } : {}), in_effect: options.reveal ? inEffect : redact(declaration, inEffect), pending: pendingValue === null ? null : options.reveal ? pendingValue : redact(declaration, pendingValue) });
   });
 }
 
@@ -221,7 +228,7 @@ function refuseUnservable(key: string, value: SettingValue): void {
   // `auto` always resolves to an engine that can run; oMLX is a managed
   // environment (no archive pin), served on Apple silicon only.
   if (value === "auto") return;
-  const servable = value === "omlx" ? process.platform === "darwin" && process.arch === "arm64" : ENGINE_BINARIES.some((pin) => pin.name === value && pin.platform === process.platform && pin.arch === process.arch);
+  const servable = value === "omlx" ? process.platform === "darwin" && process.arch === "arm64" : value === "splash" ? ENGINE_BINARIES.some((pin) => pin.name === "splash-chat" && pin.platform === process.platform && pin.arch === process.arch) : ENGINE_BINARIES.some((pin) => pin.name === value && pin.platform === process.platform && pin.arch === process.arch);
   if (!servable) throw new Error(`${value} has no pinned build for ${process.platform} ${process.arch}; the chat engine stays as it is.`);
 }
 export function updateSettings(values: Record<string, unknown>): StackSetting[] {

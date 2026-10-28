@@ -34,7 +34,7 @@ function twoChatModels(): void {
 }
 
 test("the mlx-serve pin is the second chat engine, selected by name for an Apple silicon Mac and for nothing else", () => {
-  expect(CHAT_ENGINES).toEqual(["llama-server", "mlx-serve", "omlx"]);
+  expect(CHAT_ENGINES).toEqual(["llama-server", "mlx-serve", "omlx", "splash"]);
   expect(selectEngineBinary({ platform: "darwin", arch: "arm64", cudaDevices: [] } as never, "mlx-serve")?.id).toBe(MLX_SERVE_PIN.id);
   expect(selectEngineBinary({ platform: "darwin", arch: "arm64", cudaDevices: [] } as never)?.name).toBe("llama-server");
   expect(selectEngineBinary({ platform: "linux", arch: "arm64", cudaDevices: [] } as never, "mlx-serve")).toBeNull();

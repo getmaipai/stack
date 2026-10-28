@@ -20,6 +20,8 @@ export function engineBinaryPath(pin: EngineBinaryPin): string {
   return engineToolPath(pin, pin.tool ?? "llama-server");
 }
 
+/** Vendor Splash archives bundle a Python launcher; the native executable is
+ * the install proof, while the Stack starts the bundled launcher. */
 /** What the `current` link says should run: `none` before the first
  * activation, `unready` when the link names a build that never finished
  * installing (nothing may run in its place), or the binary path. */
