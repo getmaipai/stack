@@ -121,6 +121,13 @@ if [ "$MODE" != docs ]; then
   if [ "$MODE" = full ]; then
     echo "== backend: tests"
     (cd backend && bun test)
+    # The compiled binary has a virtual filesystem a source-run test cannot see: a module-level
+    # read of a file beside the source died at startup on the Studio (2026-10-28, 4eb2e08).
+    # Compile into a scratch directory (not dist/, which would dirty the worktree) and serve it.
+    echo "== compiled binary: build, serve, /healthz"
+    scratch="$(mktemp -d)"
+    OUT_DIR="$scratch/dist" SKIP_STT_VERIFY=1 bash scripts/build-binary.sh || { rm -rf "$scratch"; exit 1; }
+    rm -rf "$scratch"
   fi
 fi
 
