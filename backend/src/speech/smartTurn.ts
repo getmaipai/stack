@@ -7,6 +7,8 @@
 import * as ort from "onnxruntime-web";
 import type { InferenceSession } from "onnxruntime-web";
 import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { isCompiledBinary } from "@/lib/paths";
 
 export const SMART_TURN_SAMPLE_RATE = 16000;
 const N_FFT = 400;
@@ -124,6 +126,9 @@ let sessionPromise: Promise<InferenceSession> | null = null;
 /** Load the model once per process; a failed load is retried on the next call. */
 export function loadSmartTurn(modelPath: string): Promise<InferenceSession> {
   if (!sessionPromise) {
+    // A compiled binary cannot embed the .mjs/.wasm ort-web loads at runtime;
+    // scripts/build-binary.sh ships them in ort-wasm/ beside the binary.
+    if (isCompiledBinary) ort.env.wasm.wasmPaths = join(dirname(process.execPath), "ort-wasm") + "/";
     ort.env.wasm.numThreads = 4; // measured on an M-series Mac: 113 ms total at 4 threads, 218 ms at 1
     ort.env.logLevel = "fatal";
     sessionPromise = ort.InferenceSession.create(new Uint8Array(readFileSync(modelPath)), {

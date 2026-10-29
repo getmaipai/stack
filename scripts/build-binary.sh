@@ -67,6 +67,10 @@ echo "== compile: $BINARY_NAME"
 echo "== migrations (sibling directory, see this script's own header)"
 cp -R backend/src/db/migrations "$OUT_DIR/migrations"
 
+echo "== ort-wasm (onnxruntime-web loads these at runtime; smartTurn.ts points wasmPaths here)"
+mkdir -p "$OUT_DIR/ort-wasm"
+cp backend/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs backend/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm "$OUT_DIR/ort-wasm/"
+
 echo "== backend-src (vendored, dereferenced - the stt worker's own real bun run target, see this script's own header)"
 mkdir -p "$OUT_DIR/backend-src"
 for entry in src node_modules package.json bunfig.toml tsconfig.json; do
@@ -121,3 +125,30 @@ STATUS="$(echo "$RESPONSE" | tail -1)"
 BODY="$(echo "$RESPONSE" | sed '$d')"
 echo "transcription: $STATUS $BODY"
 if [ "$STATUS" != "200" ]; then echo "stt did not actually work - this is what backend-src + STACK_BUN_BIN exist to fix (getmaipai/stack#8)"; exit 1; fi
+
+echo
+echo "== live verify: /v1/audio/endpoint answers from the compiled binary (Smart Turn model, onnxruntime-web wasm beside the binary)"
+ST_BODY="$(echo "$PINS" | python3 -c "
+import json,sys
+ms=[m for m in json.load(sys.stdin)['models'] if m['id'].startswith('smart-turn')]
+if not ms: sys.exit(3)
+m=ms[0]
+b={'id':m['id'],'role':m['role'],'url':m['download']['url'],'sha256':m['download']['sha256'],'approx_bytes':m['download']['approx_bytes'],'licence':m['license'],'revision':m['revision']}
+b.update({k:m[k] for k in ('repo','engine','component') if m.get(k) is not None})
+if m['download'].get('archive'): b['archive']=True
+print(json.dumps(b))")" || { echo "no smart-turn model in the catalog"; exit 1; }
+JOB="$(curl -s -X POST "http://127.0.0.1:$VERIFY_PORT/stack/v1/models" -H 'content-type: application/json' -d "$ST_BODY" | python3 -c "import json,sys;print(json.load(sys.stdin)['job'])")"
+for _ in $(seq 1 240); do
+  STATE="$(curl -s "http://127.0.0.1:$VERIFY_PORT/stack/v1/jobs/$JOB" | python3 -c "import json,sys;print(json.load(sys.stdin)['job']['state'])")"
+  case "$STATE" in done|failed|cancelled) break;; esac
+  sleep 0.5
+done
+echo "smart-turn -> $STATE"
+if [ "$STATE" != "done" ]; then echo "the smart-turn install job did not finish"; exit 1; fi
+RESPONSE="$(curl -s -w '\n%{http_code}' -X POST "http://127.0.0.1:$VERIFY_PORT/v1/audio/endpoint" -F "file=@$CLIP;type=audio/wav")"
+STATUS="$(echo "$RESPONSE" | tail -1)"
+BODY="$(echo "$RESPONSE" | sed '$d')"
+echo "endpoint: $STATUS $BODY"
+if [ "$STATUS" != "200" ] || ! echo "$BODY" | python3 -c "import json,sys;d=json.load(sys.stdin);assert isinstance(d['probability'],float) and isinstance(d['complete'],bool)"; then
+  echo "the endpoint did not return {complete, probability}: ort-wasm/ beside the binary is what makes onnxruntime-web load"; tail -20 "$VERIFY_LOG"; exit 1
+fi
