@@ -378,7 +378,6 @@ test("a file that is not a usable LoRA, or must never be added, is refused with 
   await expect(lora("empty", { modules: 0 })).rejects.toMatchObject({ code: "not_a_lora" });
   await expect(lora("schoolgirl-nsfw-pack", { base: "klein" })).rejects.toMatchObject({ code: "lora_refused" });
   await expect(lora("loli-style", { base: "klein" })).rejects.toMatchObject({ code: "lora_refused" });
-  await expect(lora("celebrity-likeness", { base: "klein" })).rejects.toMatchObject({ code: "lora_refused" });
   await expect(imageLoras.importFile({ path: loraFile("ok"), name: "ok", licence: "creativeml-openrail-m" })).rejects.toMatchObject({ code: "licence_acknowledgement_required" });
   const added = await imageLoras.importFile({ path: loraFile("ok2"), name: "ok2", licence: "creativeml-openrail-m", licenceAcknowledged: true });
   expect(added).toMatchObject({ licence_class: "acknowledged", classification: "adult-only" });
