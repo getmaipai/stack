@@ -1967,11 +1967,11 @@
                   "prompt": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 4000
+                    "maxLength": 20000
                   },
                   "negative_prompt": {
                     "type": "string",
-                    "maxLength": 4000,
+                    "maxLength": 20000,
                     "description": "Accepted. The distilled models run without guidance, so it has no effect on the picture."
                   },
                   "size": {
