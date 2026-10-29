@@ -461,7 +461,7 @@ the acceptance is one small file (`licence-acceptances.json`) and no name. Video
 
 `POST /v1/videos/generations` (JSON) answers like `/v1/images/generations`: 200 `{ created, job, data: [{ url, poster_url, content_type, width, height,
 frames, fps, seconds, seed, model, mode, lora_ids, ms, bytes, poster_bytes }] }`, or 202 `{ created, job, data: [] }` when the clip is still going at
-`timeout_ms` (30 s unsaid, 30 min at most); then poll. Fields: `prompt` (required, 4000 characters), `negative_prompt` (accepted; the distilled model
+`timeout_ms` (30 s unsaid, 30 min at most); then poll. Fields: `prompt` (required, 20000 characters), `negative_prompt` (accepted; the distilled model
 runs without guidance, so it has no effect), `image` + `image_source` (see below), `size` (`832x480` default; multiples of 32, each side 256 or more,
 area at most 399,360 pixels, so `480x832` also fits and 1280x704 does not), `seconds` (whole, 1 to 5, default 5), `seed`, `loras` (`[{ id, strength }]`, at
 most 4, strength 0 to 2, the record's default when left out), `audience` (`all-ages` unsaid, or `adult`), `timeout_ms`. Errors carry `error` (what
@@ -618,7 +618,7 @@ Z-Image-Turbo 34 GB (p128 only), plus 1 GB while LoRAs are applied (unbaked: abo
 never fit beside what is resident is 503 `no_memory` at once. Four jobs may be waiting (429 `queue_full`).
 
 `POST /v1/images/generations` (JSON) answers 200 `{ created, job, data: [Pic] }` within `timeout_ms` (two minutes unsaid, 30 minutes at most), or 202
-`{ created, job, data: [] }` past it; then poll. Fields: `prompt` (required, 4000 characters), `model` (`image` or unsaid for the default; `flux2-klein-4b`;
+`{ created, job, data: [] }` past it; then poll. Fields: `prompt` (required, 20000 characters), `model` (`image` or unsaid for the default; `flux2-klein-4b`;
 `z-image-turbo`), `size` (`1024x1024` unsaid; 256 to 2048 a side, multiples of 16), `n` (1 to 4; seeds `seed`, `seed+1`, ...), `seed`, `steps` (4 for
 Klein, 9 for Z-Image; at most 12 and 20), `negative_prompt` (accepted, no effect: the distilled models run without guidance), `loras`
 (`[{ id | sha256, scale }]`, at most 4, scale 0 to 2, the record's default when left out), `audience` (`all-ages` unsaid, or `adult`), `init_image` (base64,
