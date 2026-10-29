@@ -276,7 +276,7 @@ async function runPreview(job: Job, signal: AbortSignal, progress: JobProgress):
 
 // Home's player un-premultiplies in a shader: colour on top is premultiplied by alpha, with the matte repeated below.
 // `premultiply=inplace=1` multiplies by the frame's own alpha; the two-input form left the key colour in the colour half (green fringes, 2026-10-29).
-export const COMPANION_STACK_FILTER = "[0:v]format=gbrap,split=2[c][m0];[m0]alphaextract,format=gray,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p[myuv];[c]premultiply=inplace=1,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p[cpm];[cpm][myuv]vstack=inputs=2[out]";
+export const COMPANION_STACK_FILTER = "[0:v]format=gbrap,split=2[c][m0];[m0]alphaextract,format=gray,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p[myuv];[c]premultiply=inplace=1,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p,unsharp=5:5:0.9:5:5:0.0[cpm];[cpm][myuv]vstack=inputs=2[out]";
 const COMPANION_MAX_SOURCE_BYTES = 64 * 1024 * 1024;
 const COMPANION_MAX_SOURCE_SECONDS = 12;
 const extOkay = (path: string) => [".mp4", ".mov", ".webm"].includes(extname(path).toLowerCase());
