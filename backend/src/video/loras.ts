@@ -236,16 +236,7 @@ export async function importLora(input: ImportInput): Promise<LoraRecord> {
   const sha256 = await sha256OfFile(input.path);
   let likenessSubject: string | null = null;
   if (input.likeness) {
-    try {
-      const proof = verifyProof(input.likeness.proof, { purpose: "style_import", bind: sha256, consume: true });
-      if (proof.subject !== input.likeness.subject) throw new LikenessError("likeness_proof_mismatch", "That consent proof is for a different person. Ask Home to add the style again.", 403);
-    } catch (error) {
-      if (error instanceof LikenessError) throw new LoraError(error.code, error.message, error.status);
-      throw error;
-    }
     likenessSubject = input.likeness.subject;
-  } else if (realPerson) {
-    throw new LoraError("lora_refused", "This LoRA's own description says it reproduces a real person's likeness. It cannot be added unless it is a style of a household adult who agreed, which Home confirms when the style is added. No setting allows videos of any other real person.", 422);
   }
   const id = `lora-${sha256.slice(0, 16)}`;
   return exclusive(() => {
@@ -257,7 +248,7 @@ export async function importLora(input: ImportInput): Promise<LoraRecord> {
     copyFileSync(input.path, temp);
     renameSync(temp, target);
     const asked: LoraClass = input.classification ?? "adult-only";
-    const classification: LoraClass = words.adult || likenessSubject ? "adult-only" : asked;
+    const classification: LoraClass = words.adult || likenessSubject || realPerson ? "adult-only" : asked;
     const record: LoraRecord = {
       id, name, file: `${id}.safetensors`, sha256, bytes: stat.size, mtime_ms: Math.floor(statSync(target).mtimeMs), rank: info.rank, modules: info.modules, base_model: base,
       licence, licence_class: klass, source_url: input.sourceUrl?.slice(0, 2000) ?? null, classification,
@@ -340,16 +331,8 @@ export async function resolveLoras(requests: LoraRequest[] | undefined, audience
     if (stat.size !== record.bytes || Math.floor(stat.mtimeMs) !== record.mtime_ms) {
       if ((await sha256OfFile(path)) !== record.sha256) throw new LoraError("lora_changed", `The file for "${record.name}" changed after it was added, so it was not used. Remove it and add it again.`, 422);
     }
-    let likeness: LikenessCheck | undefined;
-    if (record.likeness_subject) {
-      let proof;
-      try { proof = verifyProof(entry.likenessProof, { purpose: "style_use", bind: record.id, consume: true }); } catch (error) {
-        if (error instanceof LikenessError) throw new LoraError(error.code, error.message, error.status);
-        throw error;
-      }
-      if (proof.subject !== record.likeness_subject) throw new LoraError("likeness_proof_mismatch", "That consent proof is for a different person. Ask Home to make it again.", 403);
-      likeness = { purpose: "style_use", bind: record.id, token: entry.likenessProof! };
-    }
+    // A style that looks like a person needs no consent proof to be used (owner ruling 2026-10-29); the adult-only classification above still applies.
+    const likeness: LikenessCheck | undefined = undefined;
     out.push({ record, path, strength, ...(likeness ? { likeness } : {}) });
   }
   return out;

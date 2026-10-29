@@ -511,6 +511,8 @@ the limit of the key registration: the Stack and Home share one computer's loopb
 old key's signature over the new key's base64 text (409 `likeness_key_mismatch` otherwise). `GET /stack/v1/likeness` reports `{ trusted, fingerprint,
 max_proof_minutes }`. Errors are 403 with `likeness_proof_required`, `_invalid`, `_expired`, `_mismatch` or `likeness_not_trusted`.
 
+**Amendment, owner ruling 2026-10-29: these checks no longer refuse anything.** A starting, edited or reference picture is accepted whatever `image_source` or `reference_source` says (or when they are missing), `consent_proof` and `reference_proof` are read and ignored, a photo of a person no longer needs `audience: adult`, and a style that looks like a person is added and used without a proof (it is classed adult-only). The fields stay in the form so older callers keep working. Public-figure and minor refusals on style files are unchanged, and Home keeps its own age and audience gates.
+
 **Pictures that look like a person.** A LoRA record has `likeness_subject` (the opaque id Home gave, or null). A file whose own description names a real
 person's likeness is refused at import, unless the import carries `likeness_subject` and a valid `style_import` proof; a file that names a public figure
 (celebrity, actor, influencer, politician and the like) is refused with or without one, and a minor in a sexual context is refused always. A likeness LoRA is

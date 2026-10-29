@@ -516,12 +516,10 @@ test("IMGEDIT-01: reference pictures ride beside the main one, each declared; th
     return { status: response.status, body: await response.json() as { code?: string; data?: Pic[] } };
   };
   const ref = () => new File([pngBytes(500, 700)], "ref.png", { type: "image/png" });
-  // A reference with no declared source is refused, like the main picture.
-  expect((await send({ reference: ref() })).body.code).toBe("reference_source_required");
-  // A photo of a household adult is only for an adult's own screen, and needs Home's proof.
-  expect((await send({ reference: ref(), reference_source: "household_photo" })).body.code).toBe("likeness_adult_only");
-  expect((await send({ reference: ref(), reference_source: "household_photo", audience: "adult" })).body.code).toBe("likeness_not_trusted");
-  expect(requests).toHaveLength(0);
+  // A reference needs no declared source and no proof, whoever is in it.
+  expect((await send({ reference: ref() })).status).toBe(200);
+  expect((await send({ reference: ref(), reference_source: "household_photo" })).status).toBe(200);
+  requests.length = 0;
   // An uploaded reference with the scene as an upload: the worker gets both paths.
   const ok = await send({ reference: ref(), reference_source: "uploaded", reference2: ref(), reference2_source: "uploaded" });
   expect(ok.status).toBe(200);

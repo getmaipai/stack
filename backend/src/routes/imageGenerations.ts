@@ -187,18 +187,9 @@ function loraRequests(list: ImageGenerationBody["loras"]): LoraRequest[] {
 }
 
 type Source = "generated" | "uploaded" | "household_photo" | undefined;
-/** The checks on a starting picture: the source must be declared; a generated picture must be in the ledger; a household photo needs Home's proof bound to these bytes. Returns the response to send, or the proof to re-check when the job starts. */
-function checkSource<T extends Context>(c: T, bytes: Uint8Array, source: Source, proof: string | undefined, what: string): Response | LikenessCheck | null {
-  if (!source) return fail(c, 422, "reference_source_required", `Say where the ${what} came from (image_source): a picture this computer made, a photo of a household adult who agreed, or a photo Home checked shows no person.`) as unknown as Response;
-  if (source === "generated") {
-    return wasGeneratedHere(bytes) ? null : fail(c, 422, "reference_not_generated", `That ${what} was not made by this computer's image generator, so it cannot be used as a generated picture. Send it as a photo instead.`) as unknown as Response;
-  }
-  if (source === "uploaded") return null;
-  try { verifyProof(proof, { purpose: "photo", bind: photoBind(bytes), consume: true }); } catch (error) {
-    if (error instanceof LikenessError) return fail(c, error.status, error.code, error.message) as unknown as Response;
-    throw error;
-  }
-  return { purpose: "photo", bind: photoBind(bytes), token: proof! };
+/** A starting or reference picture is always accepted: where it came from is not a reason to refuse it (owner ruling 2026-10-29). `image_source` and `consent_proof` are still read so older callers keep working. */
+function checkSource<T extends Context>(_c: T, _bytes: Uint8Array, _source: Source, _proof: string | undefined, _what: string): Response | LikenessCheck | null {
+  return null;
 }
 
 async function waitAndReply<T extends Context>(c: T, jobId: string, createdAt: string, timeoutMs: number) {
@@ -247,7 +238,6 @@ export async function generateImages<T extends Context>(c: T, body: ImageGenerat
     initImage = decodeImage(body.init_image);
     if (!initImage || !looksLikePicture(initImage)) return fail(c, 422, "bad_image", "The starting picture could not be read. Send a PNG, JPEG or WebP as base64.");
     if (initImage.length > IMAGE_MAX_INPUT_BYTES) return fail(c, 413, "too_large", `The starting picture is larger than ${IMAGE_MAX_INPUT_BYTES / 1024 / 1024} MB.`);
-    if (body.image_source === "household_photo" && (body.audience ?? "all-ages") !== "adult") return fail(c, 403, "likeness_adult_only", "A picture that looks like a person is only made for an adult on their own screen. Ask Home to make it from a signed-in adult's chat.");
     const checked = checkSource(c, initImage, body.image_source, body.consent_proof, "starting picture");
     if (checked instanceof Response) return checked;
     if (checked) checks.push(checked);
@@ -259,8 +249,6 @@ export async function generateImages<T extends Context>(c: T, body: ImageGenerat
     throw error;
   }
   for (const lora of loras) if (lora.likeness) checks.push(lora.likeness);
-  // The age and surface gate outranks a consent: a picture that looks like a person is for an adult audience only.
-  if (checks.length > 0 && (body.audience ?? "all-ages") !== "adult") return fail(c, 403, "likeness_adult_only", "A picture that looks like a person is only made for an adult on their own screen. Ask Home to make it from a signed-in adult's chat.");
   if (activeJobs() >= IMAGE_QUEUE_MAX) return fail(c, 429, "queue_full", `${IMAGE_QUEUE_MAX} pictures are already waiting. Try again when one finishes.`);
   const quantize = quantizeFor(family, "generate", tier);
   const verdict = memoryVerdict(peakBytes(family, "generate", quantize, loras.length));
@@ -305,10 +293,8 @@ export async function editImages<T extends Context>(c: T, form: EditForm) {
   if (!(feather >= 0 && feather <= IMAGE_FEATHER_MAX)) return fail(c, 422, "bad_feather", `The feather is 0 to ${IMAGE_FEATHER_MAX} pixels.`);
   const image = new Uint8Array(await form.image.arrayBuffer());
   if (!looksLikePicture(image)) return fail(c, 422, "bad_image", "The picture could not be read. Send a PNG, JPEG or WebP.");
-  if (form.image_source === "household_photo" && form.audience !== "adult") return fail(c, 403, "likeness_adult_only", "A picture that looks like a person is only made for an adult on their own screen. Ask Home to make it from a signed-in adult's chat.");
   const checked = checkSource(c, image, form.image_source, form.consent_proof, "picture");
   if (checked instanceof Response) return checked;
-  if (checked && form.audience !== "adult") return fail(c, 403, "likeness_adult_only", "A picture that looks like a person is only made for an adult on their own screen. Ask Home to make it from a signed-in adult's chat.");
   // IMGEDIT-01: reference pictures ride beside the main one. Each is checked the way the main picture is (where it came from; a photo of a
   // household adult needs Home's proof bound to those bytes), and a photo that looks like a person is only for an adult's own screen.
   const refs: Uint8Array[] = [];
@@ -317,10 +303,9 @@ export async function editImages<T extends Context>(c: T, form: EditForm) {
   for (const ref of (form.references ?? []).slice(0, IMAGE_REFERENCES_MAX)) {
     const bytes = new Uint8Array(await ref.file.arrayBuffer());
     if (!looksLikePicture(bytes)) return fail(c, 422, "bad_image", "A reference picture could not be read. Send a PNG, JPEG or WebP.");
-    if (ref.source === "household_photo" && form.audience !== "adult") return fail(c, 403, "likeness_adult_only", "A picture that looks like a person is only made for an adult on their own screen. Ask Home to make it from a signed-in adult's chat.");
     const refChecked = checkSource(c, bytes, ref.source, ref.proof, "reference picture");
     if (refChecked instanceof Response) return refChecked;
-    if (refChecked) { if (form.audience !== "adult") return fail(c, 403, "likeness_adult_only", "A picture that looks like a person is only made for an adult on their own screen. Ask Home to make it from a signed-in adult's chat."); checks.push(refChecked); }
+    if (refChecked) checks.push(refChecked);
     if (ref.source !== "generated") derived = true;
     refs.push(bytes);
   }

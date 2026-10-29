@@ -187,22 +187,15 @@ test("any picture can start a clip: uploaded, unlabelled or not from this Stack'
   expect((await postVideo({ prompt: "x", image: PNG_B64, image_source: "generated", timeout_ms: 5000 })).status).toBe(200);
 });
 
-test("a starting picture or an edit needs a declared source; a household photo needs a proof; uploaded means Home found no person", async () => {
+test("a starting picture or an edit is accepted whatever its source says, or whether it says anything", async () => {
   imageGen.useDeps(scriptedImage());
-  const initB64 = pngBytes(8, 8).toString("base64");
-  expect(await codeOf(await postImage({ prompt: "x", init_image: initB64 }))).toBe("reference_source_required");
-  expect(await codeOf(await postImage({ prompt: "x", init_image: initB64, image_source: "generated" }))).toBe("reference_not_generated");
-  expect(await codeOf(await postImage({ prompt: "x", init_image: initB64, image_source: "household_photo", audience: "adult" }))).toBe("likeness_proof_required");
-  expect(await codeOf(await postImage({ prompt: "x", init_image: initB64, image_source: "household_photo", audience: "adult", consent_proof: proof("photo", sha(OTHER)) }))).toBe("likeness_proof_mismatch");
-  expect(imageRequests).toHaveLength(0);
-  const bytes = pngBytes(8, 8);
-  expect((await postImage({ prompt: "x", init_image: initB64, image_source: "household_photo", audience: "adult", consent_proof: proof("photo", sha(bytes)), timeout_ms: 5000 })).status).toBe(200);
-  expect((await postImage({ prompt: "x", init_image: initB64, image_source: "uploaded", timeout_ms: 5000 })).status).toBe(200);
+  const initB64 = pngBytes(8, 8).toString("base64"), bytes = pngBytes(8, 8);
+  for (const extra of [{}, { image_source: "generated" }, { image_source: "uploaded" }, { image_source: "household_photo" }, { image_source: "household_photo", audience: "adult" }]) {
+    expect((await postImage({ prompt: "x", init_image: initB64, timeout_ms: 5000, ...extra })).status).toBe(200);
+  }
   const form = (fields: Record<string, string>) => { const f = new FormData(); f.set("operation", "edit"); f.set("instruction", "make it sunny"); f.set("timeout_ms", "5000"); for (const [k, v] of Object.entries(fields)) f.set(k, v); f.set("image", new File([bytes], "in.png")); return f; };
   const edit = (fields: Record<string, string>) => app.request("/v1/images/edits", { method: "POST", body: form(fields) });
-  expect(await codeOf(await edit({}))).toBe("reference_source_required");
-  expect(await codeOf(await edit({ image_source: "household_photo", audience: "adult" }))).toBe("likeness_proof_required");
-  expect((await edit({ image_source: "household_photo", audience: "adult", consent_proof: proof("photo", sha(bytes)) })).status).toBe(200);
+  for (const fields of [{} as Record<string, string>, { image_source: "generated" }, { image_source: "household_photo" }, { image_source: "household_photo", audience: "adult" }]) expect((await edit(fields)).status).toBe(200);
 });
 
 test("a picture made from a household photo is not recorded as a free starting picture", async () => {
@@ -218,18 +211,15 @@ test("a picture made from a household photo is not recorded as a free starting p
   expect(wasGeneratedHere(new Uint8Array(Buffer.from(uploaded.data[0]!.b64_json, "base64")))).toBe(false);
 });
 
-test("a proof is accepted once, and a photo of a person is for an adult audience only (images)", async () => {
+test("a photo of a person needs no proof and no adult audience to be edited or used as a starting picture (images)", async () => {
   imageGen.useDeps(scriptedImage());
   const bytes = pngBytes(8, 8);
-  const one = proof("photo", sha(bytes));
-  const send = (audience: string | null) => postImage({ prompt: "x", init_image: bytes.toString("base64"), image_source: "household_photo", consent_proof: one, ...(audience ? { audience } : {}), timeout_ms: 5000 });
-  expect(await codeOf(await send(null))).toBe("likeness_adult_only");
+  const send = (audience: string | null) => postImage({ prompt: "x", init_image: bytes.toString("base64"), image_source: "household_photo", ...(audience ? { audience } : {}), timeout_ms: 5000 });
+  expect((await send(null)).status).toBe(200);
   expect((await send("adult")).status).toBe(200);
-  expect(await codeOf(await send("adult"))).toBe("likeness_proof_replayed");
   const form = new FormData();
-  form.set("operation", "edit"); form.set("instruction", "x"); form.set("image_source", "household_photo"); form.set("consent_proof", proof("photo", sha(bytes))); form.set("image", new File([bytes], "in.png"));
-  const noAudience = await app.request("/v1/images/edits", { method: "POST", body: form });
-  expect(await codeOf(noAudience)).toBe("likeness_adult_only");
+  form.set("operation", "edit"); form.set("instruction", "x"); form.set("image_source", "household_photo"); form.set("timeout_ms", "5000"); form.set("image", new File([bytes], "in.png"));
+  expect((await app.request("/v1/images/edits", { method: "POST", body: form })).status).toBe(200);
 });
 
 test("a payload that is not an object, or has odd numbers, is refused as invalid and never escapes as a 500", () => {
@@ -265,38 +255,26 @@ for (const kind of ["image", "video"] as const) {
     : importLora({ path, name, licence: "apache-2.0", classification: "all-ages", ...extra });
   const Err = kind === "image" ? LoraError : VideoLoraError;
 
-  test(`${kind}: a style whose description names a real person is refused with no proof, and a public figure is refused even with one`, async () => {
+  test(`${kind}: a style whose description names a real person is added with no proof, a public figure is still refused`, async () => {
     const path = loraFile("my-friend-portrait", kind, { ss_tags: "real person, portrait" });
-    await expect(imp(path, "Friend")).rejects.toMatchObject({ code: "lora_refused" });
+    expect(await imp(path, "Friend")).toMatchObject({ classification: "adult-only" });
     const star = loraFile("a-celebrity", kind);
     await expect(imp(star, "Star", { likeness: { subject: "person_marlow", proof: proof("style_import", fileSha(star)) } })).rejects.toMatchObject({ code: "lora_refused" });
     const minor = loraFile("kid-nsfw", kind, { ss_tags: "child, nsfw, real person" });
     await expect(imp(minor, "Kid", { likeness: { subject: "person_marlow", proof: proof("style_import", fileSha(minor)) } })).rejects.toMatchObject({ code: "lora_refused" });
   });
 
-  test(`${kind}: a style of a household adult imports with a proof, is always adult-only, and needs a proof to be used`, async () => {
+  test(`${kind}: a style of a person imports and is used with no proof, and stays adult-only`, async () => {
     const path = loraFile("marlow-portrait", kind, { ss_tags: "real person, portrait" });
-    const record = await imp(path, "Marlow portrait", { likeness: { subject: "person_marlow", proof: proof("style_import", fileSha(path)) } });
-    expect(record).toMatchObject({ likeness_subject: "person_marlow", classification: "adult-only" });
-    await expect((kind === "image" ? imageLoras.update(record.id, { classification: "all-ages" }) : updateLora(record.id, { classification: "all-ages" }))).rejects.toMatchObject({ code: "classification_locked" });
+    const record = await imp(path, "Marlow portrait");
+    expect(record).toMatchObject({ classification: "adult-only" });
+    const withProof = loraFile("marlow-two", kind, { ss_tags: "real person" });
+    expect(await imp(withProof, "Two", { likeness: { subject: "person_marlow", proof: "not-checked" } })).toMatchObject({ likeness_subject: "person_marlow", classification: "adult-only" });
     const base = kind === "image" ? "flux2-klein-4b" : "wan2.2-ti2v-5b";
-    const resolve = (entry: Record<string, unknown>, audience: "adult" | "all-ages" = "adult") => kind === "image" ? imageLoras.resolve([{ id: record.id, ...entry }], audience, base) : resolveLoras([{ id: record.id, ...entry } as never], audience);
-    await expect(resolve({})).rejects.toMatchObject({ code: "likeness_proof_required" });
-    await expect(resolve({ likenessProof: proof("style_use", record.id, { signer: makeKey().privateKey }) })).rejects.toMatchObject({ code: "likeness_proof_invalid" });
-    await expect(resolve({ likenessProof: proof("style_use", "lora-0000000000000000") })).rejects.toMatchObject({ code: "likeness_proof_mismatch" });
-    await expect(resolve({ likenessProof: proof("style_use", record.id, { subject: "person_other" }) })).rejects.toMatchObject({ code: "likeness_proof_mismatch" });
-    await expect(resolve({ likenessProof: proof("style_use", record.id) }, "all-ages")).rejects.toMatchObject({ code: "lora_not_allowed" });
-    const resolved = await resolve({ likenessProof: proof("style_use", record.id) });
-    expect(resolved[0]!.likeness).toMatchObject({ purpose: "style_use", bind: record.id });
+    const resolve = (audience: "adult" | "all-ages") => kind === "image" ? imageLoras.resolve([{ id: record.id }], audience, base) : resolveLoras([{ id: record.id } as never], audience);
+    expect((await resolve("adult"))[0]!.record.id).toBe(record.id);
+    await expect(resolve("all-ages")).rejects.toMatchObject({ code: "lora_not_allowed" });
     expect(Err).toBeDefined();
-  });
-
-  test(`${kind}: an import proof for another file or purpose does not add the style`, async () => {
-    const path = loraFile("marlow-two", kind, { ss_tags: "real person" });
-    await expect(imp(path, "Two", { likeness: { subject: "person_marlow", proof: proof("style_import", "0".repeat(64)) } })).rejects.toMatchObject({ code: "likeness_proof_mismatch" });
-    await expect(imp(path, "Two", { likeness: { subject: "person_marlow", proof: proof("photo", fileSha(path)) } })).rejects.toMatchObject({ code: "likeness_proof_mismatch" });
-    await expect(imp(path, "Two", { likeness: { subject: "person_other", proof: proof("style_import", fileSha(path)) } })).rejects.toMatchObject({ code: "likeness_proof_mismatch" });
-    expect(existsSync(join(dataDir, kind === "image" ? "images" : "video", "loras", "manifest.json"))).toBe(false);
   });
 }
 
