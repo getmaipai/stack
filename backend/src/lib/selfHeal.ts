@@ -276,7 +276,7 @@ export async function requestEngineRestart(role: RoleId, reason: string): Promis
   const verdict: CrashVerdict = { kind: "unknown", cause: text || "A health check failed.", fix: "The Stack restarts it; the check that failed is named above.", retryHelps: true };
   record({ id: `${role}:${clock.now()}:canary`, kind: "requested_by_canary", at: new Date(clock.now()).toISOString(), role, cause: verdict.cause, causeKind: "canary" });
   logger.appendLine(JSON.stringify({ event: "engine.restart_requested_by_canary", role, reason: verdict.cause }));
-  await recycleRole(role);
+  await recycleRole(role, "canary-request");
   onEngineCrash({ role, kind: "spawned", engine: null, modelId: null, exitCode: null, signal: null, stderrTail: [verdict.cause], ranMs: 0, wasBusy: false, verdict });
   return { accepted: true, why: null };
 }

@@ -159,7 +159,7 @@ export const defaultActions: WatchdogActions = {
   cancelQueued: (reason) => cancelGeneratorsForMemory("queued", reason),
   cancelRunning: (reason) => cancelGeneratorsForMemory("running", reason),
   evictRole: async (role) => (await import("@/lib/supervisor")).unloadRole(role, "Unloaded: this computer is low on memory.").catch(() => false),
-  restartChat: async () => { await (await import("@/lib/supervisor")).restartRole("chat"); },
+  restartChat: async () => { await (await import("@/lib/supervisor")).restartRole("chat", "memory-watchdog"); },
   notify: (data) => { emit({ id: "pressure", data }); },
 };
 

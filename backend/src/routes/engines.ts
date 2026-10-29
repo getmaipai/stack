@@ -234,12 +234,12 @@ for (const action of ["start", "stop", "restart"] as const) enginesRoutes.openap
   if (unchosen) return c.json({ ok: false, reason: unchosen }, 200);
   try {
     if (action === "stop") { await stopRole(role); return c.json({ ok: true }, 200); }
-    if (action === "restart") { await restartRole(role); await getProcess(role); return c.json({ ok: true }, 200); }
+    if (action === "restart") { await restartRole(role, "route-engines-restart"); await getProcess(role); return c.json({ ok: true }, 200); }
     const status = getRoleStatus(role);
     // "Already running" only when the process is this engine's: a chat
     // role still on the other engine after the setting changed restarts.
     const other = CHAT_ENGINES.includes(name as ChatEngine) && runningEngine("chat") !== null && runningEngine("chat") !== name;
-    if (other) { await restartRole(role); await getProcess(role); return c.json({ ok: true }, 200); }
+    if (other) { await restartRole(role, "route-engines-other"); await getProcess(role); return c.json({ ok: true }, 200); }
     if (status.state === "ready" || status.state === "busy" || status.state === "loading") return c.json({ ok: true, reason: "Already running." }, 200);
     if (!roleCanBeStartedByStack(role) && status.state !== "stopped") return c.json({ ok: false, reason: `The ${role} role is bound to a server the Stack does not start.` }, 200);
     await restartRole(role); await getProcess(role);

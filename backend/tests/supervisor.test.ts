@@ -431,3 +431,18 @@ test("stopping and restarting a role log an engine.retired line with the reason 
   expect(text).toContain('"event":"engine.retired"');
   expect(text).toContain("Stopped by a test.");
 });
+
+test("a restart logs who asked for it and how the old process ended", async () => {
+  const { logsDir } = await import("@/lib/paths");
+  const { restartRole } = await import("@/lib/supervisor");
+  const lines = () => { try { return readFileSync(join(logsDir, "stack.log"), "utf8"); } catch { return ""; } };
+  await getProcess("chat");
+  await restartRole("chat", "test-cause");
+  const mine = lines().split("\n").filter((line) => line.includes('"cause":"test-cause"'));
+  const retired = JSON.parse(mine.find((line) => line.includes('"engine.retired"')) ?? "{}");
+  expect(retired.reason).toBe("Restarted.");
+  expect(typeof retired.ranMs === "number" || retired.ranMs === null).toBe(true);
+  const done = JSON.parse(mine.find((line) => line.includes('"engine.retire-exit"')) ?? "{}");
+  expect(done.role).toBe("chat");
+  expect("exitCode" in done && "signal" in done).toBe(true);
+});

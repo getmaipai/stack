@@ -34,7 +34,7 @@ export async function runFix(code: string): Promise<{ ok: boolean; result: strin
   if (!item?.fix) return null;
   const role = roleFromCode(code);
   switch (item.fix.action) {
-    case "restart_engine": { await restartRole(role); try { await getProcess(role); } catch (error) { return { ok: false, result: (error as Error).message }; } resolve(code); return { ok: true, result: `The ${role} engine was restarted.` }; }
+    case "restart_engine": { await restartRole(role, "repairs-restart-engine"); try { await getProcess(role); } catch (error) { return { ok: false, result: (error as Error).message }; } resolve(code); return { ok: true, result: `The ${role} engine was restarted.` }; }
     case "free_memory": { await unloadAllRoles("Unloaded to free memory."); resolve(code); return { ok: true, result: "Every engine was unloaded to free memory; the next request starts what it needs." }; }
     case "rollback_update": {
       // The engine the failed swap names rolls back; the chat role is
@@ -48,7 +48,7 @@ export async function runFix(code: string): Promise<{ ok: boolean; result: strin
       if (runsChat) await stopRole("chat", "Draining for a rollback.");
       if (runsCoding) await stopRole("coding", "Draining for a rollback.");
       await rollbackEngine(engine, previous);
-      if (runsChat) await restartRole("chat");
+      if (runsChat) await restartRole("chat", "health-action");
       resolve(code);
       return { ok: true, result: `Rolled back ${engine} to ${currentEngine(engine) ?? previous}.` };
     }

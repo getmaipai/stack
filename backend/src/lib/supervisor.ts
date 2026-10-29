@@ -1273,7 +1273,7 @@ export async function shrinkChatForVideo(): Promise<boolean> {
   const current = runtimes.get("chat")?.process;
   if (!current || current.kind !== "spawned" || current.retired || current.activeRequests > 0) return false;
   chatWindowCapTokens = CHAT_YIELD_FLOOR_TOKENS;
-  await recycleRole("chat");
+  await recycleRole("chat", "video-window-shrink");
   return true;
 }
 
@@ -1284,7 +1284,7 @@ export async function restoreChatWindow(): Promise<boolean> {
   const current = runtimes.get("chat")?.process;
   if (current && current.activeRequests > 0) return false;
   chatWindowCapTokens = null;
-  if (current && !current.retired) await recycleRole("chat");
+  if (current && !current.retired) await recycleRole("chat", "video-window-restore");
   return true;
 }
 
@@ -1710,7 +1710,9 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
       },
     };
     const spawnedAt = Date.now();
+    spawnedAtOf.set(processRecord, spawnedAt);
     void handle.exited.then(async (exitCode) => {
+      exitOf.set(processRecord, { exitCode: typeof exitCode === "number" ? exitCode : null, signal: handle.signalCode ?? null });
       // A tree whose root went away on its own: whatever of it is left is stopped now.
       if (tree) void tree.stopAll(3_000);
       // The last stderr lines say why it died (the memory manager's kill
@@ -1991,7 +1993,7 @@ export async function setMachineTierFromHardware(): Promise<{ tier: GovernorTier
 export function watchProcessMemory(role: RoleId, pid: number, measured?: { modelId: string; contextLength: number }, processMemory?: (pid: number) => Promise<number | null>): () => void {
   // `unload` is the governor's way to evict a `jit` role (idle, or under
   // pressure): it drains and stops that role's process, never chat's.
-  return startGovernor({ pid, tier: machineTier, ...(processMemory ? { processMemory } : {}), restart: async () => { await restartRole(role); }, busy: () => {
+  return startGovernor({ pid, tier: machineTier, ...(processMemory ? { processMemory } : {}), restart: async () => { await restartRole(role, "governor-runaway"); }, busy: () => {
     const current = runtimes.get(role)?.process;
     return current?.pid === pid && current.activeRequests > 0;
   }, onPeak: measured ? (_id, bytes) => { recordMeasuredFootprint(measured.modelId, bytes, measured.contextLength); } : undefined, shrinkChat: shrinkChatForVideo, restoreChat: restoreChatWindow, chatWindowShrunk, unload: async (id) => {
@@ -2015,13 +2017,19 @@ export function roleCanBeStartedByStack(requested: RoleId): boolean {
 
 /** Every stop of an engine process is logged with its reason, so a gap in
  * an engine's uptime always has a line saying why (issue 253). */
-async function retire(processRecord: RoleProcess, reason: string): Promise<void> {
-  logger.appendLine(JSON.stringify({ event: "engine.retired", role: processRecord.role, pid: processRecord.pid, reason }));
+const spawnedAtOf = new WeakMap<RoleProcess, number>();
+const exitOf = new WeakMap<RoleProcess, { exitCode: number | null; signal: string | null }>();
+
+async function retire(processRecord: RoleProcess, reason: string, cause = "unspecified"): Promise<void> {
+  const startedAt = spawnedAtOf.get(processRecord);
+  logger.appendLine(JSON.stringify({ event: "engine.retired", role: processRecord.role, pid: processRecord.pid, reason, cause, ranMs: startedAt === undefined ? null : Date.now() - startedAt, alreadyExited: exitOf.has(processRecord) }));
   processRecord.retired = true;
   processRecord.stopGovernor?.();
   for (const close of processRecord.sessions ?? []) close();
   while (processRecord.activeRequests > 0) await new Promise((resolve) => setTimeout(resolve, 10));
   await processRecord.stop();
+  const exit = exitOf.get(processRecord);
+  logger.appendLine(JSON.stringify({ event: "engine.retire-exit", role: processRecord.role, pid: processRecord.pid, cause, exitCode: exit?.exitCode ?? null, signal: exit?.signal ?? null }));
   if (processRecord.governorHandle) release(processRecord.governorHandle);
 }
 
@@ -2039,7 +2047,7 @@ export async function restartForNewProjector(): Promise<RoleId[]> {
     const model = selectedModel(role);
     if (!running || running.retired || running.projectorLoaded === true || !model || running.modelId !== model.id) continue;
     if (!launchProjectorFor(role, model)) continue;
-    await restartRole(role);
+    await restartRole(role, "new-projector");
     restarted.push(role);
   }
   return restarted;
@@ -2054,7 +2062,7 @@ export async function restartForNewChatEngine(): Promise<boolean> {
   const running = runtime("chat").process;
   if (!running || running.retired || running.kind === "url" || running.activeRequests > 0) return false;
   if (running.engine === activeChatChoice().engine) return false;
-  await restartRole("chat");
+  await restartRole("chat", "new-chat-engine");
   return true;
 }
 
@@ -2063,13 +2071,13 @@ export async function restartForNewChatEngine(): Promise<boolean> {
 let restartListener: ((role: RoleId) => void) | null = null;
 export function setRestartListener(listener: ((role: RoleId) => void) | null): void { restartListener = listener; }
 
-export async function restartRole(requested: RoleId): Promise<void> {
+export async function restartRole(requested: RoleId, cause = "unspecified"): Promise<void> {
   restartListener?.(processRoleFor(requested));
-  await recycleRole(requested);
+  await recycleRole(requested, cause);
 }
 
 /** Retires the role's process and leaves the next start to the caller, without telling the self-heal controller a person did it (a canary's restart request counts toward the breaker). */
-export async function recycleRole(requested: RoleId): Promise<void> {
+export async function recycleRole(requested: RoleId, cause = "unspecified"): Promise<void> {
   const role = processRoleFor(requested);
   if (role === "tts") clearTtsEngineFailures();
   if (role === "chat") clearChatEngineFailures();
@@ -2084,7 +2092,7 @@ export async function recycleRole(requested: RoleId): Promise<void> {
   current.retryAfter = 0;
   current.status = { ...current.status, state: "loading", reason: null };
   emit({ id: "engine.state", data: { engine: role, state: "loading" } });
-  if (previous) await retire(previous, "Restarted.");
+  if (previous) await retire(previous, "Restarted.", cause);
 }
 
 export async function stopRole(requested: RoleId, reason = "Stopped by Home."): Promise<void> {
