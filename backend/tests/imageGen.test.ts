@@ -796,7 +796,7 @@ test("a worker failure writes one image.worker_failed line to the Stack log with
   imageGen.useDeps(scripted((request) => ({ id: request.id, ok: false, code: "failed", error: "The picture engine failed on that request.", diag: { type: "ModuleNotFoundError", frames: ["mflux_worker.py:181 in build"], message: "No module named 'x'" } })));
   const response = await post({ model: "image", prompt: "a secret paper boat", seed: 7, n: 1, size: "640x480", timeout_ms: 5000 });
   expect(response.status).toBeGreaterThanOrEqual(400);
-  const log = readFileSync(join(process.env.STACK_DATA_DIR!, "logs", "stack.log"), "utf8");
+  const log = readFileSync(join(dataDir, "logs", "stack.log"), "utf8");
   const line = log.split("\n").filter((entry) => entry.includes('"event":"image.worker_failed"')).at(-1)!;
   expect(JSON.parse(line)).toMatchObject({ event: "image.worker_failed", family: "flux2-klein-4b", op: "generate", code: "failed", diag: { type: "ModuleNotFoundError", frames: ["mflux_worker.py:181 in build"] } });
   expect(log).not.toContain("secret paper boat");
