@@ -131,8 +131,8 @@ test("plan: p64 and p128 include the coding model as a removable pull body; p16 
     expect(coding.map((model) => model.id)).toEqual(["qwen3.8-27b-ud-q4-k-m", "qwen3.8-27b-dflash2-draft"]);
     expect(coding[1]).toMatchObject({ id: "qwen3.8-27b-dflash2-draft", component: "draft", engine: "splash", removable: true, approx_bytes: 3_848_817_896, repo: "incoai/Qwen3.8-27B-DFlash2", revision: "015e795645c74b1a0eeef3b570031fb62e769bc5", licence: "Apache-2.0", sha256: "67fc76d68dc5a9415511a4f394ef744d67510cd20e93b37cc2cc7d28e4bab65c" });
     expect(coding[0]).toMatchObject({ id: "qwen3.8-27b-ud-q4-k-m", removable: true, starter: false, installed: false, approx_bytes: 16_464_440_224, licence: "Apache-2.0", engine: "llama-server", revision: "4ca720788d1e01f1bff70c033e0d0028fd02e502", sha256: "322e194ff79741c7baa497c240f677f54b201b0efab44ca8e50f122b39123482" });
-    // Only the coding model and its draft are flagged removable; everything else is required.
-    expect(plan.models.filter((model) => model.removable).map((model) => model.id)).toEqual(["qwen3.8-27b-ud-q4-k-m", "qwen3.8-27b-dflash2-draft"]);
+    // Only the coding model, its draft and (p128) the picture reader are flagged removable; everything else is required.
+    expect(plan.models.filter((model) => model.removable).map((model) => model.id).filter((id) => id !== "qwen3-vl-4b-instruct-q4-k-m")).toEqual(["qwen3.8-27b-ud-q4-k-m", "qwen3.8-27b-dflash2-draft"]);
     // Chat is still the starter pair and still first; coding changes neither.
     expect(plan.models[0]).toMatchObject({ id: "qwen3-1.7b-q8-0", starter: true });
     expect(plan.models[1]).toMatchObject({ id: "muse-glimmer-30b-q4-k-xl", starter: false });

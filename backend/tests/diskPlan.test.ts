@@ -230,3 +230,14 @@ test("Detailed video (LTX-2.3) is optional on p128 only: off by default, about 7
     expect(plannedPinsFor(tier).some((entry) => row.model_ids.includes(entry.pin.id))).toBe(false);
   }
 });
+
+test("AIMODELS-VISION-01: p128 has a recommended picture-reader row (model plus projector); no other tier does; reads-pictures excludes it", () => {
+  for (const tier of PROFILE_TIERS) {
+    const plan = buildDiskPlan(tier);
+    const row = plan.rows.find((candidate) => candidate.id === "vision");
+    if (tier.id !== "p128") { expect(row).toBeUndefined(); continue; }
+    expect(row).toMatchObject({ need: "recommended", kind: "model", selectable: true });
+    expect(row!.model_ids).toEqual(["qwen3-vl-4b-instruct-q4-k-m", "qwen3-vl-4b-instruct-mmproj-q8-0"]);
+    expect(plan.rows.find((candidate) => candidate.id === "reads-pictures")?.model_ids ?? []).not.toContain("qwen3-vl-4b-instruct-mmproj-q8-0");
+  }
+});

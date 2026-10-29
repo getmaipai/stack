@@ -22,12 +22,12 @@
     "p64.needed_bytes": 98253307171,
     "p64.home_required_free_bytes": 3176323277,
     "p64.ai_required_free_bytes": 114000751794,
-    "p128.required_free_bytes": 148301886458,
+    "p128.required_free_bytes": 151843393620,
     "p128.minimum_required_free_bytes": 56572612676,
-    "p128.everything_required_free_bytes": 317739461912,
-    "p128.needed_bytes": 124317113771,
+    "p128.everything_required_free_bytes": 321280969073,
+    "p128.needed_bytes": 127268369739,
     "p128.home_required_free_bytes": 3176323277,
-    "p128.ai_required_free_bytes": 145125563181
+    "p128.ai_required_free_bytes": 148667070343
   },
   "tiers": {
     "p16": {
@@ -1091,6 +1091,24 @@
           "basis": "pins"
         },
         {
+          "id": "vision",
+          "label": "Picture reader (Qwen3-VL 4B)",
+          "note": "A small AI that describes what is in a picture. Home uses it to check finished clips and pictures for safety when the chat AI cannot read pictures.",
+          "kind": "model",
+          "need": "recommended",
+          "selectable": true,
+          "download_bytes": 2951255968,
+          "installed_bytes": 2951255968,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "qwen3-vl-4b-instruct-q4-k-m",
+            "qwen3-vl-4b-instruct-mmproj-q8-0"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "judge",
           "label": "Quick helper AI",
           "note": "A second, smaller AI that double-checks answers.",
@@ -1554,11 +1572,11 @@
         }
       ],
       "default": {
-        "download_bytes": 117361401197,
-        "installed_bytes": 119923863433,
+        "download_bytes": 120312657165,
+        "installed_bytes": 122875119401,
         "peak_temp_bytes": 4393250338,
-        "needed_bytes": 124317113771,
-        "required_free_bytes": 148301886458
+        "needed_bytes": 127268369739,
+        "required_free_bytes": 151843393620
       },
       "minimum": {
         "download_bytes": 42701207930,
@@ -1568,17 +1586,18 @@
         "required_free_bytes": 56572612676
       },
       "everything": {
-        "download_bytes": 256368353774,
-        "installed_bytes": 259727051417,
+        "download_bytes": 259319609742,
+        "installed_bytes": 262678307385,
         "peak_temp_bytes": 6067000211,
-        "needed_bytes": 265794051628,
-        "required_free_bytes": 317739461912
+        "needed_bytes": 268745307596,
+        "required_free_bytes": 321280969073
       },
       "measured_on": "2026-10-17",
       "default_selected": [
         "home",
         "chat",
         "reads-pictures",
+        "vision",
         "judge",
         "coding",
         "embed",

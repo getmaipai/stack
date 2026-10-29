@@ -35,7 +35,7 @@ export interface InstallPlan {
  * embeddings, the judge, the router, anything else. */
 const ROLE_ORDER: RoleId[] = ["chat", "stt", "tts", "embed", "judge", "router", "coding"];
 /** Roles whose bound model is in the recommended setup but removable afterwards: the coding model (CODE-STACK-01), which only p64 and p128 bind. */
-const REMOVABLE_ROLES: RoleId[] = ["coding"];
+const REMOVABLE_ROLES: RoleId[] = ["coding", "vision"];
 const rank = (role: RoleId): number => { const index = ROLE_ORDER.indexOf(role); return index === -1 ? ROLE_ORDER.length : index; };
 
 const NO_TIER_LABEL = "This computer has less than 16 GB of memory for AI, which is the least the Stack can run chat and voice on.";
@@ -92,7 +92,7 @@ export function plannedPinsFor(tier: ProfileTier, target: { platform: string; ar
   // demand but has its own bound model, so the recommended setup brings
   // it (removable). A role that shares another's model (router, an
   // unbound judge) adds nothing.
-  const roles = [...new Set<RoleId>([...tier.resident, ...tier.onDemand.filter((role) => role === "embed" || (role === "coding" && PROFILE_MODEL_BINDINGS[tier.id]?.coding))])]
+  const roles = [...new Set<RoleId>([...tier.resident, ...tier.onDemand.filter((role) => role === "embed" || (role === "coding" && PROFILE_MODEL_BINDINGS[tier.id]?.coding) || role === "vision")])]
     .filter((role) => !(ROLES[role] as { sharesModelWith?: RoleId }).sharesModelWith || PROFILE_MODEL_BINDINGS[tier.id]?.[role])
     .sort((a, b) => rank(a) - rank(b));
   const planned: Array<{ pin: CatalogModelLike; starter: boolean; removable?: boolean }> = [];
