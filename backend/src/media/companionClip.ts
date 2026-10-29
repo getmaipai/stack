@@ -158,6 +158,8 @@ export function selectCompanionWindow(frames: Uint8Array[], kind: "loop" | "ones
 }
 
 export interface FitFrames { frames: Uint8Array[]; start: number; loop_gap: number; settle_skipped_frames: number; }
+/** Frames over which a loop's seam is blended. */
+const LOOP_SEAM_FRAMES = 10;
 const blend = (target: Uint8Array, toward: Uint8Array, weight: number) => {
   for (let i = 0; i < target.length; i++) target[i] = Math.round(target[i]! * (1 - weight) + toward[i]! * weight);
 };
@@ -185,11 +187,14 @@ export function fitCompanionFrames(frames: Uint8Array[], width: number, height: 
       blend(kept[index]!, kept[0]!, (i + 1) / fade);
     }
   } else {
-    const fade = Math.min(4, kept.length, Math.max(0, frames.length - (start + length)));
-    for (let i = 0; i < fade; i++) {
-      const index = kept.length - fade + i;
-      kept[index] = kept[index]!.slice();
-      blend(kept[index]!, frames[start + length + i]!, (i + 1) / fade);
+    // A seamless seam: the first frames fade in from the frames that would follow the last one, so the step from the end back to
+    // the start is as small as the step between any two neighbouring frames. With nothing after the window, the last frames fade toward the first instead.
+    const ahead = frames.length - (start + length), fade = Math.min(LOOP_SEAM_FRAMES, kept.length, ahead);
+    if (fade > 0) {
+      for (let i = 0; i < fade; i++) { kept[i] = kept[i]!.slice(); blend(kept[i]!, frames[start + length + i]!, 1 - (i + 1) / (fade + 1)); }
+    } else {
+      const tail = Math.min(LOOP_SEAM_FRAMES, Math.floor(kept.length / 2));
+      for (let i = 0; i < tail; i++) { const index = kept.length - tail + i; kept[index] = kept[index]!.slice(); blend(kept[index]!, kept[i]!, (i + 1) / (tail + 1)); }
     }
   }
   return { frames: kept, start, loop_gap: frameDifference(kept[kept.length - 1]!, kept[0]!, width, height, signal), settle_skipped_frames: settleSkipped };

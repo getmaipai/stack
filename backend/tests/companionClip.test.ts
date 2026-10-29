@@ -37,13 +37,20 @@ function movingDot(periodic: boolean): Uint8Array[] {
   });
 }
 
-test("loop fitting finds a period and reports a small gap, and still selects a best effort without a period", () => {
+test("loop fitting finds a period and reports a small gap, and the seam blend closes the gap even without a period", () => {
   const periodic = fitCompanionFrames(movingDot(true), 16, 16, "loop", 1, 3);
   expect(periodic.frames.length % 24).toBe(0);
   expect(periodic.loop_gap).toBeLessThan(12);
   const aperiodic = fitCompanionFrames(movingDot(false), 16, 16, "loop", 1, 2);
   expect(aperiodic.frames.length).toBeGreaterThan(0);
-  expect(aperiodic.loop_gap).toBeGreaterThan(periodic.loop_gap);
+  expect(aperiodic.loop_gap).toBeLessThan(12);
+});
+
+test("a loop joins end to start as smoothly as two neighbouring frames, even on a steady drift", () => {
+  const drift = Array.from({ length: 96 }, (_, n) => new Uint8Array([n * 2, 0, 0, 255]));
+  const fitted = fitCompanionFrames(drift, 1, 1, "loop", 1, 2);
+  const step = Math.abs(fitted.frames[1]![0]! - fitted.frames[0]![0]!), seam = Math.abs(fitted.frames[fitted.frames.length - 1]![0]! - fitted.frames[0]![0]!);
+  expect(seam).toBeLessThanOrEqual(Math.max(step, 4) + 2);
 });
 
 test("one-shot crossfades its last six frames to the first pose", () => {

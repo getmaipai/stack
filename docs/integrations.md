@@ -465,8 +465,7 @@ frames, fps, seconds, seed, model, mode, lora_ids, ms, bytes, poster_bytes }] }`
 runs without guidance, so it has no effect), `image` + `image_source` (see below), `size` (`832x480` default; multiples of 32, each side 256 or more,
 area at most 399,360 pixels, so `480x832` also fits and 1280x704 does not), `seconds` (whole, 1 to 5, default 5), `seed`, `loras` (`[{ id, strength }]`, at
 most 4, strength 0 to 2, the record's default when left out), `audience` (`all-ages` unsaid, or `adult`), `timeout_ms`. Errors carry `error` (what
-happened and what to do) and `code`: 413 `too_large`; 422 `bad_size` `bad_image` `reference_source_required` `reference_image_refused`
-`reference_not_generated` `unknown_lora` `lora_not_allowed` `lora_changed` `lora_missing` `too_many_loras` `duplicate_lora` `bad_strength`; 429 `queue_full` (four clips
+happened and what to do) and `code`: 413 `too_large`; 422 `bad_size` `bad_image` `unknown_lora` `lora_not_allowed` `lora_changed` `lora_missing` `too_many_loras` `duplicate_lora` `bad_strength`; 429 `queue_full` (four clips
 already waiting); 499 `cancelled`; 500 `failed` `worker_stopped`; 503 `not_available_on_this_computer` `unsupported` `not_installed` `no_memory` `setup_failed`
 `model_missing`; 504 `timeout` (15 minutes); 507 `out_of_memory`. A request body that breaks the schema (a sixth second, an empty prompt) is a plain 400.
 

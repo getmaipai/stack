@@ -235,24 +235,13 @@ test("the model id of the video role never reaches the clip runner through the i
 
 // ---- the reference picture gate (VIDEO-GEN-12) ----
 
-test("a clip starts from a picture only when this Stack made it", async () => {
+test("any picture can start a clip, whatever it is labelled and wherever it came from", async () => {
   videoGen.useDeps(scripted());
-  const none = await post({ prompt: "x", image: PNG_B64 });
-  expect(none.status).toBe(422);
-  expect(((await none.json()) as { code: string }).code).toBe("reference_source_required");
-  const uploaded = await post({ prompt: "x", image: PNG_B64, image_source: "uploaded" });
-  expect(uploaded.status).toBe(422);
-  expect(await uploaded.json()).toMatchObject({ code: "reference_image_refused", error: expect.stringContaining("uploaded picture or a photo of a person") });
-  const foreign = await post({ prompt: "x", image: PNG_B64, image_source: "generated" });
-  expect(foreign.status).toBe(422);
-  expect(((await foreign.json()) as { code: string }).code).toBe("reference_not_generated");
+  expect((await post({ prompt: "x", image: PNG_B64, timeout_ms: 5000 })).status).toBe(200);
+  expect((await post({ prompt: "x", image: PNG_B64, image_source: "uploaded", timeout_ms: 5000 })).status).toBe(200);
+  expect((await post({ prompt: "x", image: PNG_B64, image_source: "generated", timeout_ms: 5000 })).status).toBe(200);
   const junk = await post({ prompt: "x", image: Buffer.from("not a picture at all").toString("base64"), image_source: "generated" });
   expect(((await junk.json()) as { code: string }).code).toBe("bad_image");
-  expect(requests).toHaveLength(0);
-  recordGeneratedImage(PNG);
-  const accepted = await post({ prompt: "x", image: `data:image/png;base64,${PNG_B64}`, image_source: "generated", timeout_ms: 5000 });
-  expect(accepted.status).toBe(200);
-  expect(wasGeneratedHere(PNG)).toBe(true);
   expect(wasGeneratedHere(new Uint8Array([1, 2, 3]))).toBe(false);
 });
 
@@ -484,7 +473,7 @@ test("the role state and the status route say what is installed and what a clip 
   const status = await (await get("/stack/v1/video")).json() as { video: Record<string, any> };
   expect(status.video).toMatchObject({ available: true, tier: "p128", audio: false, loras_supported: true, state: "needs-setup" });
   expect(status.video.limits).toMatchObject({ max_seconds: 5, max_frames: 121, default_size: "832x480", fps: 24 });
-  expect(status.video.reference_images.uploaded).toBe(false);
+  expect(status.video.reference_images.uploaded).toBe(true);
   expect(status.video.install.models.map((model: { id: string }) => model.id)).toEqual([STACK_VIDEO_MODEL.id, STACK_VIDEO_TOKENIZER.id]);
   const roles = await (await get("/stack/v1/roles")).json() as { roles: Array<{ id: string; state: { state: string }; endpoints: string[] }> };
   const video = roles.roles.find((role) => role.id === "video")!;

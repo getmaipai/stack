@@ -116,7 +116,7 @@ videoRoutes.openapi(statusRoute, (c) => {
     limits: { max_seconds: availability.available ? VIDEO_MAX_SECONDS : 0, fps: VIDEO_FPS, default_size: VIDEO_DEFAULT_SIZE, max_pixels: VIDEO_MAX_PIXELS, size_step: VIDEO_SIZE_STEP, min_side: VIDEO_MIN_SIDE, max_frames: VIDEO_MAX_FRAMES, max_loras: MAX_LORAS_PER_JOB, max_lora_strength: MAX_LORA_STRENGTH, max_prompt_chars: VIDEO_MAX_PROMPT_CHARS, max_reference_image_mb: VIDEO_MAX_REFERENCE_BYTES / 1024 / 1024, queue_max: VIDEO_QUEUE_MAX },
     loras_supported: true, lora_count: listLoras().length, audio: false,
     negative_prompt: "accepted, no effect: the distilled model runs without guidance",
-    reference_images: { generated: true, uploaded: false, household_photo: true, reason: "A picture this computer's image generator made can start a clip, and so can a photo of a household adult when Home sends its signed proof that they agreed. Any other uploaded picture or photo of a person is refused for everyone (VIDEO-GEN-12, LIKENESS-01)." },
+    reference_images: { generated: true, uploaded: true, household_photo: true, reason: "Any picture can start a clip. The Stack does not judge where it came from; the caller decides who may ask." },
     worker: { alive: videoGen.workerAlive, idle_exit_seconds: Math.round(Number(process.env.VIDEO_IDLE_MS ?? 600_000) / 1000) },
     environment: { engine: pin ? `${pin.name} ${pin.tag}` : VIDEO_GEN_NAME, version: VIDEO_GEN_VERSION, source: videoGenSourceInstalled(), ready: videoGenEnvironmentReady() },
     install: { models, remaining_bytes: models.filter((model) => !model.installed).reduce((sum, model) => sum + model.approx_bytes, 0) },

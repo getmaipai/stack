@@ -131,12 +131,7 @@ test("a picture starts a Detailed clip too (VIDEO-LTX-02): the generated-picture
   videoGen.useDeps(scripted());
   const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]);
   const encoded = Buffer.from(png).toString("base64");
-  // Not made by this Stack's image generator: refused for Detailed exactly as for Quick, before anything runs.
-  const unknown = await post({ prompt: "x", model: "detailed", image: encoded, image_source: "generated" });
-  expect(unknown.status).toBe(422);
-  expect(((await unknown.json()) as { code: string }).code).toBe("reference_not_generated");
-  expect(requests).toHaveLength(0);
-  recordGeneratedImage(png);
+  // Any picture can start a Detailed clip, as for Quick.
   const accepted = await post({ prompt: "the hero says hello", model: "detailed", image: encoded, image_source: "generated", seconds: 5, timeout_ms: 5000 });
   expect(accepted.status).toBe(200);
   const body = await accepted.json() as { data: Array<{ quality: string; mode: string; audio: boolean }> };

@@ -180,67 +180,12 @@ test("the trust route registers the first key, refuses a different one and repor
 
 // ---- video: the household_photo source ----
 
-test("a clip starts from a household photo only with a proof bound to that exact picture", async () => {
+test("any picture can start a clip: uploaded, unlabelled or not from this Stack's ledger", async () => {
   videoGen.useDeps(scriptedVideo());
-  const base = { prompt: "she waves", image: PNG_B64, image_source: "household_photo", audience: "adult", timeout_ms: 5000 };
-  const none = await postVideo(base);
-  expect(none.status).toBe(403);
-  expect(await codeOf(none)).toBe("likeness_proof_required");
-  const forged = await postVideo({ ...base, consent_proof: proof("photo", sha(PNG), { signer: makeKey().privateKey }) });
-  expect(forged.status).toBe(403);
-  expect(await codeOf(forged)).toBe("likeness_proof_invalid");
-  const other = await postVideo({ ...base, consent_proof: proof("photo", sha(OTHER)) });
-  expect(await codeOf(other)).toBe("likeness_proof_mismatch");
-  expect(videoRequests).toHaveLength(0);
-  const ok = await postVideo({ ...base, consent_proof: proof("photo", sha(PNG)) });
-  expect(ok.status).toBe(200);
-  expect(videoRequests).toHaveLength(1);
-  expect(videoRequests[0]!.image).not.toBeNull();
-});
-
-test("an uploaded photo is still refused, and a generated picture still needs the ledger", async () => {
-  videoGen.useDeps(scriptedVideo());
-  expect(await codeOf(await postVideo({ prompt: "x", image: PNG_B64, image_source: "uploaded" }))).toBe("reference_image_refused");
-  expect(await codeOf(await postVideo({ prompt: "x", image: PNG_B64 }))).toBe("reference_source_required");
-  expect(await codeOf(await postVideo({ prompt: "x", image: PNG_B64, image_source: "generated" }))).toBe("reference_not_generated");
-  recordGeneratedImage(PNG);
+  expect((await postVideo({ prompt: "x", image: PNG_B64, image_source: "uploaded", timeout_ms: 5000 })).status).toBe(200);
+  expect((await postVideo({ prompt: "x", image: PNG_B64, timeout_ms: 5000 })).status).toBe(200);
   expect((await postVideo({ prompt: "x", image: PNG_B64, image_source: "generated", timeout_ms: 5000 })).status).toBe(200);
 });
-
-test("a proof that runs out while the clip waits in the line fails the clip when it starts, and nothing is rendered", async () => {
-  let release!: () => void;
-  const held = new Promise<void>((resolve) => { release = resolve; });
-  let first = true;
-  videoGen.useDeps(scriptedVideo(async () => { if (first) { first = false; await held; } }));
-  // One clip holds the generator; the second waits behind it with a proof that has a minute left.
-  const blocker = await postVideo({ prompt: "a boat", timeout_ms: 1 });
-  expect(blocker.status).toBe(202);
-  const queued = await postVideo({ prompt: "she waves", image: PNG_B64, image_source: "household_photo", audience: "adult", consent_proof: proof("photo", sha(PNG), { ttl: 60 }), timeout_ms: 1 });
-  expect(queued.status).toBe(202);
-  const job = (await queued.json() as { job: string }).job;
-  expect(getJob(job)?.state).toBe("queued");
-  nowMs += 120_000;
-  release();
-  for (let i = 0; i < 100 && getJob(job)?.state !== "failed"; i += 1) await new Promise((resolve) => setTimeout(resolve, 20));
-  expect(getJob(job)?.state).toBe("failed");
-  const status = await (await app.request(`/v1/videos/generations/${job}`)).json() as { code: string };
-  expect(status.code).toBe("likeness_proof_expired");
-  // Only the first clip reached the worker.
-  expect(videoRequests).toHaveLength(1);
-  expect(videoRequests[0]!.image).toBeNull();
-});
-
-test("the poster of a clip made from a household photo is not a free starting picture", async () => {
-  videoGen.useDeps(scriptedVideo());
-  const ok = await postVideo({ prompt: "she waves", image: PNG_B64, image_source: "household_photo", audience: "adult", consent_proof: proof("photo", sha(PNG)), timeout_ms: 5000 });
-  expect(ok.status).toBe(200);
-  expect(wasGeneratedHere(new TextEncoder().encode("JPEGDATA"))).toBe(false);
-  const plain = await postVideo({ prompt: "a boat", timeout_ms: 5000 });
-  expect(plain.status).toBe(200);
-  expect(wasGeneratedHere(new TextEncoder().encode("JPEGDATA"))).toBe(true);
-});
-
-// ---- pictures: declared sources ----
 
 test("a starting picture or an edit needs a declared source; a household photo needs a proof; uploaded means Home found no person", async () => {
   imageGen.useDeps(scriptedImage());
@@ -273,17 +218,7 @@ test("a picture made from a household photo is not recorded as a free starting p
   expect(wasGeneratedHere(new Uint8Array(Buffer.from(uploaded.data[0]!.b64_json, "base64")))).toBe(false);
 });
 
-test("a proof is accepted once, and a photo or style of a person is for an adult audience only", async () => {
-  videoGen.useDeps(scriptedVideo());
-  const token = proof("photo", sha(PNG));
-  const base = { prompt: "she waves", image: PNG_B64, image_source: "household_photo", consent_proof: token, timeout_ms: 5000 };
-  const kids = await postVideo({ ...base, audience: "all-ages" });
-  expect(kids.status).toBe(403);
-  expect(await codeOf(kids)).toBe("likeness_adult_only");
-  expect((await postVideo({ ...base, audience: "adult" })).status).toBe(200);
-  const again = await postVideo({ ...base, audience: "adult" });
-  expect(again.status).toBe(403);
-  expect(await codeOf(again)).toBe("likeness_proof_replayed");
+test("a proof is accepted once, and a photo of a person is for an adult audience only (images)", async () => {
   imageGen.useDeps(scriptedImage());
   const bytes = pngBytes(8, 8);
   const one = proof("photo", sha(bytes));

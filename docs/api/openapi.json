@@ -3053,7 +3053,7 @@
                   },
                   "image": {
                     "type": "string",
-                    "description": "Image to video: the first frame, base64 (a data: URL is fine), PNG, JPEG or WebP, at most 20 MB. Needs image_source."
+                    "description": "Image to video: the first frame, base64 (a data: URL is fine), PNG, JPEG or WebP, at most 20 MB. image_source is optional."
                   },
                   "image_source": {
                     "type": "string",
@@ -3428,7 +3428,7 @@
             }
           },
           "422": {
-            "description": "The request cannot be done: bad_size, bad_image, reference_source_required, reference_image_refused, reference_not_generated, unknown_lora, wrong_base_model, lora_not_allowed, too_many_loras, bad_strength; `error` says what to change.",
+            "description": "The request cannot be done: bad_size, bad_image, unknown_lora, wrong_base_model, lora_not_allowed, too_many_loras, bad_strength; `error` says what to change.",
             "content": {
               "application/json": {
                 "schema": {

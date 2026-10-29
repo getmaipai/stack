@@ -22,7 +22,6 @@ import { cancelJob, getJob, hasJobRunner, isJobPaused, listJobs, submitJob, wait
 import { PAUSED_LABEL } from "@/lib/genProgress";
 import { LoraError, resolveLoras } from "@/video/loras";
 import { LikenessError, photoBind, verifyProof, type LikenessCheck } from "@/lib/likeness";
-import { wasGeneratedHere } from "@/video/provenance";
 import { deleteResult, isJobId, messagesPath, posterPath, readResult, videoPath, type VideoResultMeta } from "@/video/results";
 import { memoryVerdict, qualityOfModelName, tierAvailability, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, VIDEO_SPECS, videoGen, videoGenRoot, type VideoQuality } from "@/video/videoGen";
 import { stashClip, unstashClip, videoFailure, videoPreviewPath, videoProgress, videoTracker, VIDEO_JOB_KIND } from "@/video/jobs";
@@ -35,7 +34,7 @@ const VideoRequestSchema = z.object({
   model: z.string().optional().openapi({ description: "Which video model: `video` or `quick` (the default, a silent clip of up to 5 s, which can start from a picture) or `detailed` (LTX-2.3: a sound track with speech made in the same pass, up to 10 s, which can start from a picture too). A model's own id names it too. An unknown name is refused (unknown_model); a model that is not installed answers 503 not_installed.", example: "quick" }),
   prompt: z.string().trim().min(1).max(VIDEO_MAX_PROMPT_CHARS),
   negative_prompt: z.string().max(VIDEO_MAX_PROMPT_CHARS).optional().openapi({ description: "Accepted. The distilled FastWan model runs without guidance, so it has no effect on the clip." }),
-  image: z.string().optional().openapi({ description: "Image to video: the first frame, base64 (a data: URL is fine), PNG, JPEG or WebP, at most 20 MB. Needs image_source." }),
+  image: z.string().optional().openapi({ description: "Image to video: the first frame, base64 (a data: URL is fine), PNG, JPEG or WebP, at most 20 MB. image_source is optional." }),
   image_source: z.enum(["generated", "uploaded", "household_photo"]).optional().openapi({ description: "Where the picture came from, as Home knows it. `generated`: a picture this Stack's own image generator produced (or the poster of one of its clips); the Stack checks the picture's hash. `household_photo`: a photo of a consenting household adult, accepted only with `consent_proof`. `uploaded` (any other photo) is refused for everyone: a photo that may show a real person needs the household proof (VIDEO-GEN-12, LIKENESS-01)." }),
   consent_proof: z.string().max(4096).optional().openapi({ description: "With `image_source: household_photo`: Home's signed proof that the person in the photo is a household adult who agreed, bound to this exact picture (its sha256) and valid for at most 30 minutes. Checked when the request arrives and again when the clip starts." }),
   size: z.string().regex(/^\d{3,4}x\d{3,4}$/).optional().openapi({ description: `<width>x<height>. Quick: multiples of ${VIDEO_SIZE_STEP}, area at most ${VIDEO_MAX_PIXELS} pixels (832x480; 480x832 also fits), default ${VIDEO_DEFAULT_SIZE}. Detailed: multiples of 64, area at most 768 x 448 (448x768 also fits), default 768x448. Each side at least ${VIDEO_MIN_SIDE}.`, example: VIDEO_DEFAULT_SIZE }),
@@ -78,7 +77,7 @@ const postRoute = createRoute({ method: "post", path: "/generations", tags: ["Vi
   202: { content: { "application/json": { schema: VideoResponseSchema } }, description: "Still going past timeout_ms (`data` is empty); poll GET /v1/videos/generations/{job}." },
   413: { content: { "application/json": { schema: ErrorBody } }, description: "The reference picture is larger than 20 MB." },
   403: { content: { "application/json": { schema: ErrorBody } }, description: "A picture or style that looks like a person was sent without a valid proof from Home: likeness_proof_required, likeness_proof_invalid, likeness_proof_expired, likeness_proof_mismatch, likeness_not_trusted." },
-  422: { content: { "application/json": { schema: ErrorBody } }, description: "The request cannot be done: bad_size, bad_image, reference_source_required, reference_image_refused, reference_not_generated, unknown_lora, wrong_base_model, lora_not_allowed, too_many_loras, bad_strength; `error` says what to change." },
+  422: { content: { "application/json": { schema: ErrorBody } }, description: "The request cannot be done: bad_size, bad_image, unknown_lora, wrong_base_model, lora_not_allowed, too_many_loras, bad_strength; `error` says what to change." },
   429: { content: { "application/json": { schema: ErrorBody } }, description: "Four clips are already waiting; try again when one finishes." },
   499: { content: { "application/json": { schema: ErrorBody } }, description: "The job was cancelled." },
   500: { content: { "application/json": { schema: ErrorBody } }, description: "The clip failed (failed, worker_stopped)." },
@@ -202,23 +201,11 @@ videoV1Routes.openapi(postRoute, async (c) => {
   let image: Uint8Array | null = null;
   const checks: LikenessCheck[] = [];
   if (body.image !== undefined) {
-    if (!body.image_source) return fail(c, 422, "reference_source_required", "Say where the picture came from (image_source). Only a picture the Stack's image generator made can start a clip.");
-    // The age and surface gate outranks a consent, and a refused request must not use up the proof.
-    if (body.image_source === "household_photo" && (body.audience ?? "all-ages") !== "adult") return fail(c, 403, "likeness_adult_only", "A video that looks like a person is only made for an adult on their own screen. Ask Home to make it from a signed-in adult's chat.");
-    if (body.image_source !== "generated" && body.image_source !== "household_photo") return fail(c, 422, "reference_image_refused", "A clip cannot start from an uploaded picture or a photo of a person unless Home confirms the person is a household adult who agreed. Make a picture with the image generator and start the clip from that, or ask Home to animate a photo of someone who agreed.");
+    // Any picture can start a clip: the Stack does not judge where it came from. The age and surface gate is the caller's (Home) and stays outside this file.
     image = decodeImage(body.image);
     if (!image) return fail(c, 422, "bad_image", "The picture could not be read. Send a PNG, JPEG or WebP as base64.");
     if (image.length > VIDEO_MAX_REFERENCE_BYTES) return fail(c, 413, "too_large", `The picture is larger than ${VIDEO_MAX_REFERENCE_BYTES / 1024 / 1024} MB.`);
     if (!looksLikePicture(image)) return fail(c, 422, "bad_image", "The picture could not be read. Send a PNG, JPEG or WebP as base64.");
-    if (body.image_source === "generated") {
-      if (!wasGeneratedHere(image)) return fail(c, 422, "reference_not_generated", "That picture was not made by this computer's image generator, so it cannot start a clip. Make a picture with the image generator and start the clip from that, unchanged.");
-    } else {
-      try { verifyProof(body.consent_proof, { purpose: "photo", bind: photoBind(image), consume: true }); } catch (error) {
-        if (error instanceof LikenessError) return fail(c, error.status, error.code, error.message);
-        throw error;
-      }
-      checks.push({ purpose: "photo", bind: photoBind(image), token: body.consent_proof! });
-    }
   }
   let loras;
   try { loras = await resolveLoras((body.loras ?? []).map((entry) => ({ id: entry.id, ...(entry.strength !== undefined ? { strength: entry.strength } : {}), ...(entry.likeness_proof !== undefined ? { likenessProof: entry.likeness_proof } : {}) })), body.audience ?? "all-ages", spec.loraBase as "wan2.2-ti2v-5b" | "ltx-2.3"); } catch (error) {
