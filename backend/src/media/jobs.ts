@@ -14,7 +14,7 @@ import { probeFile, type ProbeResult } from "./probe";
 import { idleArgv, spawnRunner, type Runner, type RunResult } from "./run";
 import { defaultToolbox, MediaToolError, type MediaToolbox } from "./tools";
 import { mkdirSync } from "node:fs";
-import { COLOUR_MATCH_STRENGTH, COMPANION_CLIP_FPS, COMPANION_CLIP_SIZE, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionCrop, companionMetrics, companionReasons, downscaleRgba4, frameDifference, keyOutRgba, selectCompanionWindow } from "./companionClip";
+import { COLOUR_MATCH_STRENGTH, COMPANION_CLIP_FPS, COMPANION_CLIP_SIZE, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionCrop, companionMetrics, companionReasons, crossfadeLoop, downscaleRgba4, frameDifference, keyOutRgba, selectCompanionWindow } from "./companionClip";
 
 export const MEDIA_KINDS = ["media.probe", "media.fetch", "media.transcode", "media.preview", "media.companion_clip", "media.setup"] as const;
 export type MediaKind = typeof MEDIA_KINDS[number];
@@ -275,7 +275,8 @@ async function runPreview(job: Job, signal: AbortSignal, progress: JobProgress):
 }
 
 // Home's player un-premultiplies in a shader: colour on top is premultiplied by alpha, with the matte repeated below.
-export const COMPANION_STACK_FILTER = "[0:v]format=gbrap,split=2[c][m0];[m0]alphaextract,format=gray,split=2[a0][m];[a0]format=gbrap[a];[c][a]premultiply,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p[cpm];[m]scale=out_color_matrix=bt709:out_range=tv,format=yuv420p[myuv];[cpm][myuv]vstack=inputs=2[out]";
+// `premultiply=inplace=1` multiplies by the frame's own alpha; the two-input form left the key colour in the colour half (green fringes, 2026-10-29).
+export const COMPANION_STACK_FILTER = "[0:v]format=gbrap,split=2[c][m0];[m0]alphaextract,format=gray,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p[myuv];[c]premultiply=inplace=1,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p[cpm];[cpm][myuv]vstack=inputs=2[out]";
 const COMPANION_MAX_SOURCE_BYTES = 64 * 1024 * 1024;
 const COMPANION_MAX_SOURCE_SECONDS = 12;
 const extOkay = (path: string) => [".mp4", ".mov", ".webm"].includes(extname(path).toLowerCase());
@@ -425,7 +426,7 @@ async function runCompanionClip(job: Job, signal: AbortSignal, progress: JobProg
     smoothRawMatte(rawDecoded, frameCount, frameBytes, input.key, signal);
     cancelled(signal);
     progress({ status: "fitting the loop", percent: 50 });
-    let window: { start: number; length: number };
+    let window: { start: number; length: number; spare: number };
     try {
       const smallFrames = input.kind === "loop" ? readSmallFrames(rawDecoded, frameCount, frameBytes, width, COMPANION_CLIP_SIZE, signal) : [];
       window = selectCompanionWindow(smallFrames, input.kind, frameCount, input.min_seconds, input.max_seconds, signal);
@@ -454,11 +455,16 @@ async function runCompanionClip(job: Job, signal: AbortSignal, progress: JobProg
       for (let i = 0; i < fade; i++) { const index = keptFrames.length - fade + i; keptFrames[index] = keptFrames[index]!.slice(); blendFrame(keptFrames[index]!, keptFrames[0]!, (i + 1) / fade); }
       loopGap = frameDifference(keptFrames[keptFrames.length - 1]!, keptFrames[0]!, width, COMPANION_CLIP_SIZE, signal);
     } else {
-      const available = frameCount - window.start - window.length, fade = Math.min(4, keptFrames.length, available);
-      if (fade) {
-        const fd = openSync(rawDecoded, "r");
-        try { for (let i = 0; i < fade; i++) { const index = keptFrames.length - fade + i; blendRawFrame(keptFrames[index]!, fd, window.start + window.length + i, (i + 1) / fade); } }
-        finally { closeSync(fd); }
+      // A seamless cycle when the window has spare frames; otherwise the old short fade toward the frames after the window.
+      const cycle = window.spare ? crossfadeLoop(keptFrames, keptFrames.length - window.spare) : { frames: keptFrames, crossfaded: false };
+      if (cycle.crossfaded) { keptFrames.length = 0; keptFrames.push(...cycle.frames); }
+      else {
+        const available = frameCount - window.start - window.length, fade = Math.min(4, keptFrames.length, available);
+        if (fade) {
+          const fd = openSync(rawDecoded, "r");
+          try { for (let i = 0; i < fade; i++) { const index = keptFrames.length - fade + i; blendRawFrame(keptFrames[index]!, fd, window.start + window.length + i, (i + 1) / fade); } }
+          finally { closeSync(fd); }
+        }
       }
       loopGap = frameDifference(keptFrames[keptFrames.length - 1]!, keptFrames[0]!, width, COMPANION_CLIP_SIZE, signal);
     }

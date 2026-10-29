@@ -17,10 +17,8 @@ export const KEY_ALPHA_START = 5;
 export const KEY_ALPHA_END = 245;
 /** Maximum green left over a foreground channel on pure-key edges. */
 export const KEY_DESPILL_TOLERANCE = 8;
-/** Minimum estimated keyness for enabling muted-key hue keying. */
+/** Minimum estimated keyness for hue keying; any key-like border uses it, pure or muted (2026-10-29: the pure formula left skin and shirts part transparent and tinted). */
 export const HUE_KEYNESS_MIN = 30;
-/** Minimum estimated keyness that keeps the original pure-key formula. */
-export const PURE_KEYNESS_MIN = 200;
 /** Foreground keyness at or below this point stays opaque in the hue regime. */
 export const HUE_ALPHA_T0 = 12;
 /** Upper clamp for the hue-regime foreground transition. */
@@ -59,7 +57,7 @@ export function keyOutRgba(pixels: Uint8Array, key: [number, number, number], si
   // Calls without dimensions retain the original pure-key behaviour for compatibility.
   const background = size ? estimateBackground(pixels, size.width, size.height) : key;
   const bgKeyness = key[1] === 255 ? background[1] - Math.max(background[0], background[2]) : Math.min(background[0], background[2]) - background[1];
-  const regime = size && bgKeyness >= HUE_KEYNESS_MIN && bgKeyness < PURE_KEYNESS_MIN ? "hue" : "pure";
+  const regime = size && bgKeyness >= HUE_KEYNESS_MIN ? "hue" : "pure";
   const t0 = HUE_ALPHA_T0, t1 = Math.max(t0 + 16, Math.min(HUE_ALPHA_T1_MAX, bgKeyness * 0.75));
   for (let offset = 0; offset < pixels.length; offset += 4) {
     if ((offset & 0xffff) === 0 && abortSignal?.aborted) throw new Error("Cancelled.");
@@ -140,46 +138,75 @@ export function frameDifference4(a: Uint8Array, b: Uint8Array): number {
   return a.length ? total / a.length : 0;
 }
 
-export function selectCompanionWindow(frames: Uint8Array[], kind: "loop" | "oneshot", count: number, minSeconds: number, maxSeconds: number, signal?: AbortSignal): { start: number; length: number } {
+/** Frames over which a loop's seam is blended. */
+export const LOOP_SEAM_FRAMES = 10;
+/** Spare frames a loop window carries past its cycle for the crossfade seam: up to ten, at least two, never below the state's minimum length. */
+export function loopSpareFrames(count: number, minFrames: number): number { const spare = Math.min(LOOP_SEAM_FRAMES, count - minFrames); return spare >= 2 ? spare : 0; }
+
+/**
+ * The window to keep. For a loop the search scores cycle lengths (`frames[s + n]` against `frames[s]`) and the window is that
+ * cycle plus `spare` frames after it, which `crossfadeLoop` folds into the seam; with no spare frames the window is the cycle alone.
+ */
+export function selectCompanionWindow(frames: Uint8Array[], kind: "loop" | "oneshot", count: number, minSeconds: number, maxSeconds: number, signal?: AbortSignal): { start: number; length: number; spare: number } {
   const min = Math.ceil(minSeconds * COMPANION_CLIP_FPS), max = Math.floor(maxSeconds * COMPANION_CLIP_FPS);
   if (count < min) throw new Error("The clip is shorter than this state needs. Make it again.");
   if (kind === "oneshot") {
     const settle = Math.min(ONESHOT_SETTLE_FRAMES, Math.max(0, count - 24));
-    return { start: settle, length: Math.min(count - settle, max) };
+    return { start: settle, length: Math.min(count - settle, max), spare: 0 };
   }
+  const spare = loopSpareFrames(count, min);
   let start = 0, length = Math.min(count, max), best = Number.POSITIVE_INFINITY;
-  const maxStart = Math.min(12 * COMPANION_CLIP_FPS, count - min);
-  for (let s = 0; s <= maxStart; s += COMPANION_CLIP_FPS) for (let n = min; n <= Math.min(max, count - s - 1); n++) {
+  const maxStart = Math.min(12 * COMPANION_CLIP_FPS, count - min - spare);
+  for (let s = 0; s <= maxStart; s += COMPANION_CLIP_FPS) for (let n = min; n <= Math.min(max - spare, count - s - 1 - spare); n++) {
     if (signal?.aborted) throw new Error("Cancelled.");
     const score = frameDifference4(frames[s + n]!, frames[s]!);
-    if (score < best) { best = score; start = s; length = n; }
+    if (score < best) { best = score; start = s; length = n + spare; }
   }
-  return { start, length };
+  return { start, length, spare };
 }
 
 export interface FitFrames { frames: Uint8Array[]; start: number; loop_gap: number; settle_skipped_frames: number; }
-/** Frames over which a loop's seam is blended. */
-const LOOP_SEAM_FRAMES = 10;
 const blend = (target: Uint8Array, toward: Uint8Array, weight: number) => {
   for (let i = 0; i < target.length; i++) target[i] = Math.round(target[i]! * (1 - weight) + toward[i]! * weight);
 };
+
+/**
+ * A seamless cycle from a kept loop window (owner ruling 2026-10-29: loops must join perfectly). The first N spare frames
+ * (up to ten, never below the state's minimum length) are dropped and the last N frames are blended toward them in equal
+ * steps, so the last cycle frame sits one blend step before the first and playback wraps without a jump.
+ * With fewer than two spare frames the window comes back unchanged (crossfaded: false) and the caller keeps its own seam.
+ */
+export function crossfadeLoop(kept: Uint8Array[], minFrames: number): { frames: Uint8Array[]; crossfaded: boolean } {
+  const n = Math.min(LOOP_SEAM_FRAMES, kept.length - minFrames);
+  if (n < 2) return { frames: kept, crossfaded: false };
+  const cycle = kept.slice(n);
+  for (let i = 0; i < n; i++) {
+    const frame = kept[kept.length - n + i]!.slice();
+    blend(frame, kept[i]!, (i + 1) / (n + 1));
+    cycle[cycle.length - n + i] = frame;
+  }
+  return { frames: cycle, crossfaded: true };
+}
 
 export function fitCompanionFrames(frames: Uint8Array[], width: number, height: number, kind: "loop" | "oneshot", minSeconds: number, maxSeconds: number, signal?: AbortSignal): FitFrames {
   const min = Math.ceil(minSeconds * COMPANION_CLIP_FPS), max = Math.floor(maxSeconds * COMPANION_CLIP_FPS);
   if (frames.length < min) throw new Error("The clip is shorter than this state needs. Make it again.");
   const settleSkipped = kind === "oneshot" ? Math.min(ONESHOT_SETTLE_FRAMES, Math.max(0, frames.length - 24)) : 0;
   let start = settleSkipped, length = Math.min(frames.length - settleSkipped, max);
+  const spare = kind === "loop" ? loopSpareFrames(frames.length, min) : 0;
   if (kind === "loop") {
     let best = Number.POSITIVE_INFINITY;
-    const maxStart = Math.min(12 * COMPANION_CLIP_FPS, frames.length - min);
-    for (let s = 0; s <= maxStart; s += COMPANION_CLIP_FPS) for (let n = min; n <= Math.min(max, frames.length - s - 1); n++) {
+    const maxStart = Math.min(12 * COMPANION_CLIP_FPS, frames.length - min - spare);
+    for (let s = 0; s <= maxStart; s += COMPANION_CLIP_FPS) for (let n = min; n <= Math.min(max - spare, frames.length - s - 1 - spare); n++) {
       if (signal?.aborted) throw new Error("Cancelled.");
       const score = frameDifference(frames[s + n]!, frames[s]!, width, height, signal, best);
-      if (score < best) { best = score; start = s; length = n; }
+      if (score < best) { best = score; start = s; length = n + spare; }
     }
   }
-  const kept = frames.slice(start, start + length);
-  if (kind === "oneshot") {
+  let kept = frames.slice(start, start + length);
+  const cycle = spare ? crossfadeLoop(kept, kept.length - spare) : null;
+  if (cycle?.crossfaded) kept = cycle.frames;
+  else if (kind === "oneshot") {
     const fade = Math.min(6, kept.length);
     for (let i = 0; i < fade; i++) {
       const index = kept.length - fade + i;
@@ -187,8 +214,8 @@ export function fitCompanionFrames(frames: Uint8Array[], width: number, height: 
       blend(kept[index]!, kept[0]!, (i + 1) / fade);
     }
   } else {
-    // A seamless seam: the first frames fade in from the frames that would follow the last one, so the step from the end back to
-    // the start is as small as the step between any two neighbouring frames. With nothing after the window, the last frames fade toward the first instead.
+    // No spare frames for a crossfade cycle: the first frames fade in from the frames that would follow the last one, so the step
+    // from the end back to the start is as small as the step between any two neighbouring frames. With nothing after the window, the last frames fade toward the first instead.
     const ahead = frames.length - (start + length), fade = Math.min(LOOP_SEAM_FRAMES, kept.length, ahead);
     if (fade > 0) {
       for (let i = 0; i < fade; i++) { kept[i] = kept[i]!.slice(); blend(kept[i]!, frames[start + length + i]!, 1 - (i + 1) / (fade + 1)); }

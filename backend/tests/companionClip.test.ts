@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { CompanionClipInput } from "@/media/commands";
-import { COLOUR_MATCH_STRENGTH, COMPANION_CLIP_LIMITS, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionMetrics, companionReasons, fitCompanionFrames, keyOutRgba, medianMatte } from "@/media/companionClip";
+import { COLOUR_MATCH_STRENGTH, COMPANION_CLIP_LIMITS, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionMetrics, companionReasons, crossfadeLoop, fitCompanionFrames, keyOutRgba, medianMatte, selectCompanionWindow } from "@/media/companionClip";
 
 test("keying preserves a red character over either key and clears pure key pixels", () => {
   const green = new Uint8Array([255, 0, 0, 255, 0, 255, 0, 255]);
@@ -51,6 +51,38 @@ test("a loop joins end to start as smoothly as two neighbouring frames, even on 
   const fitted = fitCompanionFrames(drift, 1, 1, "loop", 1, 2);
   const step = Math.abs(fitted.frames[1]![0]! - fitted.frames[0]![0]!), seam = Math.abs(fitted.frames[fitted.frames.length - 1]![0]! - fitted.frames[0]![0]!);
   expect(seam).toBeLessThanOrEqual(Math.max(step, 4) + 2);
+});
+
+test("a loop with spare frames becomes a crossfade cycle: ten frames shorter, last frame one blend step before the first", () => {
+  // A 48-frame period with ten spare frames: the red channel ramps 0..188 and repeats, the green channel drifts so the tail differs from the head.
+  const kept = Array.from({ length: 58 }, (_, n) => new Uint8Array([(n % 48) * 4, n * 2, 20, 255]));
+  const cycle = crossfadeLoop(kept, 48);
+  expect(cycle.crossfaded).toBe(true);
+  expect(cycle.frames.length).toBe(48);
+  expect(cycle.frames[0]).toBe(kept[10]);
+  // The last ten frames walk from the old tail toward the old head in eleven equal steps.
+  const tail = cycle.frames.slice(38);
+  expect(tail[0]![1]).toBe(Math.round(96 * (10 / 11) + 0 * (1 / 11)));
+  expect(tail[9]![1]).toBe(Math.round(114 * (1 / 11) + 18 * (10 / 11)));
+  expect(tail.map((frame) => frame[0])).toEqual(kept.slice(0, 10).map((frame) => frame[0]));
+  const wrap = Math.abs(cycle.frames[47]![0]! - cycle.frames[0]![0]!), step = Math.abs(cycle.frames[1]![0]! - cycle.frames[0]![0]!);
+  expect(wrap).toBe(step);
+  kept.forEach((frame, n) => expect(frame[1]).toBe(n * 2)); // the source window is never written to
+  // The window search reserves the spare frames: a periodic 58-frame clip gives a 48-frame cycle that wraps in one step.
+  const periodic = Array.from({ length: 58 }, (_, n) => new Uint8Array([(n % 48) * 4, 0, 0, 255]));
+  const whole = fitCompanionFrames(periodic, 1, 1, "loop", 2, 3);
+  expect(whole.frames.length).toBe(48);
+  expect(whole.loop_gap).toBeLessThanOrEqual(step + 1);
+  expect(selectCompanionWindow(periodic, "loop", 58, 2, 3)).toEqual({ start: 0, length: 58, spare: 10 });
+  expect(selectCompanionWindow(periodic.slice(0, 49), "loop", 49, 2, 3)).toEqual({ start: 0, length: 48, spare: 0 });
+});
+
+test("a loop with fewer than two spare frames keeps its window length and the old seam", () => {
+  const kept = Array.from({ length: 49 }, (_, n) => new Uint8Array([n * 4, 0, 0, 255]));
+  expect(crossfadeLoop(kept, 48)).toEqual({ frames: kept, crossfaded: false });
+  expect(crossfadeLoop(kept, 49).frames.length).toBe(49);
+  const fitted = fitCompanionFrames(kept, 1, 1, "loop", 2, 3);
+  expect(fitted.frames.length).toBe(48);
 });
 
 test("one-shot crossfades its last six frames to the first pose", () => {
