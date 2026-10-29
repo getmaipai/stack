@@ -230,11 +230,10 @@ export function createLoraLibrary(config: LoraLibraryConfig) {
     const text = describedAs([name, ...triggerWords, input.path.split("/").pop(), input.sourceUrl, ...(input.extraDescription ?? [])], info.metadata);
     const words = scanWords(text);
     if (words.refuse && words.refuseReason === "minor") throw new LoraError("lora_refused", "This LoRA's own description names a child or a minor in a sexual context. It cannot be added; no setting allows that.", 422);
-    if (words.refuse && words.refuseReason === "public_figure") throw new LoraError("lora_refused", "This LoRA's own description says it reproduces a real, public person's likeness. It cannot be added: no setting allows pictures of a real, identifiable person that they have not agreed to.", 422);
     const sha256 = await sha256OfFile(input.path);
     // A style that looks like a person needs no consent proof (owner ruling 2026-10-29); it is classed adult-only so a child's or teen's screen never gets it.
     const likenessSubject: string | null = input.likeness?.subject ?? null;
-    const namesPerson = words.refuse && words.refuseReason !== "minor" && words.refuseReason !== "public_figure";
+    const namesPerson = words.refuse && words.refuseReason !== "minor";
     const id = `lora-${sha256.slice(0, 16)}`;
     return exclusive(() => {
       const records = readManifest();

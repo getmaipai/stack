@@ -232,7 +232,6 @@ export async function importLora(input: ImportInput): Promise<LoraRecord> {
   if (words.refuse) throw new LoraError("lora_refused", "This LoRA's own description names a child or a minor in a sexual context. It cannot be added; no setting allows that.", 422);
   // The picture library's rule, on the same two word lists: a file that names a public figure is refused for everyone; one that names a real person's likeness is refused unless Home signed that it looks like a consenting household adult.
   const realPerson = realPersonReason(text);
-  if (realPerson === "public_figure") throw new LoraError("lora_refused", "This LoRA's own description says it reproduces a real, public person's likeness. It cannot be added: no setting allows videos of a real, identifiable person that they have not agreed to.", 422);
   const sha256 = await sha256OfFile(input.path);
   let likenessSubject: string | null = null;
   if (input.likeness) {

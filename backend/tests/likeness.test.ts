@@ -255,11 +255,11 @@ for (const kind of ["image", "video"] as const) {
     : importLora({ path, name, licence: "apache-2.0", classification: "all-ages", ...extra });
   const Err = kind === "image" ? LoraError : VideoLoraError;
 
-  test(`${kind}: a style whose description names a real person is added with no proof, a public figure is still refused`, async () => {
+  test(`${kind}: a style whose description names a real person or a public figure is added with no proof; a minor in a sexual context is still refused`, async () => {
     const path = loraFile("my-friend-portrait", kind, { ss_tags: "real person, portrait" });
     expect(await imp(path, "Friend")).toMatchObject({ classification: "adult-only" });
     const star = loraFile("a-celebrity", kind);
-    await expect(imp(star, "Star", { likeness: { subject: "person_marlow", proof: proof("style_import", fileSha(star)) } })).rejects.toMatchObject({ code: "lora_refused" });
+    expect(await imp(star, "Star", { likeness: { subject: "person_marlow", proof: "not-checked" } })).toMatchObject({ classification: "adult-only" });
     const minor = loraFile("kid-nsfw", kind, { ss_tags: "child, nsfw, real person" });
     await expect(imp(minor, "Kid", { likeness: { subject: "person_marlow", proof: proof("style_import", fileSha(minor)) } })).rejects.toMatchObject({ code: "lora_refused" });
   });
