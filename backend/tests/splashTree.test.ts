@@ -223,7 +223,7 @@ macTest("the first coding request starts Splash through the real start path: lau
   process.env.HF_TOKEN = "hf_must_not_reach_splash"; process.env.STACK_SECRETS_KEY = "must-not-reach-splash"; process.env.PYTHONPATH = "/must/not/reach/splash";
   const started = await getProcess("coding");
   expect(started).toMatchObject({ role: "coding", kind: "spawned", engine: "splash", contextLength: 131_072, slots: 2, contextScope: "total across slots", modelId: "qwen3.8-27b-ud-q4-k-m" });
-  expect(started.identity).toMatchObject({ build: "splash-1.3.2-ornith.1", healthy: true });
+  expect(started.identity).toMatchObject({ build: "splash-1.4.1", healthy: true });
   expect(identityCheck("coding")).toMatchObject({ ok: true });
   const seen = report();
   // The arguments after the launcher, as the Stack built them.

@@ -47,7 +47,7 @@ Engines per platform:
 | `llama-server-b11476-linux-cuda-x64` | b11476 | linux x64 (NVIDIA) | pinned, not yet verified |
 | `llama-server-b10797-win-cuda-x64` | b10797 | win32 x64 (NVIDIA) | pinned, not yet verified |
 | `mlx-serve-v26.9.4-macos-arm64` | v26.9.4 | darwin arm64 | pinned, verified (the second chat engine; the coding role runs its own process and never mlx-serve) |
-| `splash-1.3.2-ornith.1-macos-arm64` | 1.3.2-ornith.1 | darwin arm64 | pinned, verified (the coding engine on Apple silicon with an M3 chip or newer, 36 GB or more and macOS 26.4 or later; its draft model is installed with the coding model; llama-server is the fallback) |
+| `splash-coding-1.4.1-macos-arm64` | 1.4.1 | darwin arm64 | pinned, verified (the coding engine on Apple silicon with an M3 chip or newer, 36 GB or more and macOS 26.4 or later; its draft model is installed with the coding model; llama-server is the fallback) |
 | `splash-1.4.1-macos-arm64` | 1.4.1 | darwin arm64 | pinned, verified (opt-in chat engine on an M3 or newer Mac with 36 GB or more and macOS 26.4 or later; uses the pinned Huihui model and DFlash draft; no outbound connection; local cache is bounded and emptied at launch; llama-server is the fallback) |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |

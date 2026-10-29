@@ -278,22 +278,21 @@ ENGINE_BINARIES.push(MLX_SERVE_PIN);
  * checksum and size are the Catalog's `engines/index.json` entry (CODE-STACK-01 C1, catalog 4020d5f), verified by download on
  * 2026-10-18. Splash is only ever started offline, from files the Stack pinned and laid out itself (lib/splash.ts). */
 export const SPLASH_PIN: EngineBinaryPin = {
-  id: "splash-1.3.2-ornith.1-macos-arm64",
+  id: "splash-coding-1.4.1-macos-arm64",
   name: "splash",
-  tag: "1.3.2-ornith.1",
+  tag: "1.4.1",
   platform: "darwin",
   arch: "arm64",
   tool: "engine/splash",
   requiresNvidia: false,
-  label: "Splash (macOS 26.4 or later, Apple silicon M3 or newer), 1.3.2-ornith.1",
+  label: "Splash (macOS 26.4 or later, Apple silicon M3 or newer), 1.4.1",
   docsUrl: "https://github.com/incoai/splash",
-  archive: { label: "Splash (macOS arm64)", url: "https://github.com/getmaipai/stack/releases/download/engine-splash-1.3.2-ornith.1/splash-1.3.2-ornith.1-arm64-macos26.tar.gz", sha256: "b438df121e6b1b2d66d50687062ca1f5521bc0063ea1d1147338714a6f982d57", githubDigest: "b438df121e6b1b2d66d50687062ca1f5521bc0063ea1d1147338714a6f982d57", approxBytes: 75_874_298 },
+  archive: { label: "Splash 1.4.1 (macOS arm64)", url: "https://github.com/incoai/splash/releases/download/1.4.1/splash-1.4.1-arm64-macos26.tar.gz", sha256: "5746068dc652a4998267d55b1c6d59b545f1bc1e018131c6d8025022f7000d5c", approxBytes: 78_669_011 },
   verified: true,
 };
 ENGINE_BINARIES.push(SPLASH_PIN);
 
-/** Chat's opt-in Splash build is separate from the pinned coding fork: the
- * latter remains on 1.3.2-ornith.1 until its own compatibility review. */
+/** Chat's opt-in Splash build: the same vendor 1.4.1 archive as `SPLASH_PIN`, under its own engine name so the chat and coding roles install and report separately. */
 export const SPLASH_CHAT_PIN: EngineBinaryPin = {
   id: "splash-1.4.1-macos-arm64",
   name: "splash-chat",

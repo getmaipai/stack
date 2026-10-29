@@ -49,9 +49,9 @@ test("chat engine selection accepts Splash, keeps auto on llama-server and falls
   expect(chatEngineFailure("splash")?.count).toBe(2);
 });
 
-test("the 1.4.1 chat pin is separate from the unchanged coding fork and version tags stage cleanly", () => {
+test("the 1.4.1 chat pin is separate from the coding pin (same vendor archive) and version tags stage cleanly", () => {
   expect(SPLASH_CHAT_PIN).toMatchObject({ id: "splash-1.4.1-macos-arm64", name: "splash-chat", tag: "1.4.1", tool: "engine/splash", archive: { url: "https://github.com/incoai/splash/releases/download/1.4.1/splash-1.4.1-arm64-macos26.tar.gz", sha256: "5746068dc652a4998267d55b1c6d59b545f1bc1e018131c6d8025022f7000d5c", approxBytes: 78_669_011 } });
-  expect(SPLASH_PIN.tag).toBe("1.3.2-ornith.1"); expect(engineNameTag("splash-chat-1.4.1")).toEqual({ name: "splash-chat", tag: "1.4.1" });
+  expect(SPLASH_PIN.tag).toBe("1.4.1"); expect(engineNameTag("splash-chat-1.4.1")).toEqual({ name: "splash-chat", tag: "1.4.1" });
 });
 
 test("Splash chat launch uses pinned target and draft, offline args, bounded cache and empties the cache", () => {
