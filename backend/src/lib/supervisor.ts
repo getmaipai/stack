@@ -792,8 +792,8 @@ export function pictureTokensMax(requested: RoleId): number | null {
 /** Whether a launch's memory reading is stored for its model: always,
  * except a model that reads pictures launched without its projector,
  * whose reading leaves the projector out (a review, VISION-02b). */
-/** Splash maps the model file, so its memory right after load (about 1 GB) is not what it holds while serving (the model's size). */
-export function mapsModelWeights(engine: string | null | undefined): boolean { return engine === "splash"; }
+/** Splash maps the model file, so its memory right after load (about 1 GB) is not what it holds while serving (the model's size). Both Splash plans count: coding's "splash" and chat's "splash-chat" (checking "splash" alone left chat's runaway watch armed, and it restarted chat every 1 to 10 minutes, 2026-10-29). */
+export function mapsModelWeights(engine: string | null | undefined): boolean { return engine === "splash" || engine === "splash-chat"; }
 
 export function keepsMeasuredFootprint(model: ModelRecord, launchedWithProjector: boolean): boolean {
   return !declaresImageInput(model) || launchedWithProjector;

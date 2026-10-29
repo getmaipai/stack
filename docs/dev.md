@@ -406,7 +406,10 @@ when its process memory exceeds 1.3 times this run's own post-load
 reading plus 500 MB for three polls (the runaway watch); a figure an
 earlier run stored never arms the watch, and the restart waits for the
 engine's requests in flight to finish unless the kernel reports critical
-pressure. The pressure event names the reading and the limit
+pressure. Splash (the coding engine and the chat engine alike) maps its
+model file, so it holds about 1 GB right after load and grows to the
+model's size as it serves: its post-load reading neither arms the watch
+nor is stored as a footprint. The pressure event names the reading and the limit
 (`process_bytes`, `limit_bytes`). A healthy reading above the run's
 peak raises the admission peak, and each rise of 64 MiB or more is
 written to the model record, so the next admission and fit plan start

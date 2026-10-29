@@ -11,6 +11,7 @@ import { SplashChatClient, chatEngine, mapsModelWeights, selectableModels, selec
 import { splashHubDir, splashHomeDir, splashRoot, splashTmpDir } from "@/lib/splashStore";
 import { __setAppleChipForTests } from "@/lib/hardware";
 import { __resetHealthForTests, list as listHealth } from "@/lib/health";
+import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, refreshMeasuredPeak, startGovernor, type GovernorHandle } from "@/lib/governor";
 
 const verified = { source: "catalog" as const, provenance: { repo: "huihui-ai/Huihui-Qwen3.8-27B-abliterated-GGUF" }, revision: STACK_CHAT_QWEN38_UNCENSORED_MODEL.revision!, sha256: STACK_CHAT_QWEN38_UNCENSORED_MODEL.download!.sha256, licence: "Apache-2.0", verifiedAt: new Date().toISOString() };
 function sparse(path: string, size: number) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, ""); truncateSync(path, size); }
@@ -60,7 +61,7 @@ test("Splash chat launch uses pinned target and draft, offline args, bounded cac
   updateSettings({ "stack.engines.chat.splash_cache_gb": 64, "stack.engines.chat.thinking_budget_ceiling": 1500 }); applyPendingSettings();
   const model = getModel(STACK_CHAT_QWEN38_UNCENSORED_MODEL.id)!;
   const plan = splashLaunchPlan(model, 8812, 65_536, "splash-chat");
-  expect(plan.engine).toBe("splash-chat"); expect(plan.build).toBe("1.4.1"); expect(plan.identity?.build).toBe("splash-1.4.1"); expect(plan.identity?.model).toBe(modelPath.split("/").pop());
+  expect(plan.engine).toBe("splash-chat"); expect(mapsModelWeights(plan.engine)).toBe(true); expect(plan.build).toBe("1.4.1"); expect(plan.identity?.build).toBe("splash-1.4.1"); expect(plan.identity?.model).toBe(modelPath.split("/").pop());
   expect(plan.command).toContain("--offline"); expect(plan.command).toContain("--max-context"); expect(plan.command).toContain("65536"); expect(plan.command).toContain("--thinking-token-budget"); expect(plan.command).toContain("1500"); expect(plan.command).toContain("--max-cache-disk"); expect(plan.command).toContain("64G");
   expect(plan.env).toMatchObject({ HF_HUB_OFFLINE: "1", DO_NOT_TRACK: "1", HF_HUB_CACHE: splashHubDir(), HOME: splashHomeDir(), TMPDIR: splashTmpDir() });
   expect(existsSync(join(cache, "old-prefix"))).toBe(false);
@@ -116,6 +117,33 @@ test("a chat model that declares picture input stays on Splash: pictures are rea
 
 test("a Splash process's post-load memory reading is not stored as a footprint or used as the runaway baseline (it maps the model and grows while serving)", () => {
   expect(mapsModelWeights("splash")).toBe(true);
+  expect(mapsModelWeights("splash-chat")).toBe(true);
   expect(mapsModelWeights("llama-server")).toBe(false);
   expect(mapsModelWeights(null)).toBe(false);
+});
+
+// 2026-10-29: chat on Splash ("splash-chat") was restarted by the runaway
+// watch every 1 to 10 minutes while idle (87 "governor-runaway" restarts):
+// its ~1 GB post-load reading became the baseline, and the mapped 14 GB
+// model paging in read as a runaway (1.3 x 1 GB + 0.5 GB for 3 polls).
+test("an idle Splash chat engine whose mapped weights page in is not restarted by the runaway watch", async () => {
+  const GB = 1_073_741_824;
+  const runLoop = async (engine: string): Promise<number> => {
+    __resetGovernorForTests();
+    __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 100 * GB, pollMs: 1, processSustainedPolls: 3 });
+    const admission = await admit({ id: "chat", role: "chat", kind: "resident", requestedBytes: 15 * GB, dryRunPeakBytes: 20 * GB, engine, pid: 4242 }) as GovernorHandle;
+    // What the supervisor's post-load check does with its ~1 GB reading.
+    if (!mapsModelWeights(engine)) refreshMeasuredPeak(admission, GB);
+    let rss = GB;
+    let restarts = 0;
+    const stop = startGovernor({ pid: 4242, freeMemory: () => 100 * GB, totalMemory: () => 128 * GB, processMemory: async () => { rss = Math.min(15 * GB, rss + 2 * GB); return rss; }, busy: () => false, restart: () => { restarts++; } });
+    await Bun.sleep(40);
+    stop();
+    await Bun.sleep(5);
+    __resetGovernorForTests();
+    return restarts;
+  };
+  expect(await runLoop("llama-server")).toBeGreaterThan(0);
+  expect(await runLoop("splash-chat")).toBe(0);
+  expect(await runLoop("splash")).toBe(0);
 });
