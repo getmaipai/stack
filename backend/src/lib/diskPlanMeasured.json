@@ -452,6 +452,10 @@
     "ernie-image-turbo-model-index": {
       "download_bytes": 547,
       "installed_bytes": 547
+    },
+    "htdemucs": {
+      "download_bytes": 84025440,
+      "installed_bytes": 84025440
     }
   }
 }

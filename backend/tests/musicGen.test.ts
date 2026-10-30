@@ -536,12 +536,12 @@ test("the worker keeps the keep-warm, offline and memory settings the note measu
 });
 
 test("the component is listed in the group music for p64 and p128, optional, with both pins and the music engine", () => {
-  const unit = componentDefs().find((candidate) => candidate.group === "music")!;
+  const unit = componentDefs().find((candidate) => candidate.group === "music" && candidate.id === STACK_MUSIC_MODEL.id)!;
   expect(unit).toMatchObject({ id: STACK_MUSIC_MODEL.id, label: "Music: ACE-Step 1.5", summary: "Makes and changes songs in chat", role: "music", tiers: ["p64", "p128"] });
   expect(unit.pins.map((pin) => pin.id)).toEqual([STACK_MUSIC_MODEL.id, STACK_MUSIC_LM_06.id]);
   expect(unit.envs.map((env) => env.name)).toEqual(["music-gen"]);
   const catalog = collectComponentsCatalog();
-  expect(catalog.models.filter((pin) => pin.role === "music").map((pin) => pin.id)).toEqual([STACK_MUSIC_MODEL.id, STACK_MUSIC_LM_06.id]);
+  expect(catalog.models.filter((pin) => pin.role === "music").map((pin) => pin.id)).toEqual([STACK_MUSIC_MODEL.id, STACK_MUSIC_LM_06.id, "htdemucs"]);
   expect(catalog.engines.some((pin) => pin.name === "music-gen")).toBe(true);
 });
 
