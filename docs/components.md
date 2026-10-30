@@ -302,7 +302,7 @@ Engines per platform:
 | p64 | on demand | `ace-step-1-5-turbo` | bf16 | 9.40 GB | not measured | not measured | MIT | ACE-Step/Ace-Step1.5 @ 19671f406d603126926c1b7e2adc169acbcade22 | pinned |
 | p128 | on demand | `ace-step-1-5-turbo` | bf16 | 9.40 GB | not measured | not measured | MIT | ACE-Step/Ace-Step1.5 @ 19671f406d603126926c1b7e2adc169acbcade22 | pinned |
 
-Installed beside the model, never selected on its own: `ace-step-1-5-lm-0-6b` (planning-lm-0.6b, 1.28 GB, MIT, ACE-Step/acestep-5Hz-lm-0.6B @ 148d8ea0225bdab342ee1ae3a354275ccd60ca80); `htdemucs` (stems, 80.1 MB, MIT, adefossez/HTDemucs @ cbc8a9b1a87023b7fd74e7b3412e6321c0eab003); `htdemucs` (stems, 80.1 MB, MIT, adefossez/HTDemucs @ cbc8a9b1a87023b7fd74e7b3412e6321c0eab003).
+Installed beside the model, never selected on its own: `ace-step-1-5-lm-0-6b` (planning-lm-0.6b, 1.28 GB, MIT, ACE-Step/acestep-5Hz-lm-0.6B @ 148d8ea0225bdab342ee1ae3a354275ccd60ca80); `htdemucs` (stems, 80.1 MB, MIT, adefossez/HTDemucs @ cbc8a9b1a87023b7fd74e7b3412e6321c0eab003).
 
 ## media (the media service: probe, fetch, transcode, preview)
 
