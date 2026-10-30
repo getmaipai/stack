@@ -9706,6 +9706,139 @@
         }
       }
     },
+    "/stack/v1/tiers/candidates": {
+      "get": {
+        "tags": [
+          "Tiers"
+        ],
+        "summary": "The models each level of a category may use on this computer (TIER-HOME-04)",
+        "description": "Every catalog candidate for the category on this computer's profile, under each of Standard, Boost and Max, with the family it belongs to, its peak memory, whether it fits that level's cap and the plain refusal when it does not. `profile` is null when this computer is too small for any profile.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "chat",
+                "pictures",
+                "video",
+                "music",
+                "voice"
+              ]
+            },
+            "required": true,
+            "name": "category",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The candidates per level.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "category": {
+                      "type": "string"
+                    },
+                    "profile": {
+                      "type": "string",
+                      "nullable": true,
+                      "enum": [
+                        "p16",
+                        "p32",
+                        "p64",
+                        "p128",
+                        null
+                      ]
+                    },
+                    "room_bytes": {
+                      "type": "number"
+                    },
+                    "levels": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "tier": {
+                            "type": "string",
+                            "enum": [
+                              "standard",
+                              "boost",
+                              "max"
+                            ]
+                          },
+                          "cap_bytes": {
+                            "type": "number"
+                          },
+                          "recommended": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "candidates": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "family": {
+                                  "type": "string"
+                                },
+                                "peak_bytes": {
+                                  "type": "number"
+                                },
+                                "verified": {
+                                  "type": "boolean"
+                                },
+                                "fits": {
+                                  "type": "boolean",
+                                  "description": "Whether the candidate's peak is at or under this level's cap on this computer."
+                                },
+                                "refusal": {
+                                  "type": "string",
+                                  "nullable": true,
+                                  "description": "The plain-words reason it cannot fill this level, or null when it fits."
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "label",
+                                "family",
+                                "peak_bytes",
+                                "verified",
+                                "fits",
+                                "refusal"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "tier",
+                          "cap_bytes",
+                          "recommended",
+                          "candidates"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "category",
+                    "profile",
+                    "room_bytes",
+                    "levels"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/memory": {
       "get": {
         "tags": [

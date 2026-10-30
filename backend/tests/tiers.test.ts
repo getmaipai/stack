@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { STACK_IMAGE_ERNIE_ID, STACK_IMAGE_KLEIN_ID, STACK_IMAGE_ZIMAGE_ID, STACK_MUSIC_MODEL_ID, STACK_VIDEO_DETAILED_MODEL_ID, STACK_VIDEO_MODEL_ID } from "@/lib/modelCatalog";
-import { customPickRefusal, minorTierClamp, resolveLadder, resolveTier, thinkingAllowedFor, TIER_CANDIDATES } from "@/lib/tiers";
+import { tierCandidateLists, customPickRefusal, minorTierClamp, resolveLadder, resolveTier, thinkingAllowedFor, TIER_CANDIDATES } from "@/lib/tiers";
 
 const GB = 1_000_000_000;
 
@@ -67,5 +67,31 @@ describe("tier resolver", () => {
     expect(thinkingAllowedFor("child")).toBe(false);
     expect(thinkingAllowedFor("teen")).toBe(false);
     expect(thinkingAllowedFor("adult")).toBe(true);
+  });
+});
+
+describe("tier candidate lists for the slot dialog", () => {
+  test("every candidate is listed under every level with its family, and a bigger one is refused in plain words", () => {
+    const levels = tierCandidateLists("pictures", "p64", 40 * GB);
+    expect(levels.map((level) => level.tier)).toEqual(["standard", "boost", "max"]);
+    const standard = levels[0]!;
+    expect(standard.candidates.map((row) => row.family)).toContain("z-image");
+    const zimage = standard.candidates.find((row) => row.id === "z-image-turbo")!;
+    expect(zimage.fits).toBe(false);
+    expect(zimage.refusal).toBe("This needs 26 GB. Standard keeps Home free, so it can't hold it. Use Boost or Max.");
+    expect(levels[1]!.candidates.find((row) => row.id === "z-image-turbo")).toMatchObject({ fits: true, refusal: null });
+    expect(standard.recommended).toBe("ernie-image-turbo");
+    expect(levels[1]!.recommended).toBe("z-image-turbo");
+  });
+
+  test("Reduced-only models are never offered as a pick, and a profile with no models lists nothing", () => {
+    const ids = tierCandidateLists("chat", "p128", 72 * GB).flatMap((level) => level.candidates.map((row) => row.id));
+    expect(ids).not.toContain("qwen3-4b-q4-k-m");
+    expect(tierCandidateLists("music", "p16", 10 * GB).every((level) => level.candidates.length === 0)).toBe(true);
+  });
+
+  test("a model this computer can never hold says so", () => {
+    const max = tierCandidateLists("video", "p128", 40 * GB)[2]!;
+    expect(max.candidates.find((row) => row.id === "ltx-2-3-dev-two-stage")!.refusal).toBe("This needs 66 GB and this computer can never hold it.");
   });
 });

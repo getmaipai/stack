@@ -321,3 +321,12 @@ test("the generated document covers the contract table's surfaces", async () => 
   }
   await getProcess("chat");
 });
+
+test("the tier candidates route answers per level with families and caps, and refuses an unknown category (TIER-HOME-04)", async () => {
+  const res = await app.request("/stack/v1/tiers/candidates?category=pictures");
+  expect(res.status).toBe(200);
+  const body = await res.json() as { category: string; profile: string | null; levels: Array<{ tier: string; candidates: Array<{ family: string; fits: boolean; refusal: string | null }> }> };
+  expect(body.category).toBe("pictures");
+  if (body.profile) expect(body.levels.map((level) => level.tier)).toEqual(["standard", "boost", "max"]);
+  expect((await app.request("/stack/v1/tiers/candidates?category=bogus")).status).toBe(400);
+});

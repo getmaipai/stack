@@ -118,3 +118,22 @@ export function customPickRefusal(input: ResolveInput & { model: string; options
 
 export function minorTierClamp(tier: TierId): TierId { return tier === "boost" || tier === "max" ? "standard" : tier; }
 export function thinkingAllowedFor(band: "child" | "teen" | "adult"): boolean { return band === "adult"; }
+
+export interface TierCandidateRow { id: string; label: string; family: string; peakBytes: number; verified: boolean; fits: boolean; refusal: string | null }
+export interface TierCandidateList { tier: "standard" | "boost" | "max"; capBytes: number; recommended: string | null; candidates: TierCandidateRow[] }
+
+/** TIER-HOME-04: what a slot dialog may offer for one category on this profile. Every non-Reduced candidate is listed under every level, with whether it fits that level's cap and, when it does not, the plain refusal (resolver rule 1 of resource-tiers section 3a). `recommended` is the resolver's own pick with no custom slot. Pure: the route supplies the profile and the room. */
+export function tierCandidateLists(category: TierCategory, profile: ProfileId, roomBytes: number, reducedFreedBytes = 0): TierCandidateList[] {
+  const pickable = TIER_CANDIDATES.filter((candidate) => candidate.category === category && candidate.profiles.includes(profile) && candidate.tiers.some((tier) => tier !== "reduced"));
+  const ladder = resolveLadder(category, profile, roomBytes, undefined, reducedFreedBytes);
+  return tierOrder.map((tier) => ({
+    tier,
+    capBytes: tierCapBytes(tier, roomBytes, reducedFreedBytes),
+    recommended: ladder.find((row) => row.tier === tier)?.resolved?.model ?? null,
+    candidates: pickable.map((candidate) => {
+      const peak = candidate.peaks.reduce((largest, item) => (item.peakBytes > largest.peakBytes ? item : largest), candidate.peaks[0]!);
+      const refusal = customPickRefusal({ category, tier, profile, roomBytes, reducedFreedBytes, model: candidate.id, options: peak.options });
+      return { id: candidate.id, label: candidate.label, family: candidate.family, peakBytes: peak.peakBytes, verified: candidate.peaks.every((item) => item.status === "measured"), fits: refusal === null, refusal };
+    }),
+  }));
+}
