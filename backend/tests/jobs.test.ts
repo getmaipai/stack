@@ -72,7 +72,7 @@ test("a fitting job stays queued past the configured admission wait and runs whe
   const submitted = submitJob({ kind: "waiting-picture" });
   if ("refused" in submitted) throw new Error(submitted.reason);
   await new Promise((resolve) => setTimeout(resolve, 60));
-  expect(getJob(submitted.job.id)).toMatchObject({ state: "running", status: expect.stringContaining("waiting for memory") });
+  expect(getJob(submitted.job.id)).toMatchObject({ state: "running", status: expect.stringContaining("Waiting for memory") });
   expect(getJob(submitted.job.id)?.status).not.toBe("no_memory");
   release(holder);
   for (let index = 0; index < 20 && !ran; index++) await new Promise((resolve) => setTimeout(resolve, 5));

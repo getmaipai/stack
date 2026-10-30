@@ -81,8 +81,6 @@ export function recordAction(level: WatchdogLevel, action: string, detail: strin
 export function recentActions(): WatchdogAction[] { return [...state.actions]; }
 export function __resetMemoryStateForTests(): void { state.level = "normal"; state.since = Date.now(); state.latest = null; state.chatPagedOut = false; state.actions = []; }
 
-function gb(bytes: number): string { return (bytes / GB).toFixed(1); }
-
 /** Whether a start is gated: the generative work the watchdog guards (a picture, a clip, the image tools, the voice engine). */
 export function isGuarded(request: Pick<GovernorRequest, "id" | "kind">): boolean {
   return request.kind === "generator" || request.kind === "jit" || request.id === "tts";
@@ -103,25 +101,25 @@ export function admissionVerdict(request: Pick<GovernorRequest, "id" | "kind">, 
   const sample = currentSample();
   if (sample.degraded) return { ok: true };
   const reserve = reserveBytes(sample.totalBytes);
-  if (state.level !== "normal") return { ok: false, reason: `This computer is low on memory (${gb(sample.availableBytes)} GB available, ${gb(reserve)} GB kept in reserve), so new picture and video work waits until it recovers.` };
+  if (state.level !== "normal") return { ok: false, reason: PAUSED_PLAIN };
   const left = sample.availableBytes - peakBytes;
-  if (left < reserve) return { ok: false, reason: `It needs about ${gb(peakBytes)} GB and ${gb(sample.availableBytes)} GB is available, which would leave ${gb(Math.max(0, left))} GB; ${gb(reserve)} GB is kept in reserve.` };
+  if (left < reserve) return { ok: false, reason: NOT_ENOUGH_PLAIN };
   return { ok: true };
 }
 
-/** The status line of a job waiting on memory: the numbers a person can act on. */
-export function waitingText(peakBytes: number, position: number): string {
+/** What a person reads while picture and video making is paused or waits for memory: plain words, never a figure (the numbers stay in the memory report for an admin). */
+const PAUSED_PLAIN = "Picture and video making is paused for a moment while this computer frees up memory. It starts again by itself, usually within a minute.";
+const NOT_ENOUGH_PLAIN = "There is not enough free memory for this right now, so it waits its turn. Closing big apps helps.";
+
+/** The status line of a job waiting on memory. `peakBytes` is kept in the signature for callers; the line carries no numbers. */
+export function waitingText(_peakBytes: number, position: number): string {
   // `position` is the job's own place in the queue (1 is first), so the jobs ahead of it are one fewer.
-  const sample = currentSample();
-  const reserve = reserveBytes(sample.totalBytes);
   const ahead = position > 1 ? ` (${position - 1} ahead)` : "";
-  return `waiting for memory${ahead}: needs about ${gb(peakBytes)} GB, ${gb(sample.availableBytes)} GB available, ${gb(reserve)} GB kept in reserve`;
+  return `Waiting for memory to free up${ahead}`;
 }
 
 /** The sentence a route returns while the level is not normal: new generative work is refused, with what to do. */
 export function lowMemoryRefusal(): string | null {
   if (!watchdogEnabled() || state.level === "normal") return null;
-  const sample = state.latest;
-  const numbers = sample ? ` (${gb(sample.availableBytes)} GB available, ${gb(reserveBytes(sample.totalBytes))} GB kept in reserve)` : "";
-  return `This computer is low on memory${numbers}, so picture and video making is paused until it recovers. Close big apps, or try again in a minute.`;
+  return `${PAUSED_PLAIN.replace(" It starts again by itself, usually within a minute.", "")} Close big apps, or try again in a minute.`;
 }

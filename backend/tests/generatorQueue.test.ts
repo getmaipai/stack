@@ -100,7 +100,7 @@ test("while the governor holds another generator, the job waits in the governor'
   expect("id" in other).toBe(true);
   const job = submit("after the other");
   await new Promise((resolve) => setTimeout(resolve, 350));
-  expect(getJob(job.id)).toMatchObject({ state: "running", status: expect.stringContaining("waiting for memory: needs about") });
+  expect(getJob(job.id)).toMatchObject({ state: "running", status: expect.stringContaining("Waiting for memory to free up") });
   expect(sidecar.started).toEqual([]);
   release(other);
   const done = await waitForJob(job.id, 3_000);
@@ -165,7 +165,7 @@ test("cancelling a render that waits in the governor's queue frees the role at o
   const other = await admit({ id: "another-generator", kind: "generator", requestedBytes: 1 * GB }) as GovernorHandle;
   const waiting = submit("will be cancelled");
   await new Promise((resolve) => setTimeout(resolve, 300));
-  expect(getJob(waiting.id)?.status).toMatch(/waiting for memory/);
+  expect(getJob(waiting.id)?.status).toMatch(/Waiting for memory/);
   expect(cancelJob(waiting.id)?.state).toBe("cancelled");
   const next = submit("the next one");
   await new Promise((resolve) => setTimeout(resolve, 300));
@@ -192,7 +192,7 @@ test("a render queued for memory with nothing loaded runs once memory frees: the
   await Bun.sleep(10);
   const job = submit("when memory frees");
   await new Promise((resolve) => setTimeout(resolve, 300));
-  expect(getJob(job.id)).toMatchObject({ state: "running", status: expect.stringContaining("waiting for memory: needs about") });
+  expect(getJob(job.id)).toMatchObject({ state: "running", status: expect.stringContaining("Waiting for memory to free up") });
   expect(sidecar.started).toEqual([]);
   const done = await waitForJob(job.id, 4_000);
   expect(done?.state).toBe("done");
@@ -225,7 +225,7 @@ test("a cancelled render's phantom is withdrawn so the live render behind it run
   await Bun.sleep(10);
   const cancelled = submit("cancelled while waiting");
   await new Promise((resolve) => setTimeout(resolve, 300));
-  expect(getJob(cancelled.id)?.status).toMatch(/waiting for memory/);
+  expect(getJob(cancelled.id)?.status).toMatch(/Waiting for memory/);
   cancelJob(cancelled.id);
   const live = submit("the live one");
   await new Promise((resolve) => setTimeout(resolve, 300));

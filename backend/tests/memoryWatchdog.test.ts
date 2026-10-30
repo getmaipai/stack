@@ -119,7 +119,7 @@ test("admission uses the real free memory: the governor's own model says yes, th
   expect("queued" in video).toBe(true);
   const verdict = admissionVerdict({ id: "video-job", kind: "generator" }, 44 * GB);
   expect(verdict.ok).toBe(false);
-  expect(verdict.ok ? "" : verdict.reason).toContain("kept in reserve");
+  expect(verdict.ok ? "" : verdict.reason).toContain("not enough free memory"); expect(verdict.ok ? "" : verdict.reason).not.toMatch(/\d GB/); /* a person never reads a figure */
   // A 13.5 GB picture fits: 30 - 13.5 = 16.5 GB left, above the 10.2 GB reserve.
   expect(admissionVerdict({ id: "pic", kind: "generator" }, 13.5 * GB).ok).toBe(true);
   // Residents (chat, judge) are not gated by the watchdog.
@@ -142,7 +142,7 @@ test("at WARN or CRITICAL a new generative start waits whatever the free memory"
   setMemoryLevel("warn");
   const verdict = admissionVerdict({ id: "pic", kind: "generator" }, GB);
   expect(verdict.ok).toBe(false);
-  expect(verdict.ok ? "" : verdict.reason).toContain("low on memory");
+  expect(verdict.ok ? "" : verdict.reason).toContain("paused for a moment"); expect(verdict.ok ? "" : verdict.reason).not.toMatch(/\d GB/);
 });
 
 test("a fitting job stays queued past the old window and runs when memory frees", async () => {
@@ -158,7 +158,7 @@ test("a fitting job stays queued past the old window and runs when memory frees"
     if ("refused" in submitted) throw new Error(submitted.reason);
     await new Promise((resolve) => setTimeout(resolve, 80));
     expect(ran).toBe(false);
-    expect(getJob(submitted.job.id)).toMatchObject({ state: "running", status: expect.stringContaining("waiting for memory") });
+    expect(getJob(submitted.job.id)).toMatchObject({ state: "running", status: expect.stringContaining("Waiting for memory") });
     expect(getGovernorStatus().queue.map((entry) => entry.id)).toEqual([submitted.job.id]);
     setLatestSample(sample({ availableBytes: 40 * GB }));
     reading = sample({ availableBytes: 40 * GB, freeBytes: 100 * GB });
@@ -226,9 +226,9 @@ test("rising swapouts while chat is loaded enters WARN at once and reports paged
   const sampler = fakeSampler();
   const actions = fakeActions();
   const dog = new MemoryWatchdog({ sampler, actions, chatLoaded: () => true, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null });
-  sampler.next = sample({ swapouts: 10 });
+  sampler.next = sample({ swapouts: 10, availableBytes: 22 * GB });
   await dog.tick();
-  sampler.next = sample({ swapouts: 11 });
+  sampler.next = sample({ swapouts: 11, availableBytes: 22 * GB });
   await dog.tick();
   expect(memoryLevel()).toBe("warn");
   expect(dog.report().watchdog.chat_paged_out).toBe(true);
@@ -237,9 +237,9 @@ test("rising swapouts while chat is loaded enters WARN at once and reports paged
 test("a paged-out chat clears once swapouts stop rising", async () => {
   const sampler = fakeSampler();
   const dog = new MemoryWatchdog({ sampler, chatLoaded: () => true, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null });
-  sampler.next = sample({ swapouts: 10 });
+  sampler.next = sample({ swapouts: 10, availableBytes: 22 * GB });
   await dog.tick();
-  sampler.next = sample({ swapouts: 11 });
+  sampler.next = sample({ swapouts: 11, availableBytes: 22 * GB });
   await dog.tick();
   expect(memoryLevel()).toBe("warn");
   for (let i = 0; i < 6; i++) await dog.tick();
@@ -250,9 +250,9 @@ test("a paged-out chat clears once swapouts stop rising", async () => {
 test("rising swapouts without chat loaded and flat swapouts do not change the level", async () => {
   const sampler = fakeSampler();
   const dog = new MemoryWatchdog({ sampler, chatLoaded: () => false, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null });
-  sampler.next = sample({ swapouts: 10 });
+  sampler.next = sample({ swapouts: 10, availableBytes: 22 * GB });
   await dog.tick();
-  sampler.next = sample({ swapouts: 11 });
+  sampler.next = sample({ swapouts: 11, availableBytes: 22 * GB });
   await dog.tick();
   expect(memoryLevel()).toBe("normal");
   expect(dog.report().watchdog.chat_paged_out).toBe(false);
@@ -485,4 +485,14 @@ test.skipIf(process.platform !== "darwin" || process.env.MAIPAI_LIVE_SAMPLER !==
   expect(rows.length).toBeGreaterThan(20);
   expect(rows.some((r) => r.pid === process.pid)).toBe(true);
   console.log(`live: free ${(live.freeBytes / GB).toFixed(1)} GB, available ${(live.availableBytes / GB).toFixed(1)} GB, wired ${(live.wiredBytes / GB).toFixed(1)} GB, swap ${(live.swapUsedBytes / GB).toFixed(2)} GB, pressure level ${live.pressureLevel}`);
+});
+
+test("chat paging out while tens of gigabytes are free does not pause pictures and clips", async () => {
+  const sampler = fakeSampler();
+  const dog = new MemoryWatchdog({ sampler, chatLoaded: () => true, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null });
+  sampler.next = sample({ swapouts: 10, availableBytes: 60 * GB });
+  await dog.tick();
+  sampler.next = sample({ swapouts: 11, availableBytes: 60 * GB });
+  await dog.tick();
+  expect(memoryLevel()).toBe("normal");
 });

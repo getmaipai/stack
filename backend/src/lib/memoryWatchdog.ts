@@ -93,6 +93,8 @@ export function stepLadder(ladder: LadderState, reading: LadderReading): LadderS
 function stepLadderForChatPageout(ladder: LadderState, reading: LadderReading, chatPagedOut: boolean): LadderState {
   const next = stepLadder(ladder, reading);
   if (!chatPagedOut || ladder.level !== "normal" || rawLevel(reading) !== "normal") return next;
+  // Chat paging out a little while tens of gigabytes are free is not a shortage: pausing pictures and clips for it only made people wait (2026-10-29: paused at 43 GB free with a 10 GB reserve).
+  if (reading.sample.availableBytes >= reading.reserve + 3 * WatchdogRules.warnClearMarginBytes) return next;
   return { level: "warn", enter: 0, clear: 0 };
 }
 
