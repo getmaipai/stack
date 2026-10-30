@@ -496,3 +496,19 @@ test("chat paging out while tens of gigabytes are free does not pause pictures a
   await dog.tick();
   expect(memoryLevel()).toBe("normal");
 });
+
+test("dev_load names the big programs by name and bytes only, and is empty when nothing is flagged (MEM-SPACE-05)", async () => {
+  const sampler = fakeSampler();
+  const { dog } = watchdogWith(sampler);
+  await dog.tick();
+  expect(dog.report().dev_load).toEqual({ others_bytes: 0, processes: [] });
+  sampler.rows = [row({ pid: 900, name: "rustc", rssBytes: 45 * GB, command: "/work/private/rustc" })];
+  for (let i = 0; i < 6; i++) await dog.tick();
+  const load = dog.report().dev_load;
+  expect(load.processes).toEqual([{ name: "rustc", bytes: 45 * GB }]);
+  expect(load.others_bytes).toBe(45 * GB);
+  expect(JSON.stringify(load)).not.toContain("/work");
+  sampler.rows = [];
+  for (let i = 0; i < 6; i++) await dog.tick();
+  expect(dog.report().dev_load.processes).toEqual([]);
+});

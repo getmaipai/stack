@@ -119,6 +119,15 @@ export function customPickRefusal(input: ResolveInput & { model: string; options
   return `This needs ${Math.round(peak.peakBytes / GB)} GB. ${name} keeps Home free, so it can't hold it. Use ${next}.`;
 }
 
+/** What the Reduced swap of chat and voice frees on this profile: each category's Standard peak minus its Reduced peak (zero when either is missing). Max may use it (TIER-STACK-02). */
+export function reducedFreedBytes(profile: ProfileId, roomBytes: number): number {
+  return (["chat", "voice"] as const).reduce((sum, category) => {
+    const standard = resolveTier({ category, tier: "standard", profile, roomBytes });
+    const reduced = resolveTier({ category, tier: "reduced", profile, roomBytes });
+    return sum + (standard && reduced ? Math.max(0, standard.peakBytes - reduced.peakBytes) : 0);
+  }, 0);
+}
+
 export function minorTierClamp(tier: TierId): TierId { return tier === "boost" || tier === "max" ? "standard" : tier; }
 export function thinkingAllowedFor(band: "child" | "teen" | "adult"): boolean { return band === "adult"; }
 

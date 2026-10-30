@@ -9840,6 +9840,92 @@
         }
       }
     },
+    "/stack/v1/capabilities": {
+      "get": {
+        "tags": [
+          "Capabilities"
+        ],
+        "summary": "What each category can run at each level on this computer (MEM-SPACE-06)",
+        "description": "One row per category and level (Standard, Boost, Max). `machine_class` is this computer's profile, or `unknown` when it is too small for any profile, in which case no row fits.",
+        "responses": {
+          "200": {
+            "description": "The capability rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "machine_class": {
+                      "type": "string"
+                    },
+                    "total_bytes": {
+                      "type": "number"
+                    },
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "category": {
+                            "type": "string",
+                            "enum": [
+                              "chat",
+                              "image",
+                              "video",
+                              "music",
+                              "voice"
+                            ]
+                          },
+                          "tier": {
+                            "type": "string",
+                            "enum": [
+                              "standard",
+                              "boost",
+                              "max"
+                            ]
+                          },
+                          "fits_ever": {
+                            "type": "boolean",
+                            "description": "Whether the level's pick could ever be admitted on this computer, with everything else idle."
+                          },
+                          "needs_bytes": {
+                            "type": "number",
+                            "nullable": true,
+                            "description": "The pick's peak memory, or the smallest catalogued peak for the level when nothing fits; null when the level has no model."
+                          },
+                          "cap_bytes": {
+                            "type": "number",
+                            "description": "The most memory this level may hold on this computer."
+                          },
+                          "model": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "The model the level would use, or null when none fits or the level has no model."
+                          }
+                        },
+                        "required": [
+                          "category",
+                          "tier",
+                          "fits_ever",
+                          "needs_bytes",
+                          "cap_bytes",
+                          "model"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "machine_class",
+                    "total_bytes",
+                    "rows"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/memory": {
       "get": {
         "tags": [
@@ -10031,6 +10117,37 @@
                         "processes"
                       ]
                     },
+                    "dev_load": {
+                      "type": "object",
+                      "properties": {
+                        "others_bytes": {
+                          "type": "number"
+                        },
+                        "processes": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "bytes": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "bytes"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "others_bytes",
+                        "processes"
+                      ],
+                      "description": "MEM-SPACE-05: what other programs hold beside the Stack. `processes` names the big ones (name and bytes only) and is empty when nothing is flagged."
+                    },
                     "top_consumers": {
                       "type": "array",
                       "items": {
@@ -10159,11 +10276,104 @@
                     "ledger",
                     "memory",
                     "stack",
+                    "dev_load",
                     "top_consumers",
                     "non_stack_bytes",
                     "isolation",
                     "recent_actions",
                     "history"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/memory/reclaim": {
+      "get": {
+        "tags": [
+          "Memory"
+        ],
+        "summary": "What the Stack could unload right now to make space (MEM-SPACE-03)",
+        "description": "Idle items the Stack loaded itself, in the order they would go: finished burst workers first, then idle warm models. Never chat, never an item in use, never a process the Stack does not own. A warm item is listed only after 2 minutes idle; the bytes still inside that grace are in `held_for_grace_bytes`. Ids and byte counts only.",
+        "responses": {
+          "200": {
+            "description": "The items that could go now.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "reserved",
+                              "warm",
+                              "burst"
+                            ]
+                          },
+                          "bytes": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "bytes"
+                        ]
+                      }
+                    },
+                    "total_bytes": {
+                      "type": "number"
+                    },
+                    "held_for_grace_bytes": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "total_bytes",
+                    "held_for_grace_bytes"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Memory"
+        ],
+        "summary": "Unload the idle items to make space (MEM-SPACE-04)",
+        "description": "Unloads what `GET /reclaim` lists, one at a time. An item that became busy stays loaded and is not counted. A second call while one is running unloads nothing.",
+        "responses": {
+          "200": {
+            "description": "How many items were unloaded and the memory they held.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "unloaded": {
+                      "type": "number"
+                    },
+                    "freed_bytes": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "unloaded",
+                    "freed_bytes"
                   ]
                 }
               }

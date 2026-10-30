@@ -296,24 +296,28 @@ export interface EvictionRoom {
   fitsCap?: boolean;
 }
 
+const classRank: Record<GovernorClass, number> = { reserved: 0, warm: 1, burst: 2 };
+/** The memory note's 4.3 order inside a class: finished burst workers first, then warm items from cheapest to dearest to reload. */
+const evictionRank = (item: LoadedInternal): number => {
+  if (item.class === "burst") return item.id.includes("tool") ? 1 : 0;
+  if (item.id.includes("vision")) return 1;
+  if (item.id.includes("edit")) return 2;
+  if (item.id.includes("coding")) return 3;
+  return 4;
+};
+
+const byEvictionOrder = (a: LoadedInternal, b: LoadedInternal): number => classRank[b.class] - classRank[a.class] || evictionRank(a) - evictionRank(b) || new Date(a.lastUsedAt).getTime() - new Date(b.lastUsedAt).getTime();
+
 /** Room a request could use after eligible idle items are unloaded. */
 export function roomAfterEviction(request: GovernorRequest, busy: (id: string) => boolean = () => false, now = Date.now()): EvictionRoom {
   const targetClass = requestClass(request);
-  const classRank: Record<GovernorClass, number> = { reserved: 0, warm: 1, burst: 2 };
-  const evictionRank = (item: LoadedInternal): number => {
-    if (item.class === "burst") return item.id.includes("tool") ? 1 : 0;
-    if (item.id.includes("vision")) return 1;
-    if (item.id.includes("edit")) return 2;
-    if (item.id.includes("coding")) return 3;
-    return 4;
-  };
   const candidates = [...loaded.values()].filter((item) => {
     if (item.class === "reserved" || item.pinned || item.evicting || item.kind === "generator" || busy(item.id)) return false;
     const warmGracePassed = item.class === "warm" && now - new Date(item.lastUsedAt).getTime() >= GovernorRules.warmEvictionGraceMs;
     if (classRank[item.class] < classRank[targetClass] && !warmGracePassed) return false;
     if (item.class === "warm" && !warmGracePassed) return false;
     return true;
-  }).sort((a, b) => classRank[b.class] - classRank[a.class] || evictionRank(a) - evictionRank(b) || new Date(a.lastUsedAt).getTime() - new Date(b.lastUsedAt).getTime());
+  }).sort(byEvictionOrder);
   let roomBytes = admissionRoomBytes();
   const evictionOrder: string[] = [];
   for (const item of candidates) {
@@ -327,6 +331,26 @@ export function roomAfterEvictionForTier(request: GovernorRequest, busy: (id: st
   const fit = fitsEverForTier(request);
   return { ...room, capBytes: fit.capBytes, fitsCap: room.roomBytes >= fit.peakBytes && fit.peakBytes <= fit.capBytes };
 }
+
+export interface ReclaimItem { id: string; kind: GovernorClass; bytes: number }
+/** MEM-SPACE-03: the idle items the Stack owns that an unload could free right now, in eviction order. Reserved items (chat), pinned items, items already leaving, generators and busy items are never listed; a warm item is listed only once idle past the 2 minute grace, and the bytes still inside it are reported apart. Ids and byte counts only. */
+export function reclaimableItems(busy: (id: string) => boolean = () => false, now = Date.now()): { items: ReclaimItem[]; heldForGraceBytes: number } {
+  let heldForGraceBytes = 0;
+  const eligible = [...loaded.values()].filter((item) => {
+    // Only what an unload can actually stop: jit roles and the picture worker, the same set the poll evicts.
+    if (!(item.kind === "jit" || item.id === "image-pool")) return false;
+    if (item.class === "reserved" || item.pinned || item.evicting || item.kind === "generator" || busy(item.id)) return false;
+    if (item.class === "warm" && now - new Date(item.lastUsedAt).getTime() < GovernorRules.warmEvictionGraceMs) { heldForGraceBytes += item.peakBytes; return false; }
+    return true;
+  }).sort(byEvictionOrder);
+  return { items: eligible.map((item) => ({ id: item.id, kind: item.class, bytes: item.peakBytes })), heldForGraceBytes };
+}
+/** Marks an item as leaving so the poll and admission leave it alone while a caller unloads it; false when it is gone or already leaving. */
+export function beginEvicting(id: string): boolean { const item = loaded.get(id); if (!item || item.evicting) return false; item.evicting = true; return true; }
+/** Clears the leaving mark after an unload that did not happen. */
+export function cancelEvicting(id: string): void { const item = loaded.get(id); if (item) item.evicting = false; }
+/** Unloads the image worker through its service; false when none is registered or it declined (busy). */
+export async function unloadImagePool(): Promise<boolean> { return imagePoolUnload ? Boolean(await imagePoolUnload()) : false; }
 
 export function peakFor(request: GovernorRequest): { bytes: number; measured: boolean } {
   let base: number;

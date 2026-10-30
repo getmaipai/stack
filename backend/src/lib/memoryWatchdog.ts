@@ -186,6 +186,8 @@ export interface MemoryReport {
   ledger: { reserved_bytes: number; warm_bytes: number; burst_bytes: number; budget_bytes: number; working_margin_bytes: number; free_bytes: number; queue_depth: { reserved: number; warm: number; burst: number }; chat_paged_out: boolean };
   memory: { total_bytes: number; available_bytes: number; free_bytes: number; wired_bytes: number; compressor_bytes: number; swap_used_bytes: number; swap_total_bytes: number; swap_growth_bytes_30s: number; pressure_level: number; pressure: string; sampled_at: string } | null;
   stack: { bytes: number; processes: Array<{ pid: number; name: string; bytes: number }> };
+  /** MEM-SPACE-05: what other programs hold beside the Stack, with the big ones named (name and bytes only, never a pid or folder). Empty list when nothing is flagged. */
+  dev_load: { others_bytes: number; processes: Array<{ name: string; bytes: number }> };
   top_consumers: TopConsumer[];
   non_stack_bytes: number;
   recent_actions: Array<{ at: string; level: WatchdogLevel; action: string; detail: string }>;
@@ -193,6 +195,7 @@ export interface MemoryReport {
 }
 
 export class MemoryWatchdog {
+  private devLoad: MemoryReport["dev_load"] = { others_bytes: 0, processes: [] };
   private sampler: SystemSampler;
   private actions: WatchdogActions;
   private now: () => number;
@@ -259,7 +262,7 @@ export class MemoryWatchdog {
       this.ticks++;
       const tight = memoryLevel() !== "normal";
       if (tight || this.ticks % WatchdogRules.processEvery === 1) this.rows = this.sampler.processes();
-      if (!watchdogEnabled() || sample.degraded) { if (memoryLevel() !== "normal") this.leave(); return; }
+      if (!watchdogEnabled() || sample.degraded) { this.devLoad = { others_bytes: 0, processes: [] }; if (memoryLevel() !== "normal") this.leave(); return; }
       const reserve = reserveBytes(sample.totalBytes);
       const previous = this.ladder.level;
       this.ladder = stepLadderForChatPageout(this.ladder, { sample, swapGrowthBytes: this.swapGrowth(), reserve }, chatPagedOut());
@@ -346,12 +349,13 @@ export class MemoryWatchdog {
 
   /** Developer protection: name the programs that hold the memory. Nothing is stopped. */
   private devProtection(): void {
-    if (this.rows.length === 0) return;
+    if (this.rows.length === 0) { this.devLoad = { others_bytes: 0, processes: [] }; return; }
     const tree = descendantsOf(this.rows, liveStackRoots(this.rows, this.ownPid));
     const others = this.rows.filter((row) => !tree.has(row.pid));
     const sum = others.reduce((total, row) => total + row.rssBytes, 0);
     const big = others.filter((row) => row.rssBytes > WatchdogRules.devSingleBytes);
     const flagged = big.length > 0 ? big : sum > WatchdogRules.devSumBytes ? [...others].sort((a, b) => b.rssBytes - a.rssBytes).slice(0, 5) : [];
+    this.devLoad = { others_bytes: sum, processes: flagged.map((row) => ({ name: row.name, bytes: row.rssBytes })) };
     if (flagged.length === 0) return;
     const key = big.length > 0 ? "single" : "sum";
     const now = this.now();
@@ -411,6 +415,7 @@ export class MemoryWatchdog {
       ledger: { reserved_bytes: classBytes.reserved, warm_bytes: classBytes.warm, burst_bytes: classBytes.burst, budget_bytes: governor.capBytes, working_margin_bytes: governor.marginBytes, free_bytes: governor.freeMemoryBytes, queue_depth: queueDepth, chat_paged_out: chatPagedOut() },
       memory: sample ? { total_bytes: sample.totalBytes, available_bytes: sample.availableBytes, free_bytes: sample.freeBytes, wired_bytes: sample.wiredBytes, compressor_bytes: sample.compressorBytes, swap_used_bytes: sample.swapUsedBytes, swap_total_bytes: sample.swapTotalBytes, swap_growth_bytes_30s: growth, pressure_level: sample.pressureLevel, pressure: sample.pressure, sampled_at: new Date(sample.at).toISOString() } : null,
       stack: { bytes: own.reduce((total, row) => total + row.rssBytes, 0), processes: own.sort((a, b) => b.rssBytes - a.rssBytes).slice(0, 10).map((row) => ({ pid: row.pid, name: row.name, bytes: row.rssBytes })) },
+      dev_load: this.devLoad,
       top_consumers: this.consumers(),
       non_stack_bytes: this.rows.filter((row) => !tree.has(row.pid)).reduce((total, row) => total + row.rssBytes, 0),
       recent_actions: recentActions(),
