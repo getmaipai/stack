@@ -1915,7 +1915,8 @@ async function startVoiceWithFallback(modelId?: string): Promise<RoleProcess> {
  * to that role's process. */
 export async function getProcess(requested: RoleId, modelId?: string): Promise<RoleProcess> {
   const role = processRoleFor(requested);
-  while (reducedSwapRunning && !reducedSwapContext.getStore() && ["chat", "judge", "router"].includes(requested)) await new Promise((resolve) => setTimeout(resolve, 10));
+  const swapWaitUntil = Date.now() + 5 * 60_000;
+  while (reducedSwapRunning && Date.now() < swapWaitUntil && !reducedSwapContext.getStore() && ["chat", "judge", "router"].includes(requested)) await new Promise((resolve) => setTimeout(resolve, 10));
   if (getRunState() !== "running") throw new EngineUnavailableError("The Stack is paused.");
   const current = runtime(role);
   if (current.manuallyStopped) throw new EngineUnavailableError(`The ${role} engine was stopped.`);

@@ -88,3 +88,19 @@ test("a queued job waits for the picture pool's 2 minute idle grace and the recl
   expect(unloaded).toContain("image-pool");
   expect(getReclaimSteps("video-job").map((step) => step.step)).toContain("evict_pool");
 });
+
+test("a retained warm pool is not a burst and pauseAll closes a Max window", async () => {
+  const pool = await admit({ id: "image-pool", kind: "generator", class: "warm", requestedBytes: 20 * GB, retainWarm: true, tier: "boost" }) as GovernorHandle;
+  release(pool);
+  expect(getGovernorStatus().loaded[0]?.tier).toBeUndefined();
+  const next = await admit({ id: "boost-next", kind: "generator", class: "burst", requestedBytes: 10 * GB, tier: "boost" });
+  expect("queued" in (next as object)).toBe(false);
+  release(next as GovernorHandle);
+  const running = await admit({ id: "run", kind: "generator", class: "burst", requestedBytes: 10 * GB }) as GovernorHandle;
+  await admit({ id: "max-job", kind: "generator", class: "burst", requestedBytes: 40 * GB, tier: "max" });
+  expect(getMaxWindow().state).toBe("draining");
+  const { pauseAll } = await import("@/lib/governor");
+  await pauseAll();
+  expect(getMaxWindow().state).toBe("none");
+  void running;
+});

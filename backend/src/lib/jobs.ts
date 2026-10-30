@@ -328,7 +328,7 @@ async function admitJob(jobId: string, request: GovernorRequest): Promise<Govern
     const latest = getReclaimSteps(request.id).at(-1);
     const maxWaiting = getGovernorStatus().queue.some((entry) => entry.id !== request.id && entry.tier === "max");
     const status = maxWaiting ? "A Max job is waiting for the computer. This one starts after it." : latest?.step === "pool_idle_wait" ? "Waiting for the picture model to go idle (up to 2 minutes), then making room." : latest?.step === "evict_pool" ? "Put the picture model away to make room." : latest?.step === "evict_idle" ? "Put an idle model away to make room." : latest?.step === "window_drain" ? "Waiting for running jobs to finish before the Max job starts." : generatorsHeldByMode() ? HELD_BY_MODE_TEXT : waitingText(peak, answer.position);
-    updateJob(jobId, { status });
+    if (getJob(jobId)?.status !== status) updateJob(jobId, { status });
   };
   refreshQueuedStatus();
   const statusTimer = setInterval(refreshQueuedStatus, 100);

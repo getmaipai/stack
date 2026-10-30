@@ -416,7 +416,7 @@ function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
   const existing = loaded.get(request.id);
   const generatorBusy = request.kind === "generator" && [...loaded.values()].some((item) => item.kind === "generator" && item !== existing);
   if (generatorBusy) return false;
-  if ((request.tier === "boost" || request.tier === "max") && [...loaded.values()].some((item) => item.tier === "boost" || item.tier === "max")) return false;
+  if ((request.tier === "boost" || request.tier === "max") && [...loaded.values()].some((item) => item !== existing && (item.tier === "boost" || item.tier === "max"))) return false;
   const cap = effectiveCapBytes();
   const growth = Math.max(0, peakBytes - (existing?.peakBytes ?? 0));
   if (loadedBytes() + growth > cap) return false;
@@ -522,6 +522,7 @@ export function setRunState(next: RunState): void {
 export async function pauseAll(): Promise<void> {
   if (runState === "paused") return;
   setRunState("pausing");
+  closeMaxWindow();
   queue.length = 0;
   for (const item of [...loaded.values()]) loaded.delete(item.id);
   setRunState("paused");
@@ -564,6 +565,7 @@ export function release(handle: GovernorHandle): void {
   reclaimSteps.delete(handle.id);
   if (maxWindow.ownerId === handle.id) closeMaxWindow();
   if (handle.retainWarm) {
+    delete item.tier;
     item.kind = "jit";
     item.class = "warm";
     item.idleTtlSeconds = idleTtlOverrides.get(item.id) ?? tuning.idleTtlSeconds;
