@@ -207,7 +207,7 @@ test("a video clip holding the generator admission makes a picture wait, never r
   expect(response.status).toBe(202);
   const job = ((await response.json()) as { job: string }).job;
   await Bun.sleep(40);
-  expect((await (await get(`/v1/images/generations/${job}`)).json() as { phase: string }).phase).toBe("waiting for memory");
+  expect((await (await get(`/v1/images/generations/${job}`)).json() as { phase: string }).phase).toBe("Waiting for memory to free up");
   expect(requests).toHaveLength(0);
 });
 
