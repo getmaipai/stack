@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { STACK_IMAGE_ERNIE_ID, STACK_IMAGE_KLEIN_ID, STACK_IMAGE_ZIMAGE_ID, STACK_MUSIC_MODEL_ID, STACK_VIDEO_DETAILED_MODEL_ID, STACK_VIDEO_MODEL_ID } from "@/lib/modelCatalog";
 import { customPickRefusal, minorTierClamp, resolveLadder, resolveTier, thinkingAllowedFor, TIER_CANDIDATES } from "@/lib/tiers";
 
 const GB = 1_000_000_000;
@@ -50,6 +51,11 @@ describe("tier resolver", () => {
     expect(resolveLadder("pictures", "p64", 24 * GB, { boost: { model: "off" } })[1]?.hiddenReason).toBe("off");
     expect(customPickRefusal({ category: "pictures", tier: "standard", profile: "p64", roomBytes: 40 * GB, model: "z-image-turbo" })).toBe("This needs 26 GB. Standard keeps Home free, so it can't hold it. Use Boost or Max.");
     expect(customPickRefusal({ category: "pictures", tier: "standard", profile: "p64", roomBytes: 48 * GB, model: "z-image-turbo" })).toBeNull();
+  });
+
+  test("candidate ids match the catalog constants", () => {
+    const ids = new Set(TIER_CANDIDATES.map((candidate) => candidate.id));
+    for (const id of [STACK_IMAGE_ERNIE_ID, STACK_IMAGE_KLEIN_ID, STACK_IMAGE_ZIMAGE_ID, STACK_MUSIC_MODEL_ID, STACK_VIDEO_DETAILED_MODEL_ID, STACK_VIDEO_MODEL_ID]) expect(ids.has(id)).toBe(true);
   });
 
   test("exports complete candidates and minor rules", () => {

@@ -1,4 +1,10 @@
-import { STACK_IMAGE_ERNIE_ID, STACK_IMAGE_KLEIN_ID, STACK_IMAGE_ZIMAGE_ID, STACK_MUSIC_MODEL_ID, STACK_VIDEO_DETAILED_MODEL_ID, STACK_VIDEO_MODEL_ID } from "@/lib/modelCatalog";
+// Ids are literals, not imports from modelCatalog: the governor imports this file, and the catalog reaches the governor through settings (an import cycle). tests/tiers.test.ts checks each literal against the catalog constant.
+const STACK_IMAGE_ERNIE_ID = "ernie-image-turbo";
+const STACK_IMAGE_KLEIN_ID = "flux2-klein-4b";
+const STACK_IMAGE_ZIMAGE_ID = "z-image-turbo";
+const STACK_MUSIC_MODEL_ID = "ace-step-1-5-turbo";
+const STACK_VIDEO_DETAILED_MODEL_ID = "ltx-2-3-distilled-mlx";
+const STACK_VIDEO_MODEL_ID = "fastwan2-2-ti2v-5b-mlx-bf16";
 
 export type TierId = "reduced" | "standard" | "boost" | "max";
 export type TierCategory = "chat" | "pictures" | "video" | "music" | "voice";
