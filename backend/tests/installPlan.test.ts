@@ -158,7 +158,7 @@ test("route: the plan's coding model carries removable: true in the response", a
   const entries = body.models.filter((model) => model.id === "qwen3.8-27b-ud-q4-k-m");
   // The route sizes from the real machine first; the override only applies when none is detected, so assert the shape either way.
   for (const entry of entries) expect(entry.removable).toBe(true);
-  expect(body.models.filter((model) => model.removable).every((model) => model.id === "qwen3.8-27b-ud-q4-k-m" || model.id === "qwen3.8-27b-dflash2-draft")).toBe(true);
+  expect(body.models.filter((model) => model.removable).every((model) => model.id === "qwen3.8-27b-ud-q4-k-m" || model.id === "qwen3.8-27b-dflash2-draft" || model.id === "qwen3-vl-4b-instruct-q4-k-m")).toBe(true);
 });
 
 test("plan: stt is Parakeet alone on p64 and p128, Moonshine alone on p16 and p32 (STT-PARAKEET-03)", () => {
