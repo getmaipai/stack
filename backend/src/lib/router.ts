@@ -6,6 +6,7 @@ import { ROLE_IDS, READY_TTL_MS, type RoleId, type RoleState, type RoleStateReco
 import { identityHeaders } from "@/lib/identity";
 import { getModel, isModelSelectable } from "@/lib/modelStore";
 import { codingCannotFitReason, getRoleStatus, identityCheck, lastRealRequestAt, processRoleFor, selectedModel } from "@/lib/supervisor";
+import { getReducedChatState } from "@/lib/reducedChat";
 import { videoRoleState } from "@/video/videoGen";
 import { musicRoleState } from "@/music/musicGen";
 import { imageEngineActive, imageRoleState } from "@/images/imageEngine";
@@ -61,6 +62,12 @@ function flatState(role: RoleId): RoleState {
 
 export function resolveRoleState(role: RoleId): RoleStateRecord {
   if (homeModeSwitching() && ["chat", "judge", "router"].includes(role)) return { state: "loaded", since: new Date().toISOString(), cause: "mode_change" };
+  const reduced = getReducedChatState();
+  if ((reduced === "entering" || reduced === "leaving") && ["chat", "judge", "router"].includes(role)) return { state: "loaded", since: new Date().toISOString(), cause: "mode_change" };
+  if (reduced === "reduced" && ["chat", "judge", "router"].includes(role)) {
+    const flat = flatState(role);
+    if (flat === "ready") return { state: "ready", since: new Date().toISOString(), cause: "tier_reduced" };
+  }
   // The video role has no process the supervisor spawns: its worker lives in the video service.
   if (role === "video") return videoRoleState();
   // The music role likewise: its worker lives in the music service.

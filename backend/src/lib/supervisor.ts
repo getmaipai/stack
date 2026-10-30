@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 // The per-role supervisor: one process per role binding, three kinds
 // (spawned by the Stack, a managed sidecar, a read-only url the person
 // runs), one lifecycle. The pieces that were paid for in the chat-only
@@ -57,6 +58,7 @@ import { getGovernorStatus } from "@/lib/governor";
 import { codingPauseBoundMs, heavyGate, isolationRules, PausableProcess, setProtectedPidProvider, type Lease, type PausableWorker } from "@/lib/heavyGate";
 import { readMlxKvBytesPerToken } from "@/lib/mlxMemory";
 import { currentHomeMode, homeModeEnteringCoding, homeModeLeavingCoding, homeModeSwitching } from "@/lib/homeMode";
+import { getReducedChatState, reducedChatForcesLight, reducedChatModels, resetReducedChatForTests, setReducedChatModels, setReducedChatState } from "@/lib/reducedChat";
 
 export type EngineKind = "spawned" | "managed" | "url";
 export type EngineStatus = RoleState | "loading" | "busy" | "stopped";
@@ -71,6 +73,8 @@ export interface RoleStatus {
   slots?: number | null;
   contextScope?: "total across slots" | "per slot" | null;
 }
+
+export type RoleStateCause = "mode_change" | "tier_reduced";
 
 export interface PostLoadCheck {
   replyOk: boolean;
@@ -176,6 +180,70 @@ export function emitHomeModeTransition(): void {
 }
 export function emitHomeModeReady(): void {
   for (const role of ["chat", "judge", "router"] as const) if (getRoleStatus(role).state === "ready") emitRoleState(role, "ready", undefined, "mode_change");
+}
+
+export function emitReducedChatReady(): void {
+  for (const role of ["chat", "judge", "router"] as const) if (getRoleStatus(role).state === "ready") emitRoleState(role, "ready", undefined, "tier_reduced");
+}
+
+let reducedSwapRunning = false;
+/** Marks the swap's own starts, so they do not wait on the swap they belong to. */
+const reducedSwapContext = new AsyncLocalStorage<true>();
+
+/** Reduced is system applied between chat turns; Home owns minors' floors because the Stack knows no person. */
+export function reducedVoiceAllowed(): false { return false; }
+
+export function enterReducedChat(): Promise<{ ok: true; swapMs: number } | { ok: false; waiting: true } | { ok: false; reason: string }> { return reducedSwapContext.run(true, enterReducedChatInner); }
+async function enterReducedChatInner(): Promise<{ ok: true; swapMs: number } | { ok: false; waiting: true } | { ok: false; reason: string }> {
+  if (currentHomeMode() === "coding") return { ok: false, reason: "Reduced chat is unavailable while coding mode is active." };
+  if (getReducedChatState() !== "off") return { ok: false, reason: "A Reduced chat change is already in progress." };
+  const lightId = (machineTier ? PROFILE_MODEL_BINDINGS[machineTier]?.judge : undefined) ?? PROFILE_MODEL_BINDINGS.p32?.judge;
+  const light = lightId ? getModel(lightId) : null;
+  if (!light || !isModelSelectable(light) || !light.modelPath || !["llama-server", "mlx-serve"].includes(String(light.engineRequirements.engine ?? "llama-server"))) return { ok: false, reason: "The smaller chat model is not installed and selectable." };
+  const roles = [...new Set(["chat", "judge", "router"].map((role) => processRoleFor(role as RoleId)))];
+  if (roles.some((role) => (runtime(role).process?.activeRequests ?? 0) > 0)) return { ok: false, waiting: true };
+  if (reducedSwapRunning) return { ok: false, reason: "A Reduced chat change is already in progress." };
+  reducedSwapRunning = true;
+  const previousModels = new Map(roles.map((role) => [role, runtime(role).process?.modelId ?? selectedModel(role)?.id ?? ""]));
+  const startedAt = Date.now();
+  setReducedChatState("entering");
+  emitHomeModeTransition();
+  try {
+    for (const role of roles) { await recycleRole(role, "tier-reduced-enter"); const proc = await getProcess(role, light.id); if (proc.modelId !== light.id) throw new Error("The smaller model did not load."); }
+    setReducedChatModels(previousModels);
+    setReducedChatState("reduced");
+    emitReducedChatReady();
+    return { ok: true, swapMs: Date.now() - startedAt };
+  } catch {
+    setReducedChatState("off");
+    try { for (const role of roles) { await recycleRole(role, "tier-reduced-rollback"); await getProcess(role, previousModels.get(role) || undefined); } } catch { /* Existing self-heal owns a failed rollback start. */ }
+    emitHomeModeReady();
+    return { ok: false, reason: "Chat could not switch to the smaller model, so it stayed on the standard one." };
+  } finally { reducedSwapRunning = false; }
+}
+
+export function leaveReducedChat(): Promise<{ ok: true; swapMs: number } | { ok: false; waiting: true } | { ok: false; reason: string }> { return reducedSwapContext.run(true, leaveReducedChatInner); }
+async function leaveReducedChatInner(): Promise<{ ok: true; swapMs: number } | { ok: false; waiting: true } | { ok: false; reason: string }> {
+  if (getReducedChatState() !== "reduced") return { ok: false, reason: "Chat is not in the Reduced state." };
+  const roles = [...new Set(["chat", "judge", "router"].map((role) => processRoleFor(role as RoleId)))];
+  if (roles.some((role) => (runtime(role).process?.activeRequests ?? 0) > 0)) return { ok: false, waiting: true };
+  if (reducedSwapRunning) return { ok: false, reason: "A Reduced chat change is already in progress." };
+  reducedSwapRunning = true;
+  const workingModels = reducedChatModels();
+  const startedAt = Date.now();
+  setReducedChatState("leaving");
+  emitHomeModeTransition();
+  try {
+    for (const role of roles) { await recycleRole(role, "tier-reduced-leave"); await getProcess(role); }
+    setReducedChatState("off");
+    emitHomeModeReady();
+    return { ok: true, swapMs: Date.now() - startedAt };
+  } catch {
+    setReducedChatState("reduced");
+    try { for (const role of roles) { await recycleRole(role, "tier-reduced-rollback"); await getProcess(role, workingModels.get(role) || selectedModel(role)?.id); } } catch { /* Existing self-heal owns a failed rollback start. */ }
+    for (const role of ["chat", "judge", "router"] as const) if (getRoleStatus(role).state === "ready") emitRoleState(role, "ready", undefined, "tier_reduced");
+    return { ok: false, reason: "Chat could not return to its standard model, so it stayed on the smaller one." };
+  } finally { reducedSwapRunning = false; }
 }
 
 // ---- the client -----------------------------------------------------------
@@ -479,7 +547,7 @@ setProtectedPidProvider(() => [...runtimes.values()].map((current) => current.pr
 const lastRoleStateLog = new Map<RoleId, string>();
 const requestLocks = new Map<RoleId, Promise<void>>();
 
-function emitRoleState(role: RoleId, state: RoleState, reason?: string, cause?: string): void {
+function emitRoleState(role: RoleId, state: RoleState, reason?: string, cause?: RoleStateCause): void {
   const signature = `${state}\n${reason ?? ""}\n${cause ?? ""}`;
   if (lastRoleStateLog.get(role) === signature) return;
   lastRoleStateLog.set(role, signature);
@@ -821,6 +889,11 @@ export function selectedModel(role: RoleId): ModelRecord | null {
   if (role === "coding" && currentHomeMode() === "coding") {
     const heavy = getModel(STACK_CODING_HEAVY_MODEL.id);
     return heavy && isModelSelectable(heavy) && !!heavy.modelPath ? heavy : null;
+  }
+  if (reducedChatForcesLight() && ["chat", "judge", "router"].includes(role)) {
+    const lightId = (machineTier ? PROFILE_MODEL_BINDINGS[machineTier]?.judge : undefined) ?? PROFILE_MODEL_BINDINGS.p32?.judge;
+    const light = lightId ? getModel(lightId) : null;
+    return light && isModelSelectable(light) && !!light.modelPath && ["llama-server", "mlx-serve"].includes(String(light.engineRequirements.engine ?? "llama-server")) ? light : null;
   }
   if (role === "judge" && (!machineTier || !PROFILE_MODEL_BINDINGS[machineTier]?.judge)) return selectedModel("chat");
   // A record names the engine it is for; the chat wire's chosen engine
@@ -1842,6 +1915,7 @@ async function startVoiceWithFallback(modelId?: string): Promise<RoleProcess> {
  * to that role's process. */
 export async function getProcess(requested: RoleId, modelId?: string): Promise<RoleProcess> {
   const role = processRoleFor(requested);
+  while (reducedSwapRunning && !reducedSwapContext.getStore() && ["chat", "judge", "router"].includes(requested)) await new Promise((resolve) => setTimeout(resolve, 10));
   if (getRunState() !== "running") throw new EngineUnavailableError("The Stack is paused.");
   const current = runtime(role);
   if (current.manuallyStopped) throw new EngineUnavailableError(`The ${role} engine was stopped.`);
@@ -2372,6 +2446,8 @@ export function resetSupervisorForTests(): void {
   clearTtsEngineFailures();
   for (const current of runtimes.values()) current.generation++;
   runtimes.clear();
+  reducedSwapRunning = false;
+  resetReducedChatForTests();
   lastRoleStateLog.clear();
   pinnedModels.clear();
   preferredModels.clear();
