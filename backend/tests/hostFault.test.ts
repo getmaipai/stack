@@ -40,3 +40,11 @@ test("self-heal waits for a host fault without counting failures or opening the 
   expect(item?.text).toContain("tries again every");
   expect(timers.filter((timer) => !timer.cancelled).length).toBe(1);
 });
+
+test("GET /stack/v1/engines/gpu-health reports one compile: ok when it answers, the sentence when it does not", async () => {
+  const { app } = await import("@/app");
+  setMetalProbeForTests(async () => null);
+  expect(await (await app.request("/stack/v1/engines/gpu-health")).json()).toEqual({ ok: true, reason: null });
+  setMetalProbeForTests(async () => METAL_COMPILER_SENTENCE);
+  expect(await (await app.request("/stack/v1/engines/gpu-health")).json()).toEqual({ ok: false, reason: METAL_COMPILER_SENTENCE });
+});

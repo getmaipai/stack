@@ -25,6 +25,7 @@ import { readSettings } from "@/settings";
 import { createJob, finishJob, getJob, jobSignal, updateJob } from "@/lib/jobs";
 import { emit } from "@/lib/events";
 import { requestEngineRestart, selfHealSummary } from "@/lib/selfHeal";
+import { metalHostFault } from "@/lib/hostProbe";
 import { ROLE_IDS } from "@/roles";
 import { EngineIndexEntrySchema } from "@/updates/catalog";
 
@@ -54,6 +55,8 @@ const environmentJobs = new Map<string, string>();
 const HealEventSchema = z.object({ id: z.string(), kind: z.enum(["crashed", "healed", "gave_up", "requested_by_canary"]), at: z.string(), role: z.string(), cause: z.string(), causeKind: z.string(), seconds: z.number().optional(), crashedAt: z.string().optional(), attempts: z.number().optional() });
 const selfHealRoute = createRoute({ method: "get", path: "/self-heal", tags: ["Engines"], summary: "Engine crashes and the Stack's own restarts", description: "Crashes per day, the recent crash, restart and gave-up events (each with a stable id so a caller notifies once), the roles whose retries stopped, and the roles being restarted now.", responses: { 200: { content: { "application/json": { schema: z.object({ enabled: z.boolean(), crashesByDay: z.array(z.object({ day: z.string(), crashes: z.number(), healed: z.number(), gaveUp: z.number() })), events: z.array(HealEventSchema), stopped: z.array(z.string()), healing: z.array(z.string()), blocker: z.string().nullable() }) } }, description: "The record." } } });
 enginesRoutes.openapi(selfHealRoute, (c) => c.json(selfHealSummary(), 200));
+const gpuHealthRoute = createRoute({ method: "get", path: "/gpu-health", tags: ["Engines"], summary: "Whether the Mac's graphics compiler answers (GPU-HEALTH-01)", description: "Compiles one tiny shader through the same compiler service the engines use. `ok` is false with the household sentence in `reason` when it does not answer; a Mac that cannot be asked reads ok.", responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.boolean(), reason: z.string().nullable() }) } }, description: "The result of one compile." } } });
+enginesRoutes.openapi(gpuHealthRoute, async (c) => { const reason = await metalHostFault("llama-server"); return c.json({ ok: reason === null, reason }, 200); });
 const restartRequestRoute = createRoute({ method: "post", path: "/self-heal/restart", tags: ["Engines"], summary: "A health check asks for one engine restart", description: "Goes through the self-heal gate, backoff and circuit breaker like a crash and counts as one failure; it never resets the breaker. Answers 200 with accepted false when self-heal is off, the circuit is open or a retry is pending.", request: { body: { content: { "application/json": { schema: z.object({ role: z.string(), reason: z.string().max(200) }) } } } }, responses: { 200: { content: { "application/json": { schema: z.object({ accepted: z.boolean(), why: z.string().nullable() }) } }, description: "The outcome." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown role." } } });
 enginesRoutes.openapi(restartRequestRoute, async (c) => {
   const { role, reason } = c.req.valid("json");
