@@ -7,7 +7,7 @@ import { basename, join } from "node:path";
 import { createJob, finishJob, getJob, jobSignal, updateJob } from "@/lib/jobs";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { getModel, installCatalogModel, isModelSelectable, reconcilePinDeclarations, type CatalogModelLike, type DownloadModelOptions } from "@/lib/modelStore";
-import { STACK_MODELS } from "@/lib/modelCatalog";
+import { STACK_MODELS, STACK_STEMS_MODELS } from "@/lib/modelCatalog";
 import { modelsDir } from "@/lib/paths";
 import { restartForNewChatEngine, restartForNewProjector } from "@/lib/supervisor";
 import { warmUp } from "@/lib/warmup";
@@ -40,7 +40,7 @@ export function startModelInstall(model: Pin, role: RoleId, download?: DownloadM
     .then(async (installed) => {
       finishJob(job.id, { ok: true, result: { model: installed.id } });
       if (installed.engineRequirements.component === "projector") {
-        try { reconcilePinDeclarations(STACK_MODELS); await restartForNewProjector(); } catch { /* a restart that fails leaves chat serving; the next start loads it */ }
+        try { reconcilePinDeclarations([...STACK_MODELS, ...STACK_STEMS_MODELS]); await restartForNewProjector(); } catch { /* a restart that fails leaves chat serving; the next start loads it */ }
       }
       // An oMLX model that finishes installing moves an idle llama-server chat onto it once its environment is built too (ENGINE-MLX-01).
       if (installed.engineRequirements.engine === "omlx") await restartForNewChatEngine().catch(() => false);
@@ -60,7 +60,7 @@ function onDisk(id: string): boolean {
  * disk: the upgrade case (VISION-03g), since the install plan only ran in
  * the setup wizard. A model that is not installed brings its own parts
  * when it is installed. */
-export function missingDeclaredParts(pins: readonly CatalogModelLike[] = STACK_MODELS): Pin[] {
+export function missingDeclaredParts(pins: readonly CatalogModelLike[] = [...STACK_MODELS, ...STACK_STEMS_MODELS]): Pin[] {
   const missing: Pin[] = [];
   for (const pin of pins) {
     if (!pin.imageInput || !onDisk(pin.id)) continue;
@@ -73,7 +73,7 @@ export function missingDeclaredParts(pins: readonly CatalogModelLike[] = STACK_M
 /** Pulls each missing declared part with progress, and raises a Repairs
  * item when it cannot (offline, a bad checksum); the item clears when the
  * part installs. Never throws: a missing picture reader never stops chat. */
-export async function pullMissingDeclaredParts(pins: readonly CatalogModelLike[] = STACK_MODELS, download?: DownloadModelOptions["download"]): Promise<string[]> {
+export async function pullMissingDeclaredParts(pins: readonly CatalogModelLike[] = [...STACK_MODELS, ...STACK_STEMS_MODELS], download?: DownloadModelOptions["download"]): Promise<string[]> {
   const started: string[] = [];
   for (const part of missingDeclaredParts(pins)) {
     const code = MISSING_PART_CODE(part.id);

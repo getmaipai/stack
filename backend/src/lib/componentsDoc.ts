@@ -9,7 +9,7 @@ import { POCKET_TTS_CLONING_REVISION, POCKET_TTS_CLONING_WEIGHTS, POCKET_TTS_PRE
 import { FFMPEG_PINS, MEDIA_COMPONENTS } from "@/media/pins";
 import { BUNDLED_RUNTIMES, ENGINE_BINARIES, engineRole, MANAGED_RUNTIMES, type BundledRuntime, type EngineBinaryPin, type ManagedRuntime } from "@/lib/engineCatalog";
 import packageJson from "../../package.json";
-import { ROLE_CANDIDATES, STACK_MODELS, type RoleCandidate } from "@/lib/modelCatalog";
+import { ROLE_CANDIDATES, STACK_MODELS, STACK_STEMS_MODELS, type RoleCandidate } from "@/lib/modelCatalog";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import { PROFILE_MODEL_BINDINGS, PROFILE_TIERS, type ProfileTier } from "@/profiles";
 import { ROLE_IDS, ROLES, type RoleId } from "@/roles";
@@ -33,7 +33,7 @@ export function collectComponentsCatalog(): ComponentsCatalog {
   const shares = Object.fromEntries(ROLE_IDS.flatMap((role) => { const definition = ROLES[role] as { sharesModelWith?: string }; return definition.sharesModelWith ? [[role, definition.sharesModelWith]] : []; }));
   const dependencies = (packageJson as { dependencies?: Record<string, string> }).dependencies ?? {};
   const runtimes = BUNDLED_RUNTIMES.map((runtime) => ({ ...runtime, version: dependencies[runtime.name] ?? "not in package.json" }));
-  return { roles: [...ROLE_IDS], labels: Object.fromEntries(ROLE_IDS.map((role) => [role, ROLES[role].label])), engines: ENGINE_BINARIES, profiles: PROFILE_TIERS, models: STACK_MODELS, candidates: ROLE_CANDIDATES, runtimes, managed: MANAGED_RUNTIMES, shares, bindings: PROFILE_MODEL_BINDINGS };
+  return { roles: [...ROLE_IDS], labels: Object.fromEntries(ROLE_IDS.map((role) => [role, ROLES[role].label])), engines: ENGINE_BINARIES, profiles: PROFILE_TIERS, models: [...STACK_MODELS, ...STACK_STEMS_MODELS], candidates: ROLE_CANDIDATES, runtimes, managed: MANAGED_RUNTIMES, shares, bindings: PROFILE_MODEL_BINDINGS };
 }
 
 const PROFILE_ORDER = ["p16", "p32", "p64", "p128"] as const;

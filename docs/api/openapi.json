@@ -5134,6 +5134,461 @@
         }
       }
     },
+    "/v1/audio/stems": {
+      "post": {
+        "tags": [
+          "Stems"
+        ],
+        "summary": "Split a song made here into stems",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "maxLength": 56000000
+                  },
+                  "source_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-fA-F]{64}$"
+                  },
+                  "model": {
+                    "type": "string",
+                    "enum": [
+                      "htdemucs"
+                    ]
+                  },
+                  "timeout_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true,
+                    "maximum": 1800000
+                  }
+                },
+                "required": [
+                  "source",
+                  "source_sha256",
+                  "model"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stems are ready.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "stem": {
+                            "type": "string",
+                            "enum": [
+                              "vocals",
+                              "drums",
+                              "bass",
+                              "other"
+                            ]
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "content_type": {
+                            "type": "string",
+                            "enum": [
+                              "audio/mp4"
+                            ]
+                          },
+                          "bytes": {
+                            "type": "integer"
+                          },
+                          "sha256": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "stem",
+                          "url",
+                          "content_type",
+                          "bytes",
+                          "sha256"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "job",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "The split is running; poll the job.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "stem": {
+                            "type": "string",
+                            "enum": [
+                              "vocals",
+                              "drums",
+                              "bass",
+                              "other"
+                            ]
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "content_type": {
+                            "type": "string",
+                            "enum": [
+                              "audio/mp4"
+                            ]
+                          },
+                          "bytes": {
+                            "type": "integer"
+                          },
+                          "sha256": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "stem",
+                          "url",
+                          "content_type",
+                          "bytes",
+                          "sha256"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "job",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Source too large.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid source or model.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not installed or unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audio/stems/{job}": {
+      "get": {
+        "tags": [
+          "Stems"
+        ],
+        "summary": "Stem job progress and result",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "phase": {
+                      "type": "string"
+                    },
+                    "progress": {
+                      "type": "number"
+                    },
+                    "progress_fraction": {
+                      "type": "number"
+                    },
+                    "stage_label": {
+                      "type": "string"
+                    },
+                    "position": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "stage": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "eta_seconds": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "code": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "stem": {
+                            "type": "string",
+                            "enum": [
+                              "vocals",
+                              "drums",
+                              "bass",
+                              "other"
+                            ]
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "content_type": {
+                            "type": "string",
+                            "enum": [
+                              "audio/mp4"
+                            ]
+                          },
+                          "bytes": {
+                            "type": "integer"
+                          },
+                          "sha256": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "stem",
+                          "url",
+                          "content_type",
+                          "bytes",
+                          "sha256"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "state",
+                    "phase",
+                    "progress",
+                    "progress_fraction",
+                    "stage_label",
+                    "position",
+                    "stage",
+                    "eta_seconds",
+                    "error",
+                    "code",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Stems"
+        ],
+        "summary": "Cancel or delete a stem job",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cancelled or deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "state"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audio/stems/{job}/{stem}": {
+      "get": {
+        "tags": [
+          "Stems"
+        ],
+        "summary": "Fetch one AAC stem",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "vocals",
+                "drums",
+                "bass",
+                "other"
+              ]
+            },
+            "required": true,
+            "name": "stem",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "AAC stem.",
+            "content": {
+              "audio/mp4": {
+                "schema": {
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Stem not found."
+          }
+        }
+      }
+    },
     "/v1/images/generations/{job}": {
       "get": {
         "tags": [
@@ -14053,6 +14508,159 @@
                   },
                   "required": [
                     "music"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/stems": {
+      "get": {
+        "tags": [
+          "Stems"
+        ],
+        "summary": "Stem splitting availability and limits",
+        "responses": {
+          "200": {
+            "description": "Stem splitter status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "stems": {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": "string"
+                        },
+                        "available": {
+                          "type": "boolean"
+                        },
+                        "model": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "installed": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "installed"
+                          ]
+                        },
+                        "models": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "role": {
+                                "type": "string"
+                              },
+                              "repo": {
+                                "type": "string"
+                              },
+                              "url": {
+                                "type": "string"
+                              },
+                              "sha256": {
+                                "type": "string"
+                              },
+                              "approx_bytes": {
+                                "type": "integer"
+                              },
+                              "licence": {
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "string"
+                              },
+                              "engine": {
+                                "type": "string"
+                              },
+                              "archive": {
+                                "type": "boolean"
+                              },
+                              "hub_file": {
+                                "type": "string"
+                              },
+                              "component": {
+                                "type": "string"
+                              },
+                              "starter": {
+                                "type": "boolean"
+                              },
+                              "installed": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "role",
+                              "url",
+                              "sha256",
+                              "approx_bytes",
+                              "licence",
+                              "revision",
+                              "starter",
+                              "installed"
+                            ]
+                          }
+                        },
+                        "installed": {
+                          "type": "boolean"
+                        },
+                        "ready": {
+                          "type": "boolean"
+                        },
+                        "limits": {
+                          "type": "object",
+                          "properties": {
+                            "max_source_mb": {
+                              "type": "number"
+                            },
+                            "outputs": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "peak_bytes": {
+                              "type": "number"
+                            },
+                            "idle_exit_seconds": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "max_source_mb",
+                            "outputs",
+                            "peak_bytes",
+                            "idle_exit_seconds"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "available",
+                        "model",
+                        "models",
+                        "installed",
+                        "ready",
+                        "limits"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "stems"
                   ]
                 }
               }

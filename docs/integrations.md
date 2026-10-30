@@ -47,6 +47,7 @@ OpenAI-shaped, so an existing client library works unchanged.
 | `POST /v1/images/generations` | `image` | the job API with a wait; on a Mac with the picture models installed the mflux worker answers (see Picture generation below), otherwise the supervised ComfyUI |
 | `POST /v1/videos/generations` | `video` | the job API with a wait; progress by phase, cancel, the clip fetched by URL (see Video generation below) |
 | `POST /v1/audio/music` | `music` | the job API with a wait; progress by stage, cancel, the song fetched by URL (see Music generation below) |
+| `POST /v1/audio/stems` | `music` | the job API with a wait; splits a song made here into vocals, drums, bass and other; each result can seed later music edits |
 | `GET /v1/models` | all | role ids plus installed model ids in OpenAI's list shape; `?role=coding` lists only the coding role's served model with `context_length` and `thinking_budget_ceiling` (an empty list when none is installed; never starts the engine) |
 
 The request's common fields are spec `RoleRequest`: `model` carries a
@@ -553,6 +554,9 @@ song, keeps its models for five idle minutes (`MUSIC_IDLE_MS`; songs come in bur
 runs with `HF_HUB_OFFLINE=1`, and makes no network request. Tiers: `p128` (songs up to 240 s, quality `quick` or `detailed`, default `detailed`) and `p64` (up to
 120 s, `quick` only); `p16` and `p32` answer 503 `not_available_on_this_computer`. Quality is the planning model: `quick` the 0.6B one, `detailed` the 1.7B one.
 Design and the measurements: Home `docs/design/music-generation-2026-10-17.md`, sections 3, 4 and 12.
+
+`POST /v1/audio/stems` accepts `{ source, source_sha256, model: "htdemucs", timeout_ms? }`. `source` is base64 of an unchanged m4a this Stack made; both the hash and made-here ledger entry must match. A successful response's `data` lists the present stems as AAC `audio/mp4` files at 44.1 kHz stereo; stems below RMS `1e-4` are omitted. The queued job reports `loading`, `splitting` and `encoding`, supports `DELETE /v1/audio/stems/{job}`, and returns 202 with an empty `data` array when it outlasts the wait. Results share music's ten-minute, newest-six retention. `GET /stack/v1/stems` reports model installation and the 2 GB governor admission. Demucs 4.1.0 loads the pinned safetensors model through its own `demucs.hf.load_safetensors_model` loader; the YAML manifest, checkpoint revision and checksums are pinned in the Stack catalog.
+
 
 The on-demand MUSIC-GEN-17 bench measures sung-word recall, unmatched heard words with their times and LRC sections, and a squeezed ending. Run `python3 backend/scripts/bench/music-sung-words.py --stack http://127.0.0.1:<scratch-port> --lyrics <file> --caption "rock vocals" --seconds 60 --seed 42 --quality quick --whisper <model-dir> --out <dir>` with an existing local whisper model directory and a scratch Stack, never the live one. It saves `song.m4a`, `job.json` and `report.json`; a repeated LRC timestamp in the last 1.5 seconds fails (exit 1), with the preceding line included in the reported tail. Extra heard words are diagnostic only because whisper can mishear growled vocals. Pass exits 0; an error exits 2. This bench never runs in the gate.
 

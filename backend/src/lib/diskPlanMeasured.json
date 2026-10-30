@@ -64,6 +64,12 @@
       "download_bytes": 873749873,
       "peak_temp_bytes": 873749873,
       "basis": "measured"
+    },
+    "stems": {
+      "installed_bytes": 1200000000,
+      "download_bytes": 800000000,
+      "peak_temp_bytes": 800000000,
+      "basis": "estimate"
     }
   },
   "pins": {

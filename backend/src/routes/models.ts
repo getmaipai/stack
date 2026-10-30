@@ -20,7 +20,7 @@ import { createJob, finishJob, getJob, jobSignal, updateJob } from "@/lib/jobs";
 import { catalogModelForId } from "@/updates/catalog";
 import { updateSettings } from "@/settings";
 import { getProcess, isModelPinned, loadedRoleForModel, pinModel, preferModel, restartForNewProjector, restartRole, unloadRole, EngineUnavailableError } from "@/lib/supervisor";
-import { STACK_MODELS, STACK_WAKEWORD_MODELS } from "@/lib/modelCatalog";
+import { STACK_MODELS, STACK_STEMS_MODELS, STACK_WAKEWORD_MODELS } from "@/lib/modelCatalog";
 import { startModelInstall } from "@/lib/installJobs";
 import { InspectRefusal, inspectModel } from "@/lib/modelInspect";
 
@@ -58,7 +58,7 @@ export function modelView(model: ModelRecord) {
  * file. */
 export function pullSpec(body: z.infer<typeof PullSchema>): CatalogModelLike & { download: NonNullable<CatalogModelLike["download"]> } {
   const catalogEntry = catalogModelForId(body.id);
-  const shipped = STACK_MODELS.find((pin) => pin.id === body.id) ?? null;
+  const shipped = [...STACK_MODELS, ...STACK_STEMS_MODELS].find((pin) => pin.id === body.id) ?? null;
   const indexed = catalogEntry ?? shipped;
   // The shipped list stands in only for the same revision: another
   // revision's files would be verified against hashes that are not theirs.
@@ -95,6 +95,8 @@ modelsRoutes.openapi(pullRoute, (c) => {
   const body = c.req.valid("json");
   // The id names the model's directory under the store.
   try { refuseUnsafeModelId(body.id); } catch (error) { return c.json({ error: (error as Error).message }, 400); }
+  const shippedPin = [...STACK_MODELS, ...STACK_STEMS_MODELS].find((pin) => pin.id === body.id);
+  if (shippedPin && (!shippedPin.download || body.role !== shippedPin.role || body.url !== shippedPin.download.url || body.sha256.toLowerCase() !== shippedPin.download.sha256.toLowerCase() || body.licence !== shippedPin.license || body.revision !== shippedPin.revision || (body.repo !== undefined && body.repo !== shippedPin.repo) || (body.approx_bytes !== undefined && body.approx_bytes !== shippedPin.download.approx_bytes) || (body.component !== undefined && body.component !== shippedPin.component))) return c.json({ error: "This model must be installed using the shipped pin." }, 400);
   const wakewordPin = STACK_WAKEWORD_MODELS.find((pin) => pin.id === body.id);
   if (wakewordPin) {
     const pin = wakewordPin;

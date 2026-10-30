@@ -6,25 +6,25 @@
   "installer": {
     "p16.required_free_bytes": 15039341565,
     "p16.minimum_required_free_bytes": 13741867392,
-    "p16.everything_required_free_bytes": 15043732853,
+    "p16.everything_required_free_bytes": 17384563381,
     "p16.needed_bytes": 12885275320,
     "p16.home_required_free_bytes": 3176323277,
     "p16.ai_required_free_bytes": 11863018288,
     "p32.required_free_bytes": 33791153085,
     "p32.minimum_required_free_bytes": 30813284198,
-    "p32.everything_required_free_bytes": 33795544373,
+    "p32.everything_required_free_bytes": 36136374901,
     "p32.needed_bytes": 28511784920,
     "p32.home_required_free_bytes": 3176323277,
     "p32.ai_required_free_bytes": 30614829808,
     "p64.required_free_bytes": 117177075071,
     "p64.minimum_required_free_bytes": 56572612676,
-    "p64.everything_required_free_bytes": 158908712164,
+    "p64.everything_required_free_bytes": 161249542692,
     "p64.needed_bytes": 98253307171,
     "p64.home_required_free_bytes": 3176323277,
     "p64.ai_required_free_bytes": 114000751794,
     "p128.required_free_bytes": 151843393620,
     "p128.minimum_required_free_bytes": 56572612676,
-    "p128.everything_required_free_bytes": 321280969073,
+    "p128.everything_required_free_bytes": 323621799601,
     "p128.needed_bytes": 127268369739,
     "p128.home_required_free_bytes": 3176323277,
     "p128.ai_required_free_bytes": 148667070343
@@ -170,6 +170,26 @@
           "basis": "pins"
         },
         {
+          "id": "stems",
+          "label": "Split songs into stems (HTDemucs)",
+          "note": "Separates songs made in Home into vocals, drums, bass and other. Optional.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 84025440,
+          "installed_bytes": 84025440,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "htdemucs"
+          ],
+          "engines": [
+            "engine:stems",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -228,6 +248,21 @@
           "engines": [],
           "installed": false,
           "basis": "measured"
+        },
+        {
+          "id": "engine:stems",
+          "label": "Stem splitting tools",
+          "note": "What separating song stems runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 800000000,
+          "installed_bytes": 1200000000,
+          "peak_temp_bytes": 800000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
         }
       ],
       "default": {
@@ -245,11 +280,11 @@
         "required_free_bytes": 13741867392
       },
       "everything": {
-        "download_bytes": 9129751418,
-        "installed_bytes": 10773990629,
-        "peak_temp_bytes": 2114944098,
-        "needed_bytes": 12888934727,
-        "required_free_bytes": 15043732853
+        "download_bytes": 10013776858,
+        "installed_bytes": 12058016069,
+        "peak_temp_bytes": 2914944098,
+        "needed_bytes": 14972960167,
+        "required_free_bytes": 17384563381
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -436,6 +471,26 @@
           "basis": "pins"
         },
         {
+          "id": "stems",
+          "label": "Split songs into stems (HTDemucs)",
+          "note": "Separates songs made in Home into vocals, drums, bass and other. Optional.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 84025440,
+          "installed_bytes": 84025440,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "htdemucs"
+          ],
+          "engines": [
+            "engine:stems",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -494,6 +549,21 @@
           "engines": [],
           "installed": false,
           "basis": "measured"
+        },
+        {
+          "id": "engine:stems",
+          "label": "Stem splitting tools",
+          "note": "What separating song stems runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 800000000,
+          "installed_bytes": 1200000000,
+          "peak_temp_bytes": 800000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
         }
       ],
       "default": {
@@ -511,11 +581,11 @@
         "required_free_bytes": 30813284198
       },
       "everything": {
-        "download_bytes": 24756261018,
-        "installed_bytes": 26400500229,
-        "peak_temp_bytes": 2114944098,
-        "needed_bytes": 28515444327,
-        "required_free_bytes": 33795544373
+        "download_bytes": 25640286458,
+        "installed_bytes": 27684525669,
+        "peak_temp_bytes": 2914944098,
+        "needed_bytes": 30599469767,
+        "required_free_bytes": 36136374901
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -856,6 +926,26 @@
           "basis": "pins"
         },
         {
+          "id": "stems",
+          "label": "Split songs into stems (HTDemucs)",
+          "note": "Separates songs made in Home into vocals, drums, bass and other. Optional.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 84025440,
+          "installed_bytes": 84025440,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "htdemucs"
+          ],
+          "engines": [
+            "engine:stems",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -974,6 +1064,21 @@
           "engines": [],
           "installed": false,
           "basis": "estimate"
+        },
+        {
+          "id": "engine:stems",
+          "label": "Stem splitting tools",
+          "note": "What separating song stems runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 800000000,
+          "installed_bytes": 1200000000,
+          "peak_temp_bytes": 800000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
         }
       ],
       "default": {
@@ -991,11 +1096,11 @@
         "required_free_bytes": 56572612676
       },
       "everything": {
-        "download_bytes": 124986255010,
-        "installed_bytes": 128000412180,
-        "peak_temp_bytes": 5308217548,
-        "needed_bytes": 133308629728,
-        "required_free_bytes": 158908712164
+        "download_bytes": 125870280450,
+        "installed_bytes": 129284437620,
+        "peak_temp_bytes": 6108217548,
+        "needed_bytes": 135392655168,
+        "required_free_bytes": 161249542692
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -1436,6 +1541,26 @@
           "basis": "pins"
         },
         {
+          "id": "stems",
+          "label": "Split songs into stems (HTDemucs)",
+          "note": "Separates songs made in Home into vocals, drums, bass and other. Optional.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 84025440,
+          "installed_bytes": 84025440,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "htdemucs"
+          ],
+          "engines": [
+            "engine:stems",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -1569,6 +1694,21 @@
           "engines": [],
           "installed": false,
           "basis": "estimate"
+        },
+        {
+          "id": "engine:stems",
+          "label": "Stem splitting tools",
+          "note": "What separating song stems runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 800000000,
+          "installed_bytes": 1200000000,
+          "peak_temp_bytes": 800000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
         }
       ],
       "default": {
@@ -1586,11 +1726,11 @@
         "required_free_bytes": 56572612676
       },
       "everything": {
-        "download_bytes": 259319609742,
-        "installed_bytes": 262678307385,
-        "peak_temp_bytes": 6067000211,
-        "needed_bytes": 268745307596,
-        "required_free_bytes": 321280969073
+        "download_bytes": 260203635182,
+        "installed_bytes": 263962332825,
+        "peak_temp_bytes": 6867000211,
+        "needed_bytes": 270829333036,
+        "required_free_bytes": 323621799601
       },
       "measured_on": "2026-10-17",
       "default_selected": [
