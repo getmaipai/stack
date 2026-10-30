@@ -4,8 +4,12 @@ import { listFiles, modelInfo } from "@huggingface/hub";
 const DEFAULT_ENDPOINT = "https://huggingface.co";
 
 function currentEndpoint(): string {
-  const value = settingValues()["stack.updates.model_host"];
-  const trimmed = typeof value === "string" && value.trim() ? value.trim() : DEFAULT_ENDPOINT;
+  // The catalog is imported by settings declarations themselves. During that
+  // module's initialization the setting table is not available yet; catalog
+  // URLs use the default host and later calls read the configured host.
+  let value: unknown;
+  try { value = settingValues()["stack.updates.model_host"]; } catch { value = undefined; }
+  const trimmed = typeof value === "string" && value.trim() ? value.trim() : "https://huggingface.co";
   return trimmed.endsWith("/") ? trimmed.slice(0, -1) : trimmed;
 }
 

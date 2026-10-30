@@ -1,7 +1,8 @@
-import { emit } from "@/lib/events";
+import { emit, emitGovernorWindow } from "@/lib/events";
 import { getMemoryReader, type MemoryPressure, type MemoryReader } from "@/lib/memory";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { ROLES } from "@/roles";
+import { tierCapBytes } from "@/lib/tiers";
 
 const GB = 1_073_741_824;
 
@@ -37,10 +38,12 @@ export const GovernorRules = {
 export type GovernorKind = "resident" | "jit" | "generator";
 export type GovernorClass = "reserved" | "warm" | "burst";
 export type GovernorTier = keyof typeof GovernorRules.tiers;
+export type JobTier = "standard" | "boost" | "max";
 export type RunState = "running" | "pausing" | "paused";
 
 export interface GovernorRequest {
   id: string;
+  tier?: JobTier;
   kind: GovernorKind;
   class?: GovernorClass;
   role?: string;
@@ -64,6 +67,7 @@ export interface GovernorRequest {
 
 export interface GovernorHandle {
   id: string;
+  tier?: JobTier;
   kind: GovernorKind;
   class?: GovernorClass;
   requestedBytes: number;
@@ -73,6 +77,7 @@ export interface GovernorHandle {
 
 export interface GovernorLoadedModel {
   id: string;
+  tier?: JobTier;
   kind: GovernorKind;
   class: GovernorClass;
   peakBytes: number;
@@ -93,10 +98,10 @@ export interface GovernorStatus {
   tier: GovernorTier;
   marginBytes: number;
   loaded: GovernorLoadedModel[];
-  queue: Array<{ id: string; position: number; kind: GovernorKind; class: GovernorClass }>;
+  queue: Array<{ id: string; position: number; kind: GovernorKind; class: GovernorClass; tier?: JobTier }>;
 }
 
-export interface GovernorDecision { at: string; decision: string; reason: string; model: string; reasonCode?: "coding_mode"; }
+export interface GovernorDecision { at: string; decision: string; reason: string; model: string; reasonCode?: "coding_mode" | "max_window"; }
 
 interface LoadedInternal extends GovernorLoadedModel {
   /** Which admission this entry is: a release or an eviction removes
@@ -151,6 +156,14 @@ type QueuedEntry = { request: GovernorRequest; settled: boolean; admitted: Promi
 const queue: QueuedEntry[] = [];
 const refusalCounts = new Map<string, number>();
 const decisions: GovernorDecision[] = [];
+type ReclaimStep = { at: number; step: "pool_idle_wait" | "evict_pool" | "evict_idle" | "window_drain"; itemId: string; bytes: number };
+const reclaimSteps = new Map<string, ReclaimStep[]>();
+let maxWindow: { state: "none" | "draining" | "open"; ownerId: string | null; since: number | null } = { state: "none", ownerId: null, since: null };
+export function getMaxWindow(): typeof maxWindow { return { ...maxWindow }; }
+export function getReclaimSteps(requestId: string): ReclaimStep[] { return [...(reclaimSteps.get(requestId) ?? [])]; }
+function reclaim(requestId: string, step: ReclaimStep["step"], itemId: string, bytes: number, at = Date.now()): void { const rows = reclaimSteps.get(requestId) ?? []; if (rows.at(-1)?.step === step && rows.at(-1)?.itemId === itemId) return; rows.push({ at, step, itemId, bytes }); reclaimSteps.set(requestId, rows); }
+function windowEvent(data: { state: "open" | "closed"; owner: string | null; tier: "max" }): void { emitGovernorWindow(data); }
+function closeMaxWindow(): void { if (maxWindow.state === "none") return; maxWindow = { state: "none", ownerId: null, since: null }; windowEvent({ state: "closed", owner: null, tier: "max" }); }
 let imagePoolUnload: (() => boolean | Promise<boolean>) | null = null;
 
 /** The image worker is managed by its service, not the role supervisor.
@@ -172,7 +185,7 @@ export function setCodingModeActive(active: boolean): void { codingModeActive = 
 /** True while the large coding mode holds picture, video and music work back. */
 export function generatorsHeldByMode(): boolean { return codingModeActive; }
 
-function decide(decision: string, reason: string, model: string, reasonCode?: "coding_mode"): void {
+function decide(decision: string, reason: string, model: string, reasonCode?: "coding_mode" | "max_window"): void {
   decisions.unshift({ at: nowIso(), decision, reason, model, ...(reasonCode ? { reasonCode } : {}) });
   if (decisions.length > 200) decisions.length = 200;
 }
@@ -207,6 +220,7 @@ function loadedItemFor(request: GovernorRequest): LoadedInternal {
     token: nextToken++,
     evicting: false,
     id: request.id,
+    ...(request.tier ? { tier: request.tier } : {}),
     kind: request.kind,
     class: requestClass(request),
     peakBytes: peak.bytes,
@@ -247,6 +261,21 @@ export function fitsEver(request: GovernorRequest): boolean {
   return peakBytes <= modelRoom && peakBytes <= workingRoom;
 }
 
+export function tierRoomBytes(): number {
+  const reservedBytes = [...loaded.values()].filter((item) => item.class === "reserved").reduce((sum, item) => sum + item.peakBytes, 0);
+  return Math.max(0, Math.min(effectiveCapBytes() - reservedBytes, totalMemoryBytes - reservedBytes - workingMargin()));
+}
+export function fitsEverForTier(request: GovernorRequest, opts: { reducedFreedBytes?: number } = {}): { fits: boolean; capBytes: number; peakBytes: number } {
+  const peakBytes = peakFor(request).bytes;
+  if (!request.tier) return { fits: fitsEver(request), capBytes: tierRoomBytes(), peakBytes };
+  const capBytes = tierCapBytes(request.tier, tierRoomBytes(), opts.reducedFreedBytes);
+  return { fits: peakBytes <= capBytes, capBytes, peakBytes };
+}
+export function neverFitTierReason(request: GovernorRequest, capBytes: number, peakBytes = peakFor(request).bytes): string {
+  const tier = request.tier![0]!.toUpperCase() + request.tier!.slice(1);
+  return `This ${tier} job needs about ${(peakBytes / GB).toFixed(0)} GB and ${tier} on this computer holds ${(capBytes / GB).toFixed(0)} GB. Use Standard, or ask an admin about Max.`;
+}
+
 export function neverFitReason(request: GovernorRequest): string {
   const peak = peakFor(request).bytes;
   const reservedBytes = [...loaded.values()].filter((item) => item.class === "reserved").reduce((sum, item) => sum + item.peakBytes, 0);
@@ -263,6 +292,8 @@ export function neverFitReason(request: GovernorRequest): string {
 export interface EvictionRoom {
   roomBytes: number;
   evictionOrder: string[];
+  capBytes?: number;
+  fitsCap?: boolean;
 }
 
 /** Room a request could use after eligible idle items are unloaded. */
@@ -290,6 +321,11 @@ export function roomAfterEviction(request: GovernorRequest, busy: (id: string) =
     roomBytes += item.peakBytes;
   }
   return { roomBytes, evictionOrder };
+}
+export function roomAfterEvictionForTier(request: GovernorRequest, busy: (id: string) => boolean = () => false, now = Date.now()): EvictionRoom {
+  const room = roomAfterEviction(request, busy, now);
+  const fit = fitsEverForTier(request);
+  return { ...room, capBytes: fit.capBytes, fitsCap: room.roomBytes >= fit.peakBytes && fit.peakBytes <= fit.capBytes };
 }
 
 export function peakFor(request: GovernorRequest): { bytes: number; measured: boolean } {
@@ -371,13 +407,16 @@ export function setAdmissionGate(gate: AdmissionGate | null): void { admissionGa
 export function gateVerdict(request: GovernorRequest, peakBytes: number): { ok: true } | { ok: false; reason: string } { return admissionGate ? admissionGate(request, peakBytes) : { ok: true }; }
 
 function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
+  if (maxWindow.state !== "none" && request.id !== maxWindow.ownerId && requestClass(request) !== "reserved") return false;
   if (codingModeActive && request.kind === "generator") return false;
   if (memoryReadingDegraded) return false;
+  if (request.tier && peakBytes > tierCapBytes(request.tier, tierRoomBytes())) return false;
   if (!gateVerdict(request, peakBytes).ok) return false;
   if (pressure !== "normal") return false;
   const existing = loaded.get(request.id);
   const generatorBusy = request.kind === "generator" && [...loaded.values()].some((item) => item.kind === "generator" && item !== existing);
   if (generatorBusy) return false;
+  if ((request.tier === "boost" || request.tier === "max") && [...loaded.values()].some((item) => item.tier === "boost" || item.tier === "max")) return false;
   const cap = effectiveCapBytes();
   const growth = Math.max(0, peakBytes - (existing?.peakBytes ?? 0));
   if (loadedBytes() + growth > cap) return false;
@@ -401,8 +440,9 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
     else request = { ...request, poolPeakBytes: undefined };
   }
   const peak = peakFor(request);
-  if (!fitsEver(request)) {
-    const reason = neverFitReason(request);
+  const tierFit = fitsEverForTier(request);
+  if (!tierFit.fits) {
+    const reason = request.tier ? neverFitTierReason(request, tierFit.capBytes, tierFit.peakBytes) : neverFitReason(request);
     decide("Refused", reason, request.id);
     return { refused: true, reason };
   }
@@ -420,10 +460,15 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
     let resolveQueued!: (result: GovernorHandle | { refused: true; reason: string }) => void;
     const admitted: Promise<GovernorHandle | { refused: true; reason: string }> = new Promise<GovernorHandle | { refused: true; reason: string }>((resolve) => { resolveQueued = resolve; });
     const entry: QueuedEntry = { request, settled: false, admitted, resolve: resolveQueued };
+    if (request.tier === "max" && maxWindow.state === "none") {
+      maxWindow = { state: "draining", ownerId: request.id, since: Date.now() };
+      reclaim(request.id, "window_drain", "", 0);
+    }
     queue.push(entry);
     const gated = gateVerdict(request, peak.bytes);
     const heldByMode = codingModeActive && request.kind === "generator";
-    decide("Queued", heldByMode ? "The large coding mode is holding picture, video and music work." : !gated.ok ? gated.reason : pressure !== "normal" ? `Memory pressure is ${pressure}.` : "The current memory budget cannot admit the request.", request.id, heldByMode ? "coding_mode" : undefined);
+    const heldByWindow = maxWindow.state !== "none" && request.id !== maxWindow.ownerId && requestClass(request) !== "reserved";
+    decide("Queued", heldByWindow ? "A Max job is waiting for the computer. This one starts after it." : heldByMode ? "The large coding mode is holding picture, video and music work." : !gated.ok ? gated.reason : pressure !== "normal" ? `Memory pressure is ${pressure}.` : "The current memory budget cannot admit the request.", request.id, heldByWindow ? "max_window" : heldByMode ? "coding_mode" : undefined);
     return { queued: true, position: queue.length, class: requestClass(request), admitted };
   }
   refusalCounts.delete(request.id);
@@ -433,6 +478,7 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
   if (existing) {
     existing.kind = request.kind;
     existing.class = requestClass(request);
+    existing.tier = request.tier;
     existing.peakBytes = peak.bytes;
     existing.measured = peak.measured;
     existing.lastUsedAt = nowIso();
@@ -440,8 +486,9 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
     existing.token = nextToken++;
     existing.keepAliveSeconds = 0;
     existing.yieldsToGenerators = false;
-    const handle: GovernorHandle = { id: request.id, kind: request.kind, class: requestClass(request), requestedBytes: peak.bytes, token: existing.token, retainWarm: request.retainWarm };
+    const handle: GovernorHandle = { id: request.id, kind: request.kind, class: requestClass(request), requestedBytes: peak.bytes, token: existing.token, retainWarm: request.retainWarm, ...(request.tier ? { tier: request.tier } : {}) };
     decide("Admitted", "The current memory budget has room.", request.id);
+    if (request.tier === "max") { maxWindow = { state: "open", ownerId: request.id, since: Date.now() }; windowEvent({ state: "open", owner: request.id, tier: "max" }); }
     if (borrowsFlexBand) flexBandBorrowerToken = existing.token;
     return handle;
   }
@@ -449,7 +496,8 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
   loaded.set(request.id, item);
   if (borrowsFlexBand) flexBandBorrowerToken = item.token;
   decide("Admitted", "The current memory budget has room.", request.id);
-  return { id: request.id, kind: request.kind, class: requestClass(request), requestedBytes: peak.bytes, token: item.token, retainWarm: request.retainWarm };
+  if (request.tier === "max") { maxWindow = { state: "open", ownerId: request.id, since: Date.now() }; windowEvent({ state: "open", owner: request.id, tier: "max" }); }
+  return { id: request.id, kind: request.kind, class: requestClass(request), requestedBytes: peak.bytes, token: item.token, retainWarm: request.retainWarm, ...(request.tier ? { tier: request.tier } : {}) };
 }
 
 /** A request on a loaded item: its idle clock starts again. */
@@ -482,17 +530,19 @@ export async function pauseAll(): Promise<void> {
 export function resumeAll(): void { setRunState("running"); }
 
 function settleAdmission(entry: QueuedEntry): void {
+  if (entry.request.tier === "max") { maxWindow = { state: "open", ownerId: entry.request.id, since: Date.now() }; windowEvent({ state: "open", owner: entry.request.id, tier: "max" }); }
   const borrowsFlexBand = usesFlexBand(entry.request, peakFor(entry.request).bytes);
   const existing = loaded.get(entry.request.id);
   if (existing) {
     existing.kind = entry.request.kind;
     existing.class = requestClass(entry.request);
+    existing.tier = entry.request.tier;
     existing.peakBytes = peakFor(entry.request).bytes;
     existing.measured = peakFor(entry.request).measured;
     existing.lastUsedAt = nowIso();
     existing.evicting = false;
     existing.token = nextToken++;
-    const handle: GovernorHandle = { id: entry.request.id, kind: entry.request.kind, class: requestClass(entry.request), requestedBytes: existing.peakBytes, token: existing.token, retainWarm: entry.request.retainWarm };
+    const handle: GovernorHandle = { id: entry.request.id, kind: entry.request.kind, class: requestClass(entry.request), requestedBytes: existing.peakBytes, token: existing.token, retainWarm: entry.request.retainWarm, ...(entry.request.tier ? { tier: entry.request.tier } : {}) };
     decide("Admitted", "The current memory budget has room.", entry.request.id);
     if (borrowsFlexBand) flexBandBorrowerToken = existing.token;
     entry.settled = true;
@@ -504,13 +554,15 @@ function settleAdmission(entry: QueuedEntry): void {
   if (borrowsFlexBand) flexBandBorrowerToken = item.token;
   decide("Admitted", "The current memory budget has room.", entry.request.id);
   entry.settled = true;
-  entry.resolve({ id: entry.request.id, kind: entry.request.kind, class: requestClass(entry.request), requestedBytes: item.peakBytes, token: item.token, retainWarm: entry.request.retainWarm });
+  entry.resolve({ id: entry.request.id, kind: entry.request.kind, class: requestClass(entry.request), requestedBytes: item.peakBytes, token: item.token, retainWarm: entry.request.retainWarm, ...(entry.request.tier ? { tier: entry.request.tier } : {}) });
 }
 
 export function release(handle: GovernorHandle): void {
   const item = loaded.get(handle.id);
   // An older admission's handle frees nothing, so it admits nothing.
   if (!item || (handle.token !== undefined && item.token !== handle.token)) return;
+  reclaimSteps.delete(handle.id);
+  if (maxWindow.ownerId === handle.id) closeMaxWindow();
   if (handle.retainWarm) {
     item.kind = "jit";
     item.class = "warm";
@@ -543,6 +595,8 @@ export function withdraw(requestId: string): void {
   if (index < 0) return;
   const entry = queue[index]!;
   queue.splice(index, 1);
+  reclaimSteps.delete(requestId);
+  if (maxWindow.ownerId === requestId && maxWindow.state === "draining") closeMaxWindow();
   if (!entry.settled) {
     entry.settled = true;
     entry.resolve({ refused: true, reason: "Withdrawn." });
@@ -565,7 +619,7 @@ export function getGovernorStatus(): GovernorStatus {
     tier: activeTier,
     marginBytes: workingMargin(),
     loaded: [...loaded.values()].map(({ peakBaselineBytes: _baseline, runPeakBytes: _runPeak, recordedPeakBytes: _recorded, processBreaches: _breaches, keepAliveSeconds: _keepAlive, token: _token, evicting: _evicting, ...item }) => item),
-    queue: queue.map((entry, index) => ({ id: entry.request.id, position: index + 1, kind: entry.request.kind, class: requestClass(entry.request) })),
+    queue: queue.map((entry, index) => ({ id: entry.request.id, position: index + 1, kind: entry.request.kind, class: requestClass(entry.request), ...(entry.request.tier ? { tier: entry.request.tier } : {}) })),
   };
 }
 
@@ -686,6 +740,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
       const idleLimit = ((idleTtlOverrides.get(item.id) ?? item.idleTtlSeconds) + item.keepAliveSeconds) * 1000;
       const idle = now - new Date(item.lastUsedAt).getTime() >= idleLimit;
       if (item.kind === "generator" && pressure === "critical") {
+        if (maxWindow.ownerId === item.id) { closeMaxWindow(); decide("Released", "The Max job stopped because memory pressure became critical.", item.id, "max_window"); }
         await options.abort?.(item.id);
         emit({ id: "pressure", data: { reason: "critical kernel memory pressure aborted a generator", id: item.id, pressure } });
       }
@@ -751,6 +806,13 @@ export function startGovernor(options: StartGovernorOptions): () => void {
     // a request can be queued by the working margin alone (free dipped under
     // peak + margin while an engine loaded) with neither edge ever firing.
     if (queue.length > 0) {
+      const maxOwner = maxWindow.state === "draining" ? queue.find((entry) => !entry.settled && entry.request.id === maxWindow.ownerId) : undefined;
+      if (maxOwner) {
+        const draining = [...loaded.values()].some((item) => item.kind === "generator" || (item.class !== "reserved" && (options.busy?.(item.id) ?? false)));
+        if (!draining && canAdmit(maxOwner.request, peakFor(maxOwner.request).bytes)) {
+          const at = queue.indexOf(maxOwner); queue.splice(at, 1); settleAdmission(maxOwner);
+        }
+      }
       let index = 0;
       while (index < queue.length) {
         const entry = queue[index]!;
@@ -762,16 +824,22 @@ export function startGovernor(options: StartGovernorOptions): () => void {
         settleAdmission(entry);
         queue.splice(index, 1);
       }
-      const head = queue[0];
+      const head = (maxWindow.state === "draining" ? queue.find((entry) => entry.request.id === maxWindow.ownerId) : undefined) ?? queue[0];
       if (head && unloadItem && !head.settled && !canAdmit(head.request, peakFor(head.request).bytes)) {
         const required = peakFor(head.request).bytes;
-        const room = roomAfterEviction(head.request, (id) => options.busy?.(id) ?? false, now);
-        if (room.roomBytes >= required) {
+        const room = roomAfterEvictionForTier(head.request, (id) => options.busy?.(id) ?? false, now);
+        if (!room.fitsCap && head.request.tier) { /* capped tier cannot be fixed by eviction */ }
+        else if (room.roomBytes < required && loaded.get("image-pool")?.class === "warm") {
+          const pool = loaded.get("image-pool")!;
+          const idleMs = now - new Date(pool.lastUsedAt).getTime();
+          if (idleMs < GovernorRules.warmEvictionGraceMs) reclaim(head.request.id, "pool_idle_wait", pool.id, pool.peakBytes, now);
+        } else if (room.roomBytes >= required) {
           let available = admissionRoomBytes();
           for (const id of room.evictionOrder) {
             if (available >= required) break;
             const item = loaded.get(id);
             if (!item || item.evicting) continue;
+            reclaim(head.request.id, id === "image-pool" ? "evict_pool" : "evict_idle", id, item.peakBytes, now);
             item.evicting = true;
             const unload = unloadItem;
             void (async () => {
@@ -812,6 +880,8 @@ export function __resetGovernorForTests(): void {
   queue.length = 0;
   refusalCounts.clear();
   decisions.length = 0;
+  reclaimSteps.clear();
+  maxWindow = { state: "none", ownerId: null, since: null };
   tuning = {
     pollMs: GovernorRules.pollMs,
     idleTtlSeconds: GovernorRules.idleTtlSeconds,

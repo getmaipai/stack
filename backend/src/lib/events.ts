@@ -20,6 +20,15 @@ export function emit(event: { id: EventId; data: Record<string, unknown> }): Eve
   return envelope;
 }
 
+/** Governor-owned Max window signal. It remains on the same transient SSE
+ * feed while the Stack event schema is being extended by the spec owner. */
+export function emitGovernorWindow(data: { state: "open" | "closed"; owner: string | null; tier: "max" }): void {
+  const envelope = { id: "window", data, at: new Date().toISOString(), seq: nextSeq++ } as unknown as EventEnvelope;
+  ring.push(envelope);
+  if (ring.length > RING_SIZE) ring.shift();
+  for (const subscriber of subscribers) { try { subscriber(envelope); } catch { /* a failing subscriber never blocks the producer */ } }
+}
+
 export function eventsAfter(lastSeq: number): EventEnvelope[] {
   return ring.filter((event) => event.seq > lastSeq);
 }

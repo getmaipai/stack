@@ -9,7 +9,7 @@
 // submit for it is refused with a reason rather than left queued.
 import { emit } from "@/lib/events";
 import { noteComponentUse } from "@/lib/componentUse";
-import { admit, fitsEver, generatorsHeldByMode, getRunState, GovernorRules, neverFitReason, peakFor, release, withdraw, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
+import { admit, fitsEverForTier, generatorsHeldByMode, getGovernorStatus, getMaxWindow, getReclaimSteps, getRunState, GovernorRules, neverFitReason, neverFitTierReason, peakFor, release, withdraw, type GovernorHandle, type GovernorRequest, type JobTier } from "@/lib/governor";
 import { heavyGate, isolationRules } from "@/lib/heavyGate";
 import { memoryLevel, PAUSED_LOW_MEMORY, waitingText } from "@/lib/memoryState";
 import { ROLES } from "@/roles";
@@ -290,7 +290,8 @@ async function pump(role: string): Promise<void> {
   try {
     const imagePool = role === "image" && (next.kind === "image_generation" || next.kind === "image_edit_generative");
     const imageEdit = imagePool && next.kind === "image_edit_generative";
-    handle = await admitJob(next.id, { id: imagePool ? "image-pool" : next.id, role, class: ROLES[role as keyof typeof ROLES]?.memoryClass ?? "burst", kind: "generator", ...(imagePool ? { retainWarm: true } : {}), ...(imageEdit ? { poolPeakBytes: GovernorRules.imagePoolPeakBytes } : {}), ...runner.options.generator.memory(jobs.get(next.id)!) });
+    const tier = (next.input as { tier?: JobTier } | null)?.tier;
+    handle = await admitJob(next.id, { id: imagePool ? "image-pool" : next.id, role, class: ROLES[role as keyof typeof ROLES]?.memoryClass ?? "burst", kind: "generator", ...(tier ? { tier } : {}), ...(imagePool ? { retainWarm: true } : {}), ...(imageEdit ? { poolPeakBytes: GovernorRules.imagePoolPeakBytes } : {}), ...runner.options.generator.memory(jobs.get(next.id)!) });
   } catch (error) {
     finishJob(next.id, { ok: false, reason: error instanceof Error ? error.message : String(error) });
     settle();
@@ -317,12 +318,20 @@ async function admitJob(jobId: string, request: GovernorRequest): Promise<Govern
   // A peak the budget can never hold is refused now with the numbers,
   // not queued for memory that will not come.
   const peak = governorPeak(request);
-  if (!fitsEver(request)) throw new Error(neverFitReason(request));
+  const fit = fitsEverForTier(request);
+  if (!fit.fits) throw new Error(request.tier ? neverFitTierReason(request, fit.capBytes, fit.peakBytes) : neverFitReason(request));
   const controller = controllers.get(jobId);
   const answer = await admit(request);
   if ("refused" in answer) throw new Error(answer.reason);
   if (!("queued" in answer)) return answer;
-  updateJob(jobId, { status: generatorsHeldByMode() ? HELD_BY_MODE_TEXT : waitingText(peak, answer.position) });
+  const refreshQueuedStatus = (): void => {
+    const latest = getReclaimSteps(request.id).at(-1);
+    const maxWaiting = getGovernorStatus().queue.some((entry) => entry.id !== request.id && entry.tier === "max");
+    const status = maxWaiting ? "A Max job is waiting for the computer. This one starts after it." : latest?.step === "pool_idle_wait" ? "Waiting for the picture model to go idle (up to 2 minutes), then making room." : latest?.step === "evict_pool" ? "Put the picture model away to make room." : latest?.step === "evict_idle" ? "Put an idle model away to make room." : latest?.step === "window_drain" ? "Waiting for running jobs to finish before the Max job starts." : generatorsHeldByMode() ? HELD_BY_MODE_TEXT : waitingText(peak, answer.position);
+    updateJob(jobId, { status });
+  };
+  refreshQueuedStatus();
+  const statusTimer = setInterval(refreshQueuedStatus, 100);
   const signal = controller?.signal;
   let pauseTimer: ReturnType<typeof setInterval> | null = null;
   try {
@@ -346,6 +355,7 @@ async function admitJob(jobId: string, request: GovernorRequest): Promise<Govern
     withdraw(request.id);
     throw error;
   } finally {
+    clearInterval(statusTimer);
     if (pauseTimer) clearInterval(pauseTimer);
   }
 }
@@ -398,7 +408,9 @@ export function cancelGeneratorsForMemory(scope: "queued" | "running", reason: s
     controllers.get(id)?.abort();
     controllers.delete(id);
     pausedJobs.delete(id);
-    touch(job, { state: "cancelled", status, reason, position: null });
+    const maxOwner = (job.input as { tier?: string } | null)?.tier === "max";
+    if (scope === "running" && maxOwner) touch(job, { state: "failed", status: "Memory ran out, so this job stopped and can be started again.", reason: "Memory ran out, so this job stopped and can be started again.", position: null });
+    else touch(job, { state: "cancelled", status, reason, position: null });
     stopped.push(id);
     // One running job per pass: the caller asks again if memory is still short.
     if (scope === "running") break;
