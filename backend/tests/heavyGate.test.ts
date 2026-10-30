@@ -409,7 +409,7 @@ test("a real clip job: the deadline and the estimate leave the paused time out, 
     ensureEnvironment: async () => {},
     paths: () => ({ modelDir: "/models/video", tokenizerDir: "/models/tok" }),
     spawn: async () => {
-      const child = Bun.spawn([process.execPath, script], { stdin: "pipe", stdout: "pipe", stderr: "pipe", env: { ...process.env, TEST_WORK_MS: "1200" } });
+      const child = Bun.spawn([process.execPath, script], { stdin: "pipe", stdout: "pipe", stderr: "pipe", env: { ...process.env, TEST_WORK_MS: "500" } });
       workerPid = child.pid; children.push(child);
       return workerHandle(child);
     },
