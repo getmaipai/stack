@@ -17,8 +17,9 @@ describe("tier resolver", () => {
     const pic64 = resolveLadder("pictures", "p64", 40 * GB);
     expect(pic64[0]?.resolved?.model).toBe("ernie-image-turbo");
     expect(pic64[1]?.resolved?.model).toBe("z-image-turbo");
-    // Measured 33 GB music admission is over every p64 cap (R = 24 GB): the evals must bring a lighter music peak before p64 offers music.
+    // Measured 16.4 GB music peak: Standard needs 0.6 R, so R = 24 GB is still short and R = 28 GB holds it. Boost and Max music stay empty.
     expect(resolveLadder("music", "p64", 24 * GB).map((row) => row.resolved?.model ?? null)).toEqual([null, null, null]);
+    expect(resolveLadder("music", "p64", 28 * GB).map((row) => row.resolved?.model ?? null)).toEqual(["ace-step-1-5-turbo", null, null]);
   });
 
   test("covers all p128 categories and max chat room threshold", () => {
@@ -30,12 +31,24 @@ describe("tier resolver", () => {
     expect(resolveTier({ category: "chat", tier: "max", profile: "p128", roomBytes: 60 * GB, reducedFreedBytes: 9 * GB })?.model).toBe("ornith-1-5-122b-mlx-4bit");
   });
 
-  test("video Standard needs 0.6 R to hold Wan's measured 44 GB", () => {
-    const tight = resolveLadder("video", "p128", 72 * GB);
+  test("video Standard needs 0.6 R to hold Wan's measured 25.4 GB, and Max video stays empty", () => {
+    const tight = resolveLadder("video", "p128", 40 * GB);
     expect(tight[0]?.resolved).toBeNull();
-    expect(tight[1]?.resolved?.model).toBe("ltx-2-3-distilled-mlx");
-    expect(resolveLadder("video", "p128", 74 * GB)[0]?.resolved?.verified).toBe(true);
+    expect(tight[1]?.resolved).toBeNull();
+    const roomy = resolveLadder("video", "p128", 72 * GB);
+    expect(roomy.map((row) => row.resolved?.model ?? null)).toEqual(["fastwan2-2-ti2v-5b-mlx-bf16", "ltx-2-3-distilled-mlx", null]);
+    expect(roomy[0]?.resolved?.verified).toBe(true);
     expect(resolveLadder("voice", "p128", 72 * GB).map((row) => row.resolved?.model ?? null)).toEqual(["chatterbox-turbo-fp16", null, null]);
+  });
+
+  test("evaluation slots: Nano Reduced voice on p64 and p128, Qwen-Image Max, htdemucs Standard stems, no draft model", () => {
+    for (const profile of ["p64", "p128"] as const) expect(resolveTier({ category: "voice", tier: "reduced", profile, roomBytes: 24 * GB })?.model).toBe("chatterbox-nano");
+    for (const profile of ["p16", "p32"] as const) expect(resolveTier({ category: "voice", tier: "reduced", profile, roomBytes: 12 * GB })?.model).toBe("pocket-tts-english");
+    expect(resolveTier({ category: "pictures", tier: "max", profile: "p128", roomBytes: 72 * GB })).toMatchObject({ model: "qwen-image-2512-q8", verified: true, peakBytes: 37_400_000_000 });
+    expect(resolveTier({ category: "pictures", tier: "max", profile: "p128", roomBytes: 36 * GB })).toBeNull();
+    expect(resolveLadder("stems", "p16", 8 * GB).map((row) => row.resolved?.model ?? null)).toEqual(["htdemucs", null, null]);
+    expect(resolveTier({ category: "music", tier: "max", profile: "p128", roomBytes: 72 * GB })).toBeNull();
+    expect(TIER_CANDIDATES.some((candidate) => /draft|dflash|mtp/i.test(candidate.id))).toBe(false);
   });
 
   test("collapses equal pins and leaves option switches visible", () => {
@@ -91,7 +104,17 @@ describe("tier candidate lists for the slot dialog", () => {
   });
 
   test("a model this computer can never hold says so", () => {
-    const max = tierCandidateLists("video", "p128", 40 * GB)[2]!;
-    expect(max.candidates.find((row) => row.id === "ltx-2-3-dev-two-stage")!.refusal).toBe("This needs 66 GB and this computer can never hold it.");
+    const max = tierCandidateLists("video", "p128", 30 * GB)[2]!;
+    expect(max.candidates.find((row) => row.id === "ltx-2-3-distilled-mlx")!.refusal).toBe("This needs 40 GB and this computer can never hold it.");
+  });
+
+  test("a vetting-only model is catalogued but never resolved or offered", () => {
+    const vetting = TIER_CANDIDATES.filter((candidate) => candidate.vetting);
+    expect(vetting.map((candidate) => candidate.id)).toEqual(["qwen3-6-35b-a3b-ud-q4-k-xl"]);
+    const ladder = resolveLadder("chat", "p128", 72 * GB).map((row) => row.resolved?.model);
+    expect(ladder).not.toContain("qwen3-6-35b-a3b-ud-q4-k-xl");
+    const ids = tierCandidateLists("chat", "p128", 72 * GB).flatMap((level) => level.candidates.map((row) => row.id));
+    expect(ids).not.toContain("qwen3-6-35b-a3b-ud-q4-k-xl");
+    expect(resolveTier({ category: "chat", tier: "standard", profile: "p128", roomBytes: 72 * GB, slot: { model: "qwen3-6-35b-a3b-ud-q4-k-xl" } })).toBeNull();
   });
 });

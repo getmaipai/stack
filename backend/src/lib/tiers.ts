@@ -7,7 +7,7 @@ const STACK_VIDEO_DETAILED_MODEL_ID = "ltx-2-3-distilled-mlx";
 const STACK_VIDEO_MODEL_ID = "fastwan2-2-ti2v-5b-mlx-bf16";
 
 export type TierId = "reduced" | "standard" | "boost" | "max";
-export type TierCategory = "chat" | "pictures" | "video" | "music" | "voice";
+export type TierCategory = "chat" | "pictures" | "video" | "music" | "voice" | "stems";
 export type ProfileId = "p16" | "p32" | "p64" | "p128";
 export type SwitchCost = "option" | "family" | "cross";
 export type OptionSet = Record<string, string | number | boolean>;
@@ -21,28 +21,30 @@ export interface TierCandidate {
   profiles: ProfileId[];
   peaks: Array<{ options: OptionSet; peakBytes: number; status: PeakStatus; note?: string }>;
   tiers: TierId[];
+  /** Measured but not on any tier: waiting on MODEL-VET-01. Never resolved, never offered as a pick. */
+  vetting?: string;
 }
 
+// Peaks marked "measured" come from docs/design/tier-evaluations-2026-10-30.md in getmaipai/home (Mac Studio, Apple M5 Max, 128 GB). Max video and Max music have no candidate on purpose: a Max slot is catalogued only with a measured, heard gain over the slot below.
 export const TIER_CANDIDATES: TierCandidate[] = [
-  { id: "muse-glimmer-30b-q4-k-xl", category: "chat", family: "muse", label: "Muse Glimmer 30B Q4_K_XL", profiles: ["p64", "p128"], peaks: [{ options: { thinking: false }, peakBytes: 21_000_000_000, status: "unverified" }, { options: { thinking: true, reasoningBudget: 4096 }, peakBytes: 22_500_000_000, status: "unverified" }], tiers: ["standard", "boost"] },
+  { id: "muse-glimmer-30b-q4-k-xl", category: "chat", family: "muse", label: "Muse Glimmer 30B Q4_K_XL", profiles: ["p64", "p128"], peaks: [{ options: { thinking: false }, peakBytes: 19_000_000_000, status: "measured", note: "Tier eval 2026-10-30, 18.6 GB resident, 19.0 GB peak." }, { options: { thinking: true, reasoningBudget: 4096 }, peakBytes: 22_500_000_000, status: "unverified" }], tiers: ["standard", "boost"] },
   { id: "muse-glimmer-30b-q4-k-m", category: "chat", family: "muse", label: "Muse Glimmer 30B Q4_K_M", profiles: ["p32"], peaks: [{ options: {}, peakBytes: 17_000_000_000, status: "unverified" }], tiers: ["standard"] },
   { id: "qwen3-8b-instruct-q4-k-m", category: "chat", family: "qwen3", label: "Qwen3 8B", profiles: ["p16"], peaks: [{ options: {}, peakBytes: 7_000_000_000, status: "unverified" }], tiers: ["standard"] },
-  { id: "qwen3-4b-q4-k-m", category: "chat", family: "qwen3", label: "Qwen3 4B", profiles: ["p16", "p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 4_000_000_000, status: "unverified" }], tiers: ["reduced"] },
-  { id: "qwen3.8-27b-ud-q4-k-m", category: "chat", family: "qwen3.8", label: "Qwen3.8 27B", profiles: ["p64", "p128"], peaks: [{ options: { thinking: true }, peakBytes: 16_000_000_000, status: "unverified" }], tiers: ["boost"] },
+  { id: "qwen3-4b-q4-k-m", category: "chat", family: "qwen3", label: "Qwen3 4B", profiles: ["p16", "p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 5_700_000_000, status: "measured", note: "Tier eval 2026-10-30, the judge profile flags, 5.70 GB after eight turns." }], tiers: ["reduced"] },
+  { id: "qwen3.8-27b-ud-q4-k-m", category: "chat", family: "qwen3.8", label: "Qwen3.8 27B", profiles: ["p64", "p128"], peaks: [{ options: { thinking: true }, peakBytes: 22_200_000_000, status: "unverified", note: "22.2 GB peak measured with thinking off and no MTP draft; the thinking figure and the MTP run are still open." }], tiers: ["boost"] },
+  { id: "qwen3-6-35b-a3b-ud-q4-k-xl", category: "chat", family: "qwen3.6", label: "Qwen3.6 35B A3B", profiles: ["p64", "p128"], peaks: [{ options: { thinking: false }, peakBytes: 23_600_000_000, status: "measured", note: "Tier eval 2026-10-30: 70 tok/s, 9 of 9 searches." }], tiers: [], vetting: "MODEL-VET-01: replacement candidate for Muse at Standard; CHAT-AB-01, KS-BENCH-01 and a licence read come first." },
   { id: "ornith-1-5-122b-mlx-4bit", category: "chat", family: "ornith", label: "Ornith 122B", profiles: ["p128"], peaks: [{ options: {}, peakBytes: 68_700_000_000, status: "measured", note: "Measured design note peak." }], tiers: ["max"] },
   { id: STACK_IMAGE_ERNIE_ID, category: "pictures", family: "ernie", label: "ERNIE Image Turbo", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 18_800_000_000, status: "measured" }], tiers: ["standard"] },
   { id: STACK_IMAGE_KLEIN_ID, category: "pictures", family: "klein", label: "FLUX.2 Klein 4B", profiles: ["p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 10_200_000_000, status: "measured" }], tiers: ["standard"] },
   { id: STACK_IMAGE_ZIMAGE_ID, category: "pictures", family: "z-image", label: "Z-Image Turbo", profiles: ["p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 25_800_000_000, status: "measured" }], tiers: ["boost"] },
-  { id: "ernie-image-base", category: "pictures", family: "ernie", label: "ERNIE Image Base", profiles: ["p128"], peaks: [{ options: { steps: 50, guidance: true }, peakBytes: 30_000_000_000, status: "unverified" }], tiers: ["max"] },
-  { id: STACK_VIDEO_MODEL_ID, category: "video", family: "wan", label: "Wan Video", profiles: ["p128"], peaks: [{ options: {}, peakBytes: 44_000_000_000, status: "measured" }], tiers: ["standard"] },
-  { id: STACK_VIDEO_DETAILED_MODEL_ID, category: "video", family: "ltx", label: "LTX Detailed Video", profiles: ["p128"], peaks: [{ options: {}, peakBytes: 46_000_000_000, status: "measured" }], tiers: ["boost"] },
-  { id: "ltx-2-3-dev-two-stage", category: "video", family: "ltx", label: "LTX 2.3 Two Stage", profiles: ["p128"], peaks: [{ options: {}, peakBytes: 66_000_000_000, status: "unverified" }], tiers: ["max"] },
-  { id: STACK_MUSIC_MODEL_ID, category: "music", family: "ace-step", label: "ACE-Step 1.5 Turbo", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 33_000_000_000, status: "measured" }], tiers: ["standard"] },
-  { id: "ace-step-1-5-xl-turbo", category: "music", family: "ace-step", label: "ACE-Step XL Turbo", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 35_000_000_000, status: "unverified" }], tiers: ["boost"] },
-  { id: "ace-step-1-5-xl-base", category: "music", family: "ace-step", label: "ACE-Step XL Base", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 40_000_000_000, status: "unverified" }], tiers: ["max"] },
-  { id: "chatterbox-turbo-fp16", category: "voice", family: "chatterbox", label: "Chatterbox Turbo", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 4_800_000_000, status: "measured" }], tiers: ["standard"] },
-  { id: "chatterbox-nano", category: "voice", family: "chatterbox", label: "Chatterbox Nano", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 1_500_000_000, status: "unverified" }], tiers: ["reduced"] },
-  { id: "pocket-tts-english", category: "voice", family: "pocket", label: "Pocket TTS", profiles: ["p16", "p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 1_000_000_000, status: "unverified" }], tiers: ["reduced", "standard"] },
+  { id: "qwen-image-2512-q8", category: "pictures", family: "qwen-image", label: "Qwen-Image 20B", profiles: ["p128"], peaks: [{ options: { steps: 30 }, peakBytes: 37_400_000_000, status: "measured", note: "Tier eval 2026-10-30, 1024 x 1024, 181 to 212 s. Nine of 22 prompts; Jesse has not yet judged the pictures." }], tiers: ["max"] },
+  { id: STACK_VIDEO_MODEL_ID, category: "video", family: "wan", label: "Wan Video", profiles: ["p128"], peaks: [{ options: {}, peakBytes: 25_400_000_000, status: "measured", note: "Tier eval 2026-10-30, 832 x 480, 49 frames. Known artifact: a head can appear behind an umbrella." }], tiers: ["standard"] },
+  { id: STACK_VIDEO_DETAILED_MODEL_ID, category: "video", family: "ltx", label: "LTX Detailed Video", profiles: ["p128"], peaks: [{ options: {}, peakBytes: 39_900_000_000, status: "measured", note: "Tier eval 2026-10-30, 768 x 448 with sound." }], tiers: ["boost"] },
+  { id: STACK_MUSIC_MODEL_ID, category: "music", family: "ace-step", label: "ACE-Step 1.5 Turbo", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 16_400_000_000, status: "measured", note: "Tier eval 2026-10-30, MLX peak." }], tiers: ["standard"] },
+  { id: "chatterbox-turbo-fp16", category: "voice", family: "chatterbox", label: "Chatterbox Turbo", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 4_580_000_000, status: "measured", note: "Tier eval 2026-10-30, MLX peak." }], tiers: ["standard"] },
+  { id: "chatterbox-nano", category: "voice", family: "chatterbox", label: "Chatterbox Nano", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 2_770_000_000, status: "measured", note: "Tier eval 2026-10-30, MLX peak with cloning; needs a pinned mlx-audio or a config-reading patch before it ships." }], tiers: ["reduced"] },
+  { id: "pocket-tts-english", category: "voice", family: "pocket", label: "Pocket TTS", profiles: ["p16", "p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 1_600_000_000, status: "measured", note: "Tier eval 2026-10-30, whole process peak." }], tiers: ["reduced", "standard"] },
+  { id: "htdemucs", category: "stems", family: "demucs", label: "Demucs 4 stems", profiles: ["p16", "p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 1_210_000_000, status: "measured", note: "Tier eval 2026-10-30, 40 s song in 2 to 5 s. Boost htdemucs_ft stays out until a listen finds it cleaner." }], tiers: ["standard"] },
 ];
 
 export const TIER_CAP_FRACTIONS = { standard: 0.6, boost: 0.85, max: 1 } as const;
@@ -55,7 +57,8 @@ export function tierCapBytes(tier: TierId, roomBytes: number, reducedFreedBytes 
 
 export interface Resolved { tier: TierId; model: string; options: OptionSet; switchCost: SwitchCost; peakBytes: number; verified: boolean; family: string; }
 export interface ResolveInput { category: TierCategory; tier: TierId; profile: ProfileId; roomBytes: number; reducedFreedBytes?: number; slot?: { model: string | "recommended" | "off"; options?: OptionSet }; below?: Resolved | null; }
-const reducedModels: Partial<Record<TierCategory, string>> = { chat: "qwen3-4b-q4-k-m", voice: "pocket-tts-english" };
+/** Reduced chat is the judge model everywhere; Reduced voice is Chatterbox Nano on p64 and p128 (same family as Standard) and Pocket TTS on p16 and p32 (owner ruling 2026-10-30; Pocket stays the fallback). */
+const reducedModelFor = (category: TierCategory, profile: ProfileId): string | undefined => category === "chat" ? "qwen3-4b-q4-k-m" : category === "voice" ? (profile === "p64" || profile === "p128" ? "chatterbox-nano" : "pocket-tts-english") : undefined;
 const equalOptions = (a: OptionSet, b: OptionSet): boolean => JSON.stringify(Object.entries(a).sort(([x], [y]) => x.localeCompare(y))) === JSON.stringify(Object.entries(b).sort(([x], [y]) => x.localeCompare(y)));
 const candidatesFor = (category: TierCategory, tier: TierId, profile: ProfileId): TierCandidate[] => TIER_CANDIDATES.filter((candidate) => candidate.category === category && candidate.profiles.includes(profile) && candidate.tiers.includes(tier));
 function cost(candidate: TierCandidate, options: OptionSet, below?: Resolved | null): SwitchCost {
@@ -71,7 +74,7 @@ export function resolveTier(input: ResolveInput): Resolved | null {
   if (slot?.model === "off") return null;
   const cap = tierCapBytes(tier, roomBytes, input.reducedFreedBytes);
   if (tier === "reduced") {
-    const id = reducedModels[category];
+    const id = reducedModelFor(category, profile);
     if (!id) return null;
     const candidate = TIER_CANDIDATES.find((item) => item.category === category && item.id === id && item.profiles.includes(profile));
     const peak = candidate?.peaks.find((item) => !slot?.options || equalOptions(item.options, slot.options));
