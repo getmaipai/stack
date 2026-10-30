@@ -6064,6 +6064,40 @@
         }
       }
     },
+    "/stack/v1/engines/gpu-health": {
+      "get": {
+        "tags": [
+          "Engines"
+        ],
+        "summary": "Whether the Mac's graphics compiler answers (GPU-HEALTH-01)",
+        "description": "Compiles one tiny shader through the same compiler service the engines use. `ok` is false with the household sentence in `reason` when it does not answer; a Mac that cannot be asked reads ok.",
+        "responses": {
+          "200": {
+            "description": "The result of one compile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "reason"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/engines/self-heal/restart": {
       "post": {
         "tags": [
