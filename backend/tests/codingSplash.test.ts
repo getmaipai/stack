@@ -251,7 +251,7 @@ test("the engine index's Splash entry (a version tag, not a build number) parses
 // ---- the launch -------------------------------------------------------------------------
 
 test("the Splash launch is exactly this argument list (flags checked against Splash 1.4.1 serve --help)", () => {
-  expect(splashArgs({ model: "unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M", revision: "4ca720788d1e01f1bff70c033e0d0028fd02e502", port: 8801, servedModelName: "qwen3.8-27b-ud-q4-k-m", thinkingBudgetTokens: 2000, contextLength: 131_072, cacheGb: 8 })).toEqual([
+  expect(splashArgs({ model: "unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M", revision: "4ca720788d1e01f1bff70c033e0d0028fd02e502", port: 8801, servedModelName: "qwen3.8-27b-ud-q4-k-m", thinkingBudgetTokens: 2000, contextLength: 131_072 })).toEqual([
     "serve",
     "--model", "unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M",
     "--revision", "4ca720788d1e01f1bff70c033e0d0028fd02e502",
@@ -264,23 +264,22 @@ test("the Splash launch is exactly this argument list (flags checked against Spl
     "--default-reasoning-effort", "medium",
     "--thinking-token-budget", "2000",
     "--max-context", "131072",
-    "--max-cache-disk", "8G",
+    "--max-cache-disk", "0",
     "--idle-release", "off",
     "--no-webui",
   ]);
 });
 
-test("the Splash launch is offline and loopback only, has no API key, bounds its disk cache, and turns it off at 0", () => {
+test("the Splash launch is offline and loopback only, has no API key, always turns its disk cache off", () => {
   const base = { model: "o/r:Q", revision: "r".repeat(40), port: 1, servedModelName: "m", thinkingBudgetTokens: 0, contextLength: 32_768 };
-  const args = splashArgs({ ...base, cacheGb: 3 });
+  const args = splashArgs(base);
   expect(args).toContain("--offline");
   expect(args.slice(args.indexOf("--host"), args.indexOf("--host") + 2)).toEqual(["--host", "127.0.0.1"]);
   expect(args).not.toContain("--api-key");
   expect(args).not.toContain("--persistent-cache");
   expect(args).not.toContain("--draft-model");
-  expect(args.slice(args.indexOf("--max-cache-disk"), args.indexOf("--max-cache-disk") + 2)).toEqual(["--max-cache-disk", "3G"]);
+  expect(args.slice(args.indexOf("--max-cache-disk"), args.indexOf("--max-cache-disk") + 2)).toEqual(["--max-cache-disk", "0"]);
   expect(args.slice(args.indexOf("--thinking-token-budget"), args.indexOf("--thinking-token-budget") + 2)).toEqual(["--thinking-token-budget", "0"]);
-  expect(splashArgs({ ...base, cacheGb: 0 }).slice(-5, -3)).toEqual(["--max-cache-disk", "0"]);
 });
 
 test("the llama-server coding launch is untouched by the Splash one", () => {
@@ -325,9 +324,8 @@ test("the two new settings are declared once, with the Stack's defaults, and rea
   const row = (key: string) => body.settings.find((setting) => setting.key === key)!;
   expect(row("stack.engines.coding.engine")).toMatchObject({ in_effect: "auto", level: "advanced", needs_restart: true, section: { id: "engines.coding" } });
   expect(row("stack.engines.coding.engine").range?.options?.map((option) => option.value)).toEqual(["auto", "splash", "llama-server"]);
-  expect(row("stack.engines.coding.splash_cache_gb")).toMatchObject({ in_effect: 8, level: "expert", needs_restart: true, section: { id: "engines.coding" } });
+  expect(body.settings.some((setting) => setting.key.endsWith("splash_cache_gb"))).toBe(false);
   expect(() => updateSettings({ "stack.engines.coding.engine": "omlx" })).toThrow();
-  expect(() => updateSettings({ "stack.engines.coding.splash_cache_gb": -1 })).toThrow();
 });
 
 // ---- the engine in effect, from the machine and what is installed -------------------------
@@ -588,7 +586,7 @@ macTest("the launch plan runs the bundled Python with the launcher, lays the cac
   installCodingRecords();
   process.env.HF_TOKEN = "hf_must_not_reach_splash";
   try {
-    updateSettings({ "stack.engines.coding.splash_cache_gb": 3, "stack.engines.coding.thinking_budget_ceiling": 1500 }); applyPendingSettings();
+    updateSettings({ "stack.engines.coding.thinking_budget_ceiling": 1500 }); applyPendingSettings();
     const model = selectedModel("coding")!;
     const plan = splashLaunchPlan(model, 8812, 131_072);
     expect(plan).toMatchObject({ engine: "splash", build: "1.4.1", kind: "spawned", stdin: "ignore", contextLength: 131_072, slots: 2, contextScope: "total across slots", healthPath: "/ready", tree: true, imageInput: false, identity: { build: "splash-1.4.1", model: STACK_CODING_MODEL.download!.sha256 } });
@@ -596,7 +594,7 @@ macTest("the launch plan runs the bundled Python with the launcher, lays the cac
       join(root, "python", "bin", "python3"), "-u", join(root, "install", "launcher.py"),
       "serve", "--model", "unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M", "--revision", "4ca720788d1e01f1bff70c033e0d0028fd02e502", "--offline", "--host", "127.0.0.1", "--port", "8812",
       "--language-only", "--served-model-name", "qwen3.8-27b-ud-q4-k-m", "--announce-served-name", "--default-reasoning-effort", "medium", "--thinking-token-budget", "1500",
-      "--max-context", "131072", "--max-cache-disk", "3G", "--idle-release", "off", "--no-webui",
+      "--max-context", "131072", "--max-cache-disk", "0", "--idle-release", "off", "--no-webui",
     ]);
     expect(plan.env).toMatchObject({ HOME: splashHomeDir(), TMPDIR: splashTmpDir(), HF_HOME: splashHomeDir(), HF_HUB_CACHE: splashHubDir(), HF_HUB_OFFLINE: "1", TRANSFORMERS_OFFLINE: "1", DO_NOT_TRACK: "1", HF_HUB_DISABLE_TELEMETRY: "1" });
     expect(plan.env).not.toHaveProperty("HF_TOKEN");

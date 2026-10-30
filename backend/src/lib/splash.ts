@@ -14,8 +14,6 @@ import type { CodingEngine } from "@/lib/engineCatalog";
 export const CODING_ENGINE_SETTING = "stack.engines.coding.engine";
 export const CODING_ENGINE_CHOICES = ["auto", "llama-server", "splash"] as const;
 export type CodingEngineSetting = typeof CODING_ENGINE_CHOICES[number];
-export const SPLASH_CACHE_GB_SETTING = "stack.engines.coding.splash_cache_gb";
-export const SPLASH_CACHE_GB_DEFAULT = 8;
 
 export const SPLASH_MIN_MEMORY_GB = 36;
 export const SPLASH_MIN_CHIP_GENERATION = 3;

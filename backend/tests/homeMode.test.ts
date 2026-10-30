@@ -135,7 +135,7 @@ test("the heavy-mode dry run counts only the embed, stt and tts processes that s
 });
 
 test("coding mode's Splash launch carries its default-effort, memory and decode-share caps", () => {
-  const args = splashArgs({ model: "owner/model", revision: "a".repeat(40), port: 8777, servedModelName: "heavy", thinkingBudgetTokens: 2000, contextLength: 131072, cacheGb: 8, defaultReasoningEffort: "none", maxMemory: "96G", decodeShare: 1.0 });
+  const args = splashArgs({ model: "owner/model", revision: "a".repeat(40), port: 8777, servedModelName: "heavy", thinkingBudgetTokens: 2000, contextLength: 131072, defaultReasoningEffort: "none", maxMemory: "96G", decodeShare: 1.0 });
   expect(args).toContain("--default-reasoning-effort");
   expect(args[args.indexOf("--default-reasoning-effort") + 1]).toBe("none");
   expect(args.slice(args.indexOf("--max-memory"), args.indexOf("--max-memory") + 2)).toEqual(["--max-memory", "96G"]);

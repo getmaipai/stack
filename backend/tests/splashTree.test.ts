@@ -230,7 +230,7 @@ macTest("the first coding request starts Splash through the real start path: lau
   expect(seen.argv).toEqual([
     "--model", "unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M", "--revision", "4ca720788d1e01f1bff70c033e0d0028fd02e502", "--offline", "--host", "127.0.0.1", "--port", String(started.port),
     "--language-only", "--served-model-name", "qwen3.8-27b-ud-q4-k-m", "--announce-served-name", "--default-reasoning-effort", "medium", "--thinking-token-budget", "2000",
-    "--max-context", "131072", "--max-cache-disk", "8G", "--idle-release", "off", "--no-webui",
+    "--max-context", "131072", "--max-cache-disk", "0", "--idle-release", "off", "--no-webui",
   ]);
   expect(seen.env).toMatchObject({ HOME: splashHomeDir(), TMPDIR: splashTmpDir(), HF_HOME: splashHomeDir(), HF_HUB_CACHE: splashHubDir(), HF_HUB_OFFLINE: "1", TRANSFORMERS_OFFLINE: "1", DO_NOT_TRACK: "1", HF_HUB_DISABLE_TELEMETRY: "1", HF_TOKEN: null, HUGGING_FACE_HUB_TOKEN: null, STACK_SECRETS_KEY: null, PYTHONPATH: null, SPLASH_API_KEY: null });
   // The Stack's files were laid out first, by hardlink.

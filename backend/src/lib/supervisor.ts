@@ -32,7 +32,7 @@ import { OmlxEngineClient } from "@/chat/omlxClient";
 import { CHAT_ENGINE_SETTING, clearChatEngineFailures, FALLBACK_AFTER_FAILURES, markChatEngineFailed, resolveChatEngine, type ChatEngineChoice, type ChatEngineId } from "@/lib/chatEngines";
 import { clearTtsEngineFailures, markTtsEngineFailed, resolveTtsEngine, TTS_ENGINE_SETTING, TTS_ENGINES, type TtsEngineChoice, type TtsEngineId } from "@/speech/ttsEngines";
 import { STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
-import { clearCodingEngineFailures, codingEngineFailure, CODING_ENGINE_SETTING, markCodingEngineFailed, resolveCodingEngine, SPLASH_CACHE_GB_DEFAULT, SPLASH_CACHE_GB_SETTING, splashEnv, splashFootprintEstimateBytes, type CodingEngineChoice, type SplashFacts } from "@/lib/splash";
+import { clearCodingEngineFailures, codingEngineFailure, CODING_ENGINE_SETTING, markCodingEngineFailed, resolveCodingEngine, splashEnv, splashFootprintEstimateBytes, type CodingEngineChoice, type SplashFacts } from "@/lib/splash";
 import { layOutSplashCache, SplashLayoutError, splashPairFor } from "@/lib/splashStore";
 import { TreeSnapshot, treeMemoryBytes } from "@/lib/processTree";
 import { comfyuiCommand, comfyuiEnv, comfyuiInstalled, COMFYUI_VERSION, linkCheckpoint, probeGenerator } from "@/generators/comfyui";
@@ -1464,9 +1464,6 @@ export function splashLaunchPlan(model: ModelRecord, port: number, contextLength
   const pair = splashPairFor(model.id);
   try { layout = layOutSplashCache(getModel, pair.pin, pair.draftPin); } catch (error) { if (error instanceof SplashLayoutError) throw new EngineUnavailableError(error.message); throw error; }
   const values = settingValues();
-  const chatCacheSetting = values["stack.engines.chat.splash_cache_gb"];
-  const cacheSetting = pinName === "splash-chat" ? chatCacheSetting : values[SPLASH_CACHE_GB_SETTING];
-  const cacheGb = Math.min(64, typeof cacheSetting === "number" && Number.isFinite(cacheSetting) ? Math.max(0, Math.floor(cacheSetting)) : SPLASH_CACHE_GB_DEFAULT);
   const coding = codingLaunchSettings(values);
   const tag = currentEngineTag(pinName) ?? pin.tag;
   const modeCoding = currentHomeMode() === "coding" || homeModeEnteringCoding();
@@ -1477,7 +1474,7 @@ export function splashLaunchPlan(model: ModelRecord, port: number, contextLength
   const maxMemoryBytes = modeCoding ? Math.max(1, Math.min(governor.capBytes - stayingBytes, estimate + governor.marginBytes)) : null;
   const chatRole = pinName === "splash-chat";
   const thinkingBudget = Math.max(0, Math.floor(Number(values["stack.engines.chat.thinking_budget_ceiling"] ?? 2000)));
-  const args = splashArgs({ model: layout.model, revision: layout.revision, port, servedModelName: model.id, thinkingBudgetTokens: chatRole ? thinkingBudget : coding.thinkingBudgetTokens, contextLength, cacheGb, languageOnly: !declaredReadsPictures(model), ...(modeCoding ? { defaultReasoningEffort: "none" as const, maxMemory: `${Math.max(1, Math.floor(maxMemoryBytes! / 1_073_741_824))}G`, decodeShare: 1.0 } : {}) });
+  const args = splashArgs({ model: layout.model, revision: layout.revision, port, servedModelName: model.id, thinkingBudgetTokens: chatRole ? thinkingBudget : coding.thinkingBudgetTokens, contextLength, languageOnly: !declaredReadsPictures(model), ...(modeCoding ? { defaultReasoningEffort: "none" as const, maxMemory: `${Math.max(1, Math.floor(maxMemoryBytes! / 1_073_741_824))}G`, decodeShare: 1.0 } : {}) });
   const env = splashEnv(layout);
   if (chatRole) env.DO_NOT_TRACK = "1";
   return {

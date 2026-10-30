@@ -2598,7 +2598,7 @@ rule holds.
 out as above; `HOME`, `TMPDIR`, `HF_HUB_CACHE` pointing there; `HF_HUB_OFFLINE=1`, `DO_NOT_TRACK=1`; run under `sandbox-exec` with a profile
 that denies every network operation except loopback; port 8895; 128 GB Mac with about 40 GB free). `python3 -u install/launcher.py serve
 --model unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M --revision 4ca72078… --offline --host 127.0.0.1 --port 8895 --language-only
---served-model-name qwen3.8-27b-ud-q4-k-m --default-reasoning-effort medium --thinking-token-budget 2000 --max-cache-disk 8G --no-webui`:
+--served-model-name qwen3.8-27b-ud-q4-k-m --default-reasoning-effort medium --thinking-token-budget 2000 --max-cache-disk 8G --no-webui` (the test ran with the cache on; since SPLASH-DISK-01 the Stack always passes `0`):
 the log said "Could not reach the Hub (HF_HUB_OFFLINE is set); installing … from the Hub cache", selected the GGUF, "Installing …
 draft incoai/Qwen3.8-27B-DFlash2; vision disabled", loaded the weights in 2.5 s and reached `Ready` in 8 s from a fresh state folder, with
 the SSD cache in the scratch `TMPDIR`. `/v1/models` listed the loaded id and the served name, owned by `splash`; a chat request answered 391 for
@@ -2644,7 +2644,7 @@ because one GGUF serves both engines (`recordEngineFor`).
 **The launch** (`splashArgs()` in `engineArgs.ts`, `splashLaunchPlan()` and `splashEnv()`): the bundled `python/bin/python3 -u install/launcher.py serve`
 with `--model <repo>:<variant from the pin> --revision <commit> --offline --host 127.0.0.1 --port <free> --language-only --served-model-name
 <pin id> --announce-served-name --default-reasoning-effort medium --thinking-token-budget <ceiling> --max-context <window> --max-cache-disk
-<splash_cache_gb>G --idle-release off --no-webui`. No `--api-key` (loopback), no `--persistent-cache`, no `--draft-model` (Splash pairs the
+0 --idle-release off --no-webui`. No `--api-key` (loopback), no `--persistent-cache`, no `--draft-model` (Splash pairs the
 Qwen3.8-27B family with the draft in the cache, the one tested), the Neural Engine left on (the benchmark's setting; it is local compute).
 `--max-context` can only lower Splash's own limit and keeps the window the `/v1/models?role=coding` route reports. `--idle-release off` leaves
 keep-warm to the Stack (Splash's default frees the weights after 10 minutes while the Stack would still count them). The environment is the
@@ -2682,7 +2682,7 @@ same command (SIGTERM, 5 s, SIGKILL); an unexpected exit of the root and a faile
 lease and the 120 s pause bound are the S2 and S3b mechanisms, unchanged.
 
 **Settings.** `stack.engines.coding.engine` (`auto`, `splash`, `llama-server`; advanced; needs a restart; section "Coding engine") and
-`stack.engines.coding.splash_cache_gb` (0 to 64, default 8; expert; needs a restart). `slots` is reported for Splash and not enforced (Splash
+(the two `splash_cache_gb` settings were removed by SPLASH-DISK-01: the SSD cache is always off). `slots` is reported for Splash and not enforced (Splash
 queues 32 requests itself).
 
 **Found along the way.** (1) The update check's `EngineIndexEntrySchema` accepted only `b<digits>` tags, so the whole engine index would have been
@@ -2815,3 +2815,16 @@ The launch now always names `--parallel` (the declared slots, one by default), `
 the old `--cache-ram-mb` spelling is rejected by b10797 and failed the launch) and `--ctx-checkpoints 8`. A chat model
 over 8 GB is admitted for the fit tool's device estimate plus the projector, the cache cap and a 2 GB output buffer. The
 waiting line counts only the jobs actually ahead of a job ("waiting for memory", then "(N ahead)" for N above zero).
+
+### SPLASH-DISK-01 (2026-10-30): Splash's SSD cache is off
+
+**Measured on the live hub (paths and sizes only).** The coding and chat Splash processes were started with `--max-cache-disk=4294967296` (the chat
+default of 4 GB; coding defaulted to 8 GB; Splash's own default is 32 GB). Each run opens a `splash-cache-*` folder under `data/splash/tmp`
+(the Stack points `TMPDIR` there and empties it at each load); the Metal shader cache (`com.apple.metal/.../functions.data`) is the only other
+file written. The cache holds prompt and slot state, which is the turn by construction, so the only conforming setting is off. macOS' flag of
+2.1 GB and 8.6 GB in two hours matches a cache bounded at 4 to 8 GB being filled and recycled.
+**Who loaded it:** the chat engine is started by the first chat request and held by the memory governor as resident; the coding engine is an
+on-demand item unloaded by `keep_warm_minutes` (default 15, `unloadIdleRoles` in `daemon.ts`). Neither applies to the resident chat engine, whose
+idle release is TIER-HOME-05's lease (Splash's own `--idle-release off`), which is why its footprint stayed up while idle; that stays with the
+tier work. **Fix:** `splashArgs` always passes `--max-cache-disk 0`; the `splash_cache_gb` settings are removed. `scripts/bench/splash-disk-writes.sh`
+reports the bytes under the Splash tmp folder over a window (bench lane, not the gate).
