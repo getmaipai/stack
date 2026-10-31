@@ -1,5 +1,5 @@
 export {};
-const usage = "Usage: bun run scripts/resource-recapture-bench.ts --stack http://127.0.0.1:8770 --kind picture|video|music|stems|all";
+const usage = "Usage: bun run scripts/resource-recapture-bench.ts --stack http://127.0.0.1:8770 --kind picture|video|music|stems|all [--wait-seconds N]";
 const args = process.argv.slice(2);
 if (args.includes("--help") || args.length === 0) { console.log(usage); process.exit(0); }
 const value = (name: string) => { const i = args.indexOf(name); return i < 0 ? undefined : args[i + 1]; };
@@ -15,10 +15,10 @@ async function read(): Promise<Reading> {
   return { processes: report.stack.processes.length, stackBytes: report.stack.bytes, unaccounted: report.stack.unaccounted_bytes, tmp: report.stack.tmp_bytes };
 }
 const jobs: Record<string, { path: string; body: unknown; ttl: number }> = {
-  picture: { path: "/v1/images/generations", body: { prompt: "A small blue square", size: "256x256", n: 1, steps: 1, timeout_ms: 30 * 60_000 }, ttl: 6000 },
-  video: { path: "/v1/videos/generations", body: { prompt: "A short blue square", model: "quick", size: "256x256", seconds: 1, timeout_ms: 30 * 60_000 }, ttl: 6000 },
-  music: { path: "/v1/audio/music", body: { task: "text2music", caption: "instrumental", instrumental: true, duration_s: 5, timeout_ms: 30 * 60_000 }, ttl: 3000 },
-  stems: { path: "/v1/audio/stems", body: null, ttl: 70_000 },
+  picture: { path: "/v1/images/generations", body: { prompt: "A small blue square", size: "256x256", n: 1, steps: 1, timeout_ms: 30 * 60_000 }, ttl: 600_000 },
+  video: { path: "/v1/videos/generations", body: { prompt: "A short blue square", model: "quick", size: "256x256", seconds: 1, timeout_ms: 30 * 60_000 }, ttl: 600_000 },
+  music: { path: "/v1/audio/music", body: { task: "text2music", caption: "instrumental", instrumental: true, duration_s: 5, timeout_ms: 30 * 60_000 }, ttl: 300_000 },
+  stems: { path: "/v1/audio/stems", body: null, ttl: 60_000 },
 };
 const rows: Array<{ kind: string; before: Reading; after: Reading }> = [];
 for (const selected of kind === "all" ? Object.keys(jobs) : [kind!]) {
@@ -37,7 +37,8 @@ for (const selected of kind === "all" ? Object.keys(jobs) : [kind!]) {
       if (["done", "failed", "cancelled"].includes(status.state)) { if (status.state !== "done") throw new Error(`${selected} job ended ${status.state}`); break; }
     }
   }
-  await Bun.sleep(job.ttl + 10_000);
+  // The worker's real idle time (picture and video 10 minutes, music 5, stems 1) plus ten seconds, or --wait-seconds.
+  await Bun.sleep(value("--wait-seconds") ? Number(value("--wait-seconds")) * 1000 : job.ttl + 10_000);
   const after = await read();
   rows.push({ kind: selected, before, after });
 }
