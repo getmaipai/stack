@@ -65,6 +65,7 @@ const runners = new Map<string, RegisteredRunner>();
 const queues = new Map<string, Job[]>();
 /** The generator job in flight per role, if any. */
 const inFlight = new Map<string, string>();
+const admitting = new Map<string, string>();
 const pumping = new Set<string>();
 /** Queued jobs per idle lane, the job running on each lane, and the settle function that frees a running job's lane (callable once). */
 const laneQueues = new Map<string, Job[]>();
@@ -266,13 +267,13 @@ function renumber(role: string): void {
  * governor's reason when refused or paused, and releases the admission
  * however the run ends. */
 async function pump(role: string): Promise<void> {
-  if (inFlight.has(role) || pumping.has(role)) return;
+  if (inFlight.has(role) || admitting.has(role) || pumping.has(role)) return;
   if (!(queues.get(role)?.length)) return;
   if (heavyGate.status().interactive_in_flight > 0 || memoryLevel() !== "normal") {
     pumping.add(role);
     await waitToStart(role);
     pumping.delete(role);
-    if (inFlight.has(role)) return;
+    if (inFlight.has(role) || admitting.has(role)) return;
   }
   const queue = queues.get(role) ?? [];
   const next = queue.shift();
@@ -280,9 +281,9 @@ async function pump(role: string): Promise<void> {
   renumber(role);
   const current = jobs.get(next.id);
   if (!current || current.state !== "queued") { void pump(role); return; }
-  inFlight.set(role, next.id);
+  admitting.set(role, next.id);
   const runner = runners.get(next.kind);
-  const settle = () => { inFlight.delete(role); void pump(role); };
+  const settle = () => { if (inFlight.get(role) === next.id) inFlight.delete(role); if (admitting.get(role) === next.id) admitting.delete(role); void pump(role); };
   if (!runner?.options.generator) { finishJob(next.id, { ok: false, reason: `No generator runs ${next.kind} jobs.` }); settle(); return; }
   jobs.set(next.id, { ...jobs.get(next.id)!, position: null });
   touch(jobs.get(next.id)!, { state: "running", status: "waiting for memory" });
@@ -301,6 +302,8 @@ async function pump(role: string): Promise<void> {
   }
   const job = jobs.get(next.id);
   if (!job || job.state !== "running") { release(handle); settle(); return; }
+  admitting.delete(role);
+  inFlight.set(role, next.id);
   touch(job, { status: "starting" });
   run(job, runner, () => { release(handle!); settle(); });
 }
@@ -406,6 +409,7 @@ export function cancelGeneratorsForMemory(scope: "queued" | "running", reason: s
   const ids: string[] = [];
   if (scope === "queued") for (const queue of queues.values()) for (const queued of queue) ids.push(queued.id);
   else ids.push(...inFlight.values());
+  if (scope === "queued") ids.push(...admitting.values());
   ids.sort((a, b) => Number(/video/i.test(jobs.get(b)?.kind ?? "")) - Number(/video/i.test(jobs.get(a)?.kind ?? "")));
   for (const id of ids) {
     const job = jobs.get(id);
@@ -454,7 +458,7 @@ export async function waitForJob(id: string, timeoutMs: number): Promise<Job | n
 export function __resetJobsForTests(): void {
   for (const controller of controllers.values()) controller.abort();
   for (const timer of laneTimers.values()) clearTimeout(timer);
-  controllers.clear(); pausedJobs.clear(); jobs.clear(); runners.clear(); queues.clear(); inFlight.clear(); pumping.clear();
+  controllers.clear(); pausedJobs.clear(); jobs.clear(); runners.clear(); queues.clear(); inFlight.clear(); admitting.clear(); pumping.clear();
   __setJobQueueTimingForTests(null);
   laneQueues.clear(); laneRunning.clear(); laneSettles.clear(); laneTimers.clear();
 }

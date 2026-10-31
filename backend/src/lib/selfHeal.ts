@@ -21,6 +21,7 @@ import { raise, resolve as resolveHealth } from "@/lib/health";
 import { logger } from "@/lib/log";
 import { listJobs, runningGeneratorKinds } from "@/lib/jobs";
 import { lowMemoryRefusal } from "@/lib/memoryState";
+import { isMemoryWaitReason } from "@/lib/admission";
 import { classifyCrash, HOST_FAULT_VERDICT, isHostFault, type CrashVerdict } from "@/lib/crashClassifier";
 import { getRunState } from "@/lib/governor";
 import { settingValues } from "@/settings";
@@ -54,6 +55,7 @@ const realClock: Clock = {
   after(ms, run) { const timer = setTimeout(run, ms); (timer as unknown as { unref?: () => void }).unref?.(); return () => clearTimeout(timer); },
 };
 let clock: Clock = realClock;
+let startHeal = healStart;
 
 export type HealEventKind = "crashed" | "healed" | "gave_up" | "requested_by_canary";
 export interface HealEvent {
@@ -243,7 +245,7 @@ async function attempt(role: RoleId): Promise<void> {
   heal.attempting = true;
   const crashedAt = heal.crashedAt ?? clock.now();
   try {
-    const result = await healStart(role);
+    const result = await startHeal(role);
     const now = clock.now();
     if (result.ok) {
       heal.lastReadyAt = now;
@@ -255,6 +257,14 @@ async function attempt(role: RoleId): Promise<void> {
     if (isHostFault(result.reason)) {
       heal.verdict = HOST_FAULT_VERDICT;
       if (roleGeneration(role) === heal.generation) waitForHost(role, heal, heal.verdict);
+      return;
+    }
+    if (isMemoryWaitReason(result.reason)) {
+      if (roleGeneration(role) === heal.generation) {
+        const refusalVerdict: CrashVerdict = { kind: "unknown", cause: "The governor needs more memory to restart the engine.", fix: "The Stack waits for memory and tries again.", retryHelps: true };
+        heal.verdict = refusalVerdict;
+        waitForHost(role, heal, refusalVerdict);
+      }
       return;
     }
     heal.failures.push(now);
@@ -325,13 +335,14 @@ export function stopSelfHeal(): void {
 
 // ---- tests ------------------------------------------------------------------
 
-export function __setSelfHealForTests(options: { clock?: Clock; rules?: Partial<Rules> } | null): void {
+export function __setSelfHealForTests(options: { clock?: Clock; rules?: Partial<Rules>; startHeal?: typeof healStart } | null): void {
   clock = options?.clock ?? realClock;
+  startHeal = options?.startHeal ?? healStart;
   rules = { ...SELF_HEAL_RULES, backoffMs: [...SELF_HEAL_RULES.backoffMs], ...(options?.rules ?? {}) } as Rules;
 }
 export function __resetSelfHealForTests(): void {
   stopSelfHeal();
-  states.clear(); holds.clear(); chain = Promise.resolve();
+  states.clear(); holds.clear(); chain = Promise.resolve(); startHeal = healStart;
   try { db.delete(meta).where(eq(meta.key, EVENTS_KEY)).run(); } catch { /* no database yet */ }
 }
 /** Resolves when the restart in flight (if any) has finished. */

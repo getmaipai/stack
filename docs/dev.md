@@ -396,7 +396,8 @@ where nothing changed. One re-admission per poll; a head that still
 cannot be admitted stays at the head. A queued request returns a
 promise the caller can await instead of watching the loaded set, and
 `withdraw` removes it before admission and settles the promise
-refused.
+refused. A give-up timer is cleared when its request settles, and it
+can withdraw only while that request remains queued.
 
 Eviction reads idle time, pin state, kernel pressure and process
 memory. A JIT model unloads after `idleTtlSeconds` (600) plus any
@@ -415,7 +416,7 @@ nor is stored as a footprint. The pressure event names the reading and the limit
 (`process_bytes`, `limit_bytes`). A healthy reading above the run's
 peak raises the admission peak, and each rise of 64 MiB or more is
 written to the model record, so the next admission and fit plan start
-from the latest run. Critical pressure aborts the in-flight generator. The poll
+from the latest run. Critical pressure cancellation is handled by the watchdog. The poll
 is every 5 s idle, every 1 s during a load. The governor keeps a bounded
 in-memory ledger of its newest 200 decisions with the reason for each,
 served on the budget route; nothing about decisions is persisted.
@@ -2042,7 +2043,10 @@ dry run plus the projector (or a measured whole-machine peak on the
 pin once one exists), and a request restarts its idle clock. Only a
 watch that can unload evicts a `jit` item, only once its process runs,
 and without blocking the watch while requests drain; an entry is removed
-by its own admission's token, never a newer one under the same id. An
+by its own admission's token, never a newer one under the same id. A
+late unload removes an entry only if its token still matches. Admission
+waits clear their give-up timer as soon as the governor answers. Jobs
+waiting for admission remain queued until a handle is returned. An
 admission never evicts a resident. A resident role about to start
 unloads any `jit` role first: a picture start still queued for memory
 is withdrawn at once, one already admitted and loading is retired

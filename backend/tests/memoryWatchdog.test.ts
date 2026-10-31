@@ -4,9 +4,9 @@
 // the route, and one live read-only check against this computer's numbers.
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { app } from "@/app";
-import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, getGovernorStatus, release, setAdmissionGate, startGovernor } from "@/lib/governor";
+import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, getGovernorStatus, release, setAdmissionGate, startGovernor, type GovernorHandle } from "@/lib/governor";
 import { __resetHealthForTests, list as listHealth } from "@/lib/health";
-import { __resetJobsForTests, cancelGeneratorsForMemory, getJob, registerJobRunner, submitJob, waitForJob, __setAdmissionWaitForTests } from "@/lib/jobs";
+import { __resetJobsForTests, cancelGeneratorsForMemory, getJob, registerJobRunner, submitJob, waitForJob, __setAdmissionWaitForTests, runningGeneratorKinds } from "@/lib/jobs";
 import { __setSystemSamplerForTests, parseEtime, parseProcessTable, type ProcessRow, type SystemSample, type SystemSampler } from "@/lib/memory/system";
 import { __resetMemoryStateForTests, admissionVerdict, latestSample, memoryLevel, PAUSED_LOW_MEMORY, reserveBytes, setLatestSample, setMemoryLevel } from "@/lib/memoryState";
 import { defaultActions, descendantsOf, findOrphans, MemoryWatchdog, newLadder, rawLevel, stepLadder, type WatchdogActions } from "@/lib/memoryWatchdog";
@@ -489,6 +489,20 @@ test("a running generative job stopped for memory runs its cleanup, releases the
   expect(job.reason).toBe("Stopped: out of memory.");
   expect(cleaned).toBe(true);
   expect(getGovernorStatus().loaded).toEqual([]);
+});
+
+test("a generator waiting for memory is queued until admission, then running scope can stop it", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: TOTAL, freeMemoryBytes: 10 * GB, tier: "p128" });
+  const holder = await admit({ id: "hold-memory", kind: "resident", requestedBytes: 30 * GB }) as GovernorHandle;
+  registerJobRunner("video_waiting_test", async () => ({}), { generator: { role: "video", memory: () => ({ requestedBytes: 20 * GB }) } });
+  const submitted = submitJob({ kind: "video_waiting_test" });
+  if ("refused" in submitted) throw new Error(submitted.reason);
+  await Bun.sleep(5);
+  expect(runningGeneratorKinds()).toEqual([]);
+  expect(cancelGeneratorsForMemory("running", "running only")).toEqual([]);
+  expect(cancelGeneratorsForMemory("queued", "queued stop")).toEqual([submitted.job.id]);
+  expect(getJob(submitted.job.id)?.state).toBe("cancelled");
+  release(holder);
 });
 
 // ---- no action on processes the Stack does not own ----

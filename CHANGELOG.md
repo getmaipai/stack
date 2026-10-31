@@ -22,6 +22,8 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Fixed
 
+- An unload in flight no longer removes a newer admission of the same engine, the admission give-up timer is cleared, a governor refusal no longer counts toward the self-heal breaker, a job waiting for memory is no longer reported as running, and the dead generator abort branch is removed (RESOURCE-FIX-07a).
+
 - The memory watchdog needs two samples for chat paged-out, keeps voice and the judge five minutes after a conversation, restarts chat at CRITICAL only when the Stack holds most of the memory, never awaits an unload, never evicts chat as 'the judge', and starts chat again after its restart; reserved roles are admitted under WARN (RESOURCE-FIX-06).
 
 - The memory watchdog stops a helper process the Stack itself started when it outlives its finished job, and reports memory its ledger cannot account for, every tick; nothing is ever matched by name (RESOURCE-FIX-10c).

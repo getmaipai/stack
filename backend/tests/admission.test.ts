@@ -83,6 +83,13 @@ test("a retried wait on the same id takes over the old watcher: the retry gets t
   release(handle!);
 });
 
+test("an admitted request timeout is cleared before a later same-id wait", async () => {
+  const first = await waitForAdmission({ id: "same", kind: "resident", requestedBytes: GB }, { stillWanted: () => true, timeoutMs: 20 });
+  expect(first?.id).toBe("same");
+  const later = waitForAdmission({ id: "same", kind: "resident", requestedBytes: GB }, { stillWanted: () => true });
+  expect((await later)?.id).toBe("same");
+});
+
 test("no kick while the memory reading is degraded: the head stays queued instead of being refused and dropped", async () => {
   const { startGovernor } = await import("@/lib/governor");
   const { scriptedMemoryReader } = await import("@/lib/memory/scripted");

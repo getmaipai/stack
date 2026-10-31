@@ -33,6 +33,13 @@ export function waitingReason(id: string, request: GovernorRequest): string {
   return `${why} It needs about ${gb(governorPeak(request))} GB with ${gb(status.freeMemoryBytes)} GB available (free memory plus cache the system can reclaim), and the machine's tier keeps ${gb(status.marginBytes)} GB of that back; memory pressure is ${status.pressure}.`;
 }
 
+/** `waitingReason` and the refusals in `governor.ts` are the source of these temporary memory waits. */
+export function isMemoryWaitReason(reason: string): boolean {
+  return reason.includes("free memory plus cache the system can reclaim")
+    || reason === "The governor queue is full."
+    || reason === "The memory reading is unavailable.";
+}
+
 export function gb(bytes: number): string { return (bytes / 1_073_741_824).toFixed(1); }
 
 export class AdmissionRefusedError extends Error {
@@ -64,16 +71,20 @@ export async function waitForAdmission(request: GovernorRequest, options: WaitOp
   if (!("queued" in answer)) return answer;
   options.onPosition?.(answer.position);
   let gaveUp = false;
+  const queuedId = request.id;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const giveUp = () => {
     if (gaveUp) return;
+    if (!getGovernorStatus().queue.some((item) => item.id === queuedId)) return;
     gaveUp = true;
     options.onGaveUp?.();
-    withdraw(request.id);
+    withdraw(queuedId);
   };
   if (options.timeoutMs !== undefined) {
-    setTimeout(giveUp, options.timeoutMs);
+    timer = setTimeout(giveUp, options.timeoutMs);
   }
   const admitted = await answer.admitted;
+  if (timer !== undefined) clearTimeout(timer);
   if (gaveUp) return null;
   if ("refused" in admitted) throw new AdmissionRefusedError(admitted.reason);
   if (!options.stillWanted()) { giveUp(); return null; }

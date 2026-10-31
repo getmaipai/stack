@@ -55,6 +55,7 @@ beforeEach(() => {
   __setSelfHealForTests({ clock });
   startSelfHeal(); timers = []; // the sweep's own timer is not under test here
 });
+
 afterEach(() => { __resetSelfHealForTests(); __setSelfHealForTests(null); setSupervisorFactoryForTests(null); resetSupervisorForTests(); __resetMemoryStateForTests(); __resetJobsForTests(); });
 
 const crashItem = (role: RoleId) => listHealth().find((item) => item.code === `engine.crashed.${role}`);
@@ -170,6 +171,29 @@ test("a restarted engine that fails the identity or one-token check is not calle
   badProbe = false;
   expect(getRoleStatus("chat").state).toBe("offline");
   await fire();
+});
+
+test("five governor wait refusals leave the breaker closed and the role is retried later", async () => {
+  const reasons = [
+    ...Array.from({ length: 4 }, () => "The current memory budget cannot admit the request. It needs about 4.0 GB with 2.0 GB available (free memory plus cache the system can reclaim), and the machine's tier keeps 1.0 GB of that back; memory pressure is normal."),
+    "The governor queue is full.",
+  ];
+  let index = 0;
+  __setSelfHealForTests({ clock, startHeal: async () => ({ ok: false, reason: reasons[index++] ?? reasons.at(-1)! }) });
+  await crash("chat");
+  for (let attempt = 0; attempt < 5; attempt++) await fire();
+  expect(selfHealSummary().stopped).toEqual([]);
+  expect(selfHealSummary().healing).toContain("chat");
+  expect(crashItem("chat")?.text).toContain("waits for it");
+  expect(pending().length).toBeGreaterThan(0);
+});
+
+test("five never-fits refusals still open the breaker", async () => {
+  __setSelfHealForTests({ clock, startHeal: async () => ({ ok: false, reason: "chat needs about 99.0 GB; the memory budget for models is 16.0 GB." }) });
+  await crash("chat");
+  for (let attempt = 0; attempt < 4; attempt++) await fire();
+  expect(selfHealSummary().stopped).toEqual(["chat"]);
+  expect(pending()).toHaveLength(0);
 });
 
 test("a cause a retry cannot fix opens the circuit at once", async () => {

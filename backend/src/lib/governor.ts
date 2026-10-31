@@ -664,6 +664,9 @@ export function getGovernorStatus(): GovernorStatus {
   };
 }
 
+/** Test-only view of the in-flight eviction mark. */
+export function __isEvictingForTests(id: string): boolean { return loaded.get(id)?.evicting ?? false; }
+
 export interface StartGovernorOptions {
   pid: number;
   pollMs?: number;
@@ -684,7 +687,6 @@ export interface StartGovernorOptions {
    * back, by at least `peakRecordStepBytes`): the caller stores it, so
    * the next admission starts from the latest run, not the first. */
   onPeak?: (id: string, processBytes: number) => void;
-  abort?: (id: string) => Promise<void> | void;
   /** A video job is held for memory and nothing lighter freed enough: the
    * caller restarts idle chat at a smaller window. Resolves false when
    * chat is busy (asked again next poll). */
@@ -806,8 +808,6 @@ export function startGovernor(options: StartGovernorOptions): () => void {
       const idle = now - new Date(item.lastUsedAt).getTime() >= idleLimit;
       if (item.kind === "generator" && pressure === "critical") {
         if (maxWindow.ownerId === item.id) { closeMaxWindow(); decide("Released", "The Max job stopped because memory pressure became critical.", item.id, "max_window"); }
-        await options.abort?.(item.id);
-        emit({ id: "pressure", data: { reason: "critical kernel memory pressure aborted a generator", id: item.id, pressure } });
       }
       // Only a watch that can unload evicts: forgetting a jit item whose
       // process still runs would hide its memory from every admission.
@@ -816,13 +816,14 @@ export function startGovernor(options: StartGovernorOptions): () => void {
         // (another process's RSS watch among them) never waits on it. The
         // entry goes when its own process is gone, never a newer one.
         item.evicting = true;
+        const token = item.token;
         const unload = unloadItem;
         decide("Unloaded", pressure !== "normal" ? `Memory pressure is ${pressure}.` : "The model was idle.", item.id);
         void (async () => {
           let unloaded: boolean | void = undefined;
           try { unloaded = await unload(item.id); } catch { unloaded = false; }
           if (unloaded === false) { item.evicting = false; return; }
-          if (loaded.get(item.id) === item) { if (item.grewRaised) resolveHealth(`resident-memory-grew.${item.id}`); loaded.delete(item.id); freeMemoryBytes += item.peakBytes; }
+          if (loaded.get(item.id) === item && item.token === token) { if (item.grewRaised) resolveHealth(`resident-memory-grew.${item.id}`); loaded.delete(item.id); freeMemoryBytes += item.peakBytes; }
         })();
       }
     }
@@ -841,12 +842,13 @@ export function startGovernor(options: StartGovernorOptions): () => void {
           const unload = unloadItem;
           for (const item of yielding) {
             item.evicting = true;
+            const token = item.token;
             void (async () => {
               let unloaded: boolean | void = undefined;
               try { unloaded = await unload(item.id); } catch { unloaded = false; }
               if (unloaded === false) { item.evicting = false; return; }
               decide("Unloaded", "A picture, video or music job was waiting and the model was idle.", item.id);
-              if (loaded.get(item.id) === item) { if (item.grewRaised) resolveHealth(`resident-memory-grew.${item.id}`); loaded.delete(item.id); freeMemoryBytes += item.peakBytes; }
+              if (loaded.get(item.id) === item && item.token === token) { if (item.grewRaised) resolveHealth(`resident-memory-grew.${item.id}`); loaded.delete(item.id); freeMemoryBytes += item.peakBytes; }
             })();
           }
         }
@@ -928,13 +930,14 @@ export function startGovernor(options: StartGovernorOptions): () => void {
             if (!item || item.evicting) continue;
             reclaim(head.request.id, id === "image-pool" ? "evict_pool" : "evict_idle", id, item.peakBytes, now);
             item.evicting = true;
+            const token = item.token;
             const unload = unloadItem;
             void (async () => {
               let unloaded: boolean | void = undefined;
               try { unloaded = await unload(id); } catch { unloaded = false; }
               if (unloaded === false) { item.evicting = false; return; }
               decide("Unloaded", `The ${requestClass(head.request)} request needed room.`, id);
-              if (loaded.get(id) === item) { if (item.grewRaised) resolveHealth(`resident-memory-grew.${item.id}`); loaded.delete(id); freeMemoryBytes += item.peakBytes; }
+              if (loaded.get(id) === item && item.token === token) { if (item.grewRaised) resolveHealth(`resident-memory-grew.${item.id}`); loaded.delete(id); freeMemoryBytes += item.peakBytes; }
             })();
             available += item.peakBytes;
           }

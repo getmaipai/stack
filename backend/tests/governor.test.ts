@@ -19,6 +19,9 @@ import {
   withdraw,
   touch,
   setWarmWorkerUnload,
+  setIdleTtlSeconds,
+  cancelEvicting,
+  __isEvictingForTests,
   type GovernorHandle,
 } from "@/lib/governor";
 import { scriptedMemoryReader } from "@/lib/memory/scripted";
@@ -225,6 +228,52 @@ test("an idle image pool unloads through the governor after its warm window and 
   expect(unloaded).toContain("image-pool");
   await Bun.sleep(5);
   expect(getGovernorStatus().loaded).toEqual([]);
+});
+
+test("an eviction without re-admission removes its ledger entry", async () => {
+  let now = Date.now();
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 100 * GB, tier: "p128" });
+  const handle = await admit({ id: "image-pool", kind: "jit", class: "warm", requestedBytes: GB }) as GovernorHandle;
+  release(handle);
+  setIdleTtlSeconds("image-pool", 1);
+  const stop = startGovernor({ pid: 1, pollMs: 1, now: () => now, unload: () => true });
+  stops.push(stop);
+  now += 2_000;
+  for (let i = 0; i < 20 && getGovernorStatus().loaded.length; i++) await Bun.sleep(2);
+  expect(getGovernorStatus().loaded).toEqual([]);
+});
+
+test("an unload in flight does not remove a newer admission of the same id", async () => {
+  let now = Date.now();
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 100 * GB, tier: "p128" });
+  const first = await admit({ id: "X", kind: "jit", class: "warm", requestedBytes: GB, retainWarm: true }) as GovernorHandle;
+  release(first);
+  setIdleTtlSeconds("X", 1);
+  let started = false;
+  let resolveUnload!: (value: boolean) => void;
+  const unloading = new Promise<boolean>((resolve) => { resolveUnload = resolve; });
+  const stop = startGovernor({ pid: 1, pollMs: 1, now: () => now + 2_000, unload: (id) => {
+    if (id !== "X") return false;
+    started = true;
+    return unloading;
+  } });
+  stops.push(stop);
+  for (let i = 0; i < 20 && (!started || !__isEvictingForTests("X")); i++) {
+    await Bun.sleep(2);
+  }
+  expect(started).toBe(true);
+  expect(__isEvictingForTests("X")).toBe(true);
+
+  const request = { id: "X", kind: "resident" as const, class: "reserved" as const, requestedBytes: 2 * GB };
+  let newer = await admit(request);
+  if ("refused" in newer) {
+    cancelEvicting("X");
+    newer = await admit(request);
+  }
+  expect(newer).toMatchObject({ id: "X", kind: "resident", class: "reserved" });
+  resolveUnload(true);
+  for (let i = 0; i < 10; i++) await Bun.sleep(2);
+  expect(getGovernorStatus().loaded).toMatchObject([{ id: "X", kind: "resident", class: "reserved" }]);
 });
 
 test("a burst video waits for the warm grace, unloads the idle image pool, then is admitted", async () => {
@@ -462,17 +511,16 @@ test("kernel warn pressure pauses admission and reports the available percent", 
   expect(await admit({ id: "pressure-blocked", kind: "resident", class: "warm", requestedBytes: GB })).toMatchObject({ queued: true, position: 1 });
 });
 
-test("kernel critical pressure aborts an in-flight generator", async () => {
+test("kernel critical pressure does not record a dead generator abort", async () => {
   await admit({ id: "generator-critical", kind: "generator", requestedBytes: GB });
-  const aborted: string[] = [];
   const stop = startGovernor({ pid: 1, pollMs: 1, memoryReader: scriptedMemoryReader([
     { totalBytes: 64 * GB, freeBytes: 32 * GB, availablePercent: 50, pressure: "normal", degraded: false },
     { totalBytes: 64 * GB, freeBytes: GB, availablePercent: 2, pressure: "critical", degraded: false },
-  ]), abort: (id) => { aborted.push(id); } });
+  ]) });
   stops.push(stop);
   await Bun.sleep(5);
   expect(getGovernorStatus().pressure).toBe("critical");
-  expect(aborted).toContain("generator-critical");
+  expect(getGovernorDecisions().some((item) => item.decision === "CRITICAL" && /aborted a generator/.test(item.reason))).toBe(false);
 });
 
 test("a degraded reading changes no state, flags the status, refuses new work, and recovers", async () => {
