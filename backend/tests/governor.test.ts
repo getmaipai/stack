@@ -183,6 +183,50 @@ test("roomAfterEviction orders idle warm models and protects reserved and busy e
   expect(room.evictionOrder).not.toContain("video");
 });
 
+test("reserved queue entries move ahead of generators and keep their arrival order", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 64 * GB, freeMemoryBytes: 20 * GB, tier: "p32" });
+  const occupying = await admit({ id: "occupying-resident", kind: "resident", requestedBytes: 8 * GB }) as GovernorHandle;
+  __setGovernorTuningForTestsOnly({ freeMemoryBytes: 8 * GB });
+  const generator = await admit({ id: "waiting-video", role: "video", kind: "generator", class: "burst", requestedBytes: 20 * GB });
+  const reservedA = await admit({ id: "reserved-a", kind: "resident", class: "reserved", requestedBytes: 8 * GB });
+  const reservedB = await admit({ id: "reserved-b", kind: "resident", class: "reserved", requestedBytes: 20 * GB });
+  expect(reservedA).toMatchObject({ queued: true, position: 1 });
+  expect(reservedB).toMatchObject({ queued: true, position: 2 });
+  expect(generator).toMatchObject({ queued: true });
+  expect(getGovernorStatus().queue.map((entry) => entry.id)).toEqual(["reserved-a", "reserved-b", "waiting-video"]);
+
+  __setGovernorTuningForTestsOnly({ freeMemoryBytes: 16 * GB });
+  release(occupying);
+  const admitted = (reservedA as { admitted: Promise<unknown> }).admitted;
+  expect(await Promise.race([admitted, Bun.sleep(100).then(() => "still waiting")])).toMatchObject({ id: "reserved-a" });
+  expect(getGovernorStatus().queue.map((entry) => entry.id)).toEqual(["reserved-b", "waiting-video"]);
+});
+
+test("queue limit counts non-reserved entries and reserved requests have a separate cap", async () => {
+  __setGovernorTuningForTestsOnly({ freeMemoryBytes: 2 * GB });
+  await admit({ id: "busy-generator", kind: "generator", requestedBytes: 4 * GB });
+  for (let index = 1; index <= 4; index++) await admit({ id: `waiting-generator-${index}`, kind: "generator", requestedBytes: 50 * GB });
+  expect(await admit({ id: "waiting-generator-fifth", kind: "generator", requestedBytes: 50 * GB })).toEqual({ refused: true, reason: "The governor queue is full." });
+  expect(await admit({ id: "reserved-over-limit", kind: "resident", class: "reserved", requestedBytes: GB })).toMatchObject({ queued: true });
+});
+
+test("eviction rank uses exact registered ids", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 100 * GB, tier: "p128" });
+  const ids = ["coding", "image-pool", "unknown-warm", "vision"];
+  for (const id of ids) await admit({ id, role: id === "vision" ? "vision" : undefined, kind: "jit", class: "warm", requestedBytes: GB });
+  for (const id of ids) touch(id);
+  const now = Date.now() + 3 * 60_000;
+  expect(roomAfterEviction({ id: "request", kind: "generator", class: "burst", requestedBytes: GB }, () => false, now).evictionOrder).toEqual(["vision", "coding", "image-pool", "unknown-warm"]);
+});
+
+test("ids containing rank words do not inherit substring ranks", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 100 * GB, tier: "p128" });
+  for (const id of ["preview-tool-x", "video-editor", "ordinary"]) await admit({ id, kind: "jit", class: "warm", requestedBytes: GB });
+  for (const id of ["preview-tool-x", "video-editor", "ordinary"]) touch(id);
+  const now = Date.now() + 3 * 60_000;
+  expect(roomAfterEviction({ id: "request", kind: "generator", class: "burst", requestedBytes: GB }, () => false, now).evictionOrder).toEqual(["preview-tool-x", "video-editor", "ordinary"]);
+});
+
 test("the image pool admission becomes one warm governor item and is reused for a larger edit", async () => {
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 100 * GB, tier: "p128" });
   const create = await admit({ id: "image-pool", kind: "generator", class: "warm", requestedBytes: 15 * GB, measuredPeakBytes: 15 * GB, retainWarm: true }) as GovernorHandle;

@@ -377,8 +377,11 @@ and the requested peak. A load starts only when available memory minus
 the requested peak leaves the profile's working margin (4 GB on p16, 8 GB on p32, 12 GB on p64, 20 GB on p128)
 and the loaded total stays under the cap (total memory minus the OS
 margin, 8 GB by default, declared as `stack.memory.model_budget_bytes`). Only one
-generator runs at a time; a request that cannot be admitted enters a
-queue of four with a position, or is refused with a reason. Three
+generator runs at a time. A request that cannot be admitted enters a
+queue with a position, or is refused with a reason. Reserved engine
+loads queue ahead of generators and keep their arrival order. They do
+not count toward the four-entry limit; that limit counts waiting
+generators and other non-reserved requests. Three
 refusals of the same request raise `admission-refused-repeatedly`.
 
 The cap is the smaller of total memory minus the OS margin and Metal's
@@ -398,6 +401,9 @@ promise the caller can await instead of watching the loaded set, and
 `withdraw` removes it before admission and settles the promise
 refused. A give-up timer is cleared when its request settles, and it
 can withdraw only while that request remains queued.
+
+Within each class, eviction uses a table of exact ids. An id that is not
+listed gets rank 0 when it is burst and rank 4 when it is warm.
 
 Eviction reads idle time, pin state, kernel pressure and process
 memory. A JIT model unloads after `idleTtlSeconds` (600) plus any

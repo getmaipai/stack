@@ -302,14 +302,12 @@ export interface EvictionRoom {
 }
 
 const classRank: Record<GovernorClass, number> = { reserved: 0, warm: 1, burst: 2 };
+// Exact ids only (a renamed or new item never silently takes a rank): `vision`, the picture edit model and `coding`
+// have their own place in the order; `image-pool`, the other warm workers and anything unknown rank 4, and burst job
+// entries rank 0. `image-tools` and `look` are pinned and never candidates.
+const exactEvictionRanks: Record<string, number> = { vision: 1, "edit-model": 2, coding: 3 };
 /** The memory note's 4.3 order inside a class: finished burst workers first, then warm items from cheapest to dearest to reload. */
-const evictionRank = (item: LoadedInternal): number => {
-  if (item.class === "burst") return item.id.includes("tool") ? 1 : 0;
-  if (item.id.includes("vision")) return 1;
-  if (item.id.includes("edit")) return 2;
-  if (item.id.includes("coding")) return 3;
-  return 4;
-};
+const evictionRank = (item: LoadedInternal): number => exactEvictionRanks[item.id] ?? (item.class === "burst" ? 0 : 4);
 
 const byEvictionOrder = (a: LoadedInternal, b: LoadedInternal): number => classRank[b.class] - classRank[a.class] || evictionRank(a) - evictionRank(b) || new Date(a.lastUsedAt).getTime() - new Date(b.lastUsedAt).getTime();
 
@@ -484,26 +482,36 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
     return { refused: true, reason: "The memory reading is unavailable." };
   }
   if (!canAdmit(request, peak.bytes)) {
+    for (let index = queue.length - 1; index >= 0; index--) if (queue[index]!.settled) queue.splice(index, 1);
     const refusals = (refusalCounts.get(request.id) ?? 0) + 1;
     refusalCounts.set(request.id, refusals);
     if (refusals >= 3) raise({ code: "admission-refused-repeatedly", severity: "warning", title: "Work is waiting for memory", text: `The governor has deferred ${request.id} repeatedly.`, cause: "The current memory budget cannot admit the request.", fix: { label: "Free memory", action: "free_memory" } });
-    if (queue.length >= tuning.queueMax) { decide("Refused", "The governor queue is full.", request.id); return { refused: true, reason: "The governor queue is full." }; }
+    const requestIsReserved = requestClass(request) === "reserved";
+    const waitingNonReserved = queue.filter((entry) => !entry.settled && requestClass(entry.request) !== "reserved").length;
+    const waitingReserved = queue.filter((entry) => !entry.settled && requestClass(entry.request) === "reserved").length;
+    if ((!requestIsReserved && waitingNonReserved >= tuning.queueMax) || (requestIsReserved && waitingReserved >= tuning.queueMax * 4)) { decide("Refused", "The governor queue is full.", request.id); return { refused: true, reason: "The governor queue is full." }; }
     const existing = queue.findIndex((entry) => entry.request.id === request.id);
     if (existing >= 0) return { queued: true, position: existing + 1, class: requestClass(request), admitted: queue[existing]!.admitted };
     let resolveQueued!: (result: GovernorHandle | { refused: true; reason: string }) => void;
     const admitted: Promise<GovernorHandle | { refused: true; reason: string }> = new Promise<GovernorHandle | { refused: true; reason: string }>((resolve) => { resolveQueued = resolve; });
-    for (const row of queue) if (!row.settled && row.headSince === null && !queue.slice(0, queue.indexOf(row)).some((prior) => !prior.settled)) row.headSince = Date.now();
-    const entry: QueuedEntry = { request, settled: false, headSince: queue.some((row) => !row.settled) ? null : Date.now(), admitted, resolve: resolveQueued };
+    const entry: QueuedEntry = { request, settled: false, headSince: null, admitted, resolve: resolveQueued };
     if (request.tier === "max" && maxWindow.state === "none") {
       maxWindow = { state: "draining", ownerId: request.id, since: Date.now() };
       reclaim(request.id, "window_drain", "", 0);
     }
-    queue.push(entry);
+    const insertAt = requestIsReserved ? queue.findIndex((row) => !row.settled && requestClass(row.request) !== "reserved") : -1;
+    if (insertAt < 0) queue.push(entry); else queue.splice(insertAt, 0, entry);
+    const unsettled = queue.filter((row) => !row.settled);
+    if (unsettled.length > 0) {
+      if (unsettled[0] === entry || unsettled[0]!.headSince === null) unsettled[0]!.headSince = Date.now();
+      for (const row of unsettled.slice(1)) row.headSince = null;
+    }
+    for (let index = queue.length - 1; index >= 0; index--) if (queue[index]!.settled) queue.splice(index, 1);
     const gated = gateVerdict(request, peak.bytes);
     const heldByMode = codingModeActive && request.kind === "generator";
     const heldByWindow = maxWindow.state !== "none" && request.id !== maxWindow.ownerId && requestClass(request) !== "reserved";
     decide("Queued", heldByWindow ? "A Max job is waiting for the computer. This one starts after it." : heldByMode ? "The large coding mode is holding picture, video and music work." : !gated.ok ? gated.reason : pressure !== "normal" ? `Memory pressure is ${pressure}.` : "The current memory budget cannot admit the request.", request.id, heldByWindow ? "max_window" : heldByMode ? "coding_mode" : undefined);
-    return { queued: true, position: queue.length, class: requestClass(request), admitted };
+    return { queued: true, position: queue.indexOf(entry) + 1, class: requestClass(request), admitted };
   }
   refusalCounts.delete(request.id);
   resolveHealth("admission-refused-repeatedly");

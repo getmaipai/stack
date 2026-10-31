@@ -22,6 +22,8 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Fixed
 
+- A reserved engine load no longer waits behind a waiting picture, video or song and is never refused for a full queue; the eviction order is a table of exact ids instead of substring matches (RESOURCE-FIX-07b).
+
 - An unload in flight no longer removes a newer admission of the same engine, the admission give-up timer is cleared, a governor refusal no longer counts toward the self-heal breaker, a job waiting for memory is no longer reported as running, and the dead generator abort branch is removed (RESOURCE-FIX-07a).
 
 - The memory watchdog needs two samples for chat paged-out, keeps voice and the judge five minutes after a conversation, restarts chat at CRITICAL only when the Stack holds most of the memory, never awaits an unload, never evicts chat as 'the judge', and starts chat again after its restart; reserved roles are admitted under WARN (RESOURCE-FIX-06).
