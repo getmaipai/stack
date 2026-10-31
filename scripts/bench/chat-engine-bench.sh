@@ -30,7 +30,7 @@ LP=""; SP=""
 cleanup() { for p in $SP $LP; do [ -n "$p" ] || continue; pkill -P "$p" 2>/dev/null || true; kill "$p" 2>/dev/null || true; done; wait 2>/dev/null || true; }
 trap cleanup EXIT
 "$LLAMA" --model "$GGUF" --port "$LLAMA_PORT" --host 127.0.0.1 -c "$CTX" -fa on -ngl 99 --jinja >"${TMPDIR:-/tmp}/bench-llama.log" 2>&1 & LP=$!
-(cd "$SPL" && HOME="$DATA/splash/home" HF_HOME="$DATA/splash/home" HF_HUB_CACHE="$DATA/splash/hub" HF_HUB_OFFLINE=1 \
+(cd "$SPL" && PYTHONPATH="$SPL" HOME="$DATA/splash/home" HF_HOME="$DATA/splash/home" HF_HUB_CACHE="$DATA/splash/hub" HF_HUB_OFFLINE=1 \
   exec "$SPL/python/bin/python3" -u -P -m server.server "$SEL" --model huihui-ai/Huihui-Qwen3.8-27B-abliterated-GGUF:UD-IQ4_XS \
   --binary "$SPL/engine/splash" --port "$SPLASH_PORT" --no-webui --max-context="$CTX" --idle-release=off \
   --served-model-name="$MODEL_NAME" --announce-served-name --default-reasoning-effort=medium >"${TMPDIR:-/tmp}/bench-splash.log" 2>&1) & SP=$!
