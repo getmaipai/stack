@@ -32,8 +32,11 @@ def run(request):
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     model.to(device).eval()
     import subprocess
-    decoded = subprocess.run([request["ffmpeg"], "-nostdin", "-hide_banner", "-loglevel", "error", "-i", request["source"], "-f", "f32le", "-ar", str(model.samplerate), "-ac", "2", "pipe:1"], check=True, stdout=subprocess.PIPE).stdout
+    decoded = subprocess.run([request["ffmpeg"], "-nostdin", "-hide_banner", "-loglevel", "error", "-i", request["source"], *(["-t", str(request["maxSeconds"] + 1)] if request.get("maxSeconds") else []), "-f", "f32le", "-ar", str(model.samplerate), "-ac", "2", "pipe:1"], check=True, stdout=subprocess.PIPE).stdout
     waveform = np.frombuffer(decoded, dtype="<f4").reshape(-1, 2).copy()
+    max_seconds = request.get("maxSeconds")
+    if max_seconds and len(waveform) / model.samplerate > max_seconds:
+        raise RuntimeError("That file is too long to split. Try one under %d minutes." % (max_seconds // 60))
     mix = torch.from_numpy(waveform.T.copy()).unsqueeze(0).to(device)
     emit({"id": request["id"], "event": "stage", "stage": "splitting", "fraction": 0.2})
     with __import__("torch").inference_mode():

@@ -3,8 +3,8 @@ import { join } from "node:path";
 import { registerJobRunner, type Job, type JobProgress } from "@/lib/jobs";
 import { GenTracker, recordRun } from "@/lib/genProgress";
 import { STEMS_MODEL_ID } from "./stems";
-import { stems, STEMS_PEAK_BYTES, type StemName } from "./stems";
-import { recordMadeSong } from "@/music/provenance";
+import { stems, STEMS_PEAK_BYTES, STEMS_OWNED_MAX_SECONDS, type StemName } from "./stems";
+import { recordMadeSong, sha256Hex } from "@/music/provenance";
 import { resultDir, workDir } from "@/music/results";
 import { dataDir } from "@/lib/paths";
 
@@ -19,7 +19,8 @@ export const stemsTracker = (id: string) => trackers.get(id) ?? null;
 const remember = <T>(map: Map<string, T>, key: string, value: T) => { map.set(key, value); if (map.size > 200) map.delete(map.keys().next().value as string); };
 
 async function run(job: Job, signal: AbortSignal, update: JobProgress) {
-  const input = job.input as { token: string } | null;
+  const input = job.input as { token: string; origin?: "made_here" | "owned_file" } | null;
+  const owned = input?.origin === "owned_file";
   const payload = stash.get(input?.token ?? ""); stash.delete(input?.token ?? "");
   if (!payload) throw new Error("The request was not received. Send it again.");
   const work = workDir(job.id); rmSync(work, { recursive: true, force: true }); mkdirSync(work, { recursive: true, mode: 0o700 });
@@ -31,10 +32,10 @@ async function run(job: Job, signal: AbortSignal, update: JobProgress) {
     const started = Date.now();
     const tracker = new GenTracker("music", "stems:htdemucs");
     remember(trackers, job.id, tracker);
-    const result = await stems.run({ id: job.id, source: sourcePath, outputs }, (stage, fraction) => { remember(stages, job.id, stage); tracker.enter(stage === "loading" ? "load" : stage === "splitting" ? "music" : "save"); update({ status: stage, percent: Math.round(fraction * 100) }); }, signal);
+    const result = await stems.run({ id: job.id, source: sourcePath, outputs, ...(owned ? { maxSeconds: STEMS_OWNED_MAX_SECONDS } : {}) }, (stage, fraction) => { remember(stages, job.id, stage); tracker.enter(stage === "loading" ? "load" : stage === "splitting" ? "music" : "save"); update({ status: stage, percent: Math.round(fraction * 100) }); }, signal);
     recordRun(tracker.key, tracker.finish());
     const files = result.files.map((file) => {
-      const bytes = new Uint8Array(readFileSync(file.path)); const sha256 = recordMadeSong(bytes);
+      const bytes = new Uint8Array(readFileSync(file.path)); const sha256 = owned ? sha256Hex(bytes) : recordMadeSong(bytes);
       return { stem: file.stem, bytes: bytes.length, sha256, path: file.path };
     });
     commitStemsResult(job.id, files, outputDir);

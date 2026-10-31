@@ -15,6 +15,7 @@ export const STEMS_VERSION = "4.1.0";
 export const STEMS_PEAK_BYTES = 3_000_000_000;
 export const STEMS_MODEL_ID = "htdemucs";
 export const STEMS_MAX_SOURCE_BYTES = 40 * 1024 * 1024;
+export const STEMS_OWNED_MAX_SECONDS = 12 * 60;
 export const STEMS_IDLE_MS = 60_000;
 export const stemsRoot = () => engineTagRoot(STEMS_NAME, STEMS_VERSION);
 const root = stemsRoot;
@@ -22,7 +23,7 @@ const proof = () => join(uvVenvPath(root()), "lib", "python3.12", "site-packages
 export const stemsEnvironmentReady = (): boolean => uvEnvironmentReady({ name: STEMS_NAME, version: STEMS_VERSION, root: root(), proof: proof() });
 const spec = (): UvEnvironmentSpec => ({ name: STEMS_NAME, version: STEMS_VERSION, root: root(), requirements: process.platform === "darwin" && process.arch === "arm64" ? requirements : null, proof: proof() });
 export type StemName = "vocals" | "drums" | "bass" | "other";
-export interface StemsRequest { id: string; source: string; outputs: Record<StemName, string>; checkpoint: string; config: string; ffmpeg: string; }
+export interface StemsRequest { maxSeconds?: number; id: string; source: string; outputs: Record<StemName, string>; checkpoint: string; config: string; ffmpeg: string; }
 export interface StemsFile { stem: StemName; path: string; rms: number; }
 export interface StemsHandle { send(request: StemsRequest, cb: (stage: string, fraction: number) => void, signal?: AbortSignal): Promise<{ files: StemsFile[]; ms: number }>; kill(): void; exited: Promise<number>; pausable?: PausableWorker; }
 export interface StemsDeps { supported: () => boolean; installed: () => boolean; ensure: (stage: (s: string) => void, signal?: AbortSignal) => Promise<void>; runtime: () => { checkpoint: string; config: string; ffmpeg: string }; spawn: () => Promise<StemsHandle>; }
@@ -78,10 +79,10 @@ export class StemsService {
   get depsAvailable(): boolean { return this.deps.supported(); }
   get installed(): boolean { return this.deps.installed(); }
   get state(): string { return !this.deps.supported() ? "unsupported" : !this.installed ? "not-installed" : this.building ? "building" : this.busy ? "running" : this.worker ? "idle" : "needs-setup"; }
-  run(request: Pick<StemsRequest, "id" | "source" | "outputs">, onStage: (stage: string, fraction: number) => void, signal?: AbortSignal) {
+  run(request: Pick<StemsRequest, "id" | "source" | "outputs" | "maxSeconds">, onStage: (stage: string, fraction: number) => void, signal?: AbortSignal) {
     const job = this.chain.then(() => this.execute(request, onStage, signal), () => this.execute(request, onStage, signal)); this.chain = job.catch(() => {}); return job;
   }
-  private async execute(request: Pick<StemsRequest, "id" | "source" | "outputs">, stage: (s: string, f: number) => void, signal?: AbortSignal) {
+  private async execute(request: Pick<StemsRequest, "id" | "source" | "outputs" | "maxSeconds">, stage: (s: string, f: number) => void, signal?: AbortSignal) {
     if (signal?.aborted) throw new Error("Cancelled.");
     if (!this.deps.installed()) throw new Error("The htdemucs model is not installed."); this.busy++; if (this.idle) clearTimeout(this.idle);
     let lease: ReturnType<typeof heavyGate.attach> | undefined;

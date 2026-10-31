@@ -5160,6 +5160,13 @@
                       "htdemucs"
                     ]
                   },
+                  "origin": {
+                    "type": "string",
+                    "enum": [
+                      "made_here",
+                      "owned_file"
+                    ]
+                  },
                   "timeout_ms": {
                     "type": "integer",
                     "minimum": 0,
