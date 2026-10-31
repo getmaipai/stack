@@ -1,7 +1,7 @@
 // MEM-SPACE-03/04: "make space now" for the Performance page. Lists and unloads only what this Stack loaded itself and nothing is using: idle
 // jit roles, the idle picture worker (after its 2 minute grace) and finished burst workers, in the governor's eviction order. It never touches
 // reserved chat, a busy item, or any process the Stack does not own, and it reports counts and bytes only (no app or person names).
-import { beginEvicting, cancelEvicting, forgetLoadedItem, reclaimableItems, unloadImagePool, type ReclaimItem } from "@/lib/governor";
+import { beginEvicting, cancelEvicting, forgetLoadedItem, reclaimableItems, unloadWarmWorker, type ReclaimItem } from "@/lib/governor";
 
 export interface ReclaimDeps {
   busy: (id: string) => boolean;
@@ -13,7 +13,7 @@ async function defaultDeps(): Promise<ReclaimDeps> {
   const supervisor = await import("@/lib/supervisor");
   return {
     busy: (id) => { try { return supervisor.getRoleStatus(id as Parameters<typeof supervisor.getRoleStatus>[0]).state === "busy"; } catch { return false; } },
-    unload: (id) => (id === "image-pool" ? unloadImagePool() : supervisor.unloadJitForGovernor(id)),
+    unload: (id) => (id === "image-pool" ? unloadWarmWorker(id) : supervisor.unloadJitForGovernor(id)),
   };
 }
 

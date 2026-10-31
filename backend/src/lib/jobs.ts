@@ -9,7 +9,7 @@
 // submit for it is refused with a reason rather than left queued.
 import { emit } from "@/lib/events";
 import { noteComponentUse } from "@/lib/componentUse";
-import { admit, fitsEverForTier, generatorsHeldByMode, getGovernorStatus, getMaxWindow, getReclaimSteps, getRunState, GovernorRules, neverFitReason, neverFitTierReason, peakFor, release, withdraw, type GovernorHandle, type GovernorRequest, type JobTier } from "@/lib/governor";
+import { admit, fitsEverForTier, forgetLoadedItem, hasWarmWorkerUnload, unloadWarmWorker, generatorsHeldByMode, getGovernorStatus, getMaxWindow, getReclaimSteps, getRunState, GovernorRules, neverFitReason, neverFitTierReason, peakFor, release, withdraw, type GovernorHandle, type GovernorRequest, type JobTier } from "@/lib/governor";
 import { heavyGate, isolationRules } from "@/lib/heavyGate";
 import { memoryLevel, PAUSED_LOW_MEMORY, waitingText } from "@/lib/memoryState";
 import { ROLES } from "@/roles";
@@ -289,10 +289,11 @@ async function pump(role: string): Promise<void> {
   let handle: GovernorHandle;
   try {
     const imagePool = role === "image" && (next.kind === "image_generation" || next.kind === "image_edit_generative");
+    const warmWorker = imagePool ? "image-pool" : role === "video" ? "video-worker" : role === "music" ? "music-worker" : role === "stems" ? "stems-worker" : null;
     const imageEdit = imagePool && next.kind === "image_edit_generative";
     const tier = (next.input as { tier?: JobTier } | null)?.tier;
     const videoQuiet = role === "video" ? jobs.get(next.id)?.input as { quiet_seconds?: number; quiet_max_wait_seconds?: number | null } | null : null;
-    handle = await admitJob(next.id, { id: imagePool ? "image-pool" : next.id, role, class: ROLES[role as keyof typeof ROLES]?.memoryClass ?? "burst", kind: "generator", ...(tier ? { tier } : {}), ...(imagePool ? { retainWarm: true } : {}), ...(imageEdit ? { poolPeakBytes: GovernorRules.imagePoolPeakBytes } : {}), ...(videoQuiet?.quiet_seconds !== undefined ? { quietSeconds: videoQuiet.quiet_seconds } : {}), ...(videoQuiet?.quiet_max_wait_seconds !== undefined ? { quietMaxWaitSeconds: videoQuiet.quiet_max_wait_seconds } : {}), ...runner.options.generator.memory(jobs.get(next.id)!) });
+    handle = await admitJob(next.id, { id: warmWorker ?? next.id, role, class: ROLES[role as keyof typeof ROLES]?.memoryClass ?? "burst", kind: "generator", ...(tier ? { tier } : {}), ...(warmWorker ? { retainWarm: true, keepAliveSeconds: 0 } : {}), ...(imageEdit ? { poolPeakBytes: GovernorRules.imagePoolPeakBytes } : {}), ...(videoQuiet?.quiet_seconds !== undefined ? { quietSeconds: videoQuiet.quiet_seconds } : {}), ...(videoQuiet?.quiet_max_wait_seconds !== undefined ? { quietMaxWaitSeconds: videoQuiet.quiet_max_wait_seconds } : {}), ...runner.options.generator.memory(jobs.get(next.id)!) });
   } catch (error) {
     finishJob(next.id, { ok: false, reason: error instanceof Error ? error.message : String(error) });
     settle();
@@ -391,6 +392,15 @@ export function cancelJob(id: string): Job | null {
 }
 
 /** The watchdog's way to stop generative work for memory. A queued job is cancelled before it starts; a running one has its signal aborted, which makes its runner stop the worker and remove its partial files (every runner cleans up in a finally). The record says plainly why. Running jobs go video first, then the rest. */
+/** A job stopped for memory gives its idle worker back now: the worker is stopped when its module is loaded, and the ledger entry goes either way. A user cancel or a failure keeps the warm worker, accounted for and evictable like the picture pool. */
+const WARM_WORKER_IDS: Record<string, string> = { image: "image-pool", video: "video-worker", music: "music-worker", stems: "stems-worker" };
+function giveBackWarmWorker(role: string | null | undefined): void {
+  const id = role ? WARM_WORKER_IDS[role] : undefined;
+  if (!id) return;
+  if (hasWarmWorkerUnload(id)) void unloadWarmWorker(id).catch(() => {});
+  else forgetLoadedItem(id);
+}
+
 export function cancelGeneratorsForMemory(scope: "queued" | "running", reason: string, status = PAUSED_LOW_MEMORY): string[] {
   const stopped: string[] = [];
   const ids: string[] = [];
@@ -412,6 +422,7 @@ export function cancelGeneratorsForMemory(scope: "queued" | "running", reason: s
     const maxOwner = (job.input as { tier?: string } | null)?.tier === "max";
     if (scope === "running" && maxOwner) touch(job, { state: "failed", status: "Memory ran out, so this job stopped and can be started again.", reason: "Memory ran out, so this job stopped and can be started again.", position: null });
     else touch(job, { state: "cancelled", status, reason, position: null });
+    if (scope === "running") giveBackWarmWorker(job.role);
     stopped.push(id);
     // One running job per pass: the caller asks again if memory is still short.
     if (scope === "running") break;

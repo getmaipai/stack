@@ -20,6 +20,7 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Fixed
 
+- A finished picture, video, music or stems job leaves no child process behind, and an idle worker's memory stays on the ledger until it exits (RESOURCE-FIX-10a).
 - The video context shrink of chat runs only after the reclaim ladder and in a quiet window, restores at the next quiet moment, warms chat after both, and is counted on the memory report (RESOURCE-FIX-03).
 - Every engine stop, unload and restart logs its cause; `unspecified` is gone (RESOURCE-FIX-02, Home issue 262).
 - The governor's runaway watch no longer restarts chat or another reserved role for using more memory than its post-load reading; it raises a health item instead (Home issue 262: 87 chat restarts on 2026-10-29).

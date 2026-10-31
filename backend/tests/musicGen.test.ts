@@ -25,6 +25,7 @@ import { __resetGenHistoryForTests, GenTracker, MUSIC_STAGES } from "@/lib/genPr
 import { buildDiskPlan } from "@/lib/diskPlan";
 import { collectComponentsCatalog } from "@/lib/componentsDoc";
 import { componentDefs } from "@/lib/components";
+import { removeWorkerDir, startLeakyWorker, waitForWorkerRequest, waitForWorkerTreeGone, waitForWorkerPids } from "./helpers/leakyWorker";
 
 const GB = 1_073_741_824;
 let spawned = 0;
@@ -124,7 +125,7 @@ test("a song is made, polled to done, fetched with and without a range, and dele
   expect((await get(body.data[0]!.url as string)).status).toBe(404);
   expect((await get(`/v1/audio/music/${body.job}`)).status).toBe(404);
   // The governor admission is back, and the work folder is gone.
-  expect(getGovernorStatus().loaded).toHaveLength(0);
+  expect(getGovernorStatus().loaded.map((item) => [item.id, item.kind])).toEqual([["music-worker", "jit"]]);
   expect(existsSync(workDir(body.job))).toBe(false);
 });
 
@@ -180,6 +181,35 @@ test("past timeout_ms the answer is 202; the status shows the stage in words wit
   expect(await (await get(`/v1/audio/music/${job}`)).json()).toMatchObject({ state: "cancelled", stage: null, stage_label: null, progress_fraction: null, eta_seconds: null, code: "cancelled" });
   release(okReply(requests[0]!));
 });
+
+test("a music edit waits in the music governor queue when memory is unavailable", async () => {
+  const bytes = fakeM4a("edit-admission");
+  musicGen.useDeps(scripted());
+  recordMadeSong(bytes);
+  __setGovernorTuningForTestsOnly({ freeMemoryBytes: GB });
+  const response = await post({ task: "edit", source: Buffer.from(bytes).toString("base64"), source_sha256: sha256Hex(bytes), edit: { op: "trim", from_s: 1, to_s: 20 }, timeout_ms: 1 });
+  expect(response.status).toBe(202);
+  const { job } = await response.json() as { job: string };
+  for (let i = 0; i < 100 && !getGovernorStatus().queue.some((item) => item.id === "music-worker"); i++) await Bun.sleep(10);
+  expect(getJob(job)).toMatchObject({ kind: "music_edit", role: "music" });
+  expect(getGovernorStatus().queue).toContainEqual(expect.objectContaining({ id: "music-worker", kind: "generator" }));
+  expect(requests).toHaveLength(0);
+});
+
+test("cancel stops the music worker and its child process", async () => {
+  process.env.MAIPAI_TEST_NO_PORTS = "1";
+  let dir = "";
+  musicGen.useDeps(scripted(okReply, { spawn: async () => { const started = startLeakyWorker(workerHandle); dir = started.dir; return started.worker; } }));
+  try {
+    const response = await post({ ...song, timeout_ms: 1 });
+    const { job } = await response.json() as { job: string };
+    for (let i = 0; i < 500 && !dir; i++) await Bun.sleep(20);
+    const pids = await waitForWorkerPids(join(dir, "pids"));
+    await waitForWorkerRequest(join(dir, "accepted"));
+    await app.request(`/v1/audio/music/${job}`, { method: "DELETE" });
+    expect(await waitForWorkerTreeGone(pids)).toBe(true);
+  } finally { musicGen.stop(); if (dir) removeWorkerDir(dir); }
+}, 30_000);
 
 test("a job that is running but has reported no stage yet is getting ready", async () => {
   musicGen.useDeps(scripted(() => new Promise<WorkerReply>(() => {}), { ensureEnvironment: (_progress, signal) => new Promise<void>((_, reject) => { signal?.addEventListener("abort", () => reject(new Error("cancelled"))); }) }));
@@ -320,7 +350,7 @@ test("the ledger keeps a hash and a time, survives a restart of the module, and 
 
 // ---- edits ----
 
-test("an edit takes no generator admission, runs through the same chain as a song, and is itself made here", async () => {
+test("an edit waits for generator admission and runs through the same chain as a song", async () => {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
   let hold = false;
@@ -343,21 +373,22 @@ test("an edit takes no generator admission, runs through the same chain as a son
   expect(await editDone.json()).toMatchObject({ data: [{ task: "trim", model: "none", duration_s: 30 }] });
   const request = requests.find((entry) => entry.op === "edit")!;
   expect(request).toMatchObject({ op: "edit", task: "edit", edit: { op: "trim", from_s: 2, to_s: 30 } });
-  expect(getGovernorStatus().loaded).toHaveLength(0);
+  expect(getGovernorStatus().loaded.map((item) => [item.id, item.kind])).toEqual([["music-worker", "jit"]]);
 });
 
-test("an edit alone never touches the governor, even when no generator could be admitted", async () => {
+test("an edit waits for governor memory like a song", async () => {
   musicGen.useDeps(scripted());
   const made = await makeSong();
   musicGen.stop(); // a cold worker: the new song asks for its whole peak, which cannot fit beside the chat below
+  await Bun.sleep(0);
   __setGovernorTuningForTestsOnly({ tier: "p128", totalMemoryBytes: 64 * GB, freeMemoryBytes: 60 * GB });
   await admit({ id: "chat", kind: "resident", requestedBytes: 40 * GB, pinned: true });
   const full = await post(song);
   expect(full.status).toBe(503);
   expect(await codeOf(full)).toBe("no_memory");
   const edited = await post({ task: "edit", source: made.base64, edit: { op: "loudness", lufs: -14 }, timeout_ms: 5000 });
-  expect(edited.status).toBe(200);
-  expect(requests.at(-1)!.edit).toEqual({ op: "loudness", lufs: -14 });
+  expect(edited.status).toBe(500);
+  expect(await codeOf(edited)).toBe("failed");
 });
 
 // ---- tiers, installs and memory ----

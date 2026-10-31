@@ -18,6 +18,7 @@ import {
   forgetLoadedItem,
   withdraw,
   touch,
+  setWarmWorkerUnload,
   type GovernorHandle,
 } from "@/lib/governor";
 import { scriptedMemoryReader } from "@/lib/memory/scripted";
@@ -834,4 +835,25 @@ test("video shrink waits until reclaimable warm items have left", async () => {
   await Bun.sleep(60);
   expect(unloads).toBeGreaterThan(0);
   expect(shrinks).toBeGreaterThan(0);
+});
+
+test("an idle video worker stays warm on the ledger and unloads for a waiting picture", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 80 * GB, tier: "p128" });
+  const warm = await admit({ id: "video-worker", role: "video", kind: "generator", class: "burst", requestedBytes: 30 * GB, retainWarm: true, keepAliveSeconds: 0 }) as GovernorHandle;
+  release(warm);
+  expect(getGovernorStatus().loaded).toMatchObject([{ id: "video-worker", kind: "jit", class: "warm" }]);
+  __setGovernorTuningForTestsOnly({ freeMemoryBytes: 35 * GB });
+  let called = false;
+  setWarmWorkerUnload("video-worker", () => { called = true; forgetLoadedItem("video-worker"); return true; });
+  try {
+    const picture = await admit({ id: "picture-after-video", role: "image", kind: "generator", class: "warm", requestedBytes: 20 * GB });
+    expect(picture).toMatchObject({ queued: true });
+    stops.push(startGovernor({ pid: 1, pollMs: 1, now: () => Date.now() + 3 * 60_000, memoryReader: scriptedMemoryReader([
+      { totalBytes: 128 * GB, freeBytes: 35 * GB, availablePercent: 27, pressure: "normal", degraded: false },
+      { totalBytes: 128 * GB, freeBytes: 65 * GB, availablePercent: 51, pressure: "normal", degraded: false },
+    ]) }));
+    const admitted = await Promise.race([(picture as { admitted: Promise<unknown> }).admitted, Bun.sleep(500).then(() => null)]);
+    expect(called).toBe(true);
+    expect(admitted).toMatchObject({ id: "picture-after-video" });
+  } finally { setWarmWorkerUnload("video-worker", null); }
 });

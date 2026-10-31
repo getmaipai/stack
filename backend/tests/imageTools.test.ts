@@ -2,9 +2,10 @@ import { afterEach, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { IMAGE_TOOL_MODEL_IDS, ImageToolError, ImageToolsService, imageToolsRequirementsFileFor, keepResult, stashInput, takeResult, unstashInput, type ImageToolsDeps, type WorkerHandle, type WorkerRequest, type WorkerReply } from "@/imagetools/imageTools";
+import { IMAGE_TOOL_MODEL_IDS, ImageToolError, ImageToolsService, imageToolsRequirementsFileFor, keepResult, stashInput, takeResult, unstashInput, workerHandle, type ImageToolsDeps, type WorkerHandle, type WorkerRequest, type WorkerReply } from "@/imagetools/imageTools";
 import { STACK_IMAGE_TOOL_MODELS, STACK_MODELS } from "@/lib/modelCatalog";
 import { buildInstallPlan } from "@/lib/installPlan";
+import { removeWorkerDir, startLeakyWorker, waitForWorkerRequest, waitForWorkerTreeGone, waitForWorkerPids } from "./helpers/leakyWorker";
 
 const PNG = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 let released = 0;
@@ -105,6 +106,22 @@ test("cancelling a running edit stops the worker and gives the memory back", asy
   expect(((await running) as ImageToolError).code).toBe("cancelled");
   expect(released).toBe(1);
 });
+
+test("cancel stops the image tools worker and its child process", async () => {
+  process.env.MAIPAI_TEST_NO_PORTS = "1";
+  let dir = "";
+  const service = new ImageToolsService(deps({ spawn: async () => { const started = startLeakyWorker(workerHandle); dir = started.dir; return started.worker; } }));
+  const controller = new AbortController();
+  try {
+    const running = service.run({ operation: "resize", image: PNG, params: { width: 5 } }, { signal: controller.signal }).catch((error) => error);
+    for (let i = 0; i < 500 && !dir; i++) await Bun.sleep(20);
+    const pids = await waitForWorkerPids(join(dir, "pids"));
+    await waitForWorkerRequest(join(dir, "accepted"));
+    controller.abort();
+    await running;
+    expect(await waitForWorkerTreeGone(pids)).toBe(true);
+  } finally { service.stop(); if (dir) removeWorkerDir(dir); }
+}, 30_000);
 
 test("an idle worker exits by itself", async () => {
   process.env.IMAGE_TOOLS_IDLE_MS = "20";

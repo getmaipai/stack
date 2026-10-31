@@ -3,11 +3,12 @@ import { app } from "@/app";
 import { __resetJobsForTests } from "@/lib/jobs";
 import { __resetGovernorForTests, __setGovernorTuningForTestsOnly } from "@/lib/governor";
 import { dataDir } from "@/lib/paths";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { STEMS_JOB_KIND, registerStemsJobs } from "@/stems/jobs";
-import { stems, stemsWorkerEnv, type StemsDeps, type StemsRequest } from "@/stems/stems";
+import { STEMS_JOB_KIND, __setStashTimeForTests, __stashHasForTests, registerStemsJobs, stashSource } from "@/stems/jobs";
+import { handle, stems, stemsWorkerEnv, type StemsDeps, type StemsRequest } from "@/stems/stems";
 import { __resetMusicProvenanceForTests, recordMadeSong, sha256Hex } from "@/music/provenance";
+import { removeWorkerDir, startLeakyWorker, waitForWorkerRequest, waitForWorkerTreeGone, waitForWorkerPids } from "./helpers/leakyWorker";
 
 const GB=1_073_741_824;
 const made = (n:string) => { const b = new TextEncoder().encode(`0000ftypM4A fake-${n}`); recordMadeSong(b); return b; };
@@ -27,6 +28,7 @@ test("status lists the three models with per-model installation", async()=>{stem
 test("silent stem is absent", async()=>{ const b=made("silent"); stems.useDeps(deps((r)=>{for(const [stem,rms] of [["vocals",.2],["drums",0],["bass",.2],["other",.2]] as const) if(rms) writeFileSync(r.outputs[stem],stem); return {files:[{stem:"vocals",path:r.outputs.vocals,rms:.2},{stem:"bass",path:r.outputs.bass,rms:.2},{stem:"other",path:r.outputs.other,rms:.2}],ms:1}; })); const r=await post({source:Buffer.from(b).toString("base64"),source_sha256:sha256Hex(b),model:"htdemucs"}); expect((await r.json() as any).data.map((x:any)=>x.stem)).not.toContain("drums"); });
 test("worker death is a plain failure", async()=>{const b=made("death"); stems.useDeps({ ...deps(()=>({files:[],ms:1})), spawn:async()=>({exited:Promise.resolve(1),kill:()=>{},send:async()=>{throw new Error("The stem worker stopped before finishing. Try again.");}}) }); const r=await post({source:Buffer.from(b).toString("base64"),source_sha256:sha256Hex(b),model:"htdemucs"}); expect(r.status).toBe(500); });
 test("worker env has no inherited network credentials", async()=>{process.env.HF_TOKEN="test-token"; process.env.HTTPS_PROXY="http://proxy.invalid"; const env=stemsWorkerEnv(); expect(env.HF_TOKEN).toBeUndefined(); expect(env.HTTPS_PROXY).toBeUndefined(); expect(env.HF_HUB_OFFLINE).toBe("1"); expect(env.TRANSFORMERS_OFFLINE).toBe("1"); delete process.env.HF_TOKEN; delete process.env.HTTPS_PROXY;});
+test("source stash removes expired entries when a new source arrives", ()=>{ const bytes=new Uint8Array([1,2,3]); stashSource("old",bytes); __setStashTimeForTests("old",Date.now()-31*60_000); stashSource("new",bytes); expect(__stashHasForTests("old")).toBe(false); expect(__stashHasForTests("new")).toBe(true); });
 test("cancel stops an active split", async()=>{
   const b=made("cancel");
   stems.useDeps({ ...deps(()=>({files:[],ms:1})), spawn:async()=>({exited:new Promise<number>(()=>{}),kill:()=>{},send:async(_r,_stage,signal)=>new Promise((_resolve,reject)=>signal?.addEventListener("abort",()=>reject(new Error("Cancelled.")),{once:true})) }) });
@@ -35,6 +37,20 @@ test("cancel stops an active split", async()=>{
   await new Promise((resolve)=>setTimeout(resolve,5));
   const state=await get(`/stack/v1/jobs/${job}`); expect(state.status).toBe(200);
 });
+test("cancel stops the stem worker and its child process", async()=>{
+  process.env.MAIPAI_TEST_NO_PORTS="1";
+  let dir="";
+  const b=made("tree");
+  stems.useDeps({ ...deps(()=>({files:[],ms:1})), spawn: async()=>{ const started=startLeakyWorker(handle); dir=started.dir; return started.worker; } });
+  try {
+    const response=await post({source:Buffer.from(b).toString("base64"),source_sha256:sha256Hex(b),model:"htdemucs",timeout_ms:1}); const job=(await response.json() as any).job;
+    for (let i = 0; i < 500 && !dir; i++) await Bun.sleep(20);
+    const pids = await waitForWorkerPids(join(dir, "pids"));
+    await waitForWorkerRequest(join(dir,"accepted"));
+    await app.request(`/v1/audio/stems/${job}`,{method:"DELETE"});
+    expect(await waitForWorkerTreeGone(pids)).toBe(true);
+  } finally { if(dir) removeWorkerDir(dir); }
+},30_000);
 const owned = (n:string) => new TextEncoder().encode(`ID3-owned-${n}-not-made-here`);
 test("an owned file is split without the ledger and its stems never enter it", async()=>{ const b=owned("good"); let seen:any=null; stems.useDeps(deps((r)=>{ seen=r; const files=[]; for(const stem of ["vocals","drums"] as const){writeFileSync(r.outputs[stem],`ftyp-${stem}`);files.push({stem,path:r.outputs[stem],rms:.2});} return {files,ms:1}; })); const r=await post({source:Buffer.from(b).toString("base64"),source_sha256:sha256Hex(b),model:"htdemucs",origin:"owned_file"}); expect(r.status).toBe(200); const body=await r.json() as any; expect(body.data.map((d:any)=>d.stem)).toEqual(["vocals","drums"]); expect(seen.maxSeconds).toBe(720); const { wasMadeHere } = await import("@/music/provenance"); expect(wasMadeHere(new TextEncoder().encode("ftyp-vocals"))).toBe(false); expect(wasMadeHere(b)).toBe(false); });
 test("the owned_file origin does not make other sources acceptable", async()=>{ stems.useDeps(deps(()=>({files:[],ms:1}))); const junk=new TextEncoder().encode("this is not audio at all"); const r=await post({source:Buffer.from(junk).toString("base64"),source_sha256:sha256Hex(junk),model:"htdemucs",origin:"owned_file"}); expect(r.status).toBe(422); const b=new TextEncoder().encode("0000ftypM4A unrecorded-plain"); const plain=await post({source:Buffer.from(b).toString("base64"),source_sha256:sha256Hex(b),model:"htdemucs"}); expect(plain.status).toBe(422); expect(((await plain.json()) as any).code).toBe("source_not_made_here"); });

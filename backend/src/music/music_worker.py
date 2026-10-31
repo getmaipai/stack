@@ -28,6 +28,7 @@ import json
 import math
 import os
 import subprocess
+import shutil
 import sys
 import time
 import traceback
@@ -163,7 +164,7 @@ def _decode_source(request, workdir):
     if not src:
         raise ValueError("this change needs the song it starts from")
     wav = os.path.join(workdir, "source.wav")
-    subprocess.run([request["ffmpeg"], "-nostdin", "-loglevel", "error", "-y", "-i", src, "-vn", "-ac", "2", "-ar", str(SAMPLE_RATE), "-c:a", "pcm_s16le", wav], check=True)
+    subprocess.run(background_argv([request["ffmpeg"], "-nostdin", "-loglevel", "error", "-y", "-i", src, "-vn", "-ac", "2", "-ar", str(SAMPLE_RATE), "-c:a", "pcm_s16le", wav]), check=True)
     return wav
 
 
@@ -171,7 +172,7 @@ def _encode(wav_path, out_path, ffmpeg, title=None):
     args = [ffmpeg, "-nostdin", "-loglevel", "error", "-y", "-i", wav_path, "-map_metadata", "-1", "-vn", "-ac", "2", "-ar", str(SAMPLE_RATE), "-c:a", "aac", "-b:a", AAC_BITRATE, "-movflags", "+faststart"]
     if title:
         args += ["-metadata", "title=" + title[:200]]
-    subprocess.run(args + [out_path], check=True)
+    subprocess.run(background_argv(args + [out_path]), check=True)
 
 
 def _write_wav(data, path):
@@ -390,5 +391,14 @@ def main():
             emit({"id": request.get("id"), "ok": False, "code": code, "error": message})
 
 
+def background_argv(argv):
+    if os.path.exists("/usr/sbin/taskpolicy"):
+        return ["/usr/sbin/taskpolicy", "-b", *argv]
+    if shutil.which("nice"):
+        return ["nice", "-n", "19", *argv]
+    return argv
+
+
 if __name__ == "__main__":
     main()
+

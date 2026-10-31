@@ -5,8 +5,17 @@ import sys
 import time
 import traceback
 import select
+import shutil
+import subprocess
 
 IDLE_SECONDS = 60
+
+def background_argv(argv):
+    if os.path.exists("/usr/sbin/taskpolicy"):
+        return ["/usr/sbin/taskpolicy", "-b", *argv]
+    if shutil.which("nice"):
+        return ["nice", "-n", "19", *argv]
+    return argv
 
 
 def emit(value):
@@ -41,8 +50,7 @@ def run(request):
         model = load_safetensors_model(checkpoints[0])
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     model.to(device).eval()
-    import subprocess
-    decoded = subprocess.run([request["ffmpeg"], "-nostdin", "-hide_banner", "-loglevel", "error", "-i", request["source"], *(["-t", str(request["maxSeconds"] + 1)] if request.get("maxSeconds") else []), "-f", "f32le", "-ar", str(model.samplerate), "-ac", "2", "pipe:1"], check=True, stdout=subprocess.PIPE).stdout
+    decoded = subprocess.run(background_argv([request["ffmpeg"], "-nostdin", "-hide_banner", "-loglevel", "error", "-i", request["source"], *(["-t", str(request["maxSeconds"] + 1)] if request.get("maxSeconds") else []), "-f", "f32le", "-ar", str(model.samplerate), "-ac", "2", "pipe:1"]), check=True, stdout=subprocess.PIPE).stdout
     waveform = np.frombuffer(decoded, dtype="<f4").reshape(-1, 2).copy()
     max_seconds = request.get("maxSeconds")
     if max_seconds and len(waveform) / model.samplerate > max_seconds:
@@ -59,7 +67,7 @@ def run(request):
             continue
         path = request["outputs"][name]
         emit({"id": request["id"], "event": "stage", "stage": "encoding", "fraction": 0.7 + 0.07 * index})
-        subprocess.run([request["ffmpeg"], "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-f", "f32le", "-ar", str(model.samplerate), "-ac", "2", "-i", "pipe:0", "-ar", "44100", "-ac", "2", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", path], input=stem.T.astype("<f4", copy=False).tobytes(), check=True)
+        subprocess.run(background_argv([request["ffmpeg"], "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-f", "f32le", "-ar", str(model.samplerate), "-ac", "2", "-i", "pipe:0", "-ar", "44100", "-ac", "2", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", path]), input=stem.T.astype("<f4", copy=False).tobytes(), check=True)
         files.append({"stem": name, "path": path, "rms": rms})
     return {"files": files}
 

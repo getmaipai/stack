@@ -22,6 +22,7 @@ import { LoraError, scanWords } from "@/lib/media/loraLibrary";
 import { parseRegion } from "@/routes/imageGenerations";
 import { dataDir } from "@/lib/paths";
 import { __resetGenHistoryForTests, GenTracker, historyKey, IMAGE_STAGES } from "@/lib/genProgress";
+import { removeWorkerDir, startLeakyWorker, waitForWorkerRequest, waitForWorkerTreeGone, waitForWorkerPids } from "./helpers/leakyWorker";
 
 const GB = 1_073_741_824;
 
@@ -181,6 +182,21 @@ test("past timeout_ms the answer is 202 with the job; status shows queue and pha
   expect((await (await get(`/v1/images/generations/${body.job}`)).json() as Record<string, unknown>).state).toBe("cancelled");
   expect(getGovernorStatus().loaded).toMatchObject([{ id: "image-pool", kind: "jit", class: "warm" }]);
 });
+
+test("the image worker and its child stop at the request deadline", async () => {
+  process.env.MAIPAI_TEST_NO_PORTS = "1";
+  process.env.IMAGE_DEADLINE_MS = "50";
+  let dir = "";
+  imageGen.useDeps(scripted(okReply, { spawn: async () => { const started = startLeakyWorker(workerHandle); dir = started.dir; return started.worker; } }));
+  try {
+    const response = await post({ prompt: "quiet picture", timeout_ms: 1 });
+    expect(response.status).toBe(202);
+    for (let i = 0; i < 500 && !dir; i++) await Bun.sleep(20);
+    const pids = await waitForWorkerPids(join(dir, "pids"));
+    await waitForWorkerRequest(join(dir, "accepted"));
+    expect(await waitForWorkerTreeGone(pids)).toBe(true);
+  } finally { delete process.env.IMAGE_DEADLINE_MS; imageGen.stop(); if (dir) removeWorkerDir(dir); }
+}, 30_000);
 
 test("a second picture waits in line behind the first; a video job in flight holds pictures back; the line is capped", async () => {
   let release!: () => void;

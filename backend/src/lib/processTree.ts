@@ -10,8 +10,17 @@
 
 export interface ProcessRow { pid: number; ppid: number; }
 
+let processTableForTests: (() => ProcessRow[]) | null = null;
+let commandLineForTests: ((pid: number) => string) | null = null;
+/** Supplies process identities to tree tests on hosts where `ps` is unavailable. */
+export function __setProcessTreeReadersForTests(readers: { processTable: () => ProcessRow[]; commandLine: (pid: number) => string } | null): void {
+  processTableForTests = readers?.processTable ?? null;
+  commandLineForTests = readers?.commandLine ?? null;
+}
+
 /** `ps -axo pid=,ppid=` as rows; empty when ps cannot run. */
 export function listProcessTable(): ProcessRow[] {
+  if (processTableForTests) return processTableForTests();
   try {
     const out = Bun.spawnSync(["ps", "-axo", "pid=,ppid="], { stdout: "pipe", stderr: "ignore" }).stdout.toString();
     return parseProcessTable(out);
@@ -51,6 +60,7 @@ export function isAlive(pid: number): boolean {
 
 /** The command line of one pid, or "" when it is gone: a pid counts as the same process only while this is unchanged. */
 export function commandLineOf(pid: number): string {
+  if (commandLineForTests) return commandLineForTests(pid);
   try { return Bun.spawnSync(["ps", "-o", "command=", "-p", String(pid)], { stdout: "pipe", stderr: "ignore" }).stdout.toString().trim(); } catch { return ""; }
 }
 

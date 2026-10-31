@@ -616,6 +616,10 @@ however it ends; then the next job in the role's queue runs. Downloads
 and installs created by other modules are jobs too, driven by those
 modules, never queued here.
 
+Generator workers are stopped as process trees, and their ffmpeg children
+run at background priority. An idle worker stays on the governor's ledger
+as a warm item until it exits, so a waiting job can evict it.
+
 One governor fact the queue works around rather than owns: the
 governor drains its queue only inside a release, so a request it
 queued for pressure or the working margin, with nothing loaded, would

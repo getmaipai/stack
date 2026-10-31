@@ -51,8 +51,10 @@ async function run(job: Job, signal: AbortSignal, update: JobProgress) {
 // The common music retention sweeper treats each job directory as one result;
 // this manifest and the four files share the same TTL and newest-six policy.
 const stash = new Map<string, { source: Uint8Array; at: number }>();
-export function stashSource(token: string, source: Uint8Array): void { stash.set(token, { source, at: Date.now() }); }
+export function stashSource(token: string, source: Uint8Array): void { const now = Date.now(); for (const [key, value] of stash) if (now - value.at > 30 * 60_000) stash.delete(key); stash.set(token, { source, at: now }); }
 export function unstashSource(token: string): void { stash.delete(token); }
+export function __setStashTimeForTests(token: string, at: number): void { const value = stash.get(token); if (value) value.at = at; }
+export function __stashHasForTests(token: string): boolean { return stash.has(token); }
 export function registerStemsJobs(): void {
   registerJobRunner(STEMS_JOB_KIND, run, { generator: { role: "music", memory: (job) => { const model = ((job.input as any)?.model ?? STEMS_MODEL_ID) as StemModelId; const peakBytes = STEMS_MODELS[model].peakBytes; return { requestedBytes: peakBytes, measuredPeakBytes: peakBytes, engine: "stems" }; } } });
 }

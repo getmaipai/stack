@@ -23,6 +23,7 @@ import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, wr
 import { join } from "node:path";
 import { admit, release, type GovernorHandle } from "@/lib/governor";
 import { heavyGate, PausableProcess, type Lease, type PausableWorker } from "@/lib/heavyGate";
+import { TreeSnapshot } from "@/lib/processTree";
 import { log } from "@/lib/log";
 import { MANAGED_RUNTIMES } from "@/lib/engineCatalog";
 import { dataDir } from "@/lib/paths";
@@ -107,7 +108,7 @@ export interface WorkerRequest { id: string; op: ImageToolOperation; input: stri
 /** One person Apple's on-device finder saw: a number (the order the finder gave), and a box as fractions of the picture. */
 export interface PersonBox { id: number; x: number; y: number; w: number; h: number; area: number }
 export interface WorkerReply { id: string | null; ok: boolean; code?: string; error?: string; width?: number; height?: number; engine?: string; model?: string; ms?: number; crop_px?: number; people?: PersonBox[]; }
-export interface WorkerHandle { send(request: WorkerRequest, deadlineMs: number): Promise<WorkerReply>; kill(): void; exited: Promise<number>; /** ISOLATION-01: the process, for the gate that stops it while chat is working (absent on a scripted worker). */ pausable?: PausableWorker; }
+export interface WorkerHandle { send(request: WorkerRequest, deadlineMs: number): Promise<WorkerReply>; kill(graceMs?: number): void; exited: Promise<number>; /** ISOLATION-01: the process, for the gate that stops it while chat is working (absent on a scripted worker). */ pausable?: PausableWorker; }
 
 export interface ImageToolsDeps {
   requirements: () => string | null;
@@ -172,14 +173,17 @@ export function workerHandle(child: { pid?: number; stdin: { write(data: string)
   })().catch(() => {});
   const exited = child.exited.then((code) => { for (const [id, resolve] of waiting) resolve({ id, ok: false, code: "worker_stopped", error: `The image tool stopped (${stderrTail.trim().split("\n").slice(-1)[0] ?? `exit ${code}`}). Try again.` }); waiting.clear(); return code; });
   const pausable = new PausableProcess(child.pid ?? null, child.exited);
+  const tree = new TreeSnapshot(child.pid ?? -1); tree.refresh();
+  const stopTree = (graceMs: number) => pausable.killAfterResume(() => { const members = tree.refresh().length; void tree.stopAll(graceMs).then(() => { const survivors = tree.survivors().length; if (members > 1) log(JSON.stringify({ event: "worker.tree_stopped", role: "image-tools", members, survivors })); }); });
   return {
     exited,
     pausable,
-    kill: () => pausable.killAfterResume(() => { try { child.kill(); } catch { /* already gone */ } }),
+    kill: (graceMs = 2_000) => stopTree(graceMs),
     send: async (request, deadlineMs) => {
       await Promise.race([started, exited.then(() => {})]);
       return await new Promise<WorkerReply>((resolve) => {
-        const timer = pausable.deadline(deadlineMs, () => { waiting.delete(request.id); try { child.kill(); } catch { /* gone */ } resolve({ id: request.id, ok: false, code: "failed", error: "The picture took too long to process and was stopped. Try a smaller picture." }); });
+        tree.refresh();
+        const timer = pausable.deadline(deadlineMs, () => { waiting.delete(request.id); stopTree(2_000); resolve({ id: request.id, ok: false, code: "failed", error: "The picture took too long to process and was stopped. Try a smaller picture." }); });
         waiting.set(request.id, (reply) => { timer.clear(); waiting.delete(request.id); resolve(reply); });
         child.stdin.write(`${JSON.stringify(request)}\n`); child.stdin.flush?.();
       });
@@ -241,10 +245,10 @@ export class ImageToolsService {
     }
   }
 
-  private stopWorker(): void {
+  private stopWorker(graceMs = 5_000): void {
     if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
     const worker = this.worker; this.worker = null;
-    worker?.kill();
+    worker?.kill(graceMs);
     this.holder?.release(); this.holder = null;
   }
 
@@ -282,7 +286,7 @@ export class ImageToolsService {
       writeFileSync(files[0]!, input.image);
       if (input.mask) writeFileSync(files[1]!, input.mask);
       onStatus("working on the picture");
-      const aborted = new Promise<never>((_, reject) => options.signal?.addEventListener("abort", () => { this.stopWorker(); reject(new ImageToolError("cancelled", "Cancelled.", 499)); }, { once: true }));
+      const aborted = new Promise<never>((_, reject) => options.signal?.addEventListener("abort", () => { this.stopWorker(2_000); reject(new ImageToolError("cancelled", "Cancelled.", 499)); }, { once: true }));
       const reply = await Promise.race([worker.send({ id: crypto.randomUUID(), op: input.operation, input: files[0]!, output: files[2]!, ...(input.mask ? { mask: files[1]! } : {}), params: input.params ?? {}, models, helper: this.helper ?? null, people_helper: this.peopleHelper ?? null }, DEADLINE_MS[input.operation]), aborted]);
       if (!reply.ok) throw new ImageToolError(reply.code ?? "failed", reply.error ?? "The picture could not be processed.", STATUS_BY_CODE[reply.code ?? "failed"] ?? 500);
       const png = new Uint8Array(readFileSync(files[2]!));

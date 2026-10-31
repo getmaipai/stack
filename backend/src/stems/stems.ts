@@ -6,6 +6,8 @@ import { getModel } from "@/lib/modelStore";
 import { STACK_STEMS_MODELS } from "@/lib/modelCatalog";
 import { ensureUvEnvironment, managedEnv, uvEnvironmentReady, uvVenvPath, uvVenvPython, type UvEnvironmentSpec } from "@/lib/uvEnvironment";
 import { heavyGate, PausableProcess, type PausableWorker } from "@/lib/heavyGate";
+import { TreeSnapshot } from "@/lib/processTree";
+import { forgetLoadedItem, setIdleTtlSeconds, setWarmWorkerUnload } from "@/lib/governor";
 import { log } from "@/lib/log";
 import workerAsset from "./stems_worker.py" with { type: "file" };
 import requirements from "./stems.darwin-arm64.requirements.txt" with { type: "file" };
@@ -32,7 +34,7 @@ export type StemModelId = keyof typeof STEMS_MODELS;
 // htdemucs_ft and htdemucs_6s peaks are estimates until measured in a real run.
 export interface StemsRequest { maxSeconds?: number; id: string; model: StemModelId; source: string; outputs: Record<StemName, string>; checkpoints: string[]; checkpointHashes: string[]; config: string; configHash: string; ffmpeg: string; }
 export interface StemsFile { stem: StemName; path: string; rms: number; }
-export interface StemsHandle { send(request: StemsRequest, cb: (stage: string, fraction: number) => void, signal?: AbortSignal): Promise<{ files: StemsFile[]; ms: number }>; kill(): void; exited: Promise<number>; pausable?: PausableWorker; }
+export interface StemsHandle { send(request: StemsRequest, cb: (stage: string, fraction: number) => void, signal?: AbortSignal): Promise<{ files: StemsFile[]; ms: number }>; kill(graceMs?: number): void; exited: Promise<number>; pausable?: PausableWorker; }
 export interface StemsDeps { supported: () => boolean; installed: (model?: StemModelId) => boolean; ensure: (stage: (s: string) => void, signal?: AbortSignal) => Promise<void>; runtime: (model?: StemModelId) => { checkpoints: string[]; checkpointHashes: string[]; config: string; configHash: string; ffmpeg: string }; spawn: () => Promise<StemsHandle>; }
 export function stemsWorkerEnv(): Record<string, string> {
   const env = managedEnv({ PYTHONUNBUFFERED: "1", PYTHONDONTWRITEBYTECODE: "1", HF_HUB_OFFLINE: "1", TRANSFORMERS_OFFLINE: "1", HF_HUB_DISABLE_TELEMETRY: "1", HF_HUB_DISABLE_PROGRESS_BARS: "1", TQDM_DISABLE: "1", TOKENIZERS_PARALLELISM: "false", HOME: join(dataDir, "home") });
@@ -70,7 +72,9 @@ export function handle(child: { pid?: number; stdin: { write(data: string): unkn
   void (async () => { for await (const _ of child.stderr as unknown as AsyncIterable<Uint8Array>) {} })();
   const exited = child.exited.then((code) => { for (const [id, cb] of callbacks) { callbacks.delete(id); cb.reject(new Error("The stem worker stopped before finishing. Try again.")); } return code; });
   const pausable = new PausableProcess(child.pid ?? null, child.exited);
-  return { exited, pausable, kill: () => pausable.killAfterResume(() => { try { child.kill(); } catch {} }), send: async (request, stage, signal) => { await Promise.race([started, exited]); if (signal?.aborted) throw new Error("Cancelled."); return new Promise((resolve, reject) => { callbacks.set(request.id, { resolve, reject, stage }); child.stdin.write(`${JSON.stringify(request)}\n`); child.stdin.flush?.(); signal?.addEventListener("abort", () => { callbacks.delete(request.id); child.kill(); reject(new Error("Cancelled.")); }, { once: true }); }); } };
+  const tree = new TreeSnapshot(child.pid ?? -1); tree.refresh();
+  const stopTree = (graceMs: number) => pausable.killAfterResume(() => { const members = tree.refresh().length; void tree.stopAll(graceMs).then(() => { const survivors = tree.survivors().length; if (members > 1) log(JSON.stringify({ event: "worker.tree_stopped", role: "stems", members, survivors })); }); });
+  return { exited, pausable, kill: (graceMs = 2_000) => stopTree(graceMs), send: async (request, stage, signal) => { await Promise.race([started, exited]); if (signal?.aborted) throw new Error("Cancelled."); tree.refresh(); return new Promise((resolve, reject) => { callbacks.set(request.id, { resolve, reject, stage }); child.stdin.write(`${JSON.stringify(request)}\n`); child.stdin.flush?.(); signal?.addEventListener("abort", () => { callbacks.delete(request.id); stopTree(2_000); reject(new Error("Cancelled.")); }, { once: true }); }); } };
 }
 export async function ensureStemsEnvironment(onProgress: (stage: string) => void = () => {}, signal?: AbortSignal): Promise<void> {
   if (!defaultStemsDeps.supported()) throw new Error(`Stem splitting is not available on ${process.platform} ${process.arch}.`);
@@ -95,13 +99,16 @@ export class StemsService {
     if (!this.deps.installed(request.model)) throw new Error(`The ${request.model} model is not installed.`); this.busy++; if (this.idle) clearTimeout(this.idle);
     let lease: ReturnType<typeof heavyGate.attach> | undefined;
     try {
-      if (!this.worker) { stage("loading", 0); this.building = "packages"; try { await this.deps.ensure((s) => { this.building = s; stage("loading", 0); }, signal); } finally { this.building = null; } this.worker = await this.deps.spawn(); const worker = this.worker; void worker.exited.then(() => { if (this.worker === worker) this.worker = null; }); }
+    setIdleTtlSeconds("stems-worker", Math.ceil(STEMS_IDLE_MS / 1000));
+    if (!this.worker) { stage("loading", 0); this.building = "packages"; try { await this.deps.ensure((s) => { this.building = s; stage("loading", 0); }, signal); } finally { this.building = null; } this.worker = await this.deps.spawn(); const worker = this.worker; void worker.exited.then(() => { if (this.worker === worker) this.stop(); }); }
       lease = heavyGate.attach({ role: "music", jobId: request.id, worker: this.worker.pausable });
       const runtime = this.deps.runtime(request.model);
       const result = await this.worker.send({ ...request, ...runtime }, stage, signal);
       return result;
     } finally { this.busy--; lease?.detach(); if (this.worker && !this.busy) this.idle = setTimeout(() => { this.stop(); log("stems worker stopped after 60 seconds idle"); }, STEMS_IDLE_MS); }
   }
-  stop(): void { if (this.idle) clearTimeout(this.idle); this.idle = null; const worker = this.worker; this.worker = null; worker?.kill(); }
+  stopIfIdle(): boolean { if (!this.worker) { forgetLoadedItem("stems-worker"); return false; } if (this.busy > 0) return false; this.stop(); return true; }
+  stop(): void { if (this.idle) clearTimeout(this.idle); this.idle = null; const worker = this.worker; this.worker = null; if (worker) void worker.exited.finally(() => forgetLoadedItem("stems-worker")); else forgetLoadedItem("stems-worker"); worker?.kill(5_000); }
 }
 export const stems = new StemsService();
+setWarmWorkerUnload("stems-worker", () => stems.stopIfIdle());

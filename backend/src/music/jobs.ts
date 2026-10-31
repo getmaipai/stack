@@ -111,5 +111,5 @@ async function runSong(job: Job, signal: AbortSignal, update: JobProgress): Prom
 
 export function registerMusicJobs(): void {
   registerJobRunner(MUSIC_JOB_KIND, runSong, { generator: { role: "music", memory: () => { const bytes = musicAdmissionBytes(); return { requestedBytes: bytes, measuredPeakBytes: bytes, engine: "music-gen" }; } } });
-  registerJobRunner(MUSIC_EDIT_JOB_KIND, runSong);
+  registerJobRunner(MUSIC_EDIT_JOB_KIND, runSong, { generator: { role: "music", memory: () => { const bytes = musicAdmissionBytes(); return { requestedBytes: bytes, measuredPeakBytes: bytes, engine: "music-gen" }; } } });
 }

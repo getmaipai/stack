@@ -24,6 +24,8 @@
 // (Home owns the gate). Age and surface gates, the household-name gate on the
 // prompt, and the two absolute lines live in Home, where the person is known.
 import { heavyGate, PausableProcess, type Lease, type PausableWorker } from "@/lib/heavyGate";
+import { TreeSnapshot } from "@/lib/processTree";
+import { forgetLoadedItem, setIdleTtlSeconds, setWarmWorkerUnload } from "@/lib/governor";
 import { lowMemoryRefusal } from "@/lib/memoryState";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -165,7 +167,7 @@ export type WorkerEvent =
   | { id: string | null; event: "stage"; stage: string; n?: number; of?: number }
   | { id: string | null; event: "preview"; ms?: number };
 export interface WorkerReply { id: string | null; ok: boolean; code?: string; error?: string; width?: number; height?: number; frames?: number; fps?: number; seed?: number; ms?: number; peak_bytes?: number; audio?: boolean; }
-export interface WorkerHandle { send(request: WorkerRequest, options: { onEvent: (event: WorkerEvent) => void; deadlineMs: number }): Promise<WorkerReply>; kill(): void; exited: Promise<number>; /** ISOLATION-01: the process, for the gate that stops it while chat is working (absent on a scripted worker). */ pausable?: PausableWorker; }
+export interface WorkerHandle { send(request: WorkerRequest, options: { onEvent: (event: WorkerEvent) => void; deadlineMs: number }): Promise<WorkerReply>; kill(graceMs?: number): void; exited: Promise<number>; /** ISOLATION-01: the process, for the gate that stops it while chat is working (absent on a scripted worker). */ pausable?: PausableWorker; }
 
 export interface VideoGenDeps {
   supported: () => boolean;
@@ -222,15 +224,18 @@ export function workerHandle(child: { pid?: number; stdin: { write(data: string)
     return code;
   });
   const pausable = new PausableProcess(child.pid ?? null, child.exited);
+  const tree = new TreeSnapshot(child.pid ?? -1); tree.refresh();
+  const stopTree = (graceMs: number) => pausable.killAfterResume(() => { const members = tree.refresh().length; void tree.stopAll(graceMs).then(() => { const survivors = tree.survivors().length; if (members > 1) log(JSON.stringify({ event: "worker.tree_stopped", role: "video", members, survivors })); }); });
   return {
     exited,
     pausable,
-    kill: () => pausable.killAfterResume(() => { try { child.kill(); } catch { /* already gone */ } }),
+    kill: (graceMs = 2_000) => stopTree(graceMs),
     send: async (request, options) => {
       await Promise.race([started, exited.then(() => {})]);
       return await new Promise<WorkerReply>((resolve) => {
         // The deadline does not run while the process is stopped for a chat (ISOLATION-01).
-        const timer = pausable.deadline(options.deadlineMs, () => { try { child.kill(); } catch { /* gone */ } resolve({ id: request.id, ok: false, code: "timeout", error: "The clip took too long and was stopped. Try a shorter clip." }); });
+        tree.refresh();
+        const timer = pausable.deadline(options.deadlineMs, () => { stopTree(2_000); resolve({ id: request.id, ok: false, code: "timeout", error: "The clip took too long and was stopped. Try a shorter clip." }); });
         slot.current = { id: request.id, onEvent: options.onEvent, resolve: (reply) => { timer.clear(); slot.current = null; resolve(reply); } };
         child.stdin.write(`${JSON.stringify(request)}\n`); child.stdin.flush?.();
       });
@@ -301,6 +306,7 @@ export class VideoGenService {
 
   /** Runs one clip, one at a time. The caller (the job runner) holds the governor admission. Throws a VideoError that says what to do. */
   run(input: VideoRunInput, options: VideoRunOptions): Promise<VideoRunResult> {
+    setIdleTtlSeconds("video-worker", Math.ceil(idleMs() / 1000));
     const next = this.chain.then(() => this.execute(input, options), () => this.execute(input, options));
     this.chain = next.catch(() => {});
     return next;
@@ -328,10 +334,12 @@ export class VideoGenService {
     }
   }
 
-  private stopWorker(): void {
+  private stopWorker(graceMs = 5_000): void {
     if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
     const worker = this.worker; this.worker = null;
-    worker?.kill();
+    if (worker) void worker.exited.finally(() => forgetLoadedItem("video-worker"));
+    else forgetLoadedItem("video-worker");
+    worker?.kill(graceMs);
   }
 
   /** Stops the worker now (shutdown, a cancel, or a test). */
@@ -339,6 +347,8 @@ export class VideoGenService {
 
   /** Stops the worker only when it is loaded and not working (the memory watchdog's way to give memory back); true when it stopped one. */
   stopIfIdle(): boolean {
+    // No worker alive: nothing holds the memory, so the ledger entry goes at once.
+    if (!this.worker) { forgetLoadedItem("video-worker"); return false; }
     if (!this.worker || this.busy > 0) return false;
     this.stopWorker();
     return true;
@@ -361,7 +371,7 @@ export class VideoGenService {
       const poster = join(input.outputDir, "poster.jpg");
       const request: WorkerRequest = { id: options.jobId, op: "generate", model_dir: paths.modelDir, tokenizer_dir: paths.tokenizerDir, ...(paths.textEncoderDir ? { text_encoder_dir: paths.textEncoderDir, ffmpeg: ffmpegPath(videoGenRoot()) } : {}), prompt: input.prompt, negative_prompt: input.negativePrompt, image: input.imagePath, width: input.width, height: input.height, num_frames: input.frames, seed: input.seed, loras: input.loras, output, poster, ...(input.previewPath ? { preview: input.previewPath } : {}) };
       const aborted = new Promise<never>((_, reject) => {
-        const stop = () => { this.stopWorker(); reject(new VideoError("cancelled", "Cancelled.", 499)); };
+        const stop = () => { this.stopWorker(2_000); reject(new VideoError("cancelled", "Cancelled.", 499)); };
         if (options.signal?.aborted) stop(); else options.signal?.addEventListener("abort", stop, { once: true });
       });
       onPhase("loading", 0);
@@ -392,6 +402,7 @@ export class VideoGenService {
 }
 
 export const videoGen = new VideoGenService();
+setWarmWorkerUnload("video-worker", () => videoGen.stopIfIdle());
 
 /** The role's state for /stack/v1/roles, derived and never stored. */
 export function videoRoleState(service: VideoGenService = videoGen, now = Date.now()): RoleStateRecord {

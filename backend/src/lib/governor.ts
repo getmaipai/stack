@@ -168,11 +168,11 @@ export function getReclaimSteps(requestId: string): ReclaimStep[] { return [...(
 function reclaim(requestId: string, step: ReclaimStep["step"], itemId: string, bytes: number, at = Date.now()): void { const rows = reclaimSteps.get(requestId) ?? []; if (rows.at(-1)?.step === step && rows.at(-1)?.itemId === itemId) return; rows.push({ at, step, itemId, bytes }); reclaimSteps.set(requestId, rows); }
 function windowEvent(data: { state: "open" | "closed"; owner: string | null; tier: "max" }): void { emitGovernorWindow(data); }
 function closeMaxWindow(): void { if (maxWindow.state === "none") return; maxWindow = { state: "none", ownerId: null, since: null }; windowEvent({ state: "closed", owner: null, tier: "max" }); }
-let imagePoolUnload: (() => boolean | Promise<boolean>) | null = null;
+const warmWorkerUnloads = new Map<string, () => boolean | Promise<boolean>>();
 
 /** The image worker is managed by its service, not the role supervisor.
  * Its stable warm item still uses the governor's normal eviction path. */
-export function setImagePoolUnload(unload: (() => boolean | Promise<boolean>) | null): void { imagePoolUnload = unload; }
+export function setWarmWorkerUnload(id: string, unload: (() => boolean | Promise<boolean>) | null): void { if (unload) warmWorkerUnloads.set(id, unload); else warmWorkerUnloads.delete(id); }
 
 const initialMemory = getMemoryReader().read();
 totalMemoryBytes = initialMemory.totalBytes;
@@ -355,7 +355,8 @@ export function beginEvicting(id: string): boolean { const item = loaded.get(id)
 /** Clears the leaving mark after an unload that did not happen. */
 export function cancelEvicting(id: string): void { const item = loaded.get(id); if (item) item.evicting = false; }
 /** Unloads the image worker through its service; false when none is registered or it declined (busy). */
-export async function unloadImagePool(): Promise<boolean> { return imagePoolUnload ? Boolean(await imagePoolUnload()) : false; }
+export function hasWarmWorkerUnload(id: string): boolean { return warmWorkerUnloads.has(id); }
+export async function unloadWarmWorker(id: string): Promise<boolean> { const unload = warmWorkerUnloads.get(id); return unload ? Boolean(await unload()) : false; }
 
 export function peakFor(request: GovernorRequest): { bytes: number; measured: boolean } {
   let base: number;
@@ -755,10 +756,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
     if (pressure !== "normal" && (systemBreaches === tuning.systemSustainedPolls || kernelPressure !== "normal")) emit({ id: "pressure", data: { pressure, free_memory_bytes: Math.round(freeMemoryBytes), floor_bytes: Math.round(floor), available_percent: Math.max(0, Math.min(100, availablePercent)) } });
     const processReader = options.processMemory ?? ((pid: number) => Promise.resolve(memoryReader.processMemoryBytes(pid)));
     const now = options.now?.() ?? Date.now();
-    const unloadItem = options.unload ?? (imagePoolUnload ? (id: string) => {
-      if (id !== "image-pool") return false;
-      return imagePoolUnload ? imagePoolUnload() : false;
-    } : undefined);
+    const unloadItem = options.unload ?? ((id: string) => unloadWarmWorker(id));
     for (const item of [...loaded.values()]) {
       // The watch compares this run's own reading; a reserved role is
       // never restarted, it is reported; a warm resident is restarted once idle.

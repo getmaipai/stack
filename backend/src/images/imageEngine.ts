@@ -21,11 +21,12 @@
 // likeness). Age and surface gates, the prompt floor and the finished-picture
 // check live in Home, where the person is known.
 import { heavyGate, PausableProcess, type Lease, type PausableWorker } from "@/lib/heavyGate";
+import { TreeSnapshot } from "@/lib/processTree";
 import { lowMemoryRefusal } from "@/lib/memoryState";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MANAGED_RUNTIMES } from "@/lib/engineCatalog";
-import { forgetLoadedItem, getGovernorStatus, GovernorRules, refreshMeasuredPeakById, setIdleTtlSeconds, setImagePoolUnload } from "@/lib/governor";
+import { forgetLoadedItem, getGovernorStatus, GovernorRules, refreshMeasuredPeakById, setIdleTtlSeconds, setWarmWorkerUnload } from "@/lib/governor";
 import { log, logger } from "@/lib/log";
 import { engineTagRoot } from "@/lib/store/layout";
 import { ensureUvEnvironment, managedEnv, uvEnvironmentReady, uvVenvPath, uvVenvPython, type UvEnvironmentSpec } from "@/lib/uvEnvironment";
@@ -82,7 +83,7 @@ export interface WorkerReply { id: string | null; ok: boolean; code?: string; er
 export interface WorkerHandle {
   send(request: WorkerRequest, options: { onEvent: (event: WorkerEvent) => void; deadlineMs: number }): Promise<WorkerReply>;
   cancel(id: string): void;
-  kill(): void;
+  kill(graceMs?: number): void;
   exited: Promise<number>;
   /** ISOLATION-01: the process, for the gate that stops it while chat is working (absent on a scripted worker). */
   pausable?: PausableWorker;
@@ -145,16 +146,20 @@ export function workerHandle(child: { pid?: number; stdin: { write(data: string)
     return code;
   });
   const pausable = new PausableProcess(child.pid ?? null, child.exited);
+  const tree = new TreeSnapshot(child.pid ?? -1);
+  tree.refresh();
+  const stopTree = (graceMs: number) => pausable.killAfterResume(() => { const members = tree.refresh().length; void tree.stopAll(graceMs).then(() => { const survivors = tree.survivors().length; if (members > 1) log(JSON.stringify({ event: "worker.tree_stopped", role: "image", members, survivors })); }); });
   return {
     exited,
     pausable,
-    kill: () => pausable.killAfterResume(() => { try { child.kill(); } catch { /* already gone */ } }),
+    kill: (graceMs = 2_000) => stopTree(graceMs),
     // A cancel line is read only by a running worker.
     cancel: (id) => { pausable.resume(); try { child.stdin.write(`${JSON.stringify({ op: "cancel", id })}\n`); child.stdin.flush?.(); } catch { /* gone */ } },
     send: async (request, options) => {
       await Promise.race([started, exited.then(() => {})]);
       return await new Promise<WorkerReply>((resolve) => {
-        const timer = pausable.deadline(options.deadlineMs, () => { try { child.kill(); } catch { /* gone */ } resolve({ id: request.id, ok: false, code: "timeout", error: "The picture took too long and was stopped. Try a smaller size or fewer pictures." }); });
+        tree.refresh();
+        const timer = pausable.deadline(options.deadlineMs, () => { stopTree(2_000); resolve({ id: request.id, ok: false, code: "timeout", error: "The picture took too long and was stopped. Try a smaller size or fewer pictures." }); });
         slot.current = { id: request.id, onEvent: options.onEvent, resolve: (reply) => { timer.clear(); slot.current = null; resolve(reply); } };
         child.stdin.write(`${JSON.stringify(request)}\n`); child.stdin.flush?.();
       });
@@ -245,11 +250,12 @@ export class ImageGenService {
     }
   }
 
-  private stopWorker(): void {
+  private stopWorker(graceMs = 5_000): void {
     if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
     const worker = this.worker; this.worker = null;
-    worker?.kill();
-    forgetLoadedItem("image-pool");
+    if (worker) void worker.exited.finally(() => forgetLoadedItem("image-pool"));
+    else forgetLoadedItem("image-pool");
+    worker?.kill(graceMs);
   }
 
   /** Stops the worker now (shutdown, a repair, or a test). */
@@ -257,6 +263,8 @@ export class ImageGenService {
 
   /** Stops the worker only when it is loaded and not working (the memory watchdog's way to give memory back); true when it stopped one. */
   stopIfIdle(): boolean {
+    // No worker alive: nothing holds the memory, so the ledger entry goes at once.
+    if (!this.worker) { forgetLoadedItem("image-pool"); return false; }
     if (!this.worker || this.busy > 0) return false;
     this.stopWorker();
     return true;
@@ -332,7 +340,7 @@ export function imagePoolGrowthFits(activeRequestPeakBytes: number, status = get
 }
 
 export const imageGen = new ImageGenService();
-setImagePoolUnload(() => imageGen.stopIfIdle());
+setWarmWorkerUnload("image-pool", () => imageGen.stopIfIdle());
 
 /** Whether the mflux path serves the image role on this computer: its weights are installed, so it, and not the ComfyUI checkpoint, answers. */
 export function imageEngineActive(service: ImageGenService = imageGen): boolean { return service.supported() && service.hasModels(); }

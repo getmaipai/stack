@@ -20,6 +20,7 @@ import { commitResult, deleteResult, readResult, resultsRoot, sweepResults, work
 import { memoryVerdict, overallPercent, tierAvailability, VideoError, videoGen, videoRequirementsFileFor, videoRoleState, VideoGenService, workerHandle, type VideoGenDeps, type WorkerEvent, type WorkerHandle, type WorkerReply, type WorkerRequest } from "@/video/videoGen";
 import { dataDir } from "@/lib/paths";
 import { __resetGenHistoryForTests, GenTracker, historyKey, recordRun, VIDEO_STAGES } from "@/lib/genProgress";
+import { removeWorkerDir, startLeakyWorker, waitForWorkerRequest, waitForWorkerTreeGone, waitForWorkerPids } from "./helpers/leakyWorker";
 
 const GB = 1_073_741_824;
 const PNG = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]);
@@ -119,7 +120,7 @@ test("a clip is made, polled to done, fetched with and without a range, and dele
   expect((await get(body.data[0]!.url as string)).status).toBe(404);
   expect((await get(`/v1/videos/generations/${body.job}`)).status).toBe(404);
   // The governor admission is back, and the work folder is gone.
-  expect(getGovernorStatus().loaded).toHaveLength(0);
+  expect(getGovernorStatus().loaded.map((item) => [item.id, item.kind])).toEqual([["video-worker", "jit"]]);
   expect(existsSync(workDir(body.job))).toBe(false);
 });
 
@@ -163,6 +164,22 @@ test("past timeout_ms the answer is 202 with the job; the status shows the phase
   expect(getGovernorStatus().loaded).toHaveLength(0);
   expect((await (await get(`/v1/videos/generations/${job}`)).json() as { state: string }).state).toBe("cancelled");
 });
+
+test("cancel stops the video worker and its child process", async () => {
+  process.env.MAIPAI_TEST_NO_PORTS = "1";
+  let dir = "";
+  videoGen.useDeps(scripted(okReply, { spawn: async () => { const started = startLeakyWorker(workerHandle); dir = started.dir; return started.worker; } }));
+  try {
+    // A long deadline: the cancel below is what must stop the tree, not a deadline that could fire before the child exists.
+    const response = await post({ prompt: "quiet clip", timeout_ms: 5000 });
+    const { job } = await response.json() as { job: string };
+    for (let i = 0; i < 500 && !dir; i++) await Bun.sleep(20);
+    const pids = await waitForWorkerPids(join(dir, "pids"));
+    await waitForWorkerRequest(join(dir, "accepted"));
+    await app.request(`/v1/videos/generations/${job}`, { method: "DELETE" });
+    expect(await waitForWorkerTreeGone(pids)).toBe(true);
+  } finally { videoGen.stop(); if (dir) removeWorkerDir(dir); }
+}, 30_000);
 
 test("a second clip waits behind the first with its position; the fifth is refused", async () => {
   let release!: () => void;

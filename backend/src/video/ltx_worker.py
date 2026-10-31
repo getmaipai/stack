@@ -22,6 +22,7 @@
 import gc
 import os
 import subprocess
+import shutil
 import sys
 import time
 import mlx.core as mx
@@ -39,6 +40,13 @@ MAX_PIXELS = 768 * 448
 SIZE_STEP = 64
 UPSCALER = "ltx-2.3-spatial-upscaler-x2-1.1.safetensors"
 PREVIEW_SIDE = 480
+
+def background_argv(argv):
+    if os.path.exists("/usr/sbin/taskpolicy"):
+        return ["/usr/sbin/taskpolicy", "-b", *argv]
+    if shutil.which("nice"):
+        return ["nice", "-n", "19", *argv]
+    return argv
 
 # 10% of the 44.1 GB measured video footprint in memory-management-2026-10-25 section 4.1.
 MLX_CACHE_LIMIT_BYTES = int(4.41 * (1 << 30))
@@ -254,7 +262,7 @@ def _finish(frames, wav, output, poster, ffmpeg):
     has_sound = os.path.isfile(wav) and os.path.getsize(wav) > 1024
     if has_sound and ffmpeg:
         command = [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", silent, "-i", wav, "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", "-map_metadata", "-1", output]
-        if subprocess.run(command, capture_output=True).returncode != 0 or not os.path.isfile(output):
+        if subprocess.run(background_argv(command), capture_output=True).returncode != 0 or not os.path.isfile(output):
             has_sound = False
     if not has_sound:
         os.replace(silent, output)
