@@ -17,6 +17,7 @@ import { createServer } from "node:net";
 import { join } from "node:path";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { log } from "@/lib/log";
+import { registerOwned, type OwnedHandle } from "@/lib/ownedProcesses";
 import { engineTagRoot } from "@/lib/store/layout";
 import { ensureUvEnvironment, managedEnv, uvEnvironmentReady, uvVenvPath, uvVenvPython, type UvEnvironmentSpec } from "@/lib/uvEnvironment";
 import darwinArm64Requirements from "./ddgs.darwin-arm64.requirements.txt" with { type: "file" };
@@ -83,7 +84,7 @@ export async function freeLoopbackPort(): Promise<number> {
 export interface DdgsDeps {
   requirements: () => string | null;
   ensureEnvironment: (onProgress: (phase: string) => void) => Promise<void>;
-  spawn: (port: number) => Promise<{ exited: Promise<number>; kill: () => void; stderrTail: () => string }>;
+  spawn: (port: number) => Promise<{ pid: number; exited: Promise<number>; kill: () => void; stderrTail: () => string }>;
   port: () => Promise<number>;
   healthy: (url: string) => Promise<boolean>;
   sleep: (ms: number, signal: AbortSignal) => Promise<void>;
@@ -105,7 +106,7 @@ export const defaultDdgsDeps: DdgsDeps = {
     const child = Bun.spawn([uvVenvPython(ddgsRoot()), script], { stdin: "ignore", stdout: "ignore", stderr: "pipe", env: { ...ddgsEnv(), DDGS_SIDECAR_PORT: String(port) } });
     let tail = "";
     void (async () => { for await (const chunk of child.stderr as unknown as AsyncIterable<Uint8Array>) tail = (tail + new TextDecoder().decode(chunk)).slice(-1500); })().catch(() => {});
-    return { exited: child.exited, kill: () => { try { child.kill(); } catch { /* already gone */ } }, stderrTail: () => tail.trim().split("\n").slice(-3).join(" | ") };
+    return { pid: child.pid, exited: child.exited, kill: () => { try { child.kill(); } catch { /* already gone */ } }, stderrTail: () => tail.trim().split("\n").slice(-3).join(" | ") };
   },
   healthy: async (url) => {
     try { const response = await fetch(new URL("health", url), { signal: AbortSignal.timeout(2000) }); return response.ok; } catch { return false; }
@@ -127,6 +128,7 @@ export class DdgsSupervisor {
   private abort: AbortController | null = null;
   private loop: Promise<void> | null = null;
   private kill: (() => void) | null = null;
+  private owned: OwnedHandle | null = null;
   private wake: (() => void) | null = null;
   constructor(private readonly deps: DdgsDeps = defaultDdgsDeps) {}
 
@@ -147,6 +149,8 @@ export class DdgsSupervisor {
     this.abort?.abort();
     this.kill?.();
     await this.loop;
+    this.owned?.finished();
+    this.owned = null;
     this.loop = null;
     this.abort = null;
   }
@@ -192,6 +196,8 @@ export class DdgsSupervisor {
         const url = `http://127.0.0.1:${port}/`;
         const child = await this.deps.spawn(port);
         this.kill = child.kill;
+        this.owned = registerOwned("ddgs-sidecar", child.pid);
+        this.owned.refresh();
         startedAt = this.deps.now();
         const ready = await this.waitHealthy(url, child.exited, signal);
         if (ready) {
@@ -201,6 +207,8 @@ export class DdgsSupervisor {
         if (!ready) child.kill();
         else void this.watchLiveness(url, child, signal);
         const code = await child.exited;
+        this.owned?.finished();
+        this.owned = null;
         stderr = child.stderrTail();
         this.kill = null;
         if (signal.aborted) return;

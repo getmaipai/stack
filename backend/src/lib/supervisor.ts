@@ -1737,6 +1737,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     void exitFailure.catch(() => {});
     const loadStartedAt = performance.now();
     await Promise.race([waitHealthy(client, loadTimeoutForModel(model.sizeBytes), () => !exited), exitFailure]);
+    if (tree) owned.refresh();
     // The engine answered; it must also be the engine and the model the Stack launched.
     if (plan.verifyServed) await plan.verifyServed(client.baseUrl);
     let identity = plan.identity ? { host: "local" as const, build: plan.identity.build, model: plan.identity.model, healthy: true } : await readEngineIdentity(client.baseUrl, undefined, plan.healthPath);

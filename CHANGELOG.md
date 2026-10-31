@@ -24,6 +24,8 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Fixed
 
+- The search sidecar and the Splash chat server are in the owned-process registry, so the memory report no longer counts them as unregistered (RESOURCE-FIX-10f).
+
 - The governor's poll bodies run one at a time, so two loops can no longer settle the same queue head or evict on a stale free-memory figure within one tick (RESOURCE-FIX-07c).
 
 - A reserved engine load no longer waits behind a waiting picture, video or song and is never refused for a full queue; the eviction order is a table of exact ids instead of substring matches (RESOURCE-FIX-07b).

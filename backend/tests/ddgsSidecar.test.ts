@@ -1,15 +1,17 @@
 import { afterEach, expect, test } from "bun:test";
 import { DdgsSupervisor, ddgsRequirementsFileFor, DDGS_HEALTH_CODE, type DdgsDeps } from "@/search/ddgsSidecar";
 import { __resetHealthForTests, list as listHealth } from "@/lib/health";
+import { __setProcessTreeReadersForTests } from "@/lib/processTree";
+import { finishedSurvivors, ownedPids } from "@/lib/ownedProcesses";
 
-afterEach(() => { __resetHealthForTests(); });
+afterEach(() => { __resetHealthForTests(); __setProcessTreeReadersForTests(null); });
 
 function deps(over: Partial<DdgsDeps> = {}): DdgsDeps {
   return {
     requirements: () => "requirements.txt",
     ensureEnvironment: async () => {},
     port: async () => 41234,
-    spawn: async () => { let end!: (code: number) => void; const exited = new Promise<number>((done) => { end = done; }); return { exited, kill: () => end(143), stderrTail: () => "" }; },
+    spawn: async () => { let end!: (code: number) => void; const exited = new Promise<number>((done) => { end = done; }); return { pid: 99, exited, kill: () => end(143), stderrTail: () => "" }; },
     healthy: async () => true,
     sleep: (ms, signal) => new Promise((done) => { const t = setTimeout(done, Math.min(ms, 5)); signal.addEventListener("abort", () => { clearTimeout(t); done(); }, { once: true }); }),
     now: Date.now,
@@ -19,11 +21,16 @@ function deps(over: Partial<DdgsDeps> = {}): DdgsDeps {
 const until = async (check: () => boolean) => { for (let i = 0; i < 400 && !check(); i++) await Bun.sleep(5); expect(check()).toBe(true); };
 
 test("a healthy sidecar is ready and its loopback address is published", async () => {
+  const live = new Set([99]);
+  __setProcessTreeReadersForTests({ processTable: () => [{ pid: 99, ppid: 1 }], startTime: (pid) => live.has(pid) ? "sidecar" : "", commandLine: (pid) => live.has(pid) ? "ddgs" : "" });
   const supervisor = new DdgsSupervisor(deps());
   supervisor.start();
   await until(() => supervisor.get().state === "ready");
   expect(supervisor.get().url).toBe("http://127.0.0.1:41234/");
+  expect(ownedPids()).toContain(99);
   await supervisor.stop();
+  live.clear();
+  expect(finishedSurvivors()).toEqual([]);
 });
 
 test("a failed environment build is a health item that says what to do, and the next try recovers it", async () => {
@@ -43,7 +50,7 @@ test("a failed environment build is a health item that says what to do, and the 
 
 test("a process that dies is restarted, and one that keeps dying raises a health item", async () => {
   let spawns = 0;
-  const supervisor = new DdgsSupervisor(deps({ spawn: async () => { spawns += 1; return { exited: Promise.resolve(1), kill: () => {}, stderrTail: () => "ImportError: no module named ddgs" }; }, healthy: async () => false }));
+  const supervisor = new DdgsSupervisor(deps({ spawn: async () => { spawns += 1; return { pid: 99 + spawns, exited: Promise.resolve(1), kill: () => {}, stderrTail: () => "ImportError: no module named ddgs" }; }, healthy: async () => false }));
   supervisor.start();
   await until(() => spawns >= 3);
   await until(() => listHealth().some((item) => item.code === DDGS_HEALTH_CODE));
