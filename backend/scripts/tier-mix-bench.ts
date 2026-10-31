@@ -141,20 +141,25 @@ const MIXES: Mix[] = [
     },
   },
   {
-    name: "standard-music-beside-standard-picture",
-    expectation: "Standard music and a Standard picture run together when both fit their Standard caps and the machine has room for both.",
+    name: "standard-music-then-standard-picture",
+    expectation: "Standard music and a Standard picture both fit their Standard caps, but only one generator job runs at a time: the picture queues behind the music and starts after it is released.",
     run: async (ctx) => {
       const music = pick("music", "standard", ctx.room), picture = pick("pictures", "standard", ctx.room);
       if (!music || !picture) { ctx.note("resolve", `slots missing on ${PROFILE} at ${(ctx.room / GB).toFixed(1)} GB (music ${!!music}, pictures ${!!picture})`, performance.now()); return true; }
       await residents();
-      const t = performance.now();
+      let t = performance.now();
       const a = await settle(await admit(request("music", music.model, music.peakBytes, { tier: "standard", role: "music" })));
-      const b = await settle(await admit(request("picture", picture.model, picture.peakBytes, { tier: "standard", role: "image" })));
-      const fits = (music.peakBytes + picture.peakBytes) <= ctx.room;
-      ctx.note("both Standard", `${"id" in a ? "music admitted" : "music " + JSON.stringify(a)}, ${"id" in b ? "picture admitted" : "picture " + JSON.stringify(b)}; together ${((music.peakBytes + picture.peakBytes) / GB).toFixed(1)} GB of ${(ctx.room / GB).toFixed(1)} GB room`, t);
-      if ("id" in a) release(a);
-      if ("id" in b) release(b);
-      return fits ? "id" in a && "id" in b : true;
+      ctx.note("Standard music", "id" in a ? "admitted" : JSON.stringify(a), t);
+      t = performance.now();
+      const b = await admit(request("picture", picture.model, picture.peakBytes, { tier: "standard", role: "image" }));
+      ctx.note("Standard picture while music runs", isQueued(b) ? "queued (one generator at a time)" : "admitted (wrong)", t);
+      if (!("id" in a)) return false;
+      t = performance.now();
+      release(a);
+      const after = await settle(b);
+      ctx.note("Standard picture after music released", "id" in after ? "admitted" : JSON.stringify(after), t);
+      if ("id" in after) release(after);
+      return isQueued(b) && "id" in after;
     },
   },
   {

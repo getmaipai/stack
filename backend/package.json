@@ -13,6 +13,7 @@
     "db:generate": "drizzle-kit generate",
     "gen:api-docs": "bun run scripts/gen-api-docs.ts",
     "bench:tier-mix": "bun run scripts/tier-mix-bench.ts",
+    "bench:chat-engines": "bun run scripts/chat-engine-bench.ts",
     "bench:recapture": "bun run scripts/resource-recapture-bench.ts",
     "gen:components-doc": "bun run scripts/gen-components-doc.ts",
     "measure:disk-plan": "bun run scripts/measure-disk-plan.ts",
