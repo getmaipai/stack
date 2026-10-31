@@ -28,6 +28,14 @@ test("the daemon binds loopback only", () => {
   expect(serveOptions().hostname).toBe("127.0.0.1");
 });
 
+test("daily memory route returns the requested zero-filled days", async () => {
+  const response = await app.request("/stack/v1/memory/daily?days=3");
+  expect(response.status).toBe(200);
+  const body = await response.json() as { days: Array<Record<string, unknown>> };
+  expect(body.days).toHaveLength(3);
+  expect(body.days[0]).toMatchObject({ chat_restarts_by_cause: {}, engine_stops_by_cause: {}, pauses: 0, resumes: 0, forced_resumes: 0, paused_seconds: 0, memory_actions: {}, shrinks: 0, restores: 0, survivors_stopped: 0, sweeps: { runs: 0, freed_bytes: 0 }, canary_restarts: 0 });
+});
+
 test("a chat completion by role answers with the engine's reply and the identity headers", async () => {
   const response = await app.request("/v1/chat/completions", json({ model: "chat", messages: [{ role: "user", content: "hello" }] }));
   expect(response.status).toBe(200);

@@ -432,6 +432,8 @@ served on the budget route; nothing about decisions is persisted.
 
 `GET /stack/v1/hardware/budget` also reports `profile` and `slots`: the active machine profile and each resolved category and tier's model, peak memory and verification status from the Stack's tier catalog.
 
+`GET /stack/v1/memory/daily` counts daily chat restarts by cause, engine stops, isolation pauses and resumes, watchdog actions, chat window changes, stopped survivors, sweeps and canary restart requests from the Stack log. It reads the current and newest rotated log files, so a day rotated away or beyond the read cap has a short count; it adds no persistence. Every JSON event line the Stack logs now carries its time as `"at"` (appended by the logger); lines written before that change have no time and are not counted, so the first complete day is the first full day after the release.
+
 Every engine stop, unload and restart writes an `engine.retired` line
 with a `reason` sentence for people and a `cause` slug from
 `RetireCause` in `supervisor.ts`, so logs can be tallied by cause.

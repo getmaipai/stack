@@ -10,6 +10,8 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Added
 
+- GET /stack/v1/memory/daily reports each day's chat restarts by cause, engine stops, isolation pauses, watchdog actions, chat window shrinks, survivors stopped and sweeps from the Stack log (RESOURCE-FIX-08a).
+
 - GET /stack/v1/hardware/budget also reports the peak memory of each tier of each category for this computer, so Home no longer keeps its own copy of the table (RESOURCE-FIX-04a).
 
 - A regression test and a hand-run bench prove each job kind gives back its processes, ledger entry, temp files and memory (RESOURCE-FIX-10e).

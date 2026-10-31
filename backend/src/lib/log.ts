@@ -4,7 +4,15 @@ import { createLogger } from "@maipai/core/src/log";
 import { format } from "node:util";
 import { logsDir } from "@/lib/paths";
 
-export const logger = createLogger(logsDir, "stack");
+const baseLogger = createLogger(logsDir, "stack");
+
+/** A JSON event line (`{"event":...}`) gets its time appended as `"at":"<ISO>"`, so a day's events can be counted later
+ * (`lib/dailyResources.ts`). Appended at the end, so every existing prefix and substring of a line stays as it was. */
+export function stampEventLine(line: string, now: Date = new Date()): string {
+  return line.startsWith("{\"event\":") && line.endsWith("}") && !line.includes("\"at\":") ? `${line.slice(0, -1)},"at":"${now.toISOString()}"}` : line;
+}
+
+export const logger = { ...baseLogger, appendLine: (line: string) => baseLogger.appendLine(stampEventLine(line)) };
 
 /** Closed event names and fields used for Home mode audit records. These
  * records never carry text, process names or model names. */

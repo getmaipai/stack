@@ -10879,6 +10879,143 @@
         }
       }
     },
+    "/stack/v1/memory/daily": {
+      "get": {
+        "tags": [
+          "Memory"
+        ],
+        "summary": "Daily resource events from the Stack log",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 14,
+              "default": 2,
+              "description": "Number of local calendar days to report, from today backward."
+            },
+            "required": false,
+            "description": "Number of local calendar days to report, from today backward.",
+            "name": "days",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Daily counts from available Stack log files, read only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "days": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "date": {
+                            "type": "string",
+                            "description": "Local calendar date."
+                          },
+                          "chat_restarts_by_cause": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "number"
+                            },
+                            "description": "Chat restarts counted by cause."
+                          },
+                          "engine_stops_by_cause": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "number"
+                            },
+                            "description": "Engine stops counted by cause."
+                          },
+                          "pauses": {
+                            "type": "number",
+                            "description": "Isolation pauses."
+                          },
+                          "resumes": {
+                            "type": "number",
+                            "description": "Isolation resumes."
+                          },
+                          "forced_resumes": {
+                            "type": "number",
+                            "description": "Forced isolation resumes."
+                          },
+                          "paused_seconds": {
+                            "type": "number",
+                            "description": "Seconds recorded while isolation resumed."
+                          },
+                          "memory_actions": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "number"
+                            },
+                            "description": "Watchdog actions counted by action."
+                          },
+                          "shrinks": {
+                            "type": "number",
+                            "description": "Chat window shrinks."
+                          },
+                          "restores": {
+                            "type": "number",
+                            "description": "Chat window restores."
+                          },
+                          "survivors_stopped": {
+                            "type": "number",
+                            "description": "Surviving processes stopped."
+                          },
+                          "sweeps": {
+                            "type": "object",
+                            "properties": {
+                              "runs": {
+                                "type": "number",
+                                "description": "Completed sweeps."
+                              },
+                              "freed_bytes": {
+                                "type": "number",
+                                "description": "Bytes freed by sweeps."
+                              }
+                            },
+                            "required": [
+                              "runs",
+                              "freed_bytes"
+                            ]
+                          },
+                          "canary_restarts": {
+                            "type": "number",
+                            "description": "Restarts requested by canaries."
+                          }
+                        },
+                        "required": [
+                          "date",
+                          "chat_restarts_by_cause",
+                          "engine_stops_by_cause",
+                          "pauses",
+                          "resumes",
+                          "forced_resumes",
+                          "paused_seconds",
+                          "memory_actions",
+                          "shrinks",
+                          "restores",
+                          "survivors_stopped",
+                          "sweeps",
+                          "canary_restarts"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "days"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/memory/reclaim": {
       "get": {
         "tags": [

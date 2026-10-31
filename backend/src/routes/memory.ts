@@ -4,6 +4,10 @@ import type { AppEnv } from "@/types";
 import { memoryWatchdog } from "@/lib/memoryWatchdog";
 import { heavyGate } from "@/lib/heavyGate";
 import { listReclaimable, runReclaim } from "@/lib/reclaim";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { dataDir } from "@/lib/paths";
+import { dailyResources } from "@/lib/dailyResources";
 
 const Level = z.enum(["normal", "warn", "critical"]);
 const MemorySchema = z.object({
@@ -27,6 +31,49 @@ const route = createRoute({
 
 export const memoryRoutes = apiRouter<AppEnv>();
 memoryRoutes.openapi(route, (c) => c.json({ ...memoryWatchdog().report(), isolation: heavyGate.status() }, 200));
+
+const DailySchema = z.object({ days: z.array(z.object({
+  date: z.string().openapi({ description: "Local calendar date." }),
+  chat_restarts_by_cause: z.record(z.string(), z.number()).openapi({ description: "Chat restarts counted by cause." }),
+  engine_stops_by_cause: z.record(z.string(), z.number()).openapi({ description: "Engine stops counted by cause." }),
+  pauses: z.number().openapi({ description: "Isolation pauses." }),
+  resumes: z.number().openapi({ description: "Isolation resumes." }),
+  forced_resumes: z.number().openapi({ description: "Forced isolation resumes." }),
+  paused_seconds: z.number().openapi({ description: "Seconds recorded while isolation resumed." }),
+  memory_actions: z.record(z.string(), z.number()).openapi({ description: "Watchdog actions counted by action." }),
+  shrinks: z.number().openapi({ description: "Chat window shrinks." }),
+  restores: z.number().openapi({ description: "Chat window restores." }),
+  survivors_stopped: z.number().openapi({ description: "Surviving processes stopped." }),
+  sweeps: z.object({ runs: z.number().openapi({ description: "Completed sweeps." }), freed_bytes: z.number().openapi({ description: "Bytes freed by sweeps." }) }),
+  canary_restarts: z.number().openapi({ description: "Restarts requested by canaries." }),
+})) });
+const dailyRoute = createRoute({
+  method: "get", path: "/daily", tags: ["Memory"], summary: "Daily resource events from the Stack log",
+  request: { query: z.object({ days: z.coerce.number().int().min(1).max(14).default(2).openapi({ description: "Number of local calendar days to report, from today backward." }) }) },
+  responses: { 200: { content: { "application/json": { schema: DailySchema } }, description: "Daily counts from available Stack log files, read only." } },
+});
+memoryRoutes.openapi(dailyRoute, (c) => {
+  const logs = join(dataDir, "logs");
+  let files: string[] = [];
+  try {
+    files = readdirSync(logs).filter((name) => name === "stack.log" || /^stack\.log\.\d{4}-/.test(name)).sort().reverse();
+  } catch { /* Missing log directory means zero counts. */ }
+  const lines: string[] = [];
+  let remaining = 5 * 1024 * 1024;
+  for (const name of files) {
+    if (remaining <= 0) break;
+    const path = join(logs, name);
+    try {
+      const size = statSync(path).size;
+      if (!statSync(path).isFile()) continue;
+      const length = Math.min(size, remaining);
+      const content = readFileSync(path).subarray(Math.max(0, size - length)).toString("utf8");
+      lines.push(...content.split("\n").slice(size > length ? 1 : 0));
+      remaining -= length;
+    } catch { /* A rotated file may disappear during the read. */ }
+  }
+  return c.json({ days: dailyResources(lines, c.req.valid("query").days, new Date()) }, 200);
+});
 
 const ReclaimItem = z.object({ id: z.string(), kind: z.enum(["reserved", "warm", "burst"]), bytes: z.number() });
 const reclaimListRoute = createRoute({
