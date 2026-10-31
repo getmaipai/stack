@@ -202,3 +202,30 @@ Bun.serve({ port, hostname: "127.0.0.1", async fetch(request) {
   expect(listHealth().find((item) => item.code === "tts.engine-fallback")).toMatchObject({ severity: "warning" });
   expect(ttsEngineInEffect()).toBe("pocket");
 }, 60_000);
+
+test("resetSupervisorForTests stops an engine a test really started, so no Pocket TTS outlives the run (2026-10-30 leak)", async () => {
+  setSupervisorFactoryForTests(null);
+  setMachineTier("p128");
+  installPocketRecords();
+  const stub = "#!" + process.execPath + `
+const port = Number(process.argv[process.argv.indexOf("--port") + 1]);
+await Bun.write(import.meta.dir + "/pid", String(process.pid));
+const header = new Uint8Array(44); new TextEncoder().encodeInto("RIFF", header);
+Bun.serve({ port, hostname: "127.0.0.1", async fetch(request) {
+  const path = new URL(request.url).pathname;
+  if (path === "/health") return Response.json({ status: "healthy" });
+  if (path === "/tts") return new Response(new Uint8Array([...header, ...new Uint8Array(4800)]), { headers: { "content-type": "audio/wav" } });
+  return new Response("no", { status: 404 });
+} });
+`;
+  fakeEnvironment(pocketTtsRoot(), { "pocket-tts": stub });
+  const spoken = await speakRole("tts", speechForm("Clover, the kitchen light is on."));
+  expect(spoken.status).toBe(200);
+  await new Response(spoken.body).arrayBuffer();
+  const pid = Number(readFileSync(join(pocketTtsRoot(), "venv", "bin", "pid"), "utf8"));
+  const alive = (): boolean => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  expect(alive()).toBe(true);
+  resetSupervisorForTests();
+  for (let i = 0; i < 100 && alive(); i++) await new Promise((done) => setTimeout(done, 50));
+  expect(alive()).toBe(false);
+}, 60_000);

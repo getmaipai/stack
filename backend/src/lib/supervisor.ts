@@ -2438,7 +2438,19 @@ export async function streamRole(requested: RoleId, path: string, body: Record<s
 
 // ---- tests ----------------------------------------------------------------
 
+/** An engine a test really started is stopped when the test resets the supervisor. Only a process this supervisor spawned (it has a
+ * spawn record) is touched, so a scripted process with a made-up pid is never signalled. 2026-10-30: a test that ran the real
+ * supervisor against a stub Pocket TTS left it running after the run ended, three of them at 4 hours old. */
+function stopSpawnedForTests(processRecord: RoleProcess | null): void {
+  if (!processRecord || !spawnedAtOf.has(processRecord) || exitOf.has(processRecord)) return;
+  void processRecord.stop().catch(() => {});
+}
+
 export function resetSupervisorForTests(): void {
+  for (const current of runtimes.values()) {
+    stopSpawnedForTests(current.process);
+    void current.starting?.then(stopSpawnedForTests, () => {});
+  }
   codingEngineForTests = undefined;
   stoppingAll = false;
   clearTtsEngineFailures();
