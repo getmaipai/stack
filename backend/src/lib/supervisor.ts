@@ -1113,7 +1113,7 @@ async function yieldJitRolesTo(role: RoleId): Promise<void> {
     // waits on a picture model's admission); already admitted and loading,
     // its memory is counted, so chat waits for it to be retired before it
     // is sized (rule 4).
-    if (current?.process || launch) await unloadRole(jit, `Unloaded so ${role} starts at its full context.`);
+    if (current?.process || launch) await unloadRole(jit, `Unloaded so ${role} starts at its full context.`, "jit-unload-for-resident");
     if (!launch) continue;
     if (getGovernorStatus().loaded.some((item) => item.id === jit)) await launch.catch(() => undefined);
     else { withdrawAdmission(jit); void launch.catch(() => undefined); }
@@ -1318,9 +1318,9 @@ export async function unloadJitForGovernor(id: string): Promise<boolean> {
     if (current.process.activeRequests > 0) return false;
     const keepWarmMs = codingKeepWarmSeconds() * 1000;
     const idleLong = current.lastRealRequestAt !== null && Date.now() - current.lastRealRequestAt >= keepWarmMs - 6_000;
-    return unloadRole(role, idleLong ? `Unloaded after ${codingLaunchSettings().keepWarmMinutes} minutes without a coding request.` : "Unloaded to free memory for other work.");
+    return unloadRole(role, idleLong ? `Unloaded after ${codingLaunchSettings().keepWarmMinutes} minutes without a coding request.` : "Unloaded to free memory for other work.", idleLong ? "coding-idle" : "coding-make-room");
   }
-  return unloadRole(role, "Unloaded by the memory governor.");
+  return unloadRole(role, "Unloaded by the memory governor.", "governor-evict");
 }
 
 /** The smallest window chat is restarted at for a held video job
@@ -1576,7 +1576,7 @@ export async function healStart(requested: RoleId): Promise<{ ok: true } | { ok:
         current.process = null;
         current.status = { ...current.status, state: "offline", reason: failure };
         emitRoleState(role, "offline", failure);
-        void retire(started, failure);
+        void retire(started, failure, "start-failed");
       }
       return { ok: false, reason: failure };
     }
@@ -1923,7 +1923,7 @@ export async function getProcess(requested: RoleId, modelId?: string): Promise<R
     const previous = current.process;
     current.process = null;
     current.status = { ...current.status, state: "loading", reason: null };
-    await retire(previous, "Replaced by a new launch.");
+    await retire(previous, "Replaced by a new launch.", "replaced-by-launch");
     return getProcess(role, modelId);
   }
   if (!current.starting && current.retryAfter > Date.now()) {
@@ -1938,7 +1938,7 @@ export async function getProcess(requested: RoleId, modelId?: string): Promise<R
       if (generation !== current.generation) {
         // Stopped or restarted while it loaded: its admission and memory
         // watch go with it, never left counted in the governor.
-        await retire(started, "Stopped or restarted while it was loading.");
+        await retire(started, "Stopped or restarted while it was loading.", "stopped-while-loading");
         if (current.starting === launch) current.starting = null;
         return getProcess(role, modelId);
       }
@@ -2092,7 +2092,52 @@ export function roleCanBeStartedByStack(requested: RoleId): boolean {
 const spawnedAtOf = new WeakMap<RoleProcess, number>();
 const exitOf = new WeakMap<RoleProcess, { exitCode: number | null; signal: string | null }>();
 
-async function retire(processRecord: RoleProcess, reason: string, cause = "unspecified"): Promise<void> {
+export type RetireCause =
+  // Restarts
+  | "governor-runaway"
+  | "video-window-shrink"
+  | "video-window-restore"
+  | "memory-watchdog"
+  | "canary-request"
+  | "tier-reduced-enter"
+  | "tier-reduced-leave"
+  | "tier-reduced-rollback"
+  | "new-projector"
+  | "new-chat-engine"
+  | "route-engines-restart"
+  | "route-engines-other"
+  | "route-engines-start"
+  | "engine-swap-postload"
+  | "engine-update-postload"
+  | "rollback-restart"
+  | "repairs-restart-engine"
+  | "health-action"
+  | "model-load"
+  | "tts-gated-weights"
+  // Stops
+  | "route-engines-stop"
+  | "engine-swap-drain"
+  | "rollback-drain"
+  | "engine-update-drain"
+  | "stack-stopping"
+  // Unloads
+  | "home-mode-change"
+  | "memory-watchdog-evict"
+  | "jit-unload-for-resident"
+  | "coding-idle"
+  | "coding-make-room"
+  | "governor-evict"
+  | "route-models-unload"
+  | "free-memory"
+  | "idle-unload"
+  // Other retirements
+  | "start-failed"
+  | "replaced-by-launch"
+  | "stopped-while-loading"
+  | "request-failed"
+  | `test-${string}`;
+
+async function retire(processRecord: RoleProcess, reason: string, cause: RetireCause): Promise<void> {
   const startedAt = spawnedAtOf.get(processRecord);
   logger.appendLine(JSON.stringify({ event: "engine.retired", role: processRecord.role, pid: processRecord.pid, reason, cause, ranMs: startedAt === undefined ? null : Date.now() - startedAt, alreadyExited: exitOf.has(processRecord) }));
   processRecord.retired = true;
@@ -2143,13 +2188,13 @@ export async function restartForNewChatEngine(): Promise<boolean> {
 let restartListener: ((role: RoleId) => void) | null = null;
 export function setRestartListener(listener: ((role: RoleId) => void) | null): void { restartListener = listener; }
 
-export async function restartRole(requested: RoleId, cause = "unspecified"): Promise<void> {
+export async function restartRole(requested: RoleId, cause: RetireCause): Promise<void> {
   restartListener?.(processRoleFor(requested));
   await recycleRole(requested, cause);
 }
 
 /** Retires the role's process and leaves the next start to the caller, without telling the self-heal controller a person did it (a canary's restart request counts toward the breaker). */
-export async function recycleRole(requested: RoleId, cause = "unspecified"): Promise<void> {
+export async function recycleRole(requested: RoleId, cause: RetireCause): Promise<void> {
   const role = processRoleFor(requested);
   if (role === "tts") clearTtsEngineFailures();
   if (role === "chat") clearChatEngineFailures();
@@ -2167,7 +2212,7 @@ export async function recycleRole(requested: RoleId, cause = "unspecified"): Pro
   if (previous) await retire(previous, "Restarted.", cause);
 }
 
-export async function stopRole(requested: RoleId, reason = "Stopped by Home."): Promise<void> {
+export async function stopRole(requested: RoleId, reason: string, cause: RetireCause): Promise<void> {
   const role = processRoleFor(requested);
   const current = runtime(role);
   current.generation++;
@@ -2180,13 +2225,13 @@ export async function stopRole(requested: RoleId, reason = "Stopped by Home."): 
   current.status = { ...current.status, state: "stopped", reason };
   emit({ id: "engine.state", data: { engine: role, state: "stopped", reason } });
   emitRoleState(role, "installed", reason);
-  if (previous) await retire(previous, reason);
+  if (previous) await retire(previous, reason, cause);
 }
 
 /** Drains and unloads a role now, without marking it stopped: the next
  * request starts it again. This is what "free memory" and Home's
  * unload mean; `stopRole` is the explicit stop that stays stopped. */
-export async function unloadRole(requested: RoleId, reason: string): Promise<boolean> {
+export async function unloadRole(requested: RoleId, reason: string, cause: RetireCause): Promise<boolean> {
   const role = processRoleFor(requested);
   const current = runtime(role);
   const processRecord = current.process;
@@ -2196,13 +2241,13 @@ export async function unloadRole(requested: RoleId, reason: string): Promise<boo
   current.starting = null;
   current.status = { ...current.status, state: "installed", reason };
   emit({ id: "engine.state", data: { engine: role, state: "installed", reason } });
-  if (processRecord) await retire(processRecord, reason);
+  if (processRecord) await retire(processRecord, reason, cause);
   return true;
 }
 
-export async function unloadAllRoles(reason: string): Promise<RoleId[]> {
+export async function unloadAllRoles(reason: string, cause: RetireCause): Promise<RoleId[]> {
   const unloaded: RoleId[] = [];
-  for (const role of [...runtimes.keys()]) if (await unloadRole(role, reason)) unloaded.push(role);
+  for (const role of [...runtimes.keys()]) if (await unloadRole(role, reason, cause)) unloaded.push(role);
   return unloaded;
 }
 
@@ -2226,7 +2271,7 @@ export async function unloadIdleRole(requested: RoleId, options: IdleUnloadOptio
   current.starting = null;
   current.status = { ...current.status, state: "installed", reason: `Unloaded after ${idleMinutes} minutes without a request.` };
   emit({ id: "engine.state", data: { engine: role, state: "installed", reason: `Unloaded after ${idleMinutes} minutes without a request.` } });
-  await retire(processRecord, `Unloaded after ${idleMinutes} minutes without a request.`);
+  await retire(processRecord, `Unloaded after ${idleMinutes} minutes without a request.`, "idle-unload");
   return true;
 }
 
@@ -2240,9 +2285,9 @@ export async function unloadIdleRoles(options: IdleUnloadOptions): Promise<RoleI
  * governor gives up at once instead of holding the stop for its
  * deadline; the wait's watcher returns any late admission. */
 let stoppingAll = false;
-export async function stopAllRoles(reason: string): Promise<void> {
+export async function stopAllRoles(reason: string, cause: RetireCause): Promise<void> {
   stoppingAll = true;
-  for (const role of [...runtimes.keys()]) if (runtime(role).process || runtime(role).starting) await stopRole(role, reason);
+  for (const role of [...runtimes.keys()]) if (runtime(role).process || runtime(role).starting) await stopRole(role, reason, cause);
 }
 
 // ---- pins -----------------------------------------------------------------
@@ -2295,7 +2340,7 @@ export async function speakRole(requested: RoleId, form: FormData, signal?: Abor
     current.starting = null;
     current.status = { ...current.status, state: "offline", reason: unavailable.reason };
     emit({ id: "engine.state", data: { engine: role, state: "offline", reason: unavailable.reason } });
-    void retire(processRecord, unavailable.reason);
+    void retire(processRecord, unavailable.reason, "request-failed");
     throw unavailable;
   }
 }
@@ -2370,7 +2415,7 @@ export async function requestRole(requested: RoleId, path: string, body: Record<
     current.starting = null;
     current.status = { ...current.status, state: "offline", reason: unavailable.reason };
     emit({ id: "engine.state", data: { engine: role, state: "offline", reason: unavailable.reason } });
-    void retire(processRecord, unavailable.reason);
+    void retire(processRecord, unavailable.reason, "request-failed");
     throw unavailable;
   } finally {
     processRecord.activeRequests--;
@@ -2431,7 +2476,7 @@ export async function streamRole(requested: RoleId, path: string, body: Record<s
     current.starting = null;
     current.status = { ...current.status, state: "offline", reason: unavailable.reason };
     emit({ id: "engine.state", data: { engine: role, state: "offline", reason: unavailable.reason } });
-    void retire(processRecord, unavailable.reason);
+    void retire(processRecord, unavailable.reason, "request-failed");
     throw unavailable;
   }
 }
@@ -2577,7 +2622,7 @@ export async function runOnRole<T>(requested: RoleId, work: (processRecord: Role
       current.starting = null;
       current.status = { ...current.status, state: "offline", reason: unavailable.reason };
       emit({ id: "engine.state", data: { engine: role, state: "offline", reason: unavailable.reason } });
-      void retire(processRecord, unavailable.reason);
+      void retire(processRecord, unavailable.reason, "request-failed");
       throw unavailable;
     }
     throw error;

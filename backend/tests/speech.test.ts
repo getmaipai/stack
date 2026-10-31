@@ -314,7 +314,7 @@ test("a restart under a live session ends the session from the server side, so t
     const events: SttWireEvent[] = [];
     socket.onmessage = (message) => events.push(SttWireEvent.parse(JSON.parse(String(message.data))));
     const closed = new Promise<string>((resolve) => { socket.onclose = (event) => resolve(event.reason); });
-    await Promise.race([restartRole("stt"), new Promise((_, reject) => setTimeout(() => reject(new Error("the restart waited on the session")), 3_000))]);
+    await Promise.race([restartRole("stt", "test-restart"), new Promise((_, reject) => setTimeout(() => reject(new Error("the restart waited on the session")), 3_000))]);
     expect(await closed).toBe("The stt engine is restarting.");
     expect(events.at(-1)).toEqual({ t: "error", v: "The stt engine is restarting." });
     expect(stopped).toBe(1);

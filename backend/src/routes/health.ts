@@ -35,7 +35,7 @@ export async function runFix(code: string): Promise<{ ok: boolean; result: strin
   const role = roleFromCode(code);
   switch (item.fix.action) {
     case "restart_engine": { await restartRole(role, "repairs-restart-engine"); try { await getProcess(role); } catch (error) { return { ok: false, result: (error as Error).message }; } resolve(code); return { ok: true, result: `The ${role} engine was restarted.` }; }
-    case "free_memory": { await unloadAllRoles("Unloaded to free memory."); resolve(code); return { ok: true, result: "Every engine was unloaded to free memory; the next request starts what it needs." }; }
+    case "free_memory": { await unloadAllRoles("Unloaded to free memory.", "free-memory"); resolve(code); return { ok: true, result: "Every engine was unloaded to free memory; the next request starts what it needs." }; }
     case "rollback_update": {
       // The engine the failed swap names rolls back; the chat role is
       // drained and restarted only when that engine is the one it runs.
@@ -45,8 +45,8 @@ export async function runFix(code: string): Promise<{ ok: boolean; result: strin
       const runsChat = engineRole(engine) === "chat" && chatEngine() === engine;
       // The coding engine is on demand: drained, and the next coding request starts the build the link now names.
       const runsCoding = engineRole(engine) === "coding" && runningEngine("coding") === engine;
-      if (runsChat) await stopRole("chat", "Draining for a rollback.");
-      if (runsCoding) await stopRole("coding", "Draining for a rollback.");
+      if (runsChat) await stopRole("chat", "Draining for a rollback.", "rollback-drain");
+      if (runsCoding) await stopRole("coding", "Draining for a rollback.", "rollback-drain");
       await rollbackEngine(engine, previous);
       if (runsChat) await restartRole("chat", "health-action");
       resolve(code);

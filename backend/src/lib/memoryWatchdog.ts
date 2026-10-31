@@ -152,7 +152,7 @@ async function defaultUnloadIdleWorkers(): Promise<string[]> {
   if (lookService.stopIfIdle()) stopped.push("look");
   const last = supervisor.lastRealRequestAt("tts");
   const state = supervisor.getRoleStatus("tts").state;
-  if ((state === "ready" || state === "loaded") && (last === null || Date.now() - last > 60_000) && await supervisor.unloadRole("tts", "Unloaded: this computer is low on memory.").catch(() => false)) stopped.push("voice engine");
+  if ((state === "ready" || state === "loaded") && (last === null || Date.now() - last > 60_000) && await supervisor.unloadRole("tts", "Unloaded: this computer is low on memory.", "memory-watchdog-evict").catch(() => false)) stopped.push("voice engine");
   return stopped;
 }
 
@@ -160,7 +160,7 @@ export const defaultActions: WatchdogActions = {
   unloadIdleWorkers: defaultUnloadIdleWorkers,
   cancelQueued: (reason) => cancelGeneratorsForMemory("queued", reason),
   cancelRunning: (reason) => cancelGeneratorsForMemory("running", reason),
-  evictRole: async (role) => (await import("@/lib/supervisor")).unloadRole(role, "Unloaded: this computer is low on memory.").catch(() => false),
+  evictRole: async (role) => (await import("@/lib/supervisor")).unloadRole(role, "Unloaded: this computer is low on memory.", "memory-watchdog-evict").catch(() => false),
   restartChat: async () => { await (await import("@/lib/supervisor")).restartRole("chat", "memory-watchdog"); },
   notify: (data) => { emit({ id: "pressure", data }); },
 };

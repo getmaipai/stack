@@ -28,6 +28,6 @@ updatesRoutes.openapi(applyRoute, async (c) => {
 });
 updatesRoutes.openapi(rollbackRoute, async (c) => {
   const { name } = c.req.valid("param"); const { tag } = c.req.valid("json");
-  try { await stopRole("chat", "Draining for a rollback."); await rollbackEngine(name, tag); await restartRole("chat"); return c.json({ ok: true as const, tag }, 200); }
+  try { await stopRole("chat", "Draining for a rollback.", "rollback-drain"); await rollbackEngine(name, tag); await restartRole("chat", "rollback-restart"); return c.json({ ok: true as const, tag }, 200); }
   catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 400); }
 });

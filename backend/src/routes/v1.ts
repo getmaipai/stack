@@ -331,7 +331,7 @@ async function ensureCloningLoaded(role: RoleId, signal: AbortSignal): Promise<v
   if (!fetched) throw new VoiceRefusedError("This voice needs the voice-cloning weights, which Hugging Face keeps behind a token; set stack.engines.tts.hf_token, turn on stack.engines.tts.voice_cloning and restart the voice engine.", 409, "voice-cloning-unavailable");
   const status = getRoleStatus(role);
   if (status.state === "ready" || status.state === "busy") {
-    if (status.identity?.model !== POCKET_TTS_GATED_REPO) await restartRole(role);
+    if (status.identity?.model !== POCKET_TTS_GATED_REPO) await restartRole(role, "tts-gated-weights");
   }
 }
 // When the picture generator's weights are installed the mflux path answers (images/imageEngine.ts); otherwise the supervised ComfyUI does.

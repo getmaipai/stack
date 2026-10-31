@@ -47,7 +47,7 @@ async function withGpuLock<T>(work: () => Promise<T>): Promise<T> {
   try { return await work(); } finally { try { rmdirSync(LOCK); } catch { /* already gone */ } }
 }
 
-afterAll(async () => { await stopAllRoles("smoke finished").catch(() => {}); });
+afterAll(async () => { await stopAllRoles("smoke finished", "test-stop").catch(() => {}); });
 
 const chat = async (body: Record<string, unknown>) => {
   const response = await app.request("/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: "chat", ...body }) });
@@ -139,7 +139,7 @@ test.skipIf(!process.env.OMLX_SMOKE)("the oMLX chat engine, end to end on this M
     expect([200, 503]).toContain(again.response.status);
 
     // 11. A clean stop leaves nothing behind.
-    await stopAllRoles("smoke finished");
+    await stopAllRoles("smoke finished", "test-stop");
     expect(runningEngine("chat")).toBeNull();
   });
 }, 3_600_000);

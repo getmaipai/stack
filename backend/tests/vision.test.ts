@@ -105,7 +105,7 @@ test("the pin's card sampling fills only what the request left out", () => {
 test("a resident start unloads a loaded vision process first, so chat is sized without it (rule 4)", async () => {
   await getProcess("vision");
   expect(getRoleStatus("vision").state).toBe("ready");
-  await restartRole("chat");
+  await restartRole("chat", "test-restart");
   await getProcess("chat");
   expect(started).toEqual(["vision", "chat"]);
   expect(getRoleStatus("vision").state).toBe("installed");

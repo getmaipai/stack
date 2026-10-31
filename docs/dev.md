@@ -420,6 +420,12 @@ is every 5 s idle, every 1 s during a load. The governor keeps a bounded
 in-memory ledger of its newest 200 decisions with the reason for each,
 served on the budget route; nothing about decisions is persisted.
 
+Every engine stop, unload and restart writes an `engine.retired` line
+with a `reason` sentence for people and a `cause` slug from
+`RetireCause` in `supervisor.ts`, so logs can be tallied by cause.
+Examples include `memory-watchdog`, `engine-swap-drain`, `free-memory`,
+`idle-unload` and `request-failed`.
+
 **The kernel's ledger.** The governor reads one `MemoryReader`:
 `{ totalBytes, availablePercent, pressure: normal | warn | critical,
 freeBytes, processMemoryBytes(pid) }`. On macOS, `hw.memsize`,

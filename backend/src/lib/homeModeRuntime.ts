@@ -94,11 +94,11 @@ export async function setupHomeModeRuntime(initial: HomeMode): Promise<void> {
     stopResidents: async () => {
       for (const role of HEAVY_ROLES) {
         const owner = processRoleFor(role);
-        if (role === owner || (role === "judge" && owner === "judge")) await unloadRole(owner, "Home is changing modes.");
+        if (role === owner || (role === "judge" && owner === "judge")) await unloadRole(owner, "Home is changing modes.", "home-mode-change");
       }
     },
     startHeavy: async () => { setCodingModeActive(true); await retryWhileResidentStarts(() => getProcess("coding", STACK_CODING_HEAVY_MODEL.id)); },
-    stopHeavy: async () => { await unloadRole("coding", "Home is changing modes."); },
+    stopHeavy: async () => { await unloadRole("coding", "Home is changing modes.", "home-mode-change"); },
     startResidents: async () => {
       setCodingModeActive(false);
       await getProcess("chat");

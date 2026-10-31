@@ -99,7 +99,7 @@ test("a hand restart closes the circuit and forgets the failures", async () => {
   for (let i = 0; i < 4; i++) { await crash("chat"); await fire(); }
   await crash("chat");
   expect(selfHealSummary().stopped).toEqual(["chat"]);
-  await restartRole("chat");
+  await restartRole("chat", "test-restart");
   expect(selfHealSummary().stopped).toEqual([]);
   await crash("chat");
   expect(await fire()).toBe(2_000);

@@ -99,7 +99,7 @@ export function stagingPin(name: string, tag: string, target: StagingTarget): En
 export function updateSwapOptions(name: string): EngineSwapOptions {
   const runsChat = CHAT_ENGINES.includes(name as ChatEngine) ? chatEngine() === name : true;
   if (!runsChat) return { emitEvents: false };
-  return { drain: () => stopRole("chat", "Draining for an engine update."), postLoadCheck: async () => { await restartRole("chat"); await getProcess("chat"); void warmUp("engine-update").catch(() => {}); return true; }, emitEvents: false };
+  return { drain: () => stopRole("chat", "Draining for an engine update.", "engine-update-drain"), postLoadCheck: async () => { await restartRole("chat", "engine-update-postload"); await getProcess("chat"); void warmUp("engine-update").catch(() => {}); return true; }, emitEvents: false };
 }
 async function stageAndSwap(name: string, tag: string, target: StagingTarget): Promise<void> {
   await ensureEngine(stagingPin(name, tag, target), undefined, { activate: false });

@@ -124,7 +124,7 @@ async function serve(): Promise<void> {
     videoGen.stop();
     musicGen.stop();
     imageGen.stop();
-    await stopAllRoles("The Stack is stopping.");
+    await stopAllRoles("The Stack is stopping.", "stack-stopping");
     stopTierWatch();
     stopWatchdog();
     server.stop(true);

@@ -239,10 +239,10 @@ test("streaming passes the engine's bytes through and finishes the request when 
 
 test("stop drains and marks the role stopped; restart starts a new generation", async () => {
   await getProcess("chat");
-  await stopRole("chat");
+  await stopRole("chat", "Stopped by Home.", "test-stop");
   expect(getRoleStatus("chat")).toMatchObject({ state: "stopped" });
   await expect(getProcess("chat")).rejects.toBeInstanceOf(EngineUnavailableError);
-  await restartRole("chat");
+  await restartRole("chat", "test-restart");
   await getProcess("chat");
   expect(started).toEqual(["chat", "chat"]);
 });
@@ -261,7 +261,7 @@ test("a refused start backs off and does not emit another loaded/offline flap on
   expect(attempts).toBe(1);
   const transitions = eventsAfter(0).filter((event) => event.id === "role.state").map((event) => (event.data as { state: string }).state);
   expect(transitions).toEqual(["loaded", "offline"]);
-  await restartRole("embed");
+  await restartRole("embed", "test-restart");
   await expect(getProcess("embed")).rejects.toThrow(/Fit plan cannot admit embed/);
   expect(attempts).toBe(2);
 });
@@ -355,11 +355,11 @@ test("after an engine goes offline mid-request, the next request starts a fresh 
 
 test("unload is undone by the next request; stop stays stopped until a restart", async () => {
   await getProcess("chat");
-  expect(await unloadRole("chat", "Unloaded to free memory.")).toBe(true);
+  expect(await unloadRole("chat", "Unloaded to free memory.", "test-unload")).toBe(true);
   expect(getRoleStatus("chat").state).toBe("installed");
   await getProcess("chat");
   expect(started).toEqual(["chat", "chat"]);
-  await stopRole("chat");
+  await stopRole("chat", "Stopped by Home.", "test-stop");
   await expect(getProcess("chat")).rejects.toThrow(/stopped/);
 });
 
@@ -424,9 +424,9 @@ test("stopping and restarting a role log an engine.retired line with the reason 
   const { stopRole, restartRole } = await import("@/lib/supervisor");
   const lines = () => { try { return readFileSync(join(logsDir, "stack.log"), "utf8"); } catch { return ""; } };
   await getProcess("chat");
-  await stopRole("chat", "Stopped by a test.");
+  await stopRole("chat", "Stopped by a test.", "test-stop")
   await getProcess("chat").catch(() => undefined);
-  await restartRole("chat").catch(() => undefined);
+  await restartRole("chat", "test-restart").catch(() => undefined);
   const text = lines();
   expect(text).toContain('"event":"engine.retired"');
   expect(text).toContain("Stopped by a test.");
@@ -445,4 +445,36 @@ test("a restart logs who asked for it and how the old process ended", async () =
   const done = JSON.parse(mine.find((line) => line.includes('"engine.retire-exit"')) ?? "{}");
   expect(done.role).toBe("chat");
   expect("exitCode" in done && "signal" in done).toBe(true);
+});
+
+test("every engine.retired line names a cause from the list; none says unspecified", async () => {
+  const { logsDir } = await import("@/lib/paths");
+  const { stopRole, restartRole, unloadRole } = await import("@/lib/supervisor");
+  const logPath = join(logsDir, "stack.log");
+  await getProcess("chat");
+  await stopRole("chat", "Stopped by a test.", "test-stop");
+  await restartRole("chat", "test-start");
+  await getProcess("chat");
+  await restartRole("chat", "test-restart");
+  await getProcess("chat");
+  await unloadRole("chat", "Unloaded by a test.", "test-unload");
+  const lines = readFileSync(logPath, "utf8").split("\n").filter(Boolean);
+  const retired = lines.filter((line) => line.includes('"event":"engine.retired"'));
+  expect(retired.some((line) => line.includes('"cause":"unspecified"'))).toBe(false);
+  const mine = retired.map((line) => JSON.parse(line) as { cause?: string }).filter((line) => line.cause?.startsWith("test-"));
+  expect(mine.length).toBeGreaterThanOrEqual(3);
+  expect(mine.every((line) => typeof line.cause === "string" && line.cause.length > 0)).toBe(true);
+  for (const cause of ["test-stop", "test-restart", "test-unload"]) {
+    expect(mine.some((line) => line.cause === cause)).toBe(true);
+    const exits = lines.filter((line) => line.includes('"event":"engine.retire-exit"')).map((line) => JSON.parse(line) as { cause?: string }).filter((line) => line.cause?.startsWith("test-"));
+    expect(exits.length).toBeGreaterThan(0);
+    expect(exits.some((line) => line.cause === cause)).toBe(true);
+  }
+});
+
+test("supervisor has no unspecified retirement cause", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const source = readFileSync(join(import.meta.dir, "../src/lib/supervisor.ts"), "utf8");
+  expect(source).not.toContain("unspecified");
 });

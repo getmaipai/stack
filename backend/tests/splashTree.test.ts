@@ -209,7 +209,7 @@ beforeEach(() => {
   setCodingMachineFacts({ platform: "darwin", arch: "arm64", chipGeneration: 5, chipName: "Apple M5 Max", memoryGb: 128, osVersion: "27.0.1" });
 });
 afterEach(async () => {
-  await stopRole("coding").catch(() => {});
+  await stopRole("coding", "Stopped by Home.", "test-stop").catch(() => {});
   for (const key of ["FAKE_BUN", "FAKE_SPLASH_SCRIPT", "FAKE_SPLASH_REFUSE", "FAKE_SPLASH_WRONG_NAME", "FAKE_SPLASH_NOT_SPLASH", "HF_TOKEN", "STACK_SECRETS_KEY", "PYTHONPATH"]) delete process.env[key];
   setMachineTier(null); setCodingMachineFacts(null); resetSupervisorForTests(); clearCodingEngineFailures(); clearModelsForTests(); __resetGovernorForTests(); __resetSettingsForTests();
   rmSync(join(engineDir(SPLASH_PIN), ".."), { recursive: true, force: true });
@@ -277,7 +277,7 @@ macTest("stopping the coding engine stops the server and the engine under it, ev
   const started = await getProcess("coding");
   const { pid, childPid } = report();
   started.pausable!.pause();
-  await stopRole("coding");
+  await stopRole("coding", "Stopped by Home.", "test-stop");
   await until(() => !isAlive(pid) && !isAlive(childPid));
   expect(isAlive(pid)).toBe(false);
   expect(isAlive(childPid)).toBe(false);

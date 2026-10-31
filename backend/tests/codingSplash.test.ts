@@ -681,7 +681,7 @@ macTest("a Splash start that fails sends the same request to llama-server, raise
   expect(engines).toEqual(["llama-server"]);
   expect(codingWarning()).toBeDefined();
   // A restart of the coding engine clears the memory: Splash is tried again, and a start that works clears the warning.
-  await recycleRole("coding");
+  await recycleRole("coding", "test-recycle");
   expect(activeCodingChoice().engine).toBe("splash");
   engines.length = 0;
   await startCodingWithFallbackForTests(undefined, async (role) => { engines.push(activeCodingChoice().engine); return scriptedProcess(role as "coding"); });

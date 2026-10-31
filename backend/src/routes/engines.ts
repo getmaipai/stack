@@ -236,7 +236,7 @@ for (const action of ["start", "stop", "restart"] as const) enginesRoutes.openap
   const unchosen = unchosenChatEngine(name, { stoppable: action === "stop" });
   if (unchosen) return c.json({ ok: false, reason: unchosen }, 200);
   try {
-    if (action === "stop") { await stopRole(role); return c.json({ ok: true }, 200); }
+    if (action === "stop") { await stopRole(role, "Stopped by Home.", "route-engines-stop"); return c.json({ ok: true }, 200); }
     if (action === "restart") { await restartRole(role, "route-engines-restart"); await getProcess(role); return c.json({ ok: true }, 200); }
     const status = getRoleStatus(role);
     // "Already running" only when the process is this engine's: a chat
@@ -245,7 +245,7 @@ for (const action of ["start", "stop", "restart"] as const) enginesRoutes.openap
     if (other) { await restartRole(role, "route-engines-other"); await getProcess(role); return c.json({ ok: true }, 200); }
     if (status.state === "ready" || status.state === "busy" || status.state === "loading") return c.json({ ok: true, reason: "Already running." }, 200);
     if (!roleCanBeStartedByStack(role) && status.state !== "stopped") return c.json({ ok: false, reason: `The ${role} role is bound to a server the Stack does not start.` }, 200);
-    await restartRole(role); await getProcess(role);
+    await restartRole(role, "route-engines-start"); await getProcess(role);
     return c.json({ ok: true }, 200);
   } catch (error) {
     return c.json({ ok: false, reason: error instanceof EngineUnavailableError ? error.reason : (error as Error).message }, 200);
@@ -259,8 +259,8 @@ enginesRoutes.openapi(currentRoute, async (c) => {
     // process to drain, and nothing to restart that would prove the build.
     if (unchosenChatEngine(name)) await swapEngine(name, tag);
     // The coding engine is on demand: it is drained, and the next coding request starts the new build (a build that does not start falls back to llama-server) rather than loading 20 GB here.
-    else if (role === "coding") await swapEngine(name, tag, { drain: () => stopRole(role, "Draining for an engine change.") });
-    else await swapEngine(name, tag, { drain: () => stopRole(role, "Draining for an engine change."), postLoadCheck: async () => { await restartRole(role); await getProcess(role); return true; } });
+    else if (role === "coding") await swapEngine(name, tag, { drain: () => stopRole(role, "Draining for an engine change.", "engine-swap-drain") });
+    else await swapEngine(name, tag, { drain: () => stopRole(role, "Draining for an engine change.", "engine-swap-drain"), postLoadCheck: async () => { await restartRole(role, "engine-swap-postload"); await getProcess(role); return true; } });
     return c.json({ ok: true as const, tag }, 200);
   } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 400); }
 });
