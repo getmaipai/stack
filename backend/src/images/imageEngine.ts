@@ -22,6 +22,7 @@
 // check live in Home, where the person is known.
 import { heavyGate, PausableProcess, type Lease, type PausableWorker } from "@/lib/heavyGate";
 import { TreeSnapshot } from "@/lib/processTree";
+import { registerOwned } from "@/lib/ownedProcesses";
 import { lowMemoryRefusal } from "@/lib/memoryState";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -148,7 +149,8 @@ export function workerHandle(child: { pid?: number; stdin: { write(data: string)
   const pausable = new PausableProcess(child.pid ?? null, child.exited);
   const tree = new TreeSnapshot(child.pid ?? -1);
   tree.refresh();
-  const stopTree = (graceMs: number) => pausable.killAfterResume(() => { const members = tree.refresh().length; void tree.stopAll(graceMs).then(() => { const survivors = tree.survivors().length; if (members > 1) log(JSON.stringify({ event: "worker.tree_stopped", role: "image", members, survivors })); }); });
+  const owned = registerOwned("image-worker", tree);
+  const stopTree = (graceMs: number) => pausable.killAfterResume(() => { const members = tree.refresh().length; void tree.stopAll(graceMs).then(() => { owned.finished(); const survivors = tree.survivors().length; if (members > 1) log(JSON.stringify({ event: "worker.tree_stopped", role: "image", members, survivors })); }); });
   return {
     exited,
     pausable,
@@ -158,7 +160,7 @@ export function workerHandle(child: { pid?: number; stdin: { write(data: string)
     send: async (request, options) => {
       await Promise.race([started, exited.then(() => {})]);
       return await new Promise<WorkerReply>((resolve) => {
-        tree.refresh();
+        tree.refresh(); owned.refresh();
         const timer = pausable.deadline(options.deadlineMs, () => { stopTree(2_000); resolve({ id: request.id, ok: false, code: "timeout", error: "The picture took too long and was stopped. Try a smaller size or fewer pictures." }); });
         slot.current = { id: request.id, onEvent: options.onEvent, resolve: (reply) => { timer.clear(); slot.current = null; resolve(reply); } };
         child.stdin.write(`${JSON.stringify(request)}\n`); child.stdin.flush?.();

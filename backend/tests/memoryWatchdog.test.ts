@@ -11,6 +11,10 @@ import { __setSystemSamplerForTests, parseEtime, parseProcessTable, type Process
 import { __resetMemoryStateForTests, admissionVerdict, latestSample, memoryLevel, PAUSED_LOW_MEMORY, reserveBytes, setLatestSample, setMemoryLevel } from "@/lib/memoryState";
 import { descendantsOf, findOrphans, MemoryWatchdog, newLadder, rawLevel, stepLadder, type WatchdogActions } from "@/lib/memoryWatchdog";
 import { __resetLifecycleForTests, beginStopping } from "@/lib/lifecycle";
+import { __setProcessTreeReadersForTests } from "@/lib/processTree";
+import { registerOwned } from "@/lib/ownedProcesses";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const GB = 1_073_741_824;
 const TOTAL = 128 * GB;
@@ -51,7 +55,18 @@ function fakeActions(): WatchdogActions & { log: string[]; running: string[]; qu
 }
 
 beforeEach(() => { __resetMemoryStateForTests(); __resetGovernorForTests(); __resetJobsForTests(); __resetHealthForTests(); __resetLifecycleForTests(); });
-afterEach(() => { setAdmissionGate(null); __setSystemSamplerForTests(null); __setAdmissionWaitForTests(null); __resetMemoryStateForTests(); __resetJobsForTests(); __resetGovernorForTests(); __resetLifecycleForTests(); });
+afterEach(() => { __setProcessTreeReadersForTests(null); setAdmissionGate(null); __setSystemSamplerForTests(null); __setAdmissionWaitForTests(null); __resetMemoryStateForTests(); __resetJobsForTests(); __resetGovernorForTests(); __resetLifecycleForTests(); });
+
+function survivorSetup() {
+  const sampler = fakeSampler();
+  const starts = new Map<number, string>([[610, "S1"]]);
+  const commands = new Map<number, string>([[610, "worker A"]]);
+  __setProcessTreeReadersForTests({ processTable: () => [{ pid: 610, ppid: 500 }], startTime: (pid) => starts.get(pid) ?? "", commandLine: (pid) => commands.get(pid) ?? "" });
+  sampler.rows = [row({ pid: 610, ppid: 500, ageSeconds: 120, name: "worker", command: "worker A", rssBytes: 2 * GB })];
+  const signals: Array<[number, string]> = [];
+  const { dog, advance } = watchdogWith(sampler, fakeActions(), { kill: (pid, signal) => { signals.push([pid, signal]); }, commandOf: (pid) => commands.get(pid) ?? null });
+  return { sampler, starts, commands, signals, dog, advance };
+}
 
 // ---- the ladder ----
 
@@ -427,6 +442,55 @@ test("an orphan with a client connected, or whose command changed, is left alone
 test("another live Stack's children are protected too", () => {
   const rows = [row({ pid: 700, ppid: 1, command: "/other/maipai-stack-darwin-arm64 serve" }), row({ pid: 701, ppid: 700, command: `${ENGINES}/llama-server/b1/llama-server` })];
   expect([...descendantsOf(rows, [700])].sort()).toEqual([700, 701]);
+});
+
+test("a finished worker gets TERM then KILL after five seconds and leaves the registry", async () => {
+  const { sampler, starts, signals, dog, advance } = survivorSetup();
+  const handle = registerOwned("video-worker", 610); handle.finished();
+  await dog.tick(); expect(signals).toEqual([]);
+  await dog.tick(); expect(signals).toEqual([[610, "SIGTERM"]]);
+  expect(listHealth().map((item) => item.code)).toContain("stray-process");
+  const { logsDir } = await import("@/lib/paths");
+  const logLines = readFileSync(join(logsDir, "stack.log"), "utf8").split("\n").filter(Boolean).flatMap((line) => { try { return [JSON.parse(line) as Record<string, unknown>]; } catch { return []; } });
+  expect(logLines.some((line) => line.event === "process.survivor" && line.kind === "video-worker" && line.action === "SIGTERM")).toBe(true);
+  expect(dog.report().watchdog.survivors_stopped).toBe(1);
+  advance(5_000); await dog.tick(); expect(signals).toEqual([[610, "SIGTERM"], [610, "SIGKILL"], [610, "SIGTERM"]]);
+  sampler.rows = []; starts.set(610, ""); await dog.tick();
+  expect(signals).toHaveLength(3);
+  const { finishedSurvivors } = await import("@/lib/ownedProcesses"); expect(finishedSurvivors()).toEqual([]);
+});
+
+test("a reused worker pid is never signalled", async () => {
+  const { starts, dog, signals } = survivorSetup();
+  registerOwned("video-worker", 610).finished();
+  await dog.tick(); starts.set(610, "S2"); await dog.tick();
+  expect(signals).toEqual([]);
+});
+
+test("same-name unregistered and still-live workers are never signalled", async () => {
+  const { sampler, dog, signals } = survivorSetup();
+  registerOwned("video-worker", 610);
+  sampler.rows.push(row({ pid: 611, ppid: 500, ageSeconds: 120, command: "worker A", rssBytes: 3 * GB }));
+  await dog.tick(); await dog.tick(); await dog.tick();
+  expect(signals).toEqual([]);
+  expect(dog.report().stack.unregistered).toEqual({ count: 1, bytes: 3 * GB });
+});
+
+test("unaccounted Stack memory unloads once after two minutes and resolves below two GB", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: TOTAL, freeMemoryBytes: 80 * GB, tier: "p128" });
+  await admit({ id: "chat", kind: "resident", class: "reserved", measuredPeakBytes: 6 * GB, requestedBytes: 6 * GB });
+  const sampler = fakeSampler([row({ pid: 500, ppid: 1, rssBytes: 6 * GB }), row({ pid: 620, ppid: 500, ageSeconds: 120, rssBytes: 6 * GB })]);
+  const actions = fakeActions(); let clock = 1_000_000;
+  const dog = new MemoryWatchdog({ sampler, actions, now: () => clock, ownPid: 500, kill: () => {}, commandOf: () => null });
+  await dog.tick(); expect(dog.report().stack.unaccounted_bytes).toBe(6 * GB);
+  clock += 120_000; await dog.tick(); await dog.tick();
+  expect(actions.log.filter((line) => line === "unload-idle")).toHaveLength(1);
+  expect(listHealth().map((item) => item.code)).toContain("memory-unaccounted");
+  const { logsDir } = await import("@/lib/paths");
+  const unaccountedLines = readFileSync(join(logsDir, "stack.log"), "utf8").split("\n").filter(Boolean).flatMap((line) => { try { return [JSON.parse(line) as Record<string, unknown>]; } catch { return []; } }).filter((line) => line.event === "memory.unaccounted");
+  expect(unaccountedLines).toHaveLength(1);
+  sampler.rows = [row({ pid: 500, ppid: 1, rssBytes: GB }), row({ pid: 620, ppid: 500, ageSeconds: 120, rssBytes: 1 * GB })];
+  await dog.tick(); expect(listHealth().map((item) => item.code)).not.toContain("memory-unaccounted");
 });
 
 // ---- parsing, the route, shutdown, the live numbers ----

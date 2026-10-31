@@ -12,10 +12,12 @@ export interface ProcessRow { pid: number; ppid: number; }
 
 let processTableForTests: (() => ProcessRow[]) | null = null;
 let commandLineForTests: ((pid: number) => string) | null = null;
+let startTimeForTests: ((pid: number) => string) | null = null;
 /** Supplies process identities to tree tests on hosts where `ps` is unavailable. */
-export function __setProcessTreeReadersForTests(readers: { processTable: () => ProcessRow[]; commandLine: (pid: number) => string } | null): void {
+export function __setProcessTreeReadersForTests(readers: { processTable: () => ProcessRow[]; commandLine: (pid: number) => string; startTime?: (pid: number) => string } | null): void {
   processTableForTests = readers?.processTable ?? null;
   commandLineForTests = readers?.commandLine ?? null;
+  startTimeForTests = readers?.startTime ?? null;
 }
 
 /** `ps -axo pid=,ppid=` as rows; empty when ps cannot run. */
@@ -64,6 +66,12 @@ export function commandLineOf(pid: number): string {
   try { return Bun.spawnSync(["ps", "-o", "command=", "-p", String(pid)], { stdout: "pipe", stderr: "ignore" }).stdout.toString().trim(); } catch { return ""; }
 }
 
+/** The process start time, or an empty string when the pid is gone. */
+export function startTimeOf(pid: number): string {
+  if (startTimeForTests) return startTimeForTests(pid);
+  try { return Bun.spawnSync(["ps", "-o", "lstart=", "-p", String(pid)], { stdout: "pipe", stderr: "ignore" }).stdout.toString().trim(); } catch { return ""; }
+}
+
 export function signalAll(pids: readonly number[], signal: NodeJS.Signals): void {
   for (const pid of pids) { try { process.kill(pid, signal); } catch { /* gone */ } }
 }
@@ -72,6 +80,7 @@ export function signalAll(pids: readonly number[], signal: NodeJS.Signals): void
 export class TreeSnapshot {
   private readonly members = new Map<number, string>();
   constructor(private readonly root: number) {}
+  get rootPid(): number { return this.root; }
 
   /** Adds every member of the tree as it is now; members that are gone stay remembered until cleaned. */
   refresh(table: ProcessRow[] = listProcessTable()): number[] {

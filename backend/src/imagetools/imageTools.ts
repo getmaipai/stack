@@ -24,6 +24,7 @@ import { join } from "node:path";
 import { admit, release, type GovernorHandle } from "@/lib/governor";
 import { heavyGate, PausableProcess, type Lease, type PausableWorker } from "@/lib/heavyGate";
 import { TreeSnapshot } from "@/lib/processTree";
+import { registerOwned } from "@/lib/ownedProcesses";
 import { log } from "@/lib/log";
 import { MANAGED_RUNTIMES } from "@/lib/engineCatalog";
 import { dataDir } from "@/lib/paths";
@@ -174,7 +175,8 @@ export function workerHandle(child: { pid?: number; stdin: { write(data: string)
   const exited = child.exited.then((code) => { for (const [id, resolve] of waiting) resolve({ id, ok: false, code: "worker_stopped", error: `The image tool stopped (${stderrTail.trim().split("\n").slice(-1)[0] ?? `exit ${code}`}). Try again.` }); waiting.clear(); return code; });
   const pausable = new PausableProcess(child.pid ?? null, child.exited);
   const tree = new TreeSnapshot(child.pid ?? -1); tree.refresh();
-  const stopTree = (graceMs: number) => pausable.killAfterResume(() => { const members = tree.refresh().length; void tree.stopAll(graceMs).then(() => { const survivors = tree.survivors().length; if (members > 1) log(JSON.stringify({ event: "worker.tree_stopped", role: "image-tools", members, survivors })); }); });
+  const owned = registerOwned("image-tools-worker", tree);
+  const stopTree = (graceMs: number) => pausable.killAfterResume(() => { const members = tree.refresh().length; void tree.stopAll(graceMs).then(() => { owned.finished(); const survivors = tree.survivors().length; if (members > 1) log(JSON.stringify({ event: "worker.tree_stopped", role: "image-tools", members, survivors })); }); });
   return {
     exited,
     pausable,
@@ -182,7 +184,7 @@ export function workerHandle(child: { pid?: number; stdin: { write(data: string)
     send: async (request, deadlineMs) => {
       await Promise.race([started, exited.then(() => {})]);
       return await new Promise<WorkerReply>((resolve) => {
-        tree.refresh();
+        tree.refresh(); owned.refresh();
         const timer = pausable.deadline(deadlineMs, () => { waiting.delete(request.id); stopTree(2_000); resolve({ id: request.id, ok: false, code: "failed", error: "The picture took too long to process and was stopped. Try a smaller picture." }); });
         waiting.set(request.id, (reply) => { timer.clear(); waiting.delete(request.id); resolve(reply); });
         child.stdin.write(`${JSON.stringify(request)}\n`); child.stdin.flush?.();

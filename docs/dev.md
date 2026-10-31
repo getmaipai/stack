@@ -2700,6 +2700,13 @@ to the pid and everything it holds at the resume (the paused pids are written to
 same command (SIGTERM, 5 s, SIGKILL); an unexpected exit of the root and a failed start do the same, so no orphan holds 20 GB. Keep-warm, the
 lease and the 120 s pause bound are the S2 and S3b mechanisms, unchanged.
 
+The owned-process registry remembers each Stack child and its descendants. Each
+tick probes finished owners; two sightings and fresh start-time and command
+checks are required before TERM, then KILL after 5 s. The `stray-process`
+health item clears after 10 quiet minutes. Unaccounted memory is counted, never
+signalled; above 4 GB for 2 minutes it unloads idle workers and raises
+`memory-unaccounted`.
+
 **Settings.** `stack.engines.coding.engine` (`auto`, `splash`, `llama-server`; advanced; needs a restart; section "Coding engine") and
 (the two `splash_cache_gb` settings were removed by SPLASH-DISK-01: the SSD cache is always off). `slots` is reported for Splash and not enforced (Splash
 queues 32 requests itself).

@@ -5,6 +5,7 @@
 // error output. Tests inject a fake Runner; the unit tests never need a
 // real binary.
 import { existsSync } from "node:fs";
+import { registerOwned } from "@/lib/ownedProcesses";
 
 export interface RunOptions {
   signal?: AbortSignal;
@@ -31,6 +32,7 @@ export function idleArgv(argv: string[]): string[] {
 
 export const spawnRunner: Runner = async (argv, options = {}) => {
   const child = Bun.spawn(idleArgv(argv), { stdin: "ignore", stdout: "pipe", stderr: "pipe", ...(options.cwd ? { cwd: options.cwd } : {}), env: { ...process.env as Record<string, string>, ...options.env } });
+  const owned = registerOwned("media-runner", child.pid ?? -1);
   let aborted = false;
   let killTimer: ReturnType<typeof setTimeout> | null = null;
   const stop = () => {
@@ -58,6 +60,8 @@ export const spawnRunner: Runner = async (argv, options = {}) => {
     (async () => { for await (const chunk of child.stderr as unknown as AsyncIterable<Uint8Array>) stderr = (stderr + new TextDecoder().decode(chunk)).slice(-STDERR_TAIL); })().catch(() => {}),
   ];
   const code = await child.exited;
+  owned.refresh();
+  owned.finished();
   await Promise.all(reading);
   if (killTimer) clearTimeout(killTimer);
   options.signal?.removeEventListener("abort", stop);

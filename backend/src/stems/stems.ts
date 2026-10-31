@@ -7,6 +7,7 @@ import { STACK_STEMS_MODELS } from "@/lib/modelCatalog";
 import { ensureUvEnvironment, managedEnv, uvEnvironmentReady, uvVenvPath, uvVenvPython, type UvEnvironmentSpec } from "@/lib/uvEnvironment";
 import { heavyGate, PausableProcess, type PausableWorker } from "@/lib/heavyGate";
 import { TreeSnapshot } from "@/lib/processTree";
+import { registerOwned } from "@/lib/ownedProcesses";
 import { forgetLoadedItem, setIdleTtlSeconds, setWarmWorkerUnload } from "@/lib/governor";
 import { log } from "@/lib/log";
 import workerAsset from "./stems_worker.py" with { type: "file" };
@@ -73,8 +74,9 @@ export function handle(child: { pid?: number; stdin: { write(data: string): unkn
   const exited = child.exited.then((code) => { for (const [id, cb] of callbacks) { callbacks.delete(id); cb.reject(new Error("The stem worker stopped before finishing. Try again.")); } return code; });
   const pausable = new PausableProcess(child.pid ?? null, child.exited);
   const tree = new TreeSnapshot(child.pid ?? -1); tree.refresh();
-  const stopTree = (graceMs: number) => pausable.killAfterResume(() => { const members = tree.refresh().length; void tree.stopAll(graceMs).then(() => { const survivors = tree.survivors().length; if (members > 1) log(JSON.stringify({ event: "worker.tree_stopped", role: "stems", members, survivors })); }); });
-  return { exited, pausable, kill: (graceMs = 2_000) => stopTree(graceMs), send: async (request, stage, signal) => { await Promise.race([started, exited]); if (signal?.aborted) throw new Error("Cancelled."); tree.refresh(); return new Promise((resolve, reject) => { callbacks.set(request.id, { resolve, reject, stage }); child.stdin.write(`${JSON.stringify(request)}\n`); child.stdin.flush?.(); signal?.addEventListener("abort", () => { callbacks.delete(request.id); stopTree(2_000); reject(new Error("Cancelled.")); }, { once: true }); }); } };
+  const owned = registerOwned("stems-worker", tree);
+  const stopTree = (graceMs: number) => pausable.killAfterResume(() => { const members = tree.refresh().length; void tree.stopAll(graceMs).then(() => { owned.finished(); const survivors = tree.survivors().length; if (members > 1) log(JSON.stringify({ event: "worker.tree_stopped", role: "stems", members, survivors })); }); });
+  return { exited, pausable, kill: (graceMs = 2_000) => stopTree(graceMs), send: async (request, stage, signal) => { await Promise.race([started, exited]); if (signal?.aborted) throw new Error("Cancelled."); tree.refresh(); owned.refresh(); return new Promise((resolve, reject) => { callbacks.set(request.id, { resolve, reject, stage }); child.stdin.write(`${JSON.stringify(request)}\n`); child.stdin.flush?.(); signal?.addEventListener("abort", () => { callbacks.delete(request.id); stopTree(2_000); reject(new Error("Cancelled.")); }, { once: true }); }); } };
 }
 export async function ensureStemsEnvironment(onProgress: (stage: string) => void = () => {}, signal?: AbortSignal): Promise<void> {
   if (!defaultStemsDeps.supported()) throw new Error(`Stem splitting is not available on ${process.platform} ${process.arch}.`);

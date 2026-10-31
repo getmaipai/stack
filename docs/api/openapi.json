@@ -10473,6 +10473,9 @@
                         },
                         "chat_paged_out": {
                           "type": "boolean"
+                        },
+                        "survivors_stopped": {
+                          "type": "number"
                         }
                       },
                       "required": [
@@ -10481,7 +10484,8 @@
                         "since",
                         "reserve_bytes",
                         "generation_paused",
-                        "chat_paged_out"
+                        "chat_paged_out",
+                        "survivors_stopped"
                       ]
                     },
                     "ledger": {
@@ -10597,6 +10601,26 @@
                         "bytes": {
                           "type": "number"
                         },
+                        "unaccounted_bytes": {
+                          "type": "number",
+                          "description": "Stack process memory above loaded model peaks."
+                        },
+                        "unregistered": {
+                          "type": "object",
+                          "properties": {
+                            "count": {
+                              "type": "number"
+                            },
+                            "bytes": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "count",
+                            "bytes"
+                          ],
+                          "description": "Older Stack descendants absent from the owned process registry."
+                        },
                         "processes": {
                           "type": "array",
                           "items": {
@@ -10622,6 +10646,8 @@
                       },
                       "required": [
                         "bytes",
+                        "unaccounted_bytes",
+                        "unregistered",
                         "processes"
                       ]
                     },

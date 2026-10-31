@@ -33,6 +33,8 @@ import { dirname } from "node:path";
 import { getRoleStatus } from "@/lib/supervisor";
 import { dataDir } from "@/lib/paths";
 import { folderBytes, runSweeps } from "@/lib/sweeps";
+import { descendantsOf as childPids, startTimeOf, commandLineOf } from "@/lib/processTree";
+import { ownedPids, finishedSurvivors } from "@/lib/ownedProcesses";
 
 const GB = 1_073_741_824;
 function gb(bytes: number): string { return (bytes / GB).toFixed(1); }
@@ -187,10 +189,10 @@ export interface WatchdogOptions {
 export interface TopConsumer { pid: number; name: string; bytes: number; stack: boolean; }
 export interface MemoryReport {
   video_window: { shrinks: number; restores: number; shrunk_now: boolean; shrunk_since: string | null };
-  watchdog: { enabled: boolean; level: WatchdogLevel; since: string; reserve_bytes: number; generation_paused: boolean; chat_paged_out: boolean };
+  watchdog: { enabled: boolean; level: WatchdogLevel; since: string; reserve_bytes: number; generation_paused: boolean; chat_paged_out: boolean; survivors_stopped: number };
   ledger: { reserved_bytes: number; warm_bytes: number; burst_bytes: number; budget_bytes: number; working_margin_bytes: number; free_bytes: number; queue_depth: { reserved: number; warm: number; burst: number }; chat_paged_out: boolean };
   memory: { total_bytes: number; available_bytes: number; free_bytes: number; wired_bytes: number; compressor_bytes: number; swap_used_bytes: number; swap_total_bytes: number; swap_growth_bytes_30s: number; pressure_level: number; pressure: string; sampled_at: string } | null;
-  stack: { bytes: number; processes: Array<{ pid: number; name: string; bytes: number }> };
+  stack: { bytes: number; unaccounted_bytes: number; unregistered: { count: number; bytes: number }; processes: Array<{ pid: number; name: string; bytes: number }> };
   /** MEM-SPACE-05: what other programs hold beside the Stack, with the big ones named (name and bytes only, never a pid or folder). Empty list when nothing is flagged. */
   dev_load: { others_bytes: number; processes: Array<{ name: string; bytes: number }> };
   top_consumers: TopConsumer[];
@@ -227,6 +229,12 @@ export class MemoryWatchdog {
   private diskTempRaised = false;
   private measureFolder: (dir: string) => number;
   private sweepDisk: (reason: string) => unknown;
+  private survivorSeen = new Set<number>();
+  private survivorTerminated = new Map<number, { at: number; startTime: string; command: string; kind: string }>();
+  private survivorsStopped = 0;
+  private unaccountedSince: number | null = null;
+  private unaccountedRaised = false;
+  private lastSurvivorAt: number | null = null;
 
   constructor(options: WatchdogOptions = {}) {
     this.sampler = options.sampler ?? getSystemSampler();
@@ -270,6 +278,7 @@ export class MemoryWatchdog {
       if (this.ring.length > WatchdogRules.ringSize) this.ring.shift();
       setLatestSample(sample);
       this.ticks++;
+      this.survivorsStopped = 0;
       if (this.ticks % 12 === 0) {
         const tempDir = `${dataDir}/tmp`;
         if (this.measureFolder(tempDir) > 2 * GB) {
@@ -282,7 +291,7 @@ export class MemoryWatchdog {
       }
       const tight = memoryLevel() !== "normal";
       if (tight || this.ticks % WatchdogRules.processEvery === 1) this.rows = this.sampler.processes();
-      if (!watchdogEnabled() || sample.degraded) { this.devLoad = { others_bytes: 0, processes: [] }; if (memoryLevel() !== "normal") this.leave(); return; }
+      if (!watchdogEnabled() || sample.degraded) { this.devLoad = { others_bytes: 0, processes: [] }; if (memoryLevel() !== "normal") this.leave(); this.reapSurvivors(); this.checkUnaccounted(); return; }
       const reserve = reserveBytes(sample.totalBytes);
       const previous = this.ladder.level;
       this.ladder = stepLadderForChatPageout(this.ladder, { sample, swapGrowthBytes: this.swapGrowth(), reserve }, chatPagedOut());
@@ -295,6 +304,8 @@ export class MemoryWatchdog {
       else await this.act(sample);
       this.devProtection();
       this.reapOrphans();
+      this.reapSurvivors();
+      this.checkUnaccounted();
     } finally {
       this.busy = false;
     }
@@ -418,11 +429,55 @@ export class MemoryWatchdog {
     }
   }
 
+  private reapSurvivors(): void {
+    const now = this.now();
+    const alive = new Set(this.rows.map((row) => row.pid));
+    for (const [pid, entry] of this.survivorTerminated) {
+      if (!alive.has(pid)) { this.survivorTerminated.delete(pid); continue; }
+      const row = this.rows.find((item) => item.pid === pid);
+      if (now - entry.at >= 5_000 && row && (row.ppid === this.ownPid || row.ppid === 1) && startTimeOf(pid) === entry.startTime && commandLineOf(pid) === entry.command) {
+        this.kill(pid, "SIGKILL"); this.survivorTerminated.delete(pid);
+        logger.appendLine(JSON.stringify({ event: "process.survivor", kind: entry.kind, pid, age_seconds: 0, rss_bytes: this.rows.find((row) => row.pid === pid)?.rssBytes ?? 0, action: "SIGKILL" }));
+      }
+    }
+    const current = new Set<number>();
+    for (const survivor of finishedSurvivors(now)) {
+      const row = this.rows.find((item) => item.pid === survivor.pid);
+      if (!row || (row.ppid !== this.ownPid && row.ppid !== 1)) continue;
+      current.add(row.pid);
+      if (!this.survivorSeen.has(row.pid) || this.survivorTerminated.has(row.pid)) continue;
+      if (startTimeOf(row.pid) !== survivor.startTime || commandLineOf(row.pid) !== survivor.command) continue;
+      this.kill(row.pid, "SIGTERM");
+      this.survivorTerminated.set(row.pid, { at: now, startTime: survivor.startTime, command: survivor.command, kind: survivor.kind });
+      this.survivorsStopped++;
+      this.lastSurvivorAt = now;
+      logger.appendLine(JSON.stringify({ event: "process.survivor", kind: survivor.kind, pid: row.pid, age_seconds: row.ageSeconds, rss_bytes: row.rssBytes, action: "SIGTERM" }));
+      raise({ code: "stray-process", severity: "warning", title: "A helper process was left running and has been stopped", text: `A ${survivor.kind} helper ran for ${row.ageSeconds} seconds after its job finished.`, cause: "A finished Stack job left a helper process running." });
+    }
+    this.survivorSeen = current;
+    if (this.lastSurvivorAt !== null && now - this.lastSurvivorAt >= 10 * 60_000) { resolveHealth("stray-process"); this.lastSurvivorAt = null; }
+  }
+
+  private checkUnaccounted(): void {
+    const report = this.report();
+    const bytes = report.stack.unaccounted_bytes;
+    const now = this.now();
+    if (bytes > 4 * GB) {
+      this.unaccountedSince ??= now;
+      if (!this.unaccountedRaised && now - this.unaccountedSince >= 2 * 60_000) {
+        this.unaccountedRaised = true;
+        void this.actions.unloadIdleWorkers();
+        logger.appendLine(JSON.stringify({ event: "memory.unaccounted", bytes, unregistered_count: report.stack.unregistered.count, unregistered_bytes: report.stack.unregistered.bytes }));
+        raise({ code: "memory-unaccounted", severity: "warning", title: "MaiPai is using more memory than its models account for", text: `${gb(bytes)} GB is unaccounted for, with ${report.stack.unregistered.count} unregistered helper processes. Idle helpers were unloaded.`, cause: "The Stack process tree uses more memory than loaded models account for.", fix: { label: "Restart engine", action: "restart_engine" } });
+      }
+    } else { this.unaccountedSince = null; if (bytes < 2 * GB && this.unaccountedRaised) { resolveHealth("memory-unaccounted"); this.unaccountedRaised = false; } }
+  }
+
   report(): MemoryReport {
     const sample = latestSample() ?? this.ring[this.ring.length - 1] ?? null;
     const tree = descendantsOf(this.rows, liveStackRoots(this.rows, this.ownPid));
     const ownTree = descendantsOf(this.rows, [this.ownPid]);
-    const own = this.rows.filter((row) => ownTree.has(row.pid));
+    const own = this.rows.filter((row) => row.pid === this.ownPid || ownTree.has(row.pid));
     const growth = this.swapGrowth();
     const level = memoryLevel();
     const governor = getGovernorStatus();
@@ -432,10 +487,10 @@ export class MemoryWatchdog {
     for (const item of governor.queue) queueDepth[item.class]++;
     return {
       video_window: videoWindowStats(),
-      watchdog: { enabled: watchdogEnabled(), level, since: new Date(levelSince()).toISOString(), reserve_bytes: sample ? reserveBytes(sample.totalBytes) : 0, generation_paused: level !== "normal", chat_paged_out: chatPagedOut() },
+      watchdog: { enabled: watchdogEnabled(), level, since: new Date(levelSince()).toISOString(), reserve_bytes: sample ? reserveBytes(sample.totalBytes) : 0, generation_paused: level !== "normal", chat_paged_out: chatPagedOut(), survivors_stopped: this.survivorsStopped },
       ledger: { reserved_bytes: classBytes.reserved, warm_bytes: classBytes.warm, burst_bytes: classBytes.burst, budget_bytes: governor.capBytes, working_margin_bytes: governor.marginBytes, free_bytes: governor.freeMemoryBytes, queue_depth: queueDepth, chat_paged_out: chatPagedOut() },
       memory: sample ? { total_bytes: sample.totalBytes, available_bytes: sample.availableBytes, free_bytes: sample.freeBytes, wired_bytes: sample.wiredBytes, compressor_bytes: sample.compressorBytes, swap_used_bytes: sample.swapUsedBytes, swap_total_bytes: sample.swapTotalBytes, swap_growth_bytes_30s: growth, pressure_level: sample.pressureLevel, pressure: sample.pressure, sampled_at: new Date(sample.at).toISOString() } : null,
-      stack: { bytes: own.reduce((total, row) => total + row.rssBytes, 0), processes: own.sort((a, b) => b.rssBytes - a.rssBytes).slice(0, 10).map((row) => ({ pid: row.pid, name: row.name, bytes: row.rssBytes })) },
+      stack: { bytes: own.reduce((total, row) => total + row.rssBytes, 0), unaccounted_bytes: Math.max(0, own.reduce((total, row) => total + row.rssBytes, 0) - governor.loaded.reduce((total, item) => total + item.peakBytes, 0)), unregistered: (() => { const registered = ownedPids(); const old = own.filter((row) => row.pid !== this.ownPid && row.ageSeconds > 60 && !registered.has(row.pid)); return { count: old.length, bytes: old.reduce((total, row) => total + row.rssBytes, 0) }; })(), processes: own.sort((a, b) => b.rssBytes - a.rssBytes).slice(0, 10).map((row) => ({ pid: row.pid, name: row.name, bytes: row.rssBytes })) },
       dev_load: this.devLoad,
       top_consumers: this.consumers(),
       non_stack_bytes: this.rows.filter((row) => !tree.has(row.pid)).reduce((total, row) => total + row.rssBytes, 0),

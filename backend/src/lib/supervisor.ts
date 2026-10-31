@@ -35,6 +35,7 @@ import { STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL,
 import { clearCodingEngineFailures, codingEngineFailure, CODING_ENGINE_SETTING, markCodingEngineFailed, resolveCodingEngine, splashEnv, splashFootprintEstimateBytes, type CodingEngineChoice, type SplashFacts } from "@/lib/splash";
 import { layOutSplashCache, SplashLayoutError, splashPairFor } from "@/lib/splashStore";
 import { TreeSnapshot, treeMemoryBytes } from "@/lib/processTree";
+import { registerOwned, type OwnedHandle } from "@/lib/ownedProcesses";
 import { comfyuiCommand, comfyuiEnv, comfyuiInstalled, COMFYUI_VERSION, linkCheckpoint, probeGenerator } from "@/generators/comfyui";
 import { basename } from "node:path";
 import { admissionRoomBytes, getRunState, refreshMeasuredPeak, release, setGovernorPid, setIdleTtlSeconds, startGovernor, touch as touchGovernor, withdraw as withdrawAdmission, type GovernorHandle, type GovernorTier } from "@/lib/governor";
@@ -130,6 +131,7 @@ export interface RoleProcess {
   governorHandle?: GovernorHandle;
   stopGovernor?: () => void;
   stop(): Promise<void>;
+  owned?: OwnedHandle;
 }
 
 export class EngineUnavailableError extends Error {
@@ -567,6 +569,7 @@ async function acquireRequestProcess(requested: RoleId, modelId?: string): Promi
   try {
     const processRecord = await getProcess(role, modelId);
     processRecord.activeRequests++;
+    processRecord.owned?.refresh();
     if (role === "coding") codingYieldBegin(processRecord);
     noteComponentUse(processRecord.modelId);
     // A request keeps a jit role's idle clock at zero.
@@ -1722,6 +1725,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   setGovernorPid(role, handle.pid);
   // Splash is a tree of processes: remembered by command so a stop or a crash leaves no member holding memory.
   const tree = plan.tree ? new TreeSnapshot(handle.pid) : null;
+  const owned = registerOwned(role, tree ?? handle.pid);
   const client = plan.client ? plan.client(`http://127.0.0.1:${port}`) : new OpenAIEngineClient(`http://127.0.0.1:${port}`, plan.healthPath);
   const stderrText = handle.stderr ? new Response(handle.stderr).text() : Promise.resolve("");
   let exited = false;
@@ -1776,6 +1780,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
       stopGovernor: watchProcessMemory(role, handle.pid, keepsFootprint ? { modelId: model.id, contextLength } : undefined, tree ? (pid) => Promise.resolve(treeMemoryBytes(pid, (member) => getMemoryReader().processMemoryBytes(member))) : undefined),
       ...(role === "coding" && plan.kind === "spawned" ? { pausable: codingPausable } : {}),
       // A stopped process holds SIGTERM until it runs again, so it continues first. A tree is asked to stop from its root, given a few seconds, and then every member that is still running is stopped, so nothing is left holding memory.
+      owned,
       stop: async () => {
         codingPausable?.resume();
         if (!tree) { handle.kill(); await handle.exited; return; }
@@ -2152,6 +2157,7 @@ async function retire(processRecord: RoleProcess, reason: string, cause: RetireC
   for (const close of processRecord.sessions ?? []) close();
   while (processRecord.activeRequests > 0) await new Promise((resolve) => setTimeout(resolve, 10));
   await processRecord.stop();
+  processRecord.owned?.finished();
   const exit = exitOf.get(processRecord);
   logger.appendLine(JSON.stringify({ event: "engine.retire-exit", role: processRecord.role, pid: processRecord.pid, cause, exitCode: exit?.exitCode ?? null, signal: exit?.signal ?? null }));
   if (processRecord.governorHandle) release(processRecord.governorHandle);
@@ -2328,6 +2334,7 @@ export async function speakRole(requested: RoleId, form: FormData, signal?: Abor
   const processRecord = await getProcess(role);
   const current = runtime(role);
   processRecord.activeRequests++;
+  processRecord.owned?.refresh();
   current.status = { ...current.status, state: "busy", kind: processRecord.kind, identity: processRecord.identity };
   const headers = () => identityHeaders(processRecord.identity, processRecord.modelRevision);
   try {
@@ -2617,6 +2624,7 @@ export async function runOnRole<T>(requested: RoleId, work: (processRecord: Role
   const processRecord = await getProcess(role);
   const current = runtime(role);
   processRecord.activeRequests++;
+  processRecord.owned?.refresh();
   current.status = { ...current.status, state: "busy", kind: processRecord.kind, identity: processRecord.identity };
   try {
     const result = await work(processRecord);
@@ -2654,6 +2662,7 @@ export async function openRoleSession(requested: RoleId, onRetire: () => void = 
   // closed its sessions; one registered now would hold the drain.
   if (processRecord.retired) throw new EngineUnavailableError(`The ${role} engine is restarting.`);
   processRecord.activeRequests++;
+  processRecord.owned?.refresh();
   processRecord.sessions ??= new Set();
   let released = false;
   const session: RoleSession = {

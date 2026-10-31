@@ -13,6 +13,7 @@ import { dataDir } from "@/lib/paths";
 import { hfHubRoot } from "@/lib/store/layout";
 import { readEngineManifest, writeEngineManifest } from "@/lib/store/manifests";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
+import { registerOwned } from "@/lib/ownedProcesses";
 
 export const MANAGED_PYTHON = "3.12";
 /** The environment's own ready marker, distinct from an engine
@@ -66,9 +67,12 @@ export function managedEnv(extra: Record<string, string> = {}): Record<string, s
 
 async function run(command: string[], env: Record<string, string>, signal?: AbortSignal): Promise<void> {
   const child = Bun.spawn(command, { stdout: "pipe", stderr: "pipe", env });
+  const owned = registerOwned("uv-installer", child.pid ?? -1);
   const abort = () => child.kill();
   signal?.addEventListener("abort", abort, { once: true });
   const [code, out, err] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+  owned.refresh();
+  owned.finished();
   signal?.removeEventListener("abort", abort);
   if (signal?.aborted) throw new Error("The environment build was cancelled.");
   if (code !== 0) throw new Error(`${command.slice(0, 3).join(" ")} exited ${code}: ${(err || out).trim().split("\n").slice(-5).join(" | ")}`);
