@@ -7,12 +7,14 @@ const stack = value("--stack");
 const kind = value("--kind");
 if (!stack || !["picture", "video", "music", "stems", "all"].includes(kind ?? "")) { console.error(usage); process.exit(2); }
 
-type Reading = { processes: number; stackBytes: number; unaccounted: number; tmp: number };
+// `heldBytes` is the governor ledger's warm plus burst bytes (what a finished job leaves loaded); `unregistered` counts processes below the
+// Stack that no job or role owns; `stackBytes` is informational because the chat engine and the other residents grow with ordinary use.
+type Reading = { heldBytes: number; unregistered: number; stackBytes: number; unaccounted: number; tmp: number };
 async function read(): Promise<Reading> {
   const response = await fetch(`${stack}/stack/v1/memory`);
   if (!response.ok) throw new Error(`Memory route returned ${response.status}`);
   const report = await response.json() as any;
-  return { processes: report.stack.processes.length, stackBytes: report.stack.bytes, unaccounted: report.stack.unaccounted_bytes, tmp: report.stack.tmp_bytes };
+  return { heldBytes: report.ledger.warm_bytes + report.ledger.burst_bytes, unregistered: report.stack.unregistered.count, stackBytes: report.stack.bytes, unaccounted: report.stack.unaccounted_bytes, tmp: report.stack.tmp_bytes };
 }
 const jobs: Record<string, { path: string; body: unknown; ttl: number }> = {
   picture: { path: "/v1/images/generations", body: { prompt: "A small blue square", size: "256x256", n: 1, steps: 1, timeout_ms: 30 * 60_000 }, ttl: 600_000 },
@@ -44,10 +46,10 @@ for (const selected of kind === "all" ? Object.keys(jobs) : [kind!]) {
 }
 console.log("kind | measure | before | after | difference");
 let failed = false;
-for (const row of rows) for (const key of ["processes", "stackBytes", "unaccounted", "tmp"] as const) {
+for (const row of rows) for (const key of ["heldBytes", "unregistered", "unaccounted", "tmp", "stackBytes"] as const) {
   const delta = row.after[key] - row.before[key];
   console.log(`${row.kind} | ${key} | ${row.before[key]} | ${row.after[key]} | ${delta}`);
-  const limit = key === "processes" ? 0 : key === "stackBytes" ? 512 * 1024 ** 2 : key === "tmp" ? 16 * 1024 ** 2 : Infinity;
+  const limit = key === "unregistered" ? 0 : key === "heldBytes" ? 256 * 1024 ** 2 : key === "unaccounted" ? 512 * 1024 ** 2 : key === "tmp" ? 16 * 1024 ** 2 : Infinity;
   if (delta > limit) failed = true;
 }
 process.exit(failed ? 1 : 0);
