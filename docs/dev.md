@@ -430,6 +430,8 @@ is every 5 s idle, every 1 s during a load. The governor keeps a bounded
 in-memory ledger of its newest 200 decisions with the reason for each,
 served on the budget route; nothing about decisions is persisted.
 
+`GET /stack/v1/hardware/budget` also reports `profile` and `slots`: the active machine profile and each resolved category and tier's model, peak memory and verification status from the Stack's tier catalog.
+
 Every engine stop, unload and restart writes an `engine.retired` line
 with a `reason` sentence for people and a `cause` slug from
 `RetireCause` in `supervisor.ts`, so logs can be tallied by cause.

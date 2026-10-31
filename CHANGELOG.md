@@ -10,6 +10,8 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Added
 
+- GET /stack/v1/hardware/budget also reports the peak memory of each tier of each category for this computer, so Home no longer keeps its own copy of the table (RESOURCE-FIX-04a).
+
 - A regression test and a hand-run bench prove each job kind gives back its processes, ledger entry, temp files and memory (RESOURCE-FIX-10e).
 
 - Coding runs on the vendor Splash 1.4.1 release (the same archive chat uses); the Ornith fork build `1.3.2-ornith.1` is retired. A real run on the Studio served the pinned Ornith-122B model and answered a tool call.

@@ -1,10 +1,27 @@
 import { describe, expect, test } from "bun:test";
 import { STACK_IMAGE_ERNIE_ID, STACK_IMAGE_KLEIN_ID, STACK_IMAGE_ZIMAGE_ID, STACK_MUSIC_MODEL_ID, STACK_VIDEO_DETAILED_MODEL_ID, STACK_VIDEO_MODEL_ID } from "@/lib/modelCatalog";
-import { tierCandidateLists, customPickRefusal, minorTierClamp, resolveLadder, resolveTier, thinkingAllowedFor, TIER_CANDIDATES } from "@/lib/tiers";
+import { budgetSlots, tierCandidateLists, customPickRefusal, minorTierClamp, resolveLadder, resolveTier, thinkingAllowedFor, TIER_CANDIDATES } from "@/lib/tiers";
 
 const GB = 1_000_000_000;
 
 describe("tier resolver", () => {
+  test("reports resolved tier peaks for the budget route", () => {
+    const slots = budgetSlots("p128", 72 * GB);
+    for (const category of ["chat", "pictures", "video", "music"] as const) {
+      const ladder = resolveLadder(category, "p128", 72 * GB);
+      for (const { tier, resolved } of ladder) {
+        if (!resolved) continue;
+        expect(slots.find((row) => row.category === category && row.tier === tier)).toMatchObject({ peak_bytes: resolved.peakBytes, model: resolved.model, verified: resolved.verified });
+      }
+    }
+    const reduced = resolveTier({ category: "chat", tier: "reduced", profile: "p128", roomBytes: 72 * GB });
+    expect(slots.find((row) => row.category === "chat" && row.tier === "reduced")?.peak_bytes).toBe(reduced?.peakBytes);
+    expect(slots.map(({ category, tier }) => `${category}:${tier}`)).toEqual(["chat:reduced", "chat:standard", "chat:boost", "chat:max", "pictures:standard", "pictures:boost", "pictures:max", "video:standard", "video:boost", "music:standard"]);
+    expect(budgetSlots("p16", 12 * GB).every((row) => row.category === "chat")).toBe(true);
+    expect(budgetSlots("p16", 12 * GB).some((row) => row.category === "pictures" || row.category === "video" || row.category === "music")).toBe(false);
+    expect(budgetSlots(null)).toEqual([]);
+  });
+
   test("resolves the requested profile ladders", () => {
     expect(resolveLadder("chat", "p16", 12 * GB).map((row) => row.resolved?.model ?? null)).toEqual(["qwen3-8b-instruct-q4-k-m", null, null]);
     expect(resolveLadder("chat", "p32", 30 * GB)[0]?.resolved?.model).toBe("muse-glimmer-30b-q4-k-m");

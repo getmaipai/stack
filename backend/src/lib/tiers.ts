@@ -109,6 +109,22 @@ export function resolveLadder(category: TierCategory, profile: ProfileId, roomBy
   });
 }
 
+/** The resolved tier peaks Home needs to describe this machine's tier options. */
+export function budgetSlots(profile: ProfileId | null | undefined, roomBytes = 0): Array<{ category: "chat" | "pictures" | "video" | "music"; tier: TierId; model: string; peak_bytes: number; verified: boolean }> {
+  if (!profile) return [];
+  const rows: Array<{ category: "chat" | "pictures" | "video" | "music"; tier: TierId; model: string; peak_bytes: number; verified: boolean }> = [];
+  for (const category of ["chat", "pictures", "video", "music"] as const) {
+    if (category === "chat") {
+      const reduced = resolveTier({ category, tier: "reduced", profile, roomBytes });
+      if (reduced) rows.push({ category, tier: "reduced", model: reduced.model, peak_bytes: reduced.peakBytes, verified: reduced.verified });
+    }
+    for (const { tier, resolved } of resolveLadder(category, profile, roomBytes)) {
+      if (resolved) rows.push({ category, tier, model: resolved.model, peak_bytes: resolved.peakBytes, verified: resolved.verified });
+    }
+  }
+  return rows;
+}
+
 export function customPickRefusal(input: ResolveInput & { model: string; options?: OptionSet }): string | null {
   const selected = TIER_CANDIDATES.find((candidate) => candidate.category === input.category && candidate.id === input.model && candidate.profiles.includes(input.profile) && candidate.tiers.some((tier) => tier !== "reduced"));
   const peak = selected?.peaks.find((item) => !input.options || equalOptions(item.options, input.options));

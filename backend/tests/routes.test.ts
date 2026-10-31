@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import * as fs from "node:fs";
 import { join } from "node:path";
 import { app } from "@/app";
+import { setMachineTier } from "@/lib/supervisor";
 import { serveOptions } from "@/daemon";
 import { __resetHealthForTests, raise } from "@/lib/health";
 import { clearModelsForTests, upsertModel } from "@/lib/modelStore";
@@ -261,14 +262,21 @@ test("importing a multi-chunk local GGUF streams its hash and registers its lm-s
 });
 
 test("hardware, budget, backup and the diagnostics bundle answer as data without a computer name", async () => {
+  setMachineTier("p16");
   const hardware = await (await app.request("/stack/v1/hardware")).json() as { hardware: Record<string, unknown>; tiers: unknown[] };
   expect(hardware.hardware.computerName).toBeUndefined();
   expect(hardware.tiers).toHaveLength(4);
-  const budget = await (await app.request("/stack/v1/hardware/budget")).json() as { capBytes: number; pressure: string; tier: string; margin_bytes: number; reading_degraded: boolean };
+  const budget = await (await app.request("/stack/v1/hardware/budget")).json() as { capBytes: number; pressure: string; tier: string; margin_bytes: number; reading_degraded: boolean; profile: string | null; slots: unknown[]; totalMemoryBytes: number; freeMemoryBytes: number; loaded: unknown[]; queue: unknown[] };
   expect(budget.capBytes).toBeGreaterThan(0);
   expect(budget.tier).toBe("p16");
   expect(budget.margin_bytes).toBe(4 * GB);
   expect(budget.reading_degraded).toBe(false);
+  expect(budget.profile).toBe("p16");
+  expect(budget.slots.every((slot) => (slot as { category: string }).category === "chat")).toBe(true);
+  expect(budget.totalMemoryBytes).toBeGreaterThan(0);
+  expect(budget.freeMemoryBytes).toBeGreaterThan(0);
+  expect(budget.loaded).toEqual(expect.any(Array));
+  expect(budget.queue).toEqual(expect.any(Array));
   const backup = await (await app.request("/stack/v1/backup")).json() as { data_dir: string; paths: Array<{ mode: string }> };
   expect(backup.paths.map((path) => path.mode)).toEqual(["include", "include", "exclude", "exclude"]);
   const bundle = await app.request("/stack/v1/diagnostics");
@@ -277,11 +285,15 @@ test("hardware, budget, backup and the diagnostics bundle answer as data without
 });
 
 test("the budget route reports the active tier, its margin and a degraded reading", async () => {
-  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 30 * GB, tier: "p128" });
-  const p128 = await (await app.request("/stack/v1/hardware/budget")).json() as { tier: string; margin_bytes: number; reading_degraded: boolean };
+  setMachineTier("p128");
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 110 * GB, tier: "p128" });
+  const p128 = await (await app.request("/stack/v1/hardware/budget")).json() as { tier: string; margin_bytes: number; reading_degraded: boolean; profile: string | null; slots: Array<{ category: string; tier: string; model: string; peak_bytes: number; verified: boolean }> };
   expect(p128.tier).toBe("p128");
   expect(p128.margin_bytes).toBe(20 * GB);
   expect(p128.reading_degraded).toBe(false);
+  expect(p128.profile).toBe("p128");
+  expect(p128.slots.length).toBeGreaterThan(0);
+  expect(p128.slots.find((slot) => slot.category === "chat" && slot.tier === "standard")).toMatchObject({ model: "muse-glimmer-30b-q4-k-xl", peak_bytes: 19_000_000_000, verified: true });
   __resetGovernorForTests();
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 16 * GB, freeMemoryBytes: 4 * GB, tier: "p16" });
   const reader = scriptedMemoryReader([

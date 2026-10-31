@@ -5,11 +5,14 @@ import { detectHardware } from "@/lib/hardware";
 import { PROFILE_TIERS, proposeProfile } from "@/profiles";
 import { RoleIdSchema } from "@/roles";
 import { getGovernorDecisions, getGovernorStatus } from "@/lib/governor";
+import { admissionRoomBytes } from "@/lib/governor";
+import { currentMachineTier } from "@/lib/supervisor";
+import { budgetSlots } from "@/lib/tiers";
 
 const CudaDeviceSchema = z.object({ index: z.number(), name: z.string(), vramBytes: z.number(), usedVramBytes: z.number().optional(), utilizationPct: z.number().optional() });
 const HardwareInfoSchema = z.object({ platform: z.string(), arch: z.string(), totalRamGb: z.number(), cpuCount: z.number(), isAppleSilicon: z.boolean(), unifiedMemoryGb: z.number(), cudaDevices: z.array(CudaDeviceSchema), freeDiskBytes: z.number().nullable(), totalDiskBytes: z.number().nullable(), osVersion: z.string() });
 const ProfileTierSchema = z.object({ id: z.enum(["p16", "p32", "p64", "p128"]), level: z.enum(["minimal", "moderate", "recommended"]), label: z.string(), minUnifiedGb: z.number(), minVramGb: z.number(), resident: z.array(RoleIdSchema), onDemand: z.array(RoleIdSchema), installedOnly: z.array(RoleIdSchema), notAvailable: z.array(RoleIdSchema), speedRange: z.object({ min: z.number(), max: z.number() }) });
-const BudgetSchema = z.object({ totalMemoryBytes: z.number().int(), capBytes: z.number().int(), freeMemoryBytes: z.number().int(), availablePercent: z.number(), pressure: z.enum(["normal", "warn", "critical"]), memoryReadingDegraded: z.boolean(), tier: z.enum(["p16", "p32", "p64", "p128"]), margin_bytes: z.number().int(), reading_degraded: z.boolean(), loaded: z.array(z.object({ id: z.string(), kind: z.enum(["resident", "jit", "generator"]), peakBytes: z.number().int(), measured: z.boolean(), lastUsedAt: z.string(), idleTtlSeconds: z.number().int(), pinned: z.boolean(), pid: z.number().int().nullable() })), queue: z.array(z.object({ id: z.string(), position: z.number().int(), kind: z.enum(["resident", "jit", "generator"]) })) });
+const BudgetSchema = z.object({ totalMemoryBytes: z.number().int(), capBytes: z.number().int(), freeMemoryBytes: z.number().int(), availablePercent: z.number(), pressure: z.enum(["normal", "warn", "critical"]), memoryReadingDegraded: z.boolean(), tier: z.enum(["p16", "p32", "p64", "p128"]), margin_bytes: z.number().int(), reading_degraded: z.boolean(), profile: z.string().nullable().openapi({ description: "The active machine profile used by the Stack's tier governor." }), slots: z.array(z.object({ category: z.enum(["chat", "pictures", "video", "music"]), tier: z.enum(["reduced", "standard", "boost", "max"]), model: z.string(), peak_bytes: z.number().int(), verified: z.boolean() })).openapi({ description: "The peak memory of each tier of each category on this computer, from the Stack's tier catalog; verified is false for an estimate." }), loaded: z.array(z.object({ id: z.string(), kind: z.enum(["resident", "jit", "generator"]), peakBytes: z.number().int(), measured: z.boolean(), lastUsedAt: z.string(), idleTtlSeconds: z.number().int(), pinned: z.boolean(), pid: z.number().int().nullable() })), queue: z.array(z.object({ id: z.string(), position: z.number().int(), kind: z.enum(["resident", "jit", "generator"]) })) });
 
 const hardwareRoute = createRoute({ method: "get", path: "/", tags: ["Hardware"], summary: "Hardware facts and the proposed profile", responses: { 200: { content: { "application/json": { schema: z.object({ hardware: HardwareInfoSchema, proposed: ProfileTierSchema.nullable(), tiers: z.array(ProfileTierSchema) }) } }, description: "The probe's facts (no computer name) and the tier this machine clears." } } });
 const budgetRoute = createRoute({ method: "get", path: "/budget", tags: ["Hardware"], summary: "The memory governor's budget and loaded set", responses: { 200: { content: { "application/json": { schema: BudgetSchema } }, description: "Cap, free memory, pressure, loaded models and the queue." } } });
@@ -22,6 +25,7 @@ hardwareRoutes.openapi(hardwareRoute, async (c) => {
 });
 hardwareRoutes.openapi(budgetRoute, (c) => {
   const status = getGovernorStatus();
-  return c.json({ ...status, margin_bytes: status.marginBytes, reading_degraded: status.memoryReadingDegraded }, 200);
+  const profile = currentMachineTier() ?? null;
+  return c.json({ ...status, margin_bytes: status.marginBytes, reading_degraded: status.memoryReadingDegraded, profile, slots: budgetSlots(profile, admissionRoomBytes()) }, 200);
 });
 hardwareRoutes.openapi(decisionsRoute, (c) => c.json({ decisions: getGovernorDecisions() }, 200));

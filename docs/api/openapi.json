@@ -10042,6 +10042,54 @@
                     "reading_degraded": {
                       "type": "boolean"
                     },
+                    "profile": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "The active machine profile used by the Stack's tier governor."
+                    },
+                    "slots": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "category": {
+                            "type": "string",
+                            "enum": [
+                              "chat",
+                              "pictures",
+                              "video",
+                              "music"
+                            ]
+                          },
+                          "tier": {
+                            "type": "string",
+                            "enum": [
+                              "reduced",
+                              "standard",
+                              "boost",
+                              "max"
+                            ]
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "peak_bytes": {
+                            "type": "integer"
+                          },
+                          "verified": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "category",
+                          "tier",
+                          "model",
+                          "peak_bytes",
+                          "verified"
+                        ]
+                      },
+                      "description": "The peak memory of each tier of each category on this computer, from the Stack's tier catalog; verified is false for an estimate."
+                    },
                     "loaded": {
                       "type": "array",
                       "items": {
@@ -10128,6 +10176,8 @@
                     "tier",
                     "margin_bytes",
                     "reading_degraded",
+                    "profile",
+                    "slots",
                     "loaded",
                     "queue"
                   ]
