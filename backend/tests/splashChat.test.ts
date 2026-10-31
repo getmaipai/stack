@@ -126,7 +126,7 @@ test("a Splash process's post-load memory reading is not stored as a footprint o
 // watch every 1 to 10 minutes while idle (87 "governor-runaway" restarts):
 // its ~1 GB post-load reading became the baseline, and the mapped 14 GB
 // model paging in read as a runaway (1.3 x 1 GB + 0.5 GB for 3 polls).
-test("an idle Splash chat engine whose mapped weights page in is not restarted by the runaway watch", async () => {
+test("an idle chat engine whose memory grows is never restarted by the runaway watch, Splash or llama-server alike", async () => {
   const GB = 1_073_741_824;
   const runLoop = async (engine: string): Promise<number> => {
     __resetGovernorForTests();
@@ -143,7 +143,8 @@ test("an idle Splash chat engine whose mapped weights page in is not restarted b
     __resetGovernorForTests();
     return restarts;
   };
-  expect(await runLoop("llama-server")).toBeGreaterThan(0);
+  // RESOURCE-FIX-01: chat is a reserved role, so even the llama-server case is kept and reported, never restarted.
+  expect(await runLoop("llama-server")).toBe(0);
   expect(await runLoop("splash-chat")).toBe(0);
   expect(await runLoop("splash")).toBe(0);
 });

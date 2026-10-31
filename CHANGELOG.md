@@ -20,6 +20,7 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Fixed
 
+- The governor's runaway watch no longer restarts chat or another reserved role for using more memory than its post-load reading; it raises a health item instead (Home issue 262: 87 chat restarts on 2026-10-29).
 - Engine builds staged by URL accept the Catalog engine-index tag format, including Splash `1.3.2` and llama-server `b10797`; malformed tags are rejected before a download. The schema reuses the Catalog's one tag validator. Added a Stack-side Splash coding-wire contract for JSON and streaming shapes, model-name rewriting and the 20-second pause limit (CODE-STACK-01 S5a).
 
 ### Changed

@@ -401,12 +401,14 @@ refused.
 Eviction reads idle time, pin state, kernel pressure and process
 memory. A JIT model unloads after `idleTtlSeconds` (600) plus any
 `keep_alive`; under pressure the least recently used unpinned JIT model
-unloads first; a pinned model never unloads. A resident model restarts
-when its process memory exceeds 1.3 times this run's own post-load
-reading plus 500 MB for three polls (the runaway watch); a figure an
-earlier run stored never arms the watch, and the restart waits for the
-engine's requests in flight to finish unless the kernel reports critical
-pressure. Splash (the coding engine and the chat engine alike) maps its
+unloads first; a pinned model never unloads. A resident whose process
+memory exceeds 1.3 times this run's own post-load reading plus 500 MB
+for three polls is handled by class: a reserved role (chat, judge,
+router, embed, stt, tts, wakeword) is never restarted for memory, the
+governor records a `Kept` decision and raises `resident-memory-grew.<role>`
+once per episode, resolved when the reading falls back; a warm resident
+(the coding engine) is restarted once its requests in flight finish, or
+at once under critical kernel pressure. Splash (the coding engine and the chat engine alike) maps its
 model file, so it holds about 1 GB right after load and grows to the
 model's size as it serves: its post-load reading neither arms the watch
 nor is stored as a footprint. The pressure event names the reading and the limit

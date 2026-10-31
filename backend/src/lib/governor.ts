@@ -119,6 +119,7 @@ interface LoadedInternal extends GovernorLoadedModel {
   recordedPeakBytes: number;
   headroomBytes: number;
   processBreaches: number;
+  grewRaised: boolean;
   keepAliveSeconds: number;
   yieldsToGenerators: boolean;
   role: string | null;
@@ -234,6 +235,7 @@ function loadedItemFor(request: GovernorRequest): LoadedInternal {
     recordedPeakBytes: 0,
     headroomBytes: request.headroomBytes ?? 0,
     processBreaches: 0,
+    grewRaised: false,
     keepAliveSeconds: request.kind === "generator" ? 0 : request.keepAliveSeconds ?? 0,
     yieldsToGenerators: request.kind === "jit" && request.yieldsToGenerators === true,
     role: request.role ?? null,
@@ -378,6 +380,7 @@ export function refreshMeasuredPeak(handle: GovernorHandle, processBytes: number
   item.peakBaselineBytes = bytes + item.headroomBytes;
   item.runPeakBytes = bytes;
   item.recordedPeakBytes = bytes;
+  item.grewRaised = false;
 }
 
 /** Records the image worker's measured live pool peak under its stable
@@ -392,12 +395,14 @@ export function refreshMeasuredPeakById(id: string, processBytes: number): void 
   item.peakBaselineBytes = null;
   item.runPeakBytes = 0;
   item.recordedPeakBytes = bytes;
+  item.grewRaised = false;
 }
 
 /** A managed worker exited, so its warm reservation is no longer resident. */
 export function forgetLoadedItem(id: string): void {
   const item = loaded.get(id);
   if (!item) return;
+  if (item.grewRaised) resolveHealth(`resident-memory-grew.${item.id}`);
   loaded.delete(id);
   freeMemoryBytes += item.peakBytes;
 }
@@ -548,7 +553,10 @@ export async function pauseAll(): Promise<void> {
   setRunState("pausing");
   closeMaxWindow();
   queue.length = 0;
-  for (const item of [...loaded.values()]) loaded.delete(item.id);
+  for (const item of [...loaded.values()]) {
+    if (item.grewRaised) resolveHealth(`resident-memory-grew.${item.id}`);
+    loaded.delete(item.id);
+  }
   setRunState("paused");
 }
 
@@ -599,9 +607,11 @@ export function release(handle: GovernorHandle): void {
     item.runPeakBytes = 0;
     item.recordedPeakBytes = 0;
     item.processBreaches = 0;
+    item.grewRaised = false;
     item.keepAliveSeconds = 0;
     return;
   }
+  if (item.grewRaised) resolveHealth(`resident-memory-grew.${item.id}`);
   loaded.delete(handle.id);
   if (item.token === flexBandBorrowerToken) flexBandBorrowerToken = null;
   if (memoryReadingDegraded) return;
@@ -735,9 +745,8 @@ export function startGovernor(options: StartGovernorOptions): () => void {
       return imagePoolUnload ? imagePoolUnload() : false;
     } : undefined);
     for (const item of [...loaded.values()]) {
-      // The runaway watch compares this process's memory with its own
-      // post-load reading (never a figure an earlier run stored), so a
-      // healthy engine is never restarted for using what it used at load.
+      // The watch compares this run's own reading; a reserved role is
+      // never restarted, it is reported; a warm resident is restarted once idle.
       if (item.pid === options.pid && item.peakBaselineBytes !== null) {
         const measured = await processReader(options.pid);
         const limit = item.peakBaselineBytes * tuning.processSafetyMultiplier + tuning.processMinOverageBytes;
@@ -745,6 +754,10 @@ export function startGovernor(options: StartGovernorOptions): () => void {
           item.processBreaches++;
         } else {
           item.processBreaches = 0;
+          if (item.grewRaised) {
+            resolveHealth(`resident-memory-grew.${item.id}`);
+            item.grewRaised = false;
+          }
           if (measured !== null && measured > item.runPeakBytes) {
             item.runPeakBytes = measured;
             item.peakBytes = Math.max(item.peakBytes, measured);
@@ -757,10 +770,23 @@ export function startGovernor(options: StartGovernorOptions): () => void {
           }
         }
         const busy = options.busy?.(item.id) ?? false;
-        if (item.kind === "resident" && item.processBreaches >= tuning.processSustainedPolls && (!busy || pressure === "critical")) {
-          emit({ id: "pressure", data: { pressure, reason: "process memory exceeded its measured peak", id: item.id, process_bytes: measured, limit_bytes: Math.round(limit) } });
-          await options.restart?.(item.id);
-          item.processBreaches = 0;
+        if (item.kind === "resident" && item.processBreaches >= tuning.processSustainedPolls) {
+          if (item.class === "reserved") {
+            if (!item.grewRaised) {
+              const label = ROLES[item.id as keyof typeof ROLES]?.label ?? item.id;
+              const measuredBytes = measured ?? item.peakBaselineBytes;
+              const gb = (bytes: number) => (bytes / GB).toFixed(1);
+              decide("Kept", "It is using more memory than when it loaded; a reserved role is never restarted for memory.", item.id);
+              emit({ id: "pressure", data: { pressure, reason: "process memory exceeded its measured peak", id: item.id, process_bytes: measured, limit_bytes: Math.round(limit), kept: true } });
+              raise({ code: `resident-memory-grew.${item.id}`, severity: "warning", title: `${label} is using more memory than when it loaded`, text: "It keeps running. If this computer gets low on memory, the Stack frees other work first. Restart the engine to start it fresh.", cause: `${label} is using ${gb(measuredBytes)} GB, ${gb(measuredBytes - item.peakBaselineBytes)} GB more than the ${gb(item.peakBaselineBytes)} GB it used after loading.`, fix: { label: "Restart engine", action: "restart_engine" } });
+              item.grewRaised = true;
+            }
+            item.processBreaches = tuning.processSustainedPolls;
+          } else if (!busy || pressure === "critical") {
+            emit({ id: "pressure", data: { pressure, reason: "process memory exceeded its measured peak", id: item.id, process_bytes: measured, limit_bytes: Math.round(limit) } });
+            await options.restart?.(item.id);
+            item.processBreaches = 0;
+          }
         }
       }
       const idleLimit = ((idleTtlOverrides.get(item.id) ?? item.idleTtlSeconds) + item.keepAliveSeconds) * 1000;
@@ -783,7 +809,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
           let unloaded: boolean | void = undefined;
           try { unloaded = await unload(item.id); } catch { unloaded = false; }
           if (unloaded === false) { item.evicting = false; return; }
-          if (loaded.get(item.id) === item) { loaded.delete(item.id); freeMemoryBytes += item.peakBytes; }
+          if (loaded.get(item.id) === item) { if (item.grewRaised) resolveHealth(`resident-memory-grew.${item.id}`); loaded.delete(item.id); freeMemoryBytes += item.peakBytes; }
         })();
       }
     }
@@ -807,7 +833,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
               try { unloaded = await unload(item.id); } catch { unloaded = false; }
               if (unloaded === false) { item.evicting = false; return; }
               decide("Unloaded", "A picture, video or music job was waiting and the model was idle.", item.id);
-              if (loaded.get(item.id) === item) { loaded.delete(item.id); freeMemoryBytes += item.peakBytes; }
+              if (loaded.get(item.id) === item) { if (item.grewRaised) resolveHealth(`resident-memory-grew.${item.id}`); loaded.delete(item.id); freeMemoryBytes += item.peakBytes; }
             })();
           }
         }
@@ -873,7 +899,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
               try { unloaded = await unload(id); } catch { unloaded = false; }
               if (unloaded === false) { item.evicting = false; return; }
               decide("Unloaded", `The ${requestClass(head.request)} request needed room.`, id);
-              if (loaded.get(id) === item) { loaded.delete(id); freeMemoryBytes += item.peakBytes; }
+              if (loaded.get(id) === item) { if (item.grewRaised) resolveHealth(`resident-memory-grew.${item.id}`); loaded.delete(id); freeMemoryBytes += item.peakBytes; }
             })();
             available += item.peakBytes;
           }

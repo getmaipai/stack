@@ -350,14 +350,41 @@ test("rule 3 keeps pinned models during pressure", async () => {
   expect(getGovernorStatus().loaded[0]?.pinned).toBe(true);
 });
 
-test("rule 3 restarts a resident model after sustained RSS overage", async () => {
+test("rule 3 never restarts a reserved role for memory; it reports it once", async () => {
   refreshMeasuredPeak(await admit({ id: "resident-chat", kind: "resident", requestedBytes: GB, measuredPeakBytes: GB, pid: 42 }) as GovernorHandle, GB);
+  __setGovernorTuningForTestsOnly({ pollMs: 1, processSustainedPolls: 2 });
+  let restarts = 0;
+  const stop = startGovernor({ pid: 42, freeMemory: () => 32 * GB, totalMemory: () => 64 * GB, processMemory: async () => 3 * GB, restart: () => { restarts++; } });
+  stops.push(stop);
+  await Bun.sleep(15);
+  expect(restarts).toBe(0);
+  expect(listHealth()).toEqual([expect.objectContaining({ code: "resident-memory-grew.resident-chat", severity: "warning", cause: expect.stringContaining("3.0 GB") })]);
+  expect(getGovernorDecisions().filter((item) => item.model === "resident-chat" && item.decision === "Kept")).toHaveLength(1);
+});
+
+test("rule 3 still restarts a warm resident after sustained overage", async () => {
+  const handle = await admit({ id: "coding", kind: "resident", class: "warm", requestedBytes: GB, measuredPeakBytes: GB, pid: 42 }) as GovernorHandle;
+  refreshMeasuredPeak(handle, GB);
   __setGovernorTuningForTestsOnly({ pollMs: 1, processSustainedPolls: 2 });
   let restarts = 0;
   const stop = startGovernor({ pid: 42, freeMemory: () => 32 * GB, totalMemory: () => 64 * GB, processMemory: async () => 2 * GB, restart: () => { restarts++; } });
   stops.push(stop);
   await Bun.sleep(15);
   expect(restarts).toBeGreaterThan(0);
+  expect(listHealth().some((item) => item.code === "resident-memory-grew.coding")).toBe(false);
+});
+
+test("the memory-grew item resolves when the reading falls back", async () => {
+  refreshMeasuredPeak(await admit({ id: "resident-chat", kind: "resident", requestedBytes: GB, measuredPeakBytes: GB, pid: 42 }) as GovernorHandle, GB);
+  __setGovernorTuningForTestsOnly({ pollMs: 1, processSustainedPolls: 2 });
+  let reading = 3 * GB;
+  const stop = startGovernor({ pid: 42, freeMemory: () => 32 * GB, totalMemory: () => 64 * GB, processMemory: async () => reading });
+  stops.push(stop);
+  await Bun.sleep(10);
+  expect(listHealth().some((item) => item.code === "resident-memory-grew.resident-chat")).toBe(true);
+  reading = GB;
+  await Bun.sleep(15);
+  expect(listHealth().some((item) => item.code === "resident-memory-grew.resident-chat")).toBe(false);
 });
 
 test("rule 4 exposes a cap and refuses a request that can never fit", async () => {
@@ -613,7 +640,7 @@ test("a stale 3.38 GB stored figure never restarts a chat engine holding 7.9 GB"
   expect(restarts).toBe(0);
 });
 
-test("after its post-load reading of 7.9 GB, a healthy chat is kept and a runaway past 1.3 x plus 0.5 GB is restarted", async () => {
+test("after its post-load reading of 7.9 GB, chat is kept even when it grows past 1.3 x plus 0.5 GB", async () => {
   const admission = await admit({ id: "chat", kind: "resident", requestedBytes: 5_027_783_488, measuredPeakBytes: RECORDED_FOOTPRINT, pid: 42 }) as GovernorHandle;
   refreshMeasuredPeak(admission, RESIDENT_WITH_WEIGHTS);
   expect(getGovernorStatus().loaded[0]).toMatchObject({ id: "chat", peakBytes: RESIDENT_WITH_WEIGHTS, measured: true });
@@ -625,8 +652,8 @@ test("after its post-load reading of 7.9 GB, a healthy chat is kept and a runawa
   await Bun.sleep(15);
   expect(restarts).toBe(0);
   reading = Math.ceil(RESIDENT_WITH_WEIGHTS * 1.3 + 500_000_000) + 1;
-  for (let index = 0; index < 40 && restarts === 0; index++) await Bun.sleep(5);
-  expect(restarts).toBeGreaterThan(0);
+  await Bun.sleep(15);
+  expect(restarts).toBe(0);
 });
 
 test("the measured peak follows this run upward and is handed back to be stored", async () => {
@@ -650,7 +677,7 @@ test("the measured peak follows this run upward and is handed back to be stored"
   expect(getGovernorStatus().loaded[0]?.peakBytes).toBe(8_485_470_208);
 });
 
-test("a runaway restart waits while the engine serves a request, unless pressure is critical", async () => {
+test("a reserved runaway is kept while busy and idle, including under critical pressure", async () => {
   const admission = await admit({ id: "chat", kind: "resident", requestedBytes: GB, measuredPeakBytes: GB, pid: 42 }) as GovernorHandle;
   refreshMeasuredPeak(admission, GB);
   __setGovernorTuningForTestsOnly({ pollMs: 1, processSustainedPolls: 2 });
@@ -661,22 +688,22 @@ test("a runaway restart waits while the engine serves a request, unless pressure
   await Bun.sleep(15);
   expect(restarts).toBe(0);
   busy = false;
-  for (let index = 0; index < 40 && restarts === 0; index++) await Bun.sleep(5);
-  expect(restarts).toBeGreaterThan(0);
+  await Bun.sleep(15);
+  expect(restarts).toBe(0);
 });
 
-test("a runaway under critical kernel pressure is restarted even mid-request", async () => {
+test("a reserved runaway under critical kernel pressure is still kept", async () => {
   const admission = await admit({ id: "chat", kind: "resident", requestedBytes: GB, measuredPeakBytes: GB, pid: 42 }) as GovernorHandle;
   refreshMeasuredPeak(admission, GB);
   __setGovernorTuningForTestsOnly({ pollMs: 1, processSustainedPolls: 2 });
   let restarts = 0;
   const stop = startGovernor({ pid: 42, processMemory: async () => 4 * GB, busy: () => true, restart: () => { restarts++; }, memoryReader: scriptedMemoryReader([{ totalBytes: 64 * GB, freeBytes: 32 * GB, availablePercent: 50, pressure: "critical", degraded: false }]) });
   stops.push(stop);
-  for (let index = 0; index < 40 && restarts === 0; index++) await Bun.sleep(5);
-  expect(restarts).toBeGreaterThan(0);
+  await Bun.sleep(15);
+  expect(restarts).toBe(0);
 });
 
-test("a peak that cannot be stored keeps the watch running", async () => {
+test("a peak that cannot be stored keeps the watch running and never restarts a reserved role", async () => {
   const admission = await admit({ id: "chat", kind: "resident", requestedBytes: GB, measuredPeakBytes: GB, pid: 42 }) as GovernorHandle;
   refreshMeasuredPeak(admission, GB);
   __setGovernorTuningForTestsOnly({ pollMs: 1, processSustainedPolls: 2 });
@@ -693,8 +720,8 @@ test("a peak that cannot be stored keeps the watch running", async () => {
   for (let index = 0; index < 40 && stored.length === 0; index++) await Bun.sleep(5);
   expect(stored[0]).toBe(1.2 * GB);
   reading = 4 * GB;
-  for (let index = 0; index < 40 && restarts === 0; index++) await Bun.sleep(5);
-  expect(restarts).toBeGreaterThan(0);
+  await Bun.sleep(15);
+  expect(restarts).toBe(0);
 });
 
 // The 2026-10-06 event on the p16 laptop: the honest 8B chat figure
