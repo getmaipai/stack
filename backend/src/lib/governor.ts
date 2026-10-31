@@ -63,6 +63,9 @@ export interface GovernorRequest {
   /** For an edit, reserve the two-model pool when it fits, otherwise use
    * the request's one-model peak. */
   poolPeakBytes?: number;
+  /** Video-only quiet-window controls supplied by Home. */
+  quietSeconds?: number;
+  quietMaxWaitSeconds?: number | null;
 }
 
 export interface GovernorHandle {
@@ -153,7 +156,7 @@ let runState: RunState = "running";
 /** An item's own idle limit in seconds, in place of the governor-wide one: the coding engine's keep-warm setting (CODE-STACK-01 S2). */
 const idleTtlOverrides = new Map<string, number>();
 const loaded = new Map<string, LoadedInternal>();
-type QueuedEntry = { request: GovernorRequest; settled: boolean; admitted: Promise<GovernorHandle | { refused: true; reason: string }>; resolve: (result: GovernorHandle | { refused: true; reason: string }) => void };
+type QueuedEntry = { request: GovernorRequest; settled: boolean; headSince: number | null; admitted: Promise<GovernorHandle | { refused: true; reason: string }>; resolve: (result: GovernorHandle | { refused: true; reason: string }) => void };
 const queue: QueuedEntry[] = [];
 const refusalCounts = new Map<string, number>();
 const decisions: GovernorDecision[] = [];
@@ -488,7 +491,8 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
     if (existing >= 0) return { queued: true, position: existing + 1, class: requestClass(request), admitted: queue[existing]!.admitted };
     let resolveQueued!: (result: GovernorHandle | { refused: true; reason: string }) => void;
     const admitted: Promise<GovernorHandle | { refused: true; reason: string }> = new Promise<GovernorHandle | { refused: true; reason: string }>((resolve) => { resolveQueued = resolve; });
-    const entry: QueuedEntry = { request, settled: false, admitted, resolve: resolveQueued };
+    for (const row of queue) if (!row.settled && row.headSince === null && !queue.slice(0, queue.indexOf(row)).some((prior) => !prior.settled)) row.headSince = Date.now();
+    const entry: QueuedEntry = { request, settled: false, headSince: queue.some((row) => !row.settled) ? null : Date.now(), admitted, resolve: resolveQueued };
     if (request.tier === "max" && maxWindow.state === "none") {
       maxWindow = { state: "draining", ownerId: request.id, since: Date.now() };
       reclaim(request.id, "window_drain", "", 0);
@@ -687,11 +691,22 @@ export interface StartGovernorOptions {
   /** No video job is waiting or running: put chat's full window back. */
   restoreChat?: () => Promise<boolean>;
   chatWindowShrunk?: () => boolean;
+  /** Epoch milliseconds for the latest chat, STT, or TTS request. */
+  lastInteractiveAt?: () => number | null;
   now?: () => number;
   tier?: GovernorTier;
 }
 
 let chatYieldBusy = false;
+let videoShrinkCount = 0;
+let videoRestoreCount = 0;
+let videoShrunkSince: string | null = null;
+let videoShrinkMaxWaitSeconds = 600;
+let videoQuietSeconds = 60;
+let videoGoneSince: number | null = null;
+export function videoWindowStats(): { shrinks: number; restores: number; shrunk_now: boolean; shrunk_since: string | null } {
+  return { shrinks: videoShrinkCount, restores: videoRestoreCount, shrunk_now: videoShrunkSince !== null, shrunk_since: videoShrunkSince };
+}
 
 export function startGovernor(options: StartGovernorOptions): () => void {
   activeTier = options.tier ?? activeTier;
@@ -842,16 +857,38 @@ export function startGovernor(options: StartGovernorOptions): () => void {
     // A video job still held after idle helpers were offered: chat is the
     // priority, but its window may shrink once for the length of the job
     // (DESIGN-chat-memory-yields-to-generators-2026-10-27). Video only.
+    const activeQueue = queue.filter((entry) => !entry.settled);
+    const head = activeQueue[0];
+    if (head && head.headSince === null) head.headSince = now;
+    for (const entry of queue) if (entry !== head && !entry.settled) entry.headSince = null;
+    const videoWaiting = activeQueue.some((entry) => entry.request.kind === "generator" && entry.request.role === "video");
+    const videoRunning = [...loaded.values()].some((item) => item.kind === "generator" && item.role === "video");
+    if (videoWaiting || videoRunning) videoGoneSince = null;
+    else if (videoGoneSince === null) videoGoneSince = now;
     if (options.shrinkChat && !chatYieldBusy) {
-      const videoWaiting = queue.some((entry) => !entry.settled && entry.request.kind === "generator" && entry.request.role === "video");
-      const videoRunning = [...loaded.values()].some((item) => item.kind === "generator" && item.role === "video");
-      const head = queue.find((entry) => !entry.settled);
-      if (head && head.request.kind === "generator" && head.request.role === "video" && !codingModeActive && !canAdmit(head.request, peakFor(head.request).bytes) && !options.chatWindowShrunk?.()) {
+      const interactiveAt = options.lastInteractiveAt?.() ?? null;
+      const quietSeconds = head?.request.quietSeconds ?? 60;
+      const maxWait = head?.request.quietMaxWaitSeconds === null ? Number.POSITIVE_INFINITY : head?.request.quietMaxWaitSeconds ?? 600;
+      const quiet = interactiveAt === null || now - interactiveAt >= quietSeconds * 1000;
+      const maxWaitPassed = head?.headSince !== null && head?.headSince !== undefined && now - head.headSince >= maxWait * 1000;
+      const evictionPending = [...loaded.values()].some((item) => item.evicting);
+      const reclaim = reclaimableItems(options.busy ?? (() => false), now);
+      const reclaimable = reclaim.items;
+      // An item inside its pool grace (MEM-SPACE-01) is about to go; the ladder is not empty yet.
+      const reclaimPollBusy = (!unloadItem && reclaimable.length > 0) || reclaim.heldForGraceBytes > 0;
+      if (head && head.request.kind === "generator" && head.request.role === "video" && !codingModeActive && !canAdmit(head.request, peakFor(head.request).bytes) && !options.chatWindowShrunk?.() && !evictionPending && reclaimable.length === 0 && !reclaimPollBusy && (quiet || maxWaitPassed)) {
+        videoShrinkMaxWaitSeconds = maxWait;
+        videoQuietSeconds = quietSeconds;
         chatYieldBusy = true;
-        void options.shrinkChat().then((done) => { if (done) decide("Restarted", "A video job was waiting for memory, so chat was restarted once at a smaller window.", "chat"); }).catch(() => {}).finally(() => { chatYieldBusy = false; });
+        void options.shrinkChat().then((done) => { if (done) { videoShrinkCount++; videoShrunkSince = new Date(options.now?.() ?? Date.now()).toISOString(); decide("Restarted", "A video job was waiting for memory, so chat was restarted once at a smaller window.", "chat"); } }).catch(() => {}).finally(() => { chatYieldBusy = false; });
       } else if (options.restoreChat && options.chatWindowShrunk?.() && !videoWaiting && !videoRunning) {
-        chatYieldBusy = true;
-        void options.restoreChat().then((done) => { if (done) decide("Restarted", "The video job is done, so chat has its full window back.", "chat"); }).catch(() => {}).finally(() => { chatYieldBusy = false; });
+        const quietSecondsRestore = videoQuietSeconds;
+        const quietRestore = interactiveAt === null || now - interactiveAt >= quietSecondsRestore * 1000;
+        const maxWaitRestore = videoGoneSince !== null && now - videoGoneSince >= videoShrinkMaxWaitSeconds * 1000;
+        if ((quietRestore || maxWaitRestore) && !(options.busy?.("chat") ?? false)) {
+          chatYieldBusy = true;
+          void options.restoreChat().then((done) => { if (done) { videoRestoreCount++; videoShrunkSince = null; decide("Restarted", "The video job is done, so chat has its full window back.", "chat"); } }).catch(() => {}).finally(() => { chatYieldBusy = false; });
+        }
       }
     }
     // Every poll tries the queue head, not only on a pressure or floor edge:
@@ -923,6 +960,7 @@ export function __setGovernorTuningForTestsOnly(overrides: Partial<GovernorTunin
 
 export function __resetGovernorForTests(): void {
   chatYieldBusy = false;
+  videoShrinkCount = 0; videoRestoreCount = 0; videoShrunkSince = null; videoShrinkMaxWaitSeconds = 600; videoQuietSeconds = 60; videoGoneSince = null;
   codingModeActive = false;
   metalCapBytes = null;
   admissionGate = null;

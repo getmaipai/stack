@@ -291,7 +291,8 @@ async function pump(role: string): Promise<void> {
     const imagePool = role === "image" && (next.kind === "image_generation" || next.kind === "image_edit_generative");
     const imageEdit = imagePool && next.kind === "image_edit_generative";
     const tier = (next.input as { tier?: JobTier } | null)?.tier;
-    handle = await admitJob(next.id, { id: imagePool ? "image-pool" : next.id, role, class: ROLES[role as keyof typeof ROLES]?.memoryClass ?? "burst", kind: "generator", ...(tier ? { tier } : {}), ...(imagePool ? { retainWarm: true } : {}), ...(imageEdit ? { poolPeakBytes: GovernorRules.imagePoolPeakBytes } : {}), ...runner.options.generator.memory(jobs.get(next.id)!) });
+    const videoQuiet = role === "video" ? jobs.get(next.id)?.input as { quiet_seconds?: number; quiet_max_wait_seconds?: number | null } | null : null;
+    handle = await admitJob(next.id, { id: imagePool ? "image-pool" : next.id, role, class: ROLES[role as keyof typeof ROLES]?.memoryClass ?? "burst", kind: "generator", ...(tier ? { tier } : {}), ...(imagePool ? { retainWarm: true } : {}), ...(imageEdit ? { poolPeakBytes: GovernorRules.imagePoolPeakBytes } : {}), ...(videoQuiet?.quiet_seconds !== undefined ? { quietSeconds: videoQuiet.quiet_seconds } : {}), ...(videoQuiet?.quiet_max_wait_seconds !== undefined ? { quietMaxWaitSeconds: videoQuiet.quiet_max_wait_seconds } : {}), ...runner.options.generator.memory(jobs.get(next.id)!) });
   } catch (error) {
     finishJob(next.id, { ok: false, reason: error instanceof Error ? error.message : String(error) });
     settle();

@@ -13,6 +13,9 @@ import {
   release,
   refreshMeasuredPeak,
   startGovernor,
+  videoWindowStats,
+  reclaimableItems,
+  forgetLoadedItem,
   withdraw,
   touch,
   type GovernorHandle,
@@ -203,7 +206,7 @@ test("an idle image pool unloads through the governor after its warm window and 
   await Bun.sleep(10);
   expect(unloaded).not.toContain("image-pool");
   busy = false;
-  await Bun.sleep(50);
+  await Bun.sleep(8);
   expect(unloaded).toContain("image-pool");
   await Bun.sleep(5);
   expect(getGovernorStatus().loaded).toEqual([]);
@@ -780,7 +783,7 @@ test("a video held for memory restarts idle chat once at a smaller window, and c
   await Bun.sleep(20);
   expect(calls).toEqual(["shrink"]); // still running: no restore, and no second shrink
   release(handle!);
-  await Bun.sleep(50);
+  await Bun.sleep(5);
   expect(calls).toEqual(["shrink", "restore"]);
 });
 
@@ -791,4 +794,44 @@ test("a picture held for memory never shrinks chat", async () => {
   stops.push(startGovernor({ pid: 1, pollMs: 1, freeMemory: () => 10 * GB, totalMemory: () => 64 * GB, shrinkChat: async () => { called = true; return true; }, chatWindowShrunk: () => false }));
   await Bun.sleep(30);
   expect(called).toBe(false);
+});
+
+test("video shrink waits for quiet, then restores quietly and counts both restarts", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 64 * GB, freeMemoryBytes: 10 * GB, tier: "p64" });
+  let now = 1_000_000; let interactive = now - 10_000; let shrunk = false; const calls: string[] = [];
+  let admitted: Promise<GovernorHandle> | null = null;
+  const first = await admit({ id: "video-quiet", role: "video", kind: "generator", class: "burst", requestedBytes: 30 * GB, quietSeconds: 60, quietMaxWaitSeconds: 120 });
+  if (!("queued" in first)) throw new Error("expected queued video");
+  admitted = first.admitted as Promise<GovernorHandle>;
+  stops.push(startGovernor({ pid: 1, pollMs: 3, now: () => now, freeMemory: () => 10 * GB, totalMemory: () => 64 * GB, lastInteractiveAt: () => interactive,
+    shrinkChat: async () => { calls.push("shrink"); shrunk = true; return true; }, restoreChat: async () => { calls.push("restore"); shrunk = false; return true; }, chatWindowShrunk: () => shrunk }));
+  await Bun.sleep(15); expect(calls).toEqual([]);
+  now += 51_000; await Bun.sleep(15); expect(calls).toEqual(["shrink"]);
+  expect(videoWindowStats()).toMatchObject({ shrinks: 1, restores: 0, shrunk_now: true });
+  interactive = now; now += 30_000; await Bun.sleep(10); expect(calls).toEqual(["shrink"]);
+  interactive = now; now += 30_000; await Bun.sleep(10); expect(calls).toEqual(["shrink"]);
+  // Withdraw models the queued video leaving before it starts.
+  withdraw("video-quiet");
+  interactive = now; now += 61_000; await Bun.sleep(30);
+  expect(calls).toContain("restore");
+  expect(videoWindowStats()).toMatchObject({ shrinks: 1, restores: 1, shrunk_now: false });
+});
+
+test("video shrink waits until reclaimable warm items have left", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 80 * GB, tier: "p128" });
+  const warmHandle = await admit({ id: "image-pool", kind: "generator", role: "image", class: "warm", requestedBytes: GB, measuredPeakBytes: GB, retainWarm: true }) as GovernorHandle;
+  release(warmHandle);
+  expect(getGovernorStatus().loaded[0]).toMatchObject({ id: "image-pool", kind: "jit" });
+  // Age the warm item past the ordinary two-minute grace period.
+  const item = reclaimableItems(() => false, Date.now() + 601_000).items[0];
+  expect(item?.id).toBe("image-pool");
+  let free = 10 * GB; let shrinks = 0; let unloads = 0; let now = Date.now() + 601_000;
+  const video = await admit({ id: "video-ladder", role: "video", kind: "generator", class: "burst", requestedBytes: 90 * GB });
+  if (!("queued" in video)) throw new Error("expected a queued video");
+  stops.push(startGovernor({ pid: 1, pollMs: 3, now: () => now, freeMemory: () => free, totalMemory: () => 128 * GB,
+    unload: async (id) => { unloads++; await Bun.sleep(10); free += GB; forgetLoadedItem(id); return id === "image-pool"; },
+    shrinkChat: async () => { shrinks++; return true; }, chatWindowShrunk: () => false }));
+  await Bun.sleep(60);
+  expect(unloads).toBeGreaterThan(0);
+  expect(shrinks).toBeGreaterThan(0);
 });

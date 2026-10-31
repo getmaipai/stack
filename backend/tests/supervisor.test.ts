@@ -417,6 +417,19 @@ test("the held-video chat window never goes below 32768 tokens and touches only 
   expect(await shrinkChatForVideo()).toBe(false); // chat is not running: nothing to restart, no cap left behind
   expect(chatWindowShrunk()).toBe(false);
   expect(await restoreChatWindow()).toBe(true);
+  const { logsDir } = await import("@/lib/paths");
+  const logText = () => { try { return readFileSync(join(logsDir, "stack.log"), "utf8"); } catch { return ""; } };
+  const before = logText();
+  setSupervisorFactoryForTests(async (role) => scriptedProcess(role, { kind: "spawned" }));
+  await getProcess("chat");
+  __resetChatWindowForTests();
+  expect(await shrinkChatForVideo()).toBe(true);
+  const added = logText().slice(before.length);
+  expect(added).toContain('"event":"chat.window","action":"shrink"');
+  await getProcess("chat");
+  expect(await restoreChatWindow()).toBe(true);
+  const afterRestore = logText().slice(before.length);
+  expect(afterRestore).toContain('"event":"chat.window","action":"restore"');
 });
 
 test("stopping and restarting a role log an engine.retired line with the reason (issue 253)", async () => {

@@ -436,7 +436,8 @@ test("GET /stack/v1/memory returns the numbers, the level and the recent actions
   void mod;
   const response = await app.request("/stack/v1/memory");
   expect(response.status).toBe(200);
-  const body = await response.json() as { watchdog: { level: string; generation_paused: boolean; reserve_bytes: number }; memory: { available_bytes: number; swap_used_bytes: number; pressure_level: number }; recent_actions: Array<{ action: string }>; top_consumers: unknown[] };
+  const body = await response.json() as { video_window: { shrinks: number; restores: number; shrunk_now: boolean; shrunk_since: string | null }; watchdog: { level: string; generation_paused: boolean; reserve_bytes: number }; memory: { available_bytes: number; swap_used_bytes: number; pressure_level: number }; recent_actions: Array<{ action: string }>; top_consumers: unknown[] };
+  expect(body.video_window).toMatchObject({ shrinks: 0, restores: 0, shrunk_now: false, shrunk_since: null });
   expect(["warn", "normal"]).toContain(body.watchdog.level);
   expect(body.memory.available_bytes).toBeGreaterThan(0);
   expect(typeof body.memory.swap_used_bytes).toBe("number");

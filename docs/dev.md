@@ -2814,6 +2814,17 @@ A picture that fails inside the worker used to leave only "The picture engine fa
 
 ## Chat process memory is bounded and admitted honestly (2026-10-27)
 
+When a video job waits for memory, the Stack offers every reclaimable idle
+item first. It shrinks idle chat to `CHAT_YIELD_FLOOR_TOKENS` only after
+that ladder is empty and chat has been quiet for the request's
+`quiet_seconds` (Home's setting), with a Stack fallback of 60 seconds.
+After `quiet_max_wait_seconds` at the queue head it can shrink at the next
+poll even if chat is active, as long as chat itself is idle. When the last
+video leaves, chat regains its full window at the next quiet moment or
+after that request's max wait. Both restarts warm chat. The memory report's
+`video_window` carries shrink and restore counts and the current shrink
+state.
+
 Measured on the Studio with the Qwen3.8-27B chat model: the Stack admitted it for 29.9 GB and it grew to 37.9 GB, so a
 queued video job (46 GB peak plus the 10.2 GB reserve) waited for memory that was never free. Causes, read from the live
 process: llama-server b10797 picked four slots on its own and kept an 8 GiB prompt cache plus 32 recurrent-state

@@ -7,6 +7,7 @@ import { listReclaimable, runReclaim } from "@/lib/reclaim";
 
 const Level = z.enum(["normal", "warn", "critical"]);
 const MemorySchema = z.object({
+  video_window: z.object({ shrinks: z.number(), restores: z.number(), shrunk_now: z.boolean(), shrunk_since: z.string().nullable() }).openapi({ description: "Video-triggered chat window shrink and restore counts and current state." }),
   watchdog: z.object({ enabled: z.boolean(), level: Level, since: z.string(), reserve_bytes: z.number(), generation_paused: z.boolean(), chat_paged_out: z.boolean() }),
   ledger: z.object({ reserved_bytes: z.number(), warm_bytes: z.number(), burst_bytes: z.number(), budget_bytes: z.number(), working_margin_bytes: z.number(), free_bytes: z.number(), queue_depth: z.object({ reserved: z.number(), warm: z.number(), burst: z.number() }), chat_paged_out: z.boolean() }),
   memory: z.object({ total_bytes: z.number(), available_bytes: z.number(), free_bytes: z.number(), wired_bytes: z.number(), compressor_bytes: z.number(), swap_used_bytes: z.number(), swap_total_bytes: z.number(), swap_growth_bytes_30s: z.number(), pressure_level: z.number(), pressure: z.string(), sampled_at: z.string() }).nullable(),

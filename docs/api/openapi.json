@@ -3131,6 +3131,17 @@
                     "exclusiveMinimum": true,
                     "maximum": 1800000,
                     "description": "How long this request waits for the clip before answering 202 with the job id. Default 30000. A clip takes about two to three minutes."
+                  },
+                  "quiet_seconds": {
+                    "type": "integer",
+                    "minimum": 20,
+                    "maximum": 3600
+                  },
+                  "quiet_max_wait_seconds": {
+                    "type": "integer",
+                    "nullable": true,
+                    "minimum": 0,
+                    "maximum": 86400
                   }
                 },
                 "required": [
@@ -10412,6 +10423,31 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "video_window": {
+                      "type": "object",
+                      "properties": {
+                        "shrinks": {
+                          "type": "number"
+                        },
+                        "restores": {
+                          "type": "number"
+                        },
+                        "shrunk_now": {
+                          "type": "boolean"
+                        },
+                        "shrunk_since": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "shrinks",
+                        "restores",
+                        "shrunk_now",
+                        "shrunk_since"
+                      ],
+                      "description": "Video-triggered chat window shrink and restore counts and current state."
+                    },
                     "watchdog": {
                       "type": "object",
                       "properties": {
@@ -10744,6 +10780,7 @@
                     }
                   },
                   "required": [
+                    "video_window",
                     "watchdog",
                     "ledger",
                     "memory",

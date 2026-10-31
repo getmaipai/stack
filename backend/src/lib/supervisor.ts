@@ -1346,7 +1346,9 @@ export async function shrinkChatForVideo(): Promise<boolean> {
   const current = runtimes.get("chat")?.process;
   if (!current || current.kind !== "spawned" || current.retired || current.activeRequests > 0) return false;
   chatWindowCapTokens = CHAT_YIELD_FLOOR_TOKENS;
+  logger.appendLine(JSON.stringify({ event: "chat.window", action: "shrink", cap_tokens: CHAT_YIELD_FLOOR_TOKENS, cause: "video" }));
   await recycleRole("chat", "video-window-shrink");
+  void import("@/lib/warmup").then((module) => module.warmUp("video-window-shrink")).catch(() => {});
   return true;
 }
 
@@ -1357,7 +1359,11 @@ export async function restoreChatWindow(): Promise<boolean> {
   const current = runtimes.get("chat")?.process;
   if (current && current.activeRequests > 0) return false;
   chatWindowCapTokens = null;
-  if (current && !current.retired) await recycleRole("chat", "video-window-restore");
+  if (current && !current.retired) {
+    logger.appendLine(JSON.stringify({ event: "chat.window", action: "restore", cap_tokens: null, cause: "video" }));
+    await recycleRole("chat", "video-window-restore");
+    void import("@/lib/warmup").then((module) => module.warmUp("video-window-restore")).catch(() => {});
+  }
   return true;
 }
 
@@ -2068,7 +2074,7 @@ export function watchProcessMemory(role: RoleId, pid: number, measured?: { model
   return startGovernor({ pid, tier: machineTier, ...(processMemory ? { processMemory } : {}), restart: async () => { await restartRole(role, "governor-runaway"); }, busy: () => {
     const current = runtimes.get(role)?.process;
     return current?.pid === pid && current.activeRequests > 0;
-  }, onPeak: measured ? (_id, bytes) => { recordMeasuredFootprint(measured.modelId, bytes, measured.contextLength); } : undefined, shrinkChat: shrinkChatForVideo, restoreChat: restoreChatWindow, chatWindowShrunk, unload: async (id) => {
+  }, onPeak: measured ? (_id, bytes) => { recordMeasuredFootprint(measured.modelId, bytes, measured.contextLength); } : undefined, shrinkChat: shrinkChatForVideo, restoreChat: restoreChatWindow, chatWindowShrunk, lastInteractiveAt: () => [lastRealRequestAt("chat"), lastRealRequestAt("stt"), lastRealRequestAt("tts")].filter((at): at is number => at !== null).sort((a, b) => b - a)[0] ?? null, unload: async (id) => {
     // Only a running jit process is evicted here; one still starting is
     // left to its own start, so its admission stays counted. The coding
     // engine also declines while it serves a request.

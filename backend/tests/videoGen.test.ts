@@ -123,6 +123,14 @@ test("a clip is made, polled to done, fetched with and without a range, and dele
   expect(existsSync(workDir(body.job))).toBe(false);
 });
 
+test("video quiet-window request fields are accepted and omitted when absent", async () => {
+  videoGen.useDeps(scripted((request, emit) => { emit({ id: request.id, event: "phase", phase: "rendering", percent: 50 }); return okReply(request); }));
+  const response = await post({ prompt: "quiet clip", quiet_seconds: 30, timeout_ms: 5000 });
+  expect(response.status).toBe(200);
+  const invalid = await post({ prompt: "invalid quiet", quiet_seconds: 10, timeout_ms: 20 });
+  expect(invalid.status).toBe(400);
+});
+
 test("neither the prompt nor the picture is kept in a job record, on the feed or in the result store", async () => {
   videoGen.useDeps(scripted());
   recordGeneratedImage(PNG);

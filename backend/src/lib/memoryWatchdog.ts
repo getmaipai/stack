@@ -26,7 +26,7 @@ import { raise, resolve as resolveHealth } from "@/lib/health";
 import { logger } from "@/lib/log";
 import { getSystemSampler, type ProcessRow, type SystemSample, type SystemSampler } from "@/lib/memory/system";
 import { cancelGeneratorsForMemory, runningGeneratorKinds } from "@/lib/jobs";
-import { getGovernorStatus, setAdmissionGate } from "@/lib/governor";
+import { getGovernorStatus, setAdmissionGate, videoWindowStats } from "@/lib/governor";
 import { admissionVerdict, chatPagedOut, latestSample, levelSince, memoryLevel, orphanReaperEnabled, recordAction, recentActions, reserveBytes, setChatPagedOut, setLatestSample, setMemoryLevel, watchdogEnabled, WatchdogRules, type WatchdogLevel } from "@/lib/memoryState";
 import { engineRoot } from "@/lib/store/layout";
 import { dirname } from "node:path";
@@ -182,6 +182,7 @@ export interface WatchdogOptions {
 
 export interface TopConsumer { pid: number; name: string; bytes: number; stack: boolean; }
 export interface MemoryReport {
+  video_window: { shrinks: number; restores: number; shrunk_now: boolean; shrunk_since: string | null };
   watchdog: { enabled: boolean; level: WatchdogLevel; since: string; reserve_bytes: number; generation_paused: boolean; chat_paged_out: boolean };
   ledger: { reserved_bytes: number; warm_bytes: number; burst_bytes: number; budget_bytes: number; working_margin_bytes: number; free_bytes: number; queue_depth: { reserved: number; warm: number; burst: number }; chat_paged_out: boolean };
   memory: { total_bytes: number; available_bytes: number; free_bytes: number; wired_bytes: number; compressor_bytes: number; swap_used_bytes: number; swap_total_bytes: number; swap_growth_bytes_30s: number; pressure_level: number; pressure: string; sampled_at: string } | null;
@@ -411,6 +412,7 @@ export class MemoryWatchdog {
     for (const item of governor.loaded) classBytes[item.class] += item.peakBytes;
     for (const item of governor.queue) queueDepth[item.class]++;
     return {
+      video_window: videoWindowStats(),
       watchdog: { enabled: watchdogEnabled(), level, since: new Date(levelSince()).toISOString(), reserve_bytes: sample ? reserveBytes(sample.totalBytes) : 0, generation_paused: level !== "normal", chat_paged_out: chatPagedOut() },
       ledger: { reserved_bytes: classBytes.reserved, warm_bytes: classBytes.warm, burst_bytes: classBytes.burst, budget_bytes: governor.capBytes, working_margin_bytes: governor.marginBytes, free_bytes: governor.freeMemoryBytes, queue_depth: queueDepth, chat_paged_out: chatPagedOut() },
       memory: sample ? { total_bytes: sample.totalBytes, available_bytes: sample.availableBytes, free_bytes: sample.freeBytes, wired_bytes: sample.wiredBytes, compressor_bytes: sample.compressorBytes, swap_used_bytes: sample.swapUsedBytes, swap_total_bytes: sample.swapTotalBytes, swap_growth_bytes_30s: growth, pressure_level: sample.pressureLevel, pressure: sample.pressure, sampled_at: new Date(sample.at).toISOString() } : null,
