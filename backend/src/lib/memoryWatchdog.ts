@@ -29,7 +29,7 @@ import { cancelGeneratorsForMemory, runningGeneratorKinds } from "@/lib/jobs";
 import { getGovernorStatus, setAdmissionGate, videoWindowStats } from "@/lib/governor";
 import { admissionVerdict, chatPagedOut, latestSample, levelSince, memoryLevel, orphanReaperEnabled, recordAction, recentActions, reserveBytes, setChatPagedOut, setLatestSample, setMemoryLevel, watchdogEnabled, WatchdogRules, type WatchdogLevel } from "@/lib/memoryState";
 import { engineRoot } from "@/lib/store/layout";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { getRoleStatus } from "@/lib/supervisor";
 import { dataDir } from "@/lib/paths";
 import { folderBytes, runSweeps } from "@/lib/sweeps";
@@ -192,7 +192,7 @@ export interface MemoryReport {
   watchdog: { enabled: boolean; level: WatchdogLevel; since: string; reserve_bytes: number; generation_paused: boolean; chat_paged_out: boolean; survivors_stopped: number };
   ledger: { reserved_bytes: number; warm_bytes: number; burst_bytes: number; budget_bytes: number; working_margin_bytes: number; free_bytes: number; queue_depth: { reserved: number; warm: number; burst: number }; chat_paged_out: boolean };
   memory: { total_bytes: number; available_bytes: number; free_bytes: number; wired_bytes: number; compressor_bytes: number; swap_used_bytes: number; swap_total_bytes: number; swap_growth_bytes_30s: number; pressure_level: number; pressure: string; sampled_at: string } | null;
-  stack: { bytes: number; unaccounted_bytes: number; unregistered: { count: number; bytes: number }; processes: Array<{ pid: number; name: string; bytes: number }> };
+  stack: { bytes: number; tmp_bytes: number; unaccounted_bytes: number; unregistered: { count: number; bytes: number }; processes: Array<{ pid: number; name: string; bytes: number }> };
   /** MEM-SPACE-05: what other programs hold beside the Stack, with the big ones named (name and bytes only, never a pid or folder). Empty list when nothing is flagged. */
   dev_load: { others_bytes: number; processes: Array<{ name: string; bytes: number }> };
   top_consumers: TopConsumer[];
@@ -490,7 +490,7 @@ export class MemoryWatchdog {
       watchdog: { enabled: watchdogEnabled(), level, since: new Date(levelSince()).toISOString(), reserve_bytes: sample ? reserveBytes(sample.totalBytes) : 0, generation_paused: level !== "normal", chat_paged_out: chatPagedOut(), survivors_stopped: this.survivorsStopped },
       ledger: { reserved_bytes: classBytes.reserved, warm_bytes: classBytes.warm, burst_bytes: classBytes.burst, budget_bytes: governor.capBytes, working_margin_bytes: governor.marginBytes, free_bytes: governor.freeMemoryBytes, queue_depth: queueDepth, chat_paged_out: chatPagedOut() },
       memory: sample ? { total_bytes: sample.totalBytes, available_bytes: sample.availableBytes, free_bytes: sample.freeBytes, wired_bytes: sample.wiredBytes, compressor_bytes: sample.compressorBytes, swap_used_bytes: sample.swapUsedBytes, swap_total_bytes: sample.swapTotalBytes, swap_growth_bytes_30s: growth, pressure_level: sample.pressureLevel, pressure: sample.pressure, sampled_at: new Date(sample.at).toISOString() } : null,
-      stack: { bytes: own.reduce((total, row) => total + row.rssBytes, 0), unaccounted_bytes: Math.max(0, own.reduce((total, row) => total + row.rssBytes, 0) - governor.loaded.reduce((total, item) => total + item.peakBytes, 0)), unregistered: (() => { const registered = ownedPids(); const old = own.filter((row) => row.pid !== this.ownPid && row.ageSeconds > 60 && !registered.has(row.pid)); return { count: old.length, bytes: old.reduce((total, row) => total + row.rssBytes, 0) }; })(), processes: own.sort((a, b) => b.rssBytes - a.rssBytes).slice(0, 10).map((row) => ({ pid: row.pid, name: row.name, bytes: row.rssBytes })) },
+      stack: { bytes: own.reduce((total, row) => total + row.rssBytes, 0), tmp_bytes: folderBytes(join(dataDir, "tmp")), unaccounted_bytes: Math.max(0, own.reduce((total, row) => total + row.rssBytes, 0) - governor.loaded.reduce((total, item) => total + item.peakBytes, 0)), unregistered: (() => { const registered = ownedPids(); const old = own.filter((row) => row.pid !== this.ownPid && row.ageSeconds > 60 && !registered.has(row.pid)); return { count: old.length, bytes: old.reduce((total, row) => total + row.rssBytes, 0) }; })(), processes: own.sort((a, b) => b.rssBytes - a.rssBytes).slice(0, 10).map((row) => ({ pid: row.pid, name: row.name, bytes: row.rssBytes })) },
       dev_load: this.devLoad,
       top_consumers: this.consumers(),
       non_stack_bytes: this.rows.filter((row) => !tree.has(row.pid)).reduce((total, row) => total + row.rssBytes, 0),

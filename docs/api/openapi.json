@@ -10601,6 +10601,9 @@
                         "bytes": {
                           "type": "number"
                         },
+                        "tmp_bytes": {
+                          "type": "number"
+                        },
                         "unaccounted_bytes": {
                           "type": "number",
                           "description": "Stack process memory above loaded model peaks."
@@ -10646,6 +10649,7 @@
                       },
                       "required": [
                         "bytes",
+                        "tmp_bytes",
                         "unaccounted_bytes",
                         "unregistered",
                         "processes"

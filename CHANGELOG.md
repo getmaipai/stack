@@ -10,6 +10,8 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Added
 
+- A regression test and a hand-run bench prove each job kind gives back its processes, ledger entry, temp files and memory (RESOURCE-FIX-10e).
+
 - Coding runs on the vendor Splash 1.4.1 release (the same archive chat uses); the Ornith fork build `1.3.2-ornith.1` is retired. A real run on the Studio served the pinned Ornith-122B model and answered a tool call.
 - Parakeet TDT 0.6B v2 int8 as the speech-to-text model on the 64 GB and 128 GB tiers (STT-PARAKEET-01 and -03): about half to a third of the word errors of Moonshine tiny, at about 1.8 GB resident. The 16 GB and 32 GB tiers keep Moonshine tiny, now bound explicitly.
 - Fast Look (LOOK-01 step 3a): `POST /v1/images/looks` runs pinned YOLOX-nano in memory, returns household object tracks and scene tags, and keeps no image or labels on disk or in logs. Detailed Look remains unavailable.

@@ -2865,3 +2865,6 @@ on-demand item unloaded by `keep_warm_minutes` (default 15, `unloadIdleRoles` in
 idle release is TIER-HOME-05's lease (Splash's own `--idle-release off`), which is why its footprint stayed up while idle; that stays with the
 tier work. **Fix:** `splashArgs` always passes `--max-cache-disk 0`; the `splash_cache_gb` settings are removed. `scripts/bench/splash-disk-writes.sh`
 reports the bytes under the Splash tmp folder over a window (bench lane, not the gate).
+# Resource recapture
+
+Run `cd backend && MAIPAI_TEST_NO_PORTS=1 bun test tests/resourceRecapture.test.ts` for the scripted worker regression check. Run `bun run scripts/resource-recapture-bench.ts --stack http://127.0.0.1:8770 --kind all` by hand against a live Stack. The bench allows no process growth, 512 MB of stack memory growth and 16 MB of temporary file growth after the worker idle TTL plus 10 seconds. The test covers picture generation, video generation and music generation with scripted workers; picture editing, stems and transcode are outside this check.
