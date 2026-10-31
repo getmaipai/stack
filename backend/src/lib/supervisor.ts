@@ -2005,6 +2005,10 @@ export function lastRealRequestAt(requested: RoleId): number | null {
   return runtime(processRoleFor(requested)).lastRealRequestAt;
 }
 
+export function lastInteractiveAt(): number | null {
+  return [lastRealRequestAt("chat"), lastRealRequestAt("stt"), lastRealRequestAt("tts")].filter((at): at is number => at !== null).sort((a, b) => b - a)[0] ?? null;
+}
+
 /** The identity a role's process is expected to report, and whether it
  * does: a spawned process must name the selected model's file; a url
  * binding with an `expected_version` must report a build containing it.
@@ -2080,7 +2084,7 @@ export function watchProcessMemory(role: RoleId, pid: number, measured?: { model
   return startGovernor({ pid, tier: machineTier, ...(processMemory ? { processMemory } : {}), restart: async () => { await restartRole(role, "governor-runaway"); }, busy: () => {
     const current = runtimes.get(role)?.process;
     return current?.pid === pid && current.activeRequests > 0;
-  }, onPeak: measured ? (_id, bytes) => { recordMeasuredFootprint(measured.modelId, bytes, measured.contextLength); } : undefined, shrinkChat: shrinkChatForVideo, restoreChat: restoreChatWindow, chatWindowShrunk, lastInteractiveAt: () => [lastRealRequestAt("chat"), lastRealRequestAt("stt"), lastRealRequestAt("tts")].filter((at): at is number => at !== null).sort((a, b) => b - a)[0] ?? null, unload: async (id) => {
+  }, onPeak: measured ? (_id, bytes) => { recordMeasuredFootprint(measured.modelId, bytes, measured.contextLength); } : undefined, shrinkChat: shrinkChatForVideo, restoreChat: restoreChatWindow, chatWindowShrunk, lastInteractiveAt, unload: async (id) => {
     // Only a running jit process is evicted here; one still starting is
     // left to its own start, so its admission stays counted. The coding
     // engine also declines while it serves a request.

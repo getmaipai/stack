@@ -116,6 +116,20 @@ test("Q8 does not use the flex band at warn or critical pressure", async () => {
   }
 });
 
+test("reserved requests are admitted at WARN and refused at CRITICAL", async () => {
+  for (const pressure of ["warn", "critical"] as const) {
+    __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 100 * GB, tier: "p128" });
+    const stop = startGovernor({ pid: 1, pollMs: 1, memoryReader: scriptedMemoryReader([{ totalBytes: 128 * GB, freeBytes: 100 * GB, availablePercent: 80, pressure, degraded: false }]) });
+    stops.push(stop);
+    await Bun.sleep(5);
+    const result = await admit({ id: `reserved-${pressure}`, kind: "resident", class: "reserved", requestedBytes: GB });
+    expect("queued" in result).toBe(pressure === "critical");
+    stop();
+    await Bun.sleep(5);
+    __resetGovernorForTests();
+  }
+});
+
 test("Q8 never lets a picture flex admission leave less than 16 GiB free", async () => {
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 35 * GB, tier: "p128" });
   expect(await admit({ id: "picture-floor", role: "image", kind: "generator", class: "warm", requestedBytes: 20 * GB })).toMatchObject({ queued: true });
@@ -445,7 +459,7 @@ test("kernel warn pressure pauses admission and reports the available percent", 
   stops.push(stop);
   await Bun.sleep(5);
   expect(getGovernorStatus()).toMatchObject({ pressure: "warn", availablePercent: 8 });
-  expect(await admit({ id: "pressure-blocked", kind: "resident", requestedBytes: GB })).toMatchObject({ queued: true, position: 1 });
+  expect(await admit({ id: "pressure-blocked", kind: "resident", class: "warm", requestedBytes: GB })).toMatchObject({ queued: true, position: 1 });
 });
 
 test("kernel critical pressure aborts an in-flight generator", async () => {
@@ -512,7 +526,7 @@ test("a queued request is admitted when the memory reading clears, without any r
   stops.push(stop);
   await Bun.sleep(10);
   expect(getGovernorStatus().pressure).toBe("warn");
-  const queued = await admit({ id: "drain-me", kind: "resident", requestedBytes: 2 * GB });
+  const queued = await admit({ id: "drain-me", kind: "resident", class: "warm", requestedBytes: 2 * GB });
   expect(queued).toMatchObject({ queued: true, position: 1 });
   const admitted = await (queued as { admitted: Promise<unknown> }).admitted;
   expect(admitted).toMatchObject({ id: "drain-me", kind: "resident" });
@@ -558,7 +572,7 @@ test("a poll with no memory change does not touch the queue", async () => {
   stops.push(stop);
   await Bun.sleep(10);
   expect(getGovernorStatus().pressure).toBe("warn");
-  const queued = await admit({ id: "stays-queued", kind: "resident", requestedBytes: 2 * GB });
+  const queued = await admit({ id: "stays-queued", kind: "resident", class: "warm", requestedBytes: 2 * GB });
   expect(queued).toMatchObject({ queued: true, position: 1 });
   await Bun.sleep(200);
   expect(getGovernorStatus().queue).toMatchObject([{ id: "stays-queued", position: 1 }]);
@@ -570,9 +584,9 @@ test("withdraw settles the queued promise as refused and promotes the next reque
   ]) });
   stops.push(stop);
   await Bun.sleep(5);
-  const first = await admit({ id: "withdrawn-first", kind: "resident", requestedBytes: 2 * GB });
+  const first = await admit({ id: "withdrawn-first", kind: "resident", class: "warm", requestedBytes: 2 * GB });
   expect(first).toMatchObject({ queued: true, position: 1 });
-  const second = await admit({ id: "behind", kind: "resident", requestedBytes: 2 * GB });
+  const second = await admit({ id: "behind", kind: "resident", class: "warm", requestedBytes: 2 * GB });
   expect(second).toMatchObject({ queued: true, position: 2 });
   withdraw("withdrawn-first");
   const settled = await (first as { admitted: Promise<unknown> }).admitted;
@@ -586,9 +600,9 @@ test("admission-refused-repeatedly still raises after three refusals of the same
   ]) });
   stops.push(stop);
   await Bun.sleep(5);
-  await admit({ id: "refuse-me", kind: "resident", requestedBytes: 2 * GB });
-  await admit({ id: "refuse-me", kind: "resident", requestedBytes: 2 * GB });
-  const third = await admit({ id: "refuse-me", kind: "resident", requestedBytes: 2 * GB });
+  await admit({ id: "refuse-me", kind: "resident", class: "warm", requestedBytes: 2 * GB });
+  await admit({ id: "refuse-me", kind: "resident", class: "warm", requestedBytes: 2 * GB });
+  const third = await admit({ id: "refuse-me", kind: "resident", class: "warm", requestedBytes: 2 * GB });
   expect(third).toMatchObject({ queued: true, position: 1 });
   expect(listHealth().find((entry) => entry.code === "admission-refused-repeatedly")).toMatchObject({ severity: "warning", title: "Work is waiting for memory" });
 });
@@ -752,9 +766,10 @@ test("the same reclaimable memory never admits the chat into kernel warn or crit
     stops.push(stop);
     await Bun.sleep(5);
     expect(getGovernorStatus()).toMatchObject({ pressure, freeMemoryBytes: 16_449_994_752 });
-    expect(await admit(honestChat)).toMatchObject({ queued: true, position: 1 });
-    expect(getGovernorDecisions().find((decision) => decision.model === "chat")?.reason).toBe(`Memory pressure is ${pressure}.`);
-    expect(getGovernorStatus().loaded).toHaveLength(0);
+    const result = await admit(honestChat);
+    expect("queued" in result).toBe(pressure === "critical");
+    expect(getGovernorDecisions().find((decision) => decision.model === "chat")?.reason).toBe(pressure === "critical" ? "Memory pressure is critical." : "The current memory budget has room.");
+    expect(getGovernorStatus().loaded.length).toBe(pressure === "critical" ? 0 : 1);
     stop();
     await Bun.sleep(5);
   }

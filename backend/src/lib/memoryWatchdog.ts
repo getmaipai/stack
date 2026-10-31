@@ -37,6 +37,7 @@ import { descendantsOf as childPids, startTimeOf, commandLineOf } from "@/lib/pr
 import { ownedPids, finishedSurvivors } from "@/lib/ownedProcesses";
 
 const GB = 1_073_741_824;
+const VOICE_KEEP_MS = 300_000;
 function gb(bytes: number): string { return (bytes / GB).toFixed(1); }
 
 // ---- the ladder (pure) ----
@@ -154,9 +155,9 @@ async function defaultUnloadIdleWorkers(): Promise<string[]> {
   if (musicGen.stopIfIdle()) stopped.push("music");
   if (imageTools.stopIfIdle()) stopped.push("image tools");
   if (lookService.stopIfIdle()) stopped.push("look");
-  const last = supervisor.lastRealRequestAt("tts");
+  const last = supervisor.lastInteractiveAt();
   const state = supervisor.getRoleStatus("tts").state;
-  if ((state === "ready" || state === "loaded") && (last === null || Date.now() - last > 60_000) && await supervisor.unloadRole("tts", "Unloaded: this computer is low on memory.", "memory-watchdog-evict").catch(() => false)) stopped.push("voice engine");
+  if ((state === "ready" || state === "loaded") && (last === null || Date.now() - last > VOICE_KEEP_MS) && await supervisor.unloadRole("tts", "Unloaded: this computer is low on memory.", "memory-watchdog-evict").catch(() => false)) stopped.push("voice engine");
   return stopped;
 }
 
@@ -164,8 +165,8 @@ export const defaultActions: WatchdogActions = {
   unloadIdleWorkers: defaultUnloadIdleWorkers,
   cancelQueued: (reason) => cancelGeneratorsForMemory("queued", reason),
   cancelRunning: (reason) => cancelGeneratorsForMemory("running", reason),
-  evictRole: async (role) => (await import("@/lib/supervisor")).unloadRole(role, "Unloaded: this computer is low on memory.", "memory-watchdog-evict").catch(() => false),
-  restartChat: async () => { await (await import("@/lib/supervisor")).restartRole("chat", "memory-watchdog"); },
+  evictRole: async (role) => { const supervisor = await import("@/lib/supervisor"); if (supervisor.processRoleFor(role) === "chat") return false; return supervisor.unloadRole(role, "Unloaded: this computer is low on memory.", "memory-watchdog-evict").catch(() => false); },
+  restartChat: async () => { const supervisor = await import("@/lib/supervisor"); await supervisor.restartRole("chat", "memory-watchdog"); void import("@/lib/supervisor").then(({ getProcess }) => getProcess("chat")).catch(() => {}); },
   notify: (data) => { emit({ id: "pressure", data }); },
 };
 
@@ -226,6 +227,11 @@ export class MemoryWatchdog {
   private itemRaised = false;
   private chatLoaded: () => boolean;
   private previousSwapouts: number | null = null;
+  private consecutiveSwapoutRises = 0;
+  private unloadInFlight = false;
+  private evictInFlight = false;
+  private judgeEvictionSettled = false;
+  private judgeEvicted = false;
   private diskTempRaised = false;
   private measureFolder: (dir: string) => number;
   private sweepDisk: (reason: string) => unknown;
@@ -273,7 +279,8 @@ export class MemoryWatchdog {
       const swapouts = swapoutsOf(sample);
       const swapoutsRose = swapouts !== null && this.previousSwapouts !== null && swapouts > this.previousSwapouts;
       if (swapouts !== null) this.previousSwapouts = swapouts;
-      setChatPagedOut(swapoutsRose && this.chatLoaded());
+      this.consecutiveSwapoutRises = swapoutsRose ? this.consecutiveSwapoutRises + 1 : 0;
+      setChatPagedOut(this.consecutiveSwapoutRises >= 2 && this.chatLoaded());
       this.ring.push(sample);
       if (this.ring.length > WatchdogRules.ringSize) this.ring.shift();
       setLatestSample(sample);
@@ -299,6 +306,7 @@ export class MemoryWatchdog {
         setMemoryLevel(this.ladder.level, this.now());
         this.record(this.ladder.level, "level", `${previous} to ${this.ladder.level}: ${gb(sample.availableBytes)} GB available, ${gb(reserve)} GB reserve, kernel level ${sample.pressureLevel}, swap ${gb(sample.swapUsedBytes)} GB`);
         this.criticalSince = this.ladder.level === "critical" ? this.now() : null;
+        if (this.ladder.level === "critical") { this.judgeEvicted = false; this.judgeEvictionSettled = false; }
       }
       if (this.ladder.level === "normal") this.leave();
       else await this.act(sample);
@@ -315,6 +323,8 @@ export class MemoryWatchdog {
     if (this.itemRaised) { resolveHealth("memory-low"); resolveHealth("memory-critical"); this.itemRaised = false; }
     if (this.ladder.level !== "normal") { this.ladder = newLadder(); setMemoryLevel("normal", this.now()); }
     this.criticalSince = null;
+    this.judgeEvicted = false;
+    this.judgeEvictionSettled = false;
     setChatPagedOut(false);
   }
 
@@ -348,27 +358,54 @@ export class MemoryWatchdog {
     if (now - this.lastActionAt < 10_000 && level !== "critical") return;
     const reason = "Paused: this computer is low on memory. Try again once it recovers.";
     if (level === "warn") {
-      const stopped = await this.actions.unloadIdleWorkers();
-      if (stopped.length > 0) this.record(level, "unload-idle", stopped.join(", "));
-      this.lastActionAt = now;
+      this.startUnload(level, now);
+      if (!this.evictInFlight) this.startEvict(level, now, sample);
       return;
     }
     // CRITICAL: one step per round, 10 s apart, so each step's effect shows before the next.
     const queued = this.actions.cancelQueued(reason);
     if (queued.length > 0) this.record(level, "cancel-queued", `${queued.length} queued job(s) cancelled`);
-    const stopped = await this.actions.unloadIdleWorkers();
-    if (stopped.length > 0) this.record(level, "unload-idle", stopped.join(", "));
-    if (now - this.lastActionAt < 10_000) return;
+    this.startUnload(level, now);
+    if (now - this.lastActionAt < 10_000 && !this.unloadInFlight) return;
     const kinds = runningGeneratorKinds();
     const cancelled = this.actions.cancelRunning("Stopped: this computer ran out of memory. Close big apps and try again.");
     if (cancelled.length > 0) { this.lastActionAt = now; this.record(level, "cancel-running", `${kinds.join(", ") || "generative job"} cancelled`); this.notifyOnce(sample); return; }
-    if (await this.actions.evictRole("judge")) { this.lastActionAt = now; this.record(level, "evict-judge", "the judge role was unloaded"); this.notifyOnce(sample); return; }
-    this.notifyOnce(sample);
-    if (this.criticalSince !== null && now - this.criticalSince >= WatchdogRules.chatRestartAfterMs && now - this.lastChatRestartAt >= WatchdogRules.chatRestartCooldownMs) {
-      this.lastChatRestartAt = now; this.lastActionAt = now;
-      this.record(level, "restart-chat", `critical for ${Math.round((now - this.criticalSince) / 1000)} s; the supervisor restarts the chat role`);
-      await this.actions.restartChat().catch((error: unknown) => this.record(level, "restart-chat-failed", error instanceof Error ? error.message : String(error)));
+    if (this.evictInFlight) { this.notifyOnce(sample); return; }
+    if (!this.judgeEvicted && !this.judgeEvictionSettled) {
+      this.startEvict(level, now, sample);
+      this.notifyOnce(sample);
+      return;
     }
+    this.judgeEvictionSettled = false;
+    const criticalSince = this.criticalSince;
+    if (criticalSince !== null && now - criticalSince >= WatchdogRules.chatRestartAfterMs && now - this.lastChatRestartAt >= WatchdogRules.chatRestartCooldownMs) {
+      this.lastChatRestartAt = now; this.lastActionAt = now;
+      const report = this.report();
+      if (report.stack.bytes <= report.non_stack_bytes) { this.record(level, "chat-restart-skipped", "another program holds most of the memory"); return; }
+      this.record(level, "restart-chat", `critical for ${Math.round((now - criticalSince) / 1000)} s; the supervisor restarts the chat role`);
+      void this.actions.restartChat().catch((error: unknown) => this.record(level, "restart-chat-failed", error instanceof Error ? error.message : String(error)));
+    }
+  }
+
+  private startUnload(level: WatchdogLevel, now: number): void {
+    if (this.unloadInFlight) return;
+    this.unloadInFlight = true;
+    this.lastActionAt = now;
+    void this.actions.unloadIdleWorkers().then((stopped) => { if (stopped.length > 0) this.record(level, "unload-idle", stopped.join(", ")); }).catch((error: unknown) => this.record(level, "unload-idle-failed", error instanceof Error ? error.message : String(error))).finally(() => { this.unloadInFlight = false; });
+  }
+
+  private startEvict(level: WatchdogLevel, now: number, sample: SystemSample): void {
+    if (level === "warn") {
+      this.evictInFlight = true;
+      void import("@/lib/supervisor").then(({ lastInteractiveAt }) => {
+        const last = lastInteractiveAt();
+        if (last !== null && now - last < VOICE_KEEP_MS) return false;
+        return this.actions.evictRole("judge");
+      }).then((evicted) => { if (evicted) { this.lastActionAt = now; this.record(level, "evict-judge", "the judge role was unloaded"); } }).catch((error: unknown) => this.record(level, "evict-judge-failed", error instanceof Error ? error.message : String(error))).finally(() => { this.judgeEvictionSettled = true; this.evictInFlight = false; });
+      return;
+    }
+    this.evictInFlight = true;
+    void this.actions.evictRole("judge").then((evicted) => { if (evicted) { this.judgeEvicted = true; this.lastActionAt = now; this.record(level, "evict-judge", "the judge role was unloaded"); this.notifyOnce(sample); } }).catch((error: unknown) => this.record(level, "evict-judge-failed", error instanceof Error ? error.message : String(error))).finally(() => { this.judgeEvictionSettled = true; this.evictInFlight = false; });
   }
 
   private notifyOnce(sample: SystemSample): void {

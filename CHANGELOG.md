@@ -22,6 +22,8 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Fixed
 
+- The memory watchdog needs two samples for chat paged-out, keeps voice and the judge five minutes after a conversation, restarts chat at CRITICAL only when the Stack holds most of the memory, never awaits an unload, never evicts chat as 'the judge', and starts chat again after its restart; reserved roles are admitted under WARN (RESOURCE-FIX-06).
+
 - The memory watchdog stops a helper process the Stack itself started when it outlives its finished job, and reports memory its ledger cannot account for, every tick; nothing is ever matched by name (RESOURCE-FIX-10c).
 - Temporary files, old results, abandoned partial downloads and voice-clone clips are swept every 10 minutes and when the temp folder passes 2 GB, not only at start (RESOURCE-FIX-10b).
 - A finished picture, video, music or stems job leaves no child process behind, and an idle worker's memory stays on the ledger until it exits (RESOURCE-FIX-10a).

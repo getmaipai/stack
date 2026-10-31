@@ -9,7 +9,7 @@ import { __resetHealthForTests, list as listHealth } from "@/lib/health";
 import { __resetJobsForTests, cancelGeneratorsForMemory, getJob, registerJobRunner, submitJob, waitForJob, __setAdmissionWaitForTests } from "@/lib/jobs";
 import { __setSystemSamplerForTests, parseEtime, parseProcessTable, type ProcessRow, type SystemSample, type SystemSampler } from "@/lib/memory/system";
 import { __resetMemoryStateForTests, admissionVerdict, latestSample, memoryLevel, PAUSED_LOW_MEMORY, reserveBytes, setLatestSample, setMemoryLevel } from "@/lib/memoryState";
-import { descendantsOf, findOrphans, MemoryWatchdog, newLadder, rawLevel, stepLadder, type WatchdogActions } from "@/lib/memoryWatchdog";
+import { defaultActions, descendantsOf, findOrphans, MemoryWatchdog, newLadder, rawLevel, stepLadder, type WatchdogActions } from "@/lib/memoryWatchdog";
 import { __resetLifecycleForTests, beginStopping } from "@/lib/lifecycle";
 import { __setProcessTreeReadersForTests } from "@/lib/processTree";
 import { registerOwned } from "@/lib/ownedProcesses";
@@ -221,8 +221,118 @@ test("WARN holds queued jobs and unloads idle workers; it never cancels queued o
   expect(listHealth().find((item) => item.code === "memory-low")?.text).toContain("Picture and video making is paused");
 });
 
+test("a pending unload does not block sampling or start again", async () => {
+  const sampler = fakeSampler();
+  let unloads = 0;
+  const actions = fakeActions();
+  actions.unloadIdleWorkers = () => { unloads++; return new Promise<string[]>(() => {}); };
+  const { dog } = watchdogWith(sampler, actions);
+  sampler.next = sample({ pressureLevel: 2, pressure: "warn" });
+  await dog.tick(); await dog.tick();
+  const ticks = dog.report().history.length;
+  await dog.tick();
+  expect(dog.report().history.length).toBe(ticks + 1);
+  expect(unloads).toBe(1);
+});
+
+test("the watchdog admission gate leaves chat unguarded", () => {
+  setLatestSample(sample({ availableBytes: 40 * GB }));
+  setMemoryLevel("warn");
+  expect(admissionVerdict({ id: "chat", kind: "resident" }, GB).ok).toBe(true);
+  setMemoryLevel("critical");
+  expect(admissionVerdict({ id: "chat", kind: "resident" }, GB).ok).toBe(true);
+});
+
+test("judge eviction on p16 does not unload its shared chat process", async () => {
+  const supervisor = await import("@/lib/supervisor");
+  const starts: string[] = [];
+  supervisor.setMachineTier("p16");
+  supervisor.setSupervisorFactoryForTests(async (role) => { starts.push(role); return supervisor.scriptedProcess(role); });
+  try {
+    expect(supervisor.processRoleFor("judge")).toBe("chat");
+    expect(await defaultActions.evictRole("judge")).toBe(false);
+    expect(starts).toEqual([]);
+  } finally { supervisor.setMachineTier(null); supervisor.setSupervisorFactoryForTests(null); supervisor.resetSupervisorForTests(); }
+});
+
+test("watchdog restart asks the supervisor to start chat after restart", async () => {
+  const supervisor = await import("@/lib/supervisor");
+  const starts: string[] = [];
+  supervisor.setSupervisorFactoryForTests(async (role) => { starts.push(role); return supervisor.scriptedProcess(role); });
+  try {
+    await defaultActions.restartChat();
+    for (let attempt = 0; attempt < 20 && !starts.includes("chat"); attempt++) await Bun.sleep(1);
+    expect(starts).toContain("chat");
+  } finally { supervisor.setSupervisorFactoryForTests(null); supervisor.resetSupervisorForTests(); }
+});
+
+test("an idle voice engine is kept five minutes after a conversation at WARN", async () => {
+  const supervisor = await import("@/lib/supervisor");
+  const originalNow = Date.now;
+  let clock = originalNow();
+  Date.now = () => clock;
+  const starts: string[] = [];
+  supervisor.setSupervisorFactoryForTests(async (role) => { starts.push(role); return supervisor.scriptedProcess(role); });
+  try {
+    await supervisor.getProcess("tts");
+    await supervisor.requestRole("chat", "/v1/chat/completions", { model: "chat", messages: [{ role: "user", content: "Hello" }] });
+    clock += 4 * 60_000;
+    expect(await defaultActions.unloadIdleWorkers()).not.toContain("voice engine");
+    expect(supervisor.getRoleStatus("tts").state).toBe("ready");
+
+    supervisor.resetSupervisorForTests();
+    starts.length = 0;
+    clock += 2 * 60_000;
+    await supervisor.getProcess("tts");
+    await supervisor.requestRole("chat", "/v1/chat/completions", { model: "chat", messages: [{ role: "user", content: "Hello again" }] });
+    // Advance the watchdog's view of time while leaving the conversation timestamp six minutes old.
+    clock += 6 * 60_000;
+    expect(await defaultActions.unloadIdleWorkers()).toContain("voice engine");
+    expect(supervisor.getRoleStatus("tts").state).toBe("installed");
+  } finally { Date.now = originalNow; supervisor.setSupervisorFactoryForTests(null); supervisor.resetSupervisorForTests(); }
+});
+
+test("the judge is kept at WARN for five minutes after a chat turn and evicted at CRITICAL regardless", async () => {
+  const supervisor = await import("@/lib/supervisor");
+  const originalNow = Date.now;
+  let clock = originalNow();
+  Date.now = () => clock;
+  supervisor.setSupervisorFactoryForTests(async (role) => supervisor.scriptedProcess(role));
+  try {
+    await supervisor.requestRole("chat", "/v1/chat/completions", { model: "chat", messages: [{ role: "user", content: "Hello" }] });
+    clock += 2 * 60_000;
+    const warnActions = fakeActions();
+    const warnSampler = fakeSampler();
+    const warnDog = new MemoryWatchdog({ sampler: warnSampler, actions: warnActions, now: () => clock, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null });
+    warnSampler.next = sample({ pressureLevel: 2, pressure: "warn", availableBytes: 12 * GB }, clock);
+    await warnDog.tick(); await warnDog.tick(); await Bun.sleep(0);
+    expect(warnActions.log).not.toContain("evict-judge");
+
+    const criticalActions = fakeActions();
+    const criticalSampler = fakeSampler();
+    const criticalDog = new MemoryWatchdog({ sampler: criticalSampler, actions: criticalActions, now: () => clock, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null });
+    criticalSampler.next = sample({ pressureLevel: 4, pressure: "critical", availableBytes: GB }, clock);
+    await criticalDog.tick(); await criticalDog.tick(); await Bun.sleep(0);
+    expect(criticalActions.log).toContain("evict-judge");
+  } finally { Date.now = originalNow; supervisor.setSupervisorFactoryForTests(null); supervisor.resetSupervisorForTests(); }
+});
+
+test("CRITICAL skips chat restart when other programs hold more memory", async () => {
+  const sampler = fakeSampler([row({ pid: 500, ppid: 1, rssBytes: GB }), row({ pid: 501, ppid: 500, rssBytes: GB }), row({ pid: 777, ppid: 3, rssBytes: 20 * GB })]);
+  const actions = fakeActions();
+  let clock = 1_000_000;
+  const dog = new MemoryWatchdog({ sampler, actions, now: () => clock, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null });
+  sampler.next = sample({ pressureLevel: 4, pressure: "critical", availableBytes: GB }, clock);
+  await dog.tick(); await dog.tick(); await Bun.sleep(0);
+  clock += 70_000;
+  await dog.tick(); await Bun.sleep(0);
+  await dog.tick();
+  expect(actions.log).not.toContain("restart-chat");
+  expect((await import("@/lib/memoryState")).recentActions().some((action) => action.action === "chat-restart-skipped" && action.detail === "another program holds most of the memory")).toBe(true);
+});
+
 test("CRITICAL cancels the running job first, then the judge, and restarts chat only after 60 s", async () => {
-  const sampler = fakeSampler([row({ pid: 900, ppid: 400, rssBytes: 20 * GB, name: "llama-server" })]);
+  const sampler = fakeSampler([row({ pid: 500, ppid: 1, rssBytes: 20 * GB, name: "maipai-stack" }), row({ pid: 900, ppid: 500, rssBytes: 20 * GB, name: "llama-server" }), row({ pid: 777, ppid: 3, rssBytes: 2 * GB })]);
   const actions = fakeActions();
   actions.running.push("job-video");
   const { dog, advance } = watchdogWith(sampler, actions);
@@ -234,14 +344,14 @@ test("CRITICAL cancels the running job first, then the judge, and restarts chat 
   expect(actions.notified).toHaveLength(1);
   expect(actions.notified[0]?.pressure).toBe("critical");
   advance(11_000);
-  await dog.tick();
+  await dog.tick(); await Bun.sleep(0);
   expect(actions.log).toContain("evict-judge");
   expect(actions.log).not.toContain("restart-chat");
   advance(11_000);
   await dog.tick();
   expect(actions.log).not.toContain("restart-chat");
   advance(60_000);
-  await dog.tick();
+  await dog.tick(); await dog.tick();
   expect(actions.log.filter((entry) => entry === "restart-chat")).toHaveLength(1);
   // Cooldown: no second restart right away; and only one notification inside the rate limit.
   advance(11_000);
@@ -250,7 +360,7 @@ test("CRITICAL cancels the running job first, then the judge, and restarts chat 
   expect(actions.notified).toHaveLength(1);
 });
 
-test("rising swapouts while chat is loaded enters WARN at once and reports paged out", async () => {
+test("chat pageout needs two consecutive rising swapout samples", async () => {
   const sampler = fakeSampler();
   const actions = fakeActions();
   const dog = new MemoryWatchdog({ sampler, actions, chatLoaded: () => true, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null });
@@ -258,8 +368,20 @@ test("rising swapouts while chat is loaded enters WARN at once and reports paged
   await dog.tick();
   sampler.next = sample({ swapouts: 11, availableBytes: 22 * GB });
   await dog.tick();
+  expect(memoryLevel()).toBe("normal");
+  expect(dog.report().watchdog.chat_paged_out).toBe(false);
+  sampler.next = sample({ swapouts: 12, availableBytes: 22 * GB });
+  await dog.tick();
   expect(memoryLevel()).toBe("warn");
   expect(dog.report().watchdog.chat_paged_out).toBe(true);
+});
+
+test("a flat swapout sample resets consecutive chat pageout rises", async () => {
+  const sampler = fakeSampler();
+  const dog = new MemoryWatchdog({ sampler, chatLoaded: () => true, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null });
+  for (const swapouts of [10, 11, 11, 12]) { sampler.next = sample({ swapouts, availableBytes: 22 * GB }); await dog.tick(); }
+  expect(memoryLevel()).toBe("normal");
+  expect(dog.report().watchdog.chat_paged_out).toBe(false);
 });
 
 test("a paged-out chat clears once swapouts stop rising", async () => {
@@ -268,6 +390,8 @@ test("a paged-out chat clears once swapouts stop rising", async () => {
   sampler.next = sample({ swapouts: 10, availableBytes: 22 * GB });
   await dog.tick();
   sampler.next = sample({ swapouts: 11, availableBytes: 22 * GB });
+  await dog.tick();
+  sampler.next = sample({ swapouts: 12, availableBytes: 22 * GB });
   await dog.tick();
   expect(memoryLevel()).toBe("warn");
   for (let i = 0; i < 6; i++) await dog.tick();

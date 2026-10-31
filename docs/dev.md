@@ -2080,6 +2080,16 @@ a machine with more memory. A smaller chat context is not one.
 
 ## The chat model reads pictures (VISION-02b, 2026-10-06)
 
+The memory watchdog needs two rising swapout samples before chat pageout
+enters WARN; one flat sample clears it. Voice and the judge stay loaded
+for five minutes after chat, speech-to-text or speech activity. WARN
+evicts the judge only outside that window. CRITICAL restarts chat after
+60 seconds only when the Stack holds more process memory than other
+programs. Unloads run without blocking sampling. A judge alias never
+unloads chat, and a watchdog restart starts chat again in the background.
+Reserved roles can start under WARN when they fit; CRITICAL still refuses
+them.
+
 The owner chose one resident process that reads pictures over a second
 vision model (Home's VISION-02). The Stack ships Qwen's own GGUF of
 Qwen3-VL-8B-Instruct as a selectable chat model

@@ -445,7 +445,7 @@ function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
   if (memoryReadingDegraded) return false;
   if (request.tier && peakBytes > tierCapBytes(request.tier, tierRoomBytes())) return false;
   if (!gateVerdict(request, peakBytes).ok) return false;
-  if (pressure !== "normal") return false;
+  if (pressure === "critical" || (pressure === "warn" && requestClass(request) !== "reserved")) return false;
   const existing = loaded.get(request.id);
   const generatorBusy = request.kind === "generator" && [...loaded.values()].some((item) => item.kind === "generator" && item !== existing);
   if (generatorBusy) return false;
