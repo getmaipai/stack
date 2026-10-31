@@ -371,6 +371,9 @@ until the first measured load, a model's peak is estimated as file size
 times the engine's multiplier (1.3 for llama-server, 1.4 for the MLX
 servers) and labelled estimated.
 
+Poll bodies from every process's governor loop run one at a time. Merging
+them into one loop waits for an id-aware busy check.
+
 Admission reads available memory now (free memory plus what the kernel
 gives back without compressing a working set; one definition, below)
 and the requested peak. A load starts only when available memory minus

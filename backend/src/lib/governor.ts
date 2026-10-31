@@ -5,6 +5,8 @@ import { ROLES } from "@/roles";
 import { tierCapBytes } from "@/lib/tiers";
 
 const GB = 1_073_741_824;
+let pollChain: Promise<void> = Promise.resolve();
+let pollsInFlight = 0;
 
 export const GovernorRules = {
   pollMs: 5_000,
@@ -731,7 +733,16 @@ export function startGovernor(options: StartGovernorOptions): () => void {
   void poll();
   schedule();
 
-  async function poll(): Promise<void> {
+  function poll(): Promise<void> {
+    // The first body of an idle governor starts at once (a caller that starts it and reads the ledger right away
+    // sees its first reading); a body that arrives while another is running waits for it.
+    const run = pollsInFlight === 0 ? pollBody() : pollChain.then(() => pollBody());
+    pollsInFlight++;
+    pollChain = run.catch(() => {}).finally(() => { pollsInFlight--; });
+    return run;
+  }
+
+  async function pollBody(): Promise<void> {
     if (stopped) return;
     const reading = memoryReader.read();
     if (reading.degraded) {
@@ -968,6 +979,8 @@ export function __setGovernorTuningForTestsOnly(overrides: Partial<GovernorTunin
 }
 
 export function __resetGovernorForTests(): void {
+  pollChain = Promise.resolve();
+  pollsInFlight = 0;
   chatYieldBusy = false;
   videoShrinkCount = 0; videoRestoreCount = 0; videoShrunkSince = null; videoShrinkMaxWaitSeconds = 600; videoQuietSeconds = 60; videoGoneSince = null;
   codingModeActive = false;

@@ -22,6 +22,8 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Fixed
 
+- The governor's poll bodies run one at a time, so two loops can no longer settle the same queue head or evict on a stale free-memory figure within one tick (RESOURCE-FIX-07c).
+
 - A reserved engine load no longer waits behind a waiting picture, video or song and is never refused for a full queue; the eviction order is a table of exact ids instead of substring matches (RESOURCE-FIX-07b).
 
 - An unload in flight no longer removes a newer admission of the same engine, the admission give-up timer is cleared, a governor refusal no longer counts toward the self-heal breaker, a job waiting for memory is no longer reported as running, and the dead generator abort branch is removed (RESOURCE-FIX-07a).

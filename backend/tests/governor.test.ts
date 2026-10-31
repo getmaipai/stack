@@ -57,6 +57,53 @@ test("rule 1 grants an admission and reports an estimated peak", async () => {
   expect(getGovernorStatus().loaded[0]).toMatchObject({ id: "resident-chat", peakBytes: Math.ceil(GB * 1.3), measured: false });
 });
 
+test("two governor loops never run their poll bodies at the same time", async () => {
+  const events: string[] = [];
+  const admission = await admit({ id: "resident-chat", kind: "resident", requestedBytes: GB, measuredPeakBytes: GB, pid: 42 }) as GovernorHandle;
+  refreshMeasuredPeak(admission, GB);
+  const processMemory = async () => {
+    events.push("enter");
+    await Bun.sleep(5);
+    events.push("exit");
+    return GB;
+  };
+  const first = startGovernor({ pid: 42, pollMs: 1, processMemory });
+  const second = startGovernor({ pid: 42, pollMs: 1, processMemory });
+  stops.push(first, second);
+  await Bun.sleep(30);
+  first();
+  second();
+  let active = 0;
+  for (const event of events) {
+    if (event === "enter") {
+      active++;
+      expect(active).toBe(1);
+    } else {
+      active--;
+      expect(active).toBe(0);
+    }
+  }
+});
+
+test("a throwing poll body does not stop later polls", async () => {
+  let readings = 0;
+  const admission = await admit({ id: "resident-chat", kind: "resident", requestedBytes: GB, measuredPeakBytes: GB, pid: 42 }) as GovernorHandle;
+  refreshMeasuredPeak(admission, GB);
+  const stop = startGovernor({
+    pid: 42,
+    pollMs: 1,
+    processMemory: async () => {
+      readings++;
+      if (readings === 1) throw new Error("temporary process read failure");
+      return Math.floor(1.5 * GB);
+    },
+  });
+  stops.push(stop);
+  await Bun.sleep(20);
+  expect(readings).toBeGreaterThan(1);
+  expect(getGovernorStatus().loaded[0]?.peakBytes).toBe(Math.floor(1.5 * GB));
+});
+
 test("fitsEver refuses only a peak that cannot fit after reserved memory and margin", async () => {
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 64 * GB, freeMemoryBytes: 64 * GB, tier: "p64" });
   await admit({ id: "chat", kind: "resident", class: "reserved", requestedBytes: 28 * GB, measuredPeakBytes: 28 * GB });
