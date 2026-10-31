@@ -5157,8 +5157,11 @@
                   "model": {
                     "type": "string",
                     "enum": [
-                      "htdemucs"
-                    ]
+                      "htdemucs",
+                      "htdemucs_ft",
+                      "htdemucs_6s"
+                    ],
+                    "default": "htdemucs"
                   },
                   "origin": {
                     "type": "string",
@@ -5176,8 +5179,7 @@
                 },
                 "required": [
                   "source",
-                  "source_sha256",
-                  "model"
+                  "source_sha256"
                 ]
               }
             }
@@ -5208,7 +5210,9 @@
                               "vocals",
                               "drums",
                               "bass",
-                              "other"
+                              "other",
+                              "guitar",
+                              "piano"
                             ]
                           },
                           "url": {
@@ -5270,7 +5274,9 @@
                               "vocals",
                               "drums",
                               "bass",
-                              "other"
+                              "other",
+                              "guitar",
+                              "piano"
                             ]
                           },
                           "url": {
@@ -5459,7 +5465,9 @@
                               "vocals",
                               "drums",
                               "bass",
-                              "other"
+                              "other",
+                              "guitar",
+                              "piano"
                             ]
                           },
                           "url": {
@@ -5571,7 +5579,9 @@
                 "vocals",
                 "drums",
                 "bass",
-                "other"
+                "other",
+                "guitar",
+                "piano"
               ]
             },
             "required": true,

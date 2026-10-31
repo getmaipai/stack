@@ -28,7 +28,7 @@ export const PRIVACY_ROWS: PrivacyRow[] = [
     id: "downloads",
     what: "Downloading a model, an engine build or a LoRA",
     when: "Only when Home installs one or applies an update, when an adult adds a LoRA by a Hugging Face link, or, on a Mac whose chat engine is oMLX by default (Apple silicon, 64 GB or more) with the chat engine setting on automatic or oMLX, once in the background at start to fetch the pinned MLX build of the chat model (ENGINE-MLX-01; set the engine to llama-server and nothing is fetched)",
-    carries: "The name of the pinned file (for a LoRA added by link, the address the adult pasted, and one request for the repository's licence and tags)",
+    carries: "The name of the pinned file (including HTDemucs fine-tuned weights: 336,101,760 bytes total, sha256 2c85ab3c62dd6edd8e0b965e38b16fd1cdde357cc25de6b6bc9ce7c83f60925f for the first file; and HTDemucs six-stem weights: 54,885,765 bytes total, sha256 d2a1745f0744721f6b8ca5bf469b67c651ea5ed1b52998cab033b2158609d411 for the checkpoint), pinned to Hugging Face URLs; for a LoRA added by link, the address the adult pasted, and one request for the repository's licence and tags)",
     receiver: "Hugging Face or the mirror declared in stack.updates.model_host for models, and GitHub for engine archives, straight from this computer",
     setting: null,
     hosts: ["huggingface.co", "github.com"],

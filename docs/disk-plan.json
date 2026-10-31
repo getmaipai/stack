@@ -6,25 +6,25 @@
   "installer": {
     "p16.required_free_bytes": 15039341565,
     "p16.minimum_required_free_bytes": 13741867392,
-    "p16.everything_required_free_bytes": 17384563381,
+    "p16.everything_required_free_bytes": 17853748590,
     "p16.needed_bytes": 12885275320,
     "p16.home_required_free_bytes": 3176323277,
     "p16.ai_required_free_bytes": 11863018288,
     "p32.required_free_bytes": 33791153085,
     "p32.minimum_required_free_bytes": 30813284198,
-    "p32.everything_required_free_bytes": 36136374901,
+    "p32.everything_required_free_bytes": 36605560110,
     "p32.needed_bytes": 28511784920,
     "p32.home_required_free_bytes": 3176323277,
     "p32.ai_required_free_bytes": 30614829808,
     "p64.required_free_bytes": 117177075071,
     "p64.minimum_required_free_bytes": 56572612676,
-    "p64.everything_required_free_bytes": 161249542692,
+    "p64.everything_required_free_bytes": 161718727901,
     "p64.needed_bytes": 98253307171,
     "p64.home_required_free_bytes": 3176323277,
     "p64.ai_required_free_bytes": 114000751794,
     "p128.required_free_bytes": 151843393620,
     "p128.minimum_required_free_bytes": 56572612676,
-    "p128.everything_required_free_bytes": 323621799601,
+    "p128.everything_required_free_bytes": 324090984810,
     "p128.needed_bytes": 127268369739,
     "p128.home_required_free_bytes": 3176323277,
     "p128.ai_required_free_bytes": 148667070343
@@ -190,6 +190,46 @@
           "basis": "pins"
         },
         {
+          "id": "stems-ft",
+          "label": "Finer stem splitter (HTDemucs fine-tuned)",
+          "note": "An optional four model package for finer stem separation.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 336101909,
+          "installed_bytes": 336101909,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "htdemucs_ft"
+          ],
+          "engines": [
+            "engine:stems",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "stems-6s",
+          "label": "Six-part stem splitter (guitar and piano)",
+          "note": "An optional model that separates guitar and piano too.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 54885765,
+          "installed_bytes": 54885765,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "htdemucs_6s"
+          ],
+          "engines": [
+            "engine:stems",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -280,11 +320,11 @@
         "required_free_bytes": 13741867392
       },
       "everything": {
-        "download_bytes": 10013776858,
-        "installed_bytes": 12058016069,
+        "download_bytes": 10404764532,
+        "installed_bytes": 12449003743,
         "peak_temp_bytes": 2914944098,
-        "needed_bytes": 14972960167,
-        "required_free_bytes": 17384563381
+        "needed_bytes": 15363947841,
+        "required_free_bytes": 17853748590
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -491,6 +531,46 @@
           "basis": "pins"
         },
         {
+          "id": "stems-ft",
+          "label": "Finer stem splitter (HTDemucs fine-tuned)",
+          "note": "An optional four model package for finer stem separation.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 336101909,
+          "installed_bytes": 336101909,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "htdemucs_ft"
+          ],
+          "engines": [
+            "engine:stems",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "stems-6s",
+          "label": "Six-part stem splitter (guitar and piano)",
+          "note": "An optional model that separates guitar and piano too.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 54885765,
+          "installed_bytes": 54885765,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "htdemucs_6s"
+          ],
+          "engines": [
+            "engine:stems",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -581,11 +661,11 @@
         "required_free_bytes": 30813284198
       },
       "everything": {
-        "download_bytes": 25640286458,
-        "installed_bytes": 27684525669,
+        "download_bytes": 26031274132,
+        "installed_bytes": 28075513343,
         "peak_temp_bytes": 2914944098,
-        "needed_bytes": 30599469767,
-        "required_free_bytes": 36136374901
+        "needed_bytes": 30990457441,
+        "required_free_bytes": 36605560110
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -946,6 +1026,46 @@
           "basis": "pins"
         },
         {
+          "id": "stems-ft",
+          "label": "Finer stem splitter (HTDemucs fine-tuned)",
+          "note": "An optional four model package for finer stem separation.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 336101909,
+          "installed_bytes": 336101909,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "htdemucs_ft"
+          ],
+          "engines": [
+            "engine:stems",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "stems-6s",
+          "label": "Six-part stem splitter (guitar and piano)",
+          "note": "An optional model that separates guitar and piano too.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 54885765,
+          "installed_bytes": 54885765,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "htdemucs_6s"
+          ],
+          "engines": [
+            "engine:stems",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -1096,11 +1216,11 @@
         "required_free_bytes": 56572612676
       },
       "everything": {
-        "download_bytes": 125870280450,
-        "installed_bytes": 129284437620,
+        "download_bytes": 126261268124,
+        "installed_bytes": 129675425294,
         "peak_temp_bytes": 6108217548,
-        "needed_bytes": 135392655168,
-        "required_free_bytes": 161249542692
+        "needed_bytes": 135783642842,
+        "required_free_bytes": 161718727901
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -1561,6 +1681,46 @@
           "basis": "pins"
         },
         {
+          "id": "stems-ft",
+          "label": "Finer stem splitter (HTDemucs fine-tuned)",
+          "note": "An optional four model package for finer stem separation.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 336101909,
+          "installed_bytes": 336101909,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "htdemucs_ft"
+          ],
+          "engines": [
+            "engine:stems",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "stems-6s",
+          "label": "Six-part stem splitter (guitar and piano)",
+          "note": "An optional model that separates guitar and piano too.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 54885765,
+          "installed_bytes": 54885765,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "htdemucs_6s"
+          ],
+          "engines": [
+            "engine:stems",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -1726,11 +1886,11 @@
         "required_free_bytes": 56572612676
       },
       "everything": {
-        "download_bytes": 260203635182,
-        "installed_bytes": 263962332825,
+        "download_bytes": 260594622856,
+        "installed_bytes": 264353320499,
         "peak_temp_bytes": 6867000211,
-        "needed_bytes": 270829333036,
-        "required_free_bytes": 323621799601
+        "needed_bytes": 271220320710,
+        "required_free_bytes": 324090984810
       },
       "measured_on": "2026-10-17",
       "default_selected": [

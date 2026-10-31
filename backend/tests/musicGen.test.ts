@@ -541,7 +541,13 @@ test("the component is listed in the group music for p64 and p128, optional, wit
   expect(unit.pins.map((pin) => pin.id)).toEqual([STACK_MUSIC_MODEL.id, STACK_MUSIC_LM_06.id]);
   expect(unit.envs.map((env) => env.name)).toEqual(["music-gen"]);
   const catalog = collectComponentsCatalog();
-  expect(catalog.models.filter((pin) => pin.role === "music").map((pin) => pin.id)).toEqual([STACK_MUSIC_MODEL.id, STACK_MUSIC_LM_06.id, "htdemucs"]);
+  expect(catalog.models.filter((pin) => pin.role === "music").map((pin) => pin.id)).toEqual([STACK_MUSIC_MODEL.id, STACK_MUSIC_LM_06.id, "htdemucs", "htdemucs_ft", "htdemucs_6s"]);
+  const stemsPins = STACK_MODELS.filter((pin) => ["htdemucs", "htdemucs_ft", "htdemucs_6s"].includes(pin.id));
+  expect(stemsPins.map((pin) => pin.download?.files?.map((file) => file.sha256))).toEqual([
+    ["d9fa14133cfcc034a6758923bb3a8ca9f8dfd0b582134643bbf83f72c17576dd", "239c445d0b14454d541ad8bd9bb271c9e536d267e8a4625208744cbb2e7bb66c"],
+    ["2c85ab3c62dd6edd8e0b965e38b16fd1cdde357cc25de6b6bc9ce7c83f60925f", "5b01a97567ae9a3178a6236fb520251045c03eb8834bc8c24a4eec11d6c8fb56", "a241863551f30d01c42bd7b97da40839922ead3acb0f1fcab25682f55b4eeb59", "68854b0d7c2b3274723b5761f6fd9f5aec5f1bcd3f0de7c1669546fdb7871b7c", "69470b8c1bbd674437b51bc9fb491327a10ab0396b702c93389b9cf750016346"],
+    ["d2a1745f0744721f6b8ca5bf469b67c651ea5ed1b52998cab033b2158609d411", "207405151270af8fd81c2373c25d27950916682ac91dca7884a11ce13dad6f58"],
+  ]);
   expect(catalog.engines.some((pin) => pin.name === "music-gen")).toBe(true);
 });
 

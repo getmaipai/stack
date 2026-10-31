@@ -92,7 +92,7 @@ const GB = 1_000_000_000;
 /** Environment downloads come from the disk plan's measured table (one definition with the wizard); the figures are a fallback only. */
 const ENV_BYTES = { stems: engineDownloadBytes("stems") ?? 0.25 * GB, image: engineDownloadBytes("image-gen") ?? 1.1 * GB, video: engineDownloadBytes("video-gen") ?? 1.0 * GB, music: engineDownloadBytes("music-gen") ?? 0.8 * GB, tools: engineDownloadBytes("image-tools") ?? 0.4 * GB, pocket: engineDownloadBytes("pocket-tts") ?? 0.72 * GB, mlxAudio: engineDownloadBytes("mlx-audio") ?? 0.47 * GB };
 /** The disk plan's row for a component, where the plan has one (its optional rows are the wizard's unchecked extras). */
-const DISK_ROW: Record<string, string> = { "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "image-tools": "image-tools", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "ace-step-1-5-turbo": "music", "htdemucs": "stems", "ltx-2-3-distilled-mlx": "video-detailed" };
+const DISK_ROW: Record<string, string> = { "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "image-tools": "image-tools", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "ace-step-1-5-turbo": "music", "htdemucs": "stems", "htdemucs_ft": "stems-ft", "htdemucs_6s": "stems-6s", "ltx-2-3-distilled-mlx": "video-detailed" };
 
 const envImage: EnvDef = { name: "image-gen", approxBytes: ENV_BYTES.image, root: imageGenRoot, ready: imageGenEnvironmentReady, build: (onPhase, signal) => ensureImageGenEnvironment(onPhase, { signal }), stop: () => imageGen.stop() };
 const envVideo: EnvDef = {
@@ -225,7 +225,9 @@ export function componentDefs(): UnitDef[] {
       return activeJobFor((kind) => kind.startsWith("video")) ? "A video clip is waiting or being made right now." : null;
     },
   });
-  units.push({ id: "htdemucs", label: "Music: HTDemucs stem splitter", summary: "Separates a song made here into vocals, drums, bass and other.", group: "music", role: "music", pins: STACK_STEMS_MODELS, envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
+  units.push({ id: "htdemucs", label: "Music: HTDemucs stem splitter", summary: "Separates a song made here into vocals, drums, bass and other.", group: "music", role: "music", pins: [STACK_STEMS_MODELS[0]!], envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
+  units.push({ id: "htdemucs-ft", label: "Music: finer stem splitter (HTDemucs fine-tuned)", summary: "Separates songs into four finer stems.", group: "music", role: "music", pins: [STACK_STEMS_MODELS[1]!], envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
+  units.push({ id: "htdemucs-6s", label: "Music: six-part stem splitter (guitar and piano)", summary: "Separates songs into six stems, including guitar and piano.", group: "music", role: "music", pins: [STACK_STEMS_MODELS[2]!], envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
   units.push({
     id: STACK_MUSIC_MODELS[0]!.id, ...LABELS[STACK_MUSIC_MODELS[0]!.id]!, group: "music", role: "music", pins: STACK_MUSIC_MODELS, envs: [envMusic], tiers: ["p64", "p128"],
     platformBlock: () => musicAvailability().code === "unsupported" ? musicAvailability().reason : null,

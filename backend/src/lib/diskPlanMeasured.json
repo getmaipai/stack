@@ -456,6 +456,14 @@
     "htdemucs": {
       "download_bytes": 84025440,
       "installed_bytes": 84025440
+    },
+    "htdemucs_ft": {
+      "download_bytes": 336101909,
+      "installed_bytes": 336101909
+    },
+    "htdemucs_6s": {
+      "download_bytes": 54885765,
+      "installed_bytes": 54885765
     }
   }
 }

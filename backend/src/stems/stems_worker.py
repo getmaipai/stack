@@ -23,12 +23,22 @@ def run(request):
     emit({"id": request["id"], "event": "stage", "stage": "loading", "fraction": 0.05})
     from pathlib import Path
     config_hash = __import__("hashlib").sha256(Path(request["config"]).read_bytes()).hexdigest()
-    if config_hash != "239c445d0b14454d541ad8bd9bb271c9e536d267e8a4625208744cbb2e7bb66c":
-        raise RuntimeError("The pinned htdemucs model configuration failed verification.")
-    checkpoint_hash = __import__("hashlib").sha256(Path(request["checkpoint"]).read_bytes()).hexdigest()
-    if checkpoint_hash != "d9fa14133cfcc034a6758923bb3a8ca9f8dfd0b582134643bbf83f72c17576dd":
-        raise RuntimeError("The pinned htdemucs checkpoint failed verification.")
-    model = load_safetensors_model(request["checkpoint"])
+    if config_hash != request["configHash"]:
+        raise RuntimeError("The pinned stem model configuration failed verification.")
+    checkpoints = request["checkpoints"]
+    for path, expected in zip(checkpoints, request["checkpointHashes"]):
+        actual = __import__("hashlib").sha256(Path(path).read_bytes()).hexdigest()
+        if actual != expected:
+            raise RuntimeError("A pinned stem checkpoint failed verification.")
+    if request["model"] == "htdemucs_ft":
+        import yaml
+        from demucs.apply import BagOfModels
+        models = [load_safetensors_model(path) for path in checkpoints]
+        bag_config = yaml.safe_load(Path(request["config"]).read_text())
+        weights = bag_config["weights"]
+        model = BagOfModels(models, weights)
+    else:
+        model = load_safetensors_model(checkpoints[0])
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     model.to(device).eval()
     import subprocess

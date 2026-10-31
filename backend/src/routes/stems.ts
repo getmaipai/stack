@@ -8,17 +8,17 @@ import { isJobId, resultDir } from "@/music/results";
 import { cancelJob, getJob, hasJobRunner, isJobPaused, listJobs, submitJob, waitForJob, type Job } from "@/lib/jobs";
 import { PAUSED_LABEL } from "@/lib/genProgress";
 import { getGovernorStatus } from "@/lib/governor";
-import { STEMS_PEAK_BYTES } from "@/stems/stems";
-import { STEMS_MODEL_ID, STEMS_MAX_SOURCE_BYTES, stems } from "@/stems/stems";
+import { STEMS_MODELS as STEMS_SPECS, STEMS_PEAK_BYTES } from "@/stems/stems";
+import { STEMS_MODEL_ID, STEMS_MAX_SOURCE_BYTES, stems, type StemModelId } from "@/stems/stems";
 import { STEMS_JOB_KIND, stashSource, unstashSource, stemsFailure, stemsStage, stemsTracker } from "@/stems/jobs";
 import { STACK_STEMS_MODEL_ID } from "@/lib/modelCatalog";
 
-export const STEM_MODELS = { htdemucs: STACK_STEMS_MODEL_ID } as const;
+export const STEM_MODELS = { htdemucs: STACK_STEMS_MODEL_ID, htdemucs_ft: "htdemucs_ft", htdemucs_6s: "htdemucs_6s" } as const;
 const DEFAULT_WAIT_MS = 30_000;
 const MAX_WAIT_MS = 30 * 60_000;
-const Schema = z.object({ source: z.string().max(56_000_000), source_sha256: z.string().regex(/^[0-9a-fA-F]{64}$/), model: z.enum(["htdemucs"]), origin: z.enum(["made_here", "owned_file"]).optional(), timeout_ms: z.number().int().positive().max(MAX_WAIT_MS).optional() });
+const Schema = z.object({ source: z.string().max(56_000_000), source_sha256: z.string().regex(/^[0-9a-fA-F]{64}$/), model: z.enum(["htdemucs", "htdemucs_ft", "htdemucs_6s"]).default("htdemucs"), origin: z.enum(["made_here", "owned_file"]).optional(), timeout_ms: z.number().int().positive().max(MAX_WAIT_MS).optional() });
 const ErrorSchema = z.object({ error: z.string(), code: z.string(), job: z.string().optional() });
-const Item = z.object({ stem: z.enum(["vocals", "drums", "bass", "other"]), url: z.string(), content_type: z.literal("audio/mp4"), bytes: z.number().int(), sha256: z.string() });
+const Item = z.object({ stem: z.enum(["vocals", "drums", "bass", "other", "guitar", "piano"]), url: z.string(), content_type: z.literal("audio/mp4"), bytes: z.number().int(), sha256: z.string() });
 const Reply = z.object({ created: z.number().int(), job: z.string(), data: z.array(Item) });
 const post = createRoute({ method: "post", path: "/", tags: ["Stems"], summary: "Split a song made here into stems", request: { body: { content: { "application/json": { schema: Schema } } } }, responses: { 200: { content: { "application/json": { schema: Reply } }, description: "Stems are ready." }, 202: { content: { "application/json": { schema: Reply } }, description: "The split is running; poll the job." }, 413: { content: { "application/json": { schema: ErrorSchema } }, description: "Source too large." }, 422: { content: { "application/json": { schema: ErrorSchema } }, description: "Invalid source or model." }, 503: { content: { "application/json": { schema: ErrorSchema } }, description: "Not installed or unavailable." } } });
 const status = createRoute({ method: "get", path: "/{job}", tags: ["Stems"], summary: "Stem job progress and result", request: { params: z.object({ job: z.string() }) }, responses: { 200: { content: { "application/json": { schema: z.object({ job: z.string(), state: z.string(), phase: z.string(), progress: z.number(), progress_fraction: z.number(), stage_label: z.string(), position: z.number().nullable(), stage: z.string().nullable(), eta_seconds: z.number().nullable(), error: z.string().nullable(), code: z.string().nullable(), data: z.array(Item) }) } }, description: "Job state." } } });
@@ -42,13 +42,14 @@ stemsV1Routes.openapi(post, async (c) => {
   // An audio file the person owns may be split and nothing else (stems of it are never written to the ledger, so they cannot become an edit or cover source); every other caller still needs a song this Stack made.
   if (!owned && !wasMadeHere(source)) return fail(c, 422, "source_not_made_here", "I can only split a song that was made here.");
   if (!stems.depsAvailable) return fail(c, 503, "unsupported", "Stem splitting is not available on this computer.");
-  if (!stems.installed) return fail(c, 503, "not_installed", "Install HTDemucs from Home's Engines page, then try again.");
+  if (!stems.isInstalled(body.model as StemModelId)) return fail(c, 503, "not_installed", body.model === "htdemucs_ft" ? "Install the fine-tuned stem model from Home's Engines page, then try again." : body.model === "htdemucs_6s" ? "Install the six-part stem model from Home's Engines page, then try again." : "Install HTDemucs from Home's Engines page, then try again.");
   if (!hasJobRunner(STEMS_JOB_KIND)) return fail(c, 503, "unsupported", "Stem splitting is not available on this machine.");
   const activeCount = listJobs().filter((job) => job.kind === STEMS_JOB_KIND && ["queued", "running", "stalled"].includes(job.state)).length;
   if (activeCount >= 4) return fail(c, 429, "queue_full", "Four stem jobs are already waiting. Try again when one finishes.");
   const statusNow = getGovernorStatus();
   const resident = statusNow.loaded.filter((item) => item.kind === "resident").reduce((sum, item) => sum + item.peakBytes, 0);
-  if (resident + STEMS_PEAK_BYTES > statusNow.capBytes) return fail(c, 503, "no_memory", "Not enough free memory for stem splitting right now. Close other big jobs, or try again.");
+  const peakBytes = STEMS_SPECS[body.model].peakBytes;
+  if (resident + peakBytes > statusNow.capBytes) return fail(c, 503, "no_memory", "Not enough free memory for stem splitting right now. Close other big jobs, or try again.");
   const token = crypto.randomUUID(); stashSource(token, source);
   const submitted = submitJob({ kind: STEMS_JOB_KIND, role: "music", input: { token, model: body.model, origin: owned ? "owned_file" : "made_here" } });
   if ("refused" in submitted) { unstashSource(token); return fail(c, 503, submitted.code ?? "no_memory", submitted.reason); }
@@ -63,5 +64,5 @@ function looksM4a(b: Uint8Array) { return b.length > 12 && String.fromCharCode(.
 stemsV1Routes.openapi(status, (c) => { const job = getJob(c.req.param("job")); return job?.kind === STEMS_JOB_KIND ? c.json(statusOf(job), 200) : fail(c, 404, "not_found", "No stem job has that id."); });
 stemsV1Routes.openapi(cancel, (c) => { const id = c.req.param("job"); const job = getJob(id); if (!job || job.kind !== STEMS_JOB_KIND) return fail(c, 404, "not_found", "No stem job has that id."); if (["queued", "running", "stalled"].includes(job.state)) { cancelJob(id); unstashSource(String((job.input as any)?.token ?? "")); return c.json({ job: id, state: "cancelled" }, 200); } if (job.state === "done") { const dir = resultDir(id); rmSync(dir, { recursive: true, force: true }); return c.json({ job: id, state: "deleted" }, 200); } return c.json({ job: id, state: job.state }, 200); });
 
-const fileRoute = createRoute({ method: "get", path: "/{job}/{stem}", tags: ["Stems"], summary: "Fetch one AAC stem", request: { params: z.object({ job: z.string(), stem: z.enum(["vocals", "drums", "bass", "other"]) }) }, responses: { 200: { content: { "audio/mp4": { schema: z.any() } }, description: "AAC stem." }, 404: { description: "Stem not found." } } });
+const fileRoute = createRoute({ method: "get", path: "/{job}/{stem}", tags: ["Stems"], summary: "Fetch one AAC stem", request: { params: z.object({ job: z.string(), stem: z.enum(["vocals", "drums", "bass", "other", "guitar", "piano"]) }) }, responses: { 200: { content: { "audio/mp4": { schema: z.any() } }, description: "AAC stem." }, 404: { description: "Stem not found." } } });
 stemsV1Routes.openapi(fileRoute, (c) => { const { job, stem } = c.req.valid("param"); if (!isJobId(job) || !data(job).some((f: any) => f.stem === stem)) return fail(c, 404, "not_found", "Stem not found."); const path = join(resultDir(job), `${stem}.m4a`); return c.body(readFileSync(path), 200, { "Content-Type": "audio/mp4", "Content-Length": String(statSync(path).size), "Accept-Ranges": "bytes" }); });

@@ -965,7 +965,23 @@ export const STACK_STEMS_MODEL: CatalogModelLike = {
     ],
   },
 };
-export const STACK_STEMS_MODELS: CatalogModelLike[] = [STACK_STEMS_MODEL];
+export const STACK_STEMS_FT_MODEL_ID = "htdemucs_ft";
+export const STACK_STEMS_FT_MODEL: CatalogModelLike = {
+  id: STACK_STEMS_FT_MODEL_ID, role: "music", component: "stems", repo: "adefossez/HTDemucs-ft", license: "MIT", revision: "d74ac89c3a1e874fc78f152555cf4d8533f06cd4", engine: "stems",
+  sizing: { profile: "p64", quantization: "fp32" },
+  download: { url: hfUrl(`adefossez/HTDemucs-ft/resolve/d74ac89c3a1e874fc78f152555cf4d8533f06cd4/f7e0c4bc.safetensors`), sha256: "2c85ab3c62dd6edd8e0b965e38b16fd1cdde357cc25de6b6bc9ce7c83f60925f", approx_bytes: 336_101_909, directory: "htdemucs_ft", files: [
+    { path: "f7e0c4bc.safetensors", sha256: "2c85ab3c62dd6edd8e0b965e38b16fd1cdde357cc25de6b6bc9ce7c83f60925f", bytes: 84_025_440 }, { path: "d12395a8.safetensors", sha256: "5b01a97567ae9a3178a6236fb520251045c03eb8834bc8c24a4eec11d6c8fb56", bytes: 84_025_440 }, { path: "92cfc3b6.safetensors", sha256: "a241863551f30d01c42bd7b97da40839922ead3acb0f1fcab25682f55b4eeb59", bytes: 84_025_440 }, { path: "04573f0d.safetensors", sha256: "68854b0d7c2b3274723b5761f6fd9f5aec5f1bcd3f0de7c1669546fdb7871b7c", bytes: 84_025_440 }, { path: "htdemucs_ft.yaml", sha256: "69470b8c1bbd674437b51bc9fb491327a10ab0396b702c93389b9cf750016346", bytes: 149 },
+  ] },
+};
+export const STACK_STEMS_6S_MODEL_ID = "htdemucs_6s";
+export const STACK_STEMS_6S_MODEL: CatalogModelLike = {
+  id: STACK_STEMS_6S_MODEL_ID, role: "music", component: "stems", repo: "adefossez/HTDemucs-6s", license: "MIT", revision: "3c5ee475be622df764938de97e4281a7b07ffa58", engine: "stems",
+  sizing: { profile: "p64", quantization: "fp32" },
+  download: { url: hfUrl(`adefossez/HTDemucs-6s/resolve/3c5ee475be622df764938de97e4281a7b07ffa58/5c90dfd2.safetensors`), sha256: "d2a1745f0744721f6b8ca5bf469b67c651ea5ed1b52998cab033b2158609d411", approx_bytes: 54_885_765, directory: "htdemucs_6s", files: [
+    { path: "5c90dfd2.safetensors", sha256: "d2a1745f0744721f6b8ca5bf469b67c651ea5ed1b52998cab033b2158609d411", bytes: 54_885_744 }, { path: "htdemucs_6s.yaml", sha256: "207405151270af8fd81c2373c25d27950916682ac91dca7884a11ce13dad6f58", bytes: 21 },
+  ] },
+};
+export const STACK_STEMS_MODELS: CatalogModelLike[] = [STACK_STEMS_MODEL, STACK_STEMS_FT_MODEL, STACK_STEMS_6S_MODEL];
 
 // VIDEO-LTX-01: the Detailed video model. LTX-2.3 22B distilled (Lightricks), the MLX layout of prince-canuma's conversion
 // (an ungated Hugging Face repository: no account is needed), at one revision, every file by sha256 and size. It makes the

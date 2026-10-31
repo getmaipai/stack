@@ -292,7 +292,7 @@ Engines per platform:
 | Engine | Build | Platform | Status |
 |---|---|---|---|
 | `music-gen-ca1e85f-macos-arm64` | ca1e85f | darwin arm64 | pinned, verified (the engine's source; its environment is the row below) |
-| `stems` | 4.1.0 | macOS 14 or later on arm64 (Demucs 4.1.0 and pinned htdemucs; cold-start stem splitting) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
+| `stems` | 4.1.0 | macOS 14 or later on arm64 (Demucs 4.1.0 and optional pinned htdemucs, htdemucs_ft and htdemucs_6s; cold-start stem splitting) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
 | `music-gen` | ca1e85f | macOS 14 or later on arm64 (MLX is Apple silicon only; the ACE-Step 1.5 source archive plus a hashed requirements file; songs with sung lyrics, remakes, covers, repaints and extensions; needs 64 GB or more; no Linux file) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
@@ -302,7 +302,7 @@ Engines per platform:
 | p64 | on demand | `ace-step-1-5-turbo` | bf16 | 9.40 GB | not measured | not measured | MIT | ACE-Step/Ace-Step1.5 @ 19671f406d603126926c1b7e2adc169acbcade22 | pinned |
 | p128 | on demand | `ace-step-1-5-turbo` | bf16 | 9.40 GB | not measured | not measured | MIT | ACE-Step/Ace-Step1.5 @ 19671f406d603126926c1b7e2adc169acbcade22 | pinned |
 
-Installed beside the model, never selected on its own: `ace-step-1-5-lm-0-6b` (planning-lm-0.6b, 1.28 GB, MIT, ACE-Step/acestep-5Hz-lm-0.6B @ 148d8ea0225bdab342ee1ae3a354275ccd60ca80); `htdemucs` (stems, 80.1 MB, MIT, adefossez/HTDemucs @ cbc8a9b1a87023b7fd74e7b3412e6321c0eab003).
+Installed beside the model, never selected on its own: `ace-step-1-5-lm-0-6b` (planning-lm-0.6b, 1.28 GB, MIT, ACE-Step/acestep-5Hz-lm-0.6B @ 148d8ea0225bdab342ee1ae3a354275ccd60ca80); `htdemucs` (stems, 80.1 MB, MIT, adefossez/HTDemucs @ cbc8a9b1a87023b7fd74e7b3412e6321c0eab003); `htdemucs_ft` (stems, 0.31 GB, MIT, adefossez/HTDemucs-ft @ d74ac89c3a1e874fc78f152555cf4d8533f06cd4); `htdemucs_6s` (stems, 52.3 MB, MIT, adefossez/HTDemucs-6s @ 3c5ee475be622df764938de97e4281a7b07ffa58).
 
 ## media (the media service: probe, fetch, transcode, preview)
 

@@ -326,7 +326,7 @@ export function engineRole(name: string): EngineRole { return ENGINE_ROLE[name] 
  * environment under data/engines/<name>/<version>/ (STACK-94c). */
 export interface ManagedRuntime { name: string; version: string; roles: string[]; platforms: string; }
 export const MANAGED_RUNTIMES: ManagedRuntime[] = [
-  { name: "stems", version: "4.1.0", roles: ["music"], platforms: "macOS 14 or later on arm64 (Demucs 4.1.0 and pinned htdemucs; cold-start stem splitting)" },
+  { name: "stems", version: "4.1.0", roles: ["music"], platforms: "macOS 14 or later on arm64 (Demucs 4.1.0 and optional pinned htdemucs, htdemucs_ft and htdemucs_6s; cold-start stem splitting)" },
   { name: "pocket-tts", version: "3.1.0", roles: ["tts"], platforms: "macOS 14 or later on arm64 (torch 2.13 ships macOS 14 wheels only; a hashed requirements file per platform, the Linux files land with the first Linux tts run)" },
   { name: "mlx-audio", version: "0.5.9", roles: ["tts"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the Stack's second voice engine, Chatterbox Turbo, VOICE-STUDIO-01; no Linux file)" },
   { name: "omlx", version: "0.7.0", roles: ["chat"], platforms: "macOS 15 or later on arm64 (MLX is Apple silicon only; opt-in chat engine (`stack.engines.chat.engine` = `omlx`), never the default: llama-server is the default on every tier, ENGINE-MLX-02; no Linux file)" },
