@@ -20,6 +20,7 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Fixed
 
+- Temporary files, old results, abandoned partial downloads and voice-clone clips are swept every 10 minutes and when the temp folder passes 2 GB, not only at start (RESOURCE-FIX-10b).
 - A finished picture, video, music or stems job leaves no child process behind, and an idle worker's memory stays on the ledger until it exits (RESOURCE-FIX-10a).
 - The video context shrink of chat runs only after the reclaim ladder and in a quiet window, restores at the next quiet moment, warms chat after both, and is counted on the memory report (RESOURCE-FIX-03).
 - Every engine stop, unload and restart logs its cause; `unspecified` is gone (RESOURCE-FIX-02, Home issue 262).

@@ -1036,6 +1036,13 @@ preload registers, measured on 2026-09-20). The same change fixed the
 suite's detection-scan roots, which were written with `=` where the
 parser reads `:`, so the scans had been reading the real home caches.
 
+Temporary work and old results are swept at Stack start and every 10
+minutes. The Stack also sweeps at once when `data/tmp` passes 2 GB.
+Partial downloads older than 7 days and voice-clone clips older than a
+day are removed. Each sweep that removes files writes one `sweep.done`
+log line. If temporary files remain over 2 GB, health reports
+`disk-temp-grew` with a restart-engine fix.
+
 ## Pin and rollback, proven live (STACK-96, 2026-09-20)
 
 `scripts/prove-pin-rollback.sh` drives the whole proof through the

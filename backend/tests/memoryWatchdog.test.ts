@@ -73,6 +73,19 @@ test("raw levels: kernel level, available memory and swap growth each decide", (
   expect(rawLevel(reading({}, 2 * GB))).toBe("critical");
 });
 
+test("disk temp over 2 GB runs sweeps and raises then resolves its health item", async () => {
+  const sampler = fakeSampler();
+  let bytes = 3 * GB;
+  let sweeps = 0;
+  const dog = new MemoryWatchdog({ sampler, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null, folderBytes: () => bytes, runSweeps: () => { sweeps++; }, chatLoaded: () => false });
+  for (let i = 0; i < 12; i++) await dog.tick();
+  expect(sweeps).toBe(1);
+  expect(listHealth().some((item) => item.code === "disk-temp-grew")).toBe(true);
+  bytes = GB;
+  for (let i = 0; i < 12; i++) await dog.tick();
+  expect(listHealth().some((item) => item.code === "disk-temp-grew")).toBe(false);
+});
+
 test("the ladder needs two samples to rise and six clear ones to fall, one level at a time", () => {
   let ladder = newLadder();
   ladder = stepLadder(ladder, reading({ availableBytes: 12 * GB }));

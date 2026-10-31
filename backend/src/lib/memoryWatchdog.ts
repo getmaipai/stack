@@ -31,6 +31,8 @@ import { admissionVerdict, chatPagedOut, latestSample, levelSince, memoryLevel, 
 import { engineRoot } from "@/lib/store/layout";
 import { dirname } from "node:path";
 import { getRoleStatus } from "@/lib/supervisor";
+import { dataDir } from "@/lib/paths";
+import { folderBytes, runSweeps } from "@/lib/sweeps";
 
 const GB = 1_073_741_824;
 function gb(bytes: number): string { return (bytes / GB).toFixed(1); }
@@ -178,6 +180,8 @@ export interface WatchdogOptions {
   /** Re-reads a pid's command line, to prove it is still the process that was judged an orphan. */
   commandOf?: (pid: number) => string | null;
   chatLoaded?: () => boolean;
+  folderBytes?: (dir: string) => number;
+  runSweeps?: (reason: string) => unknown;
 }
 
 export interface TopConsumer { pid: number; name: string; bytes: number; stack: boolean; }
@@ -220,6 +224,9 @@ export class MemoryWatchdog {
   private itemRaised = false;
   private chatLoaded: () => boolean;
   private previousSwapouts: number | null = null;
+  private diskTempRaised = false;
+  private measureFolder: (dir: string) => number;
+  private sweepDisk: (reason: string) => unknown;
 
   constructor(options: WatchdogOptions = {}) {
     this.sampler = options.sampler ?? getSystemSampler();
@@ -233,6 +240,8 @@ export class MemoryWatchdog {
       try { return Bun.spawnSync(["ps", "-o", "command=", "-p", String(pid)], { stdout: "pipe", stderr: "ignore" }).stdout.toString().trim() || null; } catch { return null; }
     });
     this.chatLoaded = options.chatLoaded ?? (() => ["ready", "loaded", "busy"].includes(getRoleStatus("chat").state));
+    this.measureFolder = options.folderBytes ?? folderBytes;
+    this.sweepDisk = options.runSweeps ?? runSweeps;
   }
 
   private swapGrowth(): number {
@@ -261,6 +270,16 @@ export class MemoryWatchdog {
       if (this.ring.length > WatchdogRules.ringSize) this.ring.shift();
       setLatestSample(sample);
       this.ticks++;
+      if (this.ticks % 12 === 0) {
+        const tempDir = `${dataDir}/tmp`;
+        if (this.measureFolder(tempDir) > 2 * GB) {
+          this.sweepDisk("disk-temp");
+          if (this.measureFolder(tempDir) > 2 * GB) {
+            if (!this.diskTempRaised) raise({ code: "disk-temp-grew", severity: "warning", title: "Temporary files are taking more than 2 GB", text: `Temporary files in ${tempDir} exceed 2 GB. Restart the engine to clear them.`, cause: `${tempDir} is still over the 2 GB temporary-file limit.`, fix: { label: "Restart engine", action: "restart_engine" } });
+            this.diskTempRaised = true;
+          } else if (this.diskTempRaised) { resolveHealth("disk-temp-grew"); this.diskTempRaised = false; }
+        } else if (this.diskTempRaised) { resolveHealth("disk-temp-grew"); this.diskTempRaised = false; }
+      }
       const tight = memoryLevel() !== "normal";
       if (tight || this.ticks % WatchdogRules.processEvery === 1) this.rows = this.sampler.processes();
       if (!watchdogEnabled() || sample.degraded) { this.devLoad = { others_bytes: 0, processes: [] }; if (memoryLevel() !== "normal") this.leave(); return; }

@@ -18,17 +18,14 @@ import { ensureChatEngineAssets } from "@/lib/chatEngineAssets";
 import { STACK_MODELS, STACK_STEMS_MODELS } from "@/lib/modelCatalog";
 import { startSelfHeal } from "@/lib/selfHeal";
 import { ddgsSupervisor } from "@/search/ddgsSidecar";
-import { imageTools, sweepImageToolsTmp } from "@/imagetools/imageTools";
+import { imageTools } from "@/imagetools/imageTools";
 import { lookService } from "@/look/look";
 import { heavyGate, recoverPausedWorkers } from "@/lib/heavyGate";
 import { hostLimiter } from "@/media/hosts";
-import { sweepJobDirs } from "@/media/paths";
 import { videoGen } from "@/video/videoGen";
 import { musicGen } from "@/music/musicGen";
-import { sweepResults as sweepMusicResults, sweepMusicTmp } from "@/music/results";
 import { imageGen } from "@/images/imageEngine";
-import { sweepImageTmp, sweepResults as sweepImageResults } from "@/images/results";
-import { sweepResults, sweepVideoTmp } from "@/video/results";
+import { runSweeps } from "@/lib/sweeps";
 import { beginStopping } from "@/lib/lifecycle";
 import { startMemoryWatchdog } from "@/lib/memoryWatchdog";
 import { execFileSync } from "node:child_process";
@@ -81,23 +78,18 @@ async function serve(): Promise<void> {
   // An engine that stops on its own is restarted here (ROBUST-01); the first look at startup finds a role that is offline with no process.
   const stopSelfHeal = startSelfHeal();
   // Pictures an earlier crash left in the image tools' temporary folder are removed; the worker itself starts on the first edit.
-  sweepImageToolsTmp();
   // ISOLATION-01: a worker an earlier Stack left stopped (it was killed while a chat held the pause) is continued now.
   recoverPausedWorkers();
   // Media job folders nobody released within a week (Home was away) go; a site that asked the Stack to rest is still resting after a restart.
-  sweepJobDirs();
   hostLimiter.load();
   // The memory watchdog (2026-10-17): samples the whole computer every 5 s, gates generative starts on real free memory, and acts on pressure.
   const stopMemoryWatchdog = startMemoryWatchdog();
   // Clips an earlier run left half-made are removed and old results swept; the video worker itself starts on the first clip and exits after ten idle minutes.
-  sweepVideoTmp();
-  sweepResults();
   // Songs: half-made work removed and old results swept; the music worker starts on the first song and exits after five idle minutes.
-  sweepMusicTmp();
-  sweepMusicResults();
   // The same for pictures (IMGGEN-STACK-02): half-made work removed, old results swept; the picture worker starts on the first request and exits after ten idle minutes.
-  sweepImageTmp();
-  sweepImageResults();
+  runSweeps("start");
+  const sweeps = setInterval(() => runSweeps("timer"), 10 * 60_000);
+  (sweeps as unknown as { unref?: () => void }).unref?.();
   const idle = setInterval(() => {
     const values = settingValues();
     // The coding engine unloads after its own keep-warm minutes, on battery or not, in place of the runtime-wide limits (CODE-STACK-01 S2).
@@ -113,6 +105,7 @@ async function serve(): Promise<void> {
     beginStopping();
     stopMemoryWatchdog();
     clearInterval(idle);
+    clearInterval(sweeps);
     stopSelfHeal();
     // ISOLATION-01: nothing is left stopped; each worker is continued before it is told to quit.
     heavyGate.resumeEverything("shutdown");

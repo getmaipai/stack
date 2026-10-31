@@ -1,10 +1,31 @@
 import { createWriteStream, existsSync, statSync, unlinkSync } from "node:fs";
 import { mkdirSync, renameSync } from "node:fs";
 import { basename, dirname } from "node:path";
+import { readdirSync } from "node:fs";
+import { modelsDir } from "@/lib/paths";
 import { sha256OfFile } from "@/lib/fileHash";
 import { withTimeout } from "@maipai/core/src/withTimeout";
 
 export { sha256OfFile } from "@/lib/fileHash";
+
+/** Removes abandoned model download pieces and leaves every other file alone. */
+export function sweepPartialDownloads(now = Date.now()): number {
+  const cutoff = now - 7 * 24 * 3600_000;
+  let removed = 0;
+  const visit = (dir: string): void => {
+    let entries;
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      const path = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) visit(path);
+      else if (entry.isFile() && (entry.name.endsWith(".part") || /\.partial-[^/]+$/.test(entry.name))) {
+        try { if (statSync(path).mtimeMs < cutoff) { unlinkSync(path); removed++; } } catch { /* It was already removed. */ }
+      }
+    }
+  };
+  visit(modelsDir);
+  return removed;
+}
 
 // The declared `downloadCapMbps` setting, pushed here by settings.ts when
 // it changes, so this module reads no configuration of its own.

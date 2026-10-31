@@ -26,6 +26,7 @@ import queue
 import struct
 import sys
 import tempfile
+import shutil
 import threading
 import time
 import urllib.error
@@ -153,7 +154,13 @@ class ChatterboxTurbo:
         self.sample_rate = int(getattr(self.model, "sample_rate", SAMPLE_RATE))
         self.default_conds = getattr(self.model, "_conds", None)
         self.clips = collections.OrderedDict()
-        self.clip_dir = tempfile.mkdtemp(prefix="mlx-tts-clips-")
+        configured_clip_dir = os.environ.get("MLX_TTS_CLIP_DIR")
+        if configured_clip_dir:
+            self.clip_dir = configured_clip_dir
+            os.makedirs(self.clip_dir, exist_ok=True)
+        else:
+            # Older system-temp folders are outside Stack data and are not swept.
+            self.clip_dir = tempfile.mkdtemp(prefix="mlx-tts-clips-")
         self.cloner_ready = self.cloner_in_cache()
 
     def cloner_in_cache(self) -> bool:
@@ -216,7 +223,13 @@ class ChatterboxTurbo:
                     self.model.prepare_conditionals(path)
                     self.clips[key] = self.model._conds
                     if len(self.clips) > 8:
-                        self.clips.popitem(last=False)
+                        old_key, _ = self.clips.popitem(last=False)
+                        for extension in ("wav", "mp3", "flac"):
+                            try:
+                                os.remove(os.path.join(self.clip_dir, f"{old_key}.{extension}"))
+                                break
+                            except FileNotFoundError:
+                                pass
                 self.model._conds = self.clips[key]
 
             generate_options = {"text": text, "stream": True, "streaming_interval": STREAM_INTERVAL_SECONDS}

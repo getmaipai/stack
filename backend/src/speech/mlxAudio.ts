@@ -10,6 +10,7 @@
 // ComfyUI (`uvEnvironment.ts`).
 import { chmodSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { dataDir } from "@/lib/paths";
 import { MANAGED_RUNTIMES } from "@/lib/engineCatalog";
 import { engineTagRoot } from "@/lib/store/layout";
 import { ensureUvEnvironment, managedEnv, uvEnvironmentReady, uvVenvPath, type UvEnvironmentSpec } from "@/lib/uvEnvironment";
@@ -53,7 +54,7 @@ export async function materializeServerScript(root = mlxAudioRoot()): Promise<st
 
 /** Offline always, no token, quiet progress bars (the Stack reads stderr only when the engine exits). */
 export function mlxAudioEnv(extra: Record<string, string> = {}): Record<string, string> {
-  const env = managedEnv({ HF_HUB_OFFLINE: "1", HF_HUB_DISABLE_PROGRESS_BARS: "1", TQDM_DISABLE: "1", PYTHONUNBUFFERED: "1", ...extra });
+  const env = managedEnv({ HF_HUB_OFFLINE: "1", HF_HUB_DISABLE_PROGRESS_BARS: "1", TQDM_DISABLE: "1", PYTHONUNBUFFERED: "1", MLX_TTS_CLIP_DIR: join(dataDir, "tmp", "voice-clips"), ...extra });
   delete env.HF_TOKEN;
   delete env.HUGGING_FACE_HUB_TOKEN;
   delete env.HF_HUB_ETAG_TIMEOUT;
