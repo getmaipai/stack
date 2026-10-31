@@ -1,11 +1,13 @@
-import { expect, test } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { dataDir } from "@/lib/paths";
 import { isAlive, processTree } from "@/lib/processTree";
 import { getGovernorStatus } from "@/lib/governor";
 import { memoryWatchdog } from "@/lib/memoryWatchdog";
-import { jobHarness, type Outcome } from "./helpers/jobHarness";
+import { jobHarness, resetJobHarness, type Outcome } from "./helpers/jobHarness";
+
+afterEach(() => resetJobHarness());
 
 const tmpBytes=(dir:string):number=>{try{return readdirSync(dir,{withFileTypes:true}).reduce((sum,e)=>{const p=join(dir,e.name);try{return sum+(e.isDirectory()?tmpBytes(p):e.isFile()?statSync(p).size:0);}catch{return sum;}},0);}catch{return 0;}};
 // The ps the reader spawns lists itself and is gone a moment later; only live pids count.

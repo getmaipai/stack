@@ -69,3 +69,11 @@ function music(): Harness {
 }
 
 export const jobHarness: Record<"picture"|"video"|"music",()=>Harness>={picture,video,music};
+
+/** Puts every global the harness touched back as the next test file expects it: engine deps, installed picture
+ * families, the job and governor state. The last harness of a file would otherwise leave the families override set. */
+export function resetJobHarness(): void {
+  imageGen.useDeps(null); videoGen.useDeps(null); musicGen.useDeps(null);
+  __setInstalledFamiliesForTests(null);
+  __resetJobsForTests(); __resetGovernorForTests();
+}
