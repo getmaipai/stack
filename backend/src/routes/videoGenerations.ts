@@ -19,7 +19,7 @@ import type { AppEnv } from "@/types";
 import { identityHeaders } from "@/lib/identity";
 import { RoleReplyHeaders } from "@maipai/spec/stack/ts/role-reply-headers.js";
 import { cancelJob, getJob, hasJobRunner, isJobPaused, listJobs, submitJob, waitForJob, type Job } from "@/lib/jobs";
-import { TierFieldSchema, TierStatusSchema, tierInput, tierOf } from "@/routes/tierField";
+import { TierFieldSchema, TierStatusSchema, governorDecides, tierInput, tierOf } from "@/routes/tierField";
 import { PAUSED_LABEL } from "@/lib/genProgress";
 import { LoraError, resolveLoras } from "@/video/loras";
 import { LikenessError, photoBind, verifyProof, type LikenessCheck } from "@/lib/likeness";
@@ -222,7 +222,7 @@ videoV1Routes.openapi(postRoute, async (c) => {
   if (checks.length > 0 && (body.audience ?? "all-ages") !== "adult") return fail(c, 403, "likeness_adult_only", "A video that looks like a person is only made for an adult on their own screen. Ask Home to make it from a signed-in adult's chat.");
   if (!videoGen.hasModels(quality)) return fail(c, 503, "not_installed", quality === "detailed" ? "The Detailed video model is not installed yet. An admin can install it in Settings, Models and storage, then try again." : "The video model is not installed yet. Install it from Home's Engines page, then try again.");
   if (activeClips() >= VIDEO_QUEUE_MAX) return fail(c, 429, "queue_full", `${VIDEO_QUEUE_MAX} clips are already waiting. Try again when one finishes.`);
-  const verdict = memoryVerdict(quality);
+  const verdict = governorDecides(body.tier) ? { ok: true as const } : memoryVerdict(quality);
   if (!verdict.ok) return fail(c, 503, "no_memory", verdict.reason);
   const seed = body.seed ?? Math.floor(Math.random() * 2 ** 32);
   const frames = seconds * VIDEO_FPS + 1;

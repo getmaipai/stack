@@ -19,7 +19,7 @@ import type { AppEnv } from "@/types";
 import { identityHeaders } from "@/lib/identity";
 import { RoleReplyHeaders } from "@maipai/spec/stack/ts/role-reply-headers.js";
 import { cancelJob, getJob, hasJobRunner, isJobPaused, listJobs, submitJob, waitForJob, type Job } from "@/lib/jobs";
-import { TierFieldSchema, TierStatusSchema, tierInput, tierOf } from "@/routes/tierField";
+import { TierFieldSchema, TierStatusSchema, governorDecides, tierInput, tierOf } from "@/routes/tierField";
 import { PAUSED_LABEL } from "@/lib/genProgress";
 import { fileResponse } from "@/routes/videoGenerations";
 import { wasMadeHere, sha256Hex } from "@/music/provenance";
@@ -243,7 +243,7 @@ musicV1Routes.openapi(postRoute, async (c) => {
   const edit = body.task === "edit";
   if (!edit) {
     if (activeSongs() >= MUSIC_QUEUE_MAX) return fail(c, 429, "queue_full", `${MUSIC_QUEUE_MAX} songs are already waiting. Try again when one finishes.`);
-    const verdict = memoryVerdict();
+    const verdict = governorDecides(body.tier) ? { ok: true as const } : memoryVerdict();
     if (!verdict.ok) return fail(c, 503, "no_memory", verdict.reason);
   }
   const fields = checked.fields;

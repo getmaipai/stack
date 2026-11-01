@@ -14,6 +14,7 @@ import { detectLoraBase, importLora, LoraError, readLoraHeader, resolveLoras } f
 import { __resetProvenanceForTests, recordGeneratedImage } from "@/video/provenance";
 import { defaultVideoGenDeps, qualityOfModelName, memoryVerdict, VIDEO_SPECS, videoGen, type VideoGenDeps, type WorkerHandle, type WorkerReply, type WorkerRequest } from "@/video/videoGen";
 import { dataDir } from "@/lib/paths";
+import { __resetMemoryStateForTests, setMemoryLevel } from "@/lib/memoryState";
 import { diskPlanForTier } from "@/lib/diskPlan";
 
 const GB = 1_073_741_824;
@@ -172,6 +173,18 @@ test("Detailed is refused for memory when chat leaves no room, with the same pla
   const response = await post({ prompt: "x", model: "detailed" });
   expect(response.status).toBe(503);
   expect(await response.json()).toMatchObject({ code: "no_memory" });
+});
+
+test("MAX-LIVE-02: while the memory watchdog is at warn a Max clip is handed to the governor (its Max window and Reduced chat decide), a plain one is still refused", async () => {
+  videoGen.useDeps(scripted());
+  setMemoryLevel("warn");
+  try {
+    const plain = await post({ prompt: "x", model: "detailed", timeout_ms: 1 });
+    expect(plain.status).toBe(503);
+    expect(await plain.json()).toMatchObject({ code: "no_memory" });
+    const max = await post({ prompt: "x", model: "detailed", tier: "max", timeout_ms: 1 });
+    expect(max.status).not.toBe(503);
+  } finally { __resetMemoryStateForTests(); }
 });
 
 test("a LoRA is read as Quick's or Detailed's from its tensors, and a clip applies only its own model's", async () => {

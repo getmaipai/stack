@@ -17,7 +17,7 @@ import type { AppEnv } from "@/types";
 import { identityHeaders } from "@/lib/identity";
 import { RoleReplyHeaders } from "@maipai/spec/stack/ts/role-reply-headers.js";
 import { cancelJob, getJob, hasJobRunner, isJobPaused, listJobs, submitJob, waitForJob, type Job } from "@/lib/jobs";
-import { TierFieldSchema, TierStatusSchema, tierInput, tierOf } from "@/routes/tierField";
+import { TierFieldSchema, TierStatusSchema, governorDecides, tierInput, tierOf } from "@/routes/tierField";
 import { PAUSED_LABEL } from "@/lib/genProgress";
 import { LoraError, type LoraRequest } from "@/lib/media/loraLibrary";
 import { LikenessError, photoBind, verifyProof, type LikenessCheck } from "@/lib/likeness";
@@ -254,7 +254,7 @@ export async function generateImages<T extends Context>(c: T, body: ImageGenerat
   for (const lora of loras) if (lora.likeness) checks.push(lora.likeness);
   if (activeJobs() >= IMAGE_QUEUE_MAX) return fail(c, 429, "queue_full", `${IMAGE_QUEUE_MAX} pictures are already waiting. Try again when one finishes.`);
   const quantize = quantizeFor(family, "generate", tier);
-  const verdict = memoryVerdict(peakBytes(family, "generate", quantize, loras.length));
+  const verdict = governorDecides(body.tier) ? { ok: true as const } : memoryVerdict(peakBytes(family, "generate", quantize, loras.length));
   if (!verdict.ok) return fail(c, 503, "no_memory", verdict.reason);
   const seed = body.seed ?? Math.floor(Math.random() * 2 ** 32);
   const token = crypto.randomUUID();

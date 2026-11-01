@@ -9,3 +9,6 @@ export const TierStatusSchema = z.enum(["standard", "boost", "max"]).openapi({ d
 export const tierInput = (tier: "standard" | "boost" | "max" | undefined): { tier?: "standard" | "boost" | "max" } => tier ? { tier } : {};
 /** The tier a job reports. */
 export const tierOf = (job: Job): "standard" | "boost" | "max" => { const tier = (job.input as { tier?: string } | null)?.tier; return tier === "boost" || tier === "max" ? tier : "standard"; };
+
+/** MAX-LIVE-02: a Max job is judged by the governor alone (its Max window, idle models given back, Reduced chat, the real-memory admission gate and the never-fits refusal). A route's own free-memory pre-check refused it in 7 ms before any of that could run (2026-11-01, live Stack); an unnamed, Standard or Boost job keeps the pre-check. */
+export const governorDecides = (tier: "standard" | "boost" | "max" | undefined): boolean => tier === "max";
