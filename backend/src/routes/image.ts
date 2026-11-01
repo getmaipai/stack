@@ -6,6 +6,7 @@
 // household LoRA library here. Who may use which LoRA is Home's rule; this
 // route stores the facts (hash, licence, base model, classification) and
 // refuses a file that cannot work or must not be added.
+import { engineIdleMs } from "@/lib/engineIdle";
 import { createRoute, z } from "@hono/zod-openapi";
 import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -124,7 +125,7 @@ imageRoutes.openapi(statusRoute, (c) => {
     edit: { generative: installed.includes("flux2-klein-4b") && availability.available, masked: installed.includes("flux2-klein-4b") && availability.available, references: installed.includes("flux2-klein-4b") && availability.available ? IMAGE_REFERENCES_MAX : 0, model: "flux2-klein-4b" },
     limits: { min_side: IMAGE_MIN_SIDE, max_side: IMAGE_MAX_SIDE, size_step: IMAGE_SIZE_STEP, max_n: IMAGE_MAX_COUNT, max_prompt_chars: IMAGE_MAX_PROMPT_CHARS, max_loras: MAX_LORAS_PER_IMAGE, max_input_bytes: IMAGE_MAX_INPUT_BYTES, max_edit_megapixels: IMAGE_MAX_EDIT_MEGAPIXELS, queue_max: IMAGE_QUEUE_MAX, feather_default: IMAGE_FEATHER_DEFAULT, feather_max: IMAGE_FEATHER_MAX, max_references: IMAGE_REFERENCES_MAX, default_size: "1024x1024" },
     negative_prompt: "accepted, no effect: the distilled models run without guidance",
-    idle_unload_s: Math.round(Number(process.env.IMAGE_IDLE_MS ?? 600_000) / 1000),
+    idle_unload_s: Math.round(engineIdleMs("image") / 1000),
     memory: { fits: verdict.ok, reason: verdict.ok ? null : verdict.reason, peak_gb: Math.round(peakBytes(defaultModel ?? DEFAULT_FAMILY, "generate", quantizeFor(defaultModel ?? DEFAULT_FAMILY, "generate", tier), 0) / 1e8) / 10 },
     worker: { alive: imageGen.workerAlive },
     environment: { engine: IMAGE_GEN_NAME, version: IMAGE_GEN_VERSION, ready: imageGenEnvironmentReady() },

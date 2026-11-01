@@ -21,6 +21,7 @@
 // and that a source track is one this Stack made (music/provenance.ts). Age and
 // surface gates, the minor line on every description, lyric and title, and the
 // no-real-voice line live in Home, where the person is known.
+import { engineIdleMs } from "@/lib/engineIdle";
 import { lowMemoryRefusal } from "@/lib/memoryState";
 import { existsSync, mkdirSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -78,7 +79,7 @@ export const MUSIC_QUALITY: Record<(typeof MUSIC_TIERS)[number], { offered: Musi
 };
 /** The planning LM each quality loads. */
 export const MUSIC_LM: Record<MusicQuality, string> = { quick: "acestep-5Hz-lm-0.6B", detailed: "acestep-5Hz-lm-1.7B" };
-const idleMs = (): number => Number(process.env.MUSIC_IDLE_MS ?? 5 * 60_000);
+const idleMs = (): number => engineIdleMs("music");
 const deadlineMs = (): number => Number(process.env.MUSIC_DEADLINE_MS ?? 10 * 60_000);
 /** MLX's buffer cache is capped at 2 GB in the worker (Home's note, section 3). */
 const CACHE_GB = 2;

@@ -401,6 +401,22 @@ test("one worker serves clips one at a time, reports the phases in order, and ex
   expect(videoRoleState(service).state).toBe("installed");
 });
 
+test("ENGINE-IDLE-01: a second clip inside the idle window reuses the loaded worker; one after it loads again", async () => {
+  process.env.VIDEO_IDLE_MS = "150";
+  const service = new VideoGenService(scripted());
+  const input = (name: string) => ({ prompt: "x", negativePrompt: null, imagePath: null, width: 832, height: 480, frames: 121, seed: 1, loras: [], outputDir: join(tmpdir(), `video-idle-${name}-${process.pid}`) });
+  await service.run(input("a"), { jobId: "idle-a" });
+  await Bun.sleep(60);
+  await service.run(input("b"), { jobId: "idle-b" });
+  expect(spawned).toBe(1);
+  expect(killed).toBe(0);
+  await Bun.sleep(300);
+  expect(killed).toBe(1);
+  await service.run(input("c"), { jobId: "idle-c" });
+  expect(spawned).toBe(2);
+  service.stop();
+});
+
 test("the first clip builds the environment and says so; a failed build says what to check; no model is a 503 with no worker", async () => {
   const phasesSeen: string[] = [];
   const building = new VideoGenService(scripted(okReply, { ensureEnvironment: async (onProgress) => { onProgress("packages"); } }));

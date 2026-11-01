@@ -33,6 +33,9 @@ export const SETTING_SECTIONS = [
   { id: "engines.coding", label: "Coding engine" },
   { id: "engines.stt", label: "Voice in engine" },
   { id: "engines.tts", label: "Voice out engine" },
+  { id: "engines.video", label: "Video engine" },
+  { id: "engines.music", label: "Music engine" },
+  { id: "engines.image", label: "Picture engine" },
 ] as const;
 
 // A `url` binding: a server the person already runs, bound read-only to
@@ -100,6 +103,10 @@ export const SETTINGS: SettingDeclaration[] = [
   ...GPU_LAYER_ROLES.map(gpuLayersSetting),
   // The coding engine (CODE-STACK-01 S2): its own llama-server process,
   // loaded by the first coding request and unloaded when idle.
+  // ENGINE-IDLE-01: how long a generator's worker stays loaded after its last job (src/lib/engineIdle.ts).
+  { ...stack, key: "stack.engines.video.keep_warm_minutes", selector: "number", range: { min: 1, max: 1440 }, default: 2, label: "Keep video ready", help: "Minutes the video model stays loaded after the last clip. The video models use 40 GB or more, so they leave after a short wait; a second clip started inside this time begins at once, a later one loads the model again first.", section: { id: "engines.video", order: 10 }, level: "advanced", needs_restart: false },
+  { ...stack, key: "stack.engines.music.keep_warm_minutes", selector: "number", range: { min: 1, max: 1440 }, default: 5, label: "Keep music ready", help: "Minutes the music model stays loaded after the last song.", section: { id: "engines.music", order: 10 }, level: "advanced", needs_restart: false },
+  { ...stack, key: "stack.engines.image.keep_warm_minutes", selector: "number", range: { min: 1, max: 1440 }, default: 10, label: "Keep pictures ready", help: "Minutes the picture model stays loaded after the last picture.", section: { id: "engines.image", order: 10 }, level: "advanced", needs_restart: false },
   { ...stack, key: "stack.engines.coding.home_mode", selector: "select", range: { options: [{ value: "normal", label: "Normal" }, { value: "coding", label: "Coding" }] }, default: "normal", label: "Home mode", help: "Normal keeps the household chat model loaded. Coding uses the large coding model for chat, judge and router too.", section: { id: "engines.coding", order: 1 }, level: "basic", needs_restart: false },
   { ...stack, key: "stack.engines.coding.keep_warm_minutes", selector: "number", range: { min: 1, max: 1440 }, default: 15, label: "Keep coding warm", help: "Minutes the coding model stays loaded after its last request. After that it unloads and the next coding request loads it again, which takes a few seconds to a minute.", section: { id: "engines.coding", order: 10 }, level: "advanced", needs_restart: false },
   { ...stack, key: "stack.engines.coding.thinking_budget_ceiling", selector: "number", range: { min: 0, max: 32768 }, default: 2000, label: "Most thinking per answer", help: "The most tokens the coding model may spend thinking before it answers. Uncapped thinking looped on some questions in testing. 0 turns thinking off.", section: { id: "engines.coding", order: 20 }, level: "advanced", needs_restart: true },

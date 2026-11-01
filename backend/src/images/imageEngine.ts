@@ -20,6 +20,7 @@
 // ever be added (never a minor in a sexual context, never a real person's
 // likeness). Age and surface gates, the prompt floor and the finished-picture
 // check live in Home, where the person is known.
+import { engineIdleMs } from "@/lib/engineIdle";
 import { heavyGate, PausableProcess, type Lease, type PausableWorker } from "@/lib/heavyGate";
 import { TreeSnapshot } from "@/lib/processTree";
 import { registerOwned } from "@/lib/ownedProcesses";
@@ -38,7 +39,7 @@ import workerScript from "./mflux_worker.py" with { type: "file" };
 
 export const IMAGE_GEN_NAME = "image-gen";
 export const IMAGE_GEN_VERSION = MANAGED_RUNTIMES.find((runtime) => runtime.name === IMAGE_GEN_NAME)?.version ?? "0.23.0";
-const idleMs = (): number => Number(process.env.IMAGE_IDLE_MS ?? 10 * 60_000);
+const idleMs = (): number => engineIdleMs("image");
 const deadlineMs = (family: ImageFamilyId, count: number): number => Number(process.env.IMAGE_DEADLINE_MS ?? (family === "z-image-turbo" ? 4 : 2) * 60_000 * Math.max(1, count));
 
 export class ImageError extends Error {

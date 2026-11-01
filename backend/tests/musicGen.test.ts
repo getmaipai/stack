@@ -562,7 +562,7 @@ test("the worker keeps the keep-warm, offline and memory settings the note measu
   expect(source).toContain('os.environ.setdefault("ACESTEP_MLX_VAE_CHUNK", "256")');
   expect(source).toContain("use_cot_lyrics=False");
   const service = await Bun.file(join(import.meta.dir, "../src/music/musicGen.ts")).text();
-  expect(service).toContain('process.env.MUSIC_IDLE_MS ?? 5 * 60_000');
+  expect(service).toContain('engineIdleMs("music")');
   for (const name of ["HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE", "HF_HUB_DISABLE_TELEMETRY", "ACESTEP_MLX_VAE_CHUNK", "MUSIC_MAX_SECONDS"]) expect(service).toContain(name);
 });
 

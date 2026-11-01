@@ -23,6 +23,7 @@
 // reference picture arrives with a declared source that is not an upload
 // (Home owns the gate). Age and surface gates, the household-name gate on the
 // prompt, and the two absolute lines live in Home, where the person is known.
+import { engineIdleMs } from "@/lib/engineIdle";
 import { heavyGate, PausableProcess, type Lease, type PausableWorker } from "@/lib/heavyGate";
 import { TreeSnapshot } from "@/lib/processTree";
 import { registerOwned } from "@/lib/ownedProcesses";
@@ -89,7 +90,7 @@ export function qualityOfModelName(name: string | undefined): VideoQuality | nul
   if (name === "detailed" || name === VIDEO_SPECS.detailed.modelId) return "detailed";
   return null;
 }
-const idleMs = (): number => Number(process.env.VIDEO_IDLE_MS ?? 10 * 60_000);
+const idleMs = (): number => engineIdleMs("video");
 const deadlineMs = (): number => Number(process.env.VIDEO_DEADLINE_MS ?? 15 * 60_000);
 
 export class VideoError extends Error {

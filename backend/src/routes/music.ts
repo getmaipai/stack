@@ -4,6 +4,7 @@
 // POST /stack/v1/engines/music-gen/install, the pinned models through
 // POST /stack/v1/models), and offers the quality choices it lists. Shaped like
 // GET /stack/v1/video.
+import { engineIdleMs } from "@/lib/engineIdle";
 import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
@@ -56,7 +57,7 @@ musicRoutes.openapi(statusRoute, (c) => {
     },
     quality: tierLimit?.quality ?? [], default_quality: tierLimit?.default_quality ?? null,
     tasks: availability.available ? ["text2music", "cover", "repaint", "extend", "edit"] : [],
-    worker: { alive: musicGen.workerAlive, idle_exit_seconds: Math.round(Number(process.env.MUSIC_IDLE_MS ?? 300_000) / 1000) },
+    worker: { alive: musicGen.workerAlive, idle_exit_seconds: Math.round(engineIdleMs("music") / 1000) },
     environment: { engine: pin ? `${pin.name} ${pin.tag}` : MUSIC_GEN_NAME, version: MUSIC_GEN_VERSION, source: musicGenSourceInstalled(), ready: musicGenEnvironmentReady() },
     install: { models, remaining_bytes: models.filter((model) => !model.installed).reduce((sum, model) => sum + model.approx_bytes, 0) },
   } }, 200 as const);

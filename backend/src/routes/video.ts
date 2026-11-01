@@ -6,6 +6,7 @@
 // LoRA library here. Who may use which LoRA is Home's rule; this route stores
 // the facts (hash, licence, base model, classification) and refuses a file
 // that cannot work or must not be added.
+import { engineIdleMs } from "@/lib/engineIdle";
 import { createRoute, z } from "@hono/zod-openapi";
 import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -39,7 +40,7 @@ const QualitySchema = z.object({
   lora_base_model: z.string(),
 });
 const StatusSchema = z.object({
-  state: z.enum(["unsupported", "off", "not-installed", "needs-setup", "building", "idle", "running"]).openapi({ description: "off: this computer's tier does not run video. not-installed: the model files are missing. needs-setup: installed; the first clip builds the environment (first time only) and starts the worker. idle: the worker is up and waits ten minutes for the next clip, then exits. running: a clip is in progress." }),
+  state: z.enum(["unsupported", "off", "not-installed", "needs-setup", "building", "idle", "running"]).openapi({ description: "off: this computer's tier does not run video. not-installed: the model files are missing. needs-setup: installed; the first clip builds the environment (first time only) and starts the worker. idle: the worker is up and waits for the next clip (two minutes unless an admin changes it), then exits. running: a clip is in progress." }),
   phase: z.string().nullable(),
   available: z.boolean(), code: z.string().nullable(), reason: z.string().nullable(), tier: z.string(),
   memory: z.object({ fits: z.boolean(), reason: z.string().nullable(), peak_gb: z.number() }).openapi({ description: "Whether a clip could be admitted next to what is resident now." }),
@@ -117,7 +118,7 @@ videoRoutes.openapi(statusRoute, (c) => {
     loras_supported: true, lora_count: listLoras().length, audio: false,
     negative_prompt: "accepted, no effect: the distilled model runs without guidance",
     reference_images: { generated: true, uploaded: true, household_photo: true, reason: "Any picture can start a clip. The Stack does not judge where it came from; the caller decides who may ask." },
-    worker: { alive: videoGen.workerAlive, idle_exit_seconds: Math.round(Number(process.env.VIDEO_IDLE_MS ?? 600_000) / 1000) },
+    worker: { alive: videoGen.workerAlive, idle_exit_seconds: Math.round(engineIdleMs("video") / 1000) },
     environment: { engine: pin ? `${pin.name} ${pin.tag}` : VIDEO_GEN_NAME, version: VIDEO_GEN_VERSION, source: videoGenSourceInstalled(), ready: videoGenEnvironmentReady() },
     install: { models, remaining_bytes: models.filter((model) => !model.installed).reduce((sum, model) => sum + model.approx_bytes, 0) },
     qualities: {

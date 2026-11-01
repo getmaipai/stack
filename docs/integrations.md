@@ -558,7 +558,7 @@ makes no network request.
 
 ACE-Step 1.5 (MIT; the 2B turbo DiT, a 5 Hz planning LM, the Qwen3-Embedding-0.6B text encoder and the music VAE) runs in process on the Apple GPU,
 driven by one JSON-lines worker inside the managed Python 3.12 environment `music-gen`. No `acestep-api` server and no port. The worker starts on the first
-song, keeps its models for five idle minutes (`MUSIC_IDLE_MS`; songs come in bursts of edits), then exits and returns its memory. It is never started at boot,
+song, keeps its models for five idle minutes (`stack.engines.music.keep_warm_minutes`, default 5, `MUSIC_IDLE_MS` overrides; songs come in bursts of edits), then exits and returns its memory. It is never started at boot,
 runs with `HF_HUB_OFFLINE=1`, and makes no network request. Tiers: `p128` (songs up to 240 s, quality `quick` or `detailed`, default `detailed`) and `p64` (up to
 120 s, `quick` only); `p16` and `p32` answer 503 `not_available_on_this_computer`. Quality is the planning model: `quick` the 0.6B one, `detailed` the 1.7B one.
 Design and the measurements: Home `docs/design/music-generation-2026-10-17.md`, sections 3, 4 and 12.
