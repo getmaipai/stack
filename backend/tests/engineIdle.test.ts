@@ -6,7 +6,7 @@ import { engineIdleMs, ENGINE_IDLE_DEFAULT_MINUTES } from "@/lib/engineIdle";
 import { app } from "@/app";
 
 beforeEach(() => __resetSettingsForTests());
-afterEach(() => { for (const name of ["VIDEO_IDLE_MS", "IMAGE_IDLE_MS", "MUSIC_IDLE_MS"]) delete process.env[name]; });
+afterEach(() => { __resetSettingsForTests(); for (const name of ["VIDEO_IDLE_MS", "IMAGE_IDLE_MS", "MUSIC_IDLE_MS"]) delete process.env[name]; });
 
 test("defaults: video 2 minutes, music 5, picture 10; each is a live setting an admin can change", () => {
   expect(ENGINE_IDLE_DEFAULT_MINUTES).toEqual({ video: 2, music: 5, image: 10 });
