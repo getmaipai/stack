@@ -44,7 +44,7 @@ export const COMPONENT_FAILED_PREFIX = "component-install-failed.";
 /** Room kept free on the data volume beyond a download, so a fit never leaves the computer full. */
 export const DISK_MARGIN_BYTES = 5_000_000_000;
 
-export type ComponentGroup = "chat" | "voice" | "pictures" | "video" | "music" | "tools" | "loras";
+export type ComponentGroup = "chat" | "voice" | "pictures" | "video" | "music" | "stems" | "tools" | "loras";
 export type ComponentState = "installed" | "installing" | "notInstalled" | "failed";
 export type ComponentRequirement = "required" | "optional" | "unsupported";
 type Tier = "p16" | "p32" | "p64" | "p128";
@@ -225,9 +225,9 @@ export function componentDefs(): UnitDef[] {
       return activeJobFor((kind) => kind.startsWith("video")) ? "A video clip is waiting or being made right now." : null;
     },
   });
-  units.push({ id: "htdemucs", label: "Music: HTDemucs stem splitter", summary: "Separates a song made here into vocals, drums, bass and other.", group: "music", role: "music", pins: [STACK_STEMS_MODELS[0]!], envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
-  units.push({ id: "htdemucs-ft", label: "Music: finer stem splitter (HTDemucs fine-tuned)", summary: "Separates songs into four finer stems.", group: "music", role: "music", pins: [STACK_STEMS_MODELS[1]!], envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
-  units.push({ id: "htdemucs-6s", label: "Music: six-part stem splitter (guitar and piano)", summary: "Separates songs into six stems, including guitar and piano.", group: "music", role: "music", pins: [STACK_STEMS_MODELS[2]!], envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
+  units.push({ id: "htdemucs", label: "Music: HTDemucs stem splitter", summary: "Separates a song made here into vocals, drums, bass and other.", group: "stems", role: "music", pins: [STACK_STEMS_MODELS[0]!], envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
+  units.push({ id: "htdemucs-ft", label: "Music: finer stem splitter (HTDemucs fine-tuned)", summary: "Separates songs into four finer stems.", group: "stems", role: "music", pins: [STACK_STEMS_MODELS[1]!], envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
+  units.push({ id: "htdemucs-6s", label: "Music: six-part stem splitter (guitar and piano)", summary: "Separates songs into six stems, including guitar and piano.", group: "stems", role: "music", pins: [STACK_STEMS_MODELS[2]!], envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
   units.push({
     id: STACK_MUSIC_MODELS[0]!.id, ...LABELS[STACK_MUSIC_MODELS[0]!.id]!, group: "music", role: "music", pins: STACK_MUSIC_MODELS, envs: [envMusic], tiers: ["p64", "p128"],
     platformBlock: () => musicAvailability().code === "unsupported" ? musicAvailability().reason : null,

@@ -4,30 +4,30 @@
   "headroom_warn_bytes": 5368709120,
   "gib_bytes": 1073741824,
   "installer": {
-    "p16.required_free_bytes": 15039341565,
+    "p16.required_free_bytes": 17380172093,
     "p16.minimum_required_free_bytes": 13741867392,
     "p16.everything_required_free_bytes": 17853748590,
-    "p16.needed_bytes": 12885275320,
+    "p16.needed_bytes": 14969300760,
     "p16.home_required_free_bytes": 3176323277,
-    "p16.ai_required_free_bytes": 11863018288,
-    "p32.required_free_bytes": 33791153085,
+    "p16.ai_required_free_bytes": 14203848816,
+    "p32.required_free_bytes": 36131983613,
     "p32.minimum_required_free_bytes": 30813284198,
     "p32.everything_required_free_bytes": 36605560110,
-    "p32.needed_bytes": 28511784920,
+    "p32.needed_bytes": 30595810360,
     "p32.home_required_free_bytes": 3176323277,
-    "p32.ai_required_free_bytes": 30614829808,
-    "p64.required_free_bytes": 117177075071,
+    "p32.ai_required_free_bytes": 32955660336,
+    "p64.required_free_bytes": 119517905599,
     "p64.minimum_required_free_bytes": 56572612676,
     "p64.everything_required_free_bytes": 161718727901,
-    "p64.needed_bytes": 98253307171,
+    "p64.needed_bytes": 100337332611,
     "p64.home_required_free_bytes": 3176323277,
-    "p64.ai_required_free_bytes": 114000751794,
-    "p128.required_free_bytes": 151843393620,
+    "p64.ai_required_free_bytes": 116341582322,
+    "p128.required_free_bytes": 154184224148,
     "p128.minimum_required_free_bytes": 56572612676,
     "p128.everything_required_free_bytes": 324090984810,
-    "p128.needed_bytes": 127268369739,
+    "p128.needed_bytes": 129352395179,
     "p128.home_required_free_bytes": 3176323277,
-    "p128.ai_required_free_bytes": 148667070343
+    "p128.ai_required_free_bytes": 151007900871
   },
   "tiers": {
     "p16": {
@@ -172,9 +172,9 @@
         {
           "id": "stems",
           "label": "Split songs into stems (HTDemucs)",
-          "note": "Separates songs made in Home into vocals, drums, bass and other. Optional.",
+          "note": "Separates songs made in Home into vocals, drums, bass and other. Recommended, about 0.3 GB.",
           "kind": "model",
-          "need": "optional",
+          "need": "recommended",
           "selectable": true,
           "download_bytes": 84025440,
           "installed_bytes": 84025440,
@@ -306,11 +306,11 @@
         }
       ],
       "default": {
-        "download_bytes": 9126092011,
-        "installed_bytes": 10770331222,
-        "peak_temp_bytes": 2114944098,
-        "needed_bytes": 12885275320,
-        "required_free_bytes": 15039341565
+        "download_bytes": 10010117451,
+        "installed_bytes": 12054356662,
+        "peak_temp_bytes": 2914944098,
+        "needed_bytes": 14969300760,
+        "required_free_bytes": 17380172093
       },
       "minimum": {
         "download_bytes": 8415061629,
@@ -334,6 +334,7 @@
         "stt",
         "voice",
         "image-tools",
+        "stems",
         "search"
       ]
     },
@@ -513,9 +514,9 @@
         {
           "id": "stems",
           "label": "Split songs into stems (HTDemucs)",
-          "note": "Separates songs made in Home into vocals, drums, bass and other. Optional.",
+          "note": "Separates songs made in Home into vocals, drums, bass and other. Recommended, about 0.3 GB.",
           "kind": "model",
-          "need": "optional",
+          "need": "recommended",
           "selectable": true,
           "download_bytes": 84025440,
           "installed_bytes": 84025440,
@@ -647,11 +648,11 @@
         }
       ],
       "default": {
-        "download_bytes": 24752601611,
-        "installed_bytes": 26396840822,
-        "peak_temp_bytes": 2114944098,
-        "needed_bytes": 28511784920,
-        "required_free_bytes": 33791153085
+        "download_bytes": 25636627051,
+        "installed_bytes": 27680866262,
+        "peak_temp_bytes": 2914944098,
+        "needed_bytes": 30595810360,
+        "required_free_bytes": 36131983613
       },
       "minimum": {
         "download_bytes": 22641242301,
@@ -677,6 +678,7 @@
         "stt",
         "voice",
         "image-tools",
+        "stems",
         "search"
       ]
     },
@@ -1008,9 +1010,9 @@
         {
           "id": "stems",
           "label": "Split songs into stems (HTDemucs)",
-          "note": "Separates songs made in Home into vocals, drums, bass and other. Optional.",
+          "note": "Separates songs made in Home into vocals, drums, bass and other. Recommended, about 0.3 GB.",
           "kind": "model",
-          "need": "optional",
+          "need": "recommended",
           "selectable": true,
           "download_bytes": 84025440,
           "installed_bytes": 84025440,
@@ -1202,11 +1204,11 @@
         }
       ],
       "default": {
-        "download_bytes": 92400917733,
-        "installed_bytes": 94618839496,
-        "peak_temp_bytes": 3634467675,
-        "needed_bytes": 98253307171,
-        "required_free_bytes": 117177075071
+        "download_bytes": 93284943173,
+        "installed_bytes": 95902864936,
+        "peak_temp_bytes": 4434467675,
+        "needed_bytes": 100337332611,
+        "required_free_bytes": 119517905599
       },
       "minimum": {
         "download_bytes": 42701207930,
@@ -1236,6 +1238,7 @@
         "image-tools",
         "pictures",
         "pictures-ernie",
+        "stems",
         "search"
       ]
     },
@@ -1663,9 +1666,9 @@
         {
           "id": "stems",
           "label": "Split songs into stems (HTDemucs)",
-          "note": "Separates songs made in Home into vocals, drums, bass and other. Optional.",
+          "note": "Separates songs made in Home into vocals, drums, bass and other. Recommended, about 0.3 GB.",
           "kind": "model",
-          "need": "optional",
+          "need": "recommended",
           "selectable": true,
           "download_bytes": 84025440,
           "installed_bytes": 84025440,
@@ -1872,11 +1875,11 @@
         }
       ],
       "default": {
-        "download_bytes": 120312657165,
-        "installed_bytes": 122875119401,
-        "peak_temp_bytes": 4393250338,
-        "needed_bytes": 127268369739,
-        "required_free_bytes": 151843393620
+        "download_bytes": 121196682605,
+        "installed_bytes": 124159144841,
+        "peak_temp_bytes": 5193250338,
+        "needed_bytes": 129352395179,
+        "required_free_bytes": 154184224148
       },
       "minimum": {
         "download_bytes": 42701207930,
@@ -1908,6 +1911,7 @@
         "pictures",
         "pictures-ernie",
         "video",
+        "stems",
         "search"
       ]
     }
