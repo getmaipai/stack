@@ -8,6 +8,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { dataDir } from "@/lib/paths";
 import { isReducedChat } from "@/lib/reducedChatLease";
+import { getMaxWindow } from "@/lib/governor";
 import { dailyResources } from "@/lib/dailyResources";
 
 const Level = z.enum(["normal", "warn", "critical"]);
@@ -22,6 +23,7 @@ const MemorySchema = z.object({
   non_stack_bytes: z.number(),
   isolation: z.object({ enabled: z.boolean(), paused_now: z.number(), interactive_in_flight: z.number(), pauses: z.number(), resumes: z.number(), forced_resumes: z.number(), paused_seconds: z.number() }).openapi({ description: "ISOLATION-01: heavy workers (picture, video, music, image tools) are stopped while a chat or voice request is in flight and continued after it. paused_now is how many are stopped this moment; paused_seconds is the total since the Stack started." }),
   reduced_chat: z.boolean().openapi({ description: "Whether chat is on the smaller Reduced model right now (the Stack's own state, for Home's notice)." }),
+  max_window: z.object({ state: z.enum(["none", "draining", "open"]), owner: z.string().nullable(), since: z.string().nullable() }).openapi({ description: "TIER-STATUS-01: the governor's own Max window. `draining`: a Max job waits for running work to finish; `open`: it holds the computer. `owner` is the job id. Home reads this for its Status line and Stop button." }),
   recent_actions: z.array(z.object({ at: z.string(), level: Level, action: z.string(), detail: z.string() })),
   history: z.array(z.object({ at: z.string(), available_bytes: z.number(), swap_used_bytes: z.number(), pressure_level: z.number() })),
 });
@@ -31,8 +33,9 @@ const route = createRoute({
   responses: { 200: { content: { "application/json": { schema: MemorySchema } }, description: "The latest 5-second sample (available, free, wired, compressed memory, swap and its recent growth, the kernel's pressure level), the watchdog's level and reserve, whether picture and video making is paused, the Stack's own processes, the biggest memory users on the computer by name (the Stack's and not), and the watchdog's recent actions. Read only." } },
 });
 
+function maxWindowView() { const w = getMaxWindow(); return { state: w.state, owner: w.ownerId, since: w.since === null ? null : new Date(w.since).toISOString() }; }
 export const memoryRoutes = apiRouter<AppEnv>();
-memoryRoutes.openapi(route, (c) => c.json({ ...memoryWatchdog().report(), isolation: heavyGate.status(), reduced_chat: isReducedChat() }, 200));
+memoryRoutes.openapi(route, (c) => c.json({ ...memoryWatchdog().report(), isolation: heavyGate.status(), reduced_chat: isReducedChat(), max_window: maxWindowView() }, 200));
 
 const DailySchema = z.object({ days: z.array(z.object({
   date: z.string().openapi({ description: "Local calendar date." }),
