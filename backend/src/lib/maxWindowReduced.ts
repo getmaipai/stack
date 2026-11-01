@@ -1,5 +1,5 @@
 // TIER-ROUTES-01: the Stack swaps chat itself when the Max window needs the room. The governor tells this file when a Max window starts
-// draining or opens (for a job that needs more than the Standard share) and when it closes; chat goes to Reduced then and comes back,
+// draining or opens (Reduced only when the job still would not fit the computer's real memory after idle models are given back, MAX-LIVE-01) and when it closes; chat goes to Reduced then and comes back,
 // through the same control Home's POST /stack/v1/tiers/reduced uses, so the two never fight: Home may still call the route, but is not required to.
 import { setMaxWindowHook, type MaxWindowChange } from "@/lib/governor";
 import { controlReducedChat, isReducedChat, reducedChatCapMs } from "@/lib/reducedChatLease";
@@ -39,7 +39,7 @@ function step(): void {
 
 export function onMaxWindowChange(change: MaxWindowChange): void {
   if (change.state === "closed") { wanted = false; disarm(); step(); return; }
-  if (!change.needsMoreThanStandard || wanted) return;
+  if (!change.needsReduced || wanted) return;
   wanted = true;
   step();
 }

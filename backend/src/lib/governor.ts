@@ -168,12 +168,56 @@ let maxWindow: { state: "none" | "draining" | "open"; ownerId: string | null; si
 export function getMaxWindow(): typeof maxWindow { return { ...maxWindow }; }
 export function getReclaimSteps(requestId: string): ReclaimStep[] { return [...(reclaimSteps.get(requestId) ?? [])]; }
 function reclaim(requestId: string, step: ReclaimStep["step"], itemId: string, bytes: number, at = Date.now()): void { const rows = reclaimSteps.get(requestId) ?? []; if (rows.at(-1)?.step === step && rows.at(-1)?.itemId === itemId) return; rows.push({ at, step, itemId, bytes }); reclaimSteps.set(requestId, rows); }
-/** TIER-ROUTES-01: the Stack's own reaction to the Max window (the Reduced chat swap). `needsMoreThanStandard` is true when the owner's peak is more than the Standard share of the tier room, so Reduced is entered only for a job that needs that room. */
-export interface MaxWindowChange { state: "draining" | "open" | "closed"; ownerId: string | null; needsMoreThanStandard: boolean }
+/** TIER-ROUTES-01: the Stack's own reaction to the Max window (the Reduced chat swap). `needsReduced` is decided from the computer's real
+ * memory (MAX-LIVE-01): true only when, after every idle model with a measured footprint is given back, the job still would not fit in what is
+ * actually available now. `needsMoreThanStandard` stays as the old static test (the job's catalogued peak against the Standard share of the tier
+ * room); it decides `needsReduced` only when no live reading exists (`basis: "static"`). */
+export interface MaxWindowChange { state: "draining" | "open" | "closed"; ownerId: string | null; needsMoreThanStandard: boolean; needsReduced: boolean; basis: "live" | "static" }
 let maxWindowHook: ((change: MaxWindowChange) => void) | null = null;
 export function setMaxWindowHook(hook: ((change: MaxWindowChange) => void) | null): void { maxWindowHook = hook; }
+
+/** MAX-LIVE-01: what the Max job needs against what the computer can really give it. Real means the memory reader's available figure (free
+ * pages plus the cache the kernel gives back, so what other programs hold is already taken out of it) less the tier's working margin, plus
+ * the footprint of idle loaded models that were measured (a ledger guess is never counted as room to give back). */
+export interface ReducedNeed { basis: "live" | "static"; needed: boolean; requiredBytes: number; roomBytes: number; shortfallBytes: number; availableBytes: number; giveBackBytes: number }
+/** A shortfall must be seen on this many looks in a row (queue time, then each poll) before Reduced is entered. */
+export const REDUCED_SUSTAINED_LOOKS = 2;
+/** A look clears the count only when the room beats the need by this much, so a reading that hovers at the edge does not reset it. */
+export const REDUCED_CLEAR_BAND_BYTES = 1 * GB;
+let reducedWatch: { ownerId: string | null; looks: number; tripped: boolean; last: ReducedNeed | null } = { ownerId: null, looks: 0, tripped: false, last: null };
+export function getReducedNeed(): { ownerId: string | null; looks: number; tripped: boolean; last: ReducedNeed | null } { return { ...reducedWatch }; }
+export function liveReadingAvailable(): boolean { return !memoryReadingDegraded && totalMemoryBytes > 0; }
+export function reducedNeedFor(request: GovernorRequest): ReducedNeed {
+  const requiredBytes = peakFor(request).bytes;
+  if (!liveReadingAvailable()) {
+    const needed = requiredBytes > tierCapBytes("standard", tierRoomBytes());
+    return { basis: "static", needed, requiredBytes, roomBytes: 0, shortfallBytes: 0, availableBytes: 0, giveBackBytes: 0 };
+  }
+  const giveBackBytes = [...loaded.values()].filter((item) => item.class !== "reserved" && !item.pinned && item.measured && item.id !== request.id).reduce((sum, item) => sum + item.peakBytes, 0);
+  const real = freeMemoryBytes + giveBackBytes - workingMargin();
+  const budget = effectiveCapBytes() - (loadedBytes() - giveBackBytes);
+  const roomBytes = Math.max(0, Math.min(real, budget));
+  return { basis: "live", needed: roomBytes < requiredBytes, requiredBytes, roomBytes, shortfallBytes: Math.max(0, requiredBytes - roomBytes), availableBytes: freeMemoryBytes, giveBackBytes };
+}
+/** One look at the Max job. The static fallback decides at once; a live reading must see the shortfall on `REDUCED_SUSTAINED_LOOKS` looks in a row. */
+function lookAtReducedNeed(request: GovernorRequest): boolean {
+  if (reducedWatch.ownerId !== request.id) reducedWatch = { ownerId: request.id, looks: 0, tripped: false, last: null };
+  const need = reducedNeedFor(request);
+  reducedWatch.last = need;
+  if (need.basis === "static") { reducedWatch.tripped = need.needed; return reducedWatch.tripped; }
+  if (need.needed) reducedWatch.looks++;
+  else if (need.roomBytes >= need.requiredBytes + REDUCED_CLEAR_BAND_BYTES) reducedWatch.looks = 0;
+  if (reducedWatch.looks >= REDUCED_SUSTAINED_LOOKS) reducedWatch.tripped = true;
+  return reducedWatch.tripped;
+}
 function notifyMaxWindow(state: MaxWindowChange["state"], ownerId: string | null, request?: GovernorRequest): void {
-  try { maxWindowHook?.({ state, ownerId, needsMoreThanStandard: request ? peakFor(request).bytes > tierCapBytes("standard", tierRoomBytes()) : false }); } catch { /* the window never fails because of the hook */ }
+  try {
+    if (state === "closed" || !request) { reducedWatch = { ownerId: null, looks: 0, tripped: false, last: null }; maxWindowHook?.({ state, ownerId, needsMoreThanStandard: false, needsReduced: false, basis: liveReadingAvailable() ? "live" : "static" }); return; }
+    const look = state === "draining" || !liveReadingAvailable(); // an admitted job already fit the real memory; only a latched shortfall carries to "open"
+    const needsReduced = look ? lookAtReducedNeed(request) : reducedWatch.ownerId === request.id && reducedWatch.tripped;
+    const basis = reducedWatch.last?.basis ?? (liveReadingAvailable() ? "live" : "static");
+    maxWindowHook?.({ state, ownerId, needsMoreThanStandard: peakFor(request).bytes > tierCapBytes("standard", tierRoomBytes()), needsReduced, basis });
+  } catch { /* the window never fails because of the hook */ }
 }
 function windowEvent(data: { state: "open" | "closed"; owner: string | null; tier: "max" }, request?: GovernorRequest): void { emitGovernorWindow(data); notifyMaxWindow(data.state, data.owner, request); }
 function closeMaxWindow(): void { if (maxWindow.state === "none") return; maxWindow = { state: "none", ownerId: null, since: null }; windowEvent({ state: "closed", owner: null, tier: "max" }); }
@@ -924,6 +968,8 @@ export function startGovernor(options: StartGovernorOptions): () => void {
     if (queue.length > 0) {
       const maxOwner = maxWindow.state === "draining" ? queue.find((entry) => !entry.settled && entry.request.id === maxWindow.ownerId) : undefined;
       if (maxOwner) {
+        const wasTripped = reducedWatch.ownerId === maxOwner.request.id && reducedWatch.tripped;
+        if (!wasTripped && lookAtReducedNeed(maxOwner.request)) notifyMaxWindow("draining", maxOwner.request.id, maxOwner.request);
         const draining = [...loaded.values()].some((item) => item.kind === "generator" || (item.class !== "reserved" && (options.busy?.(item.id) ?? false)));
         if (!draining && canAdmit(maxOwner.request, peakFor(maxOwner.request).bytes)) {
           const at = queue.indexOf(maxOwner); queue.splice(at, 1); settleAdmission(maxOwner);
@@ -1002,6 +1048,7 @@ export function __resetGovernorForTests(): void {
   decisions.length = 0;
   reclaimSteps.clear();
   maxWindow = { state: "none", ownerId: null, since: null };
+  reducedWatch = { ownerId: null, looks: 0, tripped: false, last: null };
   tuning = {
     pollMs: GovernorRules.pollMs,
     idleTtlSeconds: GovernorRules.idleTtlSeconds,
