@@ -838,3 +838,15 @@ test("the worker's diagnostics keep the exception type and frames, show a messag
   expect(value).toMatchObject({ type: "ValueError", message: null });
   expect(JSON.stringify(value)).not.toContain("secret");
 });
+
+// TIER-ROUTES-01: the picture route takes an optional tier, the job input carries it for the governor, and the status reports it.
+test("a picture job named Boost carries tier in its input and status; an unnamed one reports standard; a bad tier is refused", async () => {
+  imageGen.useDeps(scripted());
+  const boosted = await (await post({ prompt: "a paper boat", tier: "boost", timeout_ms: 5000 })).json() as { job: string };
+  expect((getJob(boosted.job)!.input as { tier?: string }).tier).toBe("boost");
+  expect((await (await get(`/v1/images/generations/${boosted.job}`)).json() as { tier: string }).tier).toBe("boost");
+  const plain = await (await post({ prompt: "a paper boat", timeout_ms: 5000 })).json() as { job: string };
+  expect((getJob(plain.job)!.input as { tier?: string }).tier).toBeUndefined();
+  expect((await (await get(`/v1/images/generations/${plain.job}`)).json() as { tier: string }).tier).toBe("standard");
+  expect((await post({ prompt: "x", tier: "turbo" })).status).toBe(400);
+});

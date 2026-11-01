@@ -31,6 +31,7 @@ import { startMemoryWatchdog } from "@/lib/memoryWatchdog";
 import { execFileSync } from "node:child_process";
 import { readMetalCapBytes } from "@/lib/metalCap";
 import { setMetalCapBytes, getGovernorStatus } from "@/lib/governor";
+import { wireMaxWindowReduced } from "@/lib/maxWindowReduced";
 import { setupHomeModeRuntime } from "@/lib/homeModeRuntime";
 
 /** Bun's default request body limit is 128 MB; a LoRA upload (VIDEO-GEN-03) may be up to 2 GB, so the limit leaves room for it. Every route checks its own size. */
@@ -52,6 +53,8 @@ async function serve(): Promise<void> {
   applyPendingSettings();
   // An installed model gets what its pin now declares (picture input) before anything launches.
   for (const id of reconcilePinDeclarations([...STACK_MODELS, ...STACK_STEMS_MODELS])) console.log(`Updated the record of ${id} to match its pin.`);
+  // TIER-ROUTES-01: the Max window swaps chat to Reduced and back by itself.
+  wireMaxWindowReduced();
   // The governor's working margin follows the machine's tier from here on.
   const { tier, stop: stopTierWatch } = await setMachineTierFromHardware();
   await setupHomeModeRuntime(settingValues()["stack.engines.coding.home_mode"] === "coding" ? "coding" : "normal");

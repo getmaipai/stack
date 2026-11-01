@@ -2067,6 +2067,15 @@
                     "maximum": 1,
                     "description": "Image to image only: how far the result may move from `init_image` (1 is a new picture). Default 0.6."
                   },
+                  "tier": {
+                    "type": "string",
+                    "enum": [
+                      "standard",
+                      "boost",
+                      "max"
+                    ],
+                    "description": "Which level the job runs at: `standard` (the default), `boost` or `max`. Boost and Max may use more of the computer's memory than Standard; a Max job opens the Max window (other jobs wait, chat may run on its smaller model until the job ends). A job too big for its level is refused with the reason. Home decides who may ask for Boost or Max; the Stack takes the word as given. The status and GET /stack/v1/jobs/{id} report it."
+                  },
                   "preview": {
                     "type": "boolean",
                     "description": "Default true. While the job runs, the status carries `preview_url`: a small JPEG (about 256 px on the long side) of where the picture is heading, redrawn after every denoising step. Pass false to skip it. Edits never make previews."
@@ -3132,6 +3141,15 @@
                     "maximum": 1800000,
                     "description": "How long this request waits for the clip before answering 202 with the job id. Default 30000. A clip takes about two to three minutes."
                   },
+                  "tier": {
+                    "type": "string",
+                    "enum": [
+                      "standard",
+                      "boost",
+                      "max"
+                    ],
+                    "description": "Which level the job runs at: `standard` (the default), `boost` or `max`. Boost and Max may use more of the computer's memory than Standard; a Max job opens the Max window (other jobs wait, chat may run on its smaller model until the job ends). A job too big for its level is refused with the reason. Home decides who may ask for Boost or Max; the Stack takes the word as given. The status and GET /stack/v1/jobs/{id} report it."
+                  },
                   "quiet_seconds": {
                     "type": "integer",
                     "minimum": 20,
@@ -3681,6 +3699,15 @@
                       "nullable": true,
                       "description": "Place in line while queued (1 is next)."
                     },
+                    "tier": {
+                      "type": "string",
+                      "enum": [
+                        "standard",
+                        "boost",
+                        "max"
+                      ],
+                      "description": "The level the job was submitted at (`standard` when none was named)."
+                    },
                     "error": {
                       "type": "string",
                       "nullable": true
@@ -3799,6 +3826,7 @@
                     "eta_seconds",
                     "preview_url",
                     "position",
+                    "tier",
                     "error",
                     "code",
                     "data"
@@ -4449,6 +4477,15 @@
                       "op"
                     ]
                   },
+                  "tier": {
+                    "type": "string",
+                    "enum": [
+                      "standard",
+                      "boost",
+                      "max"
+                    ],
+                    "description": "Which level the job runs at: `standard` (the default), `boost` or `max`. Boost and Max may use more of the computer's memory than Standard; a Max job opens the Max window (other jobs wait, chat may run on its smaller model until the job ends). A job too big for its level is refused with the reason. Home decides who may ask for Boost or Max; the Stack takes the word as given. The status and GET /stack/v1/jobs/{id} report it."
+                  },
                   "title": {
                     "type": "string",
                     "description": "Written into the file as its title. At most 200 characters."
@@ -4898,6 +4935,15 @@
                       "nullable": true,
                       "description": "Place in line while queued (1 is next)."
                     },
+                    "tier": {
+                      "type": "string",
+                      "enum": [
+                        "standard",
+                        "boost",
+                        "max"
+                      ],
+                      "description": "The level the job was submitted at (`standard` when none was named)."
+                    },
                     "error": {
                       "type": "string",
                       "nullable": true
@@ -4972,6 +5018,7 @@
                     "stage_label",
                     "eta_seconds",
                     "position",
+                    "tier",
                     "error",
                     "code",
                     "data"
@@ -5711,6 +5758,15 @@
                       "nullable": true,
                       "description": "Place in line while queued (1 is next)."
                     },
+                    "tier": {
+                      "type": "string",
+                      "enum": [
+                        "standard",
+                        "boost",
+                        "max"
+                      ],
+                      "description": "The level the job was submitted at (`standard` when none was named)."
+                    },
                     "error": {
                       "type": "string",
                       "nullable": true
@@ -5807,6 +5863,7 @@
                     "preview_url",
                     "preview_step",
                     "position",
+                    "tier",
                     "error",
                     "code",
                     "data"

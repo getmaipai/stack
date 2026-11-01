@@ -168,7 +168,14 @@ let maxWindow: { state: "none" | "draining" | "open"; ownerId: string | null; si
 export function getMaxWindow(): typeof maxWindow { return { ...maxWindow }; }
 export function getReclaimSteps(requestId: string): ReclaimStep[] { return [...(reclaimSteps.get(requestId) ?? [])]; }
 function reclaim(requestId: string, step: ReclaimStep["step"], itemId: string, bytes: number, at = Date.now()): void { const rows = reclaimSteps.get(requestId) ?? []; if (rows.at(-1)?.step === step && rows.at(-1)?.itemId === itemId) return; rows.push({ at, step, itemId, bytes }); reclaimSteps.set(requestId, rows); }
-function windowEvent(data: { state: "open" | "closed"; owner: string | null; tier: "max" }): void { emitGovernorWindow(data); }
+/** TIER-ROUTES-01: the Stack's own reaction to the Max window (the Reduced chat swap). `needsMoreThanStandard` is true when the owner's peak is more than the Standard share of the tier room, so Reduced is entered only for a job that needs that room. */
+export interface MaxWindowChange { state: "draining" | "open" | "closed"; ownerId: string | null; needsMoreThanStandard: boolean }
+let maxWindowHook: ((change: MaxWindowChange) => void) | null = null;
+export function setMaxWindowHook(hook: ((change: MaxWindowChange) => void) | null): void { maxWindowHook = hook; }
+function notifyMaxWindow(state: MaxWindowChange["state"], ownerId: string | null, request?: GovernorRequest): void {
+  try { maxWindowHook?.({ state, ownerId, needsMoreThanStandard: request ? peakFor(request).bytes > tierCapBytes("standard", tierRoomBytes()) : false }); } catch { /* the window never fails because of the hook */ }
+}
+function windowEvent(data: { state: "open" | "closed"; owner: string | null; tier: "max" }, request?: GovernorRequest): void { emitGovernorWindow(data); notifyMaxWindow(data.state, data.owner, request); }
 function closeMaxWindow(): void { if (maxWindow.state === "none") return; maxWindow = { state: "none", ownerId: null, since: null }; windowEvent({ state: "closed", owner: null, tier: "max" }); }
 const warmWorkerUnloads = new Map<string, () => boolean | Promise<boolean>>();
 
@@ -500,6 +507,7 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
     if (request.tier === "max" && maxWindow.state === "none") {
       maxWindow = { state: "draining", ownerId: request.id, since: Date.now() };
       reclaim(request.id, "window_drain", "", 0);
+      notifyMaxWindow("draining", request.id, request);
     }
     const insertAt = requestIsReserved ? queue.findIndex((row) => !row.settled && requestClass(row.request) !== "reserved") : -1;
     if (insertAt < 0) queue.push(entry); else queue.splice(insertAt, 0, entry);
@@ -532,7 +540,7 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
     existing.yieldsToGenerators = false;
     const handle: GovernorHandle = { id: request.id, kind: request.kind, class: requestClass(request), requestedBytes: peak.bytes, token: existing.token, retainWarm: request.retainWarm, ...(request.tier ? { tier: request.tier } : {}) };
     decide("Admitted", "The current memory budget has room.", request.id);
-    if (request.tier === "max") { maxWindow = { state: "open", ownerId: request.id, since: Date.now() }; windowEvent({ state: "open", owner: request.id, tier: "max" }); }
+    if (request.tier === "max") { maxWindow = { state: "open", ownerId: request.id, since: Date.now() }; windowEvent({ state: "open", owner: request.id, tier: "max" }, request); }
     if (borrowsFlexBand) flexBandBorrowerToken = existing.token;
     return handle;
   }
@@ -540,7 +548,7 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
   loaded.set(request.id, item);
   if (borrowsFlexBand) flexBandBorrowerToken = item.token;
   decide("Admitted", "The current memory budget has room.", request.id);
-  if (request.tier === "max") { maxWindow = { state: "open", ownerId: request.id, since: Date.now() }; windowEvent({ state: "open", owner: request.id, tier: "max" }); }
+  if (request.tier === "max") { maxWindow = { state: "open", ownerId: request.id, since: Date.now() }; windowEvent({ state: "open", owner: request.id, tier: "max" }, request); }
   return { id: request.id, kind: request.kind, class: requestClass(request), requestedBytes: peak.bytes, token: item.token, retainWarm: request.retainWarm, ...(request.tier ? { tier: request.tier } : {}) };
 }
 
@@ -578,7 +586,7 @@ export async function pauseAll(): Promise<void> {
 export function resumeAll(): void { setRunState("running"); }
 
 function settleAdmission(entry: QueuedEntry): void {
-  if (entry.request.tier === "max") { maxWindow = { state: "open", ownerId: entry.request.id, since: Date.now() }; windowEvent({ state: "open", owner: entry.request.id, tier: "max" }); }
+  if (entry.request.tier === "max") { maxWindow = { state: "open", ownerId: entry.request.id, since: Date.now() }; windowEvent({ state: "open", owner: entry.request.id, tier: "max" }, entry.request); }
   const borrowsFlexBand = usesFlexBand(entry.request, peakFor(entry.request).bytes);
   const existing = loaded.get(entry.request.id);
   if (existing) {

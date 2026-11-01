@@ -17,6 +17,7 @@ import type { AppEnv } from "@/types";
 import { identityHeaders } from "@/lib/identity";
 import { RoleReplyHeaders } from "@maipai/spec/stack/ts/role-reply-headers.js";
 import { cancelJob, getJob, hasJobRunner, isJobPaused, listJobs, submitJob, waitForJob, type Job } from "@/lib/jobs";
+import { TierFieldSchema, TierStatusSchema, tierInput, tierOf } from "@/routes/tierField";
 import { PAUSED_LABEL } from "@/lib/genProgress";
 import { LoraError, type LoraRequest } from "@/lib/media/loraLibrary";
 import { LikenessError, photoBind, verifyProof, type LikenessCheck } from "@/lib/likeness";
@@ -55,6 +56,7 @@ export const ImageGenerationBodySchema = z.object({
   image_source: z.enum(["generated", "uploaded", "household_photo"]).optional().openapi({ description: "Needed with `init_image`: where the starting picture came from, as Home knows it. `generated`: a picture this Stack made (its hash is checked). `household_photo`: a photo of a consenting household adult, accepted only with `consent_proof`. `uploaded`: a photo Home checked and found to show no person. Anything else is refused." }),
   consent_proof: z.string().max(4096).optional().openapi({ description: "With `image_source: household_photo`: Home's signed proof that the person in the photo is a household adult who agreed, bound to this exact picture and valid for at most 30 minutes. Checked when the request arrives and again when the job starts." }),
   strength: z.number().min(0.05).max(1).optional().openapi({ description: "Image to image only: how far the result may move from `init_image` (1 is a new picture). Default 0.6." }),
+  tier: TierFieldSchema,
   preview: z.boolean().optional().openapi({ description: "Default true. While the job runs, the status carries `preview_url`: a small JPEG (about 256 px on the long side) of where the picture is heading, redrawn after every denoising step. Pass false to skip it. Edits never make previews." }),
   timeout_ms: z.number().int().positive().max(MAX_WAIT_MS).optional().openapi({ description: `How long this request waits for the picture before answering 202 with the job id. Default ${DEFAULT_WAIT_MS}.` }),
 }).passthrough();
@@ -85,6 +87,7 @@ const JobStatusSchema = z.object({
   preview_url: z.string().nullable().openapi({ description: "GET this for the latest preview JPEG while running (the `v` query changes with every new one); null when none exists yet, the request asked for none, or the job ended." }),
   preview_step: z.number().int().nullable().openapi({ description: "The step the preview shows." }),
   position: z.number().int().nullable().openapi({ description: "Place in line while queued (1 is next)." }),
+  tier: TierStatusSchema,
   error: z.string().nullable(), code: z.string().nullable(),
   data: z.array(PicSchema),
 });
@@ -151,7 +154,7 @@ function statusOf(job: Job) {
   const phase = state === "queued" ? "queued" : state === "done" ? "ready" : state === "cancelled" && job.status === PAUSED_LOW_MEMORY ? PAUSED_LOW_MEMORY : state === "failed" || state === "cancelled" ? state : detail?.phase ?? (job.status.startsWith("waiting for memory") ? "waiting for memory" : job.status);
   const result = job.state === "done" ? readResult(job.id) : null;
   return {
-    job: job.id, state, phase, progress: Math.round(job.percent), phase_progress: state === "running" && detail ? Math.round(detail.phasePercent) : null, position: job.state === "queued" ? job.position : null,
+    job: job.id, tier: tierOf(job), state, phase, progress: Math.round(job.percent), phase_progress: state === "running" && detail ? Math.round(detail.phasePercent) : null, position: job.state === "queued" ? job.position : null,
     ...liveFields(job.id, state === "running"),
     error: job.state === "failed" ? failure?.message ?? job.reason ?? "The picture failed." : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? job.reason ?? "Paused: this computer is low on memory." : "The picture was cancelled.") : null,
     code: job.state === "failed" ? (job.status === "no_memory" ? "no_memory" : failure?.code ?? "failed") : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? "no_memory" : "cancelled") : null,
@@ -260,7 +263,7 @@ export async function generateImages<T extends Context>(c: T, body: ImageGenerat
     op: "generate", prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, family, quantize, width: size.width, height: size.height, steps, seed, count,
     loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, initImage, strength: body.strength ?? 0.6, image: null, mask: null, region: null, feather: 0, likeness: checks, derived, preview: body.preview !== false,
   });
-  const submitted = submitJob({ kind: IMAGE_JOB_KIND, role: "image", input: { token, family, mode: "generate", quantize, size: `${size.width}x${size.height}`, steps, seed, count, lora_ids: loraIds, image_to_image: initImage !== null, likeness: checks.length > 0 } });
+  const submitted = submitJob({ kind: IMAGE_JOB_KIND, role: "image", input: { token, family, mode: "generate", quantize, size: `${size.width}x${size.height}`, steps, seed, count, lora_ids: loraIds, image_to_image: initImage !== null, likeness: checks.length > 0, ...tierInput(body.tier) } });
   if ("refused" in submitted) return fail(c, 503, submitted.code ?? "unsupported", submitted.reason);
   return waitAndReply(c, submitted.job.id, submitted.job.createdAt, body.timeout_ms ?? DEFAULT_WAIT_MS);
 }

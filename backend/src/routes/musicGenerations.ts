@@ -19,6 +19,7 @@ import type { AppEnv } from "@/types";
 import { identityHeaders } from "@/lib/identity";
 import { RoleReplyHeaders } from "@maipai/spec/stack/ts/role-reply-headers.js";
 import { cancelJob, getJob, hasJobRunner, isJobPaused, listJobs, submitJob, waitForJob, type Job } from "@/lib/jobs";
+import { TierFieldSchema, TierStatusSchema, tierInput, tierOf } from "@/routes/tierField";
 import { PAUSED_LABEL } from "@/lib/genProgress";
 import { fileResponse } from "@/routes/videoGenerations";
 import { wasMadeHere, sha256Hex } from "@/music/provenance";
@@ -58,6 +59,7 @@ const MusicRequestSchema = z.object({
   at: z.enum(["start", "end"]).optional(),
   strength: z.number().optional().openapi({ description: "cover: how far to move from the original, 0.1 to 1 (default 0.6)." }),
   edit: EditSchema.optional(),
+  tier: TierFieldSchema,
   title: z.string().optional().openapi({ description: `Written into the file as its title. At most ${MAX_TITLE_CHARS} characters.` }),
   timeout_ms: z.number().int().positive().max(MAX_WAIT_MS).optional().openapi({ description: `How long this request waits for the song before answering 202 with the job id. Default ${DEFAULT_WAIT_MS}. A minute-long song takes about half a minute warm.` }),
 });
@@ -81,6 +83,7 @@ const JobStatusSchema = z.object({
   stage_label: z.string().nullable().openapi({ description: "The stage in plain words: Getting ready, Planning the song, Making the music, Mixing it down, Saving." }),
   eta_seconds: z.number().int().nullable().openapi({ description: "Whole seconds left, from the medians of earlier jobs of the same task and length (built-in times until there are some); null until a stage is known." }),
   position: z.number().int().nullable().openapi({ description: "Place in line while queued (1 is next)." }),
+  tier: TierStatusSchema,
   error: z.string().nullable(), code: z.string().nullable(),
   data: z.array(MusicDataSchema),
 });
@@ -208,7 +211,7 @@ function statusOf(job: Job) {
   const phase = state === "queued" ? "queued" : state === "done" ? "ready" : state === "cancelled" && job.status === PAUSED_LOW_MEMORY ? PAUSED_LOW_MEMORY : state === "failed" || state === "cancelled" ? state : job.status.startsWith("waiting for memory") ? "waiting for memory" : job.status;
   const result = job.state === "done" ? readResult(job.id) : null;
   return {
-    job: job.id, state, phase, progress: Math.round(job.percent), position: job.state === "queued" ? job.position : null,
+    job: job.id, tier: tierOf(job), state, phase, progress: Math.round(job.percent), position: job.state === "queued" ? job.position : null,
     ...liveFields(job.id, state === "running"),
     error: job.state === "failed" ? failure?.message ?? job.reason ?? "The song failed." : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? job.reason ?? "Paused: this computer is low on memory." : "The song was cancelled.") : null,
     code: job.state === "failed" ? (job.status === "no_memory" ? "no_memory" : failure?.code ?? "failed") : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? "no_memory" : "cancelled") : null,
@@ -248,7 +251,7 @@ musicV1Routes.openapi(postRoute, async (c) => {
   const token = crypto.randomUUID();
   stashSong(token, { fields: { ...fields, ...(seed !== undefined ? { seed } : {}) }, source, historyKey: musicHistoryKey(body.task, fields.duration_s) });
   // The job record holds the task, length, quality and seed, never a word of the request.
-  const submitted = submitJob({ kind: edit ? MUSIC_EDIT_JOB_KIND : MUSIC_JOB_KIND, role: "music", input: { token, task: body.task, ...(fields.duration_s !== undefined ? { duration_s: fields.duration_s } : {}), ...(checked.quality ? { quality: checked.quality } : {}), ...(seed !== undefined ? { seed } : {}) } });
+  const submitted = submitJob({ kind: edit ? MUSIC_EDIT_JOB_KIND : MUSIC_JOB_KIND, role: "music", input: { token, task: body.task, ...(fields.duration_s !== undefined ? { duration_s: fields.duration_s } : {}), ...(checked.quality ? { quality: checked.quality } : {}), ...(seed !== undefined ? { seed } : {}), ...tierInput(body.tier) } });
   if ("refused" in submitted) { unstashSong(token); return fail(c, 503, submitted.code ?? "unsupported", submitted.reason); }
   const settled = await waitForJob(submitted.job.id, body.timeout_ms ?? DEFAULT_WAIT_MS);
   const created = Math.floor(new Date(submitted.job.createdAt).getTime() / 1000);

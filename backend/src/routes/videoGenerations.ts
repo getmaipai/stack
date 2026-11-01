@@ -19,6 +19,7 @@ import type { AppEnv } from "@/types";
 import { identityHeaders } from "@/lib/identity";
 import { RoleReplyHeaders } from "@maipai/spec/stack/ts/role-reply-headers.js";
 import { cancelJob, getJob, hasJobRunner, isJobPaused, listJobs, submitJob, waitForJob, type Job } from "@/lib/jobs";
+import { TierFieldSchema, TierStatusSchema, tierInput, tierOf } from "@/routes/tierField";
 import { PAUSED_LABEL } from "@/lib/genProgress";
 import { LoraError, resolveLoras } from "@/video/loras";
 import { LikenessError, photoBind, verifyProof, type LikenessCheck } from "@/lib/likeness";
@@ -44,6 +45,7 @@ const VideoRequestSchema = z.object({
   loras: z.array(LoraEntry).max(4).optional().openapi({ description: "LoRAs from the household library (GET /stack/v1/video/loras) to apply, by id, with a strength of 0 to 2 (the record's default when left out). Home decides which ids this caller may name." }),
   audience: z.enum(["all-ages", "adult"]).optional().openapi({ description: "Who the clip is for, set by Home from the person's age band and the surface. Default all-ages. An adult-only LoRA in the list with audience all-ages is refused (422 lora_not_allowed)." }),
   timeout_ms: z.number().int().positive().max(MAX_WAIT_MS).optional().openapi({ description: `How long this request waits for the clip before answering 202 with the job id. Default ${DEFAULT_WAIT_MS}. A clip takes about two to three minutes.` }),
+  tier: TierFieldSchema,
   quiet_seconds: z.number().int().min(20).max(3600).optional(),
   quiet_max_wait_seconds: z.number().int().min(0).max(86400).nullable().optional(),
 });
@@ -70,6 +72,7 @@ const JobStatusSchema = z.object({
   eta_seconds: z.number().int().nullable().openapi({ description: "Whole seconds left, from the medians of earlier clips of the same size and length (a built-in 130 s total until there are some); null until a stage is known." }),
   preview_url: z.string().nullable().openapi({ description: "GET this for the first-frame preview JPEG while running; null until the motion is done, when the request asked for none, or after the job ended (the finished clip has `poster_url`)." }),
   position: z.number().int().nullable().openapi({ description: "Place in line while queued (1 is next)." }),
+  tier: TierStatusSchema,
   error: z.string().nullable(), code: z.string().nullable(),
   data: z.array(VideoDataSchema),
 });
@@ -177,7 +180,7 @@ function statusOf(job: Job) {
   const phase = state === "queued" ? "queued" : state === "done" ? "ready" : state === "cancelled" && job.status === PAUSED_LOW_MEMORY ? PAUSED_LOW_MEMORY : state === "failed" || state === "cancelled" ? state : detail?.phase ?? (job.status.startsWith("waiting for memory") ? "waiting for memory" : job.status);
   const result = job.state === "done" ? readResult(job.id) : null;
   return {
-    job: job.id, state, phase, progress: Math.round(job.percent), phase_progress: state === "running" && detail ? Math.round(detail.phasePercent) : null, position: job.state === "queued" ? job.position : null,
+    job: job.id, tier: tierOf(job), state, phase, progress: Math.round(job.percent), phase_progress: state === "running" && detail ? Math.round(detail.phasePercent) : null, position: job.state === "queued" ? job.position : null,
     ...liveFields(job.id, state === "running"),
     error: job.state === "failed" ? failure?.message ?? job.reason ?? "The clip failed." : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? job.reason ?? "Paused: this computer is low on memory." : "The clip was cancelled.") : null,
     code: job.state === "failed" ? (job.status === "no_memory" ? "no_memory" : failure?.code ?? "failed") : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? "no_memory" : "cancelled") : null,
@@ -226,7 +229,7 @@ videoV1Routes.openapi(postRoute, async (c) => {
   const token = crypto.randomUUID();
   const loraIds = loras.map((lora) => lora.record.id);
   stashClip(token, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, likeness: checks, preview: body.preview !== false });
-  const submitted = submitJob({ kind: VIDEO_JOB_KIND, role: "video", input: { token, size: `${size.width}x${size.height}`, seconds, seed, quality, mode: image ? "image-to-video" : "text-to-video", lora_ids: loraIds, likeness: checks.length > 0, ...(body.quiet_seconds !== undefined ? { quiet_seconds: body.quiet_seconds } : {}), ...(body.quiet_max_wait_seconds !== undefined ? { quiet_max_wait_seconds: body.quiet_max_wait_seconds } : {}) } });
+  const submitted = submitJob({ kind: VIDEO_JOB_KIND, role: "video", input: { token, size: `${size.width}x${size.height}`, seconds, seed, quality, mode: image ? "image-to-video" : "text-to-video", lora_ids: loraIds, likeness: checks.length > 0, ...tierInput(body.tier), ...(body.quiet_seconds !== undefined ? { quiet_seconds: body.quiet_seconds } : {}), ...(body.quiet_max_wait_seconds !== undefined ? { quiet_max_wait_seconds: body.quiet_max_wait_seconds } : {}) } });
   if ("refused" in submitted) return fail(c, 503, submitted.code ?? "unsupported", submitted.reason);
   const settled = await waitForJob(submitted.job.id, body.timeout_ms ?? DEFAULT_WAIT_MS);
   const created = Math.floor(new Date(submitted.job.createdAt).getTime() / 1000);

@@ -751,3 +751,15 @@ test("a song on a warm worker asks only for the rest of its peak (a second song 
   expect(musicAdmissionBytes(true)).toBe(MUSIC_PEAK_BYTES - MUSIC_WARM_RESIDENT_BYTES);
   expect(musicAdmissionBytes(true)).toBe(12_000_000_000);
 });
+
+// TIER-ROUTES-01: the music route takes an optional tier, the job input carries it for the governor, and the status reports it.
+test("a song job named Boost carries tier in its input and status; an unnamed one reports standard; a bad tier is refused", async () => {
+  musicGen.useDeps(scripted());
+  const boosted = await (await post({ ...song, tier: "boost" })).json() as { job: string };
+  expect((getJob(boosted.job)!.input as { tier?: string }).tier).toBe("boost");
+  expect((await (await app.request(`/v1/audio/music/${boosted.job}`)).json() as { tier: string }).tier).toBe("boost");
+  const plain = await (await post({ ...song })).json() as { job: string };
+  expect((getJob(plain.job)!.input as { tier?: string }).tier).toBeUndefined();
+  expect((await (await app.request(`/v1/audio/music/${plain.job}`)).json() as { tier: string }).tier).toBe("standard");
+  expect((await post({ ...song, tier: "turbo" })).status).toBe(400);
+});
