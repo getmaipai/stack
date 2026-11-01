@@ -924,7 +924,9 @@ export function selectableModels(role: RoleId): Array<{ id: string; name: string
     .map(({ id }) => ({ id, name: id }));
 }
 
-function selectableModel(role: RoleId, modelId: string): ModelRecord | null {
+/** The model a start may use. While Reduced forces the light model onto chat, judge and router, that model is catalogued for `judge` only, so the role check below would refuse it for `chat` ("No verified and installed chat model"): the forced pick is the answer, after the same selectable and file checks `selectedModel` applies. */
+export function selectableModel(role: RoleId, modelId: string): ModelRecord | null {
+  if (reducedChatForcesLight() && ["chat", "judge", "router"].includes(role)) { const forced = selectedModel(role); if (forced?.id === modelId) return forced; }
   const engine = recordEngineFor(role);
   return listModels().find((model) => model.id === modelId && servesRole(model, role, engine)) ?? null;
 }

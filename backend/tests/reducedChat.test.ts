@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { __resetEventsForTests, eventsAfter } from "@/lib/events";
-import { enterReducedChat, reducedVoiceAllowed, leaveReducedChat, resetSupervisorForTests, scriptedProcess, selectedModel, setMachineTier, setSupervisorFactoryForTests, setSupervisorTimeoutsForTests, requestRole } from "@/lib/supervisor";
+import { EngineUnavailableError, getRoleStatus, selectableModel, enterReducedChat, reducedVoiceAllowed, leaveReducedChat, resetSupervisorForTests, scriptedProcess, selectedModel, setMachineTier, setSupervisorFactoryForTests, setSupervisorTimeoutsForTests, requestRole } from "@/lib/supervisor";
 import { getReducedChatState } from "@/lib/reducedChat";
 import { clearModelsForTests, upsertModel } from "@/lib/modelStore";
 
@@ -77,4 +77,37 @@ test("the smaller model missing refuses in plain words and changes nothing", asy
   const result = await enterReducedChat();
   expect(result).toEqual({ ok: false, reason: "The smaller chat model is not installed and selectable." });
   expect(getReducedChatState()).toBe("off");
+});
+
+test("the swap starts the light model on chat although the catalog lists it for judge only (live 503 2026-11-01)", async () => {
+  const starts: string[] = [];
+  // Mirrors startSpawnedProcess: the same resolver, no stub of the model step.
+  setSupervisorFactoryForTests(async (role, modelId) => {
+    const model = modelId ? selectableModel(role, modelId) : selectedModel(role);
+    if (!model?.modelPath) throw new EngineUnavailableError(`No verified and installed ${role} model is available.`);
+    starts.push(`${role}:${model.id}`);
+    return scriptedProcess(role, { kind: "spawned", modelId: model.id, identity: { host: "stub", build: "scripted", model: model.id, healthy: true } });
+  });
+  const result = await enterReducedChat();
+  expect(result.ok).toBe(true);
+  expect(starts).toContain(`chat:${lightId}`);
+  expect(starts.filter((entry) => entry.startsWith("chat:")).length).toBe(1);
+  expect((await leaveReducedChat()).ok).toBe(true);
+  expect(starts[starts.length - 1]).toMatch(/standard|muse|judge/);
+});
+
+test("a failed enter restarts each role once to enter and once to roll back, and leaves chat and judge running", async () => {
+  const starts: string[] = [];
+  setSupervisorFactoryForTests(async (role, modelId) => {
+    starts.push(`${role}:${modelId ?? ""}`);
+    if (role === "chat" && modelId === lightId) throw new EngineUnavailableError("boom");
+    return scriptedProcess(role, { kind: "spawned", modelId: modelId ?? (role === "judge" ? lightId : standardId), identity: { host: "stub", build: "scripted", model: modelId ?? standardId, healthy: true } });
+  });
+  const result = await enterReducedChat();
+  expect(result.ok).toBe(false);
+  expect(getReducedChatState()).toBe("off");
+  // chat: one failed light start, one standard restart; judge: its own light model once (the rollback recycles it). No retries.
+  expect(starts).toEqual([`chat:${lightId}`, `chat:${standardId}`, `judge:${lightId}`]);
+  expect(getRoleStatus("chat").state).toBe("ready");
+  expect(getRoleStatus("judge").state).toBe("ready");
 });
