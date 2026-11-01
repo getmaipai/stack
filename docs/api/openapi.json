@@ -11014,6 +11014,33 @@
                       "type": "boolean",
                       "description": "Whether chat is on the smaller Reduced model right now (the Stack's own state, for Home's notice)."
                     },
+                    "max_window": {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "draining",
+                            "open"
+                          ]
+                        },
+                        "owner": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "since": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "owner",
+                        "since"
+                      ],
+                      "description": "TIER-STATUS-01: the governor's own Max window. `draining`: a Max job waits for running work to finish; `open`: it holds the computer. `owner` is the job id. Home reads this for its Status line and Stop button."
+                    },
                     "recent_actions": {
                       "type": "array",
                       "items": {
@@ -11083,6 +11110,7 @@
                     "non_stack_bytes",
                     "isolation",
                     "reduced_chat",
+                    "max_window",
                     "recent_actions",
                     "history"
                   ]
