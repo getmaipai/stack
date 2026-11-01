@@ -7,7 +7,7 @@
 // writes in the job's own work folder; this module only remembers which version
 // is the latest. Nothing here is a new status surface: the routes that already
 // answer for the job carry the fields.
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataDir } from "@/lib/paths";
 
@@ -73,7 +73,7 @@ function loadHistory(): History {
   try { cache = JSON.parse(readFileSync(historyFile(), "utf8")) as History; } catch { cache = {}; }
   return cache!;
 }
-export function __resetGenHistoryForTests(): void { cache = null; }
+export function __resetGenHistoryForTests(): void { cache = null; rmSync(historyFile(), { force: true }); }
 /** One history per kind and size, and per clip length (video) or picture model (image): the same size takes three times as long on Z-Image-Turbo as on Klein. */
 export const historyKey = (kind: GenKind, width: number, height: number, extra?: number | string): string => `${kind}:${width}x${height}${extra ? `${typeof extra === "number" ? "x" : ":"}${extra}` : ""}`;
 const median = (values: number[]): number => { const sorted = [...values].sort((a, b) => a - b); return sorted[Math.floor(sorted.length / 2)]!; };
