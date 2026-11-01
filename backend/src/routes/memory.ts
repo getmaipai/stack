@@ -7,6 +7,7 @@ import { listReclaimable, runReclaim } from "@/lib/reclaim";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { dataDir } from "@/lib/paths";
+import { isReducedChat } from "@/lib/reducedChatLease";
 import { dailyResources } from "@/lib/dailyResources";
 
 const Level = z.enum(["normal", "warn", "critical"]);
@@ -20,6 +21,7 @@ const MemorySchema = z.object({
   top_consumers: z.array(z.object({ pid: z.number(), name: z.string(), bytes: z.number(), stack: z.boolean() })),
   non_stack_bytes: z.number(),
   isolation: z.object({ enabled: z.boolean(), paused_now: z.number(), interactive_in_flight: z.number(), pauses: z.number(), resumes: z.number(), forced_resumes: z.number(), paused_seconds: z.number() }).openapi({ description: "ISOLATION-01: heavy workers (picture, video, music, image tools) are stopped while a chat or voice request is in flight and continued after it. paused_now is how many are stopped this moment; paused_seconds is the total since the Stack started." }),
+  reduced_chat: z.boolean().openapi({ description: "Whether chat is on the smaller Reduced model right now (the Stack's own state, for Home's notice)." }),
   recent_actions: z.array(z.object({ at: z.string(), level: Level, action: z.string(), detail: z.string() })),
   history: z.array(z.object({ at: z.string(), available_bytes: z.number(), swap_used_bytes: z.number(), pressure_level: z.number() })),
 });
@@ -30,7 +32,7 @@ const route = createRoute({
 });
 
 export const memoryRoutes = apiRouter<AppEnv>();
-memoryRoutes.openapi(route, (c) => c.json({ ...memoryWatchdog().report(), isolation: heavyGate.status() }, 200));
+memoryRoutes.openapi(route, (c) => c.json({ ...memoryWatchdog().report(), isolation: heavyGate.status(), reduced_chat: isReducedChat() }, 200));
 
 const DailySchema = z.object({ days: z.array(z.object({
   date: z.string().openapi({ description: "Local calendar date." }),

@@ -431,6 +431,14 @@ recipe of the image tools. The licence record is in `backend/src/media/pins.ts` 
 and `STACK_MEDIA_YTDLP` point at programs an operator already has. No request is ever made to a video service by the Stack itself or by its tests
 (RULES.md V1): the tests fetch a localhost fixture with yt-dlp's generic extractor.
 
+## Reduced chat while a Max job runs (TIER-REDUCED-ROUTE)
+
+Home puts chat on the smaller model (qwen3-4b class) so a Max job fits, and brings it back after.
+
+- `POST /stack/v1/tiers/reduced` with `{ "on": boolean }`. 200 `{ ok: true, swap_ms, reduced }` (asking for the state chat is already in is 200 with `swap_ms` 0). 202 `{ ok: false, waiting: true, reduced }` when a chat turn is in flight: nothing changed, ask again after the turn. 409 or 503 `{ ok: false, reason, reduced }` with a plain sentence (409: coding mode, a change already running, the smaller model missing; 503: the swap failed and chat is back on its previous model).
+- `GET /stack/v1/memory` has `reduced_chat: boolean`, the Stack's own state, for Home's notice.
+- Home renews by repeating `{ "on": true }`. With no renewal for 30 minutes (`STACK_REDUCED_CHAT_CAP_MS`) the Stack leaves Reduced by itself, and retries every 15 s while a chat turn blocks it, so a crashed Home never leaves chat stuck on the small model.
+
 ## Chat and voice win over heavy jobs (ISOLATION-01)
 
 The Stack sees every chat, transcription and speech request itself, so it keeps a heavy job from slowing them without any header or call from Home.

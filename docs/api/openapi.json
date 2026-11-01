@@ -10373,6 +10373,158 @@
         }
       }
     },
+    "/stack/v1/tiers/reduced": {
+      "post": {
+        "tags": [
+          "Tiers"
+        ],
+        "summary": "Put chat in Reduced, or bring it back (TIER-REDUCED-ROUTE)",
+        "description": "`on: true` swaps chat, judge and router to the smaller model so a Max job fits; `on: false` returns them to the standard model. Idempotent: asking for the state chat is already in answers 200 with swap_ms 0. 202 means a chat turn is running and nothing changed; ask again after it. 409 or 503 carry a plain sentence, and chat is on its normal model after a failed entry. Repeat `{ on: true }` to renew: with no renewal for 30 minutes (STACK_REDUCED_CHAT_CAP_MS) the Stack leaves Reduced by itself.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "on": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "on"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Chat is in the asked state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "swap_ms": {
+                      "type": "number"
+                    },
+                    "reduced": {
+                      "type": "boolean",
+                      "description": "Whether chat is on the smaller Reduced model right now."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "swap_ms",
+                    "reduced"
+                  ]
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "A chat turn is in flight; nothing changed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ]
+                    },
+                    "waiting": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "reduced": {
+                      "type": "boolean",
+                      "description": "Whether chat is on the smaller Reduced model right now."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "waiting",
+                    "reduced"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The change cannot happen now (coding mode, a change already running, the smaller model missing).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ]
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "reduced": {
+                      "type": "boolean",
+                      "description": "Whether chat is on the smaller Reduced model right now."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "reason",
+                    "reduced"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The swap failed and chat stayed on its previous model.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ]
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "reduced": {
+                      "type": "boolean",
+                      "description": "Whether chat is on the smaller Reduced model right now."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "reason",
+                    "reduced"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/capabilities": {
       "get": {
         "tags": [
@@ -10801,6 +10953,10 @@
                       ],
                       "description": "ISOLATION-01: heavy workers (picture, video, music, image tools) are stopped while a chat or voice request is in flight and continued after it. paused_now is how many are stopped this moment; paused_seconds is the total since the Stack started."
                     },
+                    "reduced_chat": {
+                      "type": "boolean",
+                      "description": "Whether chat is on the smaller Reduced model right now (the Stack's own state, for Home's notice)."
+                    },
                     "recent_actions": {
                       "type": "array",
                       "items": {
@@ -10869,6 +11025,7 @@
                     "top_consumers",
                     "non_stack_bytes",
                     "isolation",
+                    "reduced_chat",
                     "recent_actions",
                     "history"
                   ]

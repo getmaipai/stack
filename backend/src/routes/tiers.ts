@@ -7,6 +7,7 @@ import { detectHardware } from "@/lib/hardware";
 import { proposeProfile } from "@/profiles";
 import { tierRoomBytes } from "@/lib/governor";
 import { tierCandidateLists, type TierCategory } from "@/lib/tiers";
+import { controlReducedChat } from "@/lib/reducedChatLease";
 
 const Candidate = z.object({
   id: z.string(), label: z.string(), family: z.string(), peak_bytes: z.number(), verified: z.boolean(),
@@ -32,4 +33,21 @@ tiersRoutes.openapi(candidatesRoute, async (c) => {
     category, profile, room_bytes: roomBytes,
     levels: levels.map((level) => ({ tier: level.tier, cap_bytes: level.capBytes, recommended: level.recommended, candidates: level.candidates.map((row) => ({ id: row.id, label: row.label, family: row.family, peak_bytes: row.peakBytes, verified: row.verified, fits: row.fits, refusal: row.refusal })) })),
   }, 200);
+});
+
+const Reduced = z.boolean().describe("Whether chat is on the smaller Reduced model right now.");
+const reducedRoute = createRoute({
+  method: "post", path: "/reduced", tags: ["Tiers"], summary: "Put chat in Reduced, or bring it back (TIER-REDUCED-ROUTE)",
+  description: "`on: true` swaps chat, judge and router to the smaller model so a Max job fits; `on: false` returns them to the standard model. Idempotent: asking for the state chat is already in answers 200 with swap_ms 0. 202 means a chat turn is running and nothing changed; ask again after it. 409 or 503 carry a plain sentence, and chat is on its normal model after a failed entry. Repeat `{ on: true }` to renew: with no renewal for 30 minutes (STACK_REDUCED_CHAT_CAP_MS) the Stack leaves Reduced by itself.",
+  request: { body: { required: true, content: { "application/json": { schema: z.object({ on: z.boolean() }) } } } },
+  responses: {
+    200: { content: { "application/json": { schema: z.object({ ok: z.literal(true), swap_ms: z.number(), reduced: Reduced }) } }, description: "Chat is in the asked state." },
+    202: { content: { "application/json": { schema: z.object({ ok: z.literal(false), waiting: z.literal(true), reduced: Reduced }) } }, description: "A chat turn is in flight; nothing changed." },
+    409: { content: { "application/json": { schema: z.object({ ok: z.literal(false), reason: z.string(), reduced: Reduced }) } }, description: "The change cannot happen now (coding mode, a change already running, the smaller model missing)." },
+    503: { content: { "application/json": { schema: z.object({ ok: z.literal(false), reason: z.string(), reduced: Reduced }) } }, description: "The swap failed and chat stayed on its previous model." },
+  },
+});
+tiersRoutes.openapi(reducedRoute, async (c) => {
+  const result = await controlReducedChat(c.req.valid("json").on);
+  return c.json(result.body, result.status) as never;
 });
