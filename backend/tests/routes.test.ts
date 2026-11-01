@@ -29,6 +29,8 @@ test("the daemon binds loopback only", () => {
 });
 
 test("daily memory route returns the requested zero-filled days", async () => {
+  // Earlier test files in the same run log events into this run's stack.log; this test counts from an empty log.
+  fs.rmSync(`${dataDir}/logs`, { recursive: true, force: true });
   const response = await app.request("/stack/v1/memory/daily?days=3");
   expect(response.status).toBe(200);
   const body = await response.json() as { days: Array<Record<string, unknown>> };
