@@ -43,14 +43,16 @@ function sweepVoiceClipDir(dir: string, now: number): number {
 
 export function runSweeps(reason: string): SweepSummary {
   const summary: SweepSummary = { reason, removed_files: 0, freed_bytes: 0, per_sweep: [] };
+  // The tmp folders hold the working files of jobs that are running now, so they are emptied only at start, when no job can be running.
+  const atStart = reason === "start";
   const tasks: Array<[string, () => number | void, string]> = [
-    ["image-tools-tmp", sweepImageToolsTmp, imageToolsTmpDir()],
+    ...(atStart ? [["image-tools-tmp", sweepImageToolsTmp, imageToolsTmpDir()] as [string, () => number | void, string]] : []),
     ["media-job-dirs", sweepJobDirs, jobsDir()],
-    ["video-tmp", sweepVideoTmp, join(dataDir, "tmp", "video")],
+    ...(atStart ? [["video-tmp", sweepVideoTmp, join(dataDir, "tmp", "video")] as [string, () => number | void, string]] : []),
     ["video-results", sweepVideoResults, join(dataDir, "video", "results")],
-    ["music-tmp", sweepMusicTmp, join(dataDir, "tmp", "music")],
+    ...(atStart ? [["music-tmp", sweepMusicTmp, join(dataDir, "tmp", "music")] as [string, () => number | void, string]] : []),
     ["music-results", sweepMusicResults, join(dataDir, "music", "results")],
-    ["image-tmp", sweepImageTmp, join(dataDir, "tmp", "images")],
+    ...(atStart ? [["image-tmp", sweepImageTmp, join(dataDir, "tmp", "images")] as [string, () => number | void, string]] : []),
     ["image-results", sweepImageResults, join(dataDir, "images", "results")],
     ["partial-downloads", () => sweepPartialDownloads(), modelsDir],
     ["voice-clips", () => sweepVoiceClips(), voiceClipDir()],
