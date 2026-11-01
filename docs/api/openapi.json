@@ -13478,7 +13478,7 @@
                             "idle",
                             "running"
                           ],
-                          "description": "off: this computer's tier does not run video. not-installed: the model files are missing. needs-setup: installed; the first clip builds the environment (first time only) and starts the worker. idle: the worker is up and waits ten minutes for the next clip, then exits. running: a clip is in progress."
+                          "description": "off: this computer's tier does not run video. not-installed: the model files are missing. needs-setup: installed; the first clip builds the environment (first time only) and starts the worker. idle: the worker is up and waits for the next clip (two minutes unless an admin changes it), then exits. running: a clip is in progress."
                         },
                         "phase": {
                           "type": "string",
