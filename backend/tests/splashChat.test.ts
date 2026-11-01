@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, truncateSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { SPLASH_CHAT_PIN, SPLASH_PIN, CHAT_ENGINES, engineNameTag } from "@/lib/engineCatalog";
+import { llamaServerArgs } from "@/lib/engineArgs";
 import { CHAT_ENGINE_CHOICES, chatEngineFailure, clearChatEngineFailures, markChatEngineFailed, requestedChatEngine, resolveChatEngine } from "@/lib/chatEngines";
 import { STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CODING_DRAFT_MODEL } from "@/lib/modelCatalog";
 import { clearModelsForTests, getModel, upsertModel } from "@/lib/modelStore";
@@ -147,4 +148,36 @@ test("an idle chat engine whose memory grows is never restarted by the runaway w
   expect(await runLoop("llama-server")).toBe(0);
   expect(await runLoop("splash-chat")).toBe(0);
   expect(await runLoop("splash")).toBe(0);
+});
+
+// SPLASH-THINK-DEFAULT-01: a plain request (no thinking signal) must not think, the way llama-server's `--reasoning off` launch does.
+test("chat wire contract: every chat engine answers a plain request without thinking, and a caller that asks for thinking keeps it", async () => {
+  const seen: Array<Record<string, unknown>> = [];
+  const inner: EngineClient = {
+    baseUrl: "http://127.0.0.1:1",
+    request: async (_path, body) => { seen.push(body); return { status: 200, body: { choices: [{ message: { content: "ok" } }] } }; },
+    stream: async (_path, body) => { seen.push(body); return new Response("data: [DONE]\n\n"); },
+    health: async () => true,
+  };
+  const client = new SplashChatClient(inner, "huihui", { temperature: 0.7, thinking_budget_ceiling: 2000, source: "catalog" });
+  const kwargs = () => seen[seen.length - 1]!.chat_template_kwargs as Record<string, unknown> | undefined;
+  const plain = { model: "chat", messages: [{ role: "user", content: "hi" }], max_tokens: 30 };
+  const llamaArgs = llamaServerArgs({ modelPath: "/models/chat.gguf", port: 8771, config: { contextLength: 4096, slots: 1, threads: 0, cacheRamMb: 0, flashAttention: true }, contextLength: 4096, kvCacheType: "q8_0" });
+  for (const choice of CHAT_ENGINE_CHOICES) {
+    if (choice === "splash") {
+      await client.request("/v1/chat/completions", plain); expect(kwargs()?.enable_thinking).toBe(false);
+      await client.stream("/v1/chat/completions", plain); expect(kwargs()?.enable_thinking).toBe(false);
+      await client.request("/v1/chat/completions", { ...plain, chat_template_kwargs: { preserve_thinking: true } }); expect(kwargs()).toEqual({ preserve_thinking: true, enable_thinking: false });
+      await client.request("/v1/chat/completions", { ...plain, chat_template_kwargs: { enable_thinking: true } }); expect(kwargs()?.enable_thinking).toBe(true);
+      await client.request("/v1/chat/completions", { ...plain, reasoning_effort: "medium" }); expect(kwargs()).toBeUndefined();
+      await client.request("/v1/chat/completions", { ...plain, thinking: { type: "enabled", budget_tokens: 500 } }); expect(kwargs()).toBeUndefined();
+      await client.request("/v1/chat/completions", { ...plain, thinking_budget_tokens: 500 }); expect(kwargs()).toBeUndefined();
+      await client.request("/v1/chat/completions", { ...plain, thinking_budget_tokens: 0 }); expect(kwargs()?.enable_thinking).toBe(false);
+    } else if (choice === "llama-server") {
+      expect(llamaArgs.slice(llamaArgs.indexOf("--reasoning"), llamaArgs.indexOf("--reasoning") + 2)).toEqual(["--reasoning", "off"]);
+    } else {
+      // auto resolves to llama-server; mlx-serve and oMLX are not Splash and add no thinking control of their own.
+      expect(["auto", "mlx-serve", "omlx"]).toContain(choice);
+    }
+  }
 });

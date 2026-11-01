@@ -7,7 +7,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 // exit watch, the drain) are the same here, keyed by role.
 import { noteComponentUse } from "@/lib/componentUse";
 import { existsSync } from "node:fs";
-import { CODING_GENERATION_PATHS, clampThinking, dropClientSampling } from "@/lib/codingWire";
+import { CODING_GENERATION_PATHS, clampThinking, defaultThinkingOff, dropClientSampling } from "@/lib/codingWire";
 import { createServer } from "node:net";
 import { dirname, join } from "node:path";
 import { withTimeout } from "@maipai/core/src/withTimeout";
@@ -321,8 +321,10 @@ export class SplashChatClient extends ServedNameClient {
     if (out.reasoning_effort === "none" || kw.enable_thinking === false || (out.thinking && typeof out.thinking === "object" && (out.thinking as Record<string, unknown>).type === "disabled")) out.chat_template_kwargs = { ...kw, enable_thinking: false };
     return out;
   }
-  override request(path: string, body: Record<string, unknown>, signal?: AbortSignal) { return super.request(path, this.thinking(this.body(body)), signal); }
-  override stream(path: string, body: Record<string, unknown>, signal?: AbortSignal) { return super.stream(path, this.thinking(this.body(body)), signal); }
+  /** The default is judged on what the caller sent: `body()` fills a budget, which must not read as the caller asking to think. */
+  private wire(body: Record<string, unknown>): Record<string, unknown> { return this.thinking(this.body(Array.isArray(body.messages) ? defaultThinkingOff(body) : body)); }
+  override request(path: string, body: Record<string, unknown>, signal?: AbortSignal) { return super.request(path, this.wire(body), signal); }
+  override stream(path: string, body: Record<string, unknown>, signal?: AbortSignal) { return super.stream(path, this.wire(body), signal); }
 }
 
 // ---- timeouts and probes --------------------------------------------------
@@ -2391,7 +2393,7 @@ function samplingFor(role: RoleId, requested: RoleId, path: string, modelId: str
 
 function splashChatRequestBody(role: RoleId, processRecord: RoleProcess, body: Record<string, unknown>): Record<string, unknown> {
   if (role !== "chat" || processRecord.engine !== "splash-chat") return body;
-  const out = clampThinking(body, Math.max(0, Math.floor(Number(settingValues()["stack.engines.chat.thinking_budget_ceiling"] ?? settingValues()["stack.engines.coding.thinking_budget_ceiling"] ?? 2000))));
+  const out = clampThinking(Array.isArray(body.messages) ? defaultThinkingOff(body) : body, Math.max(0, Math.floor(Number(settingValues()["stack.engines.chat.thinking_budget_ceiling"] ?? settingValues()["stack.engines.coding.thinking_budget_ceiling"] ?? 2000))));
   if (out.reasoning_effort === "none" || out.chat_template_kwargs && typeof out.chat_template_kwargs === "object" && (out.chat_template_kwargs as Record<string, unknown>).enable_thinking === false) {
     out.chat_template_kwargs = { ...(out.chat_template_kwargs && typeof out.chat_template_kwargs === "object" ? out.chat_template_kwargs as Record<string, unknown> : {}), enable_thinking: false };
   }

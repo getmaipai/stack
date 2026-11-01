@@ -158,3 +158,19 @@ function withThinkingOff(kwargs: unknown): Record<string, unknown> {
   if (!given) throw new CodingRequestError("chat_template_kwargs must be an object like {\"enable_thinking\": false}. Send an object, or leave it out.");
   return { ...given, enable_thinking: false };
 }
+
+/** SPLASH-THINK-DEFAULT-01: Splash chat thinks unless told not to, while the llama-server chat engine launches with `--reasoning off`.
+ * A request that carries no thinking signal at all (no `enable_thinking`, `thinking`, `reasoning`, `reasoning_effort`, and no
+ * `thinking_budget_tokens` other than 0) gets `chat_template_kwargs.enable_thinking: false`, the caller's other kwargs kept.
+ * Any signal, including `enable_thinking: true`, is left exactly as sent. Returns a new body. */
+export function defaultThinkingOff(body: Record<string, unknown>): Record<string, unknown> {
+  const kwargs = asObject(body.chat_template_kwargs);
+  const budget = body.thinking_budget_tokens;
+  const asked = (kwargs !== null && kwargs.enable_thinking !== undefined)
+    || (body.thinking !== undefined && body.thinking !== null)
+    || (body.reasoning !== undefined && body.reasoning !== null)
+    || (body.reasoning_effort !== undefined && body.reasoning_effort !== null)
+    || (budget !== undefined && budget !== null && Number(budget) !== 0);
+  if (asked) return { ...body };
+  return { ...body, chat_template_kwargs: withThinkingOff(body.chat_template_kwargs) };
+}
