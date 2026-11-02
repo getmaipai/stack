@@ -14,6 +14,8 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Added
 
+- `media.edit` takes a `crossfade` op (additive): `{ op: "crossfade", duration_s (0.3 to 1.0, default 0.5), with? }` joins like `concat` but blends each seam with `xfade` (picture) and `acrossfade` (sound), 2 to 6 clips, re-encoded to the first clip's size and rate, silence for a clip without sound; each clip must be longer than twice the blend. Refusals are plain `bad_input` sentences.
+
 - LTX-2.5 (Standard, Boost and Max) starts a clip from a picture and can end on a second one (VIDEO-INPUTS-01): `image` is no longer refused with `reference_unsupported` on `ltx25-q8` and `ltx25-max`, and `POST /v1/videos/generations` takes an additive `end_image` (needs `image`; Quick and Detailed refuse it). The Stack's ffmpeg fits each picture to the true clip size (fill and centre crop, no stretch); the worker passes frame 0 as a replace and the end picture as a guide on the last frame. `qualities.ltx25` and `qualities.ltx25max` report `image_to_video: true` and a new `end_image: true`; styles stay `lora_unsupported`.
 
 - The Max profile of the LTX-2.5 video engine (LTX25-MAX-01): 1024x576, 10 s, with sound and speech, as `model` `ltx25-max` and `qualities.ltx25max` on `GET /stack/v1/video`. It runs on a second pinned runtime (`ltx25-max-gen`, dgrauet/ltx-2-mlx 0.18.0) with the ungated bf16 distilled pack (`ltx-2-5-bf16-distilled-mlx-max`, 71 GB, sha256 of every file pinned) and always passes the pack's Gemma folder to the runtime, because without it the prompt is silently ignored. Admission is the measured 48.6 GB footprint plus 5 percent, under the 64 GB per-clip cap. Standard and Boost are unchanged.

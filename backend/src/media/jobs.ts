@@ -14,7 +14,7 @@ import { probeFile, type ProbeResult } from "./probe";
 import { idleArgv, spawnRunner, type Runner, type RunResult } from "./run";
 import { defaultToolbox, MediaToolError, type MediaToolbox } from "./tools";
 import { mkdirSync } from "node:fs";
-import { concatCompatible, concatCopyArgs, concatEncodeArgs, concatListLine, concatMembers, EditInput, editInputProblem, fadeArgs, frameArgs, hasKeyframeAt, keyframeArgs, MAX_EDIT_SECONDS, muteArgs, overlayArgs, trimArgs, type Clip } from "./editOps";
+import { concatCompatible, concatCopyArgs, concatEncodeArgs, concatListLine, crossfadeArgs, crossfadeMinLength, concatMembers, EditInput, editInputProblem, fadeArgs, frameArgs, hasKeyframeAt, keyframeArgs, MAX_EDIT_SECONDS, muteArgs, overlayArgs, trimArgs, type Clip } from "./editOps";
 import { COLOUR_MATCH_STRENGTH, COMPANION_CLIP_FPS, COMPANION_CLIP_SIZE, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionCrop, companionMetrics, companionReasons, crossfadeLoop, downscaleRgba4, frameDifference, keyOutRgba, selectCompanionWindow } from "./companionClip";
 
 export const MEDIA_KINDS = ["media.probe", "media.fetch", "media.transcode", "media.preview", "media.companion_clip", "media.edit", "media.setup"] as const;
@@ -598,6 +598,15 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
       } else if (op.op === "fade") {
         if (op.in_s + op.out_s > (clip.probe.duration_s ?? 0)) throw fail({ code: "bad_input", message: `Step ${i + 1} (fade) fades for ${op.in_s + op.out_s} s in all, longer than the ${Math.round((clip.probe.duration_s ?? 0) * 100) / 100} s clip.` });
         args = fadeArgs(ffmpeg, clip, target, op);
+      } else if (op.op === "crossfade") {
+        const members = concatMembers(input, op);
+        const clips: Clip[] = [clip, ...members.map((index) => ({ path: sources[index]!, probe: probes[index]! }))];
+        const name = (position: number) => position === 0 ? "The clip" : `File ${members[position - 1]! + 1}`;
+        clips.forEach((member, position) => { if (!member.probe.has_video) throw fail({ code: "bad_input", message: `${name(position)} has no picture, so it cannot be blended into a film.` }); });
+        clips.forEach((member, position) => { if ((member.probe.duration_s ?? 0) <= crossfadeMinLength(op.duration_s)) throw fail({ code: "bad_input", message: `${name(position)} is ${Math.round((member.probe.duration_s ?? 0) * 100) / 100} s long, too short for a ${op.duration_s} s crossfade. Each clip must be longer than ${crossfadeMinLength(op.duration_s)} s (twice the blend), or use a shorter blend.` }); });
+        expected = clips.reduce((sum, member) => sum + (member.probe.duration_s ?? 0), 0) - (clips.length - 1) * op.duration_s;
+        tooLong("The blended film", expected);
+        args = crossfadeArgs(ffmpeg, clips, op.duration_s, target);
       } else {
         const members = concatMembers(input, op);
         const clips: Clip[] = [clip, ...members.map((index) => ({ path: sources[index]!, probe: probes[index]! }))];

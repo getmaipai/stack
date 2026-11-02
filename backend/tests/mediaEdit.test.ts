@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { app } from "@/app";
 import { __resetJobsForTests, waitForJob } from "@/lib/jobs";
 import { HostLimiter } from "@/media/hosts";
-import { concatCompatible, concatEncodeArgs, hasKeyframeAt, overlayArgs, trimArgs } from "@/media/editOps";
+import { concatCompatible, concatEncodeArgs, crossfadeArgs, hasKeyframeAt, overlayArgs, trimArgs } from "@/media/editOps";
 import { MEDIA_DEADLINES_MS, registerMediaJobs, resetMediaDepsForTests, setMediaDepsForTests } from "@/media/jobs";
 import { __resetRootsForTests, jobsDir, setRoots } from "@/media/paths";
 import { normalizeProbe } from "@/media/probe";
@@ -69,7 +69,7 @@ describe("media.edit with a fake runner", () => {
     const clip = touch("a.mp4");
     const out = { name: "o.mp4" };
     const refused = async (input: unknown, words: RegExp) => { const { status, body } = await post(input); expect({ status, code: body.code }).toEqual({ status: 422, code: "bad_input" }); expect(body.error).toMatch(words); };
-    await refused({ inputs: [clip], ops: [{ op: "explode" }], output: out }, /does not know.*trim, concat, mute, frame, audio_overlay, fade/);
+    await refused({ inputs: [clip], ops: [{ op: "explode" }], output: out }, /does not know.*trim, concat, mute, frame, audio_overlay, fade, crossfade/);
     await refused({ inputs: [clip], ops: Array.from({ length: 13 }, () => ({ op: "mute" })), output: out }, /at most 12 steps/);
     await refused({ inputs: Array.from({ length: 25 }, () => clip), ops: [{ op: "mute" }], output: out }, /at most 24 files/);
     await refused({ inputs: [clip], ops: [{ op: "frame" }, { op: "mute" }], output: { name: "o.png" } }, /must be the last step/);
@@ -163,6 +163,48 @@ describe("media.edit command plans", () => {
   });
 });
 
+describe("media.edit crossfade plan", () => {
+  const probe = (seconds: number, audio = true) => normalizeProbe(JSON.parse(probeJson(seconds, audio)), "/x.mp4", 1);
+  test("offsets accumulate: sum of the previous lengths minus k times the blend, one acrossfade per seam, silence for a clip without sound", () => {
+    const args = crossfadeArgs("ffmpeg", [{ path: "/a", probe: probe(5) }, { path: "/b", probe: probe(4, false) }, { path: "/c", probe: probe(3) }], 0.5, "/o.mp4");
+    const graph = args[args.indexOf("-filter_complex") + 1]!;
+    expect(graph).toContain("xfade=transition=fade:duration=0.5:offset=4.5");
+    expect(graph).toContain("xfade=transition=fade:duration=0.5:offset=8");
+    expect(graph.match(/acrossfade=d=0.5/g)?.length).toBe(2);
+    expect(graph).toMatch(/anullsrc.*atrim=0:4/);
+  });
+  test("no sound anywhere: video only", () => {
+    const args = crossfadeArgs("ffmpeg", [{ path: "/a", probe: probe(5, false) }, { path: "/b", probe: probe(4, false) }], 0.3, "/o.mp4");
+    expect(args.join(" ")).not.toContain("acrossfade");
+    expect(args).not.toContain("[a]");
+  });
+});
+
+describe("media.edit crossfade validation", () => {
+  beforeEach(() => { freshRoots(); script = () => ({}); setMediaDepsForTests({ toolbox: fakeToolbox, run: fakeRun, limiter: new HostLimiter() }); registerMediaJobs(); });
+  afterEach(cleanRoots);
+  test("refuses a bad blend length, one file, more than six clips and a missing list position, each with a plain sentence", async () => {
+    const a = touch("a.mp4"); const b = touch("b.mp4");
+    const refused = async (input: unknown, words: RegExp) => { const { status, body } = await post(input); expect({ status, code: body.code }).toEqual({ status: 422, code: "bad_input" }); expect(body.error).toMatch(words); };
+    const out = { name: "o.mp4" };
+    await refused({ inputs: [a, b], ops: [{ op: "crossfade", duration_s: 0.1 }], output: out }, /duration_s: must be from 0.3 to 1 seconds/);
+    await refused({ inputs: [a, b], ops: [{ op: "crossfade", duration_s: 2 }], output: out }, /duration_s: must be from 0.3 to 1 seconds/);
+    await refused({ inputs: [a], ops: [{ op: "crossfade" }], output: out }, /needs at least two files/);
+    await refused({ inputs: [a, a, a, a, a, a, a], ops: [{ op: "crossfade" }], output: out }, /blends 7 clips and the limit is 6/);
+    await refused({ inputs: [a, b], ops: [{ op: "crossfade", with: [5] }], output: out }, /not in the list/);
+    expect((await post({ inputs: [a, b], ops: [{ op: "crossfade" }], output: out })).status).toBe(202);
+    expect((await post({ inputs: [a, a, a, a, a, a], ops: [{ op: "crossfade", duration_s: 1 }], output: out })).status).toBe(202);
+  });
+  test("a clip no longer than twice the blend is refused with its length", async () => {
+    const a = touch("a.mp4"); const b = touch("b.mp4");
+    script = (argv) => (argv[0]!.endsWith("ffprobe") ? { stdout: probeJson(argv.includes(b) ? 0.8 : 5) } : {});
+    const job = await run({ inputs: [a, b], ops: [{ op: "crossfade", duration_s: 0.5 }], output: { name: "o.mp4" } });
+    expect(job.state).toBe("failed");
+    expect(job.result.failure.code).toBe("bad_input");
+    expect(job.result.failure.message).toMatch(/File 2 is 0.8 s long, too short for a 0.5 s crossfade/);
+  });
+});
+
 // ---- real ffmpeg ----
 function findTool(name: "ffmpeg" | "ffprobe"): string | null {
   const env = name === "ffmpeg" ? process.env.STACK_MEDIA_FFMPEG : process.env.STACK_MEDIA_FFPROBE;
@@ -240,6 +282,40 @@ real("media.edit with real ffmpeg", () => {
     expect(job.result).toMatchObject({ width: 320, height: 180 });
     expect(Math.abs(job.result.duration_s - 7)).toBeLessThan(0.2);
     expect(job.result.streams.some((stream: any) => stream.type === "audio")).toBe(true);
+  });
+
+  test("crossfade of three clips (one silent, one a different size): length is the sum minus the seams, sound present, the seam frame is a blend", async () => {
+    const dir = join(clip5, "..");
+    const silent = join(dir, "silent3.mp4"); const other = join(dir, "other4.mp4");
+    await ff(["-f", "lavfi", "-i", "testsrc2=s=320x180:r=24:d=3", "-c:v", "libx264", "-pix_fmt", "yuv420p", silent]);
+    await ff(["-f", "lavfi", "-i", "smptebars=s=320x180:r=24:d=4", "-f", "lavfi", "-i", "sine=f=660:r=48000:d=4", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", other]);
+    const d = 0.5;
+    const job = await run({ inputs: [clip5, silent, other], ops: [{ op: "crossfade", duration_s: d }], output: out("x3.mp4") }, 120_000);
+    expect(job.state).toBe("done");
+    expect(job.result).toMatchObject({ width: 320, height: 180, audio_codec: "aac" });
+    expect(Math.abs(job.result.duration_s - (12 - 2 * d))).toBeLessThan(1 / 24 + 0.03);
+    const lengths = await streamDurations(job.result.path);
+    expect(Math.abs(lengths.video - lengths.audio)).toBeLessThan(0.1);
+    // Seam 1 runs 4.5 to 5.0 s; at 4.75 the picture is half of clip 1 and half of clip 2 (which is at 0.25 s of its own time).
+    const gray = async (path: string, at: number, name: string): Promise<Buffer> => { const file = join(root, name); await ff(["-ss", String(at), "-i", path, "-frames:v", "1", "-vf", "scale=320:180,format=gray", "-f", "rawvideo", file]); return readFileSync(file); };
+    const mix = await gray(job.result.path, 4.75, "mix.raw"); const first = await gray(clip5, 4.75, "first.raw"); const second = await gray(silent, 0.25, "second.raw");
+    const diff = (x: Buffer, y: Buffer) => { let sum = 0; for (let i = 0; i < x.length; i++) sum += Math.abs(x[i]! - y[i]!); return sum / x.length; };
+    const average = Buffer.from(first.map((value, i) => Math.round((value + second[i]!) / 2)));
+    expect(diff(mix, first)).toBeGreaterThan(8);
+    expect(diff(mix, second)).toBeGreaterThan(8);
+    expect(diff(mix, average)).toBeLessThan(Math.min(diff(mix, first), diff(mix, second)) / 2);
+    // Outside the seam the picture is the plain clip.
+    expect(diff(await gray(job.result.path, 2, "p.raw"), await gray(clip5, 2, "q.raw"))).toBeLessThan(6);
+  });
+
+  test("crossfade of two clips with sound and the default 0.5 s blend, and a clip too short for the blend fails with a sentence", async () => {
+    const job = await run({ inputs: [clip5, clip2], ops: [{ op: "crossfade" }], output: out("x2.mp4") }, 120_000);
+    expect(job.state).toBe("done");
+    expect(Math.abs(job.result.duration_s - 6.5)).toBeLessThan(0.1);
+    expect(job.result.streams.some((stream: any) => stream.type === "audio")).toBe(true);
+    const short = await run({ inputs: [clip5, clip2], ops: [{ op: "crossfade", duration_s: 1 }], output: out("x2s.mp4") }, 60_000);
+    expect(short.state).toBe("failed");
+    expect(short.result.failure.message).toMatch(/too short for a 1 s crossfade/);
   });
 
   test("audio_overlay mixes a 2 s sine over a 5 s clip, the mix differs, the picture stream is bit-identical", async () => {

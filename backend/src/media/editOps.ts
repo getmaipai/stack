@@ -6,7 +6,10 @@
 import { z } from "zod";
 import type { ProbeResult } from "./probe";
 
-export const EDIT_OPS = ["trim", "concat", "mute", "frame", "audio_overlay", "fade"] as const;
+export const EDIT_OPS = ["trim", "concat", "mute", "frame", "audio_overlay", "fade", "crossfade"] as const;
+export const MIN_CROSSFADE_S = 0.3;
+export const MAX_CROSSFADE_S = 1.0;
+export const MAX_CROSSFADE_CLIPS = 6;
 export const MAX_EDIT_OPS = 12;
 export const MAX_EDIT_INPUTS = 24;
 export const MAX_EDIT_SECONDS = 600;
@@ -35,7 +38,14 @@ const AudioOverlayOp = z.object({
 const FadeOp = z.object({ op: z.literal("fade"), in_s: Seconds.default(0), out_s: Seconds.default(0) }).strict()
   .refine((op) => op.in_s > 0 || op.out_s > 0, { path: ["in_s"], message: "needs in_s or out_s above 0" });
 
-export const EditOp = z.union([TrimOp, ConcatOp, MuteOp, FrameOp, AudioOverlayOp, FadeOp]);
+/** Joins like concat, but each seam blends the last duration_s of one clip into the first duration_s of the next. */
+const CrossfadeOp = z.object({
+  op: z.literal("crossfade"),
+  duration_s: z.number().min(MIN_CROSSFADE_S, `must be from ${MIN_CROSSFADE_S} to ${MAX_CROSSFADE_S} seconds`).max(MAX_CROSSFADE_S, `must be from ${MIN_CROSSFADE_S} to ${MAX_CROSSFADE_S} seconds`).default(0.5),
+  with: z.array(Index).min(1).max(MAX_EDIT_INPUTS - 1).optional(),
+}).strict();
+
+export const EditOp = z.union([TrimOp, ConcatOp, MuteOp, FrameOp, AudioOverlayOp, FadeOp, CrossfadeOp]);
 export type EditOp = z.infer<typeof EditOp>;
 
 export const EditInput = z.object({
@@ -79,6 +89,12 @@ function planProblem(input: EditInput): string | null {
     if (op.op === "audio_overlay" && op.input === 0) return `Step ${i + 1} (audio_overlay) uses the clip itself as the overlay. List the voice or music as another file.`;
     if (op.op === "concat" && op.with?.some((index) => index >= input.inputs.length || index === 0)) return `Step ${i + 1} (concat) names a file that is not in the list (files after the first are 2 to ${input.inputs.length}).`;
     if (op.op === "concat" && input.inputs.length < 2) return `Step ${i + 1} (concat) needs at least two files.`;
+    if (op.op === "crossfade" && op.with?.some((index) => index >= input.inputs.length || index === 0)) return `Step ${i + 1} (crossfade) names a file that is not in the list (files after the first are 2 to ${input.inputs.length}).`;
+    if (op.op === "crossfade") {
+      const clips = 1 + concatMembers(input, op).length;
+      if (clips < 2) return `Step ${i + 1} (crossfade) needs at least two files.`;
+      if (clips > MAX_CROSSFADE_CLIPS) return `Step ${i + 1} (crossfade) blends ${clips} clips and the limit is ${MAX_CROSSFADE_CLIPS}. Split it into two edits.`;
+    }
     if (op.op === "frame" && i !== last) return `Step ${i + 1} (frame) makes a picture, so it must be the last step.`;
   }
   const endsInFrame = input.ops[last]!.op === "frame";
@@ -88,7 +104,7 @@ function planProblem(input: EditInput): string | null {
 }
 
 /** Input files that concat joins when it names none: every file after the first that no audio_overlay uses. */
-export function concatMembers(input: EditInput, op: Extract<EditOp, { op: "concat" }>): number[] {
+export function concatMembers(input: EditInput, op: Extract<EditOp, { op: "concat" | "crossfade" }>): number[] {
   if (op.with) return op.with;
   const overlays = new Set(input.ops.flatMap((step) => step.op === "audio_overlay" ? [step.input] : []));
   return input.inputs.map((_, index) => index).filter((index) => index > 0 && !overlays.has(index));
@@ -171,6 +187,45 @@ export function concatEncodeArgs(ffmpeg: string, clips: Clip[], out: string): st
     }
   });
   parts.push(`${joined.join("")}concat=n=${clips.length}:v=1:a=${anyAudio ? 1 : 0}[v]${anyAudio ? "[a]" : ""}`);
+  args.push("-filter_complex", parts.join(";"), "-map", "[v]");
+  if (anyAudio) args.push("-map", "[a]");
+  args.push("-sn", "-dn", ...ENCODE_V);
+  if (anyAudio) args.push(...ENCODE_A);
+  args.push(...FASTSTART, out);
+  return args;
+}
+
+/** Smallest clip length a crossfade of d seconds accepts: every clip must be longer than twice the blend. */
+export const crossfadeMinLength = (d: number): number => 2 * d;
+
+/**
+ * Blend each seam: video with xfade (fade, d seconds, offset = sum of the lengths so far minus k*d) and sound with acrossfade (d seconds).
+ * Every clip is first fitted to the first clip's size and rate (letterboxed) and 48 kHz stereo; a clip with no sound gets silence when any clip has sound.
+ */
+export function crossfadeArgs(ffmpeg: string, clips: Clip[], d: number, out: string): string[] {
+  const target = videoOf(clips[0]!.probe)!;
+  const width = Math.max(2, Math.round((target.width ?? 1280) / 2) * 2); const height = Math.max(2, Math.round((target.height ?? 720) / 2) * 2);
+  const rate = target.fps && target.fps > 0 ? num(target.fps) : "30";
+  const anyAudio = clips.some((clip) => clip.probe.has_audio);
+  const args = [...BASE(ffmpeg)];
+  for (const clip of clips) args.push("-i", clip.path);
+  const parts: string[] = [];
+  clips.forEach((clip, index) => {
+    parts.push(`[${index}:v:0]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${rate},format=yuv420p,setpts=PTS-STARTPTS[v${index}]`);
+    if (anyAudio) parts.push(clip.probe.has_audio
+      ? `[${index}:a:0]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,asetpts=PTS-STARTPTS[a${index}]`
+      : `anullsrc=r=48000:cl=stereo,atrim=0:${num(clip.probe.duration_s ?? 0)},aformat=sample_fmts=fltp:channel_layouts=stereo,asetpts=PTS-STARTPTS[a${index}]`);
+  });
+  let sum = clips[0]!.probe.duration_s ?? 0;
+  let video = "[v0]"; let audio = "[a0]";
+  for (let k = 1; k < clips.length; k++) {
+    const offset = sum - d; // sum of the previous lengths minus k*d, accumulated
+    const last = k === clips.length - 1;
+    parts.push(`${video}[v${k}]xfade=transition=fade:duration=${num(d)}:offset=${num(offset)}[${last ? "v" : `x${k}`}]`);
+    video = `[x${k}]`;
+    if (anyAudio) { parts.push(`${audio}[a${k}]acrossfade=d=${num(d)}[${last ? "a" : `y${k}`}]`); audio = `[y${k}]`; }
+    sum = offset + (clips[k]!.probe.duration_s ?? 0);
+  }
   args.push("-filter_complex", parts.join(";"), "-map", "[v]");
   if (anyAudio) args.push("-map", "[a]");
   args.push("-sn", "-dn", ...ENCODE_V);
