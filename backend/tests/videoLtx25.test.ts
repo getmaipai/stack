@@ -14,7 +14,7 @@ import { LTX_LICENCE, LTX25_REQUIRED_FILES, STACK_MODELS, STACK_VIDEO_LTX25_MODE
 import { PRIVACY_ROWS } from "@/lib/privacy";
 import { TIER_CANDIDATES } from "@/lib/tiers";
 import { registerVideoJobs } from "@/video/jobs";
-import { LTX25_MEASURED, LTX25_PEAK_BYTES, ltx25PeakBytes, ltx25Refusal, ltx25WorkerEnv, LTX25_GEN_VERSION } from "@/video/ltx25";
+import { LTX25_MEASURED, LTX25_PEAK_BYTES, ltx25PeakBytes, ltx25Refusal, ltx25TrueSize, ltx25WorkerEnv, LTX25_GEN_VERSION } from "@/video/ltx25";
 import { __resetProvenanceForTests } from "@/video/provenance";
 import { memoryVerdict, qualityOfModelName, VIDEO_SPECS, videoGen, workerHandle, type VideoGenDeps, type WorkerHandle, type WorkerReply, type WorkerRequest } from "@/video/videoGen";
 import { dataDir } from "@/lib/paths";
@@ -78,15 +78,15 @@ test("the model names map to the LTX-2.5 quality, and Quick and Detailed keep th
   expect(qualityOfModelName("ltx-3")).toBeNull();
 });
 
-test("the Standard clip (512x288, 10 s, 241 frames) runs on the LTX-2.5 worker, comes back with sound, and reports its engine and model", async () => {
+test("the Standard clip (512x256, 10 s, 241 frames) runs on the LTX-2.5 worker, comes back with sound, and reports its engine and model", async () => {
   videoGen.useDeps(scripted());
   const response = await post({ prompt: "two cartoon bears say hello", model: "ltx25-q8", seconds: 10, seed: 7, timeout_ms: 5000 });
   expect(response.status).toBe(200);
   const body = await response.json() as { data: Entry[] };
-  expect(body.data[0]).toMatchObject({ width: 512, height: 288, frames: 241, seconds: 10, quality: "ltx25", audio: true, model: STACK_VIDEO_LTX25_MODEL_ID, mode: "text-to-video" });
+  expect(body.data[0]).toMatchObject({ width: 512, height: 256, frames: 241, seconds: 10, quality: "ltx25", audio: true, model: STACK_VIDEO_LTX25_MODEL_ID, mode: "text-to-video" });
   expect(spawnedQualities).toEqual(["ltx25"]);
   expect(ensured).toEqual(["ltx25"]);
-  expect(requests[0]).toMatchObject({ model_dir: "/models/ltx25", num_frames: 241, width: 512, height: 288, loras: [] });
+  expect(requests[0]).toMatchObject({ model_dir: "/models/ltx25", num_frames: 241, width: 512, height: 256, loras: [] });
   expect((requests[0]!.num_frames - 1) % 8).toBe(0);
 });
 
@@ -100,15 +100,31 @@ test("a second clip reuses the same worker, and another model's worker leaves be
   expect(killed).toBe(1);
 });
 
-test("the default is 512x288 for 5 seconds, and Boost sizes 640x352 and 768x448 run at 5 seconds", async () => {
+test("the default is 512x256 for 5 seconds, and Boost sizes 640x320 and 768x448 run at 5 seconds", async () => {
   videoGen.useDeps(scripted());
   const plain = await post({ prompt: "x", model: "ltx25-q8", timeout_ms: 5000 });
-  expect(((await plain.json()) as { data: Entry[] }).data[0]).toMatchObject({ width: 512, height: 288, frames: 121 });
-  for (const size of ["640x352", "768x448"]) {
+  expect(((await plain.json()) as { data: Entry[] }).data[0]).toMatchObject({ width: 512, height: 256, frames: 121 });
+  for (const size of ["640x320", "768x448"]) {
     const response = await post({ prompt: "x", model: "ltx25-q8", size, seconds: 5, timeout_ms: 5000 });
     expect(response.status).toBe(200);
   }
-  expect(requests.map((request) => `${request.width}x${request.height}:${request.num_frames}`)).toEqual(["512x288:121", "640x352:121", "768x448:121"]);
+  expect(requests.map((request) => `${request.width}x${request.height}:${request.num_frames}`)).toEqual(["512x256:121", "640x320:121", "768x448:121"]);
+});
+
+test("the nominal sizes 512x288 and 640x352 are accepted, made at the true size, and reported at it; the one mapping rounds each side down to a multiple of 64", async () => {
+  expect(ltx25TrueSize(512, 288)).toEqual({ width: 512, height: 256 });
+  expect(ltx25TrueSize(640, 352)).toEqual({ width: 640, height: 320 });
+  expect(ltx25TrueSize(768, 448)).toEqual({ width: 768, height: 448 });
+  expect(ltx25TrueSize(1024, 576)).toEqual({ width: 1024, height: 576 });
+  videoGen.useDeps(scripted());
+  for (const [size, w, h] of [["512x288", 512, 256], ["640x352", 640, 320], ["544x288", 512, 256]] as const) {
+    const response = await post({ prompt: "x", model: "ltx25-q8", size, seconds: 5, timeout_ms: 5000 });
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as { data: Entry[] }).data[0]).toMatchObject({ width: w, height: h });
+  }
+  expect(requests.map((request) => `${request.width}x${request.height}`)).toEqual(["512x256", "640x320", "512x256"]);
+  // A size that rounds to something outside the table is refused, 1024x576 included.
+  for (const size of ["1024x576", "512x320", "480x288"]) expect((await post({ prompt: "x", model: "ltx25-q8", size })).status).toBe(422);
 });
 
 test("a size or a length outside the measured table is refused with a plain sentence, and nothing starts", async () => {
@@ -118,9 +134,9 @@ test("a size or a length outside the measured table is refused with a plain sent
     expect(response.status).toBe(422);
     const body = await response.json() as { code: string; error: string };
     expect(body.code).toBe("bad_size");
-    expect(body.error).toContain("512x288");
+    expect(body.error).toContain("512x256");
   }
-  for (const size of ["640x352", "768x448"]) {
+  for (const size of ["640x320", "768x448"]) {
     const response = await post({ prompt: "x", model: "ltx25-q8", size, seconds: 10 });
     expect(response.status).toBe(422);
     const body = await response.json() as { code: string; error: string };
@@ -140,7 +156,7 @@ test("frames must be 8n+1: the table check refuses anything else, and every whol
   expect(ltx25Refusal(512, 288, 8)).toContain("one more than a multiple of 8");
   expect(ltx25Refusal(512, 288, 249)).toContain("at most 10 seconds");
   expect(ltx25Refusal(768, 448, 129)).toContain("at most 5 seconds");
-  expect(ltx25Refusal(1024, 576, 121)).toContain("512x288, 640x352, 768x448");
+  expect(ltx25Refusal(1024, 576, 121)).toContain("512x256, 640x320, 768x448");
   for (let seconds = 1; seconds <= 10; seconds++) expect((seconds * 24) % 8).toBe(0);
 });
 
@@ -165,7 +181,7 @@ test("not installed answers 503 not_installed, and Quick still works", async () 
   expect((await post({ prompt: "x", timeout_ms: 5000 })).status).toBe(200);
 });
 
-test("admission uses the measured footprints: Standard 10 s 39.4 GB, 5 s 25.3 GB, 640x352 32.4 GB, Boost 768x448 45.8 GB", async () => {
+test("admission uses the measured footprints: Standard 10 s 39.4 GB, 5 s 25.3 GB, 640x320 32.4 GB, Boost 768x448 45.8 GB", async () => {
   expect(ltx25PeakBytes(512, 288, 241)).toBe(39.4e9);
   expect(ltx25PeakBytes(512, 288, 121)).toBe(25.3e9);
   expect(ltx25PeakBytes(512, 288, 49)).toBe(25.3e9);
@@ -173,7 +189,7 @@ test("admission uses the measured footprints: Standard 10 s 39.4 GB, 5 s 25.3 GB
   expect(ltx25PeakBytes(768, 448, 121)).toBe(45.8e9);
   expect(LTX25_PEAK_BYTES).toBe(45.8e9);
   expect(VIDEO_SPECS.ltx25.peakBytes).toBe(45.8e9);
-  expect(LTX25_MEASURED.map((row) => row.size)).toEqual(["512x288", "640x352", "768x448"]);
+  expect(LTX25_MEASURED.map((row) => row.size)).toEqual(["512x256", "640x320", "768x448"]);
   // The job's governor admission is the clip's own measured figure.
   let release!: () => void;
   const hold = new Promise<void>((resolve) => { release = resolve; });
@@ -200,7 +216,7 @@ test("memory: beside 28 GB of chat a clip is judged by its own measured footprin
   const refused = await post({ prompt: "x", model: "ltx25-q8", size: "768x448", seconds: 5 });
   expect(refused.status).toBe(503);
   expect(await refused.json()).toMatchObject({ code: "no_memory" });
-  const allowed = await post({ prompt: "x", model: "ltx25-q8", size: "512x288", seconds: 5, timeout_ms: 5000 });
+  const allowed = await post({ prompt: "x", model: "ltx25-q8", size: "512x256", seconds: 5, timeout_ms: 5000 });
   expect(allowed.status).toBe(200);
 });
 
@@ -219,13 +235,13 @@ test("the status route reports the LTX-2.5 engine: ready, its environment, the m
   expect(quick!.id).not.toBe(ltx25!.id);
   expect(detailed!.audio).toBe(true);
   expect(ltx25).toMatchObject({ id: STACK_VIDEO_LTX25_MODEL_ID, audio: true, image_to_video: false, installed: false, ready: false, licence: { id: "ltx-2.x-community-2026-08-11", name: LTX_LICENCE } });
-  expect(ltx25!.limits).toMatchObject({ max_seconds: 10, default_size: "512x288", size_step: 32, max_frames: 241 });
+  expect(ltx25!.limits).toMatchObject({ max_seconds: 10, default_size: "512x256", size_step: 32, max_frames: 241 });
   expect(ltx25!.environment).toMatchObject({ engine: expect.stringContaining("ltx25-gen"), version: LTX25_GEN_VERSION, ready: false });
   expect(ltx25!.install.models.map((model) => model.id)).toEqual([STACK_VIDEO_LTX25_MODEL_ID]);
   expect(ltx25!.install.download_bytes).toBe(STACK_VIDEO_LTX25_MODEL.download!.approx_bytes);
   expect(ltx25!.profiles).toEqual([
-    { name: "standard", size: "512x288", width: 512, height: 288, max_seconds: 10, max_frames: 241, peak_gb: 39.4, short_peak_gb: 25.3 },
-    { name: "boost", size: "640x352", width: 640, height: 352, max_seconds: 5, max_frames: 121, peak_gb: 32.4, short_peak_gb: null },
+    { name: "standard", size: "512x256", width: 512, height: 256, max_seconds: 10, max_frames: 241, peak_gb: 39.4, short_peak_gb: 25.3 },
+    { name: "boost", size: "640x320", width: 640, height: 320, max_seconds: 5, max_frames: 121, peak_gb: 32.4, short_peak_gb: null },
     { name: "boost", size: "768x448", width: 768, height: 448, max_seconds: 5, max_frames: 121, peak_gb: 45.8, short_peak_gb: null },
   ]);
 });
@@ -326,11 +342,11 @@ test.skipIf(!python)("REAL worker: refuses sizes and lengths outside the table, 
   const base = { op: "generate", model_dir: "/nonexistent", tokenizer_dir: "/nonexistent", prompt: "x", negative_prompt: null, image: null, seed: 1, loras: [], output: "/tmp/never.mp4", poster: "/tmp/never.jpg" };
   const send = (id: string, extra: Record<string, unknown>) => handle.send({ id, ...base, ...extra } as unknown as WorkerRequest, { deadlineMs: 60_000, onEvent: () => {} });
   expect(await send("1", { width: 1024, height: 576, num_frames: 121 })).toMatchObject({ ok: false, code: "bad_request" });
-  expect(await send("2", { width: 512, height: 288, num_frames: 120 })).toMatchObject({ ok: false, code: "bad_request" });
+  expect(await send("2", { width: 512, height: 256, num_frames: 120 })).toMatchObject({ ok: false, code: "bad_request" });
   expect(await send("3", { width: 768, height: 448, num_frames: 241 })).toMatchObject({ ok: false, code: "bad_request" });
-  expect(await send("4", { width: 512, height: 288, num_frames: 121, image: "/tmp/x.png" })).toMatchObject({ ok: false, code: "bad_request" });
-  expect(await send("5", { width: 512, height: 288, num_frames: 121, loras: [["/tmp/a.safetensors", 1]] })).toMatchObject({ ok: false, code: "bad_request" });
-  expect(await send("6", { width: 512, height: 288, num_frames: 241 })).toMatchObject({ ok: false, code: "model_missing" });
+  expect(await send("4", { width: 512, height: 256, num_frames: 121, image: "/tmp/x.png" })).toMatchObject({ ok: false, code: "bad_request" });
+  expect(await send("5", { width: 512, height: 256, num_frames: 121, loras: [["/tmp/a.safetensors", 1]] })).toMatchObject({ ok: false, code: "bad_request" });
+  expect(await send("6", { width: 512, height: 256, num_frames: 241 })).toMatchObject({ ok: false, code: "model_missing" });
   handle.kill();
 });
 
@@ -346,7 +362,7 @@ test.skipIf(!python || !realPack || !process.env.LTX25_FFMPEG)("REAL: a 1 second
   const child = Bun.spawn([python!, "-s", worker], { stdin: "pipe", stdout: "pipe", stderr: "pipe", env: { ...process.env, PYTHONPATH: process.env.LTX25_GEN_SRC ?? "", HF_HUB_OFFLINE: "1", VIDEO_WORKER_DEBUG: "1" } });
   const handle = workerHandle(child as never);
   const events: string[] = [];
-  const reply = await handle.send({ id: "real", op: "generate", model_dir: realPack!, tokenizer_dir: realPack!, ffmpeg: process.env.LTX25_FFMPEG!, prompt: "A friendly blue cartoon character waves and says hello.", negative_prompt: null, image: null, width: 512, height: 288, num_frames: 25, seed: 7, loras: [], output: join(dir, "video.mp4"), poster: join(dir, "poster.jpg") } as WorkerRequest, { deadlineMs: 600_000, onEvent: (event) => { events.push(event.event === "stage" ? event.stage : event.event); } });
+  const reply = await handle.send({ id: "real", op: "generate", model_dir: realPack!, tokenizer_dir: realPack!, ffmpeg: process.env.LTX25_FFMPEG!, prompt: "A friendly blue cartoon character waves and says hello.", negative_prompt: null, image: null, width: 512, height: 256, num_frames: 25, seed: 7, loras: [], output: join(dir, "video.mp4"), poster: join(dir, "poster.jpg") } as WorkerRequest, { deadlineMs: 600_000, onEvent: (event) => { events.push(event.event === "stage" ? event.stage : event.event); } });
   handle.kill();
   expect(reply, JSON.stringify(reply)).toMatchObject({ ok: true, width: 512, frames: 25, audio: true });
   expect(events).toContain("motion");

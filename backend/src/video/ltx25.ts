@@ -28,38 +28,48 @@ const GB = 1_000_000_000;
 /** One measured row: a size, the longest clip measured at it, and the OS footprint of that clip. Shorter clips at the same size are admitted at the same figure (a shorter clip never needs more). */
 export interface Ltx25Row { size: string; width: number; height: number; maxSeconds: number; peakBytes: number; /** The slot Home's tier design gives it (Home owns the wording). */ profile: "standard" | "boost" }
 export const LTX25_MEASURED: readonly Ltx25Row[] = [
-  // 512x288: 5 s 27 to 52 s and 25.3 GB; 10 s 43 s and 39.4 GB (the Standard slot).
-  { size: "512x288", width: 512, height: 288, maxSeconds: 10, peakBytes: 39.4 * GB, profile: "standard" },
-  // 640x352: 5 s 42 to 49 s, 32.4 GB. 10 s was not measured, so it is not offered.
-  { size: "640x352", width: 640, height: 352, maxSeconds: 5, peakBytes: 32.4 * GB, profile: "boost" },
+  // 512x256 (asked for as 512x288): 5 s 27 to 52 s and 25.3 GB; 10 s 43 s and 39.4 GB (the Standard slot).
+  { size: "512x256", width: 512, height: 256, maxSeconds: 10, peakBytes: 39.4 * GB, profile: "standard" },
+  // 640x320 (asked for as 640x352): 5 s 42 to 49 s, 32.4 GB. 10 s was not measured, so it is not offered.
+  { size: "640x320", width: 640, height: 320, maxSeconds: 5, peakBytes: 32.4 * GB, profile: "boost" },
   // 768x448: 5 s 64 to 74 s, 45.8 GB. 10 s was not measured, so it is not offered.
   { size: "768x448", width: 768, height: 448, maxSeconds: 5, peakBytes: 45.8 * GB, profile: "boost" },
 ];
-/** The 5 s footprint of the Standard size, for a clip of 5 s or less at it (a 5 s clip at 512x288 measured 25.3 GB). */
+/** The 5 s footprint of the Standard size, for a clip of 5 s or less at it (a 5 s clip at 512x256 measured 25.3 GB). */
 export const LTX25_STANDARD_5S_PEAK_BYTES = 25.3 * GB;
 /** The largest measured footprint: the figure the status and the static admission check use. */
 export const LTX25_PEAK_BYTES = Math.max(...LTX25_MEASURED.map((row) => row.peakBytes));
-export const LTX25_DEFAULT_SIZE = "512x288";
+export const LTX25_DEFAULT_SIZE = "512x256";
 export const LTX25_MAX_SECONDS = Math.max(...LTX25_MEASURED.map((row) => row.maxSeconds));
 export const LTX25_MAX_FRAMES = LTX25_MAX_SECONDS * LTX25_FPS + 1;
 
-/** The row of a size, or null when the size was not measured. */
+/**
+ * The one nominal-to-true mapping. The distilled two-stage engine draws stage one at half size and needs that half to be a multiple
+ * of 32, so it rounds each side DOWN to a multiple of 64 (a request for 512x288 comes out 512x256, 640x352 comes out 640x320,
+ * 768x448 and 1024x576 are already exact; checked with ffprobe on the judged clips). Every size, limit and footprint here is the
+ * true one; a request may name the nominal size.
+ */
+export function ltx25TrueSize(width: number, height: number): { width: number; height: number } {
+  return { width: Math.floor(width / 64) * 64, height: Math.floor(height / 64) * 64 };
+}
+/** The row of a size (nominal or true), or null when its true size was not measured. */
 export function ltx25Row(width: number, height: number): Ltx25Row | null {
-  return LTX25_MEASURED.find((row) => row.width === width && row.height === height) ?? null;
+  const true_ = ltx25TrueSize(width, height);
+  return LTX25_MEASURED.find((row) => row.width === true_.width && row.height === true_.height) ?? null;
 }
 /** A plain refusal for a size and a frame count outside the measured table, or null when the clip is allowed. Frames must be 8n+1. */
 export function ltx25Refusal(width: number, height: number, frames: number): string | null {
   const row = ltx25Row(width, height);
-  if (!row) return `This video model makes ${LTX25_MEASURED.map((item) => item.size).join(", ")}. Pick one of those sizes.`;
+  if (!row) return `This video model makes ${LTX25_MEASURED.map((item) => item.size).join(", ")} (a height between is rounded down to a multiple of 64, so 512x288 gives 512x256). Pick one of those sizes.`;
   if (!Number.isInteger(frames) || frames < 9 || (frames - 1) % 8 !== 0) return "The length must be a whole number of frames that is one more than a multiple of 8 (for example 121 frames, 5 seconds at 24 a second).";
-  if (frames > row.maxSeconds * LTX25_FPS + 1) return `At ${row.size} a clip is at most ${row.maxSeconds} seconds on this computer. A longer clip needs the ${LTX25_MEASURED.filter((item) => item.maxSeconds > row.maxSeconds).map((item) => item.size).join(" or ") || "512x288"} size.`;
+  if (frames > row.maxSeconds * LTX25_FPS + 1) return `At ${row.size} a clip is at most ${row.maxSeconds} seconds on this computer. A longer clip needs the ${LTX25_MEASURED.filter((item) => item.maxSeconds > row.maxSeconds).map((item) => item.size).join(" or ") || "512x256"} size.`;
   return null;
 }
 /** The measured footprint a clip of this size and length is admitted at (the clip's own row), or the largest figure when the size is unknown (never admit less than was measured). */
 export function ltx25PeakBytes(width: number, height: number, frames: number): number {
   const row = ltx25Row(width, height);
   if (!row) return LTX25_PEAK_BYTES;
-  if (row.size === "512x288" && frames <= 5 * LTX25_FPS + 1) return LTX25_STANDARD_5S_PEAK_BYTES;
+  if (row.size === "512x256" && frames <= 5 * LTX25_FPS + 1) return LTX25_STANDARD_5S_PEAK_BYTES;
   return row.peakBytes;
 }
 

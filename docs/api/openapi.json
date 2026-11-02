@@ -3044,7 +3044,7 @@
                   "size": {
                     "type": "string",
                     "pattern": "^\\d{3,4}x\\d{3,4}$",
-                    "description": "<width>x<height>. Quick: multiples of 32, area at most 399360 pixels (832x480; 480x832 also fits), default 832x480. Detailed: multiples of 64, area at most 768 x 448 (448x768 also fits), default 768x448. ltx25-q8: only 512x288 (up to 10 s), 640x352 and 768x448 (up to 5 s); anything else is refused (bad_size). Each side at least 256.",
+                    "description": "<width>x<height>. Quick: multiples of 32, area at most 399360 pixels (832x480; 480x832 also fits), default 832x480. Detailed: multiples of 64, area at most 768 x 448 (448x768 also fits), default 768x448. ltx25-q8: only 512x256 (up to 10 s), 640x320 and 768x448 (up to 5 s); the nominal 512x288 and 640x352 are accepted and made at the true size, which the reply reports; anything else is refused (bad_size). Each side at least 256.",
                     "example": "832x480"
                   },
                   "preview": {

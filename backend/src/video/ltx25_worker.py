@@ -32,7 +32,12 @@ os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
 
 FPS = 24
 # Mirrored in the Stack's service (video/ltx25.ts, LTX25_MEASURED): size -> longest measured clip in seconds.
-MEASURED = {(512, 288): 10, (640, 352): 5, (768, 448): 5}
+# True sizes: the engine rounds each side down to a multiple of 64 (512x288 comes out 512x256, 640x352 comes out 640x320).
+MEASURED = {(512, 256): 10, (640, 320): 5, (768, 448): 5}
+
+
+def true_size(width, height):
+    return (width // 64) * 64, (height // 64) * 64
 STEPS_TOTAL = 11  # 8 stage-one steps and 3 stage-two steps of the distilled schedule
 REQUIRED = ["transformer-distilled.safetensors", "connector.safetensors", "vae_decoder.safetensors", "vae_encoder.safetensors", "audio_vae.safetensors", "vocoder.safetensors", "spatial_upscaler_x2.safetensors", "text_encoder/model.safetensors", "text_encoder/tokenizer.json", "config.json", "embedded_config.json"]
 
@@ -91,6 +96,7 @@ def classify(error):
 
 
 def refusal(width, height, frames):
+    width, height = true_size(width, height)
     seconds = MEASURED.get((width, height))
     if seconds is None:
         return "size must be one of " + ", ".join("%dx%d" % size for size in MEASURED)
@@ -183,6 +189,7 @@ def _probe(ffmpeg, path):
 
 def generate(request):
     width, height, frames = int(request["width"]), int(request["height"]), int(request["num_frames"])
+    width, height = true_size(width, height)
     problem = refusal(width, height, frames)
     if problem:
         raise ValueError(problem)

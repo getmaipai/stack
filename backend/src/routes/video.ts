@@ -116,7 +116,7 @@ function ltx25View(models: PlanModel[], installed: string[], available: boolean)
     limits: { ...base.limits, default_size: LTX25_DEFAULT_SIZE, size_step: 32 },
     ready: available && base.installed && environment.ready,
     environment,
-    profiles: LTX25_MEASURED.map((row) => ({ name: row.profile, size: row.size, width: row.width, height: row.height, max_seconds: available ? row.maxSeconds : 0, max_frames: row.maxSeconds * LTX25_FPS + 1, peak_gb: Math.round(row.peakBytes / 1e8) / 10, short_peak_gb: row.size === "512x288" ? Math.round(LTX25_STANDARD_5S_PEAK_BYTES / 1e8) / 10 : null })),
+    profiles: LTX25_MEASURED.map((row) => ({ name: row.profile, size: row.size, width: row.width, height: row.height, max_seconds: available ? row.maxSeconds : 0, max_frames: row.maxSeconds * LTX25_FPS + 1, peak_gb: Math.round(row.peakBytes / 1e8) / 10, short_peak_gb: row.size === "512x256" ? Math.round(LTX25_STANDARD_5S_PEAK_BYTES / 1e8) / 10 : null })),
   };
 }
 

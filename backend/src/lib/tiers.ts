@@ -42,9 +42,9 @@ export const TIER_CANDIDATES: TierCandidate[] = [
   { id: STACK_VIDEO_MODEL_ID, category: "video", family: "wan", label: "Wan Video", profiles: ["p128"], peaks: [{ options: {}, peakBytes: 25_400_000_000, status: "measured", note: "Tier eval 2026-10-30, 832 x 480, 49 frames. Known artifact: a head can appear behind an umbrella." }], tiers: ["standard"] },
   { id: STACK_VIDEO_DETAILED_MODEL_ID, category: "video", family: "ltx", label: "LTX Detailed Video", profiles: ["p128"], peaks: [{ options: {}, peakBytes: 39_900_000_000, status: "measured", note: "Tier eval 2026-10-30, 768 x 448 with sound." }], tiers: ["boost"] },
   { id: STACK_VIDEO_LTX25_MODEL_ID, category: "video", family: "ltx", label: "LTX-2.5 Video with sound", profiles: ["p128"], peaks: [
-    { options: { size: "512x288", seconds: 5 }, peakBytes: 25_300_000_000, status: "measured", note: "VIDEO-TIERS-01, M5 Max OS footprint, 2026-11-02." },
-    { options: { size: "512x288", seconds: 10 }, peakBytes: 39_400_000_000, status: "measured", note: "Standard slot: 241 frames, 43 s." },
-    { options: { size: "640x352", seconds: 5 }, peakBytes: 32_400_000_000, status: "measured", note: "Boost slot." },
+    { options: { size: "512x256", seconds: 5 }, peakBytes: 25_300_000_000, status: "measured", note: "VIDEO-TIERS-01, M5 Max OS footprint, 2026-11-02." },
+    { options: { size: "512x256", seconds: 10 }, peakBytes: 39_400_000_000, status: "measured", note: "Standard slot: 241 frames, 43 s." },
+    { options: { size: "640x320", seconds: 5 }, peakBytes: 32_400_000_000, status: "measured", note: "Boost slot." },
     { options: { size: "768x448", seconds: 5 }, peakBytes: 45_800_000_000, status: "measured", note: "Boost slot." },
   ], tiers: [], vetting: "VIDEO-TIERS-01: the Stack runs it (LTX25-ENGINE-01); Home's design step moves the Standard and Boost video slots here and parks the Wan and LTX-2.3 rows for adults. Max stays empty until a run passes the 64 GB cap and beats Boost." },
   { id: STACK_MUSIC_MODEL_ID, category: "music", family: "ace-step", label: "ACE-Step 1.5 Turbo", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 16_400_000_000, status: "measured", note: "Tier eval 2026-10-30, MLX peak." }], tiers: ["standard"] },

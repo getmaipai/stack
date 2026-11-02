@@ -24,7 +24,7 @@ import { PAUSED_LABEL } from "@/lib/genProgress";
 import { LoraError, resolveLoras } from "@/video/loras";
 import { deleteResult, isJobId, messagesPath, posterPath, readResult, videoPath, type VideoResultMeta } from "@/video/results";
 import { memoryVerdict, qualityOfModelName, tierAvailability, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, VIDEO_SPECS, videoGen, videoGenRoot, type VideoQuality } from "@/video/videoGen";
-import { ltx25PeakBytes, ltx25Refusal, ltx25Row, LTX25_MEASURED } from "@/video/ltx25";
+import { ltx25PeakBytes, ltx25Refusal, ltx25Row, ltx25TrueSize, LTX25_MEASURED } from "@/video/ltx25";
 import { stashClip, unstashClip, videoFailure, videoPreviewPath, videoProgress, videoTracker, VIDEO_JOB_KIND } from "@/video/jobs";
 
 const DEFAULT_WAIT_MS = 30_000;
@@ -36,7 +36,7 @@ const VideoRequestSchema = z.object({
   prompt: z.string().trim().min(1).max(VIDEO_MAX_PROMPT_CHARS),
   negative_prompt: z.string().max(VIDEO_MAX_PROMPT_CHARS).optional().openapi({ description: "Accepted. The distilled FastWan model runs without guidance, so it has no effect on the clip." }),
   image: z.string().optional().openapi({ description: "Image to video: the first frame, base64 (a data: URL is fine), PNG, JPEG or WebP, at most 20 MB. image_source is optional." }),
-  size: z.string().regex(/^\d{3,4}x\d{3,4}$/).optional().openapi({ description: `<width>x<height>. Quick: multiples of ${VIDEO_SIZE_STEP}, area at most ${VIDEO_MAX_PIXELS} pixels (832x480; 480x832 also fits), default ${VIDEO_DEFAULT_SIZE}. Detailed: multiples of 64, area at most 768 x 448 (448x768 also fits), default 768x448. ltx25-q8: only 512x288 (up to 10 s), 640x352 and 768x448 (up to 5 s); anything else is refused (bad_size). Each side at least ${VIDEO_MIN_SIDE}.`, example: VIDEO_DEFAULT_SIZE }),
+  size: z.string().regex(/^\d{3,4}x\d{3,4}$/).optional().openapi({ description: `<width>x<height>. Quick: multiples of ${VIDEO_SIZE_STEP}, area at most ${VIDEO_MAX_PIXELS} pixels (832x480; 480x832 also fits), default ${VIDEO_DEFAULT_SIZE}. Detailed: multiples of 64, area at most 768 x 448 (448x768 also fits), default 768x448. ltx25-q8: only 512x256 (up to 10 s), 640x320 and 768x448 (up to 5 s); the nominal 512x288 and 640x352 are accepted and made at the true size, which the reply reports; anything else is refused (bad_size). Each side at least ${VIDEO_MIN_SIDE}.`, example: VIDEO_DEFAULT_SIZE }),
   preview: z.boolean().optional().openapi({ description: "Default true. While the clip runs, the status carries `preview_url`: the first frame of the clip (JPEG, up to 480 px on the long side), drawn from the finished motion the moment the long frame-building stage starts. Pass false to skip it (it costs about a second)." }),
   seconds: z.number().int().min(1).max(VIDEO_SPECS.detailed.maxSeconds).optional().openapi({ description: `Whole seconds (24 frames a second plus the first frame). Quick: 1 to ${VIDEO_MAX_SECONDS}, default ${VIDEO_MAX_SECONDS}. Detailed: 1 to ${VIDEO_SPECS.detailed.maxSeconds}, default 5. A number past the chosen model ceiling is refused (bad_seconds).` }),
   seed: z.number().int().min(0).max(4_294_967_295).optional(),
@@ -137,8 +137,9 @@ export function parseVideoSize(size: string | undefined, quality: VideoQuality =
   if (quality === "ltx25") {
     // Only the measured sizes (video/ltx25.ts); anything else is refused with the list.
     const found = /^(\d{3,4})x(\d{3,4})$/.exec(size ?? spec.defaultSize);
-    if (!found || !ltx25Row(Number(found[1]), Number(found[2]))) return `This video model makes ${LTX25_MEASURED.map((row) => row.size).join(", ")}. Pick one of those sizes.`;
-    return { width: Number(found[1]), height: Number(found[2]) };
+    if (!found || Number(found[1]) % 32 || Number(found[2]) % 32 || !ltx25Row(Number(found[1]), Number(found[2]))) return `This video model makes ${LTX25_MEASURED.map((row) => row.size).join(", ")}; a height between is rounded down to a multiple of 64 (512x288 gives 512x256). Pick one of those sizes.`;
+    // The clip is made, kept and reported at its true size.
+    return ltx25TrueSize(Number(found[1]), Number(found[2]));
   }
   const match = /^(\d{3,4})x(\d{3,4})$/.exec(size ?? spec.defaultSize);
   if (!match) return `The size must look like ${spec.defaultSize}.`;
