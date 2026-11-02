@@ -24,7 +24,7 @@ import { dataDir, keysDir } from "@/lib/paths";
 const GB = 1_073_741_824;
 const TOKEN = ["aaaa", "bbbb", "cccc", "dddd", "eeee", "ffff", "gggg", "hhhh"].join("-"); // a made-up test value
 const FULL = { "x-maipai-view": "full", "x-maipai-home-token": TOKEN };
-const SECRET = "ZEBRA-SECRET-PROMPT-7731";
+const SECRET = "a zebra on a unicycle at dusk";
 
 let videoRequests: VideoRequest[] = [];
 let imageRequests: ImageRequest[] = [];
