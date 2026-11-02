@@ -15,7 +15,7 @@ import { createJob, finishJob, getJob, jobSignal, listJobs, updateJob } from "@/
 import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { getModel, installCatalogModel, removeModel, type CatalogModelLike, type DownloadModelOptions } from "@/lib/modelStore";
-import { STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, LTX_LICENCE_NOTICE, STACK_MODELS, STACK_MUSIC_MODELS, STACK_STEMS_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_VIDEO_DETAILED_MODEL_ID, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MODEL_ID, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
+import { STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, LTX_LICENCE_NOTICE, STACK_MODELS, STACK_MUSIC_MODELS, STACK_STEMS_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_VIDEO_DETAILED_MODEL_ID, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MODEL_ID, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
 import { licenceAcceptance, recordLicenceAcceptance, type LicenceNotice } from "@/lib/licenceAcceptance";
 import { buildInstallPlan } from "@/lib/installPlan";
 import { diskPlanForTier, diskTotalsFor, engineDownloadBytes, type DiskPlan } from "@/lib/diskPlan";
@@ -30,7 +30,7 @@ import { uvEnvironmentReady } from "@/lib/uvEnvironment";
 import { loadedRoleForModel, selectedModel } from "@/lib/supervisor";
 import { ensureImageGenEnvironment, imageGen, imageGenEnvironmentReady, imageGenRoot } from "@/images/imageEngine";
 import { imageLoras } from "@/images/loras";
-import { ensureLtx25Environment, ltx25EnvironmentReady, ltx25GenRoot, LTX25_GEN_NAME } from "@/video/ltx25";
+import { ensureLtx25Environment, ensureLtx25MaxEnvironment, ltx25EnvironmentReady, ltx25GenRoot, ltx25MaxEnvironmentReady, ltx25MaxGenRoot, LTX25_GEN_NAME, LTX25_MAX_GEN_NAME } from "@/video/ltx25";
 import { ensureVideoGenEnvironment, tierAvailability as videoAvailability, videoGen, videoGenEnvironmentReady, videoGenRoot, VIDEO_GEN_NAME } from "@/video/videoGen";
 import { ensureMusicGenEnvironment, tierAvailability as musicAvailability, musicGen, musicGenEnvironmentReady, musicGenRoot, MUSIC_GEN_NAME } from "@/music/musicGen";
 import { stems, STEMS_NAME, ensureStemsEnvironment, stemsRoot, stemsEnvironmentReady } from "@/stems/stems";
@@ -91,9 +91,9 @@ export interface UnitDef {
 
 const GB = 1_000_000_000;
 /** Environment downloads come from the disk plan's measured table (one definition with the wizard); the figures are a fallback only. */
-const ENV_BYTES = { stems: engineDownloadBytes("stems") ?? 0.25 * GB, image: engineDownloadBytes("image-gen") ?? 1.1 * GB, video: engineDownloadBytes("video-gen") ?? 1.0 * GB, ltx25: engineDownloadBytes("ltx25-gen") ?? 0.25 * GB, music: engineDownloadBytes("music-gen") ?? 0.8 * GB, tools: engineDownloadBytes("image-tools") ?? 0.4 * GB, pocket: engineDownloadBytes("pocket-tts") ?? 0.72 * GB, mlxAudio: engineDownloadBytes("mlx-audio") ?? 0.47 * GB };
+const ENV_BYTES = { stems: engineDownloadBytes("stems") ?? 0.25 * GB, image: engineDownloadBytes("image-gen") ?? 1.1 * GB, video: engineDownloadBytes("video-gen") ?? 1.0 * GB, ltx25: engineDownloadBytes("ltx25-gen") ?? 0.25 * GB, ltx25max: engineDownloadBytes("ltx25-max-gen") ?? 0.25 * GB, music: engineDownloadBytes("music-gen") ?? 0.8 * GB, tools: engineDownloadBytes("image-tools") ?? 0.4 * GB, pocket: engineDownloadBytes("pocket-tts") ?? 0.72 * GB, mlxAudio: engineDownloadBytes("mlx-audio") ?? 0.47 * GB };
 /** The disk plan's row for a component, where the plan has one (its optional rows are the wizard's unchecked extras). */
-const DISK_ROW: Record<string, string> = { "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "image-tools": "image-tools", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "ace-step-1-5-turbo": "music", "htdemucs": "stems", "htdemucs_ft": "stems-ft", "htdemucs_6s": "stems-6s", "ltx-2-3-distilled-mlx": "video-detailed", "ltx-2-5-q8-distilled-mlx": "video-ltx25" };
+const DISK_ROW: Record<string, string> = { "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "image-tools": "image-tools", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "ace-step-1-5-turbo": "music", "htdemucs": "stems", "htdemucs_ft": "stems-ft", "htdemucs_6s": "stems-6s", "ltx-2-3-distilled-mlx": "video-detailed", "ltx-2-5-q8-distilled-mlx": "video-ltx25", "ltx-2-5-bf16-distilled-mlx-max": "video-ltx25-max" };
 
 const envImage: EnvDef = { name: "image-gen", approxBytes: ENV_BYTES.image, root: imageGenRoot, ready: imageGenEnvironmentReady, build: (onPhase, signal) => ensureImageGenEnvironment(onPhase, { signal }), stop: () => imageGen.stop() };
 const envVideo: EnvDef = {
@@ -114,6 +114,16 @@ const envLtx25: EnvDef = {
     onPhase("the LTX-2.5 video engine");
     await ensureEngine(pin, () => {}, { signal });
     await ensureLtx25Environment(onPhase, { signal });
+  },
+};
+const envLtx25Max: EnvDef = {
+  name: LTX25_MAX_GEN_NAME, approxBytes: ENV_BYTES.ltx25max, root: ltx25MaxGenRoot, ready: ltx25MaxEnvironmentReady, link: engineCurrentPath(LTX25_MAX_GEN_NAME), stop: () => videoGen.stop(),
+  build: async (onPhase, signal) => {
+    const pin = selectEngineBinary(await detectHardware(), LTX25_MAX_GEN_NAME);
+    if (!pin) throw new Error("No pinned LTX-2.5 Max video engine build exists for this computer.");
+    onPhase("the LTX-2.5 Max video engine");
+    await ensureEngine(pin, () => {}, { signal });
+    await ensureLtx25MaxEnvironment(onPhase, { signal });
   },
 };
 const envMusic: EnvDef = {
@@ -154,6 +164,7 @@ const LABELS: Record<string, { label: string; summary: string }> = {
   "ace-step-1-5-turbo": { label: "Music: ACE-Step 1.5", summary: "Makes and changes songs in chat" },
   "fastwan2-2-ti2v-5b-mlx-bf16": { label: "Video: Quick (Wan 2.2 FastWan 5B)", summary: "Makes short silent video clips from words or a picture." },
   "ltx-2-5-q8-distilled-mlx": { label: "Video: LTX-2.5 with sound", summary: "Makes clips up to 10 seconds with a sound track and spoken words, from a sentence. A very large download, and the maker's licence applies." },
+  "ltx-2-5-bf16-distilled-mlx-max": { label: "Video: LTX-2.5 Max with sound", summary: "Makes 1024 by 576 clips up to 10 seconds with a sound track and spoken words, from a sentence. A very large download (about 71 GB), and the maker's licence applies." },
   "ltx-2-3-distilled-mlx": { label: "Video: Detailed (LTX-2.3)", summary: "Makes longer clips with sound and spoken words. A very large download, and the maker's licence applies." },
 };
 
@@ -241,6 +252,16 @@ export function componentDefs(): UnitDef[] {
     id: STACK_VIDEO_LTX25_MODEL_ID, ...LABELS[STACK_VIDEO_LTX25_MODEL_ID]!, group: "video", role: "video", pins: STACK_VIDEO_LTX25_MODELS, envs: [envLtx25], tiers: ["p128"], licenceNotice: LTX_LICENCE_NOTICE,
     platformBlock: () => videoAvailability().code === "unsupported" ? videoAvailability().reason : null,
     usedBy: () => ["LTX-2.5 videos with sound in chat and the Video app"],
+    busy: () => {
+      const state = videoGen.status().state;
+      if (state === "running" || state === "building") return "A video clip is being made right now.";
+      return activeJobFor((kind) => kind.startsWith("video")) ? "A video clip is waiting or being made right now." : null;
+    },
+  });
+  units.push({
+    id: STACK_VIDEO_LTX25_MAX_MODEL_ID, ...LABELS[STACK_VIDEO_LTX25_MAX_MODEL_ID]!, group: "video", role: "video", pins: STACK_VIDEO_LTX25_MAX_MODELS, envs: [envLtx25Max], tiers: ["p128"], licenceNotice: LTX_LICENCE_NOTICE,
+    platformBlock: () => videoAvailability().code === "unsupported" ? videoAvailability().reason : null,
+    usedBy: () => ["LTX-2.5 Max videos with sound in chat and the Video app"],
     busy: () => {
       const state = videoGen.status().state;
       if (state === "running" || state === "building") return "A video clip is being made right now.";

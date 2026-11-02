@@ -15,12 +15,12 @@ import type { AppEnv } from "@/types";
 import { dataDir } from "@/lib/paths";
 import { installedEnginePin } from "@/lib/engineCatalog";
 import { listModels } from "@/lib/modelStore";
-import { videoDetailedInstallModels, videoInstallModels, videoLtx25InstallModels } from "@/lib/installPlan";
+import { videoDetailedInstallModels, videoInstallModels, videoLtx25InstallModels, videoLtx25MaxInstallModels } from "@/lib/installPlan";
 import { modelView } from "@/routes/models";
 import { importLora, listLoras, LORA_BASE_MODEL, LORA_BASE_MODELS, LORA_CLASSES, LoraError, MAX_LORA_BYTES, MAX_LORAS_PER_JOB, MAX_LORA_STRENGTH, removeLora, updateLora, isLoraId } from "@/video/loras";
 import { LTX_LICENCE_NOTICE } from "@/lib/modelCatalog";
 import { ltx25EnvironmentReady, LTX25_DEFAULT_SIZE, LTX25_MEASURED, LTX25_STANDARD_5S_PEAK_BYTES, LTX25_FPS } from "@/video/ltx25";
-import { LTX25_GEN_NAME, LTX25_GEN_VERSION } from "@/video/ltx25";
+import { LTX25_GEN_NAME, LTX25_GEN_VERSION, LTX25_MAX_GEN_NAME, LTX25_MAX_GEN_VERSION, LTX25_MAX_MEASURED, ltx25MaxEnvironmentReady } from "@/video/ltx25";
 import { memoryVerdict, tierAvailability, videoGen, VIDEO_SPECS, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_GEN_NAME, VIDEO_GEN_VERSION, VIDEO_MAX_FRAMES, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_PEAK_BYTES, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, videoGenEnvironmentReady, videoGenSourceInstalled } from "@/video/videoGen";
 
 const PlanModelSchema = z.object({
@@ -46,6 +46,9 @@ const Ltx25QualitySchema = QualitySchema.extend({
   environment: z.object({ engine: z.string(), version: z.string(), ready: z.boolean() }),
   profiles: z.array(z.object({ name: z.enum(["standard", "boost"]), size: z.string(), width: z.number().int(), height: z.number().int(), max_seconds: z.number().int(), max_frames: z.number().int(), peak_gb: z.number(), short_peak_gb: z.number().nullable() })).openapi({ description: "The measured table, one row per size the Stack runs (anything else is refused). `peak_gb` is the OS footprint of the longest clip at that size, the figure admission uses; `short_peak_gb` is the 5 s figure where it was measured separately. Home maps its Standard and Boost slots to these rows; Max has no row until a run passes the 64 GB cap." }),
 });
+const Ltx25MaxQualitySchema = Ltx25QualitySchema.extend({
+  profiles: z.array(z.object({ name: z.literal("max"), size: z.string(), width: z.number().int(), height: z.number().int(), max_seconds: z.number().int(), max_frames: z.number().int(), peak_gb: z.number(), admit_gb: z.number(), short_peak_gb: z.null() })).openapi({ description: "One row: `max`, 1024x576, up to 10 s (241 frames). `peak_gb` is the measured OS footprint of that clip (48.6 GB, `footprint`; the MLX peak reads lower and is not the figure); `admit_gb` is what admission reserves (the measured footprint plus 5 percent headroom), under the 64 GB per-clip cap. Home maps its Max slot to this row." }),
+});
 const StatusSchema = z.object({
   state: z.enum(["unsupported", "off", "not-installed", "needs-setup", "building", "idle", "running"]).openapi({ description: "off: this computer's tier does not run video. not-installed: the model files are missing. needs-setup: installed; the first clip builds the environment (first time only) and starts the worker. idle: the worker is up and waits for the next clip (two minutes unless an admin changes it), then exits. running: a clip is in progress." }),
   phase: z.string().nullable(),
@@ -59,7 +62,7 @@ const StatusSchema = z.object({
   worker: z.object({ alive: z.boolean(), idle_exit_seconds: z.number().int() }),
   environment: z.object({ engine: z.string(), version: z.string(), source: z.boolean(), ready: z.boolean() }),
   install: z.object({ models: z.array(PlanModelSchema), remaining_bytes: z.number().int() }).openapi({ description: "The pinned models to pull (POST /stack/v1/models, shaped as an install-plan model) and how many bytes are still to come." }),
-  qualities: z.object({ quick: QualitySchema, detailed: QualitySchema, ltx25: Ltx25QualitySchema }).openapi({ description: "VIDEO-LTX-01: the two models. `quick` is the silent clip (the fields above describe it); `detailed` makes a sound track with speech in the same pass, longer clips, and takes LoRAs made for LTX-2.3. Each lists its own limits, install pieces and whether a clip of it could be admitted now. `ltx25` (LTX25-ENGINE-01, request model `ltx25-q8`) is LTX-2.5 distilled q8 with sound: it adds `ready`, its own `environment` and the measured `profiles` table, and has no picture start and no LoRAs yet." }),
+  qualities: z.object({ quick: QualitySchema, detailed: QualitySchema, ltx25: Ltx25QualitySchema, ltx25max: Ltx25MaxQualitySchema }).openapi({ description: "VIDEO-LTX-01: the two models. `quick` is the silent clip (the fields above describe it); `detailed` makes a sound track with speech in the same pass, longer clips, and takes LoRAs made for LTX-2.3. Each lists its own limits, install pieces and whether a clip of it could be admitted now. `ltx25` (LTX25-ENGINE-01, request model `ltx25-q8`) is LTX-2.5 distilled q8 with sound: it adds `ready`, its own `environment` and the measured `profiles` table, and has no picture start and no LoRAs yet. `ltx25max` (LTX25-MAX-01, request model `ltx25-max`) is the Max profile: LTX-2.5 distilled bf16 on the dgrauet runtime at 1024x576, 10 s, with sound; the same shape as `ltx25` with one `profiles` row (`name` max); its pack and its environment are its own, so `installed`, `environment.ready` and `ready` are separate from `ltx25`." }),
 });
 const statusRoute = createRoute({ method: "get", path: "/", tags: ["Video"], summary: "The video role's state, limits, and what to install", responses: { 200: { content: { "application/json": { schema: z.object({ video: StatusSchema }) } }, description: "Additive. Home enables the video control from `available` and `state`." } } });
 
@@ -93,7 +96,7 @@ const removeRoute = createRoute({ method: "delete", path: "/loras/{id}", tags: [
 export const videoRoutes = apiRouter<AppEnv>();
 
 type PlanModel = ReturnType<typeof videoInstallModels>[number];
-function qualityView(quality: "quick" | "detailed" | "ltx25", models: PlanModel[], _installed: string[], available: boolean) {
+function qualityView(quality: "quick" | "detailed" | "ltx25" | "ltx25max", models: PlanModel[], _installed: string[], available: boolean) {
   const spec = VIDEO_SPECS[quality];
   const verdict = memoryVerdict(quality);
   const remaining = models.filter((model) => !model.installed).reduce((sum, model) => sum + model.approx_bytes, 0);
@@ -102,7 +105,7 @@ function qualityView(quality: "quick" | "detailed" | "ltx25", models: PlanModel[
     limits: { max_seconds: available ? spec.maxSeconds : 0, fps: VIDEO_FPS, default_size: spec.defaultSize, max_pixels: spec.maxPixels, size_step: spec.sizeStep, min_side: spec.minSide, max_frames: spec.maxSeconds * VIDEO_FPS + 1 },
     memory: { fits: verdict.ok, reason: verdict.ok ? null : verdict.reason, peak_gb: Math.round(spec.peakBytes / 1e8) / 10 },
     install: { models, remaining_bytes: remaining, download_bytes: models.reduce((sum, model) => sum + model.approx_bytes, 0) },
-    licence: quality === "detailed" || quality === "ltx25" ? { id: LTX_LICENCE_NOTICE.id, name: LTX_LICENCE_NOTICE.name, url: LTX_LICENCE_NOTICE.url } : null,
+    licence: quality === "detailed" || quality === "ltx25" || quality === "ltx25max" ? { id: LTX_LICENCE_NOTICE.id, name: LTX_LICENCE_NOTICE.name, url: LTX_LICENCE_NOTICE.url } : null,
     lora_base_model: spec.loraBase,
   };
 }
@@ -117,6 +120,19 @@ function ltx25View(models: PlanModel[], installed: string[], available: boolean)
     ready: available && base.installed && environment.ready,
     environment,
     profiles: LTX25_MEASURED.map((row) => ({ name: row.profile, size: row.size, width: row.width, height: row.height, max_seconds: available ? row.maxSeconds : 0, max_frames: row.maxSeconds * LTX25_FPS + 1, peak_gb: Math.round(row.peakBytes / 1e8) / 10, short_peak_gb: row.size === "512x256" ? Math.round(LTX25_STANDARD_5S_PEAK_BYTES / 1e8) / 10 : null })),
+  };
+}
+
+function ltx25MaxView(models: PlanModel[], installed: string[], available: boolean) {
+  const base = qualityView("ltx25max", models, installed, available);
+  const pin = installedEnginePin(LTX25_MAX_GEN_NAME);
+  const environment = { engine: pin ? `${pin.name} ${pin.tag}` : LTX25_MAX_GEN_NAME, version: LTX25_MAX_GEN_VERSION, ready: ltx25MaxEnvironmentReady() };
+  return {
+    ...base,
+    limits: { ...base.limits, default_size: LTX25_MAX_MEASURED[0]!.size, size_step: 64 },
+    ready: available && base.installed && environment.ready,
+    environment,
+    profiles: LTX25_MAX_MEASURED.map((row) => ({ name: row.profile, size: row.size, width: row.width, height: row.height, max_seconds: available ? row.maxSeconds : 0, max_frames: row.maxSeconds * LTX25_FPS + 1, peak_gb: Math.round(row.peakBytes / 1e8) / 10, admit_gb: Math.round(VIDEO_SPECS.ltx25max.peakBytes / 1e8) / 10, short_peak_gb: null })),
   };
 }
 
@@ -142,6 +158,7 @@ videoRoutes.openapi(statusRoute, (c) => {
       quick: qualityView("quick", models, installed, availability.available),
       detailed: qualityView("detailed", videoDetailedInstallModels(installed), installed, availability.available),
       ltx25: ltx25View(videoLtx25InstallModels(installed), installed, availability.available),
+      ltx25max: ltx25MaxView(videoLtx25MaxInstallModels(installed), installed, availability.available),
     },
   } }, 200 as const);
 });

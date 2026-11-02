@@ -1159,6 +1159,65 @@ export const STACK_VIDEO_LTX25_MODEL: CatalogModelLike = {
 };
 export const STACK_VIDEO_LTX25_MODELS: CatalogModelLike[] = [STACK_VIDEO_LTX25_MODEL];
 
+// LTX25-MAX-01: the LTX-2.5 Max pack, for the Max video slot (1024x576, 10 s). The distilled transformer at bf16 with the Gemma 4 text
+// encoder (its own folder, `gemma4-12b-ltx-v1`), the connector, the VAEs, the audio VAE, the vocoder, the duration head and the x2
+// spatial upscaler, from the UNGATED mlx-community conversion (no account or login; the official dgrauet packs are gated and cannot be
+// pinned). Left out because the distilled path reads none of them: the dev transformer (38 GB), the temporal upscaler, the pruned and
+// diffusion VAE decoders, the README. It is run by the dgrauet runtime pinned in engineCatalog (`ltx25-max-gen`, release 0.18.0) and
+// MUST be given the Gemma folder (video/ltx25.ts): without it the prompt is silently ignored. Every file is pinned by sha256 and size
+// at one revision (hashed from the real files, 2026-11-02, and equal to the repository's own LFS digests), and nothing is
+// redistributed: an admin's computer downloads it. `LICENSE.md` (the LTX-2.x Community License Agreement, 2026-08-11) and the
+// acceptable-use PDF are part of the pin and stay with the weights. Optional, never bundled; the same licence acceptance covers it.
+export const LTX25_MAX_REPO = "mlx-community/ltx-2.5-mlx";
+export const LTX25_MAX_REVISION = "891eef810a598b93817afd2b592501a911290e21";
+export const STACK_VIDEO_LTX25_MAX_MODEL_ID = "ltx-2-5-bf16-distilled-mlx-max";
+export const LTX25_MAX_ENGINE = "ltx25-max-gen";
+export const LTX25_MAX_GEMMA_FOLDER = "gemma4-12b-ltx-v1";
+const LTX25_MAX_PRIMARY = "spatial_upscaler_x2_v1_1.safetensors";
+/** Files the worker checks before it runs a Max clip. */
+export const LTX25_MAX_REQUIRED_FILES = ["transformer-distilled.safetensors", "connector.safetensors", "vae_decoder.safetensors", "vae_encoder.safetensors", "audio_vae.safetensors", "vocoder.safetensors", LTX25_MAX_PRIMARY, `${LTX25_MAX_GEMMA_FOLDER}/model.safetensors`, `${LTX25_MAX_GEMMA_FOLDER}/tokenizer.json`, `${LTX25_MAX_GEMMA_FOLDER}/config.json`, "config.json", "embedded_config.json"];
+const LTX25_MAX_FILES = [
+  { path: "LICENSE.md", sha256: "4e7dd26d9c9294e1e0549587505dcf4ba40c7c82c50850559f846f92245f6120", bytes: 30938 },
+  { path: "audio_vae.safetensors", sha256: "d5cde5980a1e27c49188c6b1a17056ec5c06d333e5ecb66ef3e09d6e9e8cc011", bytes: 106509020 },
+  { path: "config.json", sha256: "8a2b961cd343473ad73915dbca041a1257aca86807e36c4922dec97337333568", bytes: 1039 },
+  { path: "connector.safetensors", sha256: "028792ba757f509fef60b364a72976a86990930f29757f616a29149150476243", bytes: 6344495770 },
+  { path: "duration_head.safetensors", sha256: "6a528ee9a20d4b11c19e8f5e53bfe2a683c1c2184074fdc08b2e060494f22bd4", bytes: 3808819 },
+  { path: "embedded_config.json", sha256: "a59ff335d763109068ace8475d41038ef6d4d7841307dd25e9bb1dbe0d5b0757", bytes: 2529 },
+  { path: "gemma4-12b-ltx-v1/chat_template.jinja", sha256: "ae53464bf3be25802b3a5b37def7fd89667067d7577049b3b2d74c4d8de4c6d4", bytes: 18683 },
+  { path: "gemma4-12b-ltx-v1/config.json", sha256: "379a888cc321a8bf7c4e7252fb725965f0ff5d34e6979fdcd54d19a3ed8c3cbc", bytes: 4377 },
+  { path: "gemma4-12b-ltx-v1/generation_config.json", sha256: "c70f87dc2995fc43406c0bcfb41b69c6d31c2d0c033fa09e536ffabc091ae24c", bytes: 255 },
+  { path: "gemma4-12b-ltx-v1/model.safetensors", sha256: "9e792735ebfb76fa2c0dc8526aa1a11485a0e340da9dd2f4d90f95af140358bb", bytes: 23814788105 },
+  { path: "gemma4-12b-ltx-v1/processor_config.json", sha256: "6b938e76555b3e9946890770e1abcd442a4718f34041a58e8139dc8ad34545c9", bytes: 1382 },
+  { path: "gemma4-12b-ltx-v1/tokenizer.json", sha256: "cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f", bytes: 32169626 },
+  { path: "gemma4-12b-ltx-v1/tokenizer_config.json", sha256: "794a39f8330ce05020774c70c091225bc5f031b9cacf41fc20e52eb54b4b52d8", bytes: 3736 },
+  { path: "ltx-acceptable-use-policy-snapshot-2026-08-12.pdf", sha256: "054b9e6e9d4b8632dd13abe64faded682c344cf9e514813b8d262d0ea94329f1", bytes: 110423 },
+  { path: "spatial_upscaler_x2_v1_1.safetensors", sha256: "755f69dcb8a3f9589045925eb4a2237e9969f9c026a016393bc395e65ebd5788", bytes: 995745061 },
+  { path: "spatial_upscaler_x2_v1_1_config.json", sha256: "c0646d97bf1bc3fa6e66ec7d17f16ef31b717e64bf86474b7dc3993b6c42346a", bytes: 275 },
+  { path: "transformer-distilled.safetensors", sha256: "61e392660e21843b19301cefe02995c0ae329639d3e66d93ae22dc6eaf7ee32f", bytes: 37985774111 },
+  { path: "vae_decoder.safetensors", sha256: "edcc3294126fc3ec9f11e83088cc39026b8efdce0fd17987f2c90661da2e0ddb", bytes: 814349515 },
+  { path: "vae_encoder.safetensors", sha256: "101970a6cdc83345fa591027d0e5106ae53a1b291220f76640b58c2177e407a5", bytes: 637885335 },
+  { path: "vocoder.safetensors", sha256: "7316de9d2700a91497a833cb572ded629b0d2709b964917525acc22c7439a3f8", bytes: 258314115 },
+];
+export const STACK_VIDEO_LTX25_MAX_MODEL: CatalogModelLike = {
+  id: STACK_VIDEO_LTX25_MAX_MODEL_ID,
+  role: "video",
+  repo: LTX25_MAX_REPO,
+  license: LTX_LICENCE,
+  revision: LTX25_MAX_REVISION,
+  engine: LTX25_MAX_ENGINE,
+  sizing: { profile: "p128", quantization: "bf16" },
+  download: {
+    url: hfUrl(`${LTX25_MAX_REPO}/resolve/${LTX25_MAX_REVISION}/${LTX25_MAX_PRIMARY}`),
+    sha256: LTX25_MAX_FILES.find((file) => file.path === LTX25_MAX_PRIMARY)!.sha256,
+    approx_bytes: LTX25_MAX_FILES.reduce((sum, file) => sum + file.bytes, 0),
+    directory: "LTX-2.5-distilled-bf16-MLX-community",
+    files: LTX25_MAX_FILES,
+  },
+  // The OS footprint of the 1024x576, 10 s clip (`footprint`, M5 Max); the MLX peak (37 GB) is not the admission figure.
+  measured: { footprintBytes: 48_600_000_000, contextLength: 0, hardware: "Apple M5 Max, 128 GB unified memory" },
+};
+export const STACK_VIDEO_LTX25_MAX_MODELS: CatalogModelLike[] = [STACK_VIDEO_LTX25_MAX_MODEL];
+
 // IMGGEN-STACK-01 (docs/design/image-engine-2026-10-17.md in Home): the
 // image generator's weights for the mflux worker. One family is a primary
 // record (the transformer, or its first shard) plus a component record for
@@ -1271,7 +1330,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_DETAILED_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_MUSIC_MODELS, ...STACK_STEMS_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_DETAILED_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, ...STACK_STEMS_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

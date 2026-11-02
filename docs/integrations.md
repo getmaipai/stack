@@ -470,6 +470,16 @@ once: `POST /stack/v1/components/{id}/install` answers 409 `licence_required` un
 the acceptance is one small file (`licence-acceptances.json`) and no name. Video LoRAs record the model they were made for (`base_model` `wan2.2-ti2v-5b` or
 `ltx-2.3`, read from the tensors; `GET /stack/v1/video/loras` lists `base_models`), and a clip applies only LoRAs of its own model (422 `wrong_base_model`).
 
+**LTX-2.5 Max (LTX25-MAX-01).** `model` `ltx25-max` (or `ltx25-max-bf16`, or the pack id `ltx-2-5-bf16-distilled-mlx-max`) makes a 1024x576 clip of up to 10 s (241 frames at 24 a second)
+with a sound track and speech, from words only (no picture start, no LoRAs; 422 `reference_unsupported` and `lora_unsupported`). It is the Max slot of the LTX-2.5 engine and a
+separate quality: `GET /stack/v1/video` has `qualities.ltx25max` in the same shape as `qualities.ltx25` (`ready`, `installed`, `environment`, `install`, `licence`), with
+its own runtime (`ltx25-max-gen`, dgrauet/ltx-2-mlx 0.18.0) and its own pack (`ltx-2-5-bf16-distilled-mlx-max`, the ungated mlx-community conversion, distilled set only, 71 GB, the
+same licence acceptance as the other LTX models). One `profiles` row: `{ name: "max", size: "1024x576", max_seconds: 10, max_frames: 241, peak_gb: 48.6, admit_gb: 51 }`:
+`peak_gb` is the measured OS footprint (`footprint`; the MLX peak reads 37 GB and is not the admission figure), `admit_gb` is what admission reserves (the footprint plus 5 percent), under the owner's
+64 GB per-clip cap. Any other size is 422 `bad_size`. Standard and Boost stay on the fork runtime and the q8 pack and are not affected. Only one video model is in memory at a time, as with the others.
+The runtime must be run with the pack's Gemma 4 folder (`<pack>/gemma4-12b-ltx-v1`): without it the prompt is silently ignored (an unrelated clip, garbled speech). The Stack always
+passes it, and the worker refuses a Max request that does not name that folder.
+
 `POST /v1/videos/generations` (JSON) answers like `/v1/images/generations`: 200 `{ created, job, data: [{ url, poster_url, content_type, width, height,
 frames, fps, seconds, seed, model, mode, lora_ids, ms, bytes, poster_bytes }] }`, or 202 `{ created, job, data: [] }` when the clip is still going at
 `timeout_ms` (30 s unsaid, 30 min at most); then poll. Fields: `prompt` (required, 20000 characters), `negative_prompt` (accepted; the distilled model

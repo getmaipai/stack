@@ -254,6 +254,19 @@ export const ENGINE_BINARIES: EngineBinaryPin[] = [
     verified: true,
   },
   {
+    id: "ltx25-max-gen-b82b97e-macos-arm64",
+    name: "ltx25-max-gen",
+    tag: "b82b97e",
+    platform: "darwin",
+    arch: "arm64",
+    tool: "pyproject.toml",
+    requiresNvidia: false,
+    label: "ltx-2-mlx source, dgrauet release 0.18.0, commit b82b97e (MIT; the LTX-2.5 Max runtime, run with the bf16 distilled pack and its Gemma 4 text encoder)",
+    docsUrl: "https://github.com/dgrauet/ltx-2-mlx/tree/b82b97e3d000e01361f8cfcb745244b15b89a521",
+    archive: { label: "ltx-2-mlx 0.18.0 source", url: "https://codeload.github.com/dgrauet/ltx-2-mlx/tar.gz/b82b97e3d000e01361f8cfcb745244b15b89a521", sha256: "61b33f339382aadf5e1b7c38f3d6ad1c1dcc1c6e445be69b3fd49007fb6bda42", approxBytes: 6_298_247 },
+    verified: true,
+  },
+  {
     id: "music-gen-ca1e85f-macos-arm64",
     name: "music-gen",
     tag: "ca1e85f",
@@ -332,7 +345,7 @@ export type ChatEngine = typeof CHAT_ENGINES[number];
 /** The role each engine name serves, for the routes that act on "the
  * engine's role" (start, stop, restart, the swap's drain). */
 export type EngineRole = "chat" | "coding" | "tts" | "image" | "video" | "music";
-export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", splash: "coding", "splash-chat": "chat", "mlx-serve": "chat", omlx: "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", comfyui: "image", "video-gen": "video", "ltx25-gen": "video", "music-gen": "music", "stems": "music", "image-gen": "image" };
+export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", splash: "coding", "splash-chat": "chat", "mlx-serve": "chat", omlx: "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", comfyui: "image", "video-gen": "video", "ltx25-gen": "video", "ltx25-max-gen": "video", "music-gen": "music", "stems": "music", "image-gen": "image" };
 export function engineRole(name: string): EngineRole { return ENGINE_ROLE[name] ?? "chat"; }
 
 /** Runtimes the Stack assembles from pinned wheels through uv, in an
@@ -346,6 +359,7 @@ export const MANAGED_RUNTIMES: ManagedRuntime[] = [
   { name: "comfyui", version: "v0.36.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (torch 2.13 ships macOS 14 wheels only; a hashed requirements file per platform, the source archive is the same on every platform)" },
   { name: "video-gen", version: "87db56a", roles: ["video"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the mlx-video source archive plus a hashed requirements file; Wan2.2 TI2V-5B FastWan, text and picture to video, no sound; needs 64 GB or more; no Linux file)" },
   { name: "ltx25-gen", version: "5795228", roles: ["video"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the LTX-2.5 runtime source archive (fork of dgrauet/ltx-2-mlx) plus a hashed requirements file; text to video with a sound track made in the same pass; needs 64 GB or more; no Linux file)" },
+  { name: "ltx25-max-gen", version: "b82b97e", roles: ["video"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the dgrauet ltx-2-mlx 0.18.0 source archive plus a hashed requirements file; the Max LTX-2.5 slot, 1024x576 with a sound track; needs 128 GB; no Linux file)" },
   { name: "music-gen", version: "ca1e85f", roles: ["music"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the ACE-Step 1.5 source archive plus a hashed requirements file; songs with sung lyrics, remakes, covers, repaints and extensions; needs 64 GB or more; no Linux file)" },
   { name: "image-gen", version: "0.23.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; mflux 0.23.0 and a hashed requirements file; FLUX.2 Klein 4B and Z-Image-Turbo, text to picture, image to picture, LoRAs and reference edits; needs 32 GB of memory or more)" },
   { name: "image-tools", version: "1.0.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (onnxruntime, numpy, pillow, opencv; no torch; remove background, erase, upscale and resize on a picture the person has; the Linux file lands with the robot's first image run)" },

@@ -34,11 +34,17 @@ FPS = 24
 # Mirrored in the Stack's service (video/ltx25.ts, LTX25_MEASURED): size -> longest measured clip in seconds.
 # True sizes: the engine rounds each side down to a multiple of 64 (512x288 comes out 512x256, 640x352 comes out 640x320).
 MEASURED = {(512, 256): 10, (640, 320): 5, (768, 448): 5}
+# LTX25-MAX-01: the Max profile runs on the dgrauet runtime (0.18.0) and its bf16 pack, one size, measured at 48.6 GB (mirrored from
+# video/ltx25.ts, LTX25_MAX_MEASURED). A request says `profile: "max"`; every other request is the Standard/Boost table above.
+MEASURED_MAX = {(1024, 576): 10}
 
 
 def true_size(width, height):
     return (width // 64) * 64, (height // 64) * 64
 STEPS_TOTAL = 11  # 8 stage-one steps and 3 stage-two steps of the distilled schedule
+# The Max pack keeps its Gemma 4 text encoder in its own folder and names the x2 upscaler by version.
+MAX_GEMMA_FOLDER = "gemma4-12b-ltx-v1"
+MAX_REQUIRED = ["transformer-distilled.safetensors", "connector.safetensors", "vae_decoder.safetensors", "vae_encoder.safetensors", "audio_vae.safetensors", "vocoder.safetensors", "spatial_upscaler_x2_v1_1.safetensors", MAX_GEMMA_FOLDER + "/model.safetensors", MAX_GEMMA_FOLDER + "/tokenizer.json", MAX_GEMMA_FOLDER + "/config.json", "config.json", "embedded_config.json"]
 REQUIRED = ["transformer-distilled.safetensors", "connector.safetensors", "vae_decoder.safetensors", "vae_encoder.safetensors", "audio_vae.safetensors", "vocoder.safetensors", "spatial_upscaler_x2.safetensors", "text_encoder/model.safetensors", "text_encoder/tokenizer.json", "config.json", "embedded_config.json"]
 
 # 10% of the 44.1 GB video footprint, as every long-lived MLX worker (memory-management-2026-10-25 section 4.1). The footprints in
@@ -95,11 +101,12 @@ def classify(error):
     return "failed", "The clip could not be made. Try again."
 
 
-def refusal(width, height, frames):
+def refusal(width, height, frames, profile=None):
     width, height = true_size(width, height)
-    seconds = MEASURED.get((width, height))
+    table = MEASURED_MAX if profile == "max" else MEASURED
+    seconds = table.get((width, height))
     if seconds is None:
-        return "size must be one of " + ", ".join("%dx%d" % size for size in MEASURED)
+        return "size must be one of " + ", ".join("%dx%d" % size for size in table)
     if frames < 9 or (frames - 1) % 8:
         return "frames must be 8n+1"
     if frames > seconds * FPS + 1:
@@ -147,20 +154,40 @@ def _install_patches(pipe):
     _state["patched"] = True
 
 
-def _pipeline(model_dir):
-    if _state["pipe"] is not None and _state["model_dir"] == model_dir:
+def max_gemma_dir(model_dir, gemma_dir):
+    """The Gemma folder the Max runtime must be given, or a ValueError. Without it the 0.18.0 runtime loads, ignores the prompt and
+    makes an unrelated clip with garbled speech (measured 2026-11-02), so a request that does not name the pack's own folder is refused."""
+    wanted = os.path.join(model_dir, MAX_GEMMA_FOLDER)
+    if not gemma_dir or os.path.normpath(gemma_dir) != os.path.normpath(wanted):
+        raise ValueError("the Max video model must be run with its own text encoder folder")
+    for needed in ("model.safetensors", "tokenizer.json", "config.json"):
+        if not os.path.isfile(os.path.join(gemma_dir, needed)):
+            raise FileNotFoundError("the LTX-2.5 Max video model is not installed")
+    return gemma_dir
+
+
+def _pipeline(model_dir, gemma_dir=None):
+    key = (model_dir, gemma_dir)
+    if _state["pipe"] is not None and _state["model_dir"] == key:
         return _state["pipe"]
     from ltx_pipelines_mlx.distilled import DistilledPipeline
 
-    # gemma_model_id is ignored: the pack ships its own text_encoder folder, which the pipeline prefers.
-    # DistilledPipeline takes no verbose argument (the base class defaults it to True): silence it after construction.
-    pipe = DistilledPipeline(model_dir=model_dir, low_memory=True)
+    if gemma_dir:
+        # Max: the runtime reads the prompt with the Gemma 4 folder it is given, here. It is checked on the built pipeline too.
+        pipe = DistilledPipeline(model_dir=model_dir, gemma_model_id=gemma_dir, low_memory=True)
+        encoder = getattr(getattr(pipe, "prompt_encoder", None), "gemma_model_id", None)
+        if encoder != gemma_dir:
+            raise ValueError("the Max video runtime did not take the text encoder folder")
+    else:
+        # gemma_model_id is ignored: the pack ships its own text_encoder folder, which the pipeline prefers.
+        # DistilledPipeline takes no verbose argument (the base class defaults it to True): silence it after construction.
+        pipe = DistilledPipeline(model_dir=model_dir, low_memory=True)
     pipe.verbose = False
     if getattr(pipe, "video_decoder_block", None) is not None:
         pipe.video_decoder_block.verbose = False
     _install_patches(pipe)
     _state["pipe"] = pipe
-    _state["model_dir"] = model_dir
+    _state["model_dir"] = key
     return pipe
 
 
@@ -190,7 +217,8 @@ def _probe(ffmpeg, path):
 def generate(request):
     width, height, frames = int(request["width"]), int(request["height"]), int(request["num_frames"])
     width, height = true_size(width, height)
-    problem = refusal(width, height, frames)
+    profile = "max" if request.get("profile") == "max" else None
+    problem = refusal(width, height, frames, profile)
     if problem:
         raise ValueError(problem)
     if request.get("image"):
@@ -198,14 +226,15 @@ def generate(request):
     if request.get("loras"):
         raise ValueError("this video model takes no style files yet")
     model_dir = request["model_dir"]
-    for needed in REQUIRED:
+    for needed in (MAX_REQUIRED if profile == "max" else REQUIRED):
         if not os.path.exists(os.path.join(model_dir, needed)):
             raise FileNotFoundError("the LTX-2.5 video model is not installed")
+    gemma_dir = max_gemma_dir(model_dir, request.get("text_encoder_dir")) if profile == "max" else None
     ffmpeg = _ffmpeg_on_path(request.get("ffmpeg"))
     _state["steps"] = 0
     started = time.time()
     phase("loading", 0)
-    pipe = _pipeline(model_dir)
+    pipe = _pipeline(model_dir, gemma_dir)
     mx.reset_peak_memory()
     work = request["output"] + ".work"
     os.makedirs(work, exist_ok=True)

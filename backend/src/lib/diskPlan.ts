@@ -11,7 +11,7 @@ import measured from "@/lib/diskPlanMeasured.json";
 import { PROFILE_TIERS, type ProfileTier } from "@/profiles";
 import {
   CHATTERBOX_ENGINE, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS,
-  STACK_MODELS, STACK_MUSIC_MODELS, STACK_STEMS_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_VIDEO_LTX25_MODELS,
+  STACK_MODELS, STACK_MUSIC_MODELS, STACK_STEMS_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS,
 } from "@/lib/modelCatalog";
 import { OMLX_OPTIONAL_TIERS } from "@/lib/chatEngines";
 import { plannedPinsFor } from "@/lib/installPlan";
@@ -126,11 +126,12 @@ const ENGINE_ROWS: Record<string, () => DiskRow> = {
   "engine:image-tools": () => engineRow("engine:image-tools", "image-tools", "Picture editing engine tools", "What removing a background, erasing and enlarging run on."),
   "engine:video": () => engineRow("engine:video", "video-gen", "Video engine tools", "What making videos runs on."),
   "engine:video-ltx25": () => engineRow("engine:video-ltx25", "ltx25-gen", "LTX-2.5 video engine tools", "What the LTX-2.5 videos run on."),
+  "engine:video-ltx25-max": () => engineRow("engine:video-ltx25-max", "ltx25-max-gen", "LTX-2.5 Max video engine tools", "What the LTX-2.5 Max videos run on."),
   "engine:music": () => engineRow("engine:music", "music-gen", "Music engine tools", "What making songs runs on."),
   "engine:stems": () => engineRow("engine:stems", "stems", "Stem splitting tools", "What separating song stems runs on."),
   "engine:chat-mlx": () => engineRow("engine:chat-mlx", "omlx", "Faster chat engine tools (oMLX)", "What the faster chat engine runs on. llama.cpp stays as the fallback."),
 };
-const PYTHON_ENGINES = ["engine:chat-mlx", "engine:voice", "engine:voice-better", "engine:pictures", "engine:image-tools", "engine:video", "engine:video-ltx25", "engine:music", "engine:stems"];
+const PYTHON_ENGINES = ["engine:chat-mlx", "engine:voice", "engine:voice-better", "engine:pictures", "engine:image-tools", "engine:video", "engine:video-ltx25", "engine:video-ltx25-max", "engine:music", "engine:stems"];
 
 function totals(rows: DiskRow[], selected: Set<string>, only?: "home" | "ai"): DiskTotals {
   const chosen = rows.filter((row) => selected.has(row.id));
@@ -196,6 +197,7 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   if (!tier.notAvailable.includes("music")) rows.push(modelRow({ id: "music", label: "Make music (ACE-Step 1.5)", note: "Makes and changes songs in chat. Optional.", need: "optional", engines: ["engine:music", "engine:python"] }, STACK_MUSIC_MODELS));
   if (!tier.notAvailable.includes("video") && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "video-detailed", label: "Detailed videos with sound (LTX-2.3)", note: "Longer clips with a sound track and spoken words, and a large library of styles. Slower than the quick clip. Optional, about 74 GB; it needs the maker's licence accepted once during setup.", need: "optional", engines: ["engine:video", "engine:python"] }, STACK_VIDEO_DETAILED_MODELS));
   if (!tier.notAvailable.includes("video") && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "video-ltx25", label: "Videos with sound (LTX-2.5)", note: "Clips with a sound track and spoken words, up to 10 seconds. Optional, about 38 GB; it needs the maker's licence accepted once during setup.", need: "optional", engines: ["engine:video-ltx25", "engine:python"] }, STACK_VIDEO_LTX25_MODELS));
+  if (!tier.notAvailable.includes("video") && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "video-ltx25-max", label: "Best videos with sound (LTX-2.5 Max)", note: "Larger 1024 by 576 clips with a sound track and spoken words, up to 10 seconds. Optional, about 71 GB; it needs the maker's licence accepted once during setup.", need: "optional", engines: ["engine:video-ltx25-max", "engine:python"] }, STACK_VIDEO_LTX25_MAX_MODELS));
   rows.push(modelRow({ id: "stems", label: "Split songs into stems (HTDemucs)", note: "Separates songs made in Home into vocals, drums, bass and other. Recommended, about 0.3 GB.", need: "recommended", engines: ["engine:stems", "engine:python"] }, [STACK_STEMS_MODELS[0]!]));
   rows.push(modelRow({ id: "stems-ft", label: "Finer stem splitter (HTDemucs fine-tuned)", note: "An optional four model package for finer stem separation.", need: "optional", engines: ["engine:stems", "engine:python"] }, [STACK_STEMS_MODELS[1]!]));
   rows.push(modelRow({ id: "stems-6s", label: "Six-part stem splitter (guitar and piano)", note: "An optional model that separates guitar and piano too.", need: "optional", engines: ["engine:stems", "engine:python"] }, [STACK_STEMS_MODELS[2]!]));

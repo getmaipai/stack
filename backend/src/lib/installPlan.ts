@@ -5,7 +5,7 @@
 import { PROFILE_MODEL_BINDINGS, sizeMachine, type ProfileTier } from "@/profiles";
 import { knownAppleChip, type HardwareInfo, type MemorySource } from "@/lib/hardware";
 import { splashDraftWanted } from "@/lib/splash";
-import { STACK_CHAT_MODEL, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_STEMS_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
+import { STACK_CHAT_MODEL, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_STEMS_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
 import { tierDefaultTtsEngine } from "@/speech/ttsEngines";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import type { RoleId } from "@/roles";
@@ -75,6 +75,12 @@ export function videoDetailedInstallModels(installedIds: Iterable<string> = []):
 export function videoLtx25InstallModels(installedIds: Iterable<string> = []): PlanModel[] {
   const installed = new Set(installedIds);
   return STACK_VIDEO_LTX25_MODELS.flatMap((pin) => view(pin, installed, false) ?? []);
+}
+
+/** LTX25-MAX-01: the LTX-2.5 Max pack (the bf16 distilled set with its Gemma 4 text encoder), in the shape of a pull. */
+export function videoLtx25MaxInstallModels(installedIds: Iterable<string> = []): PlanModel[] {
+  const installed = new Set(installedIds);
+  return STACK_VIDEO_LTX25_MAX_MODELS.flatMap((pin) => view(pin, installed, false) ?? []);
 }
 
 /** The pins the music role needs (the shared pieces with the 1.7B planning LM, and the 0.6B planning LM), in the shape of a pull, for the music status route: Home installs them when the person turns music on. Not in the first-run plan: the row is optional. */

@@ -10,6 +10,8 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Added
 
+- The Max profile of the LTX-2.5 video engine (LTX25-MAX-01): 1024x576, 10 s, with sound and speech, as `model` `ltx25-max` and `qualities.ltx25max` on `GET /stack/v1/video`. It runs on a second pinned runtime (`ltx25-max-gen`, dgrauet/ltx-2-mlx 0.18.0) with the ungated bf16 distilled pack (`ltx-2-5-bf16-distilled-mlx-max`, 71 GB, sha256 of every file pinned) and always passes the pack's Gemma folder to the runtime, because without it the prompt is silently ignored. Admission is the measured 48.6 GB footprint plus 5 percent, under the 64 GB per-clip cap. Standard and Boost are unchanged.
+
 - `media.edit` on the media job lane (EDITOR-11): one job takes `inputs[]`, `ops[]` and an output and runs trim, concat, mute, frame, audio_overlay (with ducking and loudness) and fade in order with the bundled ffmpeg, within the same idle lane, path guards and deadline table as the other media kinds; at most 12 steps, 24 files and 10 minutes.
 
 - Video, picture and music workers leave memory after a setting you can change (`stack.engines.video.keep_warm_minutes` default 2, `music` 5, `image` 10; ENGINE-IDLE-01). The 40 GB video models used to stay ten minutes after the last clip. A second clip inside the window reuses the loaded worker.

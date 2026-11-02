@@ -231,7 +231,7 @@ test("the status route reports the LTX-2.5 engine: ready, its environment, the m
   videoGen.useDeps(scripted());
   const body = await (await app.request("/stack/v1/video")).json() as { video: { qualities: Record<string, { id: string; installed: boolean; audio: boolean; image_to_video: boolean; ready?: boolean; environment?: { engine: string; version: string; ready: boolean }; limits: Record<string, number | string>; install: { models: Array<{ id: string; approx_bytes: number }>; download_bytes: number }; licence: { id: string; name: string } | null; lora_base_model: string; profiles?: Array<Record<string, unknown>> }> } };
   const { quick, detailed, ltx25 } = body.video.qualities;
-  expect(Object.keys(body.video.qualities)).toEqual(["quick", "detailed", "ltx25"]);
+  expect(Object.keys(body.video.qualities)).toEqual(["quick", "detailed", "ltx25", "ltx25max"]);
   expect(quick!.id).not.toBe(ltx25!.id);
   expect(detailed!.audio).toBe(true);
   expect(ltx25).toMatchObject({ id: STACK_VIDEO_LTX25_MODEL_ID, audio: true, image_to_video: false, installed: false, ready: false, licence: { id: "ltx-2.x-community-2026-08-11", name: LTX_LICENCE } });

@@ -24,7 +24,7 @@
     "p64.ai_required_free_bytes": 116341582322,
     "p128.required_free_bytes": 154184224148,
     "p128.minimum_required_free_bytes": 56572612676,
-    "p128.everything_required_free_bytes": 370340472662,
+    "p128.everything_required_free_bytes": 456263288399,
     "p128.needed_bytes": 129352395179,
     "p128.home_required_free_bytes": 3176323277,
     "p128.ai_required_free_bytes": 151007900871
@@ -1684,6 +1684,26 @@
           "basis": "pins"
         },
         {
+          "id": "video-ltx25-max",
+          "label": "Best videos with sound (LTX-2.5 Max)",
+          "note": "Larger 1024 by 576 clips with a sound track and spoken words, up to 10 seconds. Optional, about 71 GB; it needs the maker's licence accepted once during setup.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 70994013114,
+          "installed_bytes": 70994013114,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "ltx-2-5-bf16-distilled-mlx-max"
+          ],
+          "engines": [
+            "engine:video-ltx25-max",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "stems",
           "label": "Split songs into stems (HTDemucs)",
           "note": "Separates songs made in Home into vocals, drums, bass and other. Recommended, about 0.3 GB.",
@@ -1879,6 +1899,21 @@
           "basis": "estimate"
         },
         {
+          "id": "engine:video-ltx25-max",
+          "label": "LTX-2.5 Max video engine tools",
+          "note": "What the LTX-2.5 Max videos run on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 250000000,
+          "installed_bytes": 400000000,
+          "peak_temp_bytes": 250000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
+        },
+        {
           "id": "engine:music",
           "label": "Music engine tools",
           "note": "What making songs runs on.",
@@ -1924,11 +1959,11 @@
         "required_free_bytes": 56572612676
       },
       "everything": {
-        "download_bytes": 298777529399,
-        "installed_bytes": 302686227042,
-        "peak_temp_bytes": 7117000211,
-        "needed_bytes": 309803227253,
-        "required_free_bytes": 370340472662
+        "download_bytes": 370021542513,
+        "installed_bytes": 374080240156,
+        "peak_temp_bytes": 7367000211,
+        "needed_bytes": 381447240367,
+        "required_free_bytes": 456263288399
       },
       "measured_on": "2026-10-17",
       "default_selected": [

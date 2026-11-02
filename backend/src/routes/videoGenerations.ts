@@ -24,7 +24,7 @@ import { PAUSED_LABEL } from "@/lib/genProgress";
 import { LoraError, resolveLoras } from "@/video/loras";
 import { deleteResult, isJobId, messagesPath, posterPath, readResult, videoPath, type VideoResultMeta } from "@/video/results";
 import { memoryVerdict, qualityOfModelName, tierAvailability, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, VIDEO_SPECS, videoGen, videoGenRoot, type VideoQuality } from "@/video/videoGen";
-import { ltx25PeakBytes, ltx25Refusal, ltx25Row, ltx25TrueSize, LTX25_MEASURED } from "@/video/ltx25";
+import { ltx25MaxPeakBytes, ltx25MaxRefusal, ltx25MaxRow, ltx25PeakBytes, ltx25Refusal, ltx25Row, ltx25TrueSize, LTX25_MAX_MEASURED, LTX25_MEASURED } from "@/video/ltx25";
 import { stashClip, unstashClip, videoFailure, videoPreviewPath, videoProgress, videoTracker, VIDEO_JOB_KIND } from "@/video/jobs";
 
 const DEFAULT_WAIT_MS = 30_000;
@@ -32,11 +32,11 @@ const MAX_WAIT_MS = 30 * 60_000;
 
 const LoraEntry = z.object({ id: z.string().max(40), strength: z.number().min(0).max(2).optional() });
 const VideoRequestSchema = z.object({
-  model: z.string().optional().openapi({ description: "Which video model: `video` or `quick` (the default, a silent clip of up to 5 s, which can start from a picture) or `detailed` (LTX-2.3: a sound track with speech made in the same pass, up to 10 s, which can start from a picture too) or `ltx25-q8` (LTX-2.5 distilled q8: a sound track with speech made in the same pass, words only, only the measured sizes and lengths of GET /stack/v1/video qualities.ltx25.profiles). A model's own id names it too. An unknown name is refused (unknown_model); a model that is not installed answers 503 not_installed.", example: "quick" }),
+  model: z.string().optional().openapi({ description: "Which video model: `video` or `quick` (the default, a silent clip of up to 5 s, which can start from a picture) or `detailed` (LTX-2.3: a sound track with speech made in the same pass, up to 10 s, which can start from a picture too) or `ltx25-q8` (LTX-2.5 distilled q8: a sound track with speech made in the same pass, words only, only the measured sizes and lengths of GET /stack/v1/video qualities.ltx25.profiles). or `ltx25-max` (LTX-2.5 Max: the dgrauet runtime and the bf16 distilled pack, 1024x576 up to 10 s with a sound track and speech, words only; see GET /stack/v1/video qualities.ltx25max.profiles). A model's own id names it too. An unknown name is refused (unknown_model); a model that is not installed answers 503 not_installed.", example: "quick" }),
   prompt: z.string().trim().min(1).max(VIDEO_MAX_PROMPT_CHARS),
   negative_prompt: z.string().max(VIDEO_MAX_PROMPT_CHARS).optional().openapi({ description: "Accepted. The distilled FastWan model runs without guidance, so it has no effect on the clip." }),
   image: z.string().optional().openapi({ description: "Image to video: the first frame, base64 (a data: URL is fine), PNG, JPEG or WebP, at most 20 MB. image_source is optional." }),
-  size: z.string().regex(/^\d{3,4}x\d{3,4}$/).optional().openapi({ description: `<width>x<height>. Quick: multiples of ${VIDEO_SIZE_STEP}, area at most ${VIDEO_MAX_PIXELS} pixels (832x480; 480x832 also fits), default ${VIDEO_DEFAULT_SIZE}. Detailed: multiples of 64, area at most 768 x 448 (448x768 also fits), default 768x448. ltx25-q8: only 512x256 (up to 10 s), 640x320 and 768x448 (up to 5 s); the nominal 512x288 and 640x352 are accepted and made at the true size, which the reply reports; anything else is refused (bad_size). Each side at least ${VIDEO_MIN_SIDE}.`, example: VIDEO_DEFAULT_SIZE }),
+  size: z.string().regex(/^\d{3,4}x\d{3,4}$/).optional().openapi({ description: `<width>x<height>. Quick: multiples of ${VIDEO_SIZE_STEP}, area at most ${VIDEO_MAX_PIXELS} pixels (832x480; 480x832 also fits), default ${VIDEO_DEFAULT_SIZE}. Detailed: multiples of 64, area at most 768 x 448 (448x768 also fits), default 768x448. ltx25-q8: only 512x256 (up to 10 s), 640x320 and 768x448 (up to 5 s); the nominal 512x288 and 640x352 are accepted and made at the true size, which the reply reports; anything else is refused (bad_size). ltx25-max: only 1024x576 (up to 10 s). Each side at least ${VIDEO_MIN_SIDE}.`, example: VIDEO_DEFAULT_SIZE }),
   preview: z.boolean().optional().openapi({ description: "Default true. While the clip runs, the status carries `preview_url`: the first frame of the clip (JPEG, up to 480 px on the long side), drawn from the finished motion the moment the long frame-building stage starts. Pass false to skip it (it costs about a second)." }),
   seconds: z.number().int().min(1).max(VIDEO_SPECS.detailed.maxSeconds).optional().openapi({ description: `Whole seconds (24 frames a second plus the first frame). Quick: 1 to ${VIDEO_MAX_SECONDS}, default ${VIDEO_MAX_SECONDS}. Detailed: 1 to ${VIDEO_SPECS.detailed.maxSeconds}, default 5. A number past the chosen model ceiling is refused (bad_seconds).` }),
   seed: z.number().int().min(0).max(4_294_967_295).optional(),
@@ -52,7 +52,7 @@ const VideoDataSchema = z.object({
   poster_url: z.string().openapi({ description: "GET this for the JPEG of frame 0." }),
   content_type: z.literal("video/mp4"),
   width: z.number().int(), height: z.number().int(), frames: z.number().int(), fps: z.number().int(), seconds: z.number().int(), seed: z.number().int(),
-  model: z.string(), quality: z.enum(["quick", "detailed", "ltx25"]), audio: z.boolean().openapi({ description: "The clip has a sound track the model made (Detailed). A Quick clip carries a silent track and answers false." }), mode: z.enum(["text-to-video", "image-to-video"]), lora_ids: z.array(z.string()), ms: z.number().int(), bytes: z.number().int(), poster_bytes: z.number().int(),
+  model: z.string(), quality: z.enum(["quick", "detailed", "ltx25", "ltx25max"]), audio: z.boolean().openapi({ description: "The clip has a sound track the model made (Detailed). A Quick clip carries a silent track and answers false." }), mode: z.enum(["text-to-video", "image-to-video"]), lora_ids: z.array(z.string()), ms: z.number().int(), bytes: z.number().int(), poster_bytes: z.number().int(),
 });
 const VideoResponseSchema = z.object({ created: z.number().int(), job: z.string(), data: z.array(VideoDataSchema) });
 const ErrorBody = z.object({ error: z.string(), code: z.string(), job: z.string().optional() });
@@ -134,6 +134,12 @@ function entry(meta: VideoResultMeta) {
 /** "832x480" to width and height, or the sentence to return. */
 export function parseVideoSize(size: string | undefined, quality: VideoQuality = "quick"): { width: number; height: number } | string {
   const spec = VIDEO_SPECS[quality];
+  if (quality === "ltx25max") {
+    // Max: the one measured size (video/ltx25.ts, LTX25_MAX_MEASURED).
+    const found = /^(\d{3,4})x(\d{3,4})$/.exec(size ?? spec.defaultSize);
+    if (!found || !ltx25MaxRow(Number(found[1]), Number(found[2])) || Number(found[1]) % 64 || Number(found[2]) % 64) return `The Max video model makes ${LTX25_MAX_MEASURED.map((row) => row.size).join(", ")} only. Pick that size.`;
+    return { width: Number(found[1]), height: Number(found[2]) };
+  }
   if (quality === "ltx25") {
     // Only the measured sizes (video/ltx25.ts); anything else is refused with the list.
     const found = /^(\d{3,4})x(\d{3,4})$/.exec(size ?? spec.defaultSize);
@@ -202,11 +208,12 @@ videoV1Routes.openapi(postRoute, async (c) => {
   const quality = qualityOfModelName(body.model);
   if (!quality) return fail(c, 422, "unknown_model", "That video model is not one this computer has. Use quick (silent, up to 5 seconds) or detailed (with sound and speech, up to 10 seconds).");
   const spec = VIDEO_SPECS[quality];
-  if (body.image !== undefined && !spec.imageToVideo) return fail(c, 422, "reference_unsupported", quality === "ltx25" ? "This video model starts from words, not from a picture. Ask for a Quick or Detailed video to animate a picture, or describe the video in words." : "A Detailed video cannot start from a picture yet. Ask for a Quick video to animate a picture, or describe the Detailed video in words.");
-  if (quality === "ltx25" && (body.loras ?? []).length > 0) return fail(c, 422, "lora_unsupported", "This video model takes no style files yet. Leave the styles out, or ask for a Detailed video to use one.");
+  if (body.image !== undefined && !spec.imageToVideo) return fail(c, 422, "reference_unsupported", quality === "ltx25" || quality === "ltx25max" ? "This video model starts from words, not from a picture. Ask for a Quick or Detailed video to animate a picture, or describe the video in words." : "A Detailed video cannot start from a picture yet. Ask for a Quick video to animate a picture, or describe the Detailed video in words.");
+  if ((quality === "ltx25" || quality === "ltx25max") && (body.loras ?? []).length > 0) return fail(c, 422, "lora_unsupported", "This video model takes no style files yet. Leave the styles out, or ask for a Detailed video to use one.");
   const size = parseVideoSize(body.size, quality);
   if (typeof size === "string") return fail(c, 422, "bad_size", size);
   const seconds = body.seconds ?? (quality === "quick" ? VIDEO_MAX_SECONDS : 5);
+  if (quality === "ltx25max") { const refusal = ltx25MaxRefusal(size.width, size.height, seconds * VIDEO_FPS + 1); if (refusal) return fail(c, 422, "bad_seconds", refusal); }
   if (quality === "ltx25") { const refusal = ltx25Refusal(size.width, size.height, seconds * VIDEO_FPS + 1); if (refusal) return fail(c, 422, "bad_seconds", refusal); }
   if (seconds > spec.maxSeconds) return fail(c, 422, "bad_seconds", `A ${quality === "quick" ? "Quick" : "Detailed"} clip is at most ${spec.maxSeconds} seconds on this computer.${quality === "quick" ? " Detailed clips run up to " + VIDEO_SPECS.detailed.maxSeconds + " seconds." : ""}`);
   let image: Uint8Array | null = null;
@@ -222,9 +229,9 @@ videoV1Routes.openapi(postRoute, async (c) => {
     if (error instanceof LoraError) return fail(c, error.status === 404 ? 422 : error.status, error.code, error.message);
     throw error;
   }
-  if (!videoGen.hasModels(quality)) return fail(c, 503, "not_installed", quality === "detailed" ? "The Detailed video model is not installed yet. An admin can install it in Settings, Models and storage, then try again." : quality === "ltx25" ? "The LTX-2.5 video model is not installed yet. An admin can install it in Settings, Models and storage, then try again." : "The video model is not installed yet. Install it from Home's Engines page, then try again.");
+  if (!videoGen.hasModels(quality)) return fail(c, 503, "not_installed", quality === "detailed" ? "The Detailed video model is not installed yet. An admin can install it in Settings, Models and storage, then try again." : quality === "ltx25max" ? "The LTX-2.5 Max video model is not installed yet. An admin can install it in Settings, Models and storage, then try again." : quality === "ltx25" ? "The LTX-2.5 video model is not installed yet. An admin can install it in Settings, Models and storage, then try again." : "The video model is not installed yet. Install it from Home's Engines page, then try again.");
   if (activeClips() >= VIDEO_QUEUE_MAX) return fail(c, 429, "queue_full", `${VIDEO_QUEUE_MAX} clips are already waiting. Try again when one finishes.`);
-  const verdict = governorDecides(body.tier) ? { ok: true as const } : memoryVerdict(quality, quality === "ltx25" ? ltx25PeakBytes(size.width, size.height, seconds * VIDEO_FPS + 1) : undefined);
+  const verdict = governorDecides(body.tier) ? { ok: true as const } : memoryVerdict(quality, quality === "ltx25max" ? ltx25MaxPeakBytes() : quality === "ltx25" ? ltx25PeakBytes(size.width, size.height, seconds * VIDEO_FPS + 1) : undefined);
   if (!verdict.ok) return fail(c, 503, "no_memory", verdict.reason);
   const seed = body.seed ?? Math.floor(Math.random() * 2 ** 32);
   const frames = seconds * VIDEO_FPS + 1;
