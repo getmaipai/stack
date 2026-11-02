@@ -10,6 +10,7 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Fixed
 
+- Admission now counts the picture encoder for a LTX-2.5 clip that starts from a picture (VIDEO-PICTURE-ADMIT-01). Measured on the M5 Max (OS footprint, one clip each): Max 1024x576 10 s reads 58.6 GB from a picture against 48.6 GB from words, so the Stack reserves 61.5 GB (58.6 plus 5 percent, under the 64 GB cap) instead of 51 GB; Standard 512x256 reads 39.7 GB at 10 s and 27.1 GB at 5 s (was 39.4 and 25.3), Boost 640x320 and 768x448 read no more than their words-only 32.4 and 45.8 GB. An end picture changed no figure by more than 0.8 GB. `GET /stack/v1/video` adds `peak_gb_picture` and `short_peak_gb_picture` to every `qualities.ltx25.profiles` row and `peak_gb_picture`, `admit_gb_picture` and `short_peak_gb_picture` to the `qualities.ltx25max.profiles` row, and the progress estimate of a clip from a picture learns from picture clips only.
 - A Max job held in its window no longer says "Waiting for running jobs to finish" when nothing is running (MAX-WAIT-REASON-01). The governor records `window_wait` once no generator or busy item remains, the job status says it waits for the computer, and `GET /v1/videos/generations/{id}` reports the phases `waiting for running jobs` and `waiting for the computer`.
 
 ### Added

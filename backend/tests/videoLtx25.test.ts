@@ -256,6 +256,35 @@ test("admission uses the measured footprints: Standard 10 s 39.4 GB, 5 s 25.3 GB
   expect((await small).status).toBe(200);
 });
 
+test("VIDEO-PICTURE-ADMIT-01: a clip that starts from a picture is admitted at its measured picture footprint, never below the words-only figure", async () => {
+  expect(ltx25PeakBytes(512, 288, 241, true)).toBe(39.7e9);
+  expect(ltx25PeakBytes(512, 288, 121, true)).toBe(27.1e9);
+  expect(ltx25PeakBytes(512, 288, 49, true)).toBe(27.1e9);
+  expect(ltx25PeakBytes(640, 352, 121, true)).toBe(32.4e9);
+  expect(ltx25PeakBytes(768, 448, 121, true)).toBe(45.8e9);
+  for (const row of LTX25_MEASURED) expect(row.picturePeakBytes).toBeGreaterThanOrEqual(row.peakBytes);
+  expect(ltx25PeakBytes(512, 288, 241)).toBe(39.4e9);
+  expect(ltx25PeakBytes(512, 288, 121)).toBe(25.3e9);
+  // The job's governor admission carries the picture figure for a picture clip only.
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("body")]).toString("base64");
+  const held = async (extra: Record<string, unknown>): Promise<number[]> => {
+    let release!: () => void;
+    const hold = new Promise<void>((resolve) => { release = resolve; });
+    videoGen.useDeps({ ...scripted(), spawn: async (): Promise<WorkerHandle> => ({ exited: new Promise<number>(() => {}), kill: () => {}, send: async (request) => { await hold; writeFileSync(request.output, "MP4"); writeFileSync(request.poster, "JPG"); return okReply(request); } }) });
+    const waiting = await post({ prompt: "x", model: "ltx25-q8", size: "512x288", seconds: 5, timeout_ms: 300, ...extra });
+    expect(waiting.status).toBe(202);
+    const running = getGovernorStatus().loaded.map((item) => item.peakBytes);
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    return running;
+  };
+  expect(await held({})).toContain(25.3e9);
+  clean();
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 90 * GB, tier: "p128" });
+  registerVideoJobs();
+  expect(await held({ image: png, end_image: png })).toContain(27.1e9);
+});
+
 test("memory: beside 28 GB of chat a clip is judged by its own measured footprint, and one that cannot fit is refused with the same plain words", async () => {
   videoGen.useDeps(scripted());
   __setGovernorTuningForTestsOnly({ tier: "p128", totalMemoryBytes: 72 * GB, freeMemoryBytes: 70 * GB });
@@ -292,9 +321,9 @@ test("the status route reports the LTX-2.5 engine: ready, its environment, the m
   expect(ltx25!.install.models.map((model) => model.id)).toEqual([STACK_VIDEO_LTX25_MODEL_ID]);
   expect(ltx25!.install.download_bytes).toBe(STACK_VIDEO_LTX25_MODEL.download!.approx_bytes);
   expect(ltx25!.profiles).toEqual([
-    { name: "standard", size: "512x256", width: 512, height: 256, max_seconds: 10, max_frames: 241, peak_gb: 39.4, short_peak_gb: 25.3 },
-    { name: "boost", size: "640x320", width: 640, height: 320, max_seconds: 5, max_frames: 121, peak_gb: 32.4, short_peak_gb: null },
-    { name: "boost", size: "768x448", width: 768, height: 448, max_seconds: 5, max_frames: 121, peak_gb: 45.8, short_peak_gb: null },
+    { name: "standard", size: "512x256", width: 512, height: 256, max_seconds: 10, max_frames: 241, peak_gb: 39.4, short_peak_gb: 25.3, peak_gb_picture: 39.7, short_peak_gb_picture: 27.1 },
+    { name: "boost", size: "640x320", width: 640, height: 320, max_seconds: 5, max_frames: 121, peak_gb: 32.4, short_peak_gb: null, peak_gb_picture: 32.4, short_peak_gb_picture: null },
+    { name: "boost", size: "768x448", width: 768, height: 448, max_seconds: 5, max_frames: 121, peak_gb: 45.8, short_peak_gb: null, peak_gb_picture: 45.8, short_peak_gb_picture: null },
   ]);
 });
 

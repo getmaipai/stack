@@ -14220,6 +14220,13 @@
                                       "short_peak_gb": {
                                         "type": "number",
                                         "nullable": true
+                                      },
+                                      "peak_gb_picture": {
+                                        "type": "number"
+                                      },
+                                      "short_peak_gb_picture": {
+                                        "type": "number",
+                                        "nullable": true
                                       }
                                     },
                                     "required": [
@@ -14230,10 +14237,12 @@
                                       "max_seconds",
                                       "max_frames",
                                       "peak_gb",
-                                      "short_peak_gb"
+                                      "short_peak_gb",
+                                      "peak_gb_picture",
+                                      "short_peak_gb_picture"
                                     ]
                                   },
-                                  "description": "The measured table, one row per size the Stack runs (anything else is refused). `peak_gb` is the OS footprint of the longest clip at that size, the figure admission uses; `short_peak_gb` is the 5 s figure where it was measured separately. Home maps its Standard and Boost slots to these rows; Max has no row until a run passes the 64 GB cap."
+                                  "description": "The measured table, one row per size the Stack runs (anything else is refused). `peak_gb` is the OS footprint of the longest clip at that size, the figure admission uses; `short_peak_gb` is the 5 s figure where it was measured separately. `peak_gb_picture` and `short_peak_gb_picture` are the same two figures for a clip that starts from a picture, with or without an end picture (VIDEO-PICTURE-ADMIT-01): admission uses them when the request carries `image`. Home maps its Standard and Boost slots to these rows; Max has no row until a run passes the 64 GB cap."
                                 }
                               },
                               "required": [
@@ -14468,6 +14477,15 @@
                                       "short_peak_gb": {
                                         "nullable": true
                                       },
+                                      "peak_gb_picture": {
+                                        "type": "number"
+                                      },
+                                      "admit_gb_picture": {
+                                        "type": "number"
+                                      },
+                                      "short_peak_gb_picture": {
+                                        "nullable": true
+                                      },
                                       "extend": {
                                         "type": "object",
                                         "nullable": true,
@@ -14513,11 +14531,14 @@
                                       "peak_gb",
                                       "admit_gb",
                                       "short_peak_gb",
+                                      "peak_gb_picture",
+                                      "admit_gb_picture",
+                                      "short_peak_gb_picture",
                                       "extend",
                                       "retake"
                                     ]
                                   },
-                                  "description": "One row: `max`, 1024x576, up to 10 s (241 frames). `peak_gb` is the measured OS footprint of that clip (48.6 GB, `footprint`; the MLX peak reads lower and is not the figure); `admit_gb` is what admission reserves (the measured footprint plus 5 percent headroom), under the 64 GB per-clip cap. Home maps its Max slot to this row."
+                                  "description": "One row: `max`, 1024x576, up to 10 s (241 frames). `peak_gb` is the measured OS footprint of that clip (48.6 GB, `footprint`; the MLX peak reads lower and is not the figure); `admit_gb` is what admission reserves (the measured footprint plus 5 percent headroom), under the 64 GB per-clip cap. `peak_gb_picture` (58.6) and `admit_gb_picture` (61.5, the same 5 percent) are the figures for a clip that starts from a picture, with or without an end picture: the picture encoder adds about 10 GB, and admission uses them when the request carries `image` (VIDEO-PICTURE-ADMIT-01). Home maps its Max slot to this row."
                                 },
                                 "extend": {
                                   "type": "boolean",

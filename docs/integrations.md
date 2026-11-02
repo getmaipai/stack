@@ -481,13 +481,22 @@ the worker refuses a runtime whose `generate_and_save` has no `images` argument 
 `end_image: true` on `qualities.ltx25` and `qualities.ltx25max` (false on Quick and Detailed). The result's `mode` is `image-to-video`. The Stack keeps no copy: the files are deleted when the job ends.
 The caller (Home) owns the age and surface gate; the Stack does not judge where a picture came from.
 
+**Memory of a clip that starts from a picture (VIDEO-PICTURE-ADMIT-01).** The picture encoder (the VAE encoder) and the picture's latent add to the footprint, so admission asks for the
+figure of a clip with a start picture when the request carries `image` (an end picture changed no figure by more than 0.8 GB, so one figure covers both). Measured 2026-11-02 on the M5 Max (128 GB),
+the Stack's own worker under `/usr/bin/time -l`, seed 7, one clip per measurement, OS footprint in GB (words only, start picture, start and end picture):
+Standard 512x256 10 s 39.4, 39.7, 39.7 (admitted 39.7); Standard 512x256 5 s 25.3, 26.3, 27.1 (admitted 27.1); Boost 640x320 5 s 32.4, 32.1, 32.3 (admitted 32.4, the words-only figure, never lower); Boost 768x448 5 s 45.8, 45.6, 45.6 (admitted 45.8, the
+words-only figure, never lower); Max 1024x576 10 s 47.4 in the worker (48.6 in the table), 56.5, 57.0, and 58.6 in the bench CLI (admitted 58.6 plus 5 percent, 61.5). Max stays under the 64 GB per-clip cap.
+`GET /stack/v1/video` reports them beside the words-only figures: `peak_gb_picture` and `short_peak_gb_picture` on every `qualities.ltx25.profiles` row (the 5 s Standard figure is the short one), and
+`peak_gb_picture`, `admit_gb_picture` (61.5) and `short_peak_gb_picture` (null) on the `qualities.ltx25max.profiles` row. The progress estimate of a clip from a picture is kept apart from the words-only
+history of the same size, so a picture clip's ETA learns from picture clips (they ran 20 to 30 percent longer at Max: 206 s words only, 248 s with a start picture, 267 s with both).
+
 **LTX-2.5 Max (LTX25-MAX-01).** `model` `ltx25-max` (or `ltx25-max-bf16`, or the pack id `ltx-2-5-bf16-distilled-mlx-max`) makes a 1024x576 clip of up to 10 s (241 frames at 24 a second)
 with a sound track and speech, from words or from a start picture and an optional end picture (`image`, `end_image`, see below; no LoRAs: 422 `lora_unsupported`). It is the Max slot of the LTX-2.5 engine and a
 separate quality: `GET /stack/v1/video` has `qualities.ltx25max` in the same shape as `qualities.ltx25` (`ready`, `installed`, `environment`, `install`, `licence`), with
 its own runtime (`ltx25-max-gen`, dgrauet/ltx-2-mlx 0.18.0) and its own pack (`ltx-2-5-bf16-distilled-mlx-max`, the ungated mlx-community conversion, distilled set only, 71 GB, the
 same licence acceptance as the other LTX models). One `profiles` row: `{ name: "max", size: "1024x576", max_seconds: 10, max_frames: 241, peak_gb: 48.6, admit_gb: 51 }`:
 `peak_gb` is the measured OS footprint (`footprint`; the MLX peak reads 37 GB and is not the admission figure), `admit_gb` is what admission reserves (the footprint plus 5 percent), under the owner's
-64 GB per-clip cap. Any other size is 422 `bad_size`. Standard and Boost stay on the fork runtime and the q8 pack and are not affected. Only one video model is in memory at a time, as with the others.
+64 GB per-clip cap. A clip that starts from a picture needs `peak_gb_picture` 58.6 and `admit_gb_picture` 61.5 (see the picture memory paragraph above), still under the cap. Any other size is 422 `bad_size`. Standard and Boost stay on the fork runtime and the q8 pack and are not affected. Only one video model is in memory at a time, as with the others.
 The runtime must be run with the pack's Gemma 4 folder (`<pack>/gemma4-12b-ltx-v1`): without it the prompt is silently ignored (an unrelated clip, garbled speech). The Stack always
 passes it, and the worker refuses a Max request that does not name that folder.
 

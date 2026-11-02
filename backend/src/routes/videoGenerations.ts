@@ -245,7 +245,7 @@ videoV1Routes.openapi(postRoute, async (c) => {
   const seed = body.seed ?? Math.floor(Math.random() * 2 ** 32);
   const frames = seconds * VIDEO_FPS + 1;
   const loraIds = loras.map((lora) => lora.record.id);
-  const peak = quality === "ltx25max" ? ltx25MaxPeakBytes() : quality === "ltx25" ? ltx25PeakBytes(size.width, size.height, seconds * VIDEO_FPS + 1) : undefined;
+  const peak = quality === "ltx25max" ? ltx25MaxPeakBytes(image !== null) : quality === "ltx25" ? ltx25PeakBytes(size.width, size.height, seconds * VIDEO_FPS + 1, image !== null) : undefined;
   return await runClip(c, body, quality, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, endImage, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, preview: body.preview !== false }, { size: `${size.width}x${size.height}`, seconds, mode: image ? "image-to-video" : "text-to-video" }, peak);
 });
 

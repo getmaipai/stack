@@ -129,7 +129,7 @@ export function registerVideoJobs(): void {
         : quality === "quick"
         ? new GenTracker("video", historyKey("video", clip.width, clip.height, clip.frames), pacing.now, 1, pacing.paused)
         : quality === "ltx25" || quality === "ltx25max"
-          ? new GenTracker("video_detailed", historyKey("video_detailed", clip.width, clip.height, `${quality === "ltx25max" ? "ltx25max" : "ltx25"}-${clip.frames}`), pacing.now, Math.max(0.25, (clip.frames - 1) / 120), pacing.paused)
+          ? new GenTracker("video_detailed", historyKey("video_detailed", clip.width, clip.height, `${quality === "ltx25max" ? "ltx25max" : "ltx25"}-${clip.frames}${clip.image ? "-picture" : ""}`), pacing.now, Math.max(0.25, (clip.frames - 1) / 120), pacing.paused)
           : new GenTracker("video_detailed", historyKey("video_detailed", clip.width, clip.height, clip.frames), pacing.now, Math.max(0.25, (clip.frames - 1) / 120), pacing.paused);
       remember(trackers, job.id, tracker);
       const result = await videoGen.run({ ...(clip.preview !== false ? { previewPath: previewFile(outputDir) } : {}), prompt: clip.prompt, negativePrompt: clip.negativePrompt, imagePath, endImagePath, width: clip.width, height: clip.height, frames: clip.frames, seed: clip.seed, loras: clip.loras, outputDir, quality, ...(editInput ? { edit: editInput } : {}) }, {
@@ -159,5 +159,5 @@ export function registerVideoJobs(): void {
     } finally {
       rmSync(work, { recursive: true, force: true });
     }
-  }, { generator: { role: "video", memory: (job) => { const input = job.input as { quality?: VideoQuality; size?: string; seconds?: number; edit?: Ltx25EditKind } | null; const quality = input?.quality ?? "quick"; const size = /^(\d+)x(\d+)$/.exec(input?.size ?? ""); const peak = input?.edit && quality === "ltx25max" ? ltx25EditAdmitBytes(input.edit, size ? `${size[1]}x${size[2]}` : null) : quality === "ltx25max" ? ltx25MaxPeakBytes() : quality === "ltx25" && size && input?.seconds ? ltx25PeakBytes(Number(size[1]), Number(size[2]), input.seconds * 24 + 1) : VIDEO_SPECS[quality].peakBytes; return { requestedBytes: peak, measuredPeakBytes: peak, engine: "video-gen" }; } } });
+  }, { generator: { role: "video", memory: (job) => { const input = job.input as { quality?: VideoQuality; size?: string; seconds?: number; mode?: string; edit?: Ltx25EditKind } | null; const withPicture = input?.mode === "image-to-video"; const quality = input?.quality ?? "quick"; const size = /^(\d+)x(\d+)$/.exec(input?.size ?? ""); const peak = input?.edit && quality === "ltx25max" ? ltx25EditAdmitBytes(input.edit, size ? `${size[1]}x${size[2]}` : null) : quality === "ltx25max" ? ltx25MaxPeakBytes(withPicture) : quality === "ltx25" && size && input?.seconds ? ltx25PeakBytes(Number(size[1]), Number(size[2]), input.seconds * 24 + 1, withPicture) : VIDEO_SPECS[quality].peakBytes; return { requestedBytes: peak, measuredPeakBytes: peak, engine: "video-gen" }; } } });
 }

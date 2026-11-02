@@ -6,17 +6,17 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { app } from "@/app";
-import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, startGovernor } from "@/lib/governor";
+import { admit, __resetGovernorForTests, __setGovernorTuningForTestsOnly, getGovernorStatus, startGovernor } from "@/lib/governor";
 import { __resetJobsForTests } from "@/lib/jobs";
 import { ENGINE_BINARIES, ENGINE_ROLE, MANAGED_RUNTIMES } from "@/lib/engineCatalog";
 import { LTX25_MAX_GEMMA_FOLDER, LTX25_MAX_REQUIRED_FILES, LTX_LICENCE, STACK_MODELS, STACK_VIDEO_LTX25_MAX_MODEL, STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODEL_ID } from "@/lib/modelCatalog";
 import { upsertModel, removeModel } from "@/lib/modelStore";
 import { registerVideoJobs } from "@/video/jobs";
-import { LTX25_CLIP_CAP_BYTES, LTX25_MAX_GEN_VERSION, LTX25_MAX_PEAK_BYTES, ltx25MaxModelPaths, ltx25MaxPeakBytes, ltx25MaxRefusal, ltx25Refusal } from "@/video/ltx25";
+import { LTX25_CLIP_CAP_BYTES, LTX25_MAX_GEN_VERSION, LTX25_MAX_PEAK_BYTES, LTX25_MAX_PICTURE_PEAK_BYTES, ltx25MaxModelPaths, ltx25MaxPeakBytes, ltx25MaxRefusal, ltx25Refusal } from "@/video/ltx25";
 import { __resetProvenanceForTests } from "@/video/provenance";
 import { __resetMemoryStateForTests } from "@/lib/memoryState";
 import { dataDir } from "@/lib/paths";
-import { buildWorkerRequest, qualityOfModelName, VIDEO_SPECS, videoGen, videoModelPaths, type VideoGenDeps, type VideoRunInput, type WorkerHandle, type WorkerReply, type WorkerRequest } from "@/video/videoGen";
+import { buildWorkerRequest, memoryVerdict, qualityOfModelName, VIDEO_SPECS, videoGen, videoModelPaths, type VideoGenDeps, type VideoRunInput, type WorkerHandle, type WorkerReply, type WorkerRequest } from "@/video/videoGen";
 
 const GB = 1_073_741_824;
 const requests: WorkerRequest[] = [];
@@ -108,6 +108,50 @@ test("admission uses the measured OS footprint with headroom, which passes the 6
   expect(STACK_VIDEO_LTX25_MAX_MODEL.measured!.footprintBytes).toBe(48_600_000_000);
 });
 
+test("VIDEO-PICTURE-ADMIT-01: a Max clip that starts from a picture is admitted at the measured 58.6 GB footprint plus 5 percent, still under the 64 GB cap", () => {
+  expect(LTX25_MAX_PICTURE_PEAK_BYTES).toBe(Math.round(58.6e9 * 1.05));
+  expect(ltx25MaxPeakBytes(true)).toBe(LTX25_MAX_PICTURE_PEAK_BYTES);
+  expect(ltx25MaxPeakBytes(false)).toBe(LTX25_MAX_PEAK_BYTES);
+  expect(LTX25_MAX_PICTURE_PEAK_BYTES).toBeGreaterThan(LTX25_MAX_PEAK_BYTES + 8e9);
+  expect(LTX25_MAX_PICTURE_PEAK_BYTES).toBeLessThan(LTX25_CLIP_CAP_BYTES);
+});
+
+test("VIDEO-PICTURE-ADMIT-01: the governor holds 51 GB for a words-only Max clip and 61.5 GB for the same clip from a picture, with or without an end picture", async () => {
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("body")]).toString("base64");
+  const held = async (extra: Record<string, unknown>): Promise<number[]> => {
+    let release!: () => void;
+    const hold = new Promise<void>((resolve) => { release = resolve; });
+    videoGen.useDeps({ ...scripted(), spawn: async (): Promise<WorkerHandle> => ({ exited: new Promise<number>(() => {}), kill: () => {}, send: async (request) => { await hold; writeFileSync(request.output, "MP4"); writeFileSync(request.poster, "JPG"); return okReply(request); } }) });
+    const waiting = await post({ prompt: "x", model: "ltx25-max", size: "1024x576", seconds: 10, timeout_ms: 300, ...extra });
+    expect(waiting.status).toBe(202);
+    const running = getGovernorStatus().loaded.map((item) => item.peakBytes);
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    clean();
+    __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 90 * GB, tier: "p128" });
+    registerVideoJobs();
+    return running;
+  };
+  expect(await held({})).toContain(LTX25_MAX_PEAK_BYTES);
+  expect(await held({ image: png })).toContain(LTX25_MAX_PICTURE_PEAK_BYTES);
+  expect(await held({ image: png, end_image: png })).toContain(LTX25_MAX_PICTURE_PEAK_BYTES);
+});
+
+test("VIDEO-PICTURE-ADMIT-01: beside a chat model that leaves room for 55 GB, the words-only Max clip passes the up-front check and the picture clip is refused with the plain no_memory words", async () => {
+  videoGen.useDeps(scripted());
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("body")]).toString("base64");
+  __setGovernorTuningForTestsOnly({ tier: "p128", totalMemoryBytes: 128 * GB, freeMemoryBytes: 120 * GB });
+  const cap = getGovernorStatus().capBytes;
+  await admit({ id: "chat", kind: "resident", requestedBytes: cap - 55e9, pinned: true });
+  expect(memoryVerdict("ltx25max", LTX25_MAX_PEAK_BYTES).ok).toBe(true);
+  expect(memoryVerdict("ltx25max", LTX25_MAX_PICTURE_PEAK_BYTES).ok).toBe(false);
+  const refused = await post({ prompt: "x", model: "ltx25-max", size: "1024x576", seconds: 10, image: png });
+  expect(refused.status).toBe(503);
+  expect(await refused.json()).toMatchObject({ code: "no_memory" });
+  // The words-only request passes the same up-front check (it is not refused as no_memory).
+  expect(((await post({ prompt: "x", model: "ltx25-max", size: "1024x576", seconds: 10, timeout_ms: 300 })) as Response).status).not.toBe(503);
+});
+
 test("REGRESSION: every Max worker request carries the pack's Gemma folder (the runtime silently ignores the prompt without it)", () => {
   const input: VideoRunInput = { prompt: "p", negativePrompt: null, imagePath: null, width: 1024, height: 576, frames: 241, seed: 1, loras: [], outputDir: "/tmp/x" };
   const dir = mkdtempSync(join(tmpdir(), "ltx25max-pack-"));
@@ -172,7 +216,7 @@ test("the status route reports the Max quality: its own pack, environment and th
   expect(max.install.download_bytes).toBe(STACK_VIDEO_LTX25_MAX_MODEL.download!.approx_bytes);
   const profiles = max.profiles as Array<Record<string, unknown>>;
   expect(profiles).toHaveLength(1);
-  expect(profiles[0]).toMatchObject({ name: "max", size: "1024x576", width: 1024, height: 576, max_seconds: 10, max_frames: 241, peak_gb: 48.6, admit_gb: 51, short_peak_gb: null });
+  expect(profiles[0]).toMatchObject({ name: "max", size: "1024x576", width: 1024, height: 576, max_seconds: 10, max_frames: 241, peak_gb: 48.6, admit_gb: 51, short_peak_gb: null, peak_gb_picture: 58.6, admit_gb_picture: 61.5, short_peak_gb_picture: null });
   expect(Object.keys(profiles[0]!)).toEqual(expect.arrayContaining(["extend", "retake"])); // LTX25-EDIT-01 footprints (null where not measured)
   // Standard and Boost are unchanged and keep the fork runtime.
   const standard = body.video.qualities.ltx25!;

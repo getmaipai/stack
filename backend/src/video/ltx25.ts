@@ -27,17 +27,22 @@ export const LTX25_FPS = 24;
 
 const GB = 1_000_000_000;
 /** One measured row: a size, the longest clip measured at it, and the OS footprint of that clip. Shorter clips at the same size are admitted at the same figure (a shorter clip never needs more). */
-export interface Ltx25Row { size: string; width: number; height: number; maxSeconds: number; peakBytes: number; /** The slot Home's tier design gives it (Home owns the wording). */ profile: "standard" | "boost" }
+export interface Ltx25Row { size: string; width: number; height: number; maxSeconds: number; peakBytes: number; /** The footprint of the same clip that starts from a picture (with or without an end picture): the larger of the measured runs, never below `peakBytes`. */ picturePeakBytes: number; /** The slot Home's tier design gives it (Home owns the wording). */ profile: "standard" | "boost" }
 export const LTX25_MEASURED: readonly Ltx25Row[] = [
   // 512x256 (asked for as 512x288): 5 s 27 to 52 s and 25.3 GB; 10 s 43 s and 39.4 GB (the Standard slot).
-  { size: "512x256", width: 512, height: 256, maxSeconds: 10, peakBytes: 39.4 * GB, profile: "standard" },
+  // From a picture (VIDEO-PICTURE-ADMIT-01, 2026-11-02, the worker under /usr/bin/time -l): 10 s 39.67 GB with a start picture, 39.70 GB with a start and an end picture.
+  { size: "512x256", width: 512, height: 256, maxSeconds: 10, peakBytes: 39.4 * GB, picturePeakBytes: 39.7 * GB, profile: "standard" },
   // 640x320 (asked for as 640x352): 5 s 42 to 49 s, 32.4 GB. 10 s was not measured, so it is not offered.
-  { size: "640x320", width: 640, height: 320, maxSeconds: 5, peakBytes: 32.4 * GB, profile: "boost" },
+  // From a picture: 5 s 32.08 GB (start) and 32.31 GB (start and end), below the words-only 32.45 GB of the same bench, so the figure stays 32.4 GB.
+  { size: "640x320", width: 640, height: 320, maxSeconds: 5, peakBytes: 32.4 * GB, picturePeakBytes: 32.4 * GB, profile: "boost" },
   // 768x448: 5 s 64 to 74 s, 45.8 GB. 10 s was not measured, so it is not offered.
-  { size: "768x448", width: 768, height: 448, maxSeconds: 5, peakBytes: 45.8 * GB, profile: "boost" },
+  // From a picture: 5 s 45.57 GB (start) and 45.62 GB (start and end), below the words-only 45.83 GB of the same bench, so the figure stays 45.8 GB.
+  { size: "768x448", width: 768, height: 448, maxSeconds: 5, peakBytes: 45.8 * GB, picturePeakBytes: 45.8 * GB, profile: "boost" },
 ];
 /** The 5 s footprint of the Standard size, for a clip of 5 s or less at it (a 5 s clip at 512x256 measured 25.3 GB). */
 export const LTX25_STANDARD_5S_PEAK_BYTES = 25.3 * GB;
+/** The same 5 s clip from a picture: 26.30 GB with a start picture, 27.07 GB with a start and an end picture (the encoder's weights and the picture's latent are a larger share of a short clip). */
+export const LTX25_STANDARD_5S_PICTURE_PEAK_BYTES = 27.1 * GB;
 /** The largest measured footprint: the figure the status and the static admission check use. */
 export const LTX25_PEAK_BYTES = Math.max(...LTX25_MEASURED.map((row) => row.peakBytes));
 export const LTX25_DEFAULT_SIZE = "512x256";
@@ -67,11 +72,11 @@ export function ltx25Refusal(width: number, height: number, frames: number): str
   return null;
 }
 /** The measured footprint a clip of this size and length is admitted at (the clip's own row), or the largest figure when the size is unknown (never admit less than was measured). */
-export function ltx25PeakBytes(width: number, height: number, frames: number): number {
+export function ltx25PeakBytes(width: number, height: number, frames: number, withPicture = false): number {
   const row = ltx25Row(width, height);
-  if (!row) return LTX25_PEAK_BYTES;
-  if (row.size === "512x256" && frames <= 5 * LTX25_FPS + 1) return LTX25_STANDARD_5S_PEAK_BYTES;
-  return row.peakBytes;
+  if (!row) return withPicture ? Math.max(LTX25_PEAK_BYTES, ...LTX25_MEASURED.map((item) => item.picturePeakBytes)) : LTX25_PEAK_BYTES;
+  if (row.size === "512x256" && frames <= 5 * LTX25_FPS + 1) return withPicture ? LTX25_STANDARD_5S_PICTURE_PEAK_BYTES : LTX25_STANDARD_5S_PEAK_BYTES;
+  return withPicture ? row.picturePeakBytes : row.peakBytes;
 }
 
 // ---- the managed environment and the installed files ----
@@ -155,8 +160,17 @@ export function ltx25MaxRefusal(width: number, height: number, frames: number): 
   if (frames > row.maxSeconds * LTX25_FPS + 1) return `A Max clip is at most ${row.maxSeconds} seconds on this computer.`;
   return null;
 }
-/** The footprint a Max clip is admitted at (always the one measured row, with its headroom; a shorter clip never needs more). */
-export function ltx25MaxPeakBytes(): number { return LTX25_MAX_PEAK_BYTES; }
+/**
+ * VIDEO-PICTURE-ADMIT-01: a Max clip that starts from a picture (with or without an end picture) loads the VAE encoder and holds the picture's
+ * latent, about 9 to 10 GB more. Measured on the M5 Max, 1024x576, 10 s, seed 7, picture pinned at frame 0 strength 1.0, runtime 0.18.0, Max pack,
+ * OS footprint by /usr/bin/time -l: 58.6 GB (bench CLI, 189 s); the Stack's own worker read 47.4 GB words only, 56.5 GB with a start picture and
+ * 57.0 GB with a start and an end picture (the worker caps the MLX cache). The highest reading, 58.6 GB, is the figure; with 5 percent headroom
+ * admission reserves 61.5 GB, still under the 64 GB per-clip cap. A shorter clip with a picture was not measured and is admitted at the same figure.
+ */
+export const LTX25_MAX_PICTURE_PEAK_MEASURED_BYTES = 58.6 * GB;
+export const LTX25_MAX_PICTURE_PEAK_BYTES = Math.round(LTX25_MAX_PICTURE_PEAK_MEASURED_BYTES * LTX25_MAX_ADMIT_HEADROOM);
+/** The footprint a Max clip is admitted at (always the one measured row, with its headroom; a shorter clip never needs more). A clip that starts from a picture needs the larger figure. */
+export function ltx25MaxPeakBytes(withPicture = false): number { return withPicture ? LTX25_MAX_PICTURE_PEAK_BYTES : LTX25_MAX_PEAK_BYTES; }
 
 export function ltx25MaxRequirementsFileFor(platform = process.platform, arch = process.arch): string | null {
   return platform === "darwin" && arch === "arm64" ? maxDarwinArm64Requirements : null;
