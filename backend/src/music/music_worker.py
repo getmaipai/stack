@@ -235,6 +235,9 @@ def cheap_edit(request, workdir):
     return {"duration_s": round(data.shape[0] / SAMPLE_RATE, 2), "seed": None, "task": op, "lrc": None}
 
 
+TEXT2MUSIC_SHIFT = 3.0
+
+
 def generate(request, workdir):
     from acestep.inference import GenerationConfig, GenerationParams, generate_music
 
@@ -260,7 +263,8 @@ def generate(request, workdir):
         duration = _seconds(request.get("duration_s"), 60.0)
         if duration < MIN_SECONDS or duration > MAX_SECONDS:
             raise ValueError("a song is %d to %d seconds long" % (MIN_SECONDS, MAX_SECONDS))
-        params = GenerationParams(task_type="text2music", duration=duration, thinking=True, use_cot_lyrics=False, **kwargs)
+        # Listening test 2026-11-02: shift 3.0, DCW off and the planner's codes at strength 0 gave clearer vocals than the library defaults.
+        params = GenerationParams(task_type="text2music", duration=duration, thinking=True, use_cot_lyrics=False, shift=TEXT2MUSIC_SHIFT, dcw_enabled=False, audio_cover_strength=0.0, **kwargs)
     else:
         src = _decode_source(request, workdir)
         total = _read(src).shape[0] / SAMPLE_RATE

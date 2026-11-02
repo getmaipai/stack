@@ -561,6 +561,9 @@ test("the worker keeps the keep-warm, offline and memory settings the note measu
   expect(source).toContain('os.environ.setdefault("HF_HUB_OFFLINE", "1")');
   expect(source).toContain('os.environ.setdefault("ACESTEP_MLX_VAE_CHUNK", "256")');
   expect(source).toContain("use_cot_lyrics=False");
+  // Listening test 2026-11-02: clearest vocals with shift 3, DCW off and the planner codes at strength 0.
+  expect(source).toContain("TEXT2MUSIC_SHIFT = 3.0");
+  expect(source).toContain("shift=TEXT2MUSIC_SHIFT, dcw_enabled=False, audio_cover_strength=0.0");
   const service = await Bun.file(join(import.meta.dir, "../src/music/musicGen.ts")).text();
   expect(service).toContain('engineIdleMs("music")');
   for (const name of ["HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE", "HF_HUB_DISABLE_TELEMETRY", "ACESTEP_MLX_VAE_CHUNK", "MUSIC_MAX_SECONDS"]) expect(service).toContain(name);
