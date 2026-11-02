@@ -303,7 +303,7 @@ test("PRIVACY: the worker is started offline with no token and no Stack secret, 
   expect(source.indexOf("forbid_network()\n    emit({\"ready\": True})")).toBeGreaterThan(0);
   expect(source).toContain("mx.set_cache_limit(");
   expect(source).toContain("mx.clear_cache()");
-  expect(source).toContain("DistilledPipeline(model_dir=model_dir, low_memory=True, verbose=False)");
+  expect(source).toContain("DistilledPipeline(model_dir=model_dir, low_memory=True)");
   expect(source).not.toMatch(/https?:\/\//);
   expect(source).not.toMatch(/snapshot_download|hf_hub_download|from_pretrained\("/);
 });
@@ -343,12 +343,12 @@ test.skipIf(!python)("REAL worker: a socket connection is refused inside the wor
 const realPack = process.env.LTX25_REAL_MODEL;
 test.skipIf(!python || !realPack || !process.env.LTX25_FFMPEG)("REAL: a 1 second Standard clip through the real worker comes back as an mp4 with an AAC sound track", async () => {
   const dir = mkdtempSync(join(tmpdir(), "ltx25-real-"));
-  const child = Bun.spawn([python!, "-s", worker], { stdin: "pipe", stdout: "pipe", stderr: "pipe", env: { ...process.env, PYTHONPATH: process.env.LTX25_GEN_SRC ?? "", HF_HUB_OFFLINE: "1" } });
+  const child = Bun.spawn([python!, "-s", worker], { stdin: "pipe", stdout: "pipe", stderr: "pipe", env: { ...process.env, PYTHONPATH: process.env.LTX25_GEN_SRC ?? "", HF_HUB_OFFLINE: "1", VIDEO_WORKER_DEBUG: "1" } });
   const handle = workerHandle(child as never);
   const events: string[] = [];
   const reply = await handle.send({ id: "real", op: "generate", model_dir: realPack!, tokenizer_dir: realPack!, ffmpeg: process.env.LTX25_FFMPEG!, prompt: "A friendly blue cartoon character waves and says hello.", negative_prompt: null, image: null, width: 512, height: 288, num_frames: 25, seed: 7, loras: [], output: join(dir, "video.mp4"), poster: join(dir, "poster.jpg") } as WorkerRequest, { deadlineMs: 600_000, onEvent: (event) => { events.push(event.event === "stage" ? event.stage : event.event); } });
   handle.kill();
-  expect(reply).toMatchObject({ ok: true, width: 512, height: 288, frames: 25, audio: true });
+  expect(reply, JSON.stringify(reply)).toMatchObject({ ok: true, width: 512, frames: 25, audio: true });
   expect(events).toContain("motion");
   rmSync(dir, { recursive: true, force: true });
 }, 700_000);

@@ -147,8 +147,11 @@ def _pipeline(model_dir):
     from ltx_pipelines_mlx.distilled import DistilledPipeline
 
     # gemma_model_id is ignored: the pack ships its own text_encoder folder, which the pipeline prefers.
-    pipe = DistilledPipeline(model_dir=model_dir, low_memory=True, verbose=False)
+    # DistilledPipeline takes no verbose argument (the base class defaults it to True): silence it after construction.
+    pipe = DistilledPipeline(model_dir=model_dir, low_memory=True)
     pipe.verbose = False
+    if getattr(pipe, "video_decoder_block", None) is not None:
+        pipe.video_decoder_block.verbose = False
     _install_patches(pipe)
     _state["pipe"] = pipe
     _state["model_dir"] = model_dir
@@ -171,9 +174,11 @@ def _ffmpeg_on_path(ffmpeg):
     return shutil.which("ffmpeg")
 
 
-def _has_audio(ffmpeg, path):
-    probe = subprocess.run([ffmpeg, "-hide_banner", "-i", path], capture_output=True, text=True)
-    return bool(re.search(r"Stream #\S+: Audio:", probe.stderr or ""))
+def _probe(ffmpeg, path):
+    """(has sound, width, height) of the engine's file. The engine rounds the height to a multiple of 64 (288 comes out 256), so the reply reports what the file really is."""
+    text = subprocess.run([ffmpeg, "-hide_banner", "-i", path], capture_output=True, text=True).stderr or ""
+    size = re.search(r"Stream #\S+: Video:.*?, (\d{2,5})x(\d{2,5})", text)
+    return bool(re.search(r"Stream #\S+: Audio:", text)), (int(size.group(1)) if size else None), (int(size.group(2)) if size else None)
 
 
 def generate(request):
@@ -207,14 +212,14 @@ def generate(request):
         poster = subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", engine_out, "-frames:v", "1", "-q:v", "3", "-map_metadata", "-1", request["poster"]], capture_output=True)
         if poster.returncode != 0 or not os.path.isfile(request["poster"]):
             raise RuntimeError("no poster")
-        has_sound = _has_audio(ffmpeg, engine_out)
+        has_sound, real_width, real_height = _probe(ffmpeg, engine_out)
         os.replace(engine_out, request["output"])
         phase("encoding", 100)
     finally:
         shutil.rmtree(work, ignore_errors=True)
         gc.collect()
         mx.clear_cache()
-    return {"width": width, "height": height, "frames": frames, "fps": FPS, "seed": int(request["seed"]), "ms": int((time.time() - started) * 1000), "peak_bytes": int(mx.get_peak_memory()), "audio": bool(has_sound)}
+    return {"width": real_width or width, "height": real_height or height, "frames": frames, "fps": FPS, "seed": int(request["seed"]), "ms": int((time.time() - started) * 1000), "peak_bytes": int(mx.get_peak_memory()), "audio": bool(has_sound)}
 
 
 def main():
@@ -242,6 +247,7 @@ def main():
             sys.stderr.flush()
             if os.environ.get("VIDEO_WORKER_DEBUG") == "1":
                 traceback.print_exc()
+                message = "%s [%s: %s]" % (message, type(error).__name__, str(error)[:300])
             emit({"id": request.get("id"), "ok": False, "code": code, "error": message})
 
 
