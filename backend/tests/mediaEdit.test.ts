@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { app } from "@/app";
 import { __resetJobsForTests, waitForJob } from "@/lib/jobs";
 import { HostLimiter } from "@/media/hosts";
-import { concatCompatible, concatEncodeArgs, crossfadeArgs, hasKeyframeAt, overlayArgs, trimArgs } from "@/media/editOps";
+import { concatCompatible, concatEncodeArgs, crossfadeArgs, gainArgs, hasKeyframeAt, overlayArgs, trimArgs } from "@/media/editOps";
 import { MEDIA_DEADLINES_MS, registerMediaJobs, resetMediaDepsForTests, setMediaDepsForTests } from "@/media/jobs";
 import { __resetRootsForTests, jobsDir, setRoots } from "@/media/paths";
 import { normalizeProbe } from "@/media/probe";
@@ -69,7 +69,7 @@ describe("media.edit with a fake runner", () => {
     const clip = touch("a.mp4");
     const out = { name: "o.mp4" };
     const refused = async (input: unknown, words: RegExp) => { const { status, body } = await post(input); expect({ status, code: body.code }).toEqual({ status: 422, code: "bad_input" }); expect(body.error).toMatch(words); };
-    await refused({ inputs: [clip], ops: [{ op: "explode" }], output: out }, /does not know.*trim, concat, mute, frame, audio_overlay, fade, crossfade/);
+    await refused({ inputs: [clip], ops: [{ op: "explode" }], output: out }, /does not know.*trim, concat, mute, frame, audio_overlay, fade, crossfade, gain/);
     await refused({ inputs: [clip], ops: Array.from({ length: 13 }, () => ({ op: "mute" })), output: out }, /at most 12 steps/);
     await refused({ inputs: Array.from({ length: 25 }, () => clip), ops: [{ op: "mute" }], output: out }, /at most 24 files/);
     await refused({ inputs: [clip], ops: [{ op: "frame" }, { op: "mute" }], output: { name: "o.png" } }, /must be the last step/);
@@ -158,7 +158,7 @@ describe("media.edit command plans", () => {
   });
   test("overlay without a picture maps only the mix", () => {
     const audioOnly = normalizeProbe(JSON.parse(probeJson(5).replace(/\{"index":0,"codec_type":"video"[^}]*\},/, "")), "/x.m4a", 1);
-    const args = overlayArgs("ffmpeg", { path: "/a.m4a", probe: audioOnly }, "/v.wav", "/o.mp4", { op: "audio_overlay", input: 1, gain_db: 0, clip_gain_db: 0, start_s: 0, duck: false });
+    const args = overlayArgs("ffmpeg", { path: "/a.m4a", probe: audioOnly }, "/v.wav", "/o.mp4", { op: "audio_overlay", input: 1, gain_db: 0, clip_gain_db: 0, start_s: 0, duck: false, fade_in_s: 0, fade_out_s: 0 });
     expect(args).not.toContain("0:v:0");
   });
 });
@@ -205,6 +205,41 @@ describe("media.edit crossfade validation", () => {
   });
 });
 
+describe("media.edit gain and overlay fades: plans and validation", () => {
+  beforeEach(() => { freshRoots(); script = (argv) => (argv[0]?.endsWith("ffprobe") ? { stdout: probeJson(5) } : {}); setMediaDepsForTests({ toolbox: fakeToolbox, run: fakeRun, limiter: new HostLimiter() }); registerMediaJobs(); });
+  afterEach(cleanRoots);
+  const probe = (seconds: number, audio = true) => normalizeProbe(JSON.parse(probeJson(seconds, audio)), "/x.mp4", 1);
+  const refused = async (input: unknown, pattern: RegExp) => { const { status, body } = await post(input); expect(status).toBe(422); expect(body.error).toMatch(pattern); };
+
+  test("gain copies the picture and sets volume in dB; the overlay trims, fades in, fades out before the delay", () => {
+    const g = gainArgs("ffmpeg", "/a.mp4", "/o.mp4", { op: "gain", db: -6 }).join(" ");
+    expect(g).toContain("-c:v copy"); expect(g).toContain("volume=-6dB");
+    const args = overlayArgs("ffmpeg", { path: "/a", probe: probe(5) }, "/t.wav", "/o.mp4", { op: "audio_overlay", input: 1, gain_db: 0, clip_gain_db: 0, start_s: 0.5, duck: false, fade_in_s: 1, fade_out_s: 1, end_s: 3.5 }, 4);
+    const graph = args[args.indexOf("-filter_complex") + 1]!;
+    expect(graph).toContain("[1:a:0]atrim=0:3,asetpts=PTS-STARTPTS,afade=t=in:st=0:d=1,afade=t=out:st=2:d=1,volume=0dB");
+    expect(graph.indexOf("afade")).toBeLessThan(graph.indexOf("adelay=500|500"));
+  });
+  test("refuses a gain outside -60 to 24 dB, a missing db, an end before the start, and fades longer than the overlay, each with a plain sentence", async () => {
+    const a = touch("a.mp4"); const b = touch("b.wav"); const out = { name: "o.mp4" };
+    await refused({ inputs: [a], ops: [{ op: "gain", db: 30 }], output: out }, /db: must be from -60 to 24 dB/);
+    await refused({ inputs: [a], ops: [{ op: "gain", db: -61 }], output: out }, /db: must be from -60 to 24 dB/);
+    await refused({ inputs: [a], ops: [{ op: "gain" }], output: out }, /ops > 1/);
+    await refused({ inputs: [a, b], ops: [{ op: "audio_overlay", input: 1, start_s: 2, end_s: 2 }], output: out }, /ends at 2 s but starts at 2 s/);
+    await refused({ inputs: [a, b], ops: [{ op: "audio_overlay", input: 1, start_s: 1, end_s: 3, fade_in_s: 1.5, fade_out_s: 1 }], output: out }, /fades for 2.5 s in all, longer than the 2 s between start_s and end_s/);
+    await refused({ inputs: [a, b], ops: [{ op: "audio_overlay", input: 1, fade_in_s: -1 }], output: out }, /fade_in_s/);
+    expect((await post({ inputs: [a], ops: [{ op: "gain", db: -60 }, { op: "gain", db: 24 }], output: out })).status).toBe(202);
+    expect((await post({ inputs: [a, b], ops: [{ op: "audio_overlay", input: 1, start_s: 1, end_s: 3, fade_in_s: 1, fade_out_s: 1 }], output: out })).status).toBe(202);
+  });
+  test("a clip with no sound, an end past the clip and fades longer than the overlay's own length fail with a sentence", async () => {
+    const a = touch("a.mp4"); const b = touch("b.wav");
+    script = (argv) => (argv[0]?.endsWith("ffprobe") ? { stdout: argv.includes(b) ? probeJson(2) : probeJson(5, false) } : {});
+    const gain = await run({ inputs: [a], ops: [{ op: "gain", db: -6 }], output: { name: "o.mp4" } });
+    expect(gain.state).toBe("failed"); expect(gain.result.failure.message).toMatch(/Step 1 \(gain\) changes the clip's sound level, but the clip has no sound/);
+    const past = await run({ inputs: [a, b], ops: [{ op: "audio_overlay", input: 1, end_s: 9 }], output: { name: "o.mp4" } });
+    expect(past.result.failure.message).toMatch(/ends at 9 s but the clip is only 5 s long/);
+  });
+});
+
 // ---- real ffmpeg ----
 function findTool(name: "ffmpeg" | "ffprobe"): string | null {
   const env = name === "ffmpeg" ? process.env.STACK_MEDIA_FFMPEG : process.env.STACK_MEDIA_FFPROBE;
@@ -220,7 +255,7 @@ const real = haveTools ? describe : describe.skip;
 
 real("media.edit with real ffmpeg", () => {
   const priorNice = process.env.STACK_MEDIA_NO_NICE;
-  let clip5 = ""; let clipNoB = ""; let clip2 = ""; let tone = "";
+  let clipSilent = ""; let tone4 = ""; let clip5 = ""; let clipNoB = ""; let clip2 = ""; let tone = "";
   const tools: MediaToolbox = { installed: () => true, path: async (tool) => (tool === "ffmpeg" ? ffmpeg! : ffprobe!) };
   async function ff(args: string[]): Promise<void> { const result = await spawnRunner([ffmpeg!, "-hide_banner", "-loglevel", "error", "-y", ...args]); if (result.code !== 0) throw new Error(result.stderr); }
   async function md5(path: string, map: "0:v:0" | "0:a:0"): Promise<string> {
@@ -242,6 +277,9 @@ real("media.edit with real ffmpeg", () => {
     await ff(["-f", "lavfi", "-i", "testsrc=s=320x180:r=24:d=5", "-f", "lavfi", "-i", "sine=f=440:r=48000:d=5", "-c:v", "libx264", "-bf", "0", "-pix_fmt", "yuv420p", "-g", "12", "-keyint_min", "12", "-sc_threshold", "0", "-c:a", "aac", "-b:a", "128k", "-shortest", clipNoB]);
     await ff(["-f", "lavfi", "-i", "testsrc2=s=160x120:r=24:d=2", "-f", "lavfi", "-i", "sine=f=330:r=44100:d=2", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", clip2]);
     await ff(["-f", "lavfi", "-i", "sine=f=880:r=48000:d=2", tone]);
+    tone4 = join(dir, "tone4.wav"); clipSilent = join(dir, "silent5.mp4");
+    await ff(["-f", "lavfi", "-i", "sine=f=880:r=48000:d=4", tone4]);
+    await ff(["-f", "lavfi", "-i", "testsrc=s=320x180:r=24:d=5", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-an", clipSilent]);
   });
   beforeEach(() => { freshRoots(); setMediaDepsForTests({ toolbox: tools, run: spawnRunner, limiter: new HostLimiter() }); registerMediaJobs(); setRoots({ read: [root, join(clip5, "..")], write: [root] }); });
   afterEach(() => { cleanRoots(); });
@@ -324,6 +362,56 @@ real("media.edit with real ffmpeg", () => {
     expect(Math.abs(job.result.duration_s - 5)).toBeLessThan(0.1);
     expect(await md5(job.result.path, "0:v:0")).toBe(await md5(clip5, "0:v:0"));
     expect(await md5(job.result.path, "0:a:0")).not.toBe(await md5(clip5, "0:a:0"));
+  });
+
+  async function level(path: string, from: number, length: number): Promise<{ mean: number; max: number }> {
+    const result = await spawnRunner([ffmpeg!, "-hide_banner", "-nostats", "-ss", String(from), "-t", String(length), "-i", path, "-map", "0:a:0", "-af", "volumedetect", "-f", "null", "-"], { collectStdout: true });
+    const text = `${result.stdout}\n${result.stderr}`;
+    const read = (key: string) => { const found = new RegExp(`${key}: (-?[\\d.]+|-inf) dB`).exec(text)?.[1]; return found === undefined || found === "-inf" ? -120 : Number(found); };
+    return { mean: read("mean_volume"), max: read("max_volume") };
+  }
+
+  test("gain of -6.02 dB halves the measured amplitude (within 0.5 dB), keeps the length, copies the picture; +6 dB doubles it", async () => {
+    const before = await level(clip5, 0.5, 4);
+    const down = await run({ inputs: [clip5], ops: [{ op: "gain", db: -6.02 }], output: out("g-down.mp4") }, 60_000);
+    expect(down.state).toBe("done");
+    expect(Math.abs(down.result.duration_s - 5)).toBeLessThan(0.1);
+    expect(await md5(down.result.path, "0:v:0")).toBe(await md5(clip5, "0:v:0"));
+    const after = await level(down.result.path, 0.5, 4);
+    expect(Math.abs(before.mean - after.mean - 6.02)).toBeLessThan(0.5);
+    const up = await run({ inputs: [clip5], ops: [{ op: "gain", db: 6 }], output: out("g-up.mp4") }, 60_000);
+    expect(Math.abs((await level(up.result.path, 0.5, 4)).mean - before.mean - 6)).toBeLessThan(0.5);
+  });
+
+  test("gain on a clip with no sound fails with a plain sentence", async () => {
+    const job = await run({ inputs: [clipSilent], ops: [{ op: "gain", db: -6 }], output: out("g-none.mp4") }, 60_000);
+    expect(job.state).toBe("failed");
+    expect(job.result.failure.message).toMatch(/has no sound/);
+  });
+
+  test("audio_overlay fades ramp, end_s trims the overlay and the clip's own sound is untouched", async () => {
+    // Silent-sound 5 s clip, a 4 s tone laid from 0.5 s to 3.5 s with 1 s fades each side.
+    const job = await run({ inputs: [clipSilent, tone4], ops: [{ op: "audio_overlay", input: 1, start_s: 0.5, end_s: 3.5, fade_in_s: 1, fade_out_s: 1 }], output: out("fade.mp4") }, 120_000);
+    expect(job.state).toBe("done");
+    expect(Math.abs(job.result.duration_s - 5)).toBeLessThan(0.1);
+    const full = await level(job.result.path, 1.7, 0.6); // inside the flat part
+    const early = await level(job.result.path, 0.5, 0.15); const late = await level(job.result.path, 3.35, 0.15);
+    expect(full.max).toBeGreaterThan(-24); // the sine source peaks near -21 dB
+    expect(full.max - early.max).toBeGreaterThan(8); // the start is ramping up
+    expect(full.max - late.max).toBeGreaterThan(8); // the end is ramping down
+    expect((await level(job.result.path, 0, 0.4)).max).toBeLessThan(-60); // before start_s
+    expect((await level(job.result.path, 3.7, 1.2)).max).toBeLessThan(-60); // after end_s: the 4 s tone is cut at 3 s of its own
+    // Without fades or end_s the overlay is unchanged: full level from the start and a tone to its own end (0.5 + 4 = 4.5 s).
+    const plain = await run({ inputs: [clipSilent, tone4], ops: [{ op: "audio_overlay", input: 1, start_s: 0.5 }], output: out("plain.mp4") }, 120_000);
+    expect((await level(plain.result.path, 0.55, 0.15)).max).toBeGreaterThan(-24);
+    expect((await level(plain.result.path, 4.2, 0.2)).max).toBeGreaterThan(-24);
+    expect((await level(plain.result.path, 4.65, 0.3)).max).toBeLessThan(-60);
+  });
+
+  test("an overlay fade longer than the overlay's own length fails with a sentence", async () => {
+    const job = await run({ inputs: [clipSilent, tone], ops: [{ op: "audio_overlay", input: 1, fade_in_s: 1.5, fade_out_s: 1 }], output: out("fade-long.mp4") }, 60_000);
+    expect(job.state).toBe("failed");
+    expect(job.result.failure.message).toMatch(/fades for 2.5 s in all, longer than the 2 s overlay/);
   });
 
   test("mute leaves no audio stream and the picture untouched", async () => {

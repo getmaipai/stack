@@ -14,7 +14,7 @@ import { probeFile, type ProbeResult } from "./probe";
 import { idleArgv, spawnRunner, type Runner, type RunResult } from "./run";
 import { defaultToolbox, MediaToolError, type MediaToolbox } from "./tools";
 import { mkdirSync } from "node:fs";
-import { concatCompatible, concatCopyArgs, concatEncodeArgs, concatListLine, crossfadeArgs, crossfadeMinLength, concatMembers, EditInput, editInputProblem, fadeArgs, frameArgs, hasKeyframeAt, keyframeArgs, MAX_EDIT_SECONDS, muteArgs, overlayArgs, trimArgs, type Clip } from "./editOps";
+import { concatCompatible, concatCopyArgs, concatEncodeArgs, concatListLine, crossfadeArgs, crossfadeMinLength, concatMembers, EditInput, editInputProblem, fadeArgs, frameArgs, gainArgs, hasKeyframeAt, keyframeArgs, MAX_EDIT_SECONDS, muteArgs, overlayArgs, trimArgs, type Clip } from "./editOps";
 import { COLOUR_MATCH_STRENGTH, COMPANION_CLIP_FPS, COMPANION_CLIP_SIZE, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionCrop, companionMetrics, companionReasons, crossfadeLoop, downscaleRgba4, frameDifference, keyOutRgba, selectCompanionWindow } from "./companionClip";
 
 export const MEDIA_KINDS = ["media.probe", "media.fetch", "media.transcode", "media.preview", "media.companion_clip", "media.edit", "media.setup"] as const;
@@ -594,7 +594,17 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
       } else if (op.op === "audio_overlay") {
         const other = probes[op.input]!;
         if (!other.has_audio) throw fail({ code: "bad_input", message: `File ${op.input + 1} has no sound to lay over the clip.` });
-        args = overlayArgs(ffmpeg, clip, sources[op.input]!, target, op); action = clip.probe.has_video ? "audio_mix_video_copy" : "audio_mix";
+        const total = clip.probe.duration_s ?? 0;
+        const round = (value: number) => Math.round(value * 100) / 100;
+        if (op.end_s !== undefined && total > 0 && op.end_s > total) throw fail({ code: "bad_input", message: `Step ${i + 1} (audio_overlay) ends at ${op.end_s} s but the clip is only ${round(total)} s long. Use an end_s inside the clip.` });
+        const ownSeconds = other.duration_s ?? null;
+        if (op.fade_out_s > 0 && op.end_s === undefined && ownSeconds === null) throw fail({ code: "bad_input", message: `Step ${i + 1} (audio_overlay) fades out, but File ${op.input + 1} has no known length. Give an end_s.` });
+        const length = op.end_s !== undefined ? Math.min(op.end_s - op.start_s, ownSeconds ?? Infinity) : ownSeconds;
+        if (length !== null && op.fade_in_s + op.fade_out_s > length) throw fail({ code: "bad_input", message: `Step ${i + 1} (audio_overlay) fades for ${round(op.fade_in_s + op.fade_out_s)} s in all, longer than the ${round(length)} s overlay. Use shorter fades.` });
+        args = overlayArgs(ffmpeg, clip, sources[op.input]!, target, op, ownSeconds); action = clip.probe.has_video ? "audio_mix_video_copy" : "audio_mix";
+      } else if (op.op === "gain") {
+        if (!clip.probe.has_audio) throw fail({ code: "bad_input", message: `Step ${i + 1} (gain) changes the clip's sound level, but the clip has no sound.` });
+        args = gainArgs(ffmpeg, clip.path, target, op); action = clip.probe.has_video ? "audio_gain_video_copy" : "audio_gain";
       } else if (op.op === "fade") {
         if (op.in_s + op.out_s > (clip.probe.duration_s ?? 0)) throw fail({ code: "bad_input", message: `Step ${i + 1} (fade) fades for ${op.in_s + op.out_s} s in all, longer than the ${Math.round((clip.probe.duration_s ?? 0) * 100) / 100} s clip.` });
         args = fadeArgs(ffmpeg, clip, target, op);

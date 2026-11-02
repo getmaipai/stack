@@ -6,7 +6,7 @@
 import { z } from "zod";
 import type { ProbeResult } from "./probe";
 
-export const EDIT_OPS = ["trim", "concat", "mute", "frame", "audio_overlay", "fade", "crossfade"] as const;
+export const EDIT_OPS = ["trim", "concat", "mute", "frame", "audio_overlay", "fade", "crossfade", "gain"] as const;
 export const MIN_CROSSFADE_S = 0.3;
 export const MAX_CROSSFADE_S = 1.0;
 export const MAX_CROSSFADE_CLIPS = 6;
@@ -34,7 +34,15 @@ const AudioOverlayOp = z.object({
   duck: z.boolean().default(false),
   /** Loudness-normalise the mix to this integrated loudness. */
   loudness_lufs: z.number().min(-40).max(-5).optional(),
+  /** Fade the overlay alone in over this many seconds from where it starts (the clip's own sound is untouched). */
+  fade_in_s: Seconds.default(0),
+  /** Fade the overlay alone out over this many seconds, ending where it ends. */
+  fade_out_s: Seconds.default(0),
+  /** Where the overlay ends, in seconds on the clip's timeline (after start_s). Without it the overlay plays to its own end. */
+  end_s: z.number().gt(0).max(MAX_EDIT_SECONDS).optional(),
 }).strict();
+/** Change the level of the working clip's own sound by db (negative is quieter); the picture is copied. */
+const GainOp = z.object({ op: z.literal("gain"), db: z.number().min(-60, "must be from -60 to 24 dB").max(24, "must be from -60 to 24 dB") }).strict();
 const FadeOp = z.object({ op: z.literal("fade"), in_s: Seconds.default(0), out_s: Seconds.default(0) }).strict()
   .refine((op) => op.in_s > 0 || op.out_s > 0, { path: ["in_s"], message: "needs in_s or out_s above 0" });
 
@@ -45,7 +53,7 @@ const CrossfadeOp = z.object({
   with: z.array(Index).min(1).max(MAX_EDIT_INPUTS - 1).optional(),
 }).strict();
 
-export const EditOp = z.union([TrimOp, ConcatOp, MuteOp, FrameOp, AudioOverlayOp, FadeOp, CrossfadeOp]);
+export const EditOp = z.union([TrimOp, ConcatOp, MuteOp, FrameOp, AudioOverlayOp, FadeOp, CrossfadeOp, GainOp]);
 export type EditOp = z.infer<typeof EditOp>;
 
 export const EditInput = z.object({
@@ -87,6 +95,10 @@ function planProblem(input: EditInput): string | null {
     const op = input.ops[i]!;
     if (op.op === "audio_overlay" && op.input >= input.inputs.length) return `Step ${i + 1} (audio_overlay) uses file ${op.input + 1}, but the edit lists only ${input.inputs.length}.`;
     if (op.op === "audio_overlay" && op.input === 0) return `Step ${i + 1} (audio_overlay) uses the clip itself as the overlay. List the voice or music as another file.`;
+    if (op.op === "audio_overlay" && op.end_s !== undefined) {
+      if (op.end_s <= op.start_s) return `Step ${i + 1} (audio_overlay) ends at ${op.end_s} s but starts at ${op.start_s} s. end_s must be after start_s.`;
+      if (op.fade_in_s + op.fade_out_s > op.end_s - op.start_s) return `Step ${i + 1} (audio_overlay) fades for ${num(op.fade_in_s + op.fade_out_s)} s in all, longer than the ${num(op.end_s - op.start_s)} s between start_s and end_s. Use shorter fades.`;
+    }
     if (op.op === "concat" && op.with?.some((index) => index >= input.inputs.length || index === 0)) return `Step ${i + 1} (concat) names a file that is not in the list (files after the first are 2 to ${input.inputs.length}).`;
     if (op.op === "concat" && input.inputs.length < 2) return `Step ${i + 1} (concat) needs at least two files.`;
     if (op.op === "crossfade" && op.with?.some((index) => index >= input.inputs.length || index === 0)) return `Step ${i + 1} (crossfade) names a file that is not in the list (files after the first are 2 to ${input.inputs.length}).`;
@@ -235,13 +247,20 @@ export function crossfadeArgs(ffmpeg: string, clips: Clip[], d: number, out: str
 }
 
 /** Lay a second audio file over the clip's own sound; the picture is copied untouched. */
-export function overlayArgs(ffmpeg: string, clip: Clip, overlayPath: string, out: string, op: Extract<EditOp, { op: "audio_overlay" }>): string[] {
+export function overlayArgs(ffmpeg: string, clip: Clip, overlayPath: string, out: string, op: Extract<EditOp, { op: "audio_overlay" }>, overlaySeconds: number | null = null): string[] {
   const length = clip.probe.duration_s ?? 0;
   const layout = "aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo";
   const delay = Math.round(op.start_s * 1000);
   const filters: string[] = [];
   filters.push(clip.probe.has_audio ? `[0:a:0]volume=${num(op.clip_gain_db)}dB,${layout}[c]` : `anullsrc=r=48000:cl=stereo,atrim=0:${num(length)},${layout}[c]`);
-  filters.push(`[1:a:0]volume=${num(op.gain_db)}dB,${layout}${delay > 0 ? `,adelay=${delay}|${delay}` : ""}${op.duck ? ",asplit=2[o][k]" : "[o]"}`);
+  // The overlay's length on the timeline: its own length, cut at end_s when given. Fades are cut on the overlay alone, before it is delayed.
+  const span = op.end_s !== undefined ? op.end_s - op.start_s : null;
+  const own = span !== null && overlaySeconds !== null ? Math.min(span, overlaySeconds) : span ?? overlaySeconds;
+  const shaping: string[] = [];
+  if (span !== null) shaping.push(`atrim=0:${num(span)}`, "asetpts=PTS-STARTPTS");
+  if (op.fade_in_s > 0) shaping.push(`afade=t=in:st=0:d=${num(op.fade_in_s)}`);
+  if (op.fade_out_s > 0 && own !== null) shaping.push(`afade=t=out:st=${num(Math.max(0, own - op.fade_out_s))}:d=${num(op.fade_out_s)}`);
+  filters.push(`[1:a:0]${shaping.map((step) => `${step},`).join("")}volume=${num(op.gain_db)}dB,${layout}${delay > 0 ? `,adelay=${delay}|${delay}` : ""}${op.duck ? ",asplit=2[o][k]" : "[o]"}`);
   let clipLabel = "[c]";
   if (op.duck) { filters.push("[c][k]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400:makeup=1[d]"); clipLabel = "[d]"; }
   const mixed = op.loudness_lufs === undefined ? "[m]" : "[x]";
@@ -253,6 +272,10 @@ export function overlayArgs(ffmpeg: string, clip: Clip, overlayPath: string, out
   if (clip.probe.has_video) args.push("-t", num(length));
   args.push(...FASTSTART, out);
   return args;
+}
+
+export function gainArgs(ffmpeg: string, src: string, out: string, op: Extract<EditOp, { op: "gain" }>): string[] {
+  return [...BASE(ffmpeg), "-i", src, "-map", "0:v:0?", "-map", "0:a:0", "-sn", "-dn", "-c:v", "copy", "-af", `volume=${num(op.db)}dB`, ...ENCODE_A, ...FASTSTART, out];
 }
 
 export function fadeArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "fade" }>): string[] {
