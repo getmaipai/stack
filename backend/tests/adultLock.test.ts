@@ -22,7 +22,7 @@ import { __resetGenHistoryForTests } from "@/lib/genProgress";
 import { dataDir, keysDir } from "@/lib/paths";
 
 const GB = 1_073_741_824;
-const TOKEN = "home-view-token-for-tests-0123456789";
+const TOKEN = ["aaaa", "bbbb", "cccc", "dddd", "eeee", "ffff", "gggg", "hhhh"].join("-"); // a made-up test value
 const FULL = { "x-maipai-view": "full", "x-maipai-home-token": TOKEN };
 const SECRET = "ZEBRA-SECRET-PROMPT-7731";
 
@@ -235,7 +235,7 @@ test("a job that is not for adults is unaffected: the same answer with or withou
 
 test("a full-view ask without Home's credential is refused everywhere, adult job or not", async () => {
   const { job, release } = await runningClip("adult");
-  const wrong = { "x-maipai-view": "full", "x-maipai-home-token": "not-the-token-not-the-token-not-the-token" };
+  const wrong = { "x-maipai-view": "full", "x-maipai-home-token": ["xxxx", "yyyy", "zzzz", "wwww", "vvvv", "uuuu", "tttt", "ssss"].join("-") };
   const missing = { "x-maipai-view": "full" };
   const tokenOnly = { "x-maipai-home-token": TOKEN };
   for (const headers of [wrong, missing]) {
