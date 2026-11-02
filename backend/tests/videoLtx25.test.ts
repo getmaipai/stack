@@ -3,7 +3,7 @@
 // posture, driven by a scripted worker (no weights, no GPU, no network). The real worker on the real weights is exercised only where
 // LTX25_GEN_PYTHON names a prepared environment (the checks that need no weights) and LTX25_REAL_MODEL names the pack.
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { app } from "@/app";
@@ -160,14 +160,66 @@ test("frames must be 8n+1: the table check refuses anything else, and every whol
   for (let seconds = 1; seconds <= 10; seconds++) expect((seconds * 24) % 8).toBe(0);
 });
 
-test("a picture start and a style file are refused for now, with what to do instead", async () => {
+// A real 1x1 PNG header is enough for the route (it checks the magic bytes); the worker is scripted here.
+const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("fake-png-body")]);
+const PNG_B64 = PNG.toString("base64");
+const JPEG_B64 = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]).toString("base64");
+
+test("VIDEO-INPUTS-01: a start picture reaches the worker as a file with the same bytes, and the end picture beside it", async () => {
+  const seen: Array<{ image: string | null; endImage: string | null; bytes: Buffer | null; endBytes: Buffer | null }> = [];
+  videoGen.useDeps(scripted((request) => {
+    seen.push({ image: request.image, endImage: request.end_image ?? null, bytes: request.image ? readFileSync(request.image) : null, endBytes: request.end_image ? readFileSync(request.end_image) : null });
+    return okReply(request);
+  }));
+  const start = await post({ prompt: "x", model: "ltx25-q8", image: PNG_B64, timeout_ms: 20_000 });
+  expect(start.status).toBe(200);
+  expect(((await start.json()) as { data: Array<{ mode: string; quality: string }> }).data[0]).toMatchObject({ mode: "image-to-video", quality: "ltx25" });
+  const both = await post({ prompt: "x", model: "ltx25-q8", image: `data:image/png;base64,${PNG_B64}`, end_image: JPEG_B64, timeout_ms: 20_000 });
+  expect(both.status).toBe(200);
+  expect(seen[0]!.bytes!.equals(PNG)).toBe(true);
+  expect(seen[0]!.endImage).toBeNull();
+  expect(seen[1]!.bytes!.equals(PNG)).toBe(true);
+  expect(seen[1]!.endBytes!.equals(Buffer.from(JPEG_B64, "base64"))).toBe(true);
+  // A request without pictures carries none (the field is absent, not null).
+  await post({ prompt: "x", model: "ltx25-q8", timeout_ms: 20_000 });
+  expect(requests.at(-1)!.image).toBeNull();
+  expect("end_image" in requests.at(-1)!).toBe(false);
+});
+
+test("VIDEO-INPUTS-01: bad picture bytes, a wrong size, a last picture without a first, and a style file are refused with what to do", async () => {
   videoGen.useDeps(scripted());
-  const picture = await post({ prompt: "x", model: "ltx25-q8", image: Buffer.from("not used").toString("base64") });
-  expect(picture.status).toBe(422);
-  expect(((await picture.json()) as { code: string }).code).toBe("reference_unsupported");
-  const style = await post({ prompt: "x", model: "ltx25-q8", loras: [{ id: "lora-0123456789abcdef" }] });
-  expect(style.status).toBe(422);
-  expect(((await style.json()) as { code: string }).code).toBe("lora_unsupported");
+  const code = async (response: Response) => ((await response.json()) as { code: string }).code;
+  const notBase64 = await post({ prompt: "x", model: "ltx25-q8", image: "%%%not base64%%%" });
+  expect([notBase64.status, await code(notBase64)]).toEqual([422, "bad_image"]);
+  const notAPicture = await post({ prompt: "x", model: "ltx25-q8", image: Buffer.from("this is text, not a picture").toString("base64") });
+  expect([notAPicture.status, await code(notAPicture)]).toEqual([422, "bad_image"]);
+  const badEnd = await post({ prompt: "x", model: "ltx25-q8", image: PNG_B64, end_image: Buffer.from("this is text, not a picture").toString("base64") });
+  expect([badEnd.status, await code(badEnd)]).toEqual([422, "bad_image"]);
+  expect(((await (await post({ prompt: "x", model: "ltx25-q8", image: PNG_B64, end_image: "%%%" })).json()) as { error: string }).error).toContain("last picture");
+  const endOnly = await post({ prompt: "x", model: "ltx25-q8", end_image: PNG_B64 });
+  expect([endOnly.status, await code(endOnly)]).toEqual([422, "bad_image"]);
+  const wrongSize = await post({ prompt: "x", model: "ltx25-q8", image: PNG_B64, size: "1024x576" });
+  expect([wrongSize.status, await code(wrongSize)]).toEqual([422, "bad_size"]);
+  const tooLong = await post({ prompt: "x", model: "ltx25-q8", image: PNG_B64, size: "768x448", seconds: 10 });
+  expect([tooLong.status, await code(tooLong)]).toEqual([422, "bad_seconds"]);
+  const style = await post({ prompt: "x", model: "ltx25-q8", image: PNG_B64, loras: [{ id: "lora-0123456789abcdef" }] });
+  expect([style.status, await code(style)]).toEqual([422, "lora_unsupported"]);
+  const big = await post({ prompt: "x", model: "ltx25-q8", image: Buffer.concat([PNG, Buffer.alloc(21 * 1024 * 1024)]).toString("base64") });
+  expect(big.status).toBe(413);
+  expect(requests).toEqual([]);
+});
+
+test("VIDEO-INPUTS-01: Quick and Detailed take no last picture (reference_unsupported); Detailed and Quick still start from one", async () => {
+  videoGen.useDeps(scripted());
+  for (const model of ["quick", "detailed"]) {
+    const response = await post({ prompt: "x", model, image: PNG_B64, end_image: PNG_B64 });
+    expect([response.status, ((await response.json()) as { code: string }).code]).toEqual([422, "reference_unsupported"]);
+  }
+  expect(VIDEO_SPECS.quick.endImage).toBe(false);
+  expect(VIDEO_SPECS.detailed.endImage).toBe(false);
+  expect(VIDEO_SPECS.detailed.imageToVideo && VIDEO_SPECS.quick.imageToVideo).toBe(true);
+  expect(VIDEO_SPECS.ltx25).toMatchObject({ imageToVideo: true, endImage: true });
+  expect(VIDEO_SPECS.ltx25max).toMatchObject({ imageToVideo: true, endImage: true });
 });
 
 test("not installed answers 503 not_installed, and Quick still works", async () => {
@@ -229,12 +281,12 @@ test("a failed run returns the worker's plain error and the next clip starts a f
 
 test("the status route reports the LTX-2.5 engine: ready, its environment, the measured profiles, and the pack's pieces", async () => {
   videoGen.useDeps(scripted());
-  const body = await (await app.request("/stack/v1/video")).json() as { video: { qualities: Record<string, { id: string; installed: boolean; audio: boolean; image_to_video: boolean; ready?: boolean; environment?: { engine: string; version: string; ready: boolean }; limits: Record<string, number | string>; install: { models: Array<{ id: string; approx_bytes: number }>; download_bytes: number }; licence: { id: string; name: string } | null; lora_base_model: string; profiles?: Array<Record<string, unknown>> }> } };
+  const body = await (await app.request("/stack/v1/video")).json() as { video: { qualities: Record<string, { id: string; installed: boolean; audio: boolean; image_to_video: boolean; end_image: boolean; ready?: boolean; environment?: { engine: string; version: string; ready: boolean }; limits: Record<string, number | string>; install: { models: Array<{ id: string; approx_bytes: number }>; download_bytes: number }; licence: { id: string; name: string } | null; lora_base_model: string; profiles?: Array<Record<string, unknown>> }> } };
   const { quick, detailed, ltx25 } = body.video.qualities;
   expect(Object.keys(body.video.qualities)).toEqual(["quick", "detailed", "ltx25", "ltx25max"]);
   expect(quick!.id).not.toBe(ltx25!.id);
   expect(detailed!.audio).toBe(true);
-  expect(ltx25).toMatchObject({ id: STACK_VIDEO_LTX25_MODEL_ID, audio: true, image_to_video: false, installed: false, ready: false, licence: { id: "ltx-2.x-community-2026-08-11", name: LTX_LICENCE } });
+  expect(ltx25).toMatchObject({ id: STACK_VIDEO_LTX25_MODEL_ID, audio: true, image_to_video: true, end_image: true, installed: false, ready: false, licence: { id: "ltx-2.x-community-2026-08-11", name: LTX_LICENCE } });
   expect(ltx25!.limits).toMatchObject({ max_seconds: 10, default_size: "512x256", size_step: 32, max_frames: 241 });
   expect(ltx25!.environment).toMatchObject({ engine: expect.stringContaining("ltx25-gen"), version: LTX25_GEN_VERSION, ready: false });
   expect(ltx25!.install.models.map((model) => model.id)).toEqual([STACK_VIDEO_LTX25_MODEL_ID]);
@@ -332,6 +384,116 @@ test("PRIVACY: the only new host is the pinned source archive's, declared with t
   expect(new URL(STACK_VIDEO_LTX25_MODEL.download!.url).host).toBe("huggingface.co");
 });
 
+// ---- VIDEO-INPUTS-01: the worker's picture path, run with a stubbed mlx and stubbed runtime packages (no weights, no GPU) ----
+
+const STACK_FFMPEG = process.env.LTX25_FFMPEG ?? "/usr/local/maipai-home/stack/data/engines/ffmpeg/v8.1.3-1/ffmpeg";
+function workerProbe(body: string[]): { out: string; err: string } {
+  const lines = [
+    "import sys, types, importlib.util, os, json, subprocess",
+    "mx = types.ModuleType('mlx.core'); mx.set_cache_limit = lambda n: None; mx.reset_peak_memory = lambda: None; mx.clear_cache = lambda: None; mx.get_peak_memory = lambda: 123",
+    "pkg = types.ModuleType('mlx'); pkg.core = mx; sys.modules['mlx'] = pkg; sys.modules['mlx.core'] = mx",
+    "spec = importlib.util.spec_from_file_location('w', sys.argv[1]); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)",
+    "ff = sys.argv[2]; tmp = sys.argv[3]",
+    ...body,
+  ];
+  const dir = mkdtempSync(join(tmpdir(), "ltx25pic-"));
+  try {
+    const run = Bun.spawnSync(["python3", "-I", "-c", lines.join("\n"), worker, STACK_FFMPEG, dir]);
+    // The worker's own progress events are JSON lines on stdout; the probe's prints are the other lines.
+    return { out: String(run.stdout).split("\n").filter((line) => line && !line.startsWith('{"id"')).join("\n"), err: String(run.stderr) };
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+}
+const ffmpegPresent = existsSync(STACK_FFMPEG);
+
+test("VIDEO-INPUTS-01 REGRESSION: the worker passes the pictures to the runtime and a runtime that cannot take them is refused, never silently run from words", () => {
+  const source = readFileSync(worker, "utf8");
+  expect(source).toContain('extra["images"] = conditioning_images(start, end, frames)');
+  expect(source).toContain("**extra");
+  expect(source).not.toContain("starts from words, not from a picture");
+  const { out, err } = workerProbe([
+    "class Takes:\n    def generate_and_save(self, prompt, output_path, images=None, **k): pass",
+    "class Drops:\n    def generate_and_save(self, prompt, output_path, **k): pass",
+    "m.require_images_support(Takes())",
+    "try: m.require_images_support(Drops()); print('accepted')\nexcept ValueError as e: print('refused:', e)",
+  ]);
+  expect(err).toBe("");
+  expect(out).toBe("refused: this video runtime cannot start from a picture");
+});
+
+test("VIDEO-INPUTS-01: conditioning_images builds frame 0 (replace) and the last frame (guide) for the 0.18.0 runtime and for the fork", () => {
+  const { out, err } = workerProbe([
+    // 0.18.0 shape: ltx_pipelines_mlx.utils.types.ImageConditioningInput with .at and .guide
+    "root = types.ModuleType('ltx_pipelines_mlx'); utils = types.ModuleType('ltx_pipelines_mlx.utils')",
+    "ty = types.ModuleType('ltx_pipelines_mlx.utils.types')",
+    "class New:\n    def __init__(self, path, idx, strength, how): self.t = (how, path, idx, strength)\n    @classmethod\n    def at(cls, path, idx, s): return cls(path, idx, s, 'replace' if idx == 0 else 'guide')\n    @classmethod\n    def guide(cls, path, idx, s): return cls(path, idx, s, 'guide')",
+    "ty.ImageConditioningInput = New; utils.types = ty; root.utils = utils",
+    "sys.modules.update({'ltx_pipelines_mlx': root, 'ltx_pipelines_mlx.utils': utils, 'ltx_pipelines_mlx.utils.types': ty})",
+    "print([i.t for i in m.conditioning_images('a.png', 'b.png', 121)])",
+    "print([i.t for i in m.conditioning_images('a.png', None, 121)])",
+    // fork shape: no utils/types.py, NamedTuple in utils/args.py
+    "del sys.modules['ltx_pipelines_mlx.utils.types']; del utils.types",
+    "import typing",
+    "class Old(typing.NamedTuple):\n    path: str\n    frame_idx: int\n    strength: float\n    crf: int = 33",
+    "args = types.ModuleType('ltx_pipelines_mlx.utils.args'); args.ImageConditioningInput = Old; sys.modules['ltx_pipelines_mlx.utils.args'] = args; utils.args = args",
+    "print([tuple(i)[:3] for i in m.conditioning_images('a.png', 'b.png', 121)])",
+  ]);
+  expect(err).toBe("");
+  const lines = out.split("\n");
+  expect(lines[0]).toBe("[('replace', 'a.png', 0, 1.0), ('guide', 'b.png', 120, 1.0)]");
+  expect(lines[1]).toBe("[('replace', 'a.png', 0, 1.0)]");
+  expect(lines[2]).toBe("[('a.png', 0, 1.0), ('b.png', 120, 1.0)]");
+});
+
+test.skipIf(!ffmpegPresent)("VIDEO-INPUTS-01: a picture is fitted to the true clip size (fill, centre crop, no stretch) as a plain RGB PNG; an unreadable file is a bad_request", () => {
+  const { out, err } = workerProbe([
+    // a 640x480 card (red left half, blue right half): filling 512x256 scales then crops top and bottom
+    "src = os.path.join(tmp, 'in.png')",
+    "subprocess.run([ff, '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=red:s=320x480', '-f', 'lavfi', '-i', 'color=c=blue:s=320x480', '-filter_complex', 'hstack', '-frames:v', '1', src], capture_output=True)",
+    "dst = os.path.join(tmp, 'out.png'); m.prepare_picture(ff, src, 512, 256, dst)",
+    "info = subprocess.run([ff, '-hide_banner', '-i', dst], capture_output=True, text=True).stderr",
+    "import re; print(re.search(r'Video: (\\w+).*?, (\\d+x\\d+)', info).groups())",
+    "bad = os.path.join(tmp, 'bad.png'); open(bad, 'wb').write(b'not a picture')",
+    "try: m.prepare_picture(ff, bad, 512, 256, os.path.join(tmp, 'bad-out.png')); print('accepted')\nexcept ValueError as e: print('refused:', e)",
+  ]);
+  expect(err).toBe("");
+  const lines = out.split("\n");
+  expect(lines[0]).toBe("('png', '512x256')");
+  expect(lines[1]).toBe("refused: the picture could not be read");
+});
+
+test.skipIf(!ffmpegPresent)("VIDEO-INPUTS-01: generate() with a fake runtime hands DistilledPipeline.generate_and_save the start and end pictures at true size and no picture means no images", () => {
+  const { out, err } = workerProbe([
+    "ty = types.ModuleType('ltx_pipelines_mlx.utils.types'); root = types.ModuleType('ltx_pipelines_mlx'); utils = types.ModuleType('ltx_pipelines_mlx.utils')",
+    "class New:\n    def __init__(self, path, idx, strength, how): self.path, self.idx, self.how = path, idx, how\n    @classmethod\n    def at(cls, path, idx, s): return cls(path, idx, s, 'replace')\n    @classmethod\n    def guide(cls, path, idx, s): return cls(path, idx, s, 'guide')",
+    "ty.ImageConditioningInput = New; utils.types = ty; root.utils = utils",
+    "sys.modules.update({'ltx_pipelines_mlx': root, 'ltx_pipelines_mlx.utils': utils, 'ltx_pipelines_mlx.utils.types': ty})",
+    "calls = []",
+    "class Pipe:\n    def generate_and_save(self, prompt, output_path, height, width, num_frames, frame_rate, seed, images=None):\n"
+      + "        sizes = []\n"
+      + "        for i in (images or []):\n"
+      + "            info = subprocess.run([ff, '-hide_banner', '-i', i.path], capture_output=True, text=True).stderr\n"
+      + "            sizes.append((i.how, i.idx, re.search(r', (\\d+x\\d+)', info).group(1)))\n"
+      + "        calls.append(sizes)\n"
+      + "        subprocess.run([ff, '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc=s=64x64:d=1', '-f', 'lavfi', '-i', 'sine=d=1', '-shortest', output_path], capture_output=True)",
+    "import re",
+    "m._pipeline = lambda *a, **k: Pipe(); m._ffmpeg_on_path = lambda f: ff",
+    "pack = os.path.join(tmp, 'pack'); os.makedirs(pack)",
+    "for n in m.REQUIRED:\n    p = os.path.join(pack, n); os.makedirs(os.path.dirname(p), exist_ok=True); open(p, 'w').write('x')",
+    "pics = []",
+    "for n, c in (('s', 'red'), ('e', 'blue')):\n    p = os.path.join(tmp, n + '.png'); subprocess.run([ff, '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=%s:s=300x500' % c, '-frames:v', '1', p], capture_output=True); pics.append(p)",
+    "def run(name, **extra):\n    r = dict(id=name, op='generate', model_dir=pack, ffmpeg=ff, prompt='p', width=512, height=288, num_frames=9, seed=1, loras=[], output=os.path.join(tmp, name + '.mp4'), poster=os.path.join(tmp, name + '.jpg')); r.update(extra); m._state['id'] = name; return m.generate(r)",
+    "run('a'); run('b', image=pics[0]); run('c', image=pics[0], end_image=pics[1])",
+    "print(calls)",
+    "try: run('d', end_image=pics[1]); print('accepted')\nexcept ValueError as e: print('refused:', e)",
+    "print(run('e', image=pics[0])['width'], os.path.exists(os.path.join(tmp, 'e.mp4.work')))",
+  ]);
+  expect(err).toBe("");
+  const lines = out.split("\n");
+  expect(lines[0]).toBe("[[], [('replace', 0, '512x256')], [('replace', 0, '512x256'), ('guide', 8, '512x256')]]");
+  expect(lines[1]).toBe("refused: a last picture needs a first picture");
+  expect(lines[2]).toMatch(/^\d+ False$/);
+});
+
 // ---- the real worker, only where a prepared environment is named ----
 
 const python = process.env.LTX25_GEN_PYTHON;
@@ -344,7 +506,7 @@ test.skipIf(!python)("REAL worker: refuses sizes and lengths outside the table, 
   expect(await send("1", { width: 1024, height: 576, num_frames: 121 })).toMatchObject({ ok: false, code: "bad_request" });
   expect(await send("2", { width: 512, height: 256, num_frames: 120 })).toMatchObject({ ok: false, code: "bad_request" });
   expect(await send("3", { width: 768, height: 448, num_frames: 241 })).toMatchObject({ ok: false, code: "bad_request" });
-  expect(await send("4", { width: 512, height: 256, num_frames: 121, image: "/tmp/x.png" })).toMatchObject({ ok: false, code: "bad_request" });
+  expect(await send("4", { width: 512, height: 256, num_frames: 121, end_image: "/tmp/x.png" })).toMatchObject({ ok: false, code: "bad_request" });
   expect(await send("5", { width: 512, height: 256, num_frames: 121, loras: [["/tmp/a.safetensors", 1]] })).toMatchObject({ ok: false, code: "bad_request" });
   expect(await send("6", { width: 512, height: 256, num_frames: 241 })).toMatchObject({ ok: false, code: "model_missing" });
   handle.kill();

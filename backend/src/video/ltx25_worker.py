@@ -9,7 +9,9 @@
 #   1. a table of the sizes and lengths that were measured (mirrored from video/ltx25.ts); anything else is refused, never tried;
 #   2. progress by stage (text, plan, model, motion step, frames, save) in place of the engine's console output;
 #   3. the Stack's own ffmpeg on PATH (the engine muxes sound with `ffmpeg` found on PATH) and a JPEG poster of frame 0;
-#   4. the same pipeline object serves every clip while the process lives. The engine runs in its low-memory mode, which gives the
+#   4. VIDEO-INPUTS-01: a start picture (and an optional end picture) fitted to the true clip size by ffmpeg and passed as the runtime's
+#      image conditioning (frame 0 replaces the first latent, the end picture guides the last frame), on both runtimes;
+#   5. the same pipeline object serves every clip while the process lives. The engine runs in its low-memory mode, which gives the
 #      transformer and decoders back after each clip: that is the mode the footprints in the table were measured in.
 # The engine's disclosure features are left exactly as shipped (licence section 6). Nothing is logged with a prompt: stderr
 # carries the failure class and the Python exception name only.
@@ -214,6 +216,47 @@ def _probe(ffmpeg, path):
     return bool(re.search(r"Stream #\S+: Audio:", text)), (int(size.group(1)) if size else None), (int(size.group(2)) if size else None)
 
 
+def prepare_picture(ffmpeg, source, width, height, target):
+    """VIDEO-INPUTS-01: the picture at the clip's true size, as a plain RGB PNG with no metadata. It is scaled to fill and centre-cropped
+    (aspect fit, never stretched) by the Stack's own ffmpeg, which also applies the file's orientation, so the runtime gets exactly the
+    pixels it will condition on and no resampling of its own. A file ffmpeg cannot read is a ValueError (a bad_request, never a crash)."""
+    filters = "scale=%d:%d:force_original_aspect_ratio=increase:flags=lanczos,crop=%d:%d,format=rgb24" % (width, height, width, height)
+    done = subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", source, "-frames:v", "1", "-vf", filters, "-map_metadata", "-1", target], capture_output=True)
+    if done.returncode != 0 or not os.path.isfile(target) or os.path.getsize(target) == 0:
+        raise ValueError("the picture could not be read")
+    return target
+
+
+def conditioning_images(start, end, frames):
+    """The runtime's image conditioning list: `start` replaces the first latent (frame 0, strength 1.0) and `end` guides the last pixel
+    frame. The 0.18.0 runtime (Max) builds them with ImageConditioningInput.at/.guide; the pinned fork (Standard, Boost) takes the
+    plain (path, frame_idx, strength) tuple of ltx_pipelines_mlx.utils.args. Both accept an absolute frame index."""
+    try:
+        from ltx_pipelines_mlx.utils import types as pipeline_types
+        cls = getattr(pipeline_types, "ImageConditioningInput", None)
+    except ImportError:  # the fork has no utils/types.py
+        cls = None
+    if cls is None or not hasattr(cls, "guide"):
+        from ltx_pipelines_mlx.utils.args import ImageConditioningInput as cls  # the fork's NamedTuple
+        make_start = lambda path: cls(path=path, frame_idx=0, strength=1.0)
+        make_end = lambda path: cls(path=path, frame_idx=frames - 1, strength=1.0)
+    else:
+        make_start = lambda path: cls.at(path, 0, 1.0)
+        make_end = lambda path: cls.guide(path, frames - 1, 1.0)
+    images = [make_start(start)]
+    if end:
+        images.append(make_end(end))
+    return images
+
+
+def require_images_support(pipe):
+    """A runtime whose generate_and_save takes no `images` would make the clip from words and silently drop the picture: refuse instead."""
+    import inspect
+
+    if "images" not in inspect.signature(pipe.generate_and_save).parameters:
+        raise ValueError("this video runtime cannot start from a picture")
+
+
 def generate(request):
     width, height, frames = int(request["width"]), int(request["height"]), int(request["num_frames"])
     width, height = true_size(width, height)
@@ -221,8 +264,8 @@ def generate(request):
     problem = refusal(width, height, frames, profile)
     if problem:
         raise ValueError(problem)
-    if request.get("image"):
-        raise ValueError("this video model starts from words, not from a picture")
+    if request.get("end_image") and not request.get("image"):
+        raise ValueError("a last picture needs a first picture")
     if request.get("loras"):
         raise ValueError("this video model takes no style files yet")
     model_dir = request["model_dir"]
@@ -240,7 +283,13 @@ def generate(request):
     os.makedirs(work, exist_ok=True)
     engine_out = os.path.join(work, "engine.mp4")
     try:
-        pipe.generate_and_save(prompt=request["prompt"], output_path=engine_out, height=height, width=width, num_frames=frames, frame_rate=FPS, seed=int(request["seed"]))
+        extra = {}
+        if request.get("image"):
+            require_images_support(pipe)
+            start = prepare_picture(ffmpeg, request["image"], width, height, os.path.join(work, "start.png"))
+            end = prepare_picture(ffmpeg, request["end_image"], width, height, os.path.join(work, "end.png")) if request.get("end_image") else None
+            extra["images"] = conditioning_images(start, end, frames)
+        pipe.generate_and_save(prompt=request["prompt"], output_path=engine_out, height=height, width=width, num_frames=frames, frame_rate=FPS, seed=int(request["seed"]), **extra)
         phase("encoding", 0)
         stage("save")
         if not os.path.isfile(engine_out):

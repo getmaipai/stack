@@ -470,8 +470,19 @@ once: `POST /stack/v1/components/{id}/install` answers 409 `licence_required` un
 the acceptance is one small file (`licence-acceptances.json`) and no name. Video LoRAs record the model they were made for (`base_model` `wan2.2-ti2v-5b` or
 `ltx-2.3`, read from the tensors; `GET /stack/v1/video/loras` lists `base_models`), and a clip applies only LoRAs of its own model (422 `wrong_base_model`).
 
+**Picture start and end on LTX-2.5 (VIDEO-INPUTS-01).** `POST /v1/videos/generations` with `model` `ltx25-q8` (Standard and Boost sizes) or `ltx25-max` takes the same `image` field
+as Quick and Detailed (base64 or a data: URL; PNG, JPEG or WebP; at most 20 MB) and an additive `end_image` (same encoding and limits). `image` is the first frame: the Stack's ffmpeg
+fits it to the clip's true size (scale to fill, centre crop, never stretched, orientation applied, metadata dropped) and the worker gives it to the runtime as image conditioning at
+frame 0, replacing the first latent. `end_image` guides the last frame (frame index `frames - 1`) and needs `image`: `end_image` alone is 422 `bad_image`; Quick and Detailed
+answer 422 `reference_unsupported` to `end_image`. A picture that is not valid base64 or not a PNG, JPEG or WebP is 422 `bad_image` (the message names the last picture when that is the bad one),
+over 20 MB is 413 `too_large`, a size or length outside the measured table is still 422 `bad_size` or `bad_seconds`, styles are still 422 `lora_unsupported`. Both runtimes take images:
+the 0.18.0 runtime (Max) through `ImageConditioningInput.at` and `.guide`, the pinned fork (Standard and Boost) through the `(path, frame_idx, strength)` tuple of `ltx_pipelines_mlx.utils.args`;
+the worker refuses a runtime whose `generate_and_save` has no `images` argument instead of making the clip from words. `GET /stack/v1/video` reports `image_to_video: true` and the new
+`end_image: true` on `qualities.ltx25` and `qualities.ltx25max` (false on Quick and Detailed). The result's `mode` is `image-to-video`. The Stack keeps no copy: the files are deleted when the job ends.
+The caller (Home) owns the age and surface gate; the Stack does not judge where a picture came from.
+
 **LTX-2.5 Max (LTX25-MAX-01).** `model` `ltx25-max` (or `ltx25-max-bf16`, or the pack id `ltx-2-5-bf16-distilled-mlx-max`) makes a 1024x576 clip of up to 10 s (241 frames at 24 a second)
-with a sound track and speech, from words only (no picture start, no LoRAs; 422 `reference_unsupported` and `lora_unsupported`). It is the Max slot of the LTX-2.5 engine and a
+with a sound track and speech, from words or from a start picture and an optional end picture (`image`, `end_image`, see below; no LoRAs: 422 `lora_unsupported`). It is the Max slot of the LTX-2.5 engine and a
 separate quality: `GET /stack/v1/video` has `qualities.ltx25max` in the same shape as `qualities.ltx25` (`ready`, `installed`, `environment`, `install`, `licence`), with
 its own runtime (`ltx25-max-gen`, dgrauet/ltx-2-mlx 0.18.0) and its own pack (`ltx-2-5-bf16-distilled-mlx-max`, the ungated mlx-community conversion, distilled set only, 71 GB, the
 same licence acceptance as the other LTX models). One `profiles` row: `{ name: "max", size: "1024x576", max_seconds: 10, max_frames: 241, peak_gb: 48.6, admit_gb: 51 }`:

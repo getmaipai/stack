@@ -79,14 +79,16 @@ export interface VideoSpec {
   audio: boolean; peakBytes: number; loraBase: string; worker: "video_worker.py" | "ltx_worker.py" | "ltx25_worker.py";
   /** A picture can start a clip of this model. Detailed can since the worker builds the picture encoder from the shape of the shipped weights (the shipped config disagrees with them: ltx_worker.py, item 4). */
   imageToVideo: boolean;
+  /** VIDEO-INPUTS-01: a second picture can end the clip (`end_image`). Only the LTX-2.5 runtimes take one. */
+  endImage: boolean;
 }
 export const VIDEO_SPECS: Record<VideoQuality, VideoSpec> = {
-  quick: { quality: "quick", modelId: STACK_VIDEO_MODEL_ID, maxSeconds: VIDEO_MAX_SECONDS, frameStep: 4, defaultSize: VIDEO_DEFAULT_SIZE, maxPixels: VIDEO_MAX_PIXELS, sizeStep: VIDEO_SIZE_STEP, minSide: VIDEO_MIN_SIDE, audio: false, peakBytes: VIDEO_PEAK_BYTES, loraBase: "wan2.2-ti2v-5b", worker: "video_worker.py", imageToVideo: true },
-  detailed: { quality: "detailed", modelId: STACK_VIDEO_DETAILED_MODEL_ID, maxSeconds: 10, frameStep: 8, defaultSize: "768x448", maxPixels: 768 * 448, sizeStep: 64, minSide: 256, audio: true, peakBytes: LTX_PEAK_BYTES, loraBase: "ltx-2.3", worker: "ltx_worker.py", imageToVideo: true },
+  quick: { quality: "quick", modelId: STACK_VIDEO_MODEL_ID, maxSeconds: VIDEO_MAX_SECONDS, frameStep: 4, defaultSize: VIDEO_DEFAULT_SIZE, maxPixels: VIDEO_MAX_PIXELS, sizeStep: VIDEO_SIZE_STEP, minSide: VIDEO_MIN_SIDE, audio: false, peakBytes: VIDEO_PEAK_BYTES, loraBase: "wan2.2-ti2v-5b", worker: "video_worker.py", imageToVideo: true, endImage: false },
+  detailed: { quality: "detailed", modelId: STACK_VIDEO_DETAILED_MODEL_ID, maxSeconds: 10, frameStep: 8, defaultSize: "768x448", maxPixels: 768 * 448, sizeStep: 64, minSide: 256, audio: true, peakBytes: LTX_PEAK_BYTES, loraBase: "ltx-2.3", worker: "ltx_worker.py", imageToVideo: true, endImage: false },
   // LTX25-ENGINE-01: the sizes and lengths are the measured table in video/ltx25.ts (checked by the route and the worker), the peak is its largest row.
-  ltx25: { quality: "ltx25", modelId: STACK_VIDEO_LTX25_MODEL_ID, maxSeconds: LTX25_MAX_SECONDS, frameStep: 8, defaultSize: LTX25_DEFAULT_SIZE, maxPixels: 768 * 448, sizeStep: 32, minSide: 256, audio: true, peakBytes: LTX25_PEAK_BYTES, loraBase: "ltx-2.5", worker: "ltx25_worker.py", imageToVideo: false },
+  ltx25: { quality: "ltx25", modelId: STACK_VIDEO_LTX25_MODEL_ID, maxSeconds: LTX25_MAX_SECONDS, frameStep: 8, defaultSize: LTX25_DEFAULT_SIZE, maxPixels: 768 * 448, sizeStep: 32, minSide: 256, audio: true, peakBytes: LTX25_PEAK_BYTES, loraBase: "ltx-2.5", worker: "ltx25_worker.py", imageToVideo: true, endImage: true },
   // LTX25-MAX-01: the Max profile (1024x576, 10 s) on the dgrauet runtime and the bf16 pack; the peak is its admission figure (measured footprint with headroom).
-  ltx25max: { quality: "ltx25max", modelId: STACK_VIDEO_LTX25_MAX_MODEL_ID, maxSeconds: LTX25_MAX_PROFILE_SECONDS, frameStep: 8, defaultSize: LTX25_MAX_DEFAULT_SIZE, maxPixels: 1024 * 576, sizeStep: 64, minSide: 256, audio: true, peakBytes: LTX25_MAX_PEAK_BYTES, loraBase: "ltx-2.5", worker: "ltx25_worker.py", imageToVideo: false },
+  ltx25max: { quality: "ltx25max", modelId: STACK_VIDEO_LTX25_MAX_MODEL_ID, maxSeconds: LTX25_MAX_PROFILE_SECONDS, frameStep: 8, defaultSize: LTX25_MAX_DEFAULT_SIZE, maxPixels: 1024 * 576, sizeStep: 64, minSide: 256, audio: true, peakBytes: LTX25_MAX_PEAK_BYTES, loraBase: "ltx-2.5", worker: "ltx25_worker.py", imageToVideo: true, endImage: true },
 };
 /** Whether a quality's runtime and weights come from the LTX-2.5 engine (its own environment). */
 export const usesLtx25Engine = (quality: VideoQuality): boolean => quality === "ltx25" || quality === "ltx25max";
@@ -137,7 +139,7 @@ export async function ensureVideoGenEnvironment(onProgress: (phase: string) => v
  * the dgrauet runtime ignores the prompt without it, and the worker refuses a Max request that lacks it (LTX25-MAX-01).
  */
 export function buildWorkerRequest(quality: VideoQuality, paths: VideoModelPaths, input: VideoRunInput, jobId: string, output: string, poster: string): WorkerRequest {
-  return { id: jobId, op: "generate", model_dir: paths.modelDir, tokenizer_dir: paths.tokenizerDir, ...(paths.textEncoderDir ? { text_encoder_dir: paths.textEncoderDir, ffmpeg: ffmpegPath(rootOf(quality)) } : {}), ...(quality === "ltx25max" ? { profile: "max" as const } : {}), prompt: input.prompt, negative_prompt: input.negativePrompt, image: input.imagePath, width: input.width, height: input.height, num_frames: input.frames, seed: input.seed, loras: input.loras, output, poster, ...(input.previewPath ? { preview: input.previewPath } : {}) };
+  return { id: jobId, op: "generate", model_dir: paths.modelDir, tokenizer_dir: paths.tokenizerDir, ...(paths.textEncoderDir ? { text_encoder_dir: paths.textEncoderDir, ffmpeg: ffmpegPath(rootOf(quality)) } : {}), ...(quality === "ltx25max" ? { profile: "max" as const } : {}), prompt: input.prompt, negative_prompt: input.negativePrompt, image: input.imagePath, ...(input.endImagePath ? { end_image: input.endImagePath } : {}), width: input.width, height: input.height, num_frames: input.frames, seed: input.seed, loras: input.loras, output, poster, ...(input.previewPath ? { preview: input.previewPath } : {}) };
 }
 
 export interface VideoModelPaths { modelDir: string; tokenizerDir: string; /** Detailed only: the Gemma folder the model reads the prompt with. */ textEncoderDir?: string; }
@@ -181,6 +183,8 @@ export function memoryVerdict(quality: VideoQuality = "quick", peakBytes: number
 
 export interface WorkerRequest {
   id: string; op: "generate"; model_dir: string; tokenizer_dir: string; /** Detailed: the Gemma folder, and the ffmpeg that joins sound to picture. */ text_encoder_dir?: string; ffmpeg?: string | null; prompt: string; negative_prompt: string | null; image: string | null;
+  /** VIDEO-INPUTS-01: the picture the clip ends on (LTX-2.5 only), with `image` as the start. */
+  end_image?: string | null;
   width: number; height: number; num_frames: number; seed: number; loras: Array<[string, number]>; output: string; poster: string;
   /** GENPREVIEW-01: where the worker writes the first-frame preview once the motion is done. */
   preview?: string;
@@ -288,7 +292,7 @@ export function workerHandle(child: { pid?: number; stdin: { write(data: string)
 export type VideoState = "unsupported" | "off" | "not-installed" | "needs-setup" | "building" | "idle" | "running";
 
 export interface VideoRunInput {
-  prompt: string; negativePrompt: string | null; imagePath: string | null; width: number; height: number; frames: number; seed: number;
+  prompt: string; negativePrompt: string | null; imagePath: string | null; /** VIDEO-INPUTS-01: the picture the clip ends on; needs imagePath. */ endImagePath?: string | null; width: number; height: number; frames: number; seed: number;
   loras: Array<[string, number]>; outputDir: string;
   /** Which model makes the clip (default Quick). */
   quality?: VideoQuality;

@@ -34,7 +34,8 @@ const LoraSchema = z.object({
 });
 const ErrorBody = z.object({ error: z.string(), code: z.string().optional() });
 const QualitySchema = z.object({
-  id: z.string(), installed: z.boolean(), available: z.boolean(), audio: z.boolean(), image_to_video: z.boolean().openapi({ description: "A picture can start a clip of this model (Quick and Detailed both)." }),
+  id: z.string(), installed: z.boolean(), available: z.boolean(), audio: z.boolean(), image_to_video: z.boolean().openapi({ description: "A picture can start a clip of this model (Quick, Detailed, and LTX-2.5 Standard, Boost and Max)." }),
+  end_image: z.boolean().openapi({ description: "A second picture can end the clip (`end_image` on the generation request; start and end together). True only on LTX-2.5 Standard, Boost and Max." }),
   limits: z.record(z.string(), z.union([z.number(), z.string()])),
   memory: z.object({ fits: z.boolean(), reason: z.string().nullable(), peak_gb: z.number() }),
   install: z.object({ models: z.array(PlanModelSchema), remaining_bytes: z.number().int(), download_bytes: z.number().int() }),
@@ -101,7 +102,7 @@ function qualityView(quality: "quick" | "detailed" | "ltx25" | "ltx25max", model
   const verdict = memoryVerdict(quality);
   const remaining = models.filter((model) => !model.installed).reduce((sum, model) => sum + model.approx_bytes, 0);
   return {
-    id: spec.modelId, installed: models.every((model) => model.installed), available, audio: spec.audio, image_to_video: spec.imageToVideo,
+    id: spec.modelId, installed: models.every((model) => model.installed), available, audio: spec.audio, image_to_video: spec.imageToVideo, end_image: spec.endImage,
     limits: { max_seconds: available ? spec.maxSeconds : 0, fps: VIDEO_FPS, default_size: spec.defaultSize, max_pixels: spec.maxPixels, size_step: spec.sizeStep, min_side: spec.minSide, max_frames: spec.maxSeconds * VIDEO_FPS + 1 },
     memory: { fits: verdict.ok, reason: verdict.ok ? null : verdict.reason, peak_gb: Math.round(spec.peakBytes / 1e8) / 10 },
     install: { models, remaining_bytes: remaining, download_bytes: models.reduce((sum, model) => sum + model.approx_bytes, 0) },

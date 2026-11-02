@@ -32,10 +32,11 @@ const MAX_WAIT_MS = 30 * 60_000;
 
 const LoraEntry = z.object({ id: z.string().max(40), strength: z.number().min(0).max(2).optional() });
 const VideoRequestSchema = z.object({
-  model: z.string().optional().openapi({ description: "Which video model: `video` or `quick` (the default, a silent clip of up to 5 s, which can start from a picture) or `detailed` (LTX-2.3: a sound track with speech made in the same pass, up to 10 s, which can start from a picture too) or `ltx25-q8` (LTX-2.5 distilled q8: a sound track with speech made in the same pass, words only, only the measured sizes and lengths of GET /stack/v1/video qualities.ltx25.profiles). or `ltx25-max` (LTX-2.5 Max: the dgrauet runtime and the bf16 distilled pack, 1024x576 up to 10 s with a sound track and speech, words only; see GET /stack/v1/video qualities.ltx25max.profiles). A model's own id names it too. An unknown name is refused (unknown_model); a model that is not installed answers 503 not_installed.", example: "quick" }),
+  model: z.string().optional().openapi({ description: "Which video model: `video` or `quick` (the default, a silent clip of up to 5 s, which can start from a picture) or `detailed` (LTX-2.3: a sound track with speech made in the same pass, up to 10 s, which can start from a picture too) or `ltx25-q8` (LTX-2.5 distilled q8: a sound track with speech made in the same pass, from words or a first picture and an optional last one (`image`, `end_image`), only the measured sizes and lengths of GET /stack/v1/video qualities.ltx25.profiles). or `ltx25-max` (LTX-2.5 Max: the dgrauet runtime and the bf16 distilled pack, 1024x576 up to 10 s with a sound track and speech, from words or a first picture and an optional last one; see GET /stack/v1/video qualities.ltx25max.profiles). A model's own id names it too. An unknown name is refused (unknown_model); a model that is not installed answers 503 not_installed.", example: "quick" }),
   prompt: z.string().trim().min(1).max(VIDEO_MAX_PROMPT_CHARS),
   negative_prompt: z.string().max(VIDEO_MAX_PROMPT_CHARS).optional().openapi({ description: "Accepted. The distilled FastWan model runs without guidance, so it has no effect on the clip." }),
-  image: z.string().optional().openapi({ description: "Image to video: the first frame, base64 (a data: URL is fine), PNG, JPEG or WebP, at most 20 MB. image_source is optional." }),
+  image: z.string().optional().openapi({ description: "Image to video: the first frame, base64 (a data: URL is fine), PNG, JPEG or WebP, at most 20 MB. image_source is optional. On `ltx25-q8` and `ltx25-max` the picture is the first frame: it is fitted to the clip's true size (scaled to fill, centre-cropped, never stretched) by the Stack." }),
+  end_image: z.string().optional().openapi({ description: "Image to video, last frame: a second picture the clip ends on, same encoding, types and 20 MB limit as `image`. Needs `image` (422 bad_image without it). Only `ltx25-q8` and `ltx25-max` take one; Quick and Detailed answer 422 reference_unsupported." }),
   size: z.string().regex(/^\d{3,4}x\d{3,4}$/).optional().openapi({ description: `<width>x<height>. Quick: multiples of ${VIDEO_SIZE_STEP}, area at most ${VIDEO_MAX_PIXELS} pixels (832x480; 480x832 also fits), default ${VIDEO_DEFAULT_SIZE}. Detailed: multiples of 64, area at most 768 x 448 (448x768 also fits), default 768x448. ltx25-q8: only 512x256 (up to 10 s), 640x320 and 768x448 (up to 5 s); the nominal 512x288 and 640x352 are accepted and made at the true size, which the reply reports; anything else is refused (bad_size). ltx25-max: only 1024x576 (up to 10 s). Each side at least ${VIDEO_MIN_SIDE}.`, example: VIDEO_DEFAULT_SIZE }),
   preview: z.boolean().optional().openapi({ description: "Default true. While the clip runs, the status carries `preview_url`: the first frame of the clip (JPEG, up to 480 px on the long side), drawn from the finished motion the moment the long frame-building stage starts. Pass false to skip it (it costs about a second)." }),
   seconds: z.number().int().min(1).max(VIDEO_SPECS.detailed.maxSeconds).optional().openapi({ description: `Whole seconds (24 frames a second plus the first frame). Quick: 1 to ${VIDEO_MAX_SECONDS}, default ${VIDEO_MAX_SECONDS}. Detailed: 1 to ${VIDEO_SPECS.detailed.maxSeconds}, default 5. A number past the chosen model ceiling is refused (bad_seconds).` }),
@@ -208,7 +209,9 @@ videoV1Routes.openapi(postRoute, async (c) => {
   const quality = qualityOfModelName(body.model);
   if (!quality) return fail(c, 422, "unknown_model", "That video model is not one this computer has. Use quick (silent, up to 5 seconds) or detailed (with sound and speech, up to 10 seconds).");
   const spec = VIDEO_SPECS[quality];
-  if (body.image !== undefined && !spec.imageToVideo) return fail(c, 422, "reference_unsupported", quality === "ltx25" || quality === "ltx25max" ? "This video model starts from words, not from a picture. Ask for a Quick or Detailed video to animate a picture, or describe the video in words." : "A Detailed video cannot start from a picture yet. Ask for a Quick video to animate a picture, or describe the Detailed video in words.");
+  if (body.image !== undefined && !spec.imageToVideo) return fail(c, 422, "reference_unsupported", "A Detailed video cannot start from a picture yet. Ask for a Quick video to animate a picture, or describe the Detailed video in words.");
+  if (body.end_image !== undefined && !spec.endImage) return fail(c, 422, "reference_unsupported", "This video model cannot end on a picture. Ask for an LTX-2.5 video to give both a first and a last picture, or send only the first picture.");
+  if (body.end_image !== undefined && body.image === undefined) return fail(c, 422, "bad_image", "A last picture needs a first picture. Send image as well, or leave end_image out.");
   if ((quality === "ltx25" || quality === "ltx25max") && (body.loras ?? []).length > 0) return fail(c, 422, "lora_unsupported", "This video model takes no style files yet. Leave the styles out, or ask for a Detailed video to use one.");
   const size = parseVideoSize(body.size, quality);
   if (typeof size === "string") return fail(c, 422, "bad_size", size);
@@ -217,12 +220,15 @@ videoV1Routes.openapi(postRoute, async (c) => {
   if (quality === "ltx25") { const refusal = ltx25Refusal(size.width, size.height, seconds * VIDEO_FPS + 1); if (refusal) return fail(c, 422, "bad_seconds", refusal); }
   if (seconds > spec.maxSeconds) return fail(c, 422, "bad_seconds", `A ${quality === "quick" ? "Quick" : "Detailed"} clip is at most ${spec.maxSeconds} seconds on this computer.${quality === "quick" ? " Detailed clips run up to " + VIDEO_SPECS.detailed.maxSeconds + " seconds." : ""}`);
   let image: Uint8Array | null = null;
-  if (body.image !== undefined) {
-    // Any picture can start a clip: the Stack does not judge where it came from. The age and surface gate is the caller's (Home) and stays outside this file.
-    image = decodeImage(body.image);
-    if (!image) return fail(c, 422, "bad_image", "The picture could not be read. Send a PNG, JPEG or WebP as base64.");
-    if (image.length > VIDEO_MAX_REFERENCE_BYTES) return fail(c, 413, "too_large", `The picture is larger than ${VIDEO_MAX_REFERENCE_BYTES / 1024 / 1024} MB.`);
-    if (!looksLikePicture(image)) return fail(c, 422, "bad_image", "The picture could not be read. Send a PNG, JPEG or WebP as base64.");
+  let endImage: Uint8Array | null = null;
+  // Any picture can start (or end) a clip: the Stack does not judge where it came from. The age and surface gate is the caller's (Home) and stays outside this file.
+  for (const [name, value] of [["image", body.image], ["end_image", body.end_image]] as const) {
+    if (value === undefined) continue;
+    const bytes = decodeImage(value);
+    if (!bytes) return fail(c, 422, "bad_image", `The ${name === "image" ? "picture" : "last picture"} could not be read. Send a PNG, JPEG or WebP as base64.`);
+    if (bytes.length > VIDEO_MAX_REFERENCE_BYTES) return fail(c, 413, "too_large", `The ${name === "image" ? "picture" : "last picture"} is larger than ${VIDEO_MAX_REFERENCE_BYTES / 1024 / 1024} MB.`);
+    if (!looksLikePicture(bytes)) return fail(c, 422, "bad_image", `The ${name === "image" ? "picture" : "last picture"} could not be read. Send a PNG, JPEG or WebP as base64.`);
+    if (name === "image") image = bytes; else endImage = bytes;
   }
   let loras;
   try { loras = await resolveLoras((body.loras ?? []).map((entry) => ({ id: entry.id, ...(entry.strength !== undefined ? { strength: entry.strength } : {}) })), body.audience ?? "all-ages", spec.loraBase as "wan2.2-ti2v-5b" | "ltx-2.3"); } catch (error) {
@@ -237,7 +243,7 @@ videoV1Routes.openapi(postRoute, async (c) => {
   const frames = seconds * VIDEO_FPS + 1;
   const token = crypto.randomUUID();
   const loraIds = loras.map((lora) => lora.record.id);
-  stashClip(token, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, preview: body.preview !== false });
+  stashClip(token, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, endImage, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, preview: body.preview !== false });
   const submitted = submitJob({ kind: VIDEO_JOB_KIND, role: "video", input: { token, size: `${size.width}x${size.height}`, seconds, seed, quality, mode: image ? "image-to-video" : "text-to-video", lora_ids: loraIds, ...tierInput(body.tier), ...(body.quiet_seconds !== undefined ? { quiet_seconds: body.quiet_seconds } : {}), ...(body.quiet_max_wait_seconds !== undefined ? { quiet_max_wait_seconds: body.quiet_max_wait_seconds } : {}) } });
   if ("refused" in submitted) return fail(c, 503, submitted.code ?? "unsupported", submitted.reason);
   const settled = await waitForJob(submitted.job.id, body.timeout_ms ?? DEFAULT_WAIT_MS);

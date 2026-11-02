@@ -69,7 +69,19 @@ test("a Max clip (1024x576, 10 s, 241 frames) runs on its own runtime, and its w
   expect(requests[0]).toMatchObject({ profile: "max", model_dir: "/models/max", text_encoder_dir: `/models/max/${LTX25_MAX_GEMMA_FOLDER}`, width: 1024, height: 576, num_frames: 241, loras: [] });
 });
 
-test("only 1024x576 is a Max size; anything else, a picture start and a style file are refused with a plain sentence", async () => {
+test("VIDEO-INPUTS-01: a Max clip takes a start picture and an end picture, as profile max with image and end_image files", async () => {
+  videoGen.useDeps(scripted());
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("body")]).toString("base64");
+  const response = await post({ prompt: "x", model: "ltx25-max", size: "1024x576", seconds: 5, image: png, end_image: png, timeout_ms: 5000 });
+  expect(response.status).toBe(200);
+  expect(((await response.json()) as { data: Entry[] }).data[0]).toMatchObject({ mode: "image-to-video", quality: "ltx25max" });
+  expect(requests[0]).toMatchObject({ profile: "max" });
+  expect(typeof requests[0]!.image).toBe("string");
+  expect(typeof requests[0]!.end_image).toBe("string");
+  expect(requests[0]!.image).not.toBe(requests[0]!.end_image);
+});
+
+test("only 1024x576 is a Max size; anything else and a style file are refused with a plain sentence", async () => {
   videoGen.useDeps(scripted());
   for (const size of ["768x448", "512x256", "1024x544", "1280x704"]) {
     const response = await post({ prompt: "x", model: "ltx25-max", size, seconds: 5 });
@@ -77,7 +89,7 @@ test("only 1024x576 is a Max size; anything else, a picture start and a style fi
     expect(((await response.json()) as { code: string }).code).toBe("bad_size");
   }
   expect((await post({ prompt: "x", model: "ltx25-max", seconds: 11 })).status).toBeGreaterThanOrEqual(400);
-  expect((await post({ prompt: "x", model: "ltx25-max", image: "aGVsbG8=" })).status).toBe(422);
+  expect((await post({ prompt: "x", model: "ltx25-max", image: "aGVsbG8=" })).status).toBe(422); // not a picture: bad_image
   expect(spawned).toEqual([]);
   // The Standard model still refuses 1024x576.
   expect((await post({ prompt: "x", model: "ltx25-q8", size: "1024x576" })).status).toBe(422);
@@ -153,7 +165,7 @@ test("the status route reports the Max quality: its own pack, environment and th
   videoGen.useDeps(scripted());
   const body = await (await app.request("/stack/v1/video")).json() as { video: { qualities: Record<string, Record<string, unknown> & { install: { models: Array<{ id: string }>; download_bytes: number } }> } };
   const max = body.video.qualities.ltx25max!;
-  expect(max).toMatchObject({ id: STACK_VIDEO_LTX25_MAX_MODEL_ID, audio: true, image_to_video: false, installed: false, ready: false, licence: { id: "ltx-2.x-community-2026-08-11" } });
+  expect(max).toMatchObject({ id: STACK_VIDEO_LTX25_MAX_MODEL_ID, audio: true, image_to_video: true, end_image: true, installed: false, ready: false, licence: { id: "ltx-2.x-community-2026-08-11" } });
   expect(max.limits).toMatchObject({ max_seconds: 10, default_size: "1024x576", size_step: 64, max_frames: 241 });
   expect(max.environment).toMatchObject({ engine: expect.stringContaining("ltx25-max-gen"), version: LTX25_MAX_GEN_VERSION, ready: false });
   expect(max.install.models.map((model) => model.id)).toEqual([STACK_VIDEO_LTX25_MAX_MODEL_ID]);

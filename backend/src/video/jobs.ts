@@ -23,6 +23,8 @@ export interface StashedClip {
   prompt: string;
   negativePrompt: string | null;
   image: Uint8Array | null;
+  /** VIDEO-INPUTS-01: the picture the clip ends on (LTX-2.5 only; needs `image`). */
+  endImage?: Uint8Array | null;
   width: number; height: number; frames: number; seed: number;
   loras: Array<[string, number]>;
   loraIds: string[];
@@ -77,6 +79,8 @@ export function registerVideoJobs(): void {
     try {
       let imagePath: string | null = null;
       if (clip.image) { imagePath = join(work, "reference.bin"); writeFileSync(imagePath, clip.image, { mode: 0o600 }); }
+      let endImagePath: string | null = null;
+      if (clip.endImage) { endImagePath = join(work, "end-reference.bin"); writeFileSync(endImagePath, clip.endImage, { mode: 0o600 }); }
       const outputDir = join(work, "out");
       const started = Date.now();
       const quality = clip.quality ?? "quick";
@@ -87,7 +91,7 @@ export function registerVideoJobs(): void {
           ? new GenTracker("video_detailed", historyKey("video_detailed", clip.width, clip.height, `${quality === "ltx25max" ? "ltx25max" : "ltx25"}-${clip.frames}`), pacing.now, Math.max(0.25, (clip.frames - 1) / 120), pacing.paused)
           : new GenTracker("video_detailed", historyKey("video_detailed", clip.width, clip.height, clip.frames), pacing.now, Math.max(0.25, (clip.frames - 1) / 120), pacing.paused);
       remember(trackers, job.id, tracker);
-      const result = await videoGen.run({ ...(clip.preview !== false ? { previewPath: previewFile(outputDir) } : {}), prompt: clip.prompt, negativePrompt: clip.negativePrompt, imagePath, width: clip.width, height: clip.height, frames: clip.frames, seed: clip.seed, loras: clip.loras, outputDir, quality }, {
+      const result = await videoGen.run({ ...(clip.preview !== false ? { previewPath: previewFile(outputDir) } : {}), prompt: clip.prompt, negativePrompt: clip.negativePrompt, imagePath, endImagePath, width: clip.width, height: clip.height, frames: clip.frames, seed: clip.seed, loras: clip.loras, outputDir, quality }, {
         jobId: job.id, signal,
         onPhase: (phase, phasePercent) => { remember(progress, job.id, { phase, phasePercent }); update({ status: phase, percent: tracker.started ? Math.round(tracker.snapshot().fraction * 100) : overallPercent(phase, phasePercent) }); },
         onStage: (stage, n, of) => { tracker.enter(stage, n, of); update({ percent: Math.round(tracker.snapshot().fraction * 100) }); },
