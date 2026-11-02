@@ -491,7 +491,7 @@ already waiting); 499 `cancelled`; 500 `failed` `worker_stopped`; 503 `not_avail
 `model_missing`; 504 `timeout` (15 minutes); 507 `out_of_memory`. A request body that breaks the schema (a sixth second, an empty prompt) is a plain 400.
 
 `GET /v1/videos/generations/{job}` returns `{ job, state, phase, progress, phase_progress, position, error, code, data }`. `state` is `queued`,
-`running`, `done`, `failed` or `cancelled`; `phase` is `queued`, `waiting for memory`, `starting`, `setting up` (the first clip only: the Python
+`running`, `done`, `failed` or `cancelled`; `phase` is `queued`, `waiting for memory`, `waiting for running jobs` (a Max clip in its window while other jobs still run), `waiting for the computer` (a Max clip in its window with nothing running, held until the computer is free enough; the job stays `running`, MAX-WAIT-REASON-01), `starting`, `setting up` (the first clip only: the Python
 environment and the pinned source build once), `loading`, `rendering`, `decoding`, `encoding`, `ready`. `progress` is 0 to 100 over the whole clip,
 weighted by where the time goes (decoding is about 85 percent of it); `phase_progress` is 0 to 100 inside the phase. `data` holds the same entry as the
 200 answer once `state` is `done`. A job the Stack no longer remembers (restart) but whose files are still held answers `done`; one whose files are gone

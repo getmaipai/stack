@@ -8,6 +8,10 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ## [Unreleased]
 
+### Fixed
+
+- A Max job held in its window no longer says "Waiting for running jobs to finish" when nothing is running (MAX-WAIT-REASON-01). The governor records `window_wait` once no generator or busy item remains, the job status says it waits for the computer, and `GET /v1/videos/generations/{id}` reports the phases `waiting for running jobs` and `waiting for the computer`.
+
 ### Added
 
 - The Max profile of the LTX-2.5 video engine (LTX25-MAX-01): 1024x576, 10 s, with sound and speech, as `model` `ltx25-max` and `qualities.ltx25max` on `GET /stack/v1/video`. It runs on a second pinned runtime (`ltx25-max-gen`, dgrauet/ltx-2-mlx 0.18.0) with the ungated bf16 distilled pack (`ltx-2-5-bf16-distilled-mlx-max`, 71 GB, sha256 of every file pinned) and always passes the pack's Gemma folder to the runtime, because without it the prompt is silently ignored. Admission is the measured 48.6 GB footprint plus 5 percent, under the 64 GB per-clip cap. Standard and Boost are unchanged.

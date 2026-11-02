@@ -104,3 +104,29 @@ test("a retained warm pool is not a burst and pauseAll closes a Max window", asy
   expect(getMaxWindow().state).toBe("none");
   void running;
 });
+
+// MAX-WAIT-REASON-01: the Max job's latest reclaim step says what it really waits for. Running work is "window_drain"; with nothing running and
+// the computer short on free memory it is "window_wait" (it used to stay "window_drain", so the status claimed running jobs that did not exist).
+test("a Max job with nothing running and too little free memory reports window_wait, not window_drain", async () => {
+  let free = 30 * GB;
+  __setGovernorTuningForTestsOnly({ freeMemoryBytes: free });
+  const max = await admit({ id: "max-job", kind: "generator", class: "burst", role: "video", requestedBytes: 50 * GB, tier: "max" });
+  expect(max).toMatchObject({ queued: true });
+  expect(getReclaimSteps("max-job").map((step) => step.step)).toEqual(["window_drain"]);
+  stops.push(startGovernor({ pid: 1, pollMs: 1, freeMemory: () => free, totalMemory: () => 128 * GB }));
+  await Bun.sleep(30);
+  expect(getReclaimSteps("max-job").at(-1)?.step).toBe("window_wait");
+  free = 110 * GB;
+  await Bun.sleep(40);
+  expect(getMaxWindow().state).toBe("open");
+  release(await queued(max).admitted as GovernorHandle);
+});
+
+test("a Max job behind running work keeps window_drain", async () => {
+  const running = await admit({ id: "pic-run", kind: "generator", class: "burst", role: "image", requestedBytes: 10 * GB }) as GovernorHandle;
+  await admit({ id: "max-job", kind: "generator", class: "burst", role: "video", requestedBytes: 40 * GB, tier: "max" });
+  stops.push(startGovernor({ pid: 1, pollMs: 1, freeMemory: () => 100 * GB, totalMemory: () => 128 * GB }));
+  await Bun.sleep(30);
+  expect(getReclaimSteps("max-job").map((step) => step.step)).toEqual(["window_drain"]);
+  release(running);
+});

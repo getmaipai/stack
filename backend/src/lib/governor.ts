@@ -162,7 +162,7 @@ type QueuedEntry = { request: GovernorRequest; settled: boolean; headSince: numb
 const queue: QueuedEntry[] = [];
 const refusalCounts = new Map<string, number>();
 const decisions: GovernorDecision[] = [];
-type ReclaimStep = { at: number; step: "pool_idle_wait" | "evict_pool" | "evict_idle" | "window_drain"; itemId: string; bytes: number };
+type ReclaimStep = { at: number; step: "pool_idle_wait" | "evict_pool" | "evict_idle" | "window_drain" | "window_wait"; itemId: string; bytes: number };
 const reclaimSteps = new Map<string, ReclaimStep[]>();
 let maxWindow: { state: "none" | "draining" | "open"; ownerId: string | null; since: number | null } = { state: "none", ownerId: null, since: null };
 export function getMaxWindow(): typeof maxWindow { return { ...maxWindow }; }
@@ -973,6 +973,10 @@ export function startGovernor(options: StartGovernorOptions): () => void {
         const draining = [...loaded.values()].some((item) => item.kind === "generator" || (item.class !== "reserved" && (options.busy?.(item.id) ?? false)));
         if (!draining && canAdmit(maxOwner.request, peakFor(maxOwner.request).bytes)) {
           const at = queue.indexOf(maxOwner); queue.splice(at, 1); settleAdmission(maxOwner);
+        } else {
+          // MAX-WAIT-REASON-01: the window's one latest step names what the Max job really waits for. "window_drain" stays only while a generator or a busy
+          // item still runs; once none does, the job waits for the computer itself ("window_wait"), and the status must not claim running jobs.
+          reclaim(maxOwner.request.id, draining ? "window_drain" : "window_wait", "", 0);
         }
       }
       let index = 0;

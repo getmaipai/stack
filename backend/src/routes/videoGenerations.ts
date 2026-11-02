@@ -18,7 +18,7 @@ import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { identityHeaders } from "@/lib/identity";
 import { RoleReplyHeaders } from "@maipai/spec/stack/ts/role-reply-headers.js";
-import { cancelJob, getJob, hasJobRunner, isJobPaused, listJobs, submitJob, waitForJob, type Job } from "@/lib/jobs";
+import { MAX_DRAIN_STATUS, MAX_WAIT_STATUS, cancelJob, getJob, hasJobRunner, isJobPaused, listJobs, submitJob, waitForJob, type Job } from "@/lib/jobs";
 import { TierFieldSchema, TierStatusSchema, governorDecides, tierInput, tierOf } from "@/routes/tierField";
 import { PAUSED_LABEL } from "@/lib/genProgress";
 import { LoraError, resolveLoras } from "@/video/loras";
@@ -59,7 +59,7 @@ const ErrorBody = z.object({ error: z.string(), code: z.string(), job: z.string(
 const JobStatusSchema = z.object({
   job: z.string(),
   state: z.enum(["queued", "running", "done", "failed", "cancelled"]),
-  phase: z.string().openapi({ description: "queued, waiting for memory, starting, setting up (first clip only), loading, rendering, decoding, encoding, ready; failed or cancelled when it ended so." }),
+  phase: z.string().openapi({ description: "queued, waiting for memory, waiting for running jobs (a Max job waits for the running ones to end), waiting for the computer (a Max job waits for the computer to be free enough), starting, setting up (first clip only), loading, rendering, decoding, encoding, ready; failed or cancelled when it ended so." }),
   progress: z.number().int().openapi({ description: "0 to 100 over the whole clip, weighted by where the time goes (decoding is most of it)." }),
   phase_progress: z.number().int().nullable().openapi({ description: "0 to 100 inside the current phase, when the phase has one." }),
   progress_fraction: z.number().nullable().openapi({ description: "0 to 1 over the whole clip, weighted by measured stage times; it moves inside a stage even when the engine reports no count." }),
@@ -187,7 +187,7 @@ function statusOf(job: Job) {
   const detail = videoProgress(job.id);
   const failure = videoFailure(job.id);
   const state = job.state === "stalled" ? "running" : job.state;
-  const phase = state === "queued" ? "queued" : state === "done" ? "ready" : state === "cancelled" && job.status === PAUSED_LOW_MEMORY ? PAUSED_LOW_MEMORY : state === "failed" || state === "cancelled" ? state : detail?.phase ?? (job.status.startsWith("waiting for memory") ? "waiting for memory" : job.status);
+  const phase = state === "queued" ? "queued" : state === "done" ? "ready" : state === "cancelled" && job.status === PAUSED_LOW_MEMORY ? PAUSED_LOW_MEMORY : state === "failed" || state === "cancelled" ? state : detail?.phase ?? (job.status.startsWith("waiting for memory") ? "waiting for memory" : job.status === MAX_DRAIN_STATUS ? "waiting for running jobs" : job.status === MAX_WAIT_STATUS ? "waiting for the computer" : job.status);
   const result = job.state === "done" ? readResult(job.id) : null;
   return {
     job: job.id, tier: tierOf(job), state, phase, progress: Math.round(job.percent), phase_progress: state === "running" && detail ? Math.round(detail.phasePercent) : null, position: job.state === "queued" ? job.position : null,

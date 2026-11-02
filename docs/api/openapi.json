@@ -3585,7 +3585,7 @@
                     },
                     "phase": {
                       "type": "string",
-                      "description": "queued, waiting for memory, starting, setting up (first clip only), loading, rendering, decoding, encoding, ready; failed or cancelled when it ended so."
+                      "description": "queued, waiting for memory, waiting for running jobs (a Max job waits for the running ones to end), waiting for the computer (a Max job waits for the computer to be free enough), starting, setting up (first clip only), loading, rendering, decoding, encoding, ready; failed or cancelled when it ended so."
                     },
                     "progress": {
                       "type": "integer",

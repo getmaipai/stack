@@ -308,6 +308,10 @@ async function pump(role: string): Promise<void> {
   run(job, runner, () => { release(handle!); settle(); });
 }
 
+/** MAX-WAIT-REASON-01: the two queued statuses of a Max job in its window. The video route turns each into its own `phase`, so Home never has to read the sentence. */
+export const MAX_DRAIN_STATUS = "Waiting for running jobs to finish before the Max job starts.";
+export const MAX_WAIT_STATUS = "Waiting for the computer to finish other work before the Max job starts.";
+
 /** The peak the governor will compute for a request, mirrored from its
  * `peakFor` so a refusal here agrees with an admission there. */
 function governorPeak(request: GovernorRequest): number {
@@ -332,7 +336,7 @@ async function admitJob(jobId: string, request: GovernorRequest): Promise<Govern
   const refreshQueuedStatus = (): void => {
     const latest = getReclaimSteps(request.id).at(-1);
     const maxWaiting = getGovernorStatus().queue.some((entry) => entry.id !== request.id && entry.tier === "max");
-    const status = maxWaiting ? "A Max job is waiting for the computer. This one starts after it." : latest?.step === "pool_idle_wait" ? "Waiting for the picture model to go idle (up to 2 minutes), then making room." : latest?.step === "evict_pool" ? "Put the picture model away to make room." : latest?.step === "evict_idle" ? "Put an idle model away to make room." : latest?.step === "window_drain" ? "Waiting for running jobs to finish before the Max job starts." : generatorsHeldByMode() ? HELD_BY_MODE_TEXT : waitingText(peak, answer.position);
+    const status = maxWaiting ? "A Max job is waiting for the computer. This one starts after it." : latest?.step === "pool_idle_wait" ? "Waiting for the picture model to go idle (up to 2 minutes), then making room." : latest?.step === "evict_pool" ? "Put the picture model away to make room." : latest?.step === "evict_idle" ? "Put an idle model away to make room." : latest?.step === "window_drain" ? MAX_DRAIN_STATUS : latest?.step === "window_wait" ? MAX_WAIT_STATUS : generatorsHeldByMode() ? HELD_BY_MODE_TEXT : waitingText(peak, answer.position);
     if (getJob(jobId)?.status !== status) updateJob(jobId, { status });
   };
   refreshQueuedStatus();

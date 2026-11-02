@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { app } from "@/app";
-import { __resetGovernorForTests, __setGovernorTuningForTestsOnly } from "@/lib/governor";
+import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, startGovernor } from "@/lib/governor";
 import { __resetJobsForTests } from "@/lib/jobs";
 import { ENGINE_BINARIES, ENGINE_ROLE, MANAGED_RUNTIMES } from "@/lib/engineCatalog";
 import { LTX25_MAX_GEMMA_FOLDER, LTX25_MAX_REQUIRED_FILES, LTX_LICENCE, STACK_MODELS, STACK_VIDEO_LTX25_MAX_MODEL, STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODEL_ID } from "@/lib/modelCatalog";
@@ -200,4 +200,25 @@ test("the Max pack is pinned: the ungated mirror at one revision, sha256 and siz
   expect(paths).toContain(`${LTX25_MAX_GEMMA_FOLDER}/model.safetensors`);
   expect(STACK_MODELS.some((model) => model.id === STACK_VIDEO_LTX25_MAX_MODEL_ID)).toBe(true);
   expect(new URL(pin.download!.url).host).toBe("huggingface.co");
+});
+
+// MAX-WAIT-REASON-01: a Max clip held by the window reports a phase of its own for each hold, so Home can say it in words.
+test("a Max clip waiting on the computer reports phase waiting for the computer; behind running work, waiting for running jobs", async () => {
+  videoGen.useDeps(scripted());
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 30 * GB, tier: "p128" });
+  const stop = startGovernor({ pid: 1, pollMs: 1, freeMemory: () => 30 * GB, totalMemory: () => 128 * GB });
+  try {
+    const first = await post({ prompt: "four smurfs talk", model: "ltx25-max", size: "1024x576", seconds: 10, tier: "max", timeout_ms: 1 });
+    expect(first.status).toBe(202);
+    const id = ((await first.json()) as { job: string }).job;
+    let phase = "";
+    for (let tries = 0; tries < 60 && phase !== "waiting for the computer"; tries++) {
+      await Bun.sleep(50);
+      phase = ((await (await app.request(`/v1/videos/generations/${id}`)).json()) as { phase: string }).phase;
+    }
+    expect(phase).toBe("waiting for the computer");
+    const status = ((await (await app.request(`/v1/videos/generations/${id}`)).json()) as { phase: string; state: string });
+    expect(status.state).toBe("running");
+    await app.request(`/v1/videos/generations/${id}`, { method: "DELETE" });
+  } finally { stop(); }
 });
