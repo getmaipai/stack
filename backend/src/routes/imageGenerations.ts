@@ -16,6 +16,7 @@ import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { identityHeaders } from "@/lib/identity";
 import { RoleReplyHeaders } from "@maipai/spec/stack/ts/role-reply-headers.js";
+import { adultInput, fullViewAllowed, isAdultJobId } from "@/lib/adultView";
 import { cancelJob, getJob, hasJobRunner, isJobPaused, listJobs, submitJob, waitForJob, type Job } from "@/lib/jobs";
 import { TierFieldSchema, TierStatusSchema, governorDecides, tierInput, tierOf } from "@/routes/tierField";
 import { PAUSED_LABEL } from "@/lib/genProgress";
@@ -144,6 +145,12 @@ function liveFields(id: string, running: boolean) {
   };
 }
 
+/** The picture job was made for an adult audience (the job record, or the result it left on disk). */
+function isAdultPicture(id: string, input?: unknown): boolean { return isAdultJobId(id) || (input as { audience?: unknown } | null)?.audience === "adult" || readResult(id)?.audience === "adult"; }
+/** ADULT-LOCK-04: an adult job's status without the content: state, phase, progress, estimate and place in line stay. */
+function redactStatus<T extends { state: string; error: string | null; data: unknown[]; preview_url: string | null; preview_step: number | null; stage_label: string | null; step: number | null; steps: number | null }>(status: T): T {
+  return { ...status, preview_url: null, preview_step: null, stage_label: null, step: null, steps: null, data: [], error: status.error === null ? null : status.state === "failed" ? "This job failed." : status.error };
+}
 function statusOf(job: Job) {
   const detail = imageProgress(job.id);
   const failure = imageFailure(job.id);
@@ -250,7 +257,7 @@ export async function generateImages<T extends Context>(c: T, body: ImageGenerat
     op: "generate", prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, family, quantize, width: size.width, height: size.height, steps, seed, count,
     loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, initImage, strength: body.strength ?? 0.6, image: null, mask: null, region: null, feather: 0, derived, preview: body.preview !== false,
   });
-  const submitted = submitJob({ kind: IMAGE_JOB_KIND, role: "image", input: { token, family, mode: "generate", quantize, size: `${size.width}x${size.height}`, steps, seed, count, lora_ids: loraIds, image_to_image: initImage !== null, ...tierInput(body.tier) } });
+  const submitted = submitJob({ kind: IMAGE_JOB_KIND, role: "image", input: { token, family, mode: "generate", quantize, size: `${size.width}x${size.height}`, steps, seed, count, lora_ids: loraIds, image_to_image: initImage !== null, ...adultInput(body.audience), ...tierInput(body.tier) } });
   if ("refused" in submitted) return fail(c, 503, submitted.code ?? "unsupported", submitted.reason);
   return waitAndReply(c, submitted.job.id, submitted.job.createdAt, body.timeout_ms ?? DEFAULT_WAIT_MS);
 }
@@ -305,7 +312,7 @@ export async function editImages<T extends Context>(c: T, form: EditForm) {
   const seed = form.seed ?? Math.floor(Math.random() * 2 ** 32);
   const token = crypto.randomUUID();
   stashImage(token, { op: "edit", prompt: instruction, negativePrompt: null, family, quantize: null, width: 0, height: 0, steps, seed, count: 1, loras: [], loraIds: [], initImage: null, strength: 0, image, mask, region: region ?? null, feather, references: refs, derived });
-  const submitted = submitJob({ kind: IMAGE_EDIT_JOB_KIND, role: "image", input: { token, family, mode: "edit", quantize: null, steps, seed, count: 1, lora_ids: [], masked: mask !== null || region !== null, references: refs.length } });
+  const submitted = submitJob({ kind: IMAGE_EDIT_JOB_KIND, role: "image", input: { token, family, mode: "edit", quantize: null, steps, seed, count: 1, ...adultInput(form.audience), lora_ids: [], masked: mask !== null || region !== null, references: refs.length } });
   if ("refused" in submitted) return fail(c, 503, submitted.code ?? "unsupported", submitted.reason);
   return waitAndReply(c, submitted.job.id, submitted.job.createdAt, form.timeout_ms ?? DEFAULT_WAIT_MS);
 }
@@ -316,15 +323,17 @@ imageV1Routes.openapi(getRoute, (c) => {
   const id = c.req.valid("param").job;
   const job = getJob(id);
   // A finished job whose files are gone (Home deleted them, or a day passed) is gone, not "done with nothing".
-  if (job && isImageKind(job) && !(job.state === "done" && !readResult(id))) return reply(c, statusOf(job), 200);
+  if (job && isImageKind(job) && !(job.state === "done" && !readResult(id))) return reply(c, isAdultPicture(id, job.input) && !fullViewAllowed((n) => c.req.header(n)) ? redactStatus(statusOf(job)) : statusOf(job), 200);
   // After a restart the job record is gone but a finished job is still on disk.
   const meta = readResult(id);
-  if (meta) return reply(c, { job: id, state: "done", phase: "ready", progress: 100, phase_progress: null, ...liveFields(id, false), position: null, error: null, code: null, data: entries(meta, false) }, 200);
+  if (meta) { const status = { job: id, state: "done", phase: "ready", progress: 100, phase_progress: null, ...liveFields(id, false), position: null, error: null, code: null, data: entries(meta, false) }; return reply(c, meta.audience === "adult" && !fullViewAllowed((n) => c.req.header(n)) ? redactStatus(status) : status, 200); }
   return fail(c, 404, "unknown_job", "No such picture job: it expired after a day, was deleted, or never existed.");
 });
 
 imageV1Routes.openapi(pngRoute, (c) => {
   const { job, file } = c.req.valid("param");
+  // ADULT-LOCK-04: every file of an adult job (preview, picture, thumbnail) answers as if it were not there unless the caller has the full view.
+  if (isAdultPicture(job) && !fullViewAllowed((n) => c.req.header(n))) return fail(c, 404, file === "preview.jpg" ? "no_preview" : "expired", file === "preview.jpg" ? "There is no preview for that picture: it has finished, was never asked for one, or no step has finished yet." : "That picture is gone: results are kept for a day, or Home deleted them. Make it again.") as never;
   if (file === "preview.jpg") {
     const preview = isJobId(job) ? imagePreviewPath(job) : null;
     if (!preview || !existsSync(preview)) return fail(c, 404, "no_preview", "There is no preview for that picture: it has finished, was never asked for one, or no step has finished yet.") as never;

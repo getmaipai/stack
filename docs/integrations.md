@@ -167,6 +167,36 @@ The Stack never notifies a person; Home's notification system (org
 `NOTIFICATIONS.md`) is the only thing that does, and it is the one
 subscriber. Progress events are live only and never become history.
 
+## Adult jobs: the redacted view and the full view (ADULT-LOCK-04)
+
+A job made with `audience: "adult"` (picture generate and edit, video, or a generic job whose `input.audience` is `adult`) is reported
+to every caller as state and progress only. This is the Stack's half of Home's Adult lock; the job's `classification` second lock
+(`lora_not_allowed` and the audience checks) is unchanged.
+
+**What the standard view of an adult job holds.** `GET /stack/v1/jobs`, `GET` and `DELETE /stack/v1/jobs/{id}`: `id`, `kind`, `role`, `state`,
+`percent`, `position`, the dates, `status` equal to the state, `input` reduced to `{ audience: "adult" }` (plus `tier` when set), `result: null`,
+`reason` a fixed line on failure or cancel, no `items` and no byte counts. `GET /stack/v1/events`: a `job.progress` of an adult job carries
+`job`, `kind`, `state`, `percent`, `status` (the state) and `position`; its `job.done` carries `job`, `kind`, `ok` and no `reason`.
+`GET /v1/videos/generations/{job}` and `GET /v1/images/generations/{job}`: `state`, `phase`, `progress`, `phase_progress`,
+`progress_fraction`, `stage`, `eta_seconds`, `position` and `code` stay; `stage_label`, `step`, `steps`, `preview_url`, `preview_step` are null,
+`data` is `[]` and a failure's `error` is a fixed line. The files of an adult job (`preview.jpg`, the clip, `poster.jpg`, `messages.mp4`, a
+picture and its thumbnail) answer the same 404 as a file that is gone. The request that makes the job (`POST`) is the maker's own call and
+answers as before. An adult job is known by its job record, and after a restart by `audience: "adult"` in the result's `meta.json`.
+
+**The full view.** Home asks for it per request, after it has checked the person's unlock proof, with two headers:
+
+| Header | Value |
+|---|---|
+| `x-maipai-view` | `full` |
+| `x-maipai-home-token` | the Stack's Home credential |
+
+The credential is a random value the Stack keeps in `data/keys/home-view-token` (made at first use, mode 600), or `STACK_HOME_VIEW_TOKEN` (at
+least 16 characters) when the unit that starts the Stack sets it; Home reads the file, or sets the variable and keeps the same value. The
+Stack never returns it from any route. A request with `x-maipai-view: full` and a missing or wrong token is refused on every route, adult job
+or not, with 403 `{ code: "full_view_forbidden" }` (so a caller cannot find out which jobs are adult by trying); a request without
+`x-maipai-view`, or with the token alone, gets the standard view. The full view of a job that is not adult is the same as its standard view.
+Logs never carry a prompt, a LoRA name or a file name of a job (typed events, counts and codes only).
+
 ## Health items
 
 Spec `HealthItem` (`health-item.schema.json`): `{ code, severity:

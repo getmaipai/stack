@@ -8,6 +8,7 @@
 // down the audience and the allowed LoRA list; the Stack applies the hard
 // limits and the locks it can check (see video/videoGen.ts).
 import { PAUSED_LOW_MEMORY } from "@/lib/memoryState";
+import { adultInput, fullViewAllowed, isAdultJobId } from "@/lib/adultView";
 import { createRoute, z } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -189,6 +190,10 @@ function liveFields(id: string, running: boolean) {
   };
 }
 
+/** ADULT-LOCK-04: an adult job's status without the content: state, phase, progress, estimate and place in line stay; the stage words, step counts, preview, failure text and result go. */
+function redactStatus<T extends { state: string; error: string | null; data: unknown[]; preview_url: string | null; stage_label: string | null; step: number | null; steps: number | null }>(status: T): T {
+  return { ...status, preview_url: null, stage_label: null, step: null, steps: null, data: [], error: status.error === null ? null : status.state === "failed" ? "This job failed." : status.error };
+}
 function statusOf(job: Job) {
   const detail = videoProgress(job.id);
   const failure = videoFailure(job.id);
@@ -203,6 +208,11 @@ function statusOf(job: Job) {
     data: result ? [entry(result)] : [],
   };
 }
+
+/** The clip was made for an adult audience (the job record, or the result it left on disk). */
+function isAdultClip(id: string, input?: unknown): boolean { return isAdultJobId(id) || (input as { audience?: unknown } | null)?.audience === "adult" || readResult(id)?.audience === "adult"; }
+/** A file of an adult clip is answered as if it were not there unless the caller has the full view. */
+const hiddenFromCaller = (c: Context, id: string): boolean => isAdultClip(id) && !fullViewAllowed((n) => c.req.header(n));
 
 export const videoV1Routes = apiRouter<AppEnv>();
 
@@ -257,7 +267,7 @@ async function runClip(c: Context, body: z.infer<typeof VideoRequestSchema>, qua
   if (!verdict.ok) return fail(c, 503, "no_memory", verdict.reason);
   const token = crypto.randomUUID();
   stashClip(token, clip);
-  const submitted = submitJob({ kind: VIDEO_JOB_KIND, role: "video", input: { token, ...jobFields, seed: clip.seed, quality, lora_ids: clip.loraIds, ...tierInput(body.tier), ...(body.quiet_seconds !== undefined ? { quiet_seconds: body.quiet_seconds } : {}), ...(body.quiet_max_wait_seconds !== undefined ? { quiet_max_wait_seconds: body.quiet_max_wait_seconds } : {}) } });
+  const submitted = submitJob({ kind: VIDEO_JOB_KIND, role: "video", input: { token, ...jobFields, ...adultInput(body.audience), seed: clip.seed, quality, lora_ids: clip.loraIds, ...tierInput(body.tier), ...(body.quiet_seconds !== undefined ? { quiet_seconds: body.quiet_seconds } : {}), ...(body.quiet_max_wait_seconds !== undefined ? { quiet_max_wait_seconds: body.quiet_max_wait_seconds } : {}) } });
   if ("refused" in submitted) { unstashClip(token); return fail(c, 503, submitted.code ?? "unsupported", submitted.reason); }
   const settled = await waitForJob(submitted.job.id, body.timeout_ms ?? DEFAULT_WAIT_MS);
   const created = Math.floor(new Date(submitted.job.createdAt).getTime() / 1000);
@@ -319,10 +329,10 @@ videoV1Routes.openapi(getRoute, (c) => {
   const id = c.req.valid("param").job;
   const job = getJob(id);
   // A finished clip whose files are gone (Home deleted them, or a day passed) is gone, not "done with nothing".
-  if (job && job.kind === VIDEO_JOB_KIND && !(job.state === "done" && !readResult(id))) return reply(c, statusOf(job), 200);
+  if (job && job.kind === VIDEO_JOB_KIND && !(job.state === "done" && !readResult(id))) return reply(c, isAdultClip(id, job.input) && !fullViewAllowed((n) => c.req.header(n)) ? redactStatus(statusOf(job)) : statusOf(job), 200);
   // After a restart the job record is gone but a finished clip is still on disk.
   const meta = readResult(id);
-  if (meta) return reply(c, { job: id, state: "done", phase: "ready", progress: 100, phase_progress: null, ...liveFields(id, false), position: null, error: null, code: null, data: [entry(meta)] }, 200);
+  if (meta) { const status = { job: id, state: "done", phase: "ready", progress: 100, phase_progress: null, ...liveFields(id, false), position: null, error: null, code: null, data: [entry(meta)] }; return reply(c, meta.audience === "adult" && !fullViewAllowed((n) => c.req.header(n)) ? redactStatus(status) : status, 200); }
   return fail(c, 404, "unknown_job", "No such clip: it expired after a day, was deleted, or never existed.");
 });
 
@@ -343,18 +353,18 @@ export function fileResponse(c: Context, path: string, type: string, range: stri
 
 videoV1Routes.openapi(videoFileRoute, (c) => {
   const id = c.req.valid("param").job;
-  if (!isJobId(id) || !existsSync(videoPath(id))) return fail(c, 404, "expired", "That clip is gone: results are kept for a day, or Home deleted it. Make it again.") as never;
+  if (!isJobId(id) || !existsSync(videoPath(id)) || hiddenFromCaller(c, id)) return fail(c, 404, "expired", "That clip is gone: results are kept for a day, or Home deleted it. Make it again.") as never;
   return fileResponse(c, videoPath(id), "video/mp4", c.req.header("range")) as never;
 });
 videoV1Routes.openapi(previewFileRoute, (c) => {
   const id = c.req.valid("param").job;
   const path = isJobId(id) ? videoPreviewPath(id) : null;
-  if (!path || !existsSync(path)) return fail(c, 404, "no_preview", "There is no preview for that clip: the motion is not finished yet, none was asked for, or the clip is done.") as never;
+  if (!path || !existsSync(path) || hiddenFromCaller(c, id)) return fail(c, 404, "no_preview", "There is no preview for that clip: the motion is not finished yet, none was asked for, or the clip is done.") as never;
   return fileResponse(c, path, "image/jpeg", undefined) as never;
 });
 videoV1Routes.openapi(posterFileRoute, (c) => {
   const id = c.req.valid("param").job;
-  if (!isJobId(id) || !existsSync(posterPath(id))) return fail(c, 404, "expired", "That poster is gone: results are kept for a day, or Home deleted it.") as never;
+  if (!isJobId(id) || !existsSync(posterPath(id)) || hiddenFromCaller(c, id)) return fail(c, 404, "expired", "That poster is gone: results are kept for a day, or Home deleted it.") as never;
   return fileResponse(c, posterPath(id), "image/jpeg", undefined) as never;
 });
 
@@ -369,7 +379,7 @@ const messagesInFlight = new Map<string, Promise<unknown>>();
 
 videoV1Routes.openapi(messagesFileRoute, async (c) => {
   const id = c.req.valid("param").job;
-  if (!isJobId(id) || !existsSync(videoPath(id))) return fail(c, 404, "expired", "That clip is gone: results are kept for a day, or Home deleted it. Make it again.") as never;
+  if (!isJobId(id) || !existsSync(videoPath(id)) || hiddenFromCaller(c, id)) return fail(c, 404, "expired", "That clip is gone: results are kept for a day, or Home deleted it. Make it again.") as never;
   if (!existsSync(messagesPath(id))) {
     try {
       const running = messagesInFlight.get(id) ?? makeMessagesCopy(videoPath(id), messagesPath(id), cleanTitle(c.req.valid("query").title), videoGenRoot()).finally(() => messagesInFlight.delete(id));

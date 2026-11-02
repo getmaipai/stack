@@ -143,7 +143,7 @@ export function registerVideoJobs(): void {
       const poster = join(outputDir, "poster.jpg");
       const meta: VideoResultMeta = {
         job: job.id, created: Math.floor(new Date(job.createdAt).getTime() / 1000), width: result.width, height: result.height, frames: result.frames, fps: result.fps, seconds: Math.round((result.frames - 1) / result.fps),
-        seed: result.seed, model: VIDEO_SPECS[quality].modelId, quality, audio: result.audio, mode: clip.edit ? clip.edit.kind : clip.image ? "image-to-video" : "text-to-video", lora_ids: clip.loraIds, ms: Date.now() - started,
+        seed: result.seed, model: VIDEO_SPECS[quality].modelId, quality, audio: result.audio, mode: clip.edit ? clip.edit.kind : clip.image ? "image-to-video" : "text-to-video", lora_ids: clip.loraIds, ...((job.input as { audience?: unknown } | null)?.audience === "adult" ? { audience: "adult" as const } : {}), ms: Date.now() - started,
         bytes: Bun.file(video).size, poster_bytes: Bun.file(poster).size, mlx_peak_gb: result.peakBytes === null ? null : Math.round(result.peakBytes / 1e8) / 10,
       };
       update({ status: "ready", percent: 100 });

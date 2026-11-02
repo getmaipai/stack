@@ -146,7 +146,7 @@ export function registerImageJobs(): void {
         }
         const meta: ImageResultMeta = {
           job: job.id, created: Math.floor(new Date(job.createdAt).getTime() / 1000), mode: item.op === "edit" ? (item.mask || item.region ? "edit-masked" : "edit") : item.initImage ? "image-to-image" : "generate",
-          model: IMAGE_FAMILIES[family].catalogId, steps: item.steps, quantize: item.quantize, lora_ids: item.loraIds, ms: result.ms, mlx_peak_gb: result.peakBytes === null ? null : Math.round(result.peakBytes / 1e8) / 10, images,
+          model: IMAGE_FAMILIES[family].catalogId, steps: item.steps, quantize: item.quantize, lora_ids: item.loraIds, ...((job.input as { audience?: unknown } | null)?.audience === "adult" ? { audience: "adult" as const } : {}), ms: result.ms, mlx_peak_gb: result.peakBytes === null ? null : Math.round(result.peakBytes / 1e8) / 10, images,
         };
         update({ status: "ready", percent: 100 });
         commitResult(meta, work);

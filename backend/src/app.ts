@@ -47,6 +47,7 @@ import { imageV1Routes } from "@/routes/imageGenerations";
 import { registerImageJobs } from "@/images/jobs";
 import { memoryRoutes } from "@/routes/memory";
 import { isStopping } from "@/lib/lifecycle";
+import { fullViewAllowed, fullViewAsked } from "@/lib/adultView";
 import { speechRoutes, websocket } from "@/routes/speech";
 import { registerGenerators } from "@/generators";
 import { SESSION_PATH } from "@/speech/server";
@@ -82,6 +83,16 @@ app.openapi(livenessRoute, (c) => c.json({ ok: true as const, version, contract:
 app.use("*", async (c, next) => {
   if (isStopping() && c.req.path !== "/healthz") {
     return c.json({ error: "The Stack is restarting. Try again in a few seconds.", code: "stack_restarting" }, 503, { "Retry-After": "5" });
+  }
+  await next();
+});
+
+// ADULT-LOCK-04: a full-view ask (x-maipai-view: full) without Home's
+// credential is refused on every route, adult job or not, so a caller cannot
+// find out which jobs are adult by trying.
+app.use("*", async (c, next) => {
+  if (fullViewAsked((name) => c.req.header(name)) && !fullViewAllowed((name) => c.req.header(name))) {
+    return c.json({ error: "The full view is for Home only. Ask without the x-maipai-view header to get the standard view.", code: "full_view_forbidden" }, 403);
   }
   await next();
 });

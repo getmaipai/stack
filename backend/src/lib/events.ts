@@ -3,6 +3,7 @@
 // SSE response stays open until the caller goes away. Nothing here is
 // persisted: progress is live only, and durable history is Home's.
 import { EventEnvelopeSchema, type EventEnvelope, type EventId } from "@/events";
+import { redactEventData } from "@/lib/adultView";
 
 const RING_SIZE = 500;
 const KEEPALIVE_MS = 15_000;
@@ -38,22 +39,25 @@ export function subscribe(listener: (event: EventEnvelope) => void): () => void 
   return () => { subscribers.delete(listener); };
 }
 
-function frame(event: EventEnvelope): string {
+/** ADULT-LOCK-04: the ring holds full events; a caller without the full view gets an adult job's progress and done events with the content taken out. */
+function frame(event: EventEnvelope, full: boolean): string {
+  if (!full) event = { ...event, data: redactEventData(event.id, event.data as Record<string, unknown>) } as EventEnvelope;
   return `id: ${event.seq}\nevent: ${event.id}\ndata: ${JSON.stringify(event)}\n\n`;
 }
 
 /** The `/stack/v1/events` body: replay from `Last-Event-Id`, then live
  * events, with a comment line every 15 s so an idle connection is not
  * closed by a proxy or a client timeout. */
-export function sseResponse(request: { lastEventId: number; signal?: AbortSignal }): Response {
+export function sseResponse(request: { lastEventId: number; signal?: AbortSignal; full?: boolean }): Response {
+  const full = request.full === true;
   const encoder = new TextEncoder();
   let unsubscribe: (() => void) | null = null;
   let keepalive: ReturnType<typeof setInterval> | null = null;
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       const push = (text: string) => { try { controller.enqueue(encoder.encode(text)); } catch { /* closed */ } };
-      for (const event of eventsAfter(request.lastEventId)) push(frame(event));
-      unsubscribe = subscribe((event) => push(frame(event)));
+      for (const event of eventsAfter(request.lastEventId)) push(frame(event, full));
+      unsubscribe = subscribe((event) => push(frame(event, full)));
       keepalive = setInterval(() => push(": keepalive\n\n"), KEEPALIVE_MS);
       (keepalive as unknown as { unref?: () => void }).unref?.();
       const close = () => {

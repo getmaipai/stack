@@ -8,6 +8,7 @@
 // install created by another module runs as that module drives it. Until a runner is registered for a kind, a
 // submit for it is refused with a reason rather than left queued.
 import { emit } from "@/lib/events";
+import { markAdultJob } from "@/lib/adultView";
 import { noteComponentUse } from "@/lib/componentUse";
 import { admit, fitsEverForTier, forgetLoadedItem, hasWarmWorkerUnload, unloadWarmWorker, generatorsHeldByMode, getGovernorStatus, getMaxWindow, getReclaimSteps, getRunState, GovernorRules, neverFitReason, neverFitTierReason, peakFor, release, withdraw, type GovernorHandle, type GovernorRequest, type JobTier } from "@/lib/governor";
 import { heavyGate, isolationRules } from "@/lib/heavyGate";
@@ -142,6 +143,7 @@ export function createJob(input: { kind: string; role?: string | null; totalByte
   const now = new Date().toISOString();
   const job: Job = { id: input.id ?? `job-${crypto.randomUUID()}`, kind: input.kind, role: input.role ?? null, state: input.state ?? "running", percent: 0, completedBytes: 0, totalBytes: input.totalBytes ?? 0, ...(input.bytesPerSecond === undefined ? {} : { bytesPerSecond: input.bytesPerSecond }), ...(input.items === undefined ? {} : { items: input.items }), status: input.status ?? "starting", position: input.position ?? null, input: input.input ?? null, result: null, reason: null, createdAt: now, updatedAt: now };
   jobs.set(job.id, job);
+  if ((job.input as { audience?: unknown } | null)?.audience === "adult") markAdultJob(job.id);
   controllers.set(job.id, new AbortController());
   emit({ id: "job.progress", data: { job: job.id, kind: job.kind, state: job.state, percent: 0, completed_bytes: 0, total_bytes: job.totalBytes, status: job.status, position: job.position, ...(job.bytesPerSecond === undefined ? {} : { bytesPerSecond: job.bytesPerSecond }), ...(job.items === undefined ? {} : { items: job.items }) } });
   return job;

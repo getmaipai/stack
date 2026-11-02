@@ -8,6 +8,10 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ## [Unreleased]
 
+### Added
+
+- Adult jobs are redacted by default (ADULT-LOCK-04). A picture, video or generic job made with `audience: "adult"` is reported as state and progress only in the job list, job detail, `job.progress` and `job.done` events, the picture and video status routes and every preview and result file; Home asks for the full view per request with `x-maipai-view: full` and `x-maipai-home-token` (the credential in `data/keys/home-view-token`, or `STACK_HOME_VIEW_TOKEN`). A full-view ask without the credential is refused with 403 `full_view_forbidden` on every route. Home must send the full-view headers wherever it fetches an adult clip, picture, preview or status (HOME-ADULT-LOCK-03), because the standard view no longer serves those files. Detail in docs/integrations.md.
+
 ### Fixed
 
 - Admission now counts the picture encoder for a LTX-2.5 clip that starts from a picture (VIDEO-PICTURE-ADMIT-01). Measured on the M5 Max (OS footprint, one clip each): Max 1024x576 10 s reads 58.6 GB from a picture against 48.6 GB from words, so the Stack reserves 61.5 GB (58.6 plus 5 percent, under the 64 GB cap) instead of 51 GB; Standard 512x256 reads 39.7 GB at 10 s and 27.1 GB at 5 s (was 39.4 and 25.3), Boost 640x320 and 768x448 read no more than their words-only 32.4 and 45.8 GB. An end picture changed no figure by more than 0.8 GB. `GET /stack/v1/video` adds `peak_gb_picture` and `short_peak_gb_picture` to every `qualities.ltx25.profiles` row and `peak_gb_picture`, `admit_gb_picture` and `short_peak_gb_picture` to the `qualities.ltx25max.profiles` row, and the progress estimate of a clip from a picture learns from picture clips only.
