@@ -99,7 +99,25 @@ def _quiet_logs():
         pass
 
 
-def _ensure_models(ckpt_dir, lm_name, cache_gb):
+DEFAULT_DIT = "acestep-v15-turbo"
+XL_BF16_DITS = ("acestep-v15-xl-turbo-bf16",)
+
+
+def _force_bf16_on_instances():
+    """The library loads a DiT as float32 on MPS, which does not fit the XL model's 10 GB bf16 file and doubles its size in memory. An instance flagged `_force_bf16` keeps bfloat16 instead; every other handler behaves as before."""
+    import torch
+    from acestep.handler import AceStepHandler
+
+    if getattr(AceStepHandler, "_bf16_patched", False):
+        return
+    AceStepHandler.dtype = property(
+        lambda self: getattr(self, "_d", torch.float32),
+        lambda self, value: setattr(self, "_d", torch.bfloat16 if (value == torch.float32 and getattr(self, "_force_bf16", False)) else value),
+    )
+    AceStepHandler._bf16_patched = True
+
+
+def _ensure_models(ckpt_dir, lm_name, cache_gb, dit_name=DEFAULT_DIT):
     """Loads the DiT, VAE and text encoder once, and the planning LM named by the request (switching it if the quality changed)."""
     import mlx.core as mx
 
@@ -108,15 +126,26 @@ def _ensure_models(ckpt_dir, lm_name, cache_gb):
     from acestep.handler import AceStepHandler
     from acestep.llm_inference import LLMHandler
 
-    if _handlers["dit"] is None or _handlers["ckpt"] != ckpt_dir:
+    if _handlers["dit"] is None or _handlers["ckpt"] != ckpt_dir or _handlers.get("dit_name") != dit_name:
         stage("load")
-        if not os.path.isfile(os.path.join(ckpt_dir, "acestep-v15-turbo", "model.safetensors")):
+        if not os.path.isfile(os.path.join(ckpt_dir, dit_name, "model.safetensors")):
             raise FileNotFoundError("the music model is not installed")
+        if _handlers["dit"] is not None:
+            _handlers["dit"] = None
+            gc.collect()
+            mx.clear_cache()
+        bf16 = dit_name in XL_BF16_DITS
+        if bf16:
+            _force_bf16_on_instances()
         dit = AceStepHandler()
-        message, ok = _ok(dit.initialize_service(project_root=os.path.dirname(ckpt_dir), config_path="acestep-v15-turbo", device="mps", use_mlx_dit=True))
+        dit._force_bf16 = bf16
+        # The XL model runs on the torch MPS path in bf16; the 2B turbo model runs on MLX.
+        message, ok = _ok(dit.initialize_service(project_root=os.path.dirname(ckpt_dir), config_path=dit_name, device="mps", use_mlx_dit=not bf16))
         if not ok:
             raise RuntimeError("model load failed")
-        _handlers.update(dit=dit, ckpt=ckpt_dir, llm=None, lm=None)
+        if _handlers["ckpt"] != ckpt_dir:
+            _handlers.update(llm=None, lm=None)
+        _handlers.update(dit=dit, dit_name=dit_name, ckpt=ckpt_dir)
     if lm_name and _handlers["lm"] != lm_name:
         stage("load")
         if not os.path.isfile(os.path.join(ckpt_dir, lm_name, "model.safetensors")):
@@ -253,7 +282,7 @@ def generate(request, workdir):
         raise ValueError("describe the music")
     seed = int(request.get("seed") if request.get("seed") is not None else -1)
     lm_name = request.get("lm") if task == "text2music" else None
-    _ensure_models(request["ckpt_dir"], lm_name or _handlers.get("lm"), float(request.get("cache_gb") or 2))
+    _ensure_models(request["ckpt_dir"], lm_name or _handlers.get("lm"), float(request.get("cache_gb") or 2), request.get("dit") or DEFAULT_DIT)
     kwargs = dict(caption=caption, lyrics=lyrics, instrumental=instrumental, seed=seed, vocal_language=request.get("language") or ("unknown" if instrumental else "en"))
     if request.get("bpm"):
         kwargs["bpm"] = max(30, min(300, int(request["bpm"])))

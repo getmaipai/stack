@@ -484,6 +484,14 @@
     "htdemucs_6s": {
       "download_bytes": 54885765,
       "installed_bytes": 54885765
+    },
+    "ace-step-1-5-xl-turbo-bf16": {
+      "download_bytes": 9974719892,
+      "installed_bytes": 9974719892
+    },
+    "ace-step-1-5-xl-turbo-config": {
+      "download_bytes": 3843622,
+      "installed_bytes": 3843622
     }
   }
 }

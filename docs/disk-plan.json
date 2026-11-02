@@ -24,7 +24,7 @@
     "p64.ai_required_free_bytes": 116341582322,
     "p128.required_free_bytes": 154184224148,
     "p128.minimum_required_free_bytes": 56572612676,
-    "p128.everything_required_free_bytes": 456263288399,
+    "p128.everything_required_free_bytes": 468237564615,
     "p128.needed_bytes": 129352395179,
     "p128.home_required_free_bytes": 3176323277,
     "p128.ai_required_free_bytes": 151007900871
@@ -1643,6 +1643,27 @@
           "basis": "pins"
         },
         {
+          "id": "music-boost",
+          "label": "Clearer songs (ACE-Step XL Turbo)",
+          "note": "A larger song model for Boost quality, with clearer voices. Optional, about 10 GB.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 9978563514,
+          "installed_bytes": 9978563514,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "ace-step-1-5-xl-turbo-bf16",
+            "ace-step-1-5-xl-turbo-config"
+          ],
+          "engines": [
+            "engine:music",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "video-detailed",
           "label": "Detailed videos with sound (LTX-2.3)",
           "note": "Longer clips with a sound track and spoken words, and a large library of styles. Slower than the quick clip. Optional, about 74 GB; it needs the maker's licence accepted once during setup.",
@@ -1959,11 +1980,11 @@
         "required_free_bytes": 56572612676
       },
       "everything": {
-        "download_bytes": 370021542513,
-        "installed_bytes": 374080240156,
+        "download_bytes": 380000106027,
+        "installed_bytes": 384058803670,
         "peak_temp_bytes": 7367000211,
-        "needed_bytes": 381447240367,
-        "required_free_bytes": 456263288399
+        "needed_bytes": 391425803881,
+        "required_free_bytes": 468237564615
       },
       "measured_on": "2026-10-17",
       "default_selected": [

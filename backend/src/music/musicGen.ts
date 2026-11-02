@@ -34,7 +34,7 @@ import { ensureEngine } from "@/lib/engineInstall";
 import { getGovernorStatus } from "@/lib/governor";
 import { log } from "@/lib/log";
 import { getModel } from "@/lib/modelStore";
-import { STACK_MUSIC_LM_06_ID, STACK_MUSIC_MODEL_ID } from "@/lib/modelCatalog";
+import { STACK_MUSIC_LM_06_ID, STACK_MUSIC_MODEL_ID, STACK_MUSIC_XL_CONFIG_ID, STACK_MUSIC_XL_ID } from "@/lib/modelCatalog";
 import { engineTagRoot } from "@/lib/store/layout";
 import { ensureUvEnvironment, managedEnv, uvEnvironmentReady, uvVenvPath, uvVenvPython, type UvEnvironmentSpec } from "@/lib/uvEnvironment";
 import type { RoleStateRecord } from "@/roles";
@@ -124,14 +124,27 @@ export async function ensureMusicGenEnvironment(onProgress: (phase: string) => v
   await ensureUvEnvironment(spec(), onProgress, options);
 }
 
-export interface MusicModelPaths { modelDir: string; lm06Dir: string; }
+/** The DiT folder the Boost quality loads (MUSIC-XL-01), beside `acestep-v15-turbo/` in the checkpoints folder. */
+export const MUSIC_XL_DIT = "acestep-v15-xl-turbo-bf16";
+/** The DiT each quality loads; a quality missing here uses the worker's default (the Standard model). */
+export const MUSIC_DIT: Partial<Record<MusicQuality, string>> = { detailed: MUSIC_XL_DIT };
+export interface MusicModelPaths { modelDir: string; lm06Dir: string; /** The XL Turbo bf16 weights file and the folder holding its config and silence latent; both or neither. */ xl?: { weights: string; configDir: string }; }
 /** The installed, verified weights folders (the shared pieces with the 1.7B LM, and the 0.6B LM), or null when either is missing. */
 export function musicModelPaths(): MusicModelPaths | null {
   const model = getModel(STACK_MUSIC_MODEL_ID);
   const lm = getModel(STACK_MUSIC_LM_06_ID);
   if (!model?.modelPath || !model.verifiedAt || !existsSync(join(model.modelPath, "acestep-v15-turbo", "model.safetensors"))) return null;
   if (!lm?.modelPath || !lm.verifiedAt || !existsSync(join(lm.modelPath, "model.safetensors"))) return null;
-  return { modelDir: model.modelPath, lm06Dir: lm.modelPath };
+  const xl = getModel(STACK_MUSIC_XL_ID);
+  const xlConfig = getModel(STACK_MUSIC_XL_CONFIG_ID);
+  const hasXl = !!xl?.modelPath && !!xl.verifiedAt && existsSync(xl.modelPath) && !!xlConfig?.modelPath && !!xlConfig.verifiedAt && existsSync(join(xlConfig.modelPath, "silence_latent.pt"));
+  return { modelDir: model.modelPath, lm06Dir: lm.modelPath, ...(hasXl ? { xl: { weights: xl!.modelPath!, configDir: xlConfig!.modelPath! } } : {}) };
+}
+
+/** The DiT folder a song of this quality loads: the quality's own when it is installed, else undefined (the worker's default Standard model). */
+export function musicDitFor(quality: MusicQuality, paths: MusicModelPaths | null = musicModelPaths()): string | undefined {
+  const dit = MUSIC_DIT[quality];
+  return dit === MUSIC_XL_DIT && !paths?.xl ? undefined : dit;
 }
 
 /**
@@ -154,6 +167,11 @@ export function assembleCheckpointDir(paths: MusicModelPaths, into: string): str
     } else symlinkSync(join(paths.modelDir, entry), join(into, entry));
   }
   symlinkSync(paths.lm06Dir, join(into, MUSIC_LM.quick));
+  if (paths.xl) {
+    mkdirSync(join(into, MUSIC_XL_DIT));
+    symlinkSync(paths.xl.weights, join(into, MUSIC_XL_DIT, "model.safetensors"));
+    for (const file of ["config.json", "silence_latent.pt"]) symlinkSync(join(paths.xl.configDir, file), join(into, MUSIC_XL_DIT, file));
+  }
   return into;
 }
 
@@ -188,7 +206,7 @@ export function memoryVerdict(): { ok: true } | { ok: false; reason: string } {
 
 export interface WorkerRequest {
   id: string; op?: "edit"; task: string; caption?: string; lyrics?: string; instrumental?: boolean; duration_s?: number; bpm?: number; key?: string; language?: string; seed?: number;
-  lm?: string; source?: string; from_s?: number; to_s?: number; add_s?: number; at?: "start" | "end"; strength?: number;
+  lm?: string; dit?: string; source?: string; from_s?: number; to_s?: number; add_s?: number; at?: "start" | "end"; strength?: number;
   edit?: { op: "trim" | "fade" | "loudness"; from_s?: number; to_s?: number; seconds?: number; where?: "in" | "out" | "both"; lufs?: number };
   output: string; ckpt_dir: string; ffmpeg: string; cache_gb?: number; title?: string; lrc?: boolean;
 }

@@ -26,7 +26,7 @@ import { wasMadeHere, sha256Hex } from "@/music/provenance";
 import { isJobId, lrcOf, readResult, deleteResult, songPath, type MusicResultMeta } from "@/music/results";
 import {
   memoryVerdict, MUSIC_DEFAULT_SECONDS, MUSIC_MAX_BPM, MUSIC_MAX_EXTEND_SECONDS, MUSIC_MAX_SOURCE_BYTES, MUSIC_MAX_TEXT_CHARS, MUSIC_MIN_BPM, MUSIC_MIN_EXTEND_SECONDS, MUSIC_MIN_SECONDS, MUSIC_LM, MUSIC_QUEUE_MAX,
-  musicGen, tierAvailability, tierLimits, type MusicRunFields,
+  musicGen, musicDitFor, tierAvailability, tierLimits, type MusicQuality, type MusicRunFields,
 } from "@/music/musicGen";
 import { musicFailure, musicHistoryKey, musicTracker, MUSIC_EDIT_JOB_KIND, MUSIC_JOB_KIND, isMusicJob, stashSong, unstashSong } from "@/music/jobs";
 
@@ -170,7 +170,8 @@ export function validateMusicRequest(body: z.infer<typeof MusicRequestSchema>, t
   if (!limits.quality.includes(quality)) return refuse(422, "bad_request", `This computer makes songs at ${limits.quality.join(" or ")} quality only. Ask for ${limits.quality[0]}.`);
   // A model task needs something to make from: words, or an instrumental described in words (the worker's own rule).
   if (!caption && (body.instrumental || !lyrics)) return refuse(422, "bad_request", "Describe the music (its style and mood), or give the lyrics.");
-  const withLm = { ...common, lm: MUSIC_LM[quality as keyof typeof MUSIC_LM], lrc: !!lyrics && !body.instrumental };
+  const dit = musicDitFor(quality as MusicQuality);
+  const withLm = { ...common, lm: MUSIC_LM[quality as keyof typeof MUSIC_LM], ...(dit ? { dit } : {}), lrc: !!lyrics && !body.instrumental };
   if (body.task === "text2music") {
     if (body.source !== undefined) return refuse(422, "bad_request", "A new song starts from words, not from a song. Use cover, repaint or extend to change one.");
     const duration = body.duration_s ?? Math.min(MUSIC_DEFAULT_SECONDS, limits.max_seconds);

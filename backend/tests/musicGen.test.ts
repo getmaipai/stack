@@ -10,14 +10,14 @@ import { join } from "node:path";
 import { app } from "@/app";
 import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, getGovernorStatus } from "@/lib/governor";
 import { __resetJobsForTests, getJob, listJobs } from "@/lib/jobs";
-import { STACK_MODELS, STACK_MUSIC_LM_06, STACK_MUSIC_MODEL, STACK_MUSIC_MODELS } from "@/lib/modelCatalog";
+import { STACK_MODELS, STACK_MUSIC_LM_06, STACK_MUSIC_MODEL, STACK_MUSIC_MODELS, STACK_MUSIC_XL, STACK_MUSIC_XL_CONFIG } from "@/lib/modelCatalog";
 import { PROFILE_TIERS } from "@/profiles";
 import { ENGINE_BINARIES, MANAGED_RUNTIMES } from "@/lib/engineCatalog";
 import { registerMusicJobs, musicHistoryKey, stashSong, unstashSong, musicTracker } from "@/music/jobs";
 import { __resetMusicProvenanceForTests, recordMadeSong, sha256Hex, wasMadeHere } from "@/music/provenance";
 import { commitResult, deleteResult, readResult, resultsRoot, sweepResults, workDir, type MusicResultMeta } from "@/music/results";
 import {
-  assembleCheckpointDir, memoryVerdict, MUSIC_MAX_SECONDS, MUSIC_PEAK_BYTES, musicGen, MusicGenService, musicRequirementsFileFor, musicRoleState, tierAvailability, tierLimits, workerHandle,
+  assembleCheckpointDir, memoryVerdict, MUSIC_XL_DIT, musicDitFor, MUSIC_MAX_SECONDS, MUSIC_PEAK_BYTES, musicGen, MusicGenService, musicRequirementsFileFor, musicRoleState, tierAvailability, tierLimits, workerHandle,
   type MusicGenDeps, type WorkerEvent, type WorkerHandle, type WorkerReply, type WorkerRequest,
 } from "@/music/musicGen";
 import { dataDir } from "@/lib/paths";
@@ -563,6 +563,8 @@ test("the worker keeps the keep-warm, offline and memory settings the note measu
   expect(source).toContain("use_cot_lyrics=False");
   // Listening test 2026-11-02: clearest vocals with shift 3, DCW off and the planner codes at strength 0.
   expect(source).toContain("TEXT2MUSIC_SHIFT = 3.0");
+  expect(source).toContain('XL_BF16_DITS = ("acestep-v15-xl-turbo-bf16",)');
+  expect(source).toContain('request.get("dit") or DEFAULT_DIT');
   expect(source).toContain("shift=TEXT2MUSIC_SHIFT, dcw_enabled=False, audio_cover_strength=0.0");
   const service = await Bun.file(join(import.meta.dir, "../src/music/musicGen.ts")).text();
   expect(service).toContain('engineIdleMs("music")');
@@ -575,7 +577,7 @@ test("the component is listed in the group music for p64 and p128, optional, wit
   expect(unit.pins.map((pin) => pin.id)).toEqual([STACK_MUSIC_MODEL.id, STACK_MUSIC_LM_06.id]);
   expect(unit.envs.map((env) => env.name)).toEqual(["music-gen"]);
   const catalog = collectComponentsCatalog();
-  expect(catalog.models.filter((pin) => pin.role === "music").map((pin) => pin.id)).toEqual([STACK_MUSIC_MODEL.id, STACK_MUSIC_LM_06.id, "htdemucs", "htdemucs_ft", "htdemucs_6s"]);
+  expect(catalog.models.filter((pin) => pin.role === "music").map((pin) => pin.id)).toEqual([STACK_MUSIC_MODEL.id, STACK_MUSIC_LM_06.id, STACK_MUSIC_XL.id, STACK_MUSIC_XL_CONFIG.id, "htdemucs", "htdemucs_ft", "htdemucs_6s"]);
   const stemsPins = STACK_MODELS.filter((pin) => ["htdemucs", "htdemucs_ft", "htdemucs_6s"].includes(pin.id));
   expect(stemsPins.map((pin) => pin.download?.files?.map((file) => file.sha256))).toEqual([
     ["d9fa14133cfcc034a6758923bb3a8ca9f8dfd0b582134643bbf83f72c17576dd", "239c445d0b14454d541ad8bd9bb271c9e536d267e8a4625208744cbb2e7bb66c"],
@@ -635,6 +637,25 @@ test("the checkpoints folder links the pinned files, and what ACE-Step writes la
   expect(readdirSync(join(model, "acestep-v15-turbo")).sort()).toEqual(["config.json", "model.safetensors"]);
   rmSync(root, { recursive: true, force: true });
   void symlinkSync;
+});
+
+test("MUSIC-XL-01: Boost loads the XL Turbo bf16 folder when it is installed, else the Standard model", () => {
+  const root = mkdtempSync(join(tmpdir(), "music-xl-"));
+  const model = join(root, "model"); const lm = join(root, "lm"); const weights = join(root, "xl.safetensors"); const config = join(root, "xlcfg"); const into = join(root, "ckpt");
+  mkdirSync(join(model, "acestep-v15-turbo"), { recursive: true }); writeFileSync(join(model, "acestep-v15-turbo", "model.safetensors"), "dit");
+  mkdirSync(lm, { recursive: true }); writeFileSync(join(lm, "model.safetensors"), "lm06");
+  mkdirSync(config, { recursive: true }); writeFileSync(join(config, "config.json"), "cfg"); writeFileSync(join(config, "silence_latent.pt"), "sil"); writeFileSync(weights, "xl");
+  expect(musicDitFor("detailed", { modelDir: model, lm06Dir: lm })).toBeUndefined();
+  expect(musicDitFor("quick", { modelDir: model, lm06Dir: lm, xl: { weights, configDir: config } })).toBeUndefined();
+  const paths = { modelDir: model, lm06Dir: lm, xl: { weights, configDir: config } };
+  expect(musicDitFor("detailed", paths)).toBe(MUSIC_XL_DIT);
+  assembleCheckpointDir(paths, into);
+  expect(readdirSync(join(into, MUSIC_XL_DIT)).sort()).toEqual(["config.json", "model.safetensors", "silence_latent.pt"]);
+  expect(readFileSync(join(into, MUSIC_XL_DIT, "model.safetensors"), "utf8")).toBe("xl");
+  expect(lstatSync(join(into, MUSIC_XL_DIT)).isSymbolicLink()).toBe(false);
+  assembleCheckpointDir({ modelDir: model, lm06Dir: lm }, into);
+  expect(existsSync(join(into, MUSIC_XL_DIT))).toBe(false);
+  rmSync(root, { recursive: true, force: true });
 });
 
 // ---- the service and the line protocol ----

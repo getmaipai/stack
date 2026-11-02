@@ -947,6 +947,54 @@ export const STACK_MUSIC_LM_06: CatalogModelLike = {
   },
 };
 export const STACK_MUSIC_MODELS: CatalogModelLike[] = [STACK_MUSIC_MODEL, STACK_MUSIC_LM_06];
+// MUSIC-XL-01: the Boost song model, ACE-Step XL Turbo in bf16 (2026-11-02 listening test: the clearest vocals).
+// Two pins because two repos hold it: the bf16 weights (a community conversion, Apache-2.0, one file) and the
+// maker's config and silence latent (MIT). music/musicGen.ts links both into `acestep-v15-xl-turbo-bf16/`.
+// Optional and p128 only: a computer without it makes Boost songs with the Standard model.
+const MUSIC_XL_WEIGHTS_REPO = "DanielMarius/acestep_v1.5_xl_turbo_bf16.safetensors";
+const MUSIC_XL_WEIGHTS_REVISION = "2d5092dee202829616bea161c10d095d587bff42";
+const MUSIC_XL_WEIGHTS_FILE = "acestep_v1.5_xl_turbo_bf16.safetensors";
+const MUSIC_XL_CONFIG_REPO = "ACE-Step/acestep-v15-xl-turbo";
+const MUSIC_XL_CONFIG_REVISION = "d4a0b288b83ebb7e25a8c0b32c573c22e134e8ee";
+export const STACK_MUSIC_XL_ID = "ace-step-1-5-xl-turbo-bf16";
+export const STACK_MUSIC_XL_CONFIG_ID = "ace-step-1-5-xl-turbo-config";
+const MUSIC_XL_CONFIG_FILES = [
+  { path: "config.json", sha256: "e3665376d46477cbd3e76203cd4e241f11a6a6bb5f88464c49f3c6aae51a918b", bytes: 2_407 },
+  { path: "silence_latent.pt", sha256: "a778e9dd942f5e8b2c09c55370782d318834432b03dabbcdf70e6ed49ad6358b", bytes: 3_841_215 },
+];
+export const STACK_MUSIC_XL: CatalogModelLike = {
+  id: STACK_MUSIC_XL_ID,
+  role: "music",
+  component: "dit-xl-turbo-bf16",
+  repo: MUSIC_XL_WEIGHTS_REPO,
+  license: "Apache-2.0",
+  revision: MUSIC_XL_WEIGHTS_REVISION,
+  engine: MUSIC_ENGINE,
+  sizing: { profile: "p128", quantization: "bf16" },
+  download: {
+    url: hfUrl(`${MUSIC_XL_WEIGHTS_REPO}/resolve/${MUSIC_XL_WEIGHTS_REVISION}/${MUSIC_XL_WEIGHTS_FILE}`),
+    sha256: "86a1afb0a1f711f0e3304ff65d874df3ae6783db683dcf982513fb9b6d14ae71",
+    approx_bytes: 9_974_719_892,
+  },
+};
+export const STACK_MUSIC_XL_CONFIG: CatalogModelLike = {
+  id: STACK_MUSIC_XL_CONFIG_ID,
+  role: "music",
+  component: "dit-xl-turbo-config",
+  repo: MUSIC_XL_CONFIG_REPO,
+  license: "MIT",
+  revision: MUSIC_XL_CONFIG_REVISION,
+  engine: MUSIC_ENGINE,
+  sizing: { profile: "p128", quantization: "bf16" },
+  download: {
+    url: hfUrl(`${MUSIC_XL_CONFIG_REPO}/resolve/${MUSIC_XL_CONFIG_REVISION}/config.json`),
+    sha256: MUSIC_XL_CONFIG_FILES[0]!.sha256,
+    approx_bytes: MUSIC_XL_CONFIG_FILES.reduce((sum, file) => sum + file.bytes, 0),
+    directory: "ACE-Step-XL-Turbo-config",
+    files: MUSIC_XL_CONFIG_FILES,
+  },
+};
+export const STACK_MUSIC_XL_MODELS: CatalogModelLike[] = [STACK_MUSIC_XL, STACK_MUSIC_XL_CONFIG];
 // TIER-STEMS-01a: HTDemucs (MIT), pinned to the checkpoint files in the
 // official Hugging Face repository. Safetensors weights plus the upstream
 // YAML architecture are loaded by the pinned Demucs package.
@@ -1330,7 +1378,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_DETAILED_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, ...STACK_STEMS_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_DETAILED_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, ...STACK_MUSIC_XL_MODELS, ...STACK_STEMS_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

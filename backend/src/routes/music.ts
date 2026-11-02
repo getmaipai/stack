@@ -10,13 +10,13 @@ import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { installedEnginePin } from "@/lib/engineCatalog";
 import { listModels } from "@/lib/modelStore";
-import { musicInstallModels } from "@/lib/installPlan";
+import { musicInstallModels, musicXlInstallModels } from "@/lib/installPlan";
 import { modelView } from "@/routes/models";
 import {
   memoryVerdict, MUSIC_DEFAULT_SECONDS, MUSIC_GEN_NAME, MUSIC_GEN_VERSION, MUSIC_MAX_BPM, MUSIC_MAX_EXTEND_SECONDS, MUSIC_MAX_SOURCE_BYTES, MUSIC_MAX_TEXT_CHARS, MUSIC_MIN_BPM, MUSIC_MIN_EXTEND_SECONDS,
   MUSIC_MIN_SECONDS, MUSIC_PEAK_BYTES, MUSIC_QUEUE_MAX, musicGen, musicGenEnvironmentReady, musicGenSourceInstalled, tierAvailability, tierLimits,
 } from "@/music/musicGen";
-import { STACK_MUSIC_MODEL_ID } from "@/lib/modelCatalog";
+import { STACK_MUSIC_MODEL_ID, STACK_MUSIC_XL_ID } from "@/lib/modelCatalog";
 
 const PlanModelSchema = z.object({
   id: z.string(), role: z.string(), repo: z.string().optional(), url: z.string(), sha256: z.string(), approx_bytes: z.number().int(), licence: z.string(), revision: z.string(),
@@ -33,6 +33,7 @@ const StatusSchema = z.object({
   tasks: z.array(z.string()),
   worker: z.object({ alive: z.boolean(), idle_exit_seconds: z.number().int() }),
   environment: z.object({ engine: z.string(), version: z.string(), source: z.boolean(), ready: z.boolean() }),
+  boost_model: z.object({ id: z.string(), installed: z.boolean(), models: z.array(PlanModelSchema), remaining_bytes: z.number().int() }).nullable().openapi({ description: "MUSIC-XL-01: the larger song model (ACE-Step XL Turbo, bf16) the detailed quality uses when installed, with the pins to pull; null on a computer that offers no detailed quality. Without it detailed songs use the standard model. Additive." }),
   install: z.object({ models: z.array(PlanModelSchema), remaining_bytes: z.number().int() }).openapi({ description: "The pinned models to pull (POST /stack/v1/models, shaped as an install-plan model) and how many bytes are still to come." }),
 });
 const statusRoute = createRoute({ method: "get", path: "/", tags: ["Music"], summary: "The music role's state, limits, and what to install", responses: { 200: { content: { "application/json": { schema: z.object({ music: StatusSchema }) } }, description: "Additive. Home enables its music control from `available` and `state`." } } });
@@ -45,6 +46,7 @@ musicRoutes.openapi(statusRoute, (c) => {
   const tierLimit = availability.available ? tierLimits(availability.tier) : null;
   const installed = listModels().map(modelView).filter((model) => model.state === "installed").map((model) => model.id);
   const models = musicInstallModels(installed);
+  const boostModels = musicXlInstallModels(installed);
   const verdict = memoryVerdict();
   const pin = installedEnginePin(MUSIC_GEN_NAME);
   return c.json({ music: {
@@ -59,6 +61,7 @@ musicRoutes.openapi(statusRoute, (c) => {
     tasks: availability.available ? ["text2music", "cover", "repaint", "extend", "edit"] : [],
     worker: { alive: musicGen.workerAlive, idle_exit_seconds: Math.round(engineIdleMs("music") / 1000) },
     environment: { engine: pin ? `${pin.name} ${pin.tag}` : MUSIC_GEN_NAME, version: MUSIC_GEN_VERSION, source: musicGenSourceInstalled(), ready: musicGenEnvironmentReady() },
+    boost_model: tierLimit?.quality.includes("detailed") ? { id: STACK_MUSIC_XL_ID, installed: boostModels.every((model) => model.installed), models: boostModels, remaining_bytes: boostModels.filter((model) => !model.installed).reduce((sum, model) => sum + model.approx_bytes, 0) } : null,
     install: { models, remaining_bytes: models.filter((model) => !model.installed).reduce((sum, model) => sum + model.approx_bytes, 0) },
   } }, 200 as const);
 });
