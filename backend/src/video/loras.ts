@@ -16,7 +16,8 @@
 // `adult` can never apply an `adult-only` file, whatever list it sends.
 //
 // The word checks below are a tripwire over file metadata, not a judgement of
-// the pictures a LoRA makes. They are listed in one place so a rule change is
+// the pictures a LoRA makes. They never refuse a file for naming a real person
+// or a public figure (MODELS-CENSOR-05, owner ruling 2026-11-02). They are listed in one place so a rule change is
 // one edit, and a file with no metadata is `adult-only` unless the importer
 // says otherwise (uncertain means adult-only).
 import { createHash } from "node:crypto";
@@ -24,8 +25,7 @@ import { closeSync, copyFileSync, existsSync, fstatSync, mkdirSync, openSync, re
 import { join } from "node:path";
 import { dataDir } from "@/lib/paths";
 import { sha256OfFile } from "@/lib/fileHash";
-import { LikenessError, verifyProof, type LikenessCheck } from "@/lib/likeness";
-import { realPersonReason } from "@/lib/media/loraLibrary";
+import { namesRealPerson } from "@/lib/media/loraLibrary";
 
 export const LORA_BASE_MODEL = "wan2.2-ti2v-5b";
 /** VIDEO-LTX-01: the two bases a LoRA can be made for: Quick's Wan2.2 5B, Detailed's LTX-2.3. */
@@ -61,8 +61,6 @@ export interface LoraRecord {
   trigger_words: string[];
   added_by: string | null;
   added_at: string;
-  /** LIKENESS-01: the household adult this LoRA looks like (an opaque id Home gave with a signed proof), or null. Always adult-only. */
-  likeness_subject: string | null;
 }
 
 export class LoraError extends Error {
@@ -168,8 +166,6 @@ export interface ImportInput {
   strengthDefault?: number;
   triggerWords?: string[];
   addedBy?: string | null;
-  /** LIKENESS-01: Home's signed proof that the LoRA looks like this consenting household adult. Without it a file that names a real person is refused. */
-  likeness?: { subject: string; proof: string };
 }
 
 function libraryDir(): string { return join(dataDir, "video", "loras"); }
@@ -179,7 +175,7 @@ const ID_RE = /^lora-[0-9a-f]{16}$/;
 export const isLoraId = (value: string): boolean => ID_RE.test(value);
 
 function readManifest(): LoraRecord[] {
-  try { const parsed = JSON.parse(readFileSync(manifestPath(), "utf8")) as { loras?: LoraRecord[] }; return Array.isArray(parsed.loras) ? parsed.loras.map((record) => ({ ...record, base_model: record.base_model ?? LORA_BASE_MODEL, likeness_subject: record.likeness_subject ?? null })) : []; } catch { return []; }
+  try { const parsed = JSON.parse(readFileSync(manifestPath(), "utf8")) as { loras?: LoraRecord[] }; return Array.isArray(parsed.loras) ? parsed.loras.map((record) => ({ ...record, base_model: record.base_model ?? LORA_BASE_MODEL })) : []; } catch { return []; }
 }
 function writeManifest(records: LoraRecord[]): void {
   mkdirSync(libraryDir(), { recursive: true, mode: 0o700 });
@@ -230,13 +226,7 @@ export async function importLora(input: ImportInput): Promise<LoraRecord> {
   const text = describedAs([name, ...triggerWords, input.path.split("/").pop(), input.sourceUrl], info.metadata);
   const words = scanWords(text);
   if (words.refuse) throw new LoraError("lora_refused", "This LoRA's own description names a child or a minor in a sexual context. It cannot be added; no setting allows that.", 422);
-  // The picture library's rule, on the same two word lists: a file that names a public figure is refused for everyone; one that names a real person's likeness is refused unless Home signed that it looks like a consenting household adult.
-  const realPerson = realPersonReason(text);
   const sha256 = await sha256OfFile(input.path);
-  let likenessSubject: string | null = null;
-  if (input.likeness) {
-    likenessSubject = input.likeness.subject;
-  }
   const id = `lora-${sha256.slice(0, 16)}`;
   return exclusive(() => {
     const records = readManifest();
@@ -247,13 +237,12 @@ export async function importLora(input: ImportInput): Promise<LoraRecord> {
     copyFileSync(input.path, temp);
     renameSync(temp, target);
     const asked: LoraClass = input.classification ?? "adult-only";
-    const classification: LoraClass = words.adult || likenessSubject || realPerson ? "adult-only" : asked;
+    const classification: LoraClass = words.adult || namesRealPerson(text) ? "adult-only" : asked;
     const record: LoraRecord = {
       id, name, file: `${id}.safetensors`, sha256, bytes: stat.size, mtime_ms: Math.floor(statSync(target).mtimeMs), rank: info.rank, modules: info.modules, base_model: base,
       licence, licence_class: klass, source_url: input.sourceUrl?.slice(0, 2000) ?? null, classification,
-      classification_note: likenessSubject ? "A style that looks like a person is always adult-only." : words.adult && asked === "all-ages" ? "The file's own description names adult content, so it is adult-only." : null,
+      classification_note: words.adult && asked === "all-ages" ? "The file's own description names adult content, so it is adult-only." : null,
       strength_default: input.strengthDefault ?? 1, trigger_words: triggerWords, added_by: input.addedBy?.slice(0, 200) ?? null, added_at: new Date().toISOString(),
-      likeness_subject: likenessSubject,
     };
     writeManifest([...records, record]);
     return record;
@@ -279,7 +268,6 @@ export function updateLora(id: string, patch: LoraPatch): Promise<LoraRecord> {
     if (patch.triggerWords !== undefined) next.trigger_words = cleanWords(patch.triggerWords);
     if (patch.sourceUrl !== undefined) next.source_url = patch.sourceUrl?.slice(0, 2000) ?? null;
     if (patch.classification !== undefined) {
-      if (patch.classification === "all-ages" && current.likeness_subject) throw new LoraError("classification_locked", "A style that looks like a person is always adult-only.", 409);
       if (patch.classification === "all-ages") {
         const info = readLoraHeader(loraFile(id));
         const words = scanWords(describedAs([next.name, ...next.trigger_words, next.source_url], info.metadata));
@@ -304,8 +292,8 @@ export function removeLora(id: string): Promise<boolean> {
   });
 }
 
-export interface LoraRequest { id: string; strength?: number; /** LIKENESS-01: Home's signed proof for using a likeness LoRA (bound to the LoRA's id). */ likenessProof?: string; }
-export interface ResolvedLora { record: LoraRecord; path: string; strength: number; /** Set for a likeness LoRA: checked again when the job starts. */ likeness?: LikenessCheck; }
+export interface LoraRequest { id: string; strength?: number; }
+export interface ResolvedLora { record: LoraRecord; path: string; strength: number; }
 
 /** Turns a job's LoRA list into files to apply, or throws a LoraError that
  * says what to change. `audience` is the second lock: an all-ages job never
@@ -330,9 +318,7 @@ export async function resolveLoras(requests: LoraRequest[] | undefined, audience
     if (stat.size !== record.bytes || Math.floor(stat.mtimeMs) !== record.mtime_ms) {
       if ((await sha256OfFile(path)) !== record.sha256) throw new LoraError("lora_changed", `The file for "${record.name}" changed after it was added, so it was not used. Remove it and add it again.`, 422);
     }
-    // A style that looks like a person needs no consent proof to be used (owner ruling 2026-10-29); the adult-only classification above still applies.
-    const likeness: LikenessCheck | undefined = undefined;
-    out.push({ record, path, strength, ...(likeness ? { likeness } : {}) });
+    out.push({ record, path, strength });
   }
   return out;
 }

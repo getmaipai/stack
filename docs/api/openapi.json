@@ -2019,11 +2019,6 @@
                           "maximum": 2,
                           "description": "Strength, 0 to 2; the record's default when left out."
                         },
-                        "likeness_proof": {
-                          "type": "string",
-                          "maxLength": 4096,
-                          "description": "Needed when the LoRA looks like a person (its record has a likeness_subject): Home's signed, short-lived proof that the person agreed, bound to this LoRA."
-                        },
                         "strength": {
                           "type": "number",
                           "minimum": 0,
@@ -2054,12 +2049,7 @@
                       "uploaded",
                       "household_photo"
                     ],
-                    "description": "Needed with `init_image`: where the starting picture came from, as Home knows it. `generated`: a picture this Stack made (its hash is checked). `household_photo`: a photo of a consenting household adult, accepted only with `consent_proof`. `uploaded`: a photo Home checked and found to show no person. Anything else is refused."
-                  },
-                  "consent_proof": {
-                    "type": "string",
-                    "maxLength": 4096,
-                    "description": "With `image_source: household_photo`: Home's signed proof that the person in the photo is a household adult who agreed, bound to this exact picture and valid for at most 30 minutes. Checked when the request arrives and again when the job starts."
+                    "description": "Optional with `init_image`: where the starting picture came from, as Home knows it. It never refuses a picture; it only decides whether the result is recorded as a free starting picture. `generated`: a picture this Stack made (its hash is checked). `household_photo` and `uploaded`: a picture Home brought; the result is not recorded as one this Stack made."
                   },
                   "strength": {
                     "type": "number",
@@ -2433,17 +2423,12 @@
                       "uploaded",
                       "household_photo"
                     ],
-                    "description": "edit and edit_masked: where the picture came from, as Home knows it (required): `generated` (this Stack made it; its hash is checked), `household_photo` (a photo of a consenting household adult; needs `consent_proof`) or `uploaded` (a photo Home checked shows no person)."
-                  },
-                  "consent_proof": {
-                    "type": "string",
-                    "maxLength": 4096,
-                    "description": "With `image_source: household_photo`: Home's signed proof, bound to this exact picture, valid for at most 30 minutes. Each proof is accepted once."
+                    "description": "edit and edit_masked: where the picture came from, as Home knows it (required): `generated` (this Stack made it; its hash is checked), `household_photo` or `uploaded`; no value is refused, it only decides whether the result is recorded as a free starting picture."
                   },
                   "reference": {
                     "type": "string",
                     "format": "binary",
-                    "description": "edit and edit_masked: a picture the edit draws on, like a person to add to the scene (\"add the woman from the second picture\"). Up to two (`reference`, `reference2`). Declare where each came from with `reference_source` and, for a household photo, `reference_proof`."
+                    "description": "edit and edit_masked: a picture the edit draws on, like a person to add to the scene (\"add the woman from the second picture\"). Up to two (`reference`, `reference2`). Say where each came from with `reference_source`."
                   },
                   "reference_source": {
                     "type": "string",
@@ -2452,10 +2437,6 @@
                       "uploaded",
                       "household_photo"
                     ]
-                  },
-                  "reference_proof": {
-                    "type": "string",
-                    "maxLength": 4096
                   },
                   "reference2": {
                     "type": "string",
@@ -2469,17 +2450,13 @@
                       "household_photo"
                     ]
                   },
-                  "reference2_proof": {
-                    "type": "string",
-                    "maxLength": 4096
-                  },
                   "audience": {
                     "type": "string",
                     "enum": [
                       "all-ages",
                       "adult"
                     ],
-                    "description": "edit and edit_masked: who the picture is for. A household photo is accepted only with `adult`."
+                    "description": "edit and edit_masked: who the picture is for."
                   }
                 },
                 "required": [
@@ -3064,20 +3041,6 @@
                     "type": "string",
                     "description": "Image to video: the first frame, base64 (a data: URL is fine), PNG, JPEG or WebP, at most 20 MB. image_source is optional."
                   },
-                  "image_source": {
-                    "type": "string",
-                    "enum": [
-                      "generated",
-                      "uploaded",
-                      "household_photo"
-                    ],
-                    "description": "Where the picture came from, as Home knows it. `generated`: a picture this Stack's own image generator produced (or the poster of one of its clips); the Stack checks the picture's hash. `household_photo`: a photo of a consenting household adult, accepted only with `consent_proof`. `uploaded` (any other photo) is refused for everyone: a photo that may show a real person needs the household proof (VIDEO-GEN-12, LIKENESS-01)."
-                  },
-                  "consent_proof": {
-                    "type": "string",
-                    "maxLength": 4096,
-                    "description": "With `image_source: household_photo`: Home's signed proof that the person in the photo is a household adult who agreed, bound to this exact picture (its sha256) and valid for at most 30 minutes. Checked when the request arrives and again when the clip starts."
-                  },
                   "size": {
                     "type": "string",
                     "pattern": "^\\d{3,4}x\\d{3,4}$",
@@ -3112,11 +3075,6 @@
                           "type": "number",
                           "minimum": 0,
                           "maximum": 2
-                        },
-                        "likeness_proof": {
-                          "type": "string",
-                          "maxLength": 4096,
-                          "description": "Needed when the LoRA looks like a person (its record has a likeness_subject): Home's signed, short-lived proof that the person agreed, bound to this LoRA."
                         }
                       },
                       "required": [
@@ -3401,31 +3359,6 @@
                     "created",
                     "job",
                     "data"
-                  ]
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "A picture or style that looks like a person was sent without a valid proof from Home: likeness_proof_required, likeness_proof_invalid, likeness_proof_expired, likeness_proof_mismatch, likeness_not_trusted.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    },
-                    "job": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
                   ]
                 }
               }
@@ -14158,11 +14091,6 @@
                           },
                           "added_at": {
                             "type": "string"
-                          },
-                          "likeness_subject": {
-                            "type": "string",
-                            "nullable": true,
-                            "description": "The household adult this LoRA looks like (an opaque id Home gave), or null. A LoRA that looks like a person is always adult-only and every request that applies it needs Home's signed proof."
                           }
                         },
                         "required": [
@@ -14182,8 +14110,7 @@
                           "strength_default",
                           "trigger_words",
                           "added_by",
-                          "added_at",
-                          "likeness_subject"
+                          "added_at"
                         ]
                       }
                     },
@@ -14269,16 +14196,6 @@
                   "added_by": {
                     "type": "string",
                     "description": "An opaque label Home keeps for who added it."
-                  },
-                  "likeness_subject": {
-                    "type": "string",
-                    "maxLength": 200,
-                    "description": "LIKENESS-01: the household adult this style looks like (an opaque id), sent with `likeness_proof`. A file whose description names a real person is refused without both."
-                  },
-                  "likeness_proof": {
-                    "type": "string",
-                    "maxLength": 4096,
-                    "description": "Home's signed, short-lived proof (purpose style_import) that the subject is a household adult who agreed."
                   }
                 },
                 "required": [
@@ -14366,11 +14283,6 @@
                     },
                     "added_at": {
                       "type": "string"
-                    },
-                    "likeness_subject": {
-                      "type": "string",
-                      "nullable": true,
-                      "description": "The household adult this LoRA looks like (an opaque id Home gave), or null. A LoRA that looks like a person is always adult-only and every request that applies it needs Home's signed proof."
                     }
                   },
                   "required": [
@@ -14390,29 +14302,7 @@
                     "strength_default",
                     "trigger_words",
                     "added_by",
-                    "added_at",
-                    "likeness_subject"
-                  ]
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "A style that looks like a person was sent without a valid proof from Home: likeness_proof_required, likeness_proof_invalid, likeness_proof_expired, likeness_proof_mismatch, likeness_not_trusted.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error"
+                    "added_at"
                   ]
                 }
               }
@@ -14613,11 +14503,6 @@
                     },
                     "added_at": {
                       "type": "string"
-                    },
-                    "likeness_subject": {
-                      "type": "string",
-                      "nullable": true,
-                      "description": "The household adult this LoRA looks like (an opaque id Home gave), or null. A LoRA that looks like a person is always adult-only and every request that applies it needs Home's signed proof."
                     }
                   },
                   "required": [
@@ -14637,8 +14522,7 @@
                     "strength_default",
                     "trigger_words",
                     "added_by",
-                    "added_at",
-                    "likeness_subject"
+                    "added_at"
                   ]
                 }
               }
@@ -15758,11 +15642,6 @@
                           },
                           "added_at": {
                             "type": "string"
-                          },
-                          "likeness_subject": {
-                            "type": "string",
-                            "nullable": true,
-                            "description": "The household adult this LoRA looks like (an opaque id Home gave), or null. A LoRA that looks like a person is always adult-only and every request that applies it needs Home's signed proof."
                           }
                         },
                         "required": [
@@ -15782,8 +15661,7 @@
                           "strength_default",
                           "trigger_words",
                           "added_by",
-                          "added_at",
-                          "likeness_subject"
+                          "added_at"
                         ]
                       }
                     },
@@ -15865,16 +15743,6 @@
                   "added_by": {
                     "type": "string",
                     "description": "An opaque label Home keeps for who added it."
-                  },
-                  "likeness_subject": {
-                    "type": "string",
-                    "maxLength": 200,
-                    "description": "LIKENESS-01: the household adult this style looks like (an opaque id), sent with `likeness_proof`. A file whose description names a real person is refused without both."
-                  },
-                  "likeness_proof": {
-                    "type": "string",
-                    "maxLength": 4096,
-                    "description": "Home's signed, short-lived proof (purpose style_import) that the subject is a household adult who agreed."
                   }
                 },
                 "required": [
@@ -15957,11 +15825,6 @@
                     },
                     "added_at": {
                       "type": "string"
-                    },
-                    "likeness_subject": {
-                      "type": "string",
-                      "nullable": true,
-                      "description": "The household adult this LoRA looks like (an opaque id Home gave), or null. A LoRA that looks like a person is always adult-only and every request that applies it needs Home's signed proof."
                     }
                   },
                   "required": [
@@ -15981,29 +15844,7 @@
                     "strength_default",
                     "trigger_words",
                     "added_by",
-                    "added_at",
-                    "likeness_subject"
-                  ]
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "A style that looks like a person was sent without a valid proof from Home: likeness_proof_required, likeness_proof_invalid, likeness_proof_expired, likeness_proof_mismatch, likeness_not_trusted.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error"
+                    "added_at"
                   ]
                 }
               }
@@ -16052,7 +15893,7 @@
             }
           },
           "422": {
-            "description": "Not usable: not_safetensors, not_a_lora, wrong_base_model, licence_acknowledgement_required, lora_refused (a minor in a sexual context, or a real person's likeness: never allowed), bad_name, bad_strength.",
+            "description": "Not usable: not_safetensors, not_a_lora, wrong_base_model, licence_acknowledgement_required, lora_refused (a minor in a sexual context: never allowed), bad_name, bad_strength.",
             "content": {
               "application/json": {
                 "schema": {
@@ -16121,15 +15962,6 @@
                   },
                   "added_by": {
                     "type": "string"
-                  },
-                  "likeness_subject": {
-                    "type": "string",
-                    "maxLength": 200,
-                    "description": "Refused (422 likeness_file_required): a style of a person is added as a file, not from a link."
-                  },
-                  "likeness_proof": {
-                    "type": "string",
-                    "maxLength": 4096
                   }
                 },
                 "required": [
@@ -16307,11 +16139,6 @@
                     },
                     "added_at": {
                       "type": "string"
-                    },
-                    "likeness_subject": {
-                      "type": "string",
-                      "nullable": true,
-                      "description": "The household adult this LoRA looks like (an opaque id Home gave), or null. A LoRA that looks like a person is always adult-only and every request that applies it needs Home's signed proof."
                     }
                   },
                   "required": [
@@ -16331,8 +16158,7 @@
                     "strength_default",
                     "trigger_words",
                     "added_by",
-                    "added_at",
-                    "likeness_subject"
+                    "added_at"
                   ]
                 }
               }
@@ -16456,157 +16282,6 @@
                   },
                   "required": [
                     "error"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/stack/v1/likeness": {
-      "get": {
-        "tags": [
-          "Likeness"
-        ],
-        "summary": "Whether this Stack takes likeness proofs, and from which Home key",
-        "responses": {
-          "200": {
-            "description": "`trusted` is false until Home registers its key.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "likeness": {
-                      "type": "object",
-                      "properties": {
-                        "trusted": {
-                          "type": "boolean"
-                        },
-                        "fingerprint": {
-                          "type": "string",
-                          "nullable": true
-                        },
-                        "max_proof_minutes": {
-                          "type": "integer"
-                        }
-                      },
-                      "required": [
-                        "trusted",
-                        "fingerprint",
-                        "max_proof_minutes"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "likeness"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/stack/v1/likeness/trust": {
-      "put": {
-        "tags": [
-          "Likeness"
-        ],
-        "summary": "Register Home's proof-signing key",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "public_key": {
-                    "type": "string",
-                    "minLength": 40,
-                    "maxLength": 400,
-                    "description": "Home's Ed25519 public key, base64 of the SPKI DER form."
-                  },
-                  "rotation_signature": {
-                    "type": "string",
-                    "maxLength": 400,
-                    "description": "Needed only to replace a key already registered: the current key's signature (base64) over the new key's base64 text."
-                  }
-                },
-                "required": [
-                  "public_key"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "The first key a Stack sees is trusted (it listens on loopback and Home is its only caller).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "result": {
-                      "type": "string",
-                      "enum": [
-                        "registered",
-                        "unchanged",
-                        "rotated"
-                      ]
-                    },
-                    "fingerprint": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "result",
-                    "fingerprint"
-                  ]
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "likeness_key_mismatch: a different key is already trusted and the request was not signed by it.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "bad_key: not an Ed25519 public key.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
                   ]
                 }
               }

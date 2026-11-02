@@ -22,7 +22,6 @@ import { cancelJob, getJob, hasJobRunner, isJobPaused, listJobs, submitJob, wait
 import { TierFieldSchema, TierStatusSchema, governorDecides, tierInput, tierOf } from "@/routes/tierField";
 import { PAUSED_LABEL } from "@/lib/genProgress";
 import { LoraError, resolveLoras } from "@/video/loras";
-import { LikenessError, photoBind, verifyProof, type LikenessCheck } from "@/lib/likeness";
 import { deleteResult, isJobId, messagesPath, posterPath, readResult, videoPath, type VideoResultMeta } from "@/video/results";
 import { memoryVerdict, qualityOfModelName, tierAvailability, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, VIDEO_SPECS, videoGen, videoGenRoot, type VideoQuality } from "@/video/videoGen";
 import { stashClip, unstashClip, videoFailure, videoPreviewPath, videoProgress, videoTracker, VIDEO_JOB_KIND } from "@/video/jobs";
@@ -30,14 +29,12 @@ import { stashClip, unstashClip, videoFailure, videoPreviewPath, videoProgress, 
 const DEFAULT_WAIT_MS = 30_000;
 const MAX_WAIT_MS = 30 * 60_000;
 
-const LoraEntry = z.object({ id: z.string().max(40), strength: z.number().min(0).max(2).optional(), likeness_proof: z.string().max(4096).optional().openapi({ description: "Needed when the LoRA looks like a person (its record has a likeness_subject): Home's signed, short-lived proof that the person agreed, bound to this LoRA." }) });
+const LoraEntry = z.object({ id: z.string().max(40), strength: z.number().min(0).max(2).optional() });
 const VideoRequestSchema = z.object({
   model: z.string().optional().openapi({ description: "Which video model: `video` or `quick` (the default, a silent clip of up to 5 s, which can start from a picture) or `detailed` (LTX-2.3: a sound track with speech made in the same pass, up to 10 s, which can start from a picture too). A model's own id names it too. An unknown name is refused (unknown_model); a model that is not installed answers 503 not_installed.", example: "quick" }),
   prompt: z.string().trim().min(1).max(VIDEO_MAX_PROMPT_CHARS),
   negative_prompt: z.string().max(VIDEO_MAX_PROMPT_CHARS).optional().openapi({ description: "Accepted. The distilled FastWan model runs without guidance, so it has no effect on the clip." }),
   image: z.string().optional().openapi({ description: "Image to video: the first frame, base64 (a data: URL is fine), PNG, JPEG or WebP, at most 20 MB. image_source is optional." }),
-  image_source: z.enum(["generated", "uploaded", "household_photo"]).optional().openapi({ description: "Where the picture came from, as Home knows it. `generated`: a picture this Stack's own image generator produced (or the poster of one of its clips); the Stack checks the picture's hash. `household_photo`: a photo of a consenting household adult, accepted only with `consent_proof`. `uploaded` (any other photo) is refused for everyone: a photo that may show a real person needs the household proof (VIDEO-GEN-12, LIKENESS-01)." }),
-  consent_proof: z.string().max(4096).optional().openapi({ description: "With `image_source: household_photo`: Home's signed proof that the person in the photo is a household adult who agreed, bound to this exact picture (its sha256) and valid for at most 30 minutes. Checked when the request arrives and again when the clip starts." }),
   size: z.string().regex(/^\d{3,4}x\d{3,4}$/).optional().openapi({ description: `<width>x<height>. Quick: multiples of ${VIDEO_SIZE_STEP}, area at most ${VIDEO_MAX_PIXELS} pixels (832x480; 480x832 also fits), default ${VIDEO_DEFAULT_SIZE}. Detailed: multiples of 64, area at most 768 x 448 (448x768 also fits), default 768x448. Each side at least ${VIDEO_MIN_SIDE}.`, example: VIDEO_DEFAULT_SIZE }),
   preview: z.boolean().optional().openapi({ description: "Default true. While the clip runs, the status carries `preview_url`: the first frame of the clip (JPEG, up to 480 px on the long side), drawn from the finished motion the moment the long frame-building stage starts. Pass false to skip it (it costs about a second)." }),
   seconds: z.number().int().min(1).max(VIDEO_SPECS.detailed.maxSeconds).optional().openapi({ description: `Whole seconds (24 frames a second plus the first frame). Quick: 1 to ${VIDEO_MAX_SECONDS}, default ${VIDEO_MAX_SECONDS}. Detailed: 1 to ${VIDEO_SPECS.detailed.maxSeconds}, default 5. A number past the chosen model ceiling is refused (bad_seconds).` }),
@@ -81,7 +78,6 @@ const postRoute = createRoute({ method: "post", path: "/generations", tags: ["Vi
   200: { content: { "application/json": { schema: VideoResponseSchema } }, description: "The clip is ready; `data[0].url` is where to fetch it." },
   202: { content: { "application/json": { schema: VideoResponseSchema } }, description: "Still going past timeout_ms (`data` is empty); poll GET /v1/videos/generations/{job}." },
   413: { content: { "application/json": { schema: ErrorBody } }, description: "The reference picture is larger than 20 MB." },
-  403: { content: { "application/json": { schema: ErrorBody } }, description: "A picture or style that looks like a person was sent without a valid proof from Home: likeness_proof_required, likeness_proof_invalid, likeness_proof_expired, likeness_proof_mismatch, likeness_not_trusted." },
   422: { content: { "application/json": { schema: ErrorBody } }, description: "The request cannot be done: bad_size, bad_image, unknown_lora, wrong_base_model, lora_not_allowed, too_many_loras, bad_strength; `error` says what to change." },
   429: { content: { "application/json": { schema: ErrorBody } }, description: "Four clips are already waiting; try again when one finishes." },
   499: { content: { "application/json": { schema: ErrorBody } }, description: "The job was cancelled." },
@@ -204,7 +200,6 @@ videoV1Routes.openapi(postRoute, async (c) => {
   const seconds = body.seconds ?? (quality === "quick" ? VIDEO_MAX_SECONDS : 5);
   if (seconds > spec.maxSeconds) return fail(c, 422, "bad_seconds", `A ${quality === "quick" ? "Quick" : "Detailed"} clip is at most ${spec.maxSeconds} seconds on this computer.${quality === "quick" ? " Detailed clips run up to " + VIDEO_SPECS.detailed.maxSeconds + " seconds." : ""}`);
   let image: Uint8Array | null = null;
-  const checks: LikenessCheck[] = [];
   if (body.image !== undefined) {
     // Any picture can start a clip: the Stack does not judge where it came from. The age and surface gate is the caller's (Home) and stays outside this file.
     image = decodeImage(body.image);
@@ -213,13 +208,10 @@ videoV1Routes.openapi(postRoute, async (c) => {
     if (!looksLikePicture(image)) return fail(c, 422, "bad_image", "The picture could not be read. Send a PNG, JPEG or WebP as base64.");
   }
   let loras;
-  try { loras = await resolveLoras((body.loras ?? []).map((entry) => ({ id: entry.id, ...(entry.strength !== undefined ? { strength: entry.strength } : {}), ...(entry.likeness_proof !== undefined ? { likenessProof: entry.likeness_proof } : {}) })), body.audience ?? "all-ages", spec.loraBase as "wan2.2-ti2v-5b" | "ltx-2.3"); } catch (error) {
+  try { loras = await resolveLoras((body.loras ?? []).map((entry) => ({ id: entry.id, ...(entry.strength !== undefined ? { strength: entry.strength } : {}) })), body.audience ?? "all-ages", spec.loraBase as "wan2.2-ti2v-5b" | "ltx-2.3"); } catch (error) {
     if (error instanceof LoraError) return fail(c, error.status === 404 ? 422 : error.status, error.code, error.message);
     throw error;
   }
-  for (const lora of loras) if (lora.likeness) checks.push(lora.likeness);
-  // The age and surface gate outranks a consent: a clip that looks like a person is for an adult audience only.
-  if (checks.length > 0 && (body.audience ?? "all-ages") !== "adult") return fail(c, 403, "likeness_adult_only", "A video that looks like a person is only made for an adult on their own screen. Ask Home to make it from a signed-in adult's chat.");
   if (!videoGen.hasModels(quality)) return fail(c, 503, "not_installed", quality === "detailed" ? "The Detailed video model is not installed yet. An admin can install it in Settings, Models and storage, then try again." : "The video model is not installed yet. Install it from Home's Engines page, then try again.");
   if (activeClips() >= VIDEO_QUEUE_MAX) return fail(c, 429, "queue_full", `${VIDEO_QUEUE_MAX} clips are already waiting. Try again when one finishes.`);
   const verdict = governorDecides(body.tier) ? { ok: true as const } : memoryVerdict(quality);
@@ -228,8 +220,8 @@ videoV1Routes.openapi(postRoute, async (c) => {
   const frames = seconds * VIDEO_FPS + 1;
   const token = crypto.randomUUID();
   const loraIds = loras.map((lora) => lora.record.id);
-  stashClip(token, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, likeness: checks, preview: body.preview !== false });
-  const submitted = submitJob({ kind: VIDEO_JOB_KIND, role: "video", input: { token, size: `${size.width}x${size.height}`, seconds, seed, quality, mode: image ? "image-to-video" : "text-to-video", lora_ids: loraIds, likeness: checks.length > 0, ...tierInput(body.tier), ...(body.quiet_seconds !== undefined ? { quiet_seconds: body.quiet_seconds } : {}), ...(body.quiet_max_wait_seconds !== undefined ? { quiet_max_wait_seconds: body.quiet_max_wait_seconds } : {}) } });
+  stashClip(token, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, preview: body.preview !== false });
+  const submitted = submitJob({ kind: VIDEO_JOB_KIND, role: "video", input: { token, size: `${size.width}x${size.height}`, seconds, seed, quality, mode: image ? "image-to-video" : "text-to-video", lora_ids: loraIds, ...tierInput(body.tier), ...(body.quiet_seconds !== undefined ? { quiet_seconds: body.quiet_seconds } : {}), ...(body.quiet_max_wait_seconds !== undefined ? { quiet_max_wait_seconds: body.quiet_max_wait_seconds } : {}) } });
   if ("refused" in submitted) return fail(c, 503, submitted.code ?? "unsupported", submitted.reason);
   const settled = await waitForJob(submitted.job.id, body.timeout_ms ?? DEFAULT_WAIT_MS);
   const created = Math.floor(new Date(submitted.job.createdAt).getTime() / 1000);

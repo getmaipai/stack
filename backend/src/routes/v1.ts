@@ -363,15 +363,12 @@ const ImageEditFormSchema = z.object({
   factor: z.coerce.number().positive().optional(),
   engine: z.enum(["auto", "vision", "isnet"]).optional().openapi({ description: "remove_background only: auto uses Apple's on-device finder when this Mac has it, else the ONNX model." }),
   timeout_ms: z.coerce.number().int().positive().optional(),
-  image_source: z.enum(["generated", "uploaded", "household_photo"]).optional().openapi({ description: "edit and edit_masked: where the picture came from, as Home knows it (required): `generated` (this Stack made it; its hash is checked), `household_photo` (a photo of a consenting household adult; needs `consent_proof`) or `uploaded` (a photo Home checked shows no person)." }),
-  consent_proof: z.string().max(4096).optional().openapi({ description: "With `image_source: household_photo`: Home's signed proof, bound to this exact picture, valid for at most 30 minutes. Each proof is accepted once." }),
-  reference: z.custom<File>((value) => value instanceof File, "A reference picture.").openapi({ type: "string", format: "binary", description: "edit and edit_masked: a picture the edit draws on, like a person to add to the scene (\"add the woman from the second picture\"). Up to two (`reference`, `reference2`). Declare where each came from with `reference_source` and, for a household photo, `reference_proof`." }).optional(),
+  image_source: z.enum(["generated", "uploaded", "household_photo"]).optional().openapi({ description: "edit and edit_masked: where the picture came from, as Home knows it (required): `generated` (this Stack made it; its hash is checked), `household_photo` or `uploaded`; no value is refused, it only decides whether the result is recorded as a free starting picture." }),
+  reference: z.custom<File>((value) => value instanceof File, "A reference picture.").openapi({ type: "string", format: "binary", description: "edit and edit_masked: a picture the edit draws on, like a person to add to the scene (\"add the woman from the second picture\"). Up to two (`reference`, `reference2`). Say where each came from with `reference_source`." }).optional(),
   reference_source: z.enum(["generated", "uploaded", "household_photo"]).optional(),
-  reference_proof: z.string().max(4096).optional(),
   reference2: z.custom<File>((value) => value instanceof File, "A second reference picture.").openapi({ type: "string", format: "binary" }).optional(),
   reference2_source: z.enum(["generated", "uploaded", "household_photo"]).optional(),
-  reference2_proof: z.string().max(4096).optional(),
-  audience: z.enum(["all-ages", "adult"]).optional().openapi({ description: "edit and edit_masked: who the picture is for. A household photo is accepted only with `adult`." }),
+  audience: z.enum(["all-ages", "adult"]).optional().openapi({ description: "edit and edit_masked: who the picture is for." }),
 });
 const ImageEditResponseSchema = z.object({ created: z.number().int(), job: z.string(), data: z.array(z.record(z.string(), z.unknown())) });
 const ImageEditErrorSchema = z.object({ error: z.string(), code: z.string().optional(), job: z.string().optional() });
@@ -391,7 +388,7 @@ v1Routes.openapi(imageEditsRoute, async (c) => {
   if (form.operation === "edit" || form.operation === "edit_masked") {
     if (form.image.size === 0 || form.image.size > MAX_UPLOAD_BYTES) return jsonReply(c, { error: `The picture must be between 1 byte and ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.`, code: "too_large" }, 413, identityHeaders(null)) as never;
     if (form.mask && form.mask.size > MAX_UPLOAD_BYTES) return jsonReply(c, { error: "The mask is too big.", code: "too_large" }, 413, identityHeaders(null)) as never;
-    return editImages(c, { image: form.image, mask: form.mask, operation: form.operation, instruction: form.instruction, prompt: form.prompt, region: form.region, feather: form.feather, seed: form.seed, steps: form.steps, timeout_ms: form.timeout_ms, image_source: form.image_source, consent_proof: form.consent_proof, audience: form.audience, references: [...(form.reference ? [{ file: form.reference, source: form.reference_source, proof: form.reference_proof }] : []), ...(form.reference2 ? [{ file: form.reference2, source: form.reference2_source, proof: form.reference2_proof }] : [])] }) as never;
+    return editImages(c, { image: form.image, mask: form.mask, operation: form.operation, instruction: form.instruction, prompt: form.prompt, region: form.region, feather: form.feather, seed: form.seed, steps: form.steps, timeout_ms: form.timeout_ms, image_source: form.image_source, audience: form.audience, references: [...(form.reference ? [{ file: form.reference, source: form.reference_source }] : []), ...(form.reference2 ? [{ file: form.reference2, source: form.reference2_source }] : [])] }) as never;
   }
   if (form.image.size === 0 || form.image.size > MAX_UPLOAD_BYTES) return jsonReply(c, { error: `The picture must be between 1 byte and ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.`, code: "too_large" }, 413, identityHeaders(null)) as never;
   if (form.mask && form.mask.size > MAX_UPLOAD_BYTES) return jsonReply(c, { error: "The mask is too big.", code: "too_large" }, 413, identityHeaders(null)) as never;

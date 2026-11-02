@@ -17,8 +17,7 @@
 // Safety posture: the model has no filter and the Stack makes no decision about
 // who is in a picture or who is asking. The Stack enforces what it can know:
 // the hard size limits, the tier, the LoRA audience lock, and which LoRAs may
-// ever be added (never a minor in a sexual context, never a real person's
-// likeness). Age and surface gates, the prompt floor and the finished-picture
+// ever be added (never a minor in a sexual context). Age and surface gates, the prompt floor and the finished-picture
 // check live in Home, where the person is known.
 import { engineIdleMs } from "@/lib/engineIdle";
 import { heavyGate, PausableProcess, type Lease, type PausableWorker } from "@/lib/heavyGate";

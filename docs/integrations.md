@@ -502,34 +502,15 @@ preview: the moment the motion is finished and the long frame-building stage sta
 job's work folder (done, failed, cancelled, or a Stack restart). Per-step previews of the noisy motion were not built: they need the frame decoder loaded for the
 whole motion stage, which is only 9 percent of the clip.
 
-**Reference pictures (VIDEO-GEN-12, owner ruling 2026-10-17).** `image` is a PNG, JPEG or WebP as base64 (a `data:` URL is fine), at most 20 MB,
-and needs `image_source`. Only `generated` is accepted, and only for a picture this Stack's own image generator returned (or the poster of one of its own
-clips): the Stack records the sha256 of every picture it generates (hash and time only, 30 days, the newest 2,000) and checks the bytes it is given, so the
-picture must arrive unchanged. `uploaded` and any picture the Stack did not make are refused for everyone. The one other source is `household_photo`
-(LIKENESS-01, owner ruling 2026-10-17): a photo of a household adult who agreed, accepted only with `consent_proof`, Home's signed proof (below) bound to the
-sha256 of that exact picture. Home applies its own age, surface, consent and face-count gates first.
-
-**Likeness proofs (LIKENESS-01).** Who agreed to what is Home's record; the Stack refuses to act on a likeness without a short-lived proof Home signed for
-that one thing. A proof is `<payload>.<signature>`, both base64url: the payload is JSON `{ v: 1, purpose, subject, requester, bind, iat, exp, jti }` and the
-signature is Ed25519 over the payload text. `purpose` is `photo` (a photo of the subject starts a clip, a picture or an edit; `bind` is the picture's sha256),
-`style_import` (a style of the subject is added; `bind` is the file's sha256, so it is added as a file, never from a link) or `style_use` (that style is applied;
-`bind` is the LoRA id). A proof lives at most 30 minutes (`exp - iat`), is accepted once (its `jti` is remembered until it expires: `likeness_proof_replayed`),
-is checked when the request arrives and again when the job starts (a job can wait minutes in the line), and is refused when forged, expired, for another
-picture or purpose, or when no key is registered. A photo or style of a person is made only with `audience: adult` (`likeness_adult_only`). Trust on first use is
-the limit of the key registration: the Stack and Home share one computer's loopback, so Home registers at start and compares the fingerprint it gets back. Home registers its public key once with `PUT
-/stack/v1/likeness/trust { public_key }` (base64 SPKI DER, Ed25519); the first key is trusted, a different one replaces it only with `rotation_signature`, the
-old key's signature over the new key's base64 text (409 `likeness_key_mismatch` otherwise). `GET /stack/v1/likeness` reports `{ trusted, fingerprint,
-max_proof_minutes }`. Errors are 403 with `likeness_proof_required`, `_invalid`, `_expired`, `_mismatch` or `likeness_not_trusted`.
-
-**Amendment, owner ruling 2026-10-29: these checks no longer refuse anything.** A starting, edited or reference picture is accepted whatever `image_source` or `reference_source` says (or when they are missing), `consent_proof` and `reference_proof` are read and ignored, a photo of a person no longer needs `audience: adult`, and a style that looks like a person is added and used without a proof (it is classed adult-only). The fields stay in the form so older callers keep working. The public-figure refusal on style files is gone too (owner ruling 2026-10-29); only a style file that names a minor in a sexual context is still refused, and Home keeps its own age and audience gates.
-
-**Pictures that look like a person.** A LoRA record has `likeness_subject` (the opaque id Home gave, or null). A file whose own description names a real
-person's likeness is refused at import, unless the import carries `likeness_subject` and a valid `style_import` proof; a file that names a public figure
-(celebrity, actor, influencer, politician and the like) is refused with or without one, and a minor in a sexual context is refused always. A likeness LoRA is
-always adult-only (`classification_locked` on any change) and every picture or clip request that applies it needs `likeness_proof` (a `style_use` proof) on its
-`loras` entry. `init_image` on `/v1/images/generations` and the picture of `/v1/images/edits` now need `image_source` too (`generated` checked against the
-ledger, `household_photo` with a proof, or `uploaded`: a photo Home found to show no person). Output of a job that rested on a proof is not recorded as a
-generated picture, so starting again from it needs a fresh proof. Home applies its own age, surface and consent gates first.
+**Reference pictures and styles of real people (MODELS-CENSOR-05, owner ruling 2026-11-02).** `image` is a PNG, JPEG or WebP as base64 (a `data:` URL is
+fine), at most 20 MB. The Stack never judges where a picture came from or whom it shows: the models decide for an adult, the app only filters, and Home keeps
+the age and audience gates. The Stack keeps a ledger of the sha256 of every picture it generates (hash and time only, 30 days, the newest 2,000). On
+`/v1/images/generations` and `/v1/images/edits`, `image_source` (`generated`, `uploaded`, `household_photo`) and `reference_source` are optional and refuse
+nothing; they only decide whether the result counts as a picture this Stack made and so may start a later job (a result derived from a photo someone brought
+does not). The likeness proofs of LIKENESS-01 are removed: there is no `/stack/v1/likeness` route, no signing key to register, and `consent_proof`,
+`reference_proof`, `likeness_proof`, `likeness_subject` and the `likeness_*` error codes no longer exist (an older caller that still sends the fields is
+ignored, not refused). A style file whose description names a real person or a public figure is added like any other and is classed adult-only, so it never
+reaches a child's or a teen's request.
 
 **LoRAs.** The household library is `data/video/loras/` (one `.safetensors` per record plus `manifest.json`). `GET /stack/v1/video/loras`;
 `POST /stack/v1/video/loras` (multipart: `file`, or `path` for a file already on the Stack's computer; `name`, `licence`, `licence_acknowledged`,
@@ -635,7 +616,7 @@ never fit beside what is resident is 503 `no_memory` at once. Four jobs may be w
 `z-image-turbo`), `size` (`1024x1024` unsaid; 256 to 2048 a side, multiples of 16), `n` (1 to 4; seeds `seed`, `seed+1`, ...), `seed`, `steps` (4 for
 Klein, 9 for Z-Image; at most 12 and 20), `negative_prompt` (accepted, no effect: the distilled models run without guidance), `loras`
 (`[{ id | sha256, scale }]`, at most 4, scale 0 to 2, the record's default when left out), `audience` (`all-ages` unsaid, or `adult`), `init_image` (base64,
-at most 40 MB, needs `image_source` and, for a household photo, `consent_proof`) with `strength` (0.05 to 1, default 0.6) for image to image, `preview` (default true: the status carries a small preview picture while the job runs, see below; false skips it), `timeout_ms`. A LoRA selects the base model it
+at most 40 MB, `image_source` optional) with `strength` (0.05 to 1, default 0.6) for image to image, `preview` (default true: the status carries a small preview picture while the job runs, see below; false skips it), `timeout_ms`. A LoRA selects the base model it
 was made for (a request that mixes bases is 422 `wrong_base_model`). `Pic` is `{ url, thumbnail_url, b64_json (the waiting reply only), content_type, seed,
 width, height, model, steps, ms, lora_ids, mode }`. Errors carry `error` (what happened, what to do) and `code`: 413 `too_large`; 422 `bad_size` `bad_steps`
 `bad_image` `unknown_lora` `wrong_base_model` `lora_not_allowed` `lora_changed` `lora_missing` `too_many_loras` `duplicate_lora` `bad_strength`; 429 `queue_full`;
@@ -670,7 +651,7 @@ unchanged bit for bit (0 feather: exactly the mask). `seed`, `steps`, `timeout_m
 `edit` or `edit-masked`, files under `/v1/images/generations/{job}/0.png`); extra codes: 422 `instruction_required` `mask_required` `bad_region` `mask_empty`.
 IMGEDIT-01 additions (additive): `edit` and `edit_masked` take up to two extra pictures, `reference` and `reference2`, that the edit draws on ("add the woman from the
 second picture to the bench"). Each is declared like the main picture (`reference_source`, `reference2_source`: `generated`, `uploaded` or `household_photo`) and a
-`household_photo` reference needs its own signed likeness proof (`reference_proof`, `reference2_proof`, bound to that picture's hash, used once) and `audience: adult`.
+`household_photo` reference is accepted like any other.
 With a reference the whole scene goes to the model (no crop). `GET /stack/v1/image` reports `edit.references` (0 on a Stack that cannot).
 Two more tool operations, Apple's on-device person finder (macOS 14 and later, a small helper compiled once like the foreground finder): `find_people` answers `data[0].people`
 (numbered boxes as fractions of the picture, each person's main blob only) and a copy of the picture with the boxes drawn and numbered; `erase_people` (field `people`: `1,3` or `all`)
@@ -685,8 +666,8 @@ The other non-generative operations (`remove_background`, `erase`, `upscale`, `r
 16 hex of the sha256. The base model (`flux2-klein-4b` or `z-image-turbo`) is read from the tensors; an SDXL-family file (SDXL, Pony, Illustrious, NoobAI), a FLUX.1 or Chroma file declared in its header, or a Wan file is refused 422 `wrong_base_model`
 and says where it belongs. Open licences import as is; any other needs `licence_acknowledged=true`. `classification` defaults to `adult-only` (uncertain means
 adult-only); a file whose own metadata, name, tags or trigger words name adult content is adult-only whatever is asked. Refused outright (422
-`lora_refused`, no setting lifts it): a file that names a child or a minor in a sexual context, and a file that says it reproduces a real person's likeness
-(a celebrity or likeness tag; a consenting household member's own face is refused until the owner rules). The word lists are a tripwire in
+`lora_refused`, no setting lifts it): a file that names a child or a minor in a sexual context. A file that names a real person or a public figure is added
+(classed adult-only). The word lists are a tripwire in
 `lib/media/loraLibrary.ts`, not a judgement of the pictures. **Who may use which LoRA is Home's rule**: the request names the ids it may apply and
 `audience` is a second lock (an `all-ages` request naming an `adult-only` LoRA is 422 `lora_not_allowed`). The video library (`video/loras.ts`) keeps its
 own file; both read the same safetensors header.
