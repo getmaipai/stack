@@ -148,15 +148,18 @@ test("MAX-LIVE-01: idle models that were measured count as room to give back; a 
 
 test("MAX-LIVE-01: when the memory sampler fails the static Standard share decides (fallback), and a live reading takes over again", async () => {
   const request = maxRequest("video-worker", 41 * GB); // above the Standard share (60 percent of the tier room)
-  await new Promise((r) => setTimeout(r, 60));
+  // The sampler runs on a timer, so a loaded machine can be late: wait for the basis to change instead of a fixed pause.
+  const until = async (basis: string) => { for (let i = 0; i < 100 && reducedNeedFor(request).basis !== basis; i++) await new Promise((r) => setTimeout(r, 50)); };
+  await until("live");
   expect(reducedNeedFor(request).basis).toBe("live");
   sampler.fail = true;
-  await new Promise((r) => setTimeout(r, 80));
+  await until("static");
   const fallback = reducedNeedFor(request);
   expect(fallback.basis).toBe("static");
   expect(fallback.needed).toBe(true);
   expect(reducedNeedFor(maxRequest("small", 10 * GB))).toMatchObject({ basis: "static", needed: false });
   sampler.fail = false; sampler.free = 70 * GB;
-  await new Promise((r) => setTimeout(r, 80));
+  await until("live");
+  for (let i = 0; i < 100 && reducedNeedFor(request).needed; i++) await new Promise((r) => setTimeout(r, 50));
   expect(reducedNeedFor(request)).toMatchObject({ basis: "live", needed: false });
 });
