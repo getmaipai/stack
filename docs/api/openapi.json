@@ -3051,6 +3051,24 @@
                     "description": "<width>x<height>. Quick: multiples of 32, area at most 399360 pixels (832x480; 480x832 also fits), default 832x480. Detailed: multiples of 64, area at most 768 x 448 (448x768 also fits), default 768x448. ltx25-q8: only 512x256 (up to 10 s), 640x320 and 768x448 (up to 5 s); the nominal 512x288 and 640x352 are accepted and made at the true size, which the reply reports; anything else is refused (bad_size). ltx25-max: only 1024x576 (up to 10 s). Each side at least 256.",
                     "example": "832x480"
                   },
+                  "source_video": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096,
+                    "description": "LTX25-EDIT-01, `ltx25-max` only: an absolute path to the clip to edit, a file inside a media folder Home declared (or the Stack's media job folder), the same rule `media.edit` uses for its inputs, so a clip of 100s of MB is never sent as base64. Needs exactly one of `extend_seconds` and `retake_from_seconds`. The Stack reads it, never changes it, and keeps no copy past the job. The source must have a picture and a sound track, be 25 to 241 frames (about 1 to 10 seconds), and be at least 768x448: a source that is not on the measured size table or not at 24 a second is re-made by the Stack's ffmpeg first (scaled to fill and centre-cropped, never stretched), and the result carries the true size. Refusals are 422 `bad_source`, `bad_source_audio`, `source_not_found` and the media path codes."
+                  },
+                  "extend_seconds": {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 6,
+                    "description": "LTX25-EDIT-01: add this many seconds after the source (1 to 6), continuing its picture and speech from `prompt`. Mapped to ceil(seconds x 24 / 8) latent frames of 8 pixel frames each, so a whole number of seconds adds exactly that many (1 s is 3 latent frames, 6 s is 18). The source is kept as it is (re-decoded, about 39.5 dB PSNR against the source) and the new part follows it with no visible seam. Needs `source_video` and `model` `ltx25-max`; excludes `retake_from_seconds`."
+                  },
+                  "retake_from_seconds": {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 9,
+                    "description": "LTX25-EDIT-01: regenerate the source from this second to its end (1 to 9), picture and speech, from `prompt`; the part before it is kept (about 39.7 dB PSNR). The first latent frame at floor(seconds x 24 / 8) is where the new part starts; the end is always the clip end. A start at or past the clip end is 422 `bad_retake`. Needs `source_video` and `model` `ltx25-max`; excludes `extend_seconds`."
+                  },
                   "preview": {
                     "type": "boolean",
                     "description": "Default true. While the clip runs, the status carries `preview_url`: the first frame of the clip (JPEG, up to 480 px on the long side), drawn from the finished motion the moment the long frame-building stage starts. Pass false to skip it (it costs about a second)."
@@ -3202,7 +3220,9 @@
                             "type": "string",
                             "enum": [
                               "text-to-video",
-                              "image-to-video"
+                              "image-to-video",
+                              "extend",
+                              "retake"
                             ]
                           },
                           "lora_ids": {
@@ -3322,7 +3342,9 @@
                             "type": "string",
                             "enum": [
                               "text-to-video",
-                              "image-to-video"
+                              "image-to-video",
+                              "extend",
+                              "retake"
                             ]
                           },
                           "lora_ids": {
@@ -3714,7 +3736,9 @@
                             "type": "string",
                             "enum": [
                               "text-to-video",
-                              "image-to-video"
+                              "image-to-video",
+                              "extend",
+                              "retake"
                             ]
                           },
                           "lora_ids": {
@@ -14443,6 +14467,40 @@
                                       },
                                       "short_peak_gb": {
                                         "nullable": true
+                                      },
+                                      "extend": {
+                                        "type": "object",
+                                        "nullable": true,
+                                        "properties": {
+                                          "peak_gb": {
+                                            "type": "number"
+                                          },
+                                          "admit_gb": {
+                                            "type": "number"
+                                          }
+                                        },
+                                        "required": [
+                                          "peak_gb",
+                                          "admit_gb"
+                                        ],
+                                        "description": "The extend footprint at this size, or null when an extend was not measured here."
+                                      },
+                                      "retake": {
+                                        "type": "object",
+                                        "nullable": true,
+                                        "properties": {
+                                          "peak_gb": {
+                                            "type": "number"
+                                          },
+                                          "admit_gb": {
+                                            "type": "number"
+                                          }
+                                        },
+                                        "required": [
+                                          "peak_gb",
+                                          "admit_gb"
+                                        ],
+                                        "description": "The retake footprint at this size, or null when a retake was not measured here."
                                       }
                                     },
                                     "required": [
@@ -14454,10 +14512,140 @@
                                       "max_frames",
                                       "peak_gb",
                                       "admit_gb",
-                                      "short_peak_gb"
+                                      "short_peak_gb",
+                                      "extend",
+                                      "retake"
                                     ]
                                   },
                                   "description": "One row: `max`, 1024x576, up to 10 s (241 frames). `peak_gb` is the measured OS footprint of that clip (48.6 GB, `footprint`; the MLX peak reads lower and is not the figure); `admit_gb` is what admission reserves (the measured footprint plus 5 percent headroom), under the 64 GB per-clip cap. Home maps its Max slot to this row."
+                                },
+                                "extend": {
+                                  "type": "boolean",
+                                  "description": "LTX25-EDIT-01: the Max runtime has the extend pipeline (`extend_distilled.py`), so `POST /v1/videos/generations` with `source_video` and `extend_seconds` can run. False when the installed runtime lacks it."
+                                },
+                                "retake": {
+                                  "type": "boolean",
+                                  "description": "LTX25-EDIT-01: the Max runtime has the retake pipeline (`retake.py`), so `source_video` with `retake_from_seconds` can run."
+                                },
+                                "edit": {
+                                  "type": "object",
+                                  "properties": {
+                                    "extend_seconds": {
+                                      "type": "object",
+                                      "properties": {
+                                        "min": {
+                                          "type": "number"
+                                        },
+                                        "max": {
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "min",
+                                        "max"
+                                      ]
+                                    },
+                                    "retake_from_seconds": {
+                                      "type": "object",
+                                      "properties": {
+                                        "min": {
+                                          "type": "number"
+                                        },
+                                        "max": {
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "min",
+                                        "max"
+                                      ]
+                                    },
+                                    "source": {
+                                      "type": "object",
+                                      "properties": {
+                                        "min_frames": {
+                                          "type": "integer"
+                                        },
+                                        "max_frames": {
+                                          "type": "integer"
+                                        },
+                                        "fps": {
+                                          "type": "integer"
+                                        },
+                                        "min_size": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "min_frames",
+                                        "max_frames",
+                                        "fps",
+                                        "min_size"
+                                      ],
+                                      "description": "What a source clip may be: frames at 24 a second (a clip at another rate is re-made first), and the smallest size (a larger one is fitted down to the largest `profiles` size inside it)."
+                                    },
+                                    "profiles": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "size": {
+                                            "type": "string"
+                                          },
+                                          "width": {
+                                            "type": "integer"
+                                          },
+                                          "height": {
+                                            "type": "integer"
+                                          },
+                                          "extend": {
+                                            "type": "object",
+                                            "properties": {
+                                              "peak_gb": {
+                                                "type": "number"
+                                              },
+                                              "admit_gb": {
+                                                "type": "number"
+                                              }
+                                            },
+                                            "required": [
+                                              "peak_gb",
+                                              "admit_gb"
+                                            ]
+                                          },
+                                          "retake": {
+                                            "type": "object",
+                                            "properties": {
+                                              "peak_gb": {
+                                                "type": "number"
+                                              },
+                                              "admit_gb": {
+                                                "type": "number"
+                                              }
+                                            },
+                                            "required": [
+                                              "peak_gb",
+                                              "admit_gb"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "size",
+                                          "width",
+                                          "height",
+                                          "extend",
+                                          "retake"
+                                        ]
+                                      },
+                                      "description": "One row per source size the Stack edits, measured with a 10 s source: `peak_gb` is the OS footprint and `admit_gb` what admission reserves (the footprint plus 5 percent), under the 64 GB per-clip cap."
+                                    }
+                                  },
+                                  "required": [
+                                    "extend_seconds",
+                                    "retake_from_seconds",
+                                    "source",
+                                    "profiles"
+                                  ]
                                 }
                               },
                               "required": [
@@ -14474,7 +14662,10 @@
                                 "lora_base_model",
                                 "ready",
                                 "environment",
-                                "profiles"
+                                "profiles",
+                                "extend",
+                                "retake",
+                                "edit"
                               ]
                             }
                           },

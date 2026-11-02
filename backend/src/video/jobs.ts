@@ -6,7 +6,7 @@
 // (lib/jobs.ts) gives the clip its place in line and the governor's admission
 // of 44 GB before this runner is called. The kind is not a role id on
 // purpose: `/v1/images/generations` with model "video" must never reach it.
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { registerJobRunner } from "@/lib/jobs";
 import { heavyGate } from "@/lib/heavyGate";
@@ -14,8 +14,10 @@ import { heavyGate } from "@/lib/heavyGate";
 import { workDir, commitResult, type VideoResultMeta } from "./results";
 import { recordGeneratedImage } from "./provenance";
 import { GenTracker, historyKey, previewExists, previewFile, recordRun } from "@/lib/genProgress";
-import { overallPercent, VideoError, videoGen, VIDEO_SPECS, type VideoQuality } from "./videoGen";
+import { overallPercent, VideoError, videoGen, VIDEO_SPECS, type VideoQuality, type VideoRunInput } from "./videoGen";
 import { ltx25MaxPeakBytes, ltx25PeakBytes } from "./ltx25";
+import { checkEdit, EditSourceError, editRuntime, extendLatentFrames, extendPixelFrames, fitArgs, ltx25EditAdmitBytes, planSource, probeSource, retakeStartLatent, type Ltx25EditKind } from "./ltx25Edit";
+import { resolveReadable } from "@/media/paths";
 
 export const VIDEO_JOB_KIND = "video_generation";
 
@@ -32,6 +34,8 @@ export interface StashedClip {
   quality?: VideoQuality;
   /** GENPREVIEW-01: draw the first-frame preview when the motion is done (default on). */
   preview?: boolean;
+  /** LTX25-EDIT-01 (Max only): extend or retake the clip at `sourcePath` (already resolved inside a declared media folder). `seconds` is `extend_seconds` or `retake_from_seconds`. */
+  edit?: { kind: Ltx25EditKind; sourcePath: string; seconds: number };
 }
 const pending = new Map<string, StashedClip & { at: number }>();
 const STASH_TTL_MS = 30 * 60_000;
@@ -66,6 +70,34 @@ function remember<T>(map: Map<string, T>, key: string, value: T): void {
   while (map.size > 200) map.delete(map.keys().next().value as string);
 }
 
+/** The job's copy of an edit's source, and what the worker is told about it. Throws a VideoError with a plain message for a source the table does not allow. */
+async function prepareEditSource(edit: NonNullable<StashedClip["edit"]>, work: string, signal: AbortSignal, status: (text: string) => void): Promise<{ edit: NonNullable<VideoRunInput["edit"]>; width: number; height: number; frames: number }> {
+  try {
+    const source = resolveReadable(edit.sourcePath, "The source clip");
+    const ffmpeg = await editRuntime.toolbox.path("ffmpeg", status, signal);
+    const ffprobe = await editRuntime.toolbox.path("ffprobe", status, signal);
+    const plan = planSource(await probeSource(ffprobe, source, editRuntime.run, signal));
+    checkEdit(edit.kind, plan, edit.seconds);
+    const sourcePath = join(work, "source.mp4");
+    if (plan.fit) {
+      const made = await editRuntime.run([ffmpeg, ...fitArgs(source, sourcePath, plan)], { signal });
+      if (made.aborted) throw new VideoError("cancelled", "Cancelled.", 499);
+      if (made.code !== 0) throw new EditSourceError("bad_source", "The source could not be fitted to the size the video model edits. Send an mp4 clip with a picture and sound.");
+    } else copyFileSync(source, sourcePath);
+    const extendFrames = edit.kind === "extend" ? extendLatentFrames(edit.seconds) : undefined;
+    // The expected length of the result, for the progress estimate (the worker reports the real one): an extend adds 8 frames per latent frame.
+    const frames = edit.kind === "extend" ? plan.frames + extendPixelFrames(edit.seconds) : plan.frames;
+    return { edit: { kind: edit.kind, sourcePath, ffmpeg, ffprobe, ...(extendFrames !== undefined ? { extendFrames } : { retakeStartLatent: retakeStartLatent(edit.seconds) }) }, width: plan.width, height: plan.height, frames };
+  } catch (error) {
+    if (error instanceof EditSourceError) throw new VideoError(error.code, error.message, error.status);
+    if (error instanceof VideoError) throw error;
+    if (signal.aborted) throw new VideoError("cancelled", "Cancelled.", 499);
+    const code = (error as { code?: unknown } | null)?.code;
+    if (typeof code === "string" && /^(path_|no_roots|root_|tool_)/.test(code)) throw new VideoError(code === "path_not_found" ? "source_not_found" : code, error instanceof Error ? error.message : "The source clip could not be read.", code.startsWith("tool_") ? 503 : 422);
+    throw error;
+  }
+}
+
 export interface VideoJobResult { job: string; model: string; width: number; height: number; frames: number; fps: number; seconds: number; seed: number; lora_ids: string[]; ms: number; }
 
 export function registerVideoJobs(): void {
@@ -84,14 +116,23 @@ export function registerVideoJobs(): void {
       const outputDir = join(work, "out");
       const started = Date.now();
       const quality = clip.quality ?? "quick";
+      // LTX25-EDIT-01: the source is probed again (the authority), fitted to the runtime's table when needed and copied into the job's private folder.
+      let editInput: VideoRunInput["edit"] | undefined;
+      if (clip.edit) {
+        const prepared = await prepareEditSource(clip.edit, work, signal, (status) => update({ status }));
+        editInput = prepared.edit;
+        clip.width = prepared.width; clip.height = prepared.height; clip.frames = prepared.frames;
+      }
       const pacing = heavyGate.pacing(job.id);
-      const tracker = quality === "quick"
+      const tracker = clip.edit
+        ? new GenTracker("video_edit", historyKey("video_edit", clip.width, clip.height, `${clip.edit.kind}-${clip.frames}`), pacing.now, Math.max(0.25, ((clip.frames - 1) / 240) * (clip.edit.kind === "retake" ? 1.4 : 0.93)), pacing.paused)
+        : quality === "quick"
         ? new GenTracker("video", historyKey("video", clip.width, clip.height, clip.frames), pacing.now, 1, pacing.paused)
         : quality === "ltx25" || quality === "ltx25max"
           ? new GenTracker("video_detailed", historyKey("video_detailed", clip.width, clip.height, `${quality === "ltx25max" ? "ltx25max" : "ltx25"}-${clip.frames}`), pacing.now, Math.max(0.25, (clip.frames - 1) / 120), pacing.paused)
           : new GenTracker("video_detailed", historyKey("video_detailed", clip.width, clip.height, clip.frames), pacing.now, Math.max(0.25, (clip.frames - 1) / 120), pacing.paused);
       remember(trackers, job.id, tracker);
-      const result = await videoGen.run({ ...(clip.preview !== false ? { previewPath: previewFile(outputDir) } : {}), prompt: clip.prompt, negativePrompt: clip.negativePrompt, imagePath, endImagePath, width: clip.width, height: clip.height, frames: clip.frames, seed: clip.seed, loras: clip.loras, outputDir, quality }, {
+      const result = await videoGen.run({ ...(clip.preview !== false ? { previewPath: previewFile(outputDir) } : {}), prompt: clip.prompt, negativePrompt: clip.negativePrompt, imagePath, endImagePath, width: clip.width, height: clip.height, frames: clip.frames, seed: clip.seed, loras: clip.loras, outputDir, quality, ...(editInput ? { edit: editInput } : {}) }, {
         jobId: job.id, signal,
         onPhase: (phase, phasePercent) => { remember(progress, job.id, { phase, phasePercent }); update({ status: phase, percent: tracker.started ? Math.round(tracker.snapshot().fraction * 100) : overallPercent(phase, phasePercent) }); },
         onStage: (stage, n, of) => { tracker.enter(stage, n, of); update({ percent: Math.round(tracker.snapshot().fraction * 100) }); },
@@ -102,7 +143,7 @@ export function registerVideoJobs(): void {
       const poster = join(outputDir, "poster.jpg");
       const meta: VideoResultMeta = {
         job: job.id, created: Math.floor(new Date(job.createdAt).getTime() / 1000), width: result.width, height: result.height, frames: result.frames, fps: result.fps, seconds: Math.round((result.frames - 1) / result.fps),
-        seed: result.seed, model: VIDEO_SPECS[quality].modelId, quality, audio: result.audio, mode: clip.image ? "image-to-video" : "text-to-video", lora_ids: clip.loraIds, ms: Date.now() - started,
+        seed: result.seed, model: VIDEO_SPECS[quality].modelId, quality, audio: result.audio, mode: clip.edit ? clip.edit.kind : clip.image ? "image-to-video" : "text-to-video", lora_ids: clip.loraIds, ms: Date.now() - started,
         bytes: Bun.file(video).size, poster_bytes: Bun.file(poster).size, mlx_peak_gb: result.peakBytes === null ? null : Math.round(result.peakBytes / 1e8) / 10,
       };
       update({ status: "ready", percent: 100 });
@@ -118,5 +159,5 @@ export function registerVideoJobs(): void {
     } finally {
       rmSync(work, { recursive: true, force: true });
     }
-  }, { generator: { role: "video", memory: (job) => { const input = job.input as { quality?: VideoQuality; size?: string; seconds?: number } | null; const quality = input?.quality ?? "quick"; const size = /^(\d+)x(\d+)$/.exec(input?.size ?? ""); const peak = quality === "ltx25max" ? ltx25MaxPeakBytes() : quality === "ltx25" && size && input?.seconds ? ltx25PeakBytes(Number(size[1]), Number(size[2]), input.seconds * 24 + 1) : VIDEO_SPECS[quality].peakBytes; return { requestedBytes: peak, measuredPeakBytes: peak, engine: "video-gen" }; } } });
+  }, { generator: { role: "video", memory: (job) => { const input = job.input as { quality?: VideoQuality; size?: string; seconds?: number; edit?: Ltx25EditKind } | null; const quality = input?.quality ?? "quick"; const size = /^(\d+)x(\d+)$/.exec(input?.size ?? ""); const peak = input?.edit && quality === "ltx25max" ? ltx25EditAdmitBytes(input.edit, size ? `${size[1]}x${size[2]}` : null) : quality === "ltx25max" ? ltx25MaxPeakBytes() : quality === "ltx25" && size && input?.seconds ? ltx25PeakBytes(Number(size[1]), Number(size[2]), input.seconds * 24 + 1) : VIDEO_SPECS[quality].peakBytes; return { requestedBytes: peak, measuredPeakBytes: peak, engine: "video-gen" }; } } });
 }

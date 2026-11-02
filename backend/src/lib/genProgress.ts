@@ -22,7 +22,7 @@ export interface StageDef {
   fixed?: boolean;
 }
 
-export type GenKind = "image" | "video" | "video_detailed" | "music";
+export type GenKind = "image" | "video" | "video_detailed" | "video_edit" | "music";
 
 /** Video stages. Weights and seconds are the medians of measured runs (832x480, 5 s, 128 GB Mac); see the design note "Stack API as built". */
 export const VIDEO_STAGES: StageDef[] = [
@@ -44,6 +44,17 @@ export const VIDEO_DETAILED_STAGES: StageDef[] = [
   { id: "save", weight: 0.02, seconds: 1, fixed: true, label: () => "Saving the video" },
 ];
 
+/** LTX25-EDIT-01: an LTX-2.5 Max extend or retake. The source clip is read and encoded first (stage `source`); the rest follows the generate stages. Measured totals at 768x448 (10 s source): extend 137 s, retake 202 s; the split below is a first guess that the Stack's own run history replaces. */
+export const VIDEO_EDIT_STAGES: StageDef[] = [
+  { id: "source", weight: 0.08, seconds: 12, label: () => "Reading your clip" },
+  { id: "load_text", weight: 0.03, seconds: 4, fixed: true, label: () => "Getting ready" },
+  { id: "plan", weight: 0.05, seconds: 8, fixed: true, label: () => "Planning the scene and the words" },
+  { id: "load_model", weight: 0.05, seconds: 6, fixed: true, label: () => "Loading the video model" },
+  { id: "motion", weight: 0.4, seconds: 60, label: (n, of) => (n !== null && of ? `Making the new part, step ${Math.min(n + 1, of)} of ${of}` : "Making the new part") },
+  { id: "frames", weight: 0.37, seconds: 55, label: (n, of) => (n !== null && of ? `Putting the whole clip together, ${Math.min(n + 1, of)} of ${of}` : "Putting the whole clip together") },
+  { id: "save", weight: 0.02, seconds: 2, fixed: true, label: () => "Saving the video" },
+];
+
 export const IMAGE_STAGES: StageDef[] = [
   { id: "load", weight: 0.1, seconds: 0.5, label: () => "Loading the picture model" },
   { id: "plan", weight: 0.15, seconds: 0.6, label: () => "Reading your request" },
@@ -60,7 +71,7 @@ export const MUSIC_STAGES: StageDef[] = [
   { id: "save", weight: 0.045, seconds: 1, label: () => "Saving" },
 ];
 
-export const stagesFor = (kind: GenKind): StageDef[] => (kind === "video" ? VIDEO_STAGES : kind === "video_detailed" ? VIDEO_DETAILED_STAGES : kind === "music" ? MUSIC_STAGES : IMAGE_STAGES);
+export const stagesFor = (kind: GenKind): StageDef[] => (kind === "video" ? VIDEO_STAGES : kind === "video_detailed" ? VIDEO_DETAILED_STAGES : kind === "video_edit" ? VIDEO_EDIT_STAGES : kind === "music" ? MUSIC_STAGES : IMAGE_STAGES);
 
 // ---- history: the last few stage durations per kind and size ----
 

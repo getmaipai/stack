@@ -170,7 +170,10 @@ test("the status route reports the Max quality: its own pack, environment and th
   expect(max.environment).toMatchObject({ engine: expect.stringContaining("ltx25-max-gen"), version: LTX25_MAX_GEN_VERSION, ready: false });
   expect(max.install.models.map((model) => model.id)).toEqual([STACK_VIDEO_LTX25_MAX_MODEL_ID]);
   expect(max.install.download_bytes).toBe(STACK_VIDEO_LTX25_MAX_MODEL.download!.approx_bytes);
-  expect(max.profiles).toEqual([{ name: "max", size: "1024x576", width: 1024, height: 576, max_seconds: 10, max_frames: 241, peak_gb: 48.6, admit_gb: 51, short_peak_gb: null }]);
+  const profiles = max.profiles as Array<Record<string, unknown>>;
+  expect(profiles).toHaveLength(1);
+  expect(profiles[0]).toMatchObject({ name: "max", size: "1024x576", width: 1024, height: 576, max_seconds: 10, max_frames: 241, peak_gb: 48.6, admit_gb: 51, short_peak_gb: null });
+  expect(Object.keys(profiles[0]!)).toEqual(expect.arrayContaining(["extend", "retake"])); // LTX25-EDIT-01 footprints (null where not measured)
   // Standard and Boost are unchanged and keep the fork runtime.
   const standard = body.video.qualities.ltx25!;
   expect((standard.environment as { engine: string }).engine).toContain("ltx25-gen");

@@ -20,6 +20,7 @@ import { modelView } from "@/routes/models";
 import { importLora, listLoras, LORA_BASE_MODEL, LORA_BASE_MODELS, LORA_CLASSES, LoraError, MAX_LORA_BYTES, MAX_LORAS_PER_JOB, MAX_LORA_STRENGTH, removeLora, updateLora, isLoraId } from "@/video/loras";
 import { LTX_LICENCE_NOTICE } from "@/lib/modelCatalog";
 import { ltx25EnvironmentReady, LTX25_DEFAULT_SIZE, LTX25_MEASURED, LTX25_STANDARD_5S_PEAK_BYTES, LTX25_FPS } from "@/video/ltx25";
+import { ltx25EditAdmitBytes, ltx25EditPeakBytes, ltx25MaxEditSupported, LTX25_EDIT_EXTEND_MAX_SECONDS, LTX25_EDIT_EXTEND_MIN_SECONDS, LTX25_EDIT_MAX_SOURCE_FRAMES, LTX25_EDIT_MIN_SOURCE_FRAMES, LTX25_EDIT_RETAKE_MAX_SECONDS, LTX25_EDIT_RETAKE_MIN_SECONDS, LTX25_MAX_EDIT_MEASURED } from "@/video/ltx25Edit";
 import { LTX25_GEN_NAME, LTX25_GEN_VERSION, LTX25_MAX_GEN_NAME, LTX25_MAX_GEN_VERSION, LTX25_MAX_MEASURED, ltx25MaxEnvironmentReady } from "@/video/ltx25";
 import { memoryVerdict, tierAvailability, videoGen, VIDEO_SPECS, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_GEN_NAME, VIDEO_GEN_VERSION, VIDEO_MAX_FRAMES, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_PEAK_BYTES, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, videoGenEnvironmentReady, videoGenSourceInstalled } from "@/video/videoGen";
 
@@ -47,8 +48,16 @@ const Ltx25QualitySchema = QualitySchema.extend({
   environment: z.object({ engine: z.string(), version: z.string(), ready: z.boolean() }),
   profiles: z.array(z.object({ name: z.enum(["standard", "boost"]), size: z.string(), width: z.number().int(), height: z.number().int(), max_seconds: z.number().int(), max_frames: z.number().int(), peak_gb: z.number(), short_peak_gb: z.number().nullable() })).openapi({ description: "The measured table, one row per size the Stack runs (anything else is refused). `peak_gb` is the OS footprint of the longest clip at that size, the figure admission uses; `short_peak_gb` is the 5 s figure where it was measured separately. Home maps its Standard and Boost slots to these rows; Max has no row until a run passes the 64 GB cap." }),
 });
+const EditFootprint = z.object({ peak_gb: z.number(), admit_gb: z.number() });
 const Ltx25MaxQualitySchema = Ltx25QualitySchema.extend({
-  profiles: z.array(z.object({ name: z.literal("max"), size: z.string(), width: z.number().int(), height: z.number().int(), max_seconds: z.number().int(), max_frames: z.number().int(), peak_gb: z.number(), admit_gb: z.number(), short_peak_gb: z.null() })).openapi({ description: "One row: `max`, 1024x576, up to 10 s (241 frames). `peak_gb` is the measured OS footprint of that clip (48.6 GB, `footprint`; the MLX peak reads lower and is not the figure); `admit_gb` is what admission reserves (the measured footprint plus 5 percent headroom), under the 64 GB per-clip cap. Home maps its Max slot to this row." }),
+  extend: z.boolean().openapi({ description: "LTX25-EDIT-01: the Max runtime has the extend pipeline (`extend_distilled.py`), so `POST /v1/videos/generations` with `source_video` and `extend_seconds` can run. False when the installed runtime lacks it." }),
+  retake: z.boolean().openapi({ description: "LTX25-EDIT-01: the Max runtime has the retake pipeline (`retake.py`), so `source_video` with `retake_from_seconds` can run." }),
+  edit: z.object({
+    extend_seconds: z.object({ min: z.number(), max: z.number() }), retake_from_seconds: z.object({ min: z.number(), max: z.number() }),
+    source: z.object({ min_frames: z.number().int(), max_frames: z.number().int(), fps: z.number().int(), min_size: z.string() }).openapi({ description: "What a source clip may be: frames at 24 a second (a clip at another rate is re-made first), and the smallest size (a larger one is fitted down to the largest `profiles` size inside it)." }),
+    profiles: z.array(z.object({ size: z.string(), width: z.number().int(), height: z.number().int(), extend: EditFootprint, retake: EditFootprint })).openapi({ description: "One row per source size the Stack edits, measured with a 10 s source: `peak_gb` is the OS footprint and `admit_gb` what admission reserves (the footprint plus 5 percent), under the 64 GB per-clip cap." }),
+  }),
+  profiles: z.array(z.object({ name: z.literal("max"), size: z.string(), width: z.number().int(), height: z.number().int(), max_seconds: z.number().int(), max_frames: z.number().int(), peak_gb: z.number(), admit_gb: z.number(), short_peak_gb: z.null(), extend: EditFootprint.nullable().openapi({ description: "The extend footprint at this size, or null when an extend was not measured here." }), retake: EditFootprint.nullable().openapi({ description: "The retake footprint at this size, or null when a retake was not measured here." }) })).openapi({ description: "One row: `max`, 1024x576, up to 10 s (241 frames). `peak_gb` is the measured OS footprint of that clip (48.6 GB, `footprint`; the MLX peak reads lower and is not the figure); `admit_gb` is what admission reserves (the measured footprint plus 5 percent headroom), under the 64 GB per-clip cap. Home maps its Max slot to this row." }),
 });
 const StatusSchema = z.object({
   state: z.enum(["unsupported", "off", "not-installed", "needs-setup", "building", "idle", "running"]).openapi({ description: "off: this computer's tier does not run video. not-installed: the model files are missing. needs-setup: installed; the first clip builds the environment (first time only) and starts the worker. idle: the worker is up and waits for the next clip (two minutes unless an admin changes it), then exits. running: a clip is in progress." }),
@@ -124,6 +133,12 @@ function ltx25View(models: PlanModel[], installed: string[], available: boolean)
   };
 }
 
+/** The measured footprint and the admitted one (footprint plus 5 percent) of an extend or a retake at a size, in GB. */
+function editFootprint(kind: "extend" | "retake", size: string): { peak_gb: number; admit_gb: number } {
+  const row = LTX25_MAX_EDIT_MEASURED.find((item) => item.size === size)!;
+  return { peak_gb: Math.round(ltx25EditPeakBytes(row, kind) / 1e8) / 10, admit_gb: Math.round(ltx25EditAdmitBytes(kind, size) / 1e8) / 10 };
+}
+
 function ltx25MaxView(models: PlanModel[], installed: string[], available: boolean) {
   const base = qualityView("ltx25max", models, installed, available);
   const pin = installedEnginePin(LTX25_MAX_GEN_NAME);
@@ -133,7 +148,14 @@ function ltx25MaxView(models: PlanModel[], installed: string[], available: boole
     limits: { ...base.limits, default_size: LTX25_MAX_MEASURED[0]!.size, size_step: 64 },
     ready: available && base.installed && environment.ready,
     environment,
-    profiles: LTX25_MAX_MEASURED.map((row) => ({ name: row.profile, size: row.size, width: row.width, height: row.height, max_seconds: available ? row.maxSeconds : 0, max_frames: row.maxSeconds * LTX25_FPS + 1, peak_gb: Math.round(row.peakBytes / 1e8) / 10, admit_gb: Math.round(VIDEO_SPECS.ltx25max.peakBytes / 1e8) / 10, short_peak_gb: null })),
+    extend: ltx25MaxEditSupported(),
+    retake: ltx25MaxEditSupported(),
+    edit: {
+      extend_seconds: { min: LTX25_EDIT_EXTEND_MIN_SECONDS, max: LTX25_EDIT_EXTEND_MAX_SECONDS }, retake_from_seconds: { min: LTX25_EDIT_RETAKE_MIN_SECONDS, max: LTX25_EDIT_RETAKE_MAX_SECONDS },
+      source: { min_frames: LTX25_EDIT_MIN_SOURCE_FRAMES, max_frames: LTX25_EDIT_MAX_SOURCE_FRAMES, fps: LTX25_FPS, min_size: [...LTX25_MAX_EDIT_MEASURED].sort((a, b) => a.width * a.height - b.width * b.height)[0]!.size },
+      profiles: LTX25_MAX_EDIT_MEASURED.map((row) => ({ size: row.size, width: row.width, height: row.height, extend: editFootprint("extend", row.size), retake: editFootprint("retake", row.size) })),
+    },
+    profiles: LTX25_MAX_MEASURED.map((row) => ({ name: row.profile, size: row.size, width: row.width, height: row.height, max_seconds: available ? row.maxSeconds : 0, max_frames: row.maxSeconds * LTX25_FPS + 1, peak_gb: Math.round(row.peakBytes / 1e8) / 10, admit_gb: Math.round(VIDEO_SPECS.ltx25max.peakBytes / 1e8) / 10, short_peak_gb: null, extend: LTX25_MAX_EDIT_MEASURED.some((edit) => edit.size === row.size) ? editFootprint("extend", row.size) : null, retake: LTX25_MAX_EDIT_MEASURED.some((edit) => edit.size === row.size) ? editFootprint("retake", row.size) : null })),
   };
 }
 

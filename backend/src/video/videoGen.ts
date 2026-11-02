@@ -139,7 +139,10 @@ export async function ensureVideoGenEnvironment(onProgress: (phase: string) => v
  * the dgrauet runtime ignores the prompt without it, and the worker refuses a Max request that lacks it (LTX25-MAX-01).
  */
 export function buildWorkerRequest(quality: VideoQuality, paths: VideoModelPaths, input: VideoRunInput, jobId: string, output: string, poster: string): WorkerRequest {
-  return { id: jobId, op: "generate", model_dir: paths.modelDir, tokenizer_dir: paths.tokenizerDir, ...(paths.textEncoderDir ? { text_encoder_dir: paths.textEncoderDir, ffmpeg: ffmpegPath(rootOf(quality)) } : {}), ...(quality === "ltx25max" ? { profile: "max" as const } : {}), prompt: input.prompt, negative_prompt: input.negativePrompt, image: input.imagePath, ...(input.endImagePath ? { end_image: input.endImagePath } : {}), width: input.width, height: input.height, num_frames: input.frames, seed: input.seed, loras: input.loras, output, poster, ...(input.previewPath ? { preview: input.previewPath } : {}) };
+  const edit = input.edit;
+  return { id: jobId, op: edit ? edit.kind : "generate", model_dir: paths.modelDir, tokenizer_dir: paths.tokenizerDir, ...(paths.textEncoderDir ? { text_encoder_dir: paths.textEncoderDir, ffmpeg: ffmpegPath(rootOf(quality)) } : {}), ...(quality === "ltx25max" ? { profile: "max" as const } : {}), prompt: input.prompt, negative_prompt: input.negativePrompt, image: input.imagePath, ...(input.endImagePath ? { end_image: input.endImagePath } : {}), width: input.width, height: input.height, num_frames: input.frames, seed: input.seed, loras: input.loras, output, poster, ...(input.previewPath ? { preview: input.previewPath } : {}),
+    // LTX25-EDIT-01: an extend or a retake names the (fitted) source clip and the latent numbers, and the Stack's own ffmpeg and ffprobe.
+    ...(edit ? { source_video: edit.sourcePath, ffmpeg: edit.ffmpeg, ffprobe: edit.ffprobe, ...(edit.kind === "extend" ? { extend_frames: edit.extendFrames } : { retake_start_latent: edit.retakeStartLatent }) } : {}) };
 }
 
 export interface VideoModelPaths { modelDir: string; tokenizerDir: string; /** Detailed only: the Gemma folder the model reads the prompt with. */ textEncoderDir?: string; }
@@ -182,7 +185,7 @@ export function memoryVerdict(quality: VideoQuality = "quick", peakBytes: number
 // ---- the worker protocol ----
 
 export interface WorkerRequest {
-  id: string; op: "generate"; model_dir: string; tokenizer_dir: string; /** Detailed: the Gemma folder, and the ffmpeg that joins sound to picture. */ text_encoder_dir?: string; ffmpeg?: string | null; prompt: string; negative_prompt: string | null; image: string | null;
+  id: string; op: "generate" | "extend" | "retake"; model_dir: string; tokenizer_dir: string; /** Detailed: the Gemma folder, and the ffmpeg that joins sound to picture. */ text_encoder_dir?: string; ffmpeg?: string | null; prompt: string; negative_prompt: string | null; image: string | null;
   /** VIDEO-INPUTS-01: the picture the clip ends on (LTX-2.5 only), with `image` as the start. */
   end_image?: string | null;
   width: number; height: number; num_frames: number; seed: number; loras: Array<[string, number]>; output: string; poster: string;
@@ -190,6 +193,8 @@ export interface WorkerRequest {
   preview?: string;
   /** LTX25-MAX-01: `max` selects the Max table and the dgrauet runtime's rules; the worker then refuses a request whose `text_encoder_dir` is not the pack's own Gemma folder. */
   profile?: "max";
+  /** LTX25-EDIT-01 (op `extend` or `retake`, Max only): the source clip (on the 64 grid at 24 a second), the ffprobe the runtime reads it with, and the edit's own number in latent frames. */
+  source_video?: string; ffprobe?: string; extend_frames?: number; retake_start_latent?: number;
 }
 export type WorkerEvent =
   | { id: string | null; event: "phase"; phase: "loading" | "rendering" | "decoding" | "encoding"; percent?: number }
@@ -296,6 +301,8 @@ export interface VideoRunInput {
   loras: Array<[string, number]>; outputDir: string;
   /** Which model makes the clip (default Quick). */
   quality?: VideoQuality;
+  /** LTX25-EDIT-01: extend or retake a source clip (Max only). `sourcePath` is the fitted private copy; `extendFrames` and `retakeStartLatent` are latent frames (video/ltx25Edit.ts maps seconds to them). */
+  edit?: { kind: "extend" | "retake"; sourcePath: string; ffmpeg: string; ffprobe: string; extendFrames?: number; retakeStartLatent?: number };
   /** Where the worker writes the first-frame preview (a file the job's runner serves while the clip runs). */
   previewPath?: string;
 }

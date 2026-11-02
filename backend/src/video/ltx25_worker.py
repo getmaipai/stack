@@ -13,6 +13,9 @@
 #      image conditioning (frame 0 replaces the first latent, the end picture guides the last frame), on both runtimes;
 #   5. the same pipeline object serves every clip while the process lives. The engine runs in its low-memory mode, which gives the
 #      transformer and decoders back after each clip: that is the mode the footprints in the table were measured in.
+#   6. LTX25-EDIT-01: two more modes on the Max runtime, `extend` (ExtendDistilledPipeline: append latent frames after a source clip) and `retake`
+#      (RetakePipeline(distilled=True): regenerate the source from a latent frame to its end). Both keep the source in latent form and decode the
+#      whole clip again; both are refused unless the source is a measured size and length and the Gemma guard passes, like every Max run.
 # The engine's disclosure features are left exactly as shipped (licence section 6). Nothing is logged with a prompt: stderr
 # carries the failure class and the Python exception name only.
 import gc
@@ -39,6 +42,11 @@ MEASURED = {(512, 256): 10, (640, 320): 5, (768, 448): 5}
 # LTX25-MAX-01: the Max profile runs on the dgrauet runtime (0.18.0) and its bf16 pack, one size, measured at 48.6 GB (mirrored from
 # video/ltx25.ts, LTX25_MAX_MEASURED). A request says `profile: "max"`; every other request is the Standard/Boost table above.
 MEASURED_MAX = {(1024, 576): 10}
+# LTX25-EDIT-01: the sizes an extend or a retake was measured at (mirrored from video/ltx25Edit.ts, LTX25_MAX_EDIT_MEASURED) and the source
+# limits: the runtime carries the last 25 pixel frames of a source, and the longest source measured is 10 s (241 frames).
+MEASURED_EDIT = {(768, 448), (1024, 576)}
+EDIT_MIN_SOURCE_FRAMES = 25
+EDIT_MAX_SOURCE_FRAMES = 241
 
 
 def true_size(width, height):
@@ -55,7 +63,7 @@ MLX_CACHE_LIMIT_BYTES = int(4.41 * (1 << 30))
 mx.set_cache_limit(MLX_CACHE_LIMIT_BYTES)
 
 _real_out = sys.stdout
-_state = {"id": None, "pipe": None, "model_dir": None, "steps": 0, "patched": False}
+_state = {"id": None, "pipe": None, "model_dir": None, "steps": 0, "steps_total": 11, "patched": False, "x0_patched": False}
 
 
 def emit(obj):
@@ -119,6 +127,8 @@ def refusal(width, height, frames, profile=None):
 def _install_patches(pipe):
     """Progress hooks, applied once per process. A hook that cannot be installed leaves the clip unaffected (it only loses a stage)."""
     try:
+        if _state["x0_patched"]:
+            raise StopIteration  # the class is patched once per process; a second pipeline only gets its own hooks
         from ltx_core_mlx.model.transformer.model import X0Model
 
         original_call = X0Model.__call__
@@ -126,12 +136,16 @@ def _install_patches(pipe):
         def counted(self, *args, **kwargs):
             out = original_call(self, *args, **kwargs)
             _state["steps"] += 1
-            done = min(_state["steps"], STEPS_TOTAL)
-            phase("rendering", 100.0 * done / STEPS_TOTAL)
-            stage("motion", done, STEPS_TOTAL)
+            total = _state["steps_total"]
+            done = min(_state["steps"], total)
+            phase("rendering", 100.0 * done / total)
+            stage("motion", done, total)
             return out
 
         X0Model.__call__ = counted
+        _state["x0_patched"] = True
+    except StopIteration:
+        pass
     except Exception as error:  # noqa: BLE001
         sys.stderr.write("video worker: no motion progress (%s)\n" % type(error).__name__)
 
@@ -168,22 +182,43 @@ def max_gemma_dir(model_dir, gemma_dir):
     return gemma_dir
 
 
-def _pipeline(model_dir, gemma_dir=None):
-    key = (model_dir, gemma_dir)
+def _release_pipeline():
+    """One pipeline lives at a time: a different mode (generate, extend, retake) gives the old one's weights back first."""
+    _state["pipe"] = None
+    _state["model_dir"] = None
+    gc.collect()
+    mx.clear_cache()
+
+
+def _pipeline(model_dir, gemma_dir=None, mode="generate"):
+    key = (mode, model_dir, gemma_dir)
     if _state["pipe"] is not None and _state["model_dir"] == key:
         return _state["pipe"]
-    from ltx_pipelines_mlx.distilled import DistilledPipeline
+    if _state["pipe"] is not None:
+        _release_pipeline()
+    if mode == "extend":
+        from ltx_pipelines_mlx.extend_distilled import ExtendDistilledPipeline
 
-    if gemma_dir:
+        pipe = ExtendDistilledPipeline(model_dir=model_dir, gemma_model_id=gemma_dir, low_memory=True)
+    elif mode == "retake":
+        from ltx_pipelines_mlx.retake import RetakePipeline
+
+        pipe = RetakePipeline(model_dir=model_dir, gemma_model_id=gemma_dir, low_memory=True, distilled=True)
+    elif gemma_dir:
+        from ltx_pipelines_mlx.distilled import DistilledPipeline
+
         # Max: the runtime reads the prompt with the Gemma 4 folder it is given, here. It is checked on the built pipeline too.
         pipe = DistilledPipeline(model_dir=model_dir, gemma_model_id=gemma_dir, low_memory=True)
-        encoder = getattr(getattr(pipe, "prompt_encoder", None), "gemma_model_id", None)
-        if encoder != gemma_dir:
-            raise ValueError("the Max video runtime did not take the text encoder folder")
     else:
+        from ltx_pipelines_mlx.distilled import DistilledPipeline
+
         # gemma_model_id is ignored: the pack ships its own text_encoder folder, which the pipeline prefers.
         # DistilledPipeline takes no verbose argument (the base class defaults it to True): silence it after construction.
         pipe = DistilledPipeline(model_dir=model_dir, low_memory=True)
+    if gemma_dir:
+        encoder = getattr(getattr(pipe, "prompt_encoder", None), "gemma_model_id", None)
+        if encoder != gemma_dir:
+            raise ValueError("the Max video runtime did not take the text encoder folder")
     pipe.verbose = False
     if getattr(pipe, "video_decoder_block", None) is not None:
         pipe.video_decoder_block.verbose = False
@@ -275,6 +310,7 @@ def generate(request):
     gemma_dir = max_gemma_dir(model_dir, request.get("text_encoder_dir")) if profile == "max" else None
     ffmpeg = _ffmpeg_on_path(request.get("ffmpeg"))
     _state["steps"] = 0
+    _state["steps_total"] = STEPS_TOTAL
     started = time.time()
     phase("loading", 0)
     pipe = _pipeline(model_dir, gemma_dir)
@@ -307,6 +343,129 @@ def generate(request):
     return {"width": real_width or width, "height": real_height or height, "frames": frames, "fps": FPS, "seed": int(request["seed"]), "ms": int((time.time() - started) * 1000), "peak_bytes": int(mx.get_peak_memory()), "audio": bool(has_sound)}
 
 
+# ---- LTX25-EDIT-01: extend and retake ----
+
+def tools_on_path(ffmpeg, ffprobe, work):
+    """The runtime probes the source with `ffprobe` and muxes with `ffmpeg`, both found on PATH. The Stack names the two files it owns; they are
+    linked under those exact names in a private folder placed first on PATH, so a bundled file with a platform suffix and a system ffprobe
+    of another version never decide the result."""
+    folder = os.path.join(work, "bin")
+    os.makedirs(folder, exist_ok=True)
+    for name, source in (("ffmpeg", ffmpeg), ("ffprobe", ffprobe)):
+        if not source or not os.path.isfile(source):
+            raise FileNotFoundError("the video tools are not installed")
+        link = os.path.join(folder, name)
+        if os.path.lexists(link):
+            os.remove(link)
+        os.symlink(os.path.abspath(source), link)
+    os.environ["PATH"] = folder + os.pathsep + os.environ.get("PATH", "")
+    return shutil.which("ffmpeg")
+
+
+def latent_frames(frames):
+    """Latent frames of a source of `frames` pixel frames (the runtime encodes 8k + 1 of them): 241 gives 31."""
+    k = max(1, (frames - 1) // 8)
+    return k + 1
+
+
+def edit_refusal(mode, width, height, frames, extend_frames, start_latent):
+    """The plain refusal for an edit outside what was measured, or None. Mirrors video/ltx25Edit.ts (planSource, checkEdit)."""
+    if (width, height) not in MEASURED_EDIT:
+        return "the source must be one of " + ", ".join("%dx%d" % size for size in sorted(MEASURED_EDIT))
+    if frames < EDIT_MIN_SOURCE_FRAMES:
+        return "the source needs at least %d frames" % EDIT_MIN_SOURCE_FRAMES
+    if frames > EDIT_MAX_SOURCE_FRAMES:
+        return "the source is at most %d frames" % EDIT_MAX_SOURCE_FRAMES
+    if mode == "extend":
+        if not isinstance(extend_frames, int) or extend_frames < 1 or extend_frames > 18:
+            return "extend_frames must be 1 to 18 latent frames"
+    else:
+        if not isinstance(start_latent, int) or start_latent < 1 or start_latent >= latent_frames(frames):
+            return "the retake start must be inside the clip"
+    return None
+
+
+def edit(request):
+    """Extend or retake a source clip (op `extend` or `retake`). The reply has the same shape as a generated clip."""
+    mode = request["op"]
+    if request.get("profile") != "max":
+        raise ValueError("extend and retake run on the Max video model only")
+    source = request.get("source_video")
+    if not source or not os.path.isfile(source):
+        raise ValueError("the source clip is missing")
+    if request.get("image") or request.get("end_image"):
+        raise ValueError("an extend or a retake takes no picture")
+    if request.get("loras"):
+        raise ValueError("this video model takes no style files yet")
+    model_dir = request["model_dir"]
+    for needed in MAX_REQUIRED:
+        if not os.path.exists(os.path.join(model_dir, needed)):
+            raise FileNotFoundError("the LTX-2.5 video model is not installed")
+    gemma_dir = max_gemma_dir(model_dir, request.get("text_encoder_dir"))
+    work = request["output"] + ".work"
+    os.makedirs(work, exist_ok=True)
+    started = time.time()
+    try:
+        ffmpeg = tools_on_path(request.get("ffmpeg"), request.get("ffprobe"), work)
+        from ltx_core_mlx.utils.ffmpeg import probe_video_info
+
+        info = probe_video_info(source)
+        if abs(info.fps - FPS) > 0.05:
+            raise ValueError("the source must be 24 frames a second")
+        problem = edit_refusal(mode, int(info.width), int(info.height), int(info.num_frames), request.get("extend_frames"), request.get("retake_start_latent"))
+        if problem:
+            raise ValueError(problem)
+        _state["steps"] = 0
+        _state["steps_total"] = 11 if mode == "extend" else 8
+        phase("loading", 0)
+        stage("source")
+        pipe = _pipeline(model_dir, gemma_dir, mode)
+        mx.reset_peak_memory()
+        engine_out = os.path.join(work, "engine.mp4")
+        seed = int(request["seed"])
+        if mode == "extend":
+            video_latent, audio_latent = pipe.extend_from_video(prompt=request["prompt"], video_path=source, extend_frames=int(request["extend_frames"]), seed=seed)
+        else:
+            end = latent_frames(int(info.num_frames))
+            video_latent, audio_latent = pipe.retake_from_video(prompt=request["prompt"], video_path=source, start_frame=int(request["retake_start_latent"]), end_frame=end, seed=seed, regenerate_audio=True)
+        # The same decode and save the runtime's command line does: give the transformer and the text encoder back, load the decoders, decode the whole clip.
+        phase("decoding", 0)
+        stage("frames")
+        pipe.dit = None
+        pipe.text_encoder = None
+        pipe.feature_extractor = None
+        pipe._loaded = False
+        gc.collect()
+        mx.clear_cache()
+        if pipe.source_frame_rate is None:
+            raise RuntimeError("the source frame rate was not recorded")
+        pipe._load_decoders()
+        pipe._decode_and_save_video(video_latent, audio_latent, engine_out, frame_rate=pipe.source_frame_rate)
+        phase("encoding", 0)
+        stage("save")
+        if not os.path.isfile(engine_out):
+            raise RuntimeError("the engine wrote no file")
+        poster = subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", engine_out, "-frames:v", "1", "-q:v", "3", "-map_metadata", "-1", request["poster"]], capture_output=True)
+        if poster.returncode != 0 or not os.path.isfile(request["poster"]):
+            raise RuntimeError("no poster")
+        has_sound, real_width, real_height = _probe(ffmpeg, engine_out)
+        frames = _count_frames(ffmpeg, engine_out)
+        os.replace(engine_out, request["output"])
+        phase("encoding", 100)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+        gc.collect()
+        mx.clear_cache()
+    return {"width": real_width or int(info.width), "height": real_height or int(info.height), "frames": frames, "fps": FPS, "seed": seed, "ms": int((time.time() - started) * 1000), "peak_bytes": int(mx.get_peak_memory()), "audio": bool(has_sound)}
+
+
+def _count_frames(ffmpeg, path):
+    """Pixel frames of the engine's file (the reply reports what the file really holds): ffmpeg's own count of the decoded video stream (a stream copy counts one more than the file holds)."""
+    text = subprocess.run([ffmpeg, "-hide_banner", "-i", path, "-map", "0:v:0", "-c", "copy", "-f", "null", "-"], capture_output=True, text=True).stderr or ""
+    found = re.findall(r"frame=\s*(\d+)", text)
+    return int(found[-1]) if found else 0
+
+
 def main():
     forbid_network()
     emit({"ready": True})
@@ -322,7 +481,7 @@ def main():
             break
         _state["id"] = request.get("id")
         try:
-            result = generate(request)
+            result = edit(request) if request.get("op") in ("extend", "retake") else generate(request)
             emit({"id": request["id"], "ok": True, **result})
         except BaseException as error:  # noqa: BLE001 - every failure becomes a reply, the process stays up
             if isinstance(error, (KeyboardInterrupt, SystemExit)):

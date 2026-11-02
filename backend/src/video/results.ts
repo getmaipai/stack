@@ -23,7 +23,7 @@ export interface VideoResultMeta {
   quality?: "quick" | "detailed" | "ltx25" | "ltx25max";
   /** The clip has a sound track the model made (older results have none: no). */
   audio?: boolean;
-  mode: "text-to-video" | "image-to-video";
+  mode: "text-to-video" | "image-to-video" | "extend" | "retake";
   lora_ids: string[];
   ms: number;
   bytes: number;
