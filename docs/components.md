@@ -272,7 +272,9 @@ Engines per platform:
 | Engine | Build | Platform | Status |
 |---|---|---|---|
 | `video-gen-87db56a-macos-arm64` | 87db56a | darwin arm64 | pinned, verified (the engine's source; its environment is the row below) |
+| `ltx25-gen-5795228-macos-arm64` | 5795228 | darwin arm64 | pinned, verified (the engine's source; its environment is the row below) |
 | `video-gen` | 87db56a | macOS 14 or later on arm64 (MLX is Apple silicon only; the mlx-video source archive plus a hashed requirements file; Wan2.2 TI2V-5B FastWan, text and picture to video, no sound; needs 64 GB or more; no Linux file) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
+| `ltx25-gen` | 5795228 | macOS 14 or later on arm64 (MLX is Apple silicon only; the LTX-2.5 runtime source archive (fork of dgrauet/ltx-2-mlx) plus a hashed requirements file; text to video with a sound track made in the same pass; needs 64 GB or more; no Linux file) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
 
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
@@ -281,7 +283,7 @@ Engines per platform:
 | p64 | not available |  |  |  |  |  |  |  | not available |
 | p128 | on demand | `ltx-2-3-distilled-mlx` | bf16 | 43.91 GB | 42.84 GB (Apple M5 Max, 128 GB unified memory) | n/a | LTX-2.x Community License Agreement (2026-08-11) | prince-canuma/LTX-2.3-distilled @ 65b104b9387fb173d8e4b92fc5effc47625baf2a | pinned |
 
-Also pinned, started only when chosen (Home's "load this model"): `fastwan2-2-ti2v-5b-mlx-bf16` (bf16, 22.52 GB, Apache-2.0, lBroth/FastWan2.2-TI2V-5B-MLX @ de2998ac446581895089ae363f4dcc0c02ca9ea2).
+Also pinned, started only when chosen (Home's "load this model"): `fastwan2-2-ti2v-5b-mlx-bf16` (bf16, 22.52 GB, Apache-2.0, lBroth/FastWan2.2-TI2V-5B-MLX @ de2998ac446581895089ae363f4dcc0c02ca9ea2); `ltx-2-5-q8-distilled-mlx` (q8, 35.33 GB, LTX-2.x Community License Agreement (2026-08-11), MrMofer/ltx-2.5-mlx-q8 @ f1b56e7dc89f71a9af2cddac787b89ed22a8b7fc).
 
 Installed beside the model, never selected on its own: `video-umt5-tokenizer` (tokenizer, 20.4 MB, Apache-2.0, google/umt5-xxl @ 66cb9e7e85526fe440a945569e42c72fb6cbc0ad); `video-gemma-3-12b-text-encoder` (text-encoder, 24.61 GB, Gemma Terms of Use, mlx-community/gemma-3-12b-it-bf16 @ b8b9b412cb795bd6115fdce8c9a0ef0d1664db3a).
 

@@ -241,6 +241,19 @@ export const ENGINE_BINARIES: EngineBinaryPin[] = [
     verified: true,
   },
   {
+    id: "ltx25-gen-5795228-macos-arm64",
+    name: "ltx25-gen",
+    tag: "5795228",
+    platform: "darwin",
+    arch: "arm64",
+    tool: "pyproject.toml",
+    requiresNvidia: false,
+    label: "ltx-2-mlx source, fork MrMoferFRAN branch ltx25, commit 5795228 (MIT; the LTX-2.5 runtime the video worker runs on Apple silicon)",
+    docsUrl: "https://github.com/MrMoferFRAN/ltx-2-mlx/tree/57952288076766abe27dda3a774b2c24f7346977",
+    archive: { label: "ltx-2-mlx 5795228 source", url: "https://codeload.github.com/MrMoferFRAN/ltx-2-mlx/tar.gz/57952288076766abe27dda3a774b2c24f7346977", sha256: "fa9a66a0c78721c3dce51d0f1dadcabad060682410303be748e529a846a9d5c9", approxBytes: 5_668_630 },
+    verified: true,
+  },
+  {
     id: "music-gen-ca1e85f-macos-arm64",
     name: "music-gen",
     tag: "ca1e85f",
@@ -319,7 +332,7 @@ export type ChatEngine = typeof CHAT_ENGINES[number];
 /** The role each engine name serves, for the routes that act on "the
  * engine's role" (start, stop, restart, the swap's drain). */
 export type EngineRole = "chat" | "coding" | "tts" | "image" | "video" | "music";
-export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", splash: "coding", "splash-chat": "chat", "mlx-serve": "chat", omlx: "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", comfyui: "image", "video-gen": "video", "music-gen": "music", "stems": "music", "image-gen": "image" };
+export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", splash: "coding", "splash-chat": "chat", "mlx-serve": "chat", omlx: "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", comfyui: "image", "video-gen": "video", "ltx25-gen": "video", "music-gen": "music", "stems": "music", "image-gen": "image" };
 export function engineRole(name: string): EngineRole { return ENGINE_ROLE[name] ?? "chat"; }
 
 /** Runtimes the Stack assembles from pinned wheels through uv, in an
@@ -332,6 +345,7 @@ export const MANAGED_RUNTIMES: ManagedRuntime[] = [
   { name: "omlx", version: "0.7.0", roles: ["chat"], platforms: "macOS 15 or later on arm64 (MLX is Apple silicon only; opt-in chat engine (`stack.engines.chat.engine` = `omlx`), never the default: llama-server is the default on every tier, ENGINE-MLX-02; no Linux file)" },
   { name: "comfyui", version: "v0.36.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (torch 2.13 ships macOS 14 wheels only; a hashed requirements file per platform, the source archive is the same on every platform)" },
   { name: "video-gen", version: "87db56a", roles: ["video"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the mlx-video source archive plus a hashed requirements file; Wan2.2 TI2V-5B FastWan, text and picture to video, no sound; needs 64 GB or more; no Linux file)" },
+  { name: "ltx25-gen", version: "5795228", roles: ["video"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the LTX-2.5 runtime source archive (fork of dgrauet/ltx-2-mlx) plus a hashed requirements file; text to video with a sound track made in the same pass; needs 64 GB or more; no Linux file)" },
   { name: "music-gen", version: "ca1e85f", roles: ["music"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the ACE-Step 1.5 source archive plus a hashed requirements file; songs with sung lyrics, remakes, covers, repaints and extensions; needs 64 GB or more; no Linux file)" },
   { name: "image-gen", version: "0.23.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; mflux 0.23.0 and a hashed requirements file; FLUX.2 Klein 4B and Z-Image-Turbo, text to picture, image to picture, LoRAs and reference edits; needs 32 GB of memory or more)" },
   { name: "image-tools", version: "1.0.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (onnxruntime, numpy, pillow, opencv; no torch; remove background, erase, upscale and resize on a picture the person has; the Linux file lands with the robot's first image run)" },

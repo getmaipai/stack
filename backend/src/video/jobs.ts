@@ -15,6 +15,7 @@ import { workDir, commitResult, type VideoResultMeta } from "./results";
 import { recordGeneratedImage } from "./provenance";
 import { GenTracker, historyKey, previewExists, previewFile, recordRun } from "@/lib/genProgress";
 import { overallPercent, VideoError, videoGen, VIDEO_SPECS, type VideoQuality } from "./videoGen";
+import { ltx25PeakBytes } from "./ltx25";
 
 export const VIDEO_JOB_KIND = "video_generation";
 
@@ -82,7 +83,9 @@ export function registerVideoJobs(): void {
       const pacing = heavyGate.pacing(job.id);
       const tracker = quality === "quick"
         ? new GenTracker("video", historyKey("video", clip.width, clip.height, clip.frames), pacing.now, 1, pacing.paused)
-        : new GenTracker("video_detailed", historyKey("video_detailed", clip.width, clip.height, clip.frames), pacing.now, Math.max(0.25, (clip.frames - 1) / 120), pacing.paused);
+        : quality === "ltx25"
+          ? new GenTracker("video_detailed", historyKey("video_detailed", clip.width, clip.height, `ltx25-${clip.frames}`), pacing.now, Math.max(0.25, (clip.frames - 1) / 120), pacing.paused)
+          : new GenTracker("video_detailed", historyKey("video_detailed", clip.width, clip.height, clip.frames), pacing.now, Math.max(0.25, (clip.frames - 1) / 120), pacing.paused);
       remember(trackers, job.id, tracker);
       const result = await videoGen.run({ ...(clip.preview !== false ? { previewPath: previewFile(outputDir) } : {}), prompt: clip.prompt, negativePrompt: clip.negativePrompt, imagePath, width: clip.width, height: clip.height, frames: clip.frames, seed: clip.seed, loras: clip.loras, outputDir, quality }, {
         jobId: job.id, signal,
@@ -111,5 +114,5 @@ export function registerVideoJobs(): void {
     } finally {
       rmSync(work, { recursive: true, force: true });
     }
-  }, { generator: { role: "video", memory: (job) => { const peak = VIDEO_SPECS[(job.input as { quality?: VideoQuality } | null)?.quality ?? "quick"].peakBytes; return { requestedBytes: peak, measuredPeakBytes: peak, engine: "video-gen" }; } } });
+  }, { generator: { role: "video", memory: (job) => { const input = job.input as { quality?: VideoQuality; size?: string; seconds?: number } | null; const quality = input?.quality ?? "quick"; const size = /^(\d+)x(\d+)$/.exec(input?.size ?? ""); const peak = quality === "ltx25" && size && input?.seconds ? ltx25PeakBytes(Number(size[1]), Number(size[2]), input.seconds * 24 + 1) : VIDEO_SPECS[quality].peakBytes; return { requestedBytes: peak, measuredPeakBytes: peak, engine: "video-gen" }; } } });
 }

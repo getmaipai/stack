@@ -35,6 +35,12 @@
       "peak_temp_bytes": 758782663,
       "basis": "measured"
     },
+    "ltx25-gen": {
+      "installed_bytes": 400000000,
+      "download_bytes": 250000000,
+      "peak_temp_bytes": 250000000,
+      "basis": "estimate"
+    },
     "music-gen": {
       "installed_bytes": 1200000000,
       "download_bytes": 800000000,
@@ -360,6 +366,10 @@
     "ltx-2-3-distilled-mlx": {
       "download_bytes": 47145417266,
       "installed_bytes": 47145417266
+    },
+    "ltx-2-5-q8-distilled-mlx": {
+      "download_bytes": 37932906543,
+      "installed_bytes": 37932906543
     },
     "video-gemma-3-12b-text-encoder": {
       "download_bytes": 26427893141,

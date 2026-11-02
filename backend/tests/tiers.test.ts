@@ -127,7 +127,7 @@ describe("tier candidate lists for the slot dialog", () => {
 
   test("a vetting-only model is catalogued but never resolved or offered", () => {
     const vetting = TIER_CANDIDATES.filter((candidate) => candidate.vetting);
-    expect(vetting.map((candidate) => candidate.id)).toEqual(["qwen3-6-35b-a3b-ud-q4-k-xl"]);
+    expect(vetting.map((candidate) => candidate.id)).toEqual(["qwen3-6-35b-a3b-ud-q4-k-xl", "ltx-2-5-q8-distilled-mlx"]);
     const ladder = resolveLadder("chat", "p128", 72 * GB).map((row) => row.resolved?.model);
     expect(ladder).not.toContain("qwen3-6-35b-a3b-ud-q4-k-xl");
     const ids = tierCandidateLists("chat", "p128", 72 * GB).flatMap((level) => level.candidates.map((row) => row.id));
