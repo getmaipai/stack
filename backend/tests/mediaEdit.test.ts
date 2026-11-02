@@ -104,12 +104,13 @@ describe("media.edit with a fake runner", () => {
     const job = await run({ inputs: [a, voice], ops: [{ op: "trim", in_s: 0, out_s: 4 }, { op: "audio_overlay", input: 1, gain_db: -3, clip_gain_db: -9, start_s: 0.5, duck: true, loudness_lufs: -16 }, { op: "fade", out_s: 1 }], output: { name: "film.mp4" } });
     expect(job.state).toBe("done");
     expect(job.result.steps.map((step: any) => step.op)).toEqual(["trim", "audio_overlay", "fade"]);
-    expect(job.result.steps[0].action).toBe("copy");
+    // the fake probe reports 5 s for the 4 s copy, so the late-copy check redoes it as an encode
+    expect(job.result.steps[0].action).toBe("encode");
     expect(job.result.steps[1].action).toBe("audio_mix_video_copy");
     const edits = calls.filter((argv) => argv[0]!.endsWith("ffmpeg"));
-    expect(edits.length).toBe(3);
+    expect(edits.length).toBe(4);
     for (const argv of edits) expect(argv.every((part) => typeof part === "string") && !argv.some((part) => part === "sh" || part === "-c:sh")).toBe(true);
-    const overlay = edits[1]!;
+    const overlay = edits[2]!;
     expect(overlay).toContain("-c:v"); expect(overlay[overlay.indexOf("-c:v") + 1]).toBe("copy");
     const graph = overlay[overlay.indexOf("-filter_complex") + 1]!;
     expect(graph).toContain("volume=-9dB"); expect(graph).toContain("volume=-3dB"); expect(graph).toContain("adelay=500|500"); expect(graph).toContain("sidechaincompress"); expect(graph).toContain("loudnorm=I=-16");
@@ -177,7 +178,7 @@ const real = haveTools ? describe : describe.skip;
 
 real("media.edit with real ffmpeg", () => {
   const priorNice = process.env.STACK_MEDIA_NO_NICE;
-  let clip5 = ""; let clip2 = ""; let tone = "";
+  let clip5 = ""; let clipNoB = ""; let clip2 = ""; let tone = "";
   const tools: MediaToolbox = { installed: () => true, path: async (tool) => (tool === "ffmpeg" ? ffmpeg! : ffprobe!) };
   async function ff(args: string[]): Promise<void> { const result = await spawnRunner([ffmpeg!, "-hide_banner", "-loglevel", "error", "-y", ...args]); if (result.code !== 0) throw new Error(result.stderr); }
   async function md5(path: string, map: "0:v:0" | "0:a:0"): Promise<string> {
@@ -195,6 +196,8 @@ real("media.edit with real ffmpeg", () => {
     const dir = realpathSync(mkdtempSync(join(tmpdir(), "edit-fixture-")));
     clip5 = join(dir, "clip5.mp4"); clip2 = join(dir, "clip2.mp4"); tone = join(dir, "tone.wav");
     await ff(["-f", "lavfi", "-i", "testsrc=s=320x180:r=24:d=5", "-f", "lavfi", "-i", "sine=f=440:r=48000:d=5", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-g", "12", "-keyint_min", "12", "-sc_threshold", "0", "-c:a", "aac", "-b:a", "128k", "-shortest", clip5]);
+    clipNoB = join(dir, "clipnob.mp4");
+    await ff(["-f", "lavfi", "-i", "testsrc=s=320x180:r=24:d=5", "-f", "lavfi", "-i", "sine=f=440:r=48000:d=5", "-c:v", "libx264", "-bf", "0", "-pix_fmt", "yuv420p", "-g", "12", "-keyint_min", "12", "-sc_threshold", "0", "-c:a", "aac", "-b:a", "128k", "-shortest", clipNoB]);
     await ff(["-f", "lavfi", "-i", "testsrc2=s=160x120:r=24:d=2", "-f", "lavfi", "-i", "sine=f=330:r=44100:d=2", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", clip2]);
     await ff(["-f", "lavfi", "-i", "sine=f=880:r=48000:d=2", tone]);
   });
@@ -202,14 +205,23 @@ real("media.edit with real ffmpeg", () => {
   afterEach(() => { cleanRoots(); });
   const out = (name: string) => ({ dir: root, name });
 
-  test("trim keeps the length and audio sync within 50 ms", async () => {
-    const job = await run({ inputs: [clip5], ops: [{ op: "trim", in_s: 1, out_s: 3 }], output: out("t.mp4") }, 60_000);
+  test("trim keeps the length and audio sync within 50 ms (stream copy on a keyframe, no B-frames)", async () => {
+    const job = await run({ inputs: [clipNoB], ops: [{ op: "trim", in_s: 1, out_s: 3 }], output: out("t.mp4") }, 60_000);
     expect(job.state).toBe("done");
+    expect(job.result.steps[0].action).toBe("copy");
     const lengths = await streamDurations(job.result.path);
     expect(Math.abs(lengths.format - 2)).toBeLessThan(0.05);
     expect(Math.abs(lengths.video - lengths.audio)).toBeLessThan(0.05);
     expect(job.result).toMatchObject({ container: "mp4", width: 320, height: 180, video_codec: "h264", audio_codec: "aac" });
     expect(job.result.streams.length).toBe(2);
+  });
+
+  test("trim of a B-frame clip stays within 50 ms (a copy that comes out late is redone as an encode)", async () => {
+    const job = await run({ inputs: [clip5], ops: [{ op: "trim", in_s: 1, out_s: 3 }], output: out("t3.mp4") }, 60_000);
+    expect(job.state).toBe("done");
+    const lengths = await streamDurations(job.result.path);
+    expect(Math.abs(lengths.format - 2)).toBeLessThan(0.05);
+    expect(Math.abs(lengths.video - lengths.audio)).toBeLessThan(0.05);
   });
 
   test("trim off a keyframe re-encodes and is still the right length", async () => {

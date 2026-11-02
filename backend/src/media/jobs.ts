@@ -613,6 +613,18 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
       const base = i / input.ops.length; const share = 1 / input.ops.length;
       const result = await mediaDeps.run(args, { signal, onStdoutLine: (line) => { const seconds = parseProgressSeconds(line); if (seconds !== null && expected > 0) progress({ status: label, percent: Math.min(99, Math.round((base + Math.min(1, seconds / expected) * share) * 100)) }); } });
       if (result.aborted || signal.aborted) throw new Error("Cancelled.");
+      if (op.op === "trim" && action === "copy" && result.code === 0 && existsSync(target)) {
+        // A stream copy cut on a B-frame stream can start the picture late; keep it only when it is within 40 ms of the request.
+        const copied = await probe(target, `The result of step ${i + 1}`);
+        if (Math.abs((copied.duration_s ?? 0) - expected) > 0.04) {
+          rmSync(target, { force: true });
+          const again = trimArgs(ffmpeg, clip.path, target, op, clip.probe, false, true);
+          args = again.args; action = again.action;
+          const retry = await mediaDeps.run(args, { signal });
+          if (retry.aborted || signal.aborted) throw new Error("Cancelled.");
+          result.code = retry.code; result.stderr = retry.stderr;
+        }
+      }
       if (result.code !== 0 || !existsSync(target)) throw fail({ code: "failed", message: `The edit could not be made at step ${i + 1} (${op.op}). Open Details for what the tool said.`, detail: result.stderr.trim().split("\n").slice(-6).join("\n").slice(-1200) });
       steps.push({ op: op.op, action });
       const made = await probe(target, `The result of step ${i + 1}`);

@@ -104,12 +104,12 @@ const num = (value: number): string => String(Math.round(value * 1000) / 1000);
 export interface Clip { path: string; probe: ProbeResult; }
 const videoOf = (probe: ProbeResult) => probe.streams.find((stream) => stream.type === "video" && !stream.cover_art);
 
-/** Trim copies the streams when the cut starts on a keyframe (or at 0), else re-encodes so the start is exact. */
-export function trimArgs(ffmpeg: string, src: string, out: string, op: Extract<EditOp, { op: "trim" }>, probe: ProbeResult, startsOnKeyframe: boolean): { args: string[]; action: "copy" | "encode" } {
+/** Trim copies the streams when the cut starts on a keyframe (or at 0), else re-encodes so the start is exact. The runner re-runs a copy that came out more than 40 ms off (B-frame delay) as an encode. */
+export function trimArgs(ffmpeg: string, src: string, out: string, op: Extract<EditOp, { op: "trim" }>, probe: ProbeResult, startsOnKeyframe: boolean, forceEncode = false): { args: string[]; action: "copy" | "encode" } {
   const length = op.out_s - op.in_s;
-  const copy = probe.has_video && (op.in_s === 0 || startsOnKeyframe);
+  const copy = !forceEncode && probe.has_video && (op.in_s === 0 || startsOnKeyframe);
   const args = [...BASE(ffmpeg), "-ss", num(op.in_s), "-i", src, "-t", num(length), "-map", "0:v:0?", "-map", "0:a:0?", "-sn", "-dn"];
-  if (copy) args.push("-c", "copy", "-avoid_negative_ts", "make_zero");
+  if (copy) args.push("-c", "copy", "-avoid_negative_ts", "disabled");
   else { if (probe.has_video) args.push(...ENCODE_V); if (probe.has_audio) args.push(...ENCODE_A); }
   args.push(...FASTSTART, out);
   return { args, action: copy ? "copy" : "encode" };
