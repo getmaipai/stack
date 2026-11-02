@@ -14,14 +14,15 @@ import { probeFile, type ProbeResult } from "./probe";
 import { idleArgv, spawnRunner, type Runner, type RunResult } from "./run";
 import { defaultToolbox, MediaToolError, type MediaToolbox } from "./tools";
 import { mkdirSync } from "node:fs";
+import { concatCompatible, concatCopyArgs, concatEncodeArgs, concatListLine, concatMembers, EditInput, editInputProblem, fadeArgs, frameArgs, hasKeyframeAt, keyframeArgs, MAX_EDIT_SECONDS, muteArgs, overlayArgs, trimArgs, type Clip } from "./editOps";
 import { COLOUR_MATCH_STRENGTH, COMPANION_CLIP_FPS, COMPANION_CLIP_SIZE, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionCrop, companionMetrics, companionReasons, crossfadeLoop, downscaleRgba4, frameDifference, keyOutRgba, selectCompanionWindow } from "./companionClip";
 
-export const MEDIA_KINDS = ["media.probe", "media.fetch", "media.transcode", "media.preview", "media.companion_clip", "media.setup"] as const;
+export const MEDIA_KINDS = ["media.probe", "media.fetch", "media.transcode", "media.preview", "media.companion_clip", "media.edit", "media.setup"] as const;
 export type MediaKind = typeof MEDIA_KINDS[number];
 export const MEDIA_LANE = "idle";
 export const MEDIA_QUEUE_CAP = 64;
 const MINUTE = 60_000;
-export const MEDIA_DEADLINES_MS: Record<MediaKind, number> = { "media.probe": 3 * MINUTE, "media.preview": 20 * MINUTE, "media.fetch": 3 * 60 * MINUTE, "media.transcode": 12 * 60 * MINUTE, "media.companion_clip": 20 * MINUTE, "media.setup": 30 * MINUTE };
+export const MEDIA_DEADLINES_MS: Record<MediaKind, number> = { "media.probe": 3 * MINUTE, "media.preview": 20 * MINUTE, "media.fetch": 3 * 60 * MINUTE, "media.transcode": 12 * 60 * MINUTE, "media.companion_clip": 20 * MINUTE, "media.edit": 30 * MINUTE, "media.setup": 30 * MINUTE };
 
 type RawInputRunner = (argv: string[], inputPath: string, signal: AbortSignal) => Promise<RunResult>;
 async function spawnRawInputRunner(argv: string[], inputPath: string, signal: AbortSignal): Promise<RunResult> {
@@ -67,6 +68,14 @@ function precheck(kind: MediaKind): (input: Record<string, unknown>) => JobRefus
       else if (kind === "media.transcode") { const parsed = TranscodeInput.parse(input); resolveReadable(parsed.path); if (parsed.output_dir) resolveWritableDir(parsed.output_dir); if (parsed.output_name) safeName(parsed.output_name, ""); }
       else if (kind === "media.preview") { const parsed = PreviewInput.parse(input); resolveReadable(parsed.path); if (parsed.output_dir) resolveWritableDir(parsed.output_dir); }
       else if (kind === "media.companion_clip") { const parsed = CompanionClipInput.parse(input); resolveReadable(parsed.path); if (parsed.output_dir) resolveWritableDir(parsed.output_dir); if (parsed.output_name) safeName(parsed.output_name, ""); }
+      else if (kind === "media.edit") {
+        const problem = editInputProblem(input);
+        if (problem) return { reason: problem, code: "bad_input", status: 422 };
+        const parsed = EditInput.parse(input);
+        for (const path of parsed.inputs) resolveReadable(path);
+        if (parsed.output.dir) resolveWritableDir(parsed.output.dir);
+        safeName(parsed.output.name, "");
+      }
       else if (kind === "media.setup") SetupInput.parse(input);
       else {
         const parsed = FetchInput.parse(input);
@@ -522,6 +531,106 @@ async function runCompanionClip(job: Job, signal: AbortSignal, progress: JobProg
   }
 }
 
+// ---- media.edit (EDITOR-11) ----
+export interface EditResult { path: string; size_bytes: number; container: "mp4" | "mov" | "png"; duration_s: number | null; width: number | null; height: number | null; video_codec: string | null; audio_codec: string | null; streams: ProbeResult["streams"]; steps: Array<{ op: string; action: string }>; elapsed_ms: number; }
+async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Promise<EditResult> {
+  const started = mediaDeps.now();
+  const problem = editInputProblem(job.input ?? {});
+  if (problem) throw fail({ code: "bad_input", message: problem });
+  const input = EditInput.parse(job.input ?? {});
+  let sources: string[]; let dir: string; let name: string;
+  try {
+    sources = input.inputs.map((path) => resolveReadable(path));
+    dir = input.output.dir ? resolveWritableDir(input.output.dir) : jobDir(job.id);
+    name = safeName(input.output.name, "");
+  } catch (error) { throw pathFailure(error) ?? error; }
+  const final = join(dir, name);
+  if (sources.includes(final)) throw fail({ code: "bad_input", message: "The edited file would replace one of the files it is made from. Choose another output folder or name." });
+  const extension = extname(name);
+  const partial = join(dir, `.${basename(name, extension)}.part${extension}`);
+  const work = join(jobDir(job.id), "edit-work");
+  const tools = await toolPaths(["ffmpeg", "ffprobe"], progress, signal);
+  const ffmpeg = tools.ffmpeg!; const ffprobe = tools.ffprobe!;
+  const tooLong = (what: string, seconds: number | null) => { if (seconds !== null && seconds > MAX_EDIT_SECONDS) throw fail({ code: "too_long", message: `${what} is ${Math.round(seconds / 60 * 10) / 10} minutes long. Edits take at most ${MAX_EDIT_SECONDS / 60} minutes. Trim it first or edit a shorter part.` }); };
+  const probe = async (path: string, what: string): Promise<ProbeResult> => {
+    try { return await probeFile(mediaDeps.run, ffprobe, path, signal); } catch (error) { if (signal.aborted) throw error; throw fail({ code: "unreadable", message: `${what} could not be read: ${error instanceof Error ? error.message : String(error)}` }); }
+  };
+  progress({ status: "reading the files" });
+  const probes: ProbeResult[] = [];
+  for (let index = 0; index < sources.length; index++) {
+    cancelled(signal);
+    const found = await probe(sources[index]!, `File ${index + 1}`);
+    tooLong(`File ${index + 1}`, found.duration_s);
+    probes.push(found);
+  }
+  mkdirSync(work, { recursive: true });
+  const steps: EditResult["steps"] = [];
+  let clip: Clip = { path: sources[0]!, probe: probes[0]! };
+  try {
+    for (let i = 0; i < input.ops.length; i++) {
+      cancelled(signal);
+      const op = input.ops[i]!;
+      const last = i === input.ops.length - 1;
+      const target = last ? partial : join(work, `step${i}.${op.op === "frame" ? "png" : "mp4"}`);
+      const label = `step ${i + 1} of ${input.ops.length}: ${op.op}`;
+      progress({ status: label, percent: Math.round((i / input.ops.length) * 100) });
+      let args: string[]; let action = "encode"; let expected = clip.probe.duration_s ?? 0;
+      const needsVideo = (what: string) => { if (!clip.probe.has_video) throw fail({ code: "bad_input", message: `Step ${i + 1} (${what}) needs a picture and the clip has none.` }); };
+      if (op.op === "trim") {
+        const total = clip.probe.duration_s ?? 0;
+        if (op.in_s >= total) throw fail({ code: "bad_input", message: `Step ${i + 1} (trim) starts at ${op.in_s} s but the clip is only ${Math.round(total * 100) / 100} s long.` });
+        let keyframe = false;
+        if (clip.probe.has_video && op.in_s > 0) {
+          const listing = await mediaDeps.run(keyframeArgs(ffprobe, clip.path, op.in_s), { signal, collectStdout: true });
+          if (signal.aborted) throw new Error("Cancelled.");
+          keyframe = listing.code === 0 && hasKeyframeAt(listing.stdout, op.in_s, clip.probe.streams.find((stream) => stream.type === "video" && !stream.cover_art)?.fps ?? null);
+        }
+        const plan = trimArgs(ffmpeg, clip.path, target, op, clip.probe, keyframe); args = plan.args; action = plan.action; expected = Math.min(op.out_s, total) - op.in_s;
+      } else if (op.op === "mute") { needsVideo("mute"); args = muteArgs(ffmpeg, clip.path, target); action = "copy"; }
+      else if (op.op === "frame") {
+        needsVideo("frame");
+        if (op.at_s >= (clip.probe.duration_s ?? 0) && (clip.probe.duration_s ?? 0) > 0) throw fail({ code: "bad_input", message: `Step ${i + 1} (frame) asks for ${op.at_s} s but the clip is only ${Math.round((clip.probe.duration_s ?? 0) * 100) / 100} s long.` });
+        args = frameArgs(ffmpeg, clip.path, target, op.at_s); expected = 0;
+      } else if (op.op === "audio_overlay") {
+        const other = probes[op.input]!;
+        if (!other.has_audio) throw fail({ code: "bad_input", message: `File ${op.input + 1} has no sound to lay over the clip.` });
+        args = overlayArgs(ffmpeg, clip, sources[op.input]!, target, op); action = clip.probe.has_video ? "audio_mix_video_copy" : "audio_mix";
+      } else if (op.op === "fade") {
+        if (op.in_s + op.out_s > (clip.probe.duration_s ?? 0)) throw fail({ code: "bad_input", message: `Step ${i + 1} (fade) fades for ${op.in_s + op.out_s} s in all, longer than the ${Math.round((clip.probe.duration_s ?? 0) * 100) / 100} s clip.` });
+        args = fadeArgs(ffmpeg, clip, target, op);
+      } else {
+        const members = concatMembers(input, op);
+        const clips: Clip[] = [clip, ...members.map((index) => ({ path: sources[index]!, probe: probes[index]! }))];
+        clips.forEach((member, position) => { if (!member.probe.has_video) throw fail({ code: "bad_input", message: `${position === 0 ? "The clip" : `File ${members[position - 1]! + 1}`} has no picture, so it cannot be joined into a film.` }); });
+        expected = clips.reduce((sum, member) => sum + (member.probe.duration_s ?? 0), 0);
+        tooLong("The joined film", expected);
+        if (concatCompatible(clips)) {
+          const list = join(work, `list${i}.txt`);
+          writeFileSync(list, clips.map((member) => concatListLine(member.path)).join("\n") + "\n");
+          args = concatCopyArgs(ffmpeg, list, target); action = "copy";
+        } else args = concatEncodeArgs(ffmpeg, clips, target);
+      }
+      const base = i / input.ops.length; const share = 1 / input.ops.length;
+      const result = await mediaDeps.run(args, { signal, onStdoutLine: (line) => { const seconds = parseProgressSeconds(line); if (seconds !== null && expected > 0) progress({ status: label, percent: Math.min(99, Math.round((base + Math.min(1, seconds / expected) * share) * 100)) }); } });
+      if (result.aborted || signal.aborted) throw new Error("Cancelled.");
+      if (result.code !== 0 || !existsSync(target)) throw fail({ code: "failed", message: `The edit could not be made at step ${i + 1} (${op.op}). Open Details for what the tool said.`, detail: result.stderr.trim().split("\n").slice(-6).join("\n").slice(-1200) });
+      steps.push({ op: op.op, action });
+      const made = await probe(target, `The result of step ${i + 1}`);
+      if (op.op !== "frame") tooLong(`The result of step ${i + 1}`, made.duration_s);
+      clip = { path: target, probe: made };
+    }
+    renameSync(clip.path, final);
+  } catch (error) {
+    rmSync(partial, { force: true });
+    throw error;
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+  const done = clip.probe;
+  const isPicture = extension.toLowerCase() === ".png";
+  return { path: final, size_bytes: sizeOf(final), container: isPicture ? "png" : extension.toLowerCase() === ".mov" ? "mov" : "mp4", duration_s: isPicture ? null : done.duration_s, width: done.width, height: done.height, video_codec: done.video_codec, audio_codec: done.audio_codec, streams: done.streams, steps, elapsed_ms: mediaDeps.now() - started };
+}
+
 // ---- media.setup ----
 async function runSetup(_job: Job, signal: AbortSignal, progress: JobProgress): Promise<{ tools: Record<string, string>; elapsed_ms: number }> {
   const started = mediaDeps.now();
@@ -535,5 +644,6 @@ export function registerMediaJobs(): void {
   registerJobRunner("media.transcode", runTranscode, { lane: laneFor("media.transcode") });
   registerJobRunner("media.preview", runPreview, { lane: laneFor("media.preview") });
   registerJobRunner("media.companion_clip", runCompanionClip, { lane: laneFor("media.companion_clip") });
+  registerJobRunner("media.edit", runEdit, { lane: laneFor("media.edit") });
   registerJobRunner("media.setup", runSetup, { lane: laneFor("media.setup") });
 }

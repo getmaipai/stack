@@ -10,6 +10,8 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Added
 
+- `media.edit` on the media job lane (EDITOR-11): one job takes `inputs[]`, `ops[]` and an output and runs trim, concat, mute, frame, audio_overlay (with ducking and loudness) and fade in order with the bundled ffmpeg, within the same idle lane, path guards and deadline table as the other media kinds; at most 12 steps, 24 files and 10 minutes.
+
 - Video, picture and music workers leave memory after a setting you can change (`stack.engines.video.keep_warm_minutes` default 2, `music` 5, `image` 10; ENGINE-IDLE-01). The 40 GB video models used to stay ten minutes after the last clip. A second clip inside the window reuses the loaded worker.
 
 - GET /stack/v1/memory/daily reports each day's chat restarts by cause, engine stops, isolation pauses, watchdog actions, chat window shrinks, survivors stopped and sweeps from the Stack log (RESOURCE-FIX-08a).
