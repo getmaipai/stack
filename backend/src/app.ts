@@ -42,6 +42,8 @@ import { registerMusicJobs } from "@/music/jobs";
 import { registerStemsJobs } from "@/stems/jobs";
 import { stemsV1Routes } from "@/routes/stems";
 import { stemsRoutes } from "@/routes/stemsStatus";
+import { registerAlignJobs } from "@/align/jobs";
+import { alignV1Routes } from "@/routes/align";
 import { imageRoutes } from "@/routes/image";
 import { imageV1Routes } from "@/routes/imageGenerations";
 import { registerImageJobs } from "@/images/jobs";
@@ -69,6 +71,7 @@ registerMediaJobs();
 registerVideoJobs();
 registerMusicJobs();
 registerStemsJobs();
+registerAlignJobs();
 registerImageJobs();
 
 const livenessRoute = createRoute({
@@ -108,6 +111,7 @@ app.route("/v1", lookRoutes);
 app.route("/v1/videos", videoV1Routes);
 app.route("/v1/audio/music", musicV1Routes);
 app.route("/v1/audio/stems", stemsV1Routes);
+app.route("/v1/audio/align", alignV1Routes);
 app.route("/v1/images", imageV1Routes);
 app.route("/stack/v1/roles", rolesRoutes);
 app.route("/stack/v1/engines", enginesRoutes);

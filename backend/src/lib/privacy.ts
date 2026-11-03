@@ -34,6 +34,15 @@ export const PRIVACY_ROWS: PrivacyRow[] = [
     hosts: ["huggingface.co", "github.com"],
   },
   {
+    id: "align-model",
+    what: "Downloading the pinned lyric alignment model (MMS forced aligner, 1,262,047,414 bytes), and running it",
+    when: "The download happens only when Home installs the lyric timing component, once, never on a schedule. Timing lyrics afterwards runs offline: the worker has no network, no token and no proxy (HF_HUB_OFFLINE=1, TORCH_HOME on this computer), and reads only the file this computer holds",
+    carries: "The name of the pinned file (sha256 20ef12963ab4924bef49ac4fc7f58ad5da2ee43b2c11bc8c853c9b90ecdbc680); nothing about the household. The song and its lyrics never leave this computer: the lyric words are held in memory only and never reach a log line, an error message or a file name",
+    receiver: "Meta's model file host (dl.fbaipublicfiles.com), straight from this computer",
+    setting: null,
+    hosts: ["dl.fbaipublicfiles.com"],
+  },
+  {
     id: "video-lora-install",
     what: "Downloading a video style (LoRA) file an admin chose",
     when: "Only when an owner or admin installs a style from Hugging Face or Civitai in Home; one download at a time, resumed from where it stopped, never on a schedule",

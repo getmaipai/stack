@@ -1113,6 +1113,17 @@ export const STACK_STEMS_6S_MODEL: CatalogModelLike = {
 };
 export const STACK_STEMS_MODELS: CatalogModelLike[] = [STACK_STEMS_MODEL, STACK_STEMS_FT_MODEL, STACK_STEMS_6S_MODEL];
 
+// MUSIC-GEN-20b: the forced aligner behind POST /v1/audio/align, torchaudio's MMS_FA bundle (Meta's MMS wav2vec2 CTC
+// alignment model, the file torchaudio would fetch itself, here pinned by sha256 and installed through the normal
+// download path so nothing is fetched at run time). Licence: CC-BY-NC-4.0 (the MMS release): household use, no resale.
+export const STACK_ALIGN_MODEL_ID = "mms-fa-align";
+export const STACK_ALIGN_MODEL: CatalogModelLike = {
+  id: STACK_ALIGN_MODEL_ID, role: "music", component: "align", repo: "facebookresearch/fairseq/examples/mms/data_prep", license: "CC-BY-NC-4.0", revision: "torchaudio-2.10.0-MMS_FA", engine: "align",
+  sizing: { profile: "p16", quantization: "fp32" },
+  download: { url: "https://dl.fbaipublicfiles.com/mms/torchaudio/ctc_alignment_mling_uroman/model.pt", sha256: "20ef12963ab4924bef49ac4fc7f58ad5da2ee43b2c11bc8c853c9b90ecdbc680", approx_bytes: 1_262_047_414 },
+};
+export const STACK_ALIGN_MODELS: CatalogModelLike[] = [STACK_ALIGN_MODEL];
+
 // VIDEO-LTX-01: the Detailed video model. LTX-2.3 22B distilled (Lightricks), the MLX layout of prince-canuma's conversion
 // (an ungated Hugging Face repository: no account is needed), at one revision, every file by sha256 and size. It makes the
 // picture and its sound track in one pass (speech included), up to 10 s a clip at 768 x 448, with an 8 + 3 step distilled
@@ -1462,7 +1473,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_DETAILED_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, ...STACK_MUSIC_XL_MODELS, ...STACK_MUSIC_MAX_MODELS, ...STACK_STEMS_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_DETAILED_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, ...STACK_MUSIC_XL_MODELS, ...STACK_MUSIC_MAX_MODELS, ...STACK_STEMS_MODELS, ...STACK_ALIGN_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

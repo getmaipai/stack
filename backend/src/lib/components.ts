@@ -15,7 +15,7 @@ import { createJob, finishJob, getJob, jobSignal, listJobs, updateJob } from "@/
 import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { getModel, installCatalogModel, removeModel, type CatalogModelLike, type DownloadModelOptions } from "@/lib/modelStore";
-import { STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, LTX_LICENCE_NOTICE, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_SFT_ID, STACK_MUSIC_XL_ID, STACK_MUSIC_XL_MODELS, STACK_STEMS_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_VIDEO_DETAILED_MODEL_ID, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MODEL_ID, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
+import { STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, LTX_LICENCE_NOTICE, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_SFT_ID, STACK_MUSIC_XL_ID, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_STEMS_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_VIDEO_DETAILED_MODEL_ID, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MODEL_ID, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
 import { licenceAcceptance, recordLicenceAcceptance, type LicenceNotice } from "@/lib/licenceAcceptance";
 import { buildInstallPlan } from "@/lib/installPlan";
 import { diskPlanForTier, diskTotalsFor, engineDownloadBytes, type DiskPlan } from "@/lib/diskPlan";
@@ -33,6 +33,7 @@ import { imageLoras } from "@/images/loras";
 import { ensureLtx25Environment, ensureLtx25MaxEnvironment, ltx25EnvironmentReady, ltx25GenRoot, ltx25MaxEnvironmentReady, ltx25MaxGenRoot, LTX25_GEN_NAME, LTX25_MAX_GEN_NAME } from "@/video/ltx25";
 import { ensureVideoGenEnvironment, tierAvailability as videoAvailability, videoGen, videoGenEnvironmentReady, videoGenRoot, VIDEO_GEN_NAME } from "@/video/videoGen";
 import { ensureMusicGenEnvironment, tierAvailability as musicAvailability, musicGen, musicGenEnvironmentReady, musicGenRoot, MUSIC_GEN_NAME } from "@/music/musicGen";
+import { align, ALIGN_NAME, ensureAlignEnvironment, alignRoot, alignEnvironmentReady } from "@/align/align";
 import { stems, STEMS_NAME, ensureStemsEnvironment, stemsRoot, stemsEnvironmentReady } from "@/stems/stems";
 import { listLoras as listVideoLoras, removeLora as removeVideoLora } from "@/video/loras";
 import { imageTools, imageToolsProof, imageToolsRoot } from "@/imagetools/imageTools";
@@ -91,10 +92,10 @@ export interface UnitDef {
 
 const GB = 1_000_000_000;
 /** Environment downloads come from the disk plan's measured table (one definition with the wizard); the figures are a fallback only. */
-const ENV_BYTES = { stems: engineDownloadBytes("stems") ?? 0.25 * GB, image: engineDownloadBytes("image-gen") ?? 1.1 * GB, video: engineDownloadBytes("video-gen") ?? 1.0 * GB, ltx25: engineDownloadBytes("ltx25-gen") ?? 0.25 * GB, ltx25max: engineDownloadBytes("ltx25-max-gen") ?? 0.25 * GB, music: engineDownloadBytes("music-gen") ?? 0.8 * GB, tools: engineDownloadBytes("image-tools") ?? 0.4 * GB, pocket: engineDownloadBytes("pocket-tts") ?? 0.72 * GB, mlxAudio: engineDownloadBytes("mlx-audio") ?? 0.47 * GB };
+const ENV_BYTES = { align: engineDownloadBytes("align") ?? 0.3 * GB, stems: engineDownloadBytes("stems") ?? 0.25 * GB, image: engineDownloadBytes("image-gen") ?? 1.1 * GB, video: engineDownloadBytes("video-gen") ?? 1.0 * GB, ltx25: engineDownloadBytes("ltx25-gen") ?? 0.25 * GB, ltx25max: engineDownloadBytes("ltx25-max-gen") ?? 0.25 * GB, music: engineDownloadBytes("music-gen") ?? 0.8 * GB, tools: engineDownloadBytes("image-tools") ?? 0.4 * GB, pocket: engineDownloadBytes("pocket-tts") ?? 0.72 * GB, mlxAudio: engineDownloadBytes("mlx-audio") ?? 0.47 * GB };
 /** The disk plan's row for a component, where the plan has one (its optional rows are the wizard's unchecked extras). */
 /** The install-plan row each component stands for (the size and need shown beside it). A test keeps every plan row covered. */
-export const DISK_ROW: Record<string, string> = { "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "ernie-image-turbo": "pictures-ernie", "qwen-image-2512-q8": "pictures-qwen", "image-tools": "image-tools", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "ace-step-1-5-turbo": "music", "ace-step-1-5-xl-turbo-bf16": "music-boost", "ace-step-1-5-xl-sft-bf16": "music-max", "htdemucs": "stems", "htdemucs_ft": "stems-ft", "htdemucs_6s": "stems-6s", "ltx-2-3-distilled-mlx": "video-detailed", "ltx-2-5-q8-distilled-mlx": "video-ltx25", "ltx-2-5-bf16-distilled-mlx-max": "video-ltx25-max" };
+export const DISK_ROW: Record<string, string> = { "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "ernie-image-turbo": "pictures-ernie", "qwen-image-2512-q8": "pictures-qwen", "image-tools": "image-tools", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "ace-step-1-5-turbo": "music", "ace-step-1-5-xl-turbo-bf16": "music-boost", "ace-step-1-5-xl-sft-bf16": "music-max", "htdemucs": "stems", "htdemucs_ft": "stems-ft", "htdemucs_6s": "stems-6s", "mms-fa-align": "align", "ltx-2-3-distilled-mlx": "video-detailed", "ltx-2-5-q8-distilled-mlx": "video-ltx25", "ltx-2-5-bf16-distilled-mlx-max": "video-ltx25-max" };
 
 const envImage: EnvDef = { name: "image-gen", approxBytes: ENV_BYTES.image, root: imageGenRoot, ready: imageGenEnvironmentReady, build: (onPhase, signal) => ensureImageGenEnvironment(onPhase, { signal }), stop: () => imageGen.stop() };
 const envVideo: EnvDef = {
@@ -137,6 +138,7 @@ const envMusic: EnvDef = {
     await ensureMusicGenEnvironment(onPhase, { signal });
   },
 };
+const envAlign: EnvDef = { name: ALIGN_NAME, approxBytes: ENV_BYTES.align, root: alignRoot, ready: alignEnvironmentReady, build: (onPhase, signal) => ensureAlignEnvironment(onPhase, signal), stop: () => align.stop() };
 const envStems: EnvDef = { name: STEMS_NAME, approxBytes: ENV_BYTES.stems, root: stemsRoot, ready: stemsEnvironmentReady, build: (onPhase, signal) => ensureStemsEnvironment(onPhase, signal), stop: () => stems.stop() };
 const envTools: EnvDef = { name: "image-tools", approxBytes: ENV_BYTES.tools, root: imageToolsRoot, ready: () => uvEnvironmentReady({ root: imageToolsRoot(), proof: imageToolsProof() }), lazy: true, build: async () => {}, stop: () => imageTools.stop() };
 const envPocket: EnvDef = { name: "pocket-tts", approxBytes: ENV_BYTES.pocket, root: pocketTtsRoot, ready: pocketTtsInstalled, build: (onPhase, signal) => ensurePocketTtsEnvironment(onPhase, { signal }) };
@@ -277,6 +279,7 @@ export function componentDefs(): UnitDef[] {
   });
   units.push({ id: "htdemucs", label: "Music: HTDemucs stem splitter", summary: "Separates a song made here into vocals, drums, bass and other.", group: "stems", role: "music", pins: [STACK_STEMS_MODELS[0]!], envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
   units.push({ id: "htdemucs-ft", label: "Music: finer stem splitter (HTDemucs fine-tuned)", summary: "Separates songs into four finer stems.", group: "stems", role: "music", pins: [STACK_STEMS_MODELS[1]!], envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
+  units.push({ id: "mms-fa-align", label: "Music: lyric timing (MMS aligner)", summary: "Finds when each word of a song's lyrics is sung.", group: "stems", role: "music", pins: STACK_ALIGN_MODELS, envs: [envAlign], usedBy: () => ["Word-by-word lyrics on a song card"], busy: () => activeJobFor((kind) => kind === "align_generation") ? "A song's lyrics are being timed right now." : null });
   units.push({ id: "htdemucs-6s", label: "Music: six-part stem splitter (guitar and piano)", summary: "Separates songs into six stems, including guitar and piano.", group: "stems", role: "music", pins: [STACK_STEMS_MODELS[2]!], envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
   units.push({
     id: STACK_MUSIC_MODELS[0]!.id, ...LABELS[STACK_MUSIC_MODELS[0]!.id]!, group: "music", role: "music", pins: STACK_MUSIC_MODELS, envs: [envMusic], tiers: ["p64", "p128"],

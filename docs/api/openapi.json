@@ -5632,6 +5632,516 @@
         }
       }
     },
+    "/v1/audio/align": {
+      "post": {
+        "tags": [
+          "Align"
+        ],
+        "summary": "Time known lyrics against a song, word by word",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "maxLength": 56000000
+                  },
+                  "source_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-fA-F]{64}$"
+                  },
+                  "lyrics": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8000
+                  },
+                  "origin": {
+                    "type": "string",
+                    "enum": [
+                      "made_here",
+                      "owned_file"
+                    ]
+                  },
+                  "timeout_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true,
+                    "maximum": 1800000
+                  }
+                },
+                "required": [
+                  "source",
+                  "source_sha256",
+                  "lyrics"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Word timings are ready.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "words": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "t": {
+                                "type": "number"
+                              },
+                              "end": {
+                                "type": "number"
+                              },
+                              "text": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "t",
+                              "end",
+                              "text"
+                            ]
+                          }
+                        },
+                        "aligned_words": {
+                          "type": "integer"
+                        },
+                        "total_words": {
+                          "type": "integer"
+                        },
+                        "line_starts": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          }
+                        }
+                      },
+                      "required": [
+                        "words",
+                        "aligned_words",
+                        "total_words",
+                        "line_starts"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "job",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "The alignment is running; poll the job.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "words": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "t": {
+                                "type": "number"
+                              },
+                              "end": {
+                                "type": "number"
+                              },
+                              "text": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "t",
+                              "end",
+                              "text"
+                            ]
+                          }
+                        },
+                        "aligned_words": {
+                          "type": "integer"
+                        },
+                        "total_words": {
+                          "type": "integer"
+                        },
+                        "line_starts": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          }
+                        }
+                      },
+                      "required": [
+                        "words",
+                        "aligned_words",
+                        "total_words",
+                        "line_starts"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "job",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Source too large.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid source.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many alignment jobs waiting.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not installed or unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audio/align/{job}": {
+      "get": {
+        "tags": [
+          "Align"
+        ],
+        "summary": "Alignment job progress and result",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "phase": {
+                      "type": "string"
+                    },
+                    "progress": {
+                      "type": "number"
+                    },
+                    "progress_fraction": {
+                      "type": "number"
+                    },
+                    "stage_label": {
+                      "type": "string"
+                    },
+                    "position": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "stage": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "eta_seconds": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "code": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "words": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "t": {
+                                "type": "number"
+                              },
+                              "end": {
+                                "type": "number"
+                              },
+                              "text": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "t",
+                              "end",
+                              "text"
+                            ]
+                          }
+                        },
+                        "aligned_words": {
+                          "type": "integer"
+                        },
+                        "total_words": {
+                          "type": "integer"
+                        },
+                        "line_starts": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          }
+                        }
+                      },
+                      "required": [
+                        "words",
+                        "aligned_words",
+                        "total_words",
+                        "line_starts"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "state",
+                    "phase",
+                    "progress",
+                    "progress_fraction",
+                    "stage_label",
+                    "position",
+                    "stage",
+                    "eta_seconds",
+                    "error",
+                    "code",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such alignment job.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Align"
+        ],
+        "summary": "Cancel or delete an alignment job",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cancelled or deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "state"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such alignment job.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/images/generations/{job}": {
       "get": {
         "tags": [

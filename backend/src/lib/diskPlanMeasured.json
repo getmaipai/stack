@@ -82,6 +82,12 @@
       "download_bytes": 800000000,
       "peak_temp_bytes": 800000000,
       "basis": "estimate"
+    },
+    "align": {
+      "installed_bytes": 515129344,
+      "download_bytes": 450000000,
+      "peak_temp_bytes": 450000000,
+      "basis": "estimate"
     }
   },
   "pins": {
@@ -604,6 +610,10 @@
     "qwen-image-2512-q8-vae-model-safetensors-index": {
       "download_bytes": 13512,
       "installed_bytes": 13512
+    },
+    "mms-fa-align": {
+      "download_bytes": 1262047414,
+      "installed_bytes": 1262047414
     }
   }
 }
