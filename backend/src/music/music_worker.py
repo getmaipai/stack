@@ -292,8 +292,10 @@ def generate(request, workdir):
         duration = _seconds(request.get("duration_s"), 60.0)
         if duration < MIN_SECONDS or duration > MAX_SECONDS:
             raise ValueError("a song is %d to %d seconds long" % (MIN_SECONDS, MAX_SECONDS))
-        # Listening test 2026-11-02: shift 3.0, DCW off and the planner's codes at strength 0 gave clearer vocals than the library defaults.
-        params = GenerationParams(task_type="text2music", duration=duration, thinking=True, use_cot_lyrics=False, shift=TEXT2MUSIC_SHIFT, dcw_enabled=False, audio_cover_strength=0.0, **kwargs)
+        # Listening test 2026-11-02: shift 3.0 and DCW off gave clearer vocals. The planner codes stay at full strength on the 2B Turbo (at 0 it
+        # sings nothing) and drop to 0 on the XL Turbo bf16, where that was the clearest clip.
+        codes = 0.0 if _handlers.get("dit_name") in XL_BF16_DITS else 1.0
+        params = GenerationParams(task_type="text2music", duration=duration, thinking=True, use_cot_lyrics=False, shift=TEXT2MUSIC_SHIFT, dcw_enabled=False, audio_cover_strength=codes, **kwargs)
     else:
         src = _decode_source(request, workdir)
         total = _read(src).shape[0] / SAMPLE_RATE

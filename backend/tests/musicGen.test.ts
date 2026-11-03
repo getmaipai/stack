@@ -561,11 +561,12 @@ test("the worker keeps the keep-warm, offline and memory settings the note measu
   expect(source).toContain('os.environ.setdefault("HF_HUB_OFFLINE", "1")');
   expect(source).toContain('os.environ.setdefault("ACESTEP_MLX_VAE_CHUNK", "256")');
   expect(source).toContain("use_cot_lyrics=False");
-  // Listening test 2026-11-02: clearest vocals with shift 3, DCW off and the planner codes at strength 0.
+  // Listening test 2026-11-02: clearest vocals with shift 3 and DCW off; planner codes at 1.0 on the 2B Turbo (0 sings nothing), 0 on the XL bf16.
   expect(source).toContain("TEXT2MUSIC_SHIFT = 3.0");
   expect(source).toContain('XL_BF16_DITS = ("acestep-v15-xl-turbo-bf16",)');
   expect(source).toContain('request.get("dit") or DEFAULT_DIT');
-  expect(source).toContain("shift=TEXT2MUSIC_SHIFT, dcw_enabled=False, audio_cover_strength=0.0");
+  expect(source).toContain("shift=TEXT2MUSIC_SHIFT, dcw_enabled=False, audio_cover_strength=codes");
+  expect(source).toContain("codes = 0.0 if _handlers.get(\"dit_name\") in XL_BF16_DITS else 1.0");
   const service = await Bun.file(join(import.meta.dir, "../src/music/musicGen.ts")).text();
   expect(service).toContain('engineIdleMs("music")');
   for (const name of ["HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE", "HF_HUB_DISABLE_TELEMETRY", "ACESTEP_MLX_VAE_CHUNK", "MUSIC_MAX_SECONDS"]) expect(service).toContain(name);
