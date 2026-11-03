@@ -17,6 +17,7 @@ import { installedEnginePin } from "@/lib/engineCatalog";
 import { listModels } from "@/lib/modelStore";
 import { videoDetailedInstallModels, videoInstallModels, videoLtx25InstallModels, videoLtx25MaxInstallModels } from "@/lib/installPlan";
 import { modelView } from "@/routes/models";
+import { LORA_INSTALL_SITES, startVideoLoraInstall } from "@/video/loraInstall";
 import { importLora, listLoras, LORA_BASE_MODEL, LORA_BASE_MODELS, LORA_CLASSES, LoraError, MAX_LORA_BYTES, MAX_LORAS_PER_JOB, MAX_LORA_STRENGTH, removeLora, updateLora, isLoraId } from "@/video/loras";
 import { LTX_LICENCE_NOTICE } from "@/lib/modelCatalog";
 import { ltx25EnvironmentReady, ltx25LoraProfile, LTX25_UNFUSED_ADMIT_FACTOR, LTX25_DEFAULT_SIZE, LTX25_MEASURED, LTX25_STANDARD_5S_PEAK_BYTES, LTX25_STANDARD_5S_PICTURE_PEAK_BYTES, LTX25_FPS } from "@/video/ltx25";
@@ -105,6 +106,27 @@ const importRoute = createRoute({ method: "post", path: "/loras", tags: ["Video"
   409: { content: { "application/json": { schema: ErrorBody } }, description: "Already in the library (already_added)." },
   413: { content: { "application/json": { schema: ErrorBody } }, description: "Larger than 2 GB." },
   422: { content: { "application/json": { schema: ErrorBody } }, description: "Not usable: not_safetensors, not_a_lora, wrong_base_model, lora_keys_unsupported (an ltx-2.5 file with no lora_A/lora_B tensors the runtime reads, such as a kohya file), licence_acknowledgement_required, lora_refused (a minor in a sexual context: never allowed), bad_name, bad_strength." },
+} });
+const installBody = z.object({
+  source: z.enum(LORA_INSTALL_SITES).openapi({ description: "Which site the file comes from. The address must belong to it: a Hugging Face file link (resolve or blob) or `https://civitai.com/api/download/models/<version id>`; any other host is refused (host_not_allowed)." }),
+  url: z.string().max(2048),
+  name: z.string(),
+  licence: z.string().openapi({ description: "The licence as the source states it (the same rule as POST /loras)." }),
+  licence_acknowledged: z.boolean().optional(),
+  audience: z.enum(["all-ages", "adult"]).optional().openapi({ description: "Home's decision. Default adult (uncertain means adult-only); a file whose own metadata names adult content is adult-only whatever is asked. Stored as the record's classification." }),
+  strength_default: z.number().min(0).max(MAX_LORA_STRENGTH).optional(),
+  trigger_words: z.array(z.string()).optional(),
+  added_by: z.string().optional(),
+  base_model: z.enum(LORA_BASE_MODELS).optional().openapi({ description: "What the source says the file was made for; the tensors still decide the family (wrong_base_model on a conflict)." }),
+  sha256_expected: z.string().optional().openapi({ description: "The source's published sha256. Checked on the bytes received (hash_mismatch); when a library record already has that hash, no download starts (409 duplicate_lora with existing_id)." }),
+  token: z.string().max(512).optional().openapi({ description: "The admin's key or token for that site. Used for one call, only sent to the site's own host (never to a CDN or another host a redirect names), never stored, logged, or shown in the job." }),
+  source_url: z.string().max(2000).optional().openapi({ description: "The page the admin chose, kept on the record. Never put a token in it." }),
+});
+const installRoute = createRoute({ method: "post", path: "/loras/install", tags: ["Video"], summary: "Download a LoRA from Hugging Face or Civitai into the library (video.lora.install job)", request: { body: { content: { "application/json": { schema: installBody } } } }, responses: {
+  202: { content: { "application/json": { schema: z.object({ job: z.string() }) } }, description: "A `video.lora.install` job started (`GET /stack/v1/jobs/{id}`). It reports bytes only and is named \"a style\". Done: `result.lora` is the library record. Failed: `reason` is `code: sentence` and `result` is `{ code, existing_id? }`; codes: host_not_allowed, token_needed, token_refused, source_missing, source_busy, too_large, hash_mismatch, not_safetensors, download_cut_short, download_failed, duplicate_lora, plus the POST /loras codes (wrong_base_model, lora_keys_unsupported, lora_refused, licence_acknowledgement_required)." },
+  409: { content: { "application/json": { schema: z.object({ error: z.string(), code: z.string(), existing_id: z.string().optional() }) } }, description: "duplicate_lora: a library record already has the expected hash; nothing was downloaded." },
+  422: { content: { "application/json": { schema: ErrorBody } }, description: "The request cannot be used: bad_url, host_not_allowed, bad_source, bad_hash, bad_classification." },
+  503: { content: { "application/json": { schema: ErrorBody } }, description: "install_busy: one download at a time." },
 } });
 const patchRoute = createRoute({ method: "patch", path: "/loras/{id}", tags: ["Video"], summary: "Edit a LoRA's name, class, default strength or trigger words", request: { params: z.object({ id: z.string() }), body: { content: { "application/json": { schema: z.object({ name: z.string().optional(), classification: z.enum(LORA_CLASSES).optional(), strength_default: z.number().min(0).max(MAX_LORA_STRENGTH).optional(), trigger_words: z.array(z.string()).optional(), source_url: z.string().nullable().optional(), base_model: z.enum(LORA_BASE_MODELS).optional().openapi({ description: "Moves an LTX file between ltx-2.3 and ltx-2.5 (an LTX file's version cannot be read from its tensors). The file is read again: a family that is not LTX, or a version the file itself names otherwise, is refused (wrong_base_model); an ltx-2.5 file the runtime cannot map is refused (lora_keys_unsupported)." }) }) } } } }, responses: {
   200: { content: { "application/json": { schema: LoraSchema } }, description: "Updated." },
@@ -236,6 +258,22 @@ videoRoutes.openapi(importRoute, async (c) => {
     if (error instanceof LoraError) return c.json({ error: error.message, code: error.code }, error.status as 409 | 413 | 422);
     throw error;
   } finally { if (temp) rmSync(temp, { force: true }); }
+});
+
+videoRoutes.openapi(installRoute, (c) => {
+  const body = c.req.valid("json");
+  try {
+    const job = startVideoLoraInstall({ site: body.source, url: body.url, name: body.name, licence: body.licence, licenceAcknowledged: body.licence_acknowledged, classification: body.audience === undefined ? undefined : body.audience === "adult" ? "adult-only" : "all-ages", strengthDefault: body.strength_default, triggerWords: body.trigger_words, addedBy: body.added_by ?? null, baseModel: body.base_model ?? null, sha256Expected: body.sha256_expected ?? null, token: body.token ?? null, sourceUrl: body.source_url ?? null });
+    return c.json({ job: job.id }, 202);
+  } catch (error) {
+    if (error instanceof LoraError) {
+      const existing = (error as { existingId?: string }).existingId;
+      if (error.status === 409) return c.json({ error: error.message, code: error.code, ...(existing ? { existing_id: existing } : {}) }, 409);
+      if (error.status === 503) return c.json({ error: error.message, code: error.code }, 503);
+      return c.json({ error: error.message, code: error.code }, 422);
+    }
+    throw error;
+  }
 });
 
 videoRoutes.openapi(patchRoute, async (c) => {
