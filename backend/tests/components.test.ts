@@ -8,7 +8,7 @@ import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:
 import { join } from "node:path";
 import { app } from "@/app";
 import { diskPlanForTier, diskTotalsFor } from "@/lib/diskPlan";
-import { ComponentError, __setComponentDepsForTests, __setComponentUnitsForTests, __settleComponentInstallsForTests, componentDefs, forgetSizes, listComponents, startComponentInstall, uninstallComponent, type EnvDef, type UnitDef } from "@/lib/components";
+import { DISK_ROW, ComponentError, __setComponentDepsForTests, __setComponentUnitsForTests, __settleComponentInstallsForTests, componentDefs, forgetSizes, listComponents, startComponentInstall, uninstallComponent, type EnvDef, type UnitDef } from "@/lib/components";
 import { noteComponentUse, __forgetUseForTests } from "@/lib/componentUse";
 import { __resetHealthForTests, list as listHealth } from "@/lib/health";
 import { runFix } from "@/routes/health";
@@ -21,6 +21,7 @@ import { writeHfFile } from "@/lib/store/hfCache";
 import { imageLoras } from "@/images/loras";
 import { resetSupervisorForTests, setSupervisorFactoryForTests } from "@/lib/supervisor";
 import { STACK_IMAGE_ZIMAGE_MODELS } from "@/lib/modelCatalog";
+import { IMAGE_FAMILIES } from "@/images/models";
 
 const GB = 1_073_741_824;
 const hw = (over: Partial<HardwareInfo> = {}): HardwareInfo => ({ platform: "darwin", arch: "arm64", totalRamGb: 128, cpuCount: 16, isAppleSilicon: true, unifiedMemoryGb: 128, cudaDevices: [], freeDiskBytes: 1500 * GB, osVersion: "test", ...over });
@@ -350,4 +351,17 @@ test("the coding model is a removable component on p128 and p64 (not required), 
   }
   const small = await listComponents(hw({ unifiedMemoryGb: 32, totalRamGb: 32 }));
   expect(small.components.find((c) => c.id === "qwen3.8-27b-ud-q4-k-m")!.requirement).toBe("unsupported");
+});
+
+// ---- INSTALL-EVERYTHING-01: every picture model the Stack can run is a component Settings can install ----
+
+test("every picture family has a component of its own, sized by its install-plan row", async () => {
+  __setComponentUnitsForTests(null);
+  const ids = new Set(componentDefs().map((def) => def.id));
+  for (const family of Object.keys(IMAGE_FAMILIES)) expect(ids.has(family)).toBe(true);
+  const planRows = new Set(diskPlanForTier("p128")!.rows.map((row) => row.id));
+  for (const [component, row] of Object.entries(DISK_ROW)) if (ids.has(component)) expect(planRows.has(row)).toBe(true);
+  const ernie = (await listComponents(hw())).components.find((c) => c.id === "ernie-image-turbo")!;
+  expect(ernie).toMatchObject({ label: "Pictures: ERNIE-Image-Turbo", group: "pictures", can_install: expect.any(Boolean) });
+  expect(ernie.full_bytes).toBeGreaterThan(15e9);
 });

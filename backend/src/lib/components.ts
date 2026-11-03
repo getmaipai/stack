@@ -15,7 +15,7 @@ import { createJob, finishJob, getJob, jobSignal, listJobs, updateJob } from "@/
 import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { getModel, installCatalogModel, removeModel, type CatalogModelLike, type DownloadModelOptions } from "@/lib/modelStore";
-import { STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, LTX_LICENCE_NOTICE, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_SFT_ID, STACK_MUSIC_XL_ID, STACK_MUSIC_XL_MODELS, STACK_STEMS_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_VIDEO_DETAILED_MODEL_ID, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MODEL_ID, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
+import { STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, LTX_LICENCE_NOTICE, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_SFT_ID, STACK_MUSIC_XL_ID, STACK_MUSIC_XL_MODELS, STACK_STEMS_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_VIDEO_DETAILED_MODEL_ID, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MODEL_ID, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
 import { licenceAcceptance, recordLicenceAcceptance, type LicenceNotice } from "@/lib/licenceAcceptance";
 import { buildInstallPlan } from "@/lib/installPlan";
 import { diskPlanForTier, diskTotalsFor, engineDownloadBytes, type DiskPlan } from "@/lib/diskPlan";
@@ -93,7 +93,8 @@ const GB = 1_000_000_000;
 /** Environment downloads come from the disk plan's measured table (one definition with the wizard); the figures are a fallback only. */
 const ENV_BYTES = { stems: engineDownloadBytes("stems") ?? 0.25 * GB, image: engineDownloadBytes("image-gen") ?? 1.1 * GB, video: engineDownloadBytes("video-gen") ?? 1.0 * GB, ltx25: engineDownloadBytes("ltx25-gen") ?? 0.25 * GB, ltx25max: engineDownloadBytes("ltx25-max-gen") ?? 0.25 * GB, music: engineDownloadBytes("music-gen") ?? 0.8 * GB, tools: engineDownloadBytes("image-tools") ?? 0.4 * GB, pocket: engineDownloadBytes("pocket-tts") ?? 0.72 * GB, mlxAudio: engineDownloadBytes("mlx-audio") ?? 0.47 * GB };
 /** The disk plan's row for a component, where the plan has one (its optional rows are the wizard's unchecked extras). */
-const DISK_ROW: Record<string, string> = { "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "image-tools": "image-tools", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "ace-step-1-5-turbo": "music", "ace-step-1-5-xl-turbo-bf16": "music-boost", "ace-step-1-5-xl-sft-bf16": "music-max", "htdemucs": "stems", "htdemucs_ft": "stems-ft", "htdemucs_6s": "stems-6s", "ltx-2-3-distilled-mlx": "video-detailed", "ltx-2-5-q8-distilled-mlx": "video-ltx25", "ltx-2-5-bf16-distilled-mlx-max": "video-ltx25-max" };
+/** The install-plan row each component stands for (the size and need shown beside it). A test keeps every plan row covered. */
+export const DISK_ROW: Record<string, string> = { "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "ernie-image-turbo": "pictures-ernie", "image-tools": "image-tools", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "ace-step-1-5-turbo": "music", "ace-step-1-5-xl-turbo-bf16": "music-boost", "ace-step-1-5-xl-sft-bf16": "music-max", "htdemucs": "stems", "htdemucs_ft": "stems-ft", "htdemucs_6s": "stems-6s", "ltx-2-3-distilled-mlx": "video-detailed", "ltx-2-5-q8-distilled-mlx": "video-ltx25", "ltx-2-5-bf16-distilled-mlx-max": "video-ltx25-max" };
 
 const envImage: EnvDef = { name: "image-gen", approxBytes: ENV_BYTES.image, root: imageGenRoot, ready: imageGenEnvironmentReady, build: (onPhase, signal) => ensureImageGenEnvironment(onPhase, { signal }), stop: () => imageGen.stop() };
 const envVideo: EnvDef = {
@@ -161,6 +162,7 @@ const LABELS: Record<string, { label: string; summary: string }> = {
   "tool-look": { label: "Look", summary: "Names household objects, wall colour and light in a picture." },
   "flux2-klein-4b": { label: "Pictures: FLUX.2 Klein 4B", summary: "The everyday picture model. Makes and edits pictures in a few seconds." },
   "z-image-turbo": { label: "Pictures: Z-Image-Turbo", summary: "A higher-detail picture model for the largest computers. A big download." },
+  "ernie-image-turbo": { label: "Pictures: ERNIE-Image-Turbo", summary: "Draws words inside pictures correctly. Makes new pictures from a sentence; FLUX.2 Klein stays for edits." },
   "ace-step-1-5-turbo": { label: "Music: ACE-Step 1.5", summary: "Makes and changes songs in chat" },
   "ace-step-1-5-xl-turbo-bf16": { label: "Music: Boost (ACE-Step XL Turbo)", summary: "A larger song model with clearer voices, used for Boost songs. About 10 GB; a Boost song takes about a minute." },
   "ace-step-1-5-xl-sft-bf16": { label: "Music: Max (ACE-Step XL SFT)", summary: "The best song model, with its larger planning model, used for Max songs. About 18 GB; a Max song takes about three minutes." },
@@ -214,7 +216,7 @@ export function componentDefs(): UnitDef[] {
     if (state === "running" || state === "building") return "A picture is being made right now.";
     return activeJobFor((kind) => kind === "image_generation" || kind === "image" || kind.startsWith("image")) ? "A picture is waiting or being made right now." : null;
   };
-  const familyUnit = (id: "flux2-klein-4b" | "z-image-turbo", pins: CatalogModelLike[], tiers: Tier[], usedBy: string): UnitDef => ({
+  const familyUnit = (id: "flux2-klein-4b" | "z-image-turbo" | "ernie-image-turbo", pins: CatalogModelLike[], tiers: Tier[], usedBy: string): UnitDef => ({
     id, ...LABELS[id]!, group: "pictures", role: "image", pins, envs: [envImage], tiers,
     platformBlock: () => imageGen.supported() ? null : "Pictures are not available on this kind of computer yet.",
     usedBy: () => { const count = imageLoras.list().filter((lora) => lora.base_model === id).length; return [usedBy, ...(count ? [`${count} picture style${count === 1 ? "" : "s"} (LoRAs)`] : [])]; },
@@ -222,6 +224,7 @@ export function componentDefs(): UnitDef[] {
   });
   units.push(familyUnit("flux2-klein-4b", STACK_IMAGE_KLEIN_MODELS, ["p32", "p64", "p128"], "Pictures in chat and the Pictures app"));
   units.push(familyUnit("z-image-turbo", STACK_IMAGE_ZIMAGE_MODELS, ["p128"], "Pictures, when chosen as the model"));
+  units.push(familyUnit("ernie-image-turbo", STACK_IMAGE_ERNIE_MODELS, ["p64", "p128"], "Pictures, when chosen as the model"));
   units.push({
     id: "image-tools", ...LABELS["image-tools"]!, group: "tools", role: "image", pins: STACK_IMAGE_TOOL_MODELS, envs: [envTools],
     platformBlock: () => { const status = imageTools.status(); return status.state === "unsupported" ? status.reason ?? "Picture tools are not available on this computer yet." : null; },

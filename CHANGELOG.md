@@ -10,6 +10,8 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Changed
 
+- ERNIE-Image-Turbo is a component (INSTALL-EVERYTHING-01): `GET /stack/v1/components` lists `ernie-image-turbo` (group pictures, p64 and p128), so it installs and uninstalls from the component list like Z-Image-Turbo and is sized by its `pictures-ernie` install-plan row. It was only reachable through the Setup plan before.
+
 - The memory watchdog gives up the running video, picture or music job last. At CRITICAL it first unloads idle workers, evicts the idle judge and, when nobody is using chat, puts chat on the smaller Reduced model; it re-reads the pressure and cancels the running job only if it is still critical. A person who is chatting keeps the full model. Reduced that the watchdog entered is left again after a minute at normal (MEM-LADDER-01). Pure `criticalStep` with a table test.
 
 ### Added
