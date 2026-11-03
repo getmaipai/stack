@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { app } from "@/app";
 import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, getGovernorStatus } from "@/lib/governor";
-import { __resetJobsForTests, getJob, listJobs } from "@/lib/jobs";
+import { __resetJobsForTests, cancelGeneratorsForMemory, getJob, listJobs } from "@/lib/jobs";
 import { STACK_MODELS, STACK_VIDEO_MODEL, STACK_VIDEO_TOKENIZER } from "@/lib/modelCatalog";
 import { PROFILE_TIERS } from "@/profiles";
 import { ENGINE_BINARIES, MANAGED_RUNTIMES } from "@/lib/engineCatalog";
@@ -163,6 +163,22 @@ test("past timeout_ms the answer is 202 with the job; the status shows the phase
   expect(killed).toBe(1);
   expect(getGovernorStatus().loaded).toHaveLength(0);
   expect((await (await get(`/v1/videos/generations/${job}`)).json() as { state: string }).state).toBe("cancelled");
+});
+
+test("a clip the memory watchdog stops ends cancelled with code memory_cancelled; a person's cancel stays cancelled; a refusal at submit stays no_memory", async () => {
+  videoGen.useDeps(scripted((request, emit) => new Promise<WorkerReply>(() => { emit({ id: request.id, event: "phase", phase: "rendering", percent: 30 }); })));
+  const response = await post({ prompt: "stopped by the watchdog", timeout_ms: 50 });
+  const { job } = await response.json() as { job: string };
+  await Bun.sleep(30);
+  expect(cancelGeneratorsForMemory("running", "Stopped: this computer got too busy.")).toEqual([job]);
+  await Bun.sleep(30);
+  expect(await (await get(`/v1/videos/generations/${job}`)).json()).toMatchObject({ state: "cancelled", phase: "paused: low memory", code: "memory_cancelled", error: "Stopped: this computer got too busy." });
+  // A person's Stop.
+  const second = await (await post({ prompt: "stopped by a person", timeout_ms: 50 })).json() as { job: string };
+  await Bun.sleep(30);
+  await app.request(`/v1/videos/generations/${second.job}`, { method: "DELETE" });
+  await Bun.sleep(30);
+  expect(await (await get(`/v1/videos/generations/${second.job}`)).json()).toMatchObject({ state: "cancelled", code: "cancelled" });
 });
 
 test("cancel stops the video worker and its child process", async () => {

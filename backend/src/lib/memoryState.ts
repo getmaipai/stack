@@ -44,6 +44,10 @@ export const WatchdogRules = {
 
 /** The status of a job the watchdog stopped or held back for memory. */
 export const PAUSED_LOW_MEMORY = "paused: low memory";
+/** The status of a Max job the watchdog stopped (it ends `failed`, not `cancelled`, so the card keeps its own start-again path). */
+export const STOPPED_FOR_MEMORY_MAX = "stopped: memory";
+/** The machine reason a video job's terminal result carries when the memory watchdog stopped it (queued or running, any level). Distinct from a person's Stop (`cancelled`), a worker crash (`worker_stopped`) and a refusal at submit (`no_memory`). */
+export const MEMORY_CANCELLED_CODE = "memory_cancelled";
 
 export type WatchdogLevel = "normal" | "warn" | "critical";
 

@@ -11,10 +11,18 @@
 //                 and tool workers and the idle voice engine, cancel
 //                 queued generative jobs.
 //   CRITICAL      (kernel pressure 4, swap growing fast, or available
-//                 < 3 GB) cancel the running generative job (video
-//                 first), evict the judge role, and restart the chat
-//                 role through the supervisor only if it stays critical
-//                 for 60 s. Raise a health item and one notification.
+//                 < 3 GB) the running generative job is the LAST thing
+//                 given up (`criticalStep`, pure): unload idle workers
+//                 and the idle voice engine, evict the idle judge, put
+//                 an idle chat on the smaller Reduced model (never while
+//                 a person is chatting), wait one settle window, re-read
+//                 the pressure, and only if the raw reading is still
+//                 critical cancel the running job (video first; it ends
+//                 `cancelled` with code `memory_cancelled`, and Home
+//                 starts it again). Chat restarts through the supervisor
+//                 only if it stays critical for 60 s. Reduced is left
+//                 again once the level has been normal for a minute.
+//                 Raise a health item and one notification.
 //
 // It acts only on what the Stack owns: its engines, workers and jobs.
 // Other processes are named in the log and never touched, with one
@@ -30,7 +38,9 @@ import { getGovernorStatus, setAdmissionGate, videoWindowStats } from "@/lib/gov
 import { admissionVerdict, chatPagedOut, latestSample, levelSince, memoryLevel, orphanReaperEnabled, recordAction, recentActions, reserveBytes, setChatPagedOut, setLatestSample, setMemoryLevel, watchdogEnabled, WatchdogRules, type WatchdogLevel } from "@/lib/memoryState";
 import { engineRoot } from "@/lib/store/layout";
 import { dirname, join } from "node:path";
-import { getRoleStatus } from "@/lib/supervisor";
+import { getRoleStatus, lastInteractiveAt } from "@/lib/supervisor";
+import { controlReducedChat, reducedHolders } from "@/lib/reducedChatLease";
+import { getReducedChatState } from "@/lib/reducedChat";
 import { dataDir } from "@/lib/paths";
 import { folderBytes, runSweeps } from "@/lib/sweeps";
 import { descendantsOf as childPids, startTimeOf, commandLineOf } from "@/lib/processTree";
@@ -38,6 +48,12 @@ import { ownedPids, finishedSurvivors } from "@/lib/ownedProcesses";
 
 const GB = 1_073_741_824;
 const VOICE_KEEP_MS = 300_000;
+/** Nobody has used chat, speech or voice this long: chat may be put on the smaller Reduced model to make room. A person chatting always keeps the full model. */
+const CHAT_IDLE_MS = 120_000;
+/** The level must have been normal this long before Reduced is left again, so a brief dip does not swap chat back and forth. */
+const REDUCED_HOLD_MS = 60_000;
+/** After a give-back freed something, wait this long before judging whether the job must go. */
+const SETTLE_MS = 10_000;
 function gb(bytes: number): string { return (bytes / GB).toFixed(1); }
 
 // ---- the ladder (pure) ----
@@ -134,6 +150,42 @@ function liveStackRoots(rows: ProcessRow[], ownPid: number): number[] {
   return [...roots];
 }
 
+
+// ---- the critical ladder (pure) ----
+
+export type ReducedState = "off" | "entering" | "reduced" | "leaving";
+export interface CriticalInputs {
+  /** Idle workers and the idle voice engine were already asked to unload in this critical episode. */
+  idleGivenBack: boolean;
+  /** The idle judge was already evicted (or there was none to evict) in this episode. */
+  judgeSettled: boolean;
+  /** A give-back is still running (an unload, an eviction or the Reduced swap). */
+  giveBackInFlight: boolean;
+  /** Nobody has used chat, speech or voice for CHAT_IDLE_MS. */
+  chatIdle: boolean;
+  reduced: ReducedState;
+  /** Reduced was already tried in this episode and could not be entered (coding mode, no small model, swap failed). */
+  reduceTried: boolean;
+  /** The newest sample, read on its own without the ladder's hysteresis, is still critical. */
+  rawCritical: boolean;
+  /** A give-back that freed something finished less than SETTLE_MS ago: its effect is not read yet. */
+  settling: boolean;
+}
+/** `cancel-running` means "the last resort": the caller stops the running generative job if there is one, and goes on to the chat-restart rule if there is none. */
+export type CriticalStep = "unload-idle" | "evict-judge" | "reduce-chat" | "wait" | "cancel-running";
+
+/** What one critical round does, in order of cost to a person: give back what is idle, shrink an idle chat, and only then stop the running job. */
+export function criticalStep(input: CriticalInputs): CriticalStep {
+  if (!input.idleGivenBack) return "unload-idle";
+  if (!input.judgeSettled) return "evict-judge";
+  if (input.giveBackInFlight || input.reduced === "entering" || input.reduced === "leaving") return "wait";
+  // The Stack's own idle memory is given back whatever the pressure reads now; the rest waits on a fresh reading.
+  if (!input.rawCritical) return "wait";
+  if (input.chatIdle && input.reduced === "off" && !input.reduceTried) return "reduce-chat";
+  if (input.settling) return "wait";
+  return "cancel-running";
+}
+
 // ---- actions ----
 
 export interface WatchdogActions {
@@ -143,6 +195,10 @@ export interface WatchdogActions {
   cancelRunning(reason: string): string[];
   /** Unload a warm role the Stack owns; false when it was not loaded. */
   evictRole(role: "judge"): Promise<boolean>;
+  /** Put chat on the smaller Reduced model. `reduced`: this call did it (the watchdog owns it and leaves it later); `already`: someone else holds Reduced; `waiting`: a chat turn is running, nothing changed; `unavailable`: it cannot be done here (coding mode, no small model, swap failed). */
+  reduceChat(): Promise<"reduced" | "already" | "waiting" | "unavailable">;
+  /** Give chat its normal model back after a reduce this watchdog made. `kept`: Home or the Max window still holds Reduced (the watchdog's hold is dropped); `waiting`: a chat turn is running, try again. */
+  restoreChat(): Promise<"restored" | "kept" | "waiting" | "failed">;
   restartChat(): Promise<void>;
   notify(data: Record<string, unknown>): void;
 }
@@ -166,6 +222,18 @@ export const defaultActions: WatchdogActions = {
   cancelQueued: (reason) => cancelGeneratorsForMemory("queued", reason),
   cancelRunning: (reason) => cancelGeneratorsForMemory("running", reason),
   evictRole: async (role) => { const supervisor = await import("@/lib/supervisor"); if (supervisor.processRoleFor(role) === "chat") return false; return supervisor.unloadRole(role, "Unloaded: this computer is low on memory.", "memory-watchdog-evict").catch(() => false); },
+  reduceChat: async () => {
+    const result = await controlReducedChat(true, "watchdog").catch(() => null);
+    if (!result) return "unavailable";
+    if (result.status === 200) return "reduced";
+    return result.status === 202 ? "waiting" : "unavailable";
+  },
+  restoreChat: async () => {
+    const result = await controlReducedChat(false, "watchdog").catch(() => null);
+    if (!result) return "failed";
+    if (result.status === 200) return reducedHolders().length > 0 ? "kept" : "restored";
+    return result.status === 202 ? "waiting" : "failed";
+  },
   restartChat: async () => { const supervisor = await import("@/lib/supervisor"); await supervisor.restartRole("chat", "memory-watchdog"); void import("@/lib/supervisor").then(({ getProcess }) => getProcess("chat")).catch(() => {}); },
   notify: (data) => { emit({ id: "pressure", data }); },
 };
@@ -183,6 +251,8 @@ export interface WatchdogOptions {
   /** Re-reads a pid's command line, to prove it is still the process that was judged an orphan. */
   commandOf?: (pid: number) => string | null;
   chatLoaded?: () => boolean;
+  /** True when nobody has used chat, speech or voice for CHAT_IDLE_MS (default: read from the supervisor). */
+  chatIdle?: () => boolean;
   folderBytes?: (dir: string) => number;
   runSweeps?: (reason: string) => unknown;
 }
@@ -201,6 +271,8 @@ export interface MemoryReport {
   recent_actions: Array<{ at: string; level: WatchdogLevel; action: string; detail: string }>;
   history: Array<{ at: string; available_bytes: number; swap_used_bytes: number; pressure_level: number }>;
 }
+
+function reducedStateNow(): ReducedState { return getReducedChatState(); }
 
 export class MemoryWatchdog {
   private devLoad: MemoryReport["dev_load"] = { others_bytes: 0, processes: [] };
@@ -241,6 +313,17 @@ export class MemoryWatchdog {
   private unaccountedSince: number | null = null;
   private unaccountedRaised = false;
   private lastSurvivorAt: number | null = null;
+  private idleGivenBack = false;
+  private criticalJudgeDone = false;
+  private reduceTried = false;
+  private reduceInFlight = false;
+  private reduceWaits = 0;
+  private lastGiveBackAt = 0;
+  /** This watchdog entered Reduced (not Home, not the Max window), so it is the one to leave it. */
+  private reducedOwned = false;
+  private restoreInFlight = false;
+  private normalSince: number | null = null;
+  private chatIdleNow: () => boolean;
 
   constructor(options: WatchdogOptions = {}) {
     this.sampler = options.sampler ?? getSystemSampler();
@@ -254,6 +337,7 @@ export class MemoryWatchdog {
       try { return Bun.spawnSync(["ps", "-o", "command=", "-p", String(pid)], { stdout: "pipe", stderr: "ignore" }).stdout.toString().trim() || null; } catch { return null; }
     });
     this.chatLoaded = options.chatLoaded ?? (() => ["ready", "loaded", "busy"].includes(getRoleStatus("chat").state));
+    this.chatIdleNow = options.chatIdle ?? (() => { const last = lastInteractiveAt(); return last === null || this.now() - last >= CHAT_IDLE_MS; });
     this.measureFolder = options.folderBytes ?? folderBytes;
     this.sweepDisk = options.runSweeps ?? runSweeps;
   }
@@ -306,10 +390,10 @@ export class MemoryWatchdog {
         setMemoryLevel(this.ladder.level, this.now());
         this.record(this.ladder.level, "level", `${previous} to ${this.ladder.level}: ${gb(sample.availableBytes)} GB available, ${gb(reserve)} GB reserve, kernel level ${sample.pressureLevel}, swap ${gb(sample.swapUsedBytes)} GB`);
         this.criticalSince = this.ladder.level === "critical" ? this.now() : null;
-        if (this.ladder.level === "critical") { this.judgeEvicted = false; this.judgeEvictionSettled = false; }
+        if (this.ladder.level === "critical") { this.judgeEvicted = false; this.judgeEvictionSettled = false; this.idleGivenBack = false; this.criticalJudgeDone = false; this.reduceTried = false; this.reduceWaits = 0; }
       }
       if (this.ladder.level === "normal") this.leave();
-      else await this.act(sample);
+      else { this.normalSince = null; await this.act(sample, rawLevel({ sample, swapGrowthBytes: this.swapGrowth(), reserve }) === "critical"); }
       this.devProtection();
       this.reapOrphans();
       this.reapSurvivors();
@@ -325,7 +409,25 @@ export class MemoryWatchdog {
     this.criticalSince = null;
     this.judgeEvicted = false;
     this.judgeEvictionSettled = false;
+    this.idleGivenBack = false;
+    this.criticalJudgeDone = false;
+    this.reduceTried = false;
+    this.reduceWaits = 0;
     setChatPagedOut(false);
+    this.maybeRestoreChat();
+  }
+
+  /** Reduced made by this watchdog ends once the level has stayed normal for a minute and no chat turn is running; a turn in flight only delays it. */
+  private maybeRestoreChat(): void {
+    if (!this.reducedOwned || this.restoreInFlight) return;
+    const now = this.now();
+    this.normalSince ??= now;
+    if (now - this.normalSince < REDUCED_HOLD_MS) return;
+    this.restoreInFlight = true;
+    void this.actions.restoreChat().then((result) => {
+      if (result === "restored") { this.reducedOwned = false; this.record("normal", "restore-chat", "memory recovered; chat is back on its normal model"); }
+      else if (result === "kept") { this.reducedOwned = false; this.record("normal", "restore-chat-kept", "another holder still needs the smaller model"); }
+    }).catch((error: unknown) => this.record("normal", "restore-chat-failed", error instanceof Error ? error.message : String(error))).finally(() => { this.restoreInFlight = false; });
   }
 
   private consumers(): TopConsumer[] {
@@ -349,7 +451,7 @@ export class MemoryWatchdog {
     resolveHealth(critical ? "memory-low" : "memory-critical");
   }
 
-  private async act(sample: SystemSample): Promise<void> {
+  private async act(sample: SystemSample, rawCritical = true): Promise<void> {
     const level = this.ladder.level;
     if (level === "normal") return;
     this.raiseItem(level, sample);
@@ -362,20 +464,35 @@ export class MemoryWatchdog {
       if (!this.evictInFlight) this.startEvict(level, now, sample);
       return;
     }
-    // CRITICAL: one step per round, 10 s apart, so each step's effect shows before the next.
+    // CRITICAL (`criticalStep`): the running job is the last thing given up.
     const queued = this.actions.cancelQueued(reason);
     if (queued.length > 0) this.record(level, "cancel-queued", `${queued.length} queued job(s) cancelled`);
-    this.startUnload(level, now);
-    if (now - this.lastActionAt < 10_000 && !this.unloadInFlight) return;
     const kinds = runningGeneratorKinds();
-    const cancelled = this.actions.cancelRunning("Stopped: this computer ran out of memory. Close big apps and try again.");
-    if (cancelled.length > 0) { this.lastActionAt = now; this.record(level, "cancel-running", `${kinds.join(", ") || "generative job"} cancelled`); this.notifyOnce(sample); return; }
-    if (this.evictInFlight) { this.notifyOnce(sample); return; }
-    if (!this.judgeEvicted && !this.judgeEvictionSettled) {
-      this.startEvict(level, now, sample);
-      this.notifyOnce(sample);
-      return;
+    const step = criticalStep({
+      idleGivenBack: this.idleGivenBack,
+      judgeSettled: this.criticalJudgeDone,
+      giveBackInFlight: this.unloadInFlight || this.evictInFlight || this.reduceInFlight,
+      chatIdle: this.chatIdleNow(),
+      reduced: reducedStateNow(),
+      reduceTried: this.reduceTried,
+      rawCritical,
+      settling: now - this.lastGiveBackAt < SETTLE_MS,
+    });
+    switch (step) {
+      case "unload-idle": this.idleGivenBack = true; this.startUnload(level, now); return;
+      case "evict-judge":
+        if (this.unloadInFlight || this.evictInFlight) return;
+        this.startEvict(level, now, sample);
+        return;
+      case "reduce-chat": this.startReduce(level); return;
+      case "wait": return;
+      case "cancel-running": {
+        const cancelled = this.actions.cancelRunning("Stopped: this computer got too busy. It can start again in a little while.");
+        if (cancelled.length > 0) { this.lastActionAt = now; this.lastGiveBackAt = now; this.record(level, "cancel-running", `${kinds.join(", ") || "generative job"} cancelled`); this.notifyOnce(sample); return; }
+        break;
+      }
     }
+    if (this.evictInFlight) { this.notifyOnce(sample); return; }
     this.judgeEvictionSettled = false;
     const criticalSince = this.criticalSince;
     if (criticalSince !== null && now - criticalSince >= WatchdogRules.chatRestartAfterMs && now - this.lastChatRestartAt >= WatchdogRules.chatRestartCooldownMs) {
@@ -391,7 +508,7 @@ export class MemoryWatchdog {
     if (this.unloadInFlight) return;
     this.unloadInFlight = true;
     this.lastActionAt = now;
-    void this.actions.unloadIdleWorkers().then((stopped) => { if (stopped.length > 0) this.record(level, "unload-idle", stopped.join(", ")); }).catch((error: unknown) => this.record(level, "unload-idle-failed", error instanceof Error ? error.message : String(error))).finally(() => { this.unloadInFlight = false; });
+    void this.actions.unloadIdleWorkers().then((stopped) => { if (stopped.length > 0) { this.lastGiveBackAt = this.now(); this.record(level, "unload-idle", stopped.join(", ")); } }).catch((error: unknown) => this.record(level, "unload-idle-failed", error instanceof Error ? error.message : String(error))).finally(() => { this.unloadInFlight = false; });
   }
 
   private startEvict(level: WatchdogLevel, now: number, sample: SystemSample): void {
@@ -405,7 +522,19 @@ export class MemoryWatchdog {
       return;
     }
     this.evictInFlight = true;
-    void this.actions.evictRole("judge").then((evicted) => { if (evicted) { this.judgeEvicted = true; this.lastActionAt = now; this.record(level, "evict-judge", "the judge role was unloaded"); this.notifyOnce(sample); } }).catch((error: unknown) => this.record(level, "evict-judge-failed", error instanceof Error ? error.message : String(error))).finally(() => { this.judgeEvictionSettled = true; this.evictInFlight = false; });
+    void this.actions.evictRole("judge").then((evicted) => { if (evicted) { this.judgeEvicted = true; this.lastActionAt = now; this.lastGiveBackAt = this.now(); this.record(level, "evict-judge", "the judge role was unloaded"); this.notifyOnce(sample); } }).catch((error: unknown) => this.record(level, "evict-judge-failed", error instanceof Error ? error.message : String(error))).finally(() => { this.judgeEvictionSettled = true; this.criticalJudgeDone = true; this.evictInFlight = false; });
+  }
+
+  /** Chat is idle and the pressure is still critical: put it on the smaller model before any job is stopped. A turn that starts first wins (the swap answers `waiting`), and the step is tried again next round. */
+  private startReduce(level: WatchdogLevel): void {
+    if (this.reduceInFlight) return;
+    this.reduceInFlight = true;
+    this.reduceTried = true;
+    void this.actions.reduceChat().then((result) => {
+      if (result === "reduced") { this.reducedOwned = true; this.lastGiveBackAt = this.now(); this.record(level, "reduce-chat", "chat idle; it now uses the smaller model so a running job can keep going"); }
+      else if (result === "waiting") { this.reduceWaits++; this.reduceTried = this.reduceWaits >= 2; }
+      else this.record(level, "reduce-chat-skipped", result === "already" ? "chat was already on the smaller model" : "chat could not switch to the smaller model here");
+    }).catch((error: unknown) => this.record(level, "reduce-chat-failed", error instanceof Error ? error.message : String(error))).finally(() => { this.reduceInFlight = false; });
   }
 
   private notifyOnce(sample: SystemSample): void {

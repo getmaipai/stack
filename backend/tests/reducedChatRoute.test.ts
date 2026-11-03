@@ -97,3 +97,27 @@ test("when a chat turn blocks the cap leave, it retries until the turn ends", as
   await Bun.sleep(60);
   expect(await reducedInMemory()).toBe(false);
 });
+
+test("Reduced has holders: chat returns to the full model only when Home, the Max window and the watchdog have all let go (MEM-LADDER-01)", async () => {
+  const { controlReducedChat, reducedHolders } = await import("@/lib/reducedChatLease");
+  expect((await controlReducedChat(true, "watchdog")).status).toBe(200);
+  expect((await post({ on: true })).status).toBe(200); // Home joins; no second swap
+  expect(calls).toEqual(["enter"]);
+  expect((await post({ on: false })).status).toBe(200); // Home lets go: the watchdog still holds it
+  expect(await reducedInMemory()).toBe(true);
+  expect(reducedHolders()).toEqual(["watchdog"]);
+  expect(calls).toEqual(["enter"]);
+  await controlReducedChat(false, "watchdog");
+  expect(await reducedInMemory()).toBe(false);
+  expect(calls).toEqual(["enter", "leave"]);
+});
+
+test("the lease cap drops Home's hold but not the watchdog's", async () => {
+  const { controlReducedChat, reducedHolders } = await import("@/lib/reducedChatLease");
+  __setReducedLeaseForTests({ capMs: 40, retryMs: 20, deps: stubs() });
+  await controlReducedChat(true, "watchdog");
+  await post({ on: true });
+  await Bun.sleep(120);
+  expect(reducedHolders()).toEqual(["watchdog"]);
+  expect(await reducedInMemory()).toBe(true);
+});

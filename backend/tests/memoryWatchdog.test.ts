@@ -9,7 +9,7 @@ import { __resetHealthForTests, list as listHealth } from "@/lib/health";
 import { __resetJobsForTests, cancelGeneratorsForMemory, getJob, registerJobRunner, submitJob, waitForJob, __setAdmissionWaitForTests, runningGeneratorKinds } from "@/lib/jobs";
 import { __setSystemSamplerForTests, parseEtime, parseProcessTable, type ProcessRow, type SystemSample, type SystemSampler } from "@/lib/memory/system";
 import { __resetMemoryStateForTests, admissionVerdict, latestSample, memoryLevel, PAUSED_LOW_MEMORY, reserveBytes, setLatestSample, setMemoryLevel } from "@/lib/memoryState";
-import { defaultActions, descendantsOf, findOrphans, MemoryWatchdog, newLadder, rawLevel, stepLadder, type WatchdogActions } from "@/lib/memoryWatchdog";
+import { criticalStep, defaultActions, descendantsOf, findOrphans, MemoryWatchdog, newLadder, rawLevel, stepLadder, type CriticalInputs, type CriticalStep, type WatchdogActions } from "@/lib/memoryWatchdog";
 import { __resetLifecycleForTests, beginStopping } from "@/lib/lifecycle";
 import { __setProcessTreeReadersForTests } from "@/lib/processTree";
 import { registerOwned } from "@/lib/ownedProcesses";
@@ -42,13 +42,15 @@ function fakeSampler(rows: ProcessRow[] = []): SystemSampler & { next: SystemSam
   };
 }
 
-function fakeActions(): WatchdogActions & { log: string[]; running: string[]; queued: string[]; judgeLoaded: boolean; notified: Array<Record<string, unknown>> } {
-  const state = { log: [] as string[], running: [] as string[], queued: [] as string[], judgeLoaded: true, notified: [] as Array<Record<string, unknown>> };
+function fakeActions(): WatchdogActions & { log: string[]; running: string[]; queued: string[]; judgeLoaded: boolean; notified: Array<Record<string, unknown>>; reduceResult: "reduced" | "already" | "waiting" | "unavailable"; restoreResult: "restored" | "kept" | "waiting" | "failed" } {
+  const state = { log: [] as string[], running: [] as string[], queued: [] as string[], judgeLoaded: true, notified: [] as Array<Record<string, unknown>>, reduceResult: "unavailable" as "reduced" | "already" | "waiting" | "unavailable", restoreResult: "restored" as "restored" | "kept" | "waiting" | "failed" };
   return Object.assign(state, {
     unloadIdleWorkers: async () => { state.log.push("unload-idle"); return []; },
     cancelQueued: () => { state.log.push("cancel-queued"); return state.queued.splice(0); },
     cancelRunning: () => { state.log.push("cancel-running"); return state.running.splice(0, 1); },
     evictRole: async () => { state.log.push("evict-judge"); const had = state.judgeLoaded; state.judgeLoaded = false; return had; },
+    reduceChat: async () => { state.log.push("reduce-chat"); return state.reduceResult; },
+    restoreChat: async () => { state.log.push("restore-chat"); return state.restoreResult; },
     restartChat: async () => { state.log.push("restart-chat"); },
     notify: (data: Record<string, unknown>) => { state.notified.push(data); },
   });
@@ -313,6 +315,7 @@ test("the judge is kept at WARN for five minutes after a chat turn and evicted a
     const criticalDog = new MemoryWatchdog({ sampler: criticalSampler, actions: criticalActions, now: () => clock, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null });
     criticalSampler.next = sample({ pressureLevel: 4, pressure: "critical", availableBytes: GB }, clock);
     await criticalDog.tick(); await criticalDog.tick(); await Bun.sleep(0);
+    await criticalDog.tick(); await Bun.sleep(0);
     expect(criticalActions.log).toContain("evict-judge");
   } finally { Date.now = originalNow; supervisor.setSupervisorFactoryForTests(null); supervisor.resetSupervisorForTests(); }
 });
@@ -323,41 +326,154 @@ test("CRITICAL skips chat restart when other programs hold more memory", async (
   let clock = 1_000_000;
   const dog = new MemoryWatchdog({ sampler, actions, now: () => clock, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null });
   sampler.next = sample({ pressureLevel: 4, pressure: "critical", availableBytes: GB }, clock);
-  await dog.tick(); await dog.tick(); await Bun.sleep(0);
+  for (let i = 0; i < 4; i++) { await dog.tick(); await Bun.sleep(0); }
   clock += 70_000;
-  await dog.tick(); await Bun.sleep(0);
-  await dog.tick();
+  sampler.next = sample({ pressureLevel: 4, pressure: "critical", availableBytes: GB }, clock);
+  for (let i = 0; i < 4; i++) { await dog.tick(); await Bun.sleep(0); clock += 11_000; sampler.next = sample({ pressureLevel: 4, pressure: "critical", availableBytes: GB }, clock); }
   expect(actions.log).not.toContain("restart-chat");
   expect((await import("@/lib/memoryState")).recentActions().some((action) => action.action === "chat-restart-skipped" && action.detail === "another program holds most of the memory")).toBe(true);
 });
 
-test("CRITICAL cancels the running job first, then the judge, and restarts chat only after 60 s", async () => {
+/** Drives the critical rounds: each call is one 5 s tick; the sample is re-read as critical or recovered by the caller. */
+async function rounds(dog: MemoryWatchdog, advance: (ms: number) => void, count: number, stepMs = 5_000): Promise<void> {
+  for (let i = 0; i < count; i++) { await dog.tick(); await Bun.sleep(0); advance(stepMs); }
+}
+
+test("CRITICAL gives back what is idle, reduces an idle chat, and cancels the running job only when still critical; chat restarts only after 60 s", async () => {
   const sampler = fakeSampler([row({ pid: 500, ppid: 1, rssBytes: 20 * GB, name: "maipai-stack" }), row({ pid: 900, ppid: 500, rssBytes: 20 * GB, name: "llama-server" }), row({ pid: 777, ppid: 3, rssBytes: 2 * GB })]);
   const actions = fakeActions();
   actions.running.push("job-video");
-  const { dog, advance } = watchdogWith(sampler, actions);
-  sampler.next = sample({ pressureLevel: 4, pressure: "critical", availableBytes: 2 * GB });
-  await dog.tick(); await dog.tick();
+  actions.reduceResult = "reduced";
+  let clock = 1_000_000;
+  const dog = new MemoryWatchdog({ sampler, actions, now: () => clock, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null, chatIdle: () => true });
+  const advance = (ms: number) => { clock += ms; sampler.next = sample({ pressureLevel: 4, pressure: "critical", availableBytes: 2 * GB }, clock); };
+  sampler.next = sample({ pressureLevel: 4, pressure: "critical", availableBytes: 2 * GB }, clock);
+  await rounds(dog, advance, 8);
   expect(memoryLevel()).toBe("critical");
-  expect(actions.log.filter((entry) => entry === "cancel-running")).toHaveLength(1);
+  const order = actions.log.filter((entry, i) => ["unload-idle", "evict-judge", "reduce-chat", "cancel-running"].includes(entry) && actions.log.indexOf(entry) === i);
+  expect(order).toEqual(["unload-idle", "evict-judge", "reduce-chat", "cancel-running"]);
   expect(listHealth().find((item) => item.code === "memory-critical")?.severity).toBe("critical");
   expect(actions.notified).toHaveLength(1);
   expect(actions.notified[0]?.pressure).toBe("critical");
-  advance(11_000);
-  await dog.tick(); await Bun.sleep(0);
-  expect(actions.log).toContain("evict-judge");
   expect(actions.log).not.toContain("restart-chat");
-  advance(11_000);
-  await dog.tick();
+  await rounds(dog, advance, 4);
   expect(actions.log).not.toContain("restart-chat");
   advance(60_000);
-  await dog.tick(); await dog.tick();
+  await rounds(dog, advance, 3);
   expect(actions.log.filter((entry) => entry === "restart-chat")).toHaveLength(1);
   // Cooldown: no second restart right away; and only one notification inside the rate limit.
-  advance(11_000);
-  await dog.tick();
+  await rounds(dog, advance, 3);
   expect(actions.log.filter((entry) => entry === "restart-chat")).toHaveLength(1);
   expect(actions.notified).toHaveLength(1);
+});
+
+test("a running job survives when reducing an idle chat frees enough: the next reading is no longer critical", async () => {
+  const sampler = fakeSampler([row({ pid: 500, ppid: 1, rssBytes: GB, name: "maipai-stack" })]);
+  const actions = fakeActions();
+  actions.running.push("job-video");
+  actions.reduceResult = "reduced";
+  let clock = 1_000_000;
+  const dog = new MemoryWatchdog({ sampler, actions, now: () => clock, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null, chatIdle: () => true });
+  const critical = () => sample({ pressureLevel: 4, pressure: "critical", availableBytes: 2 * GB }, clock);
+  sampler.next = critical();
+  const advance = (ms: number) => { clock += ms; sampler.next = actions.log.includes("reduce-chat") ? sample({ pressureLevel: 2, pressure: "warn", availableBytes: 14 * GB }, clock) : critical(); };
+  await rounds(dog, advance, 10);
+  expect(actions.log).toContain("reduce-chat");
+  expect(actions.log).not.toContain("cancel-running");
+  expect(actions.running).toEqual(["job-video"]);
+});
+
+test("a person chatting keeps the full model: no reduce, the idle parts go first, then the job is cancelled", async () => {
+  const sampler = fakeSampler([row({ pid: 500, ppid: 1, rssBytes: GB, name: "maipai-stack" })]);
+  const actions = fakeActions();
+  actions.running.push("job-video");
+  actions.reduceResult = "reduced";
+  let clock = 1_000_000;
+  const dog = new MemoryWatchdog({ sampler, actions, now: () => clock, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null, chatIdle: () => false });
+  const advance = (ms: number) => { clock += ms; sampler.next = sample({ pressureLevel: 4, pressure: "critical", availableBytes: 2 * GB }, clock); };
+  sampler.next = sample({ pressureLevel: 4, pressure: "critical", availableBytes: 2 * GB }, clock);
+  await rounds(dog, advance, 6);
+  expect(actions.log).not.toContain("reduce-chat");
+  expect(actions.log.filter((entry, i) => ["unload-idle", "evict-judge", "cancel-running"].includes(entry) && actions.log.indexOf(entry) === i)).toEqual(["unload-idle", "evict-judge", "cancel-running"]);
+});
+
+test("a chat turn that starts while chat is being reduced wins: the step is tried again, nothing is cancelled meanwhile", async () => {
+  const sampler = fakeSampler([row({ pid: 500, ppid: 1, rssBytes: GB, name: "maipai-stack" })]);
+  const actions = fakeActions();
+  actions.running.push("job-video");
+  actions.reduceResult = "waiting";
+  let clock = 1_000_000;
+  const dog = new MemoryWatchdog({ sampler, actions, now: () => clock, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null, chatIdle: () => true });
+  const advance = (ms: number) => { clock += ms; sampler.next = sample({ pressureLevel: 4, pressure: "critical", availableBytes: 2 * GB }, clock); };
+  sampler.next = sample({ pressureLevel: 4, pressure: "critical", availableBytes: 2 * GB }, clock);
+  await rounds(dog, advance, 6);
+  expect(actions.log.filter((entry) => entry === "reduce-chat").length).toBeGreaterThan(1);
+  expect(actions.log).toContain("cancel-running");
+});
+
+test("Reduced chat the watchdog made is left again once the level has been normal for a minute, and not before", async () => {
+  const sampler = fakeSampler([row({ pid: 500, ppid: 1, rssBytes: GB, name: "maipai-stack" })]);
+  const actions = fakeActions();
+  actions.reduceResult = "reduced";
+  let clock = 1_000_000;
+  const dog = new MemoryWatchdog({ sampler, actions, now: () => clock, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null, chatIdle: () => true });
+  const level = (critical: boolean) => critical ? sample({ pressureLevel: 4, pressure: "critical", availableBytes: 2 * GB }, clock) : sample({ pressureLevel: 1, pressure: "normal", availableBytes: 60 * GB }, clock);
+  sampler.next = level(true);
+  await rounds(dog, (ms) => { clock += ms; sampler.next = level(true); }, 6);
+  expect(actions.log).toContain("reduce-chat");
+  const recover = (ms: number) => { clock += ms; sampler.next = level(false); };
+  recover(0);
+  await rounds(dog, recover, 14);
+  expect(memoryLevel()).toBe("normal");
+  expect(actions.log).not.toContain("restore-chat");
+  await rounds(dog, recover, 20);
+  expect(actions.log.filter((entry) => entry === "restore-chat")).toHaveLength(1);
+});
+
+test("a Reduced chat someone else holds is never left by the watchdog", async () => {
+  const sampler = fakeSampler([row({ pid: 500, ppid: 1, rssBytes: GB, name: "maipai-stack" })]);
+  const actions = fakeActions();
+  actions.reduceResult = "already";
+  let clock = 1_000_000;
+  const dog = new MemoryWatchdog({ sampler, actions, now: () => clock, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null, chatIdle: () => true });
+  sampler.next = sample({ pressureLevel: 4, pressure: "critical", availableBytes: 2 * GB }, clock);
+  await rounds(dog, (ms) => { clock += ms; sampler.next = sample({ pressureLevel: 4, pressure: "critical", availableBytes: 2 * GB }, clock); }, 6);
+  const recover = (ms: number) => { clock += ms; sampler.next = sample({ pressureLevel: 1, pressure: "normal", availableBytes: 60 * GB }, clock); };
+  recover(0);
+  await rounds(dog, recover, 40);
+  expect(actions.log).not.toContain("restore-chat");
+});
+
+// ---- the critical step table (pure) ----
+
+const base: CriticalInputs = { idleGivenBack: true, judgeSettled: true, giveBackInFlight: false, chatIdle: true, reduced: "off", reduceTried: false, rawCritical: true, settling: false };
+test("criticalStep decides in order: idle parts, judge, reduce an idle chat, wait to read the effect, then the job", () => {
+  const table: Array<[string, Partial<CriticalInputs>, CriticalStep]> = [
+    ["nothing given back yet", { idleGivenBack: false }, "unload-idle"],
+    ["judge still resident", { judgeSettled: false }, "evict-judge"],
+    ["an unload is still running", { giveBackInFlight: true }, "wait"],
+    ["idle chat, critical -> reduce before any cancel", {}, "reduce-chat"],
+    ["an active chat is never reduced -> the job is the one to yield", { chatIdle: false }, "cancel-running"],
+    ["chat already reduced and still critical -> cancel", { reduced: "reduced" }, "cancel-running"],
+    ["the swap to Reduced is in progress -> wait", { reduced: "entering" }, "wait"],
+    ["Reduced could not be entered -> cancel", { reduceTried: true }, "cancel-running"],
+    ["reducing freed enough: the raw reading is no longer critical -> hold, no cancel", { reduced: "reduced", rawCritical: false }, "wait"],
+    ["a give-back freed something a moment ago -> wait to read it", { reduced: "reduced", settling: true }, "wait"],
+    ["pressure from other programs: the Stack still gives back its own first", { idleGivenBack: false, chatIdle: false }, "unload-idle"],
+  ];
+  for (const [name, over, want] of table) expect({ name, step: criticalStep({ ...base, ...over }) }).toEqual({ name, step: want });
+});
+
+test("a running video stopped by the watchdog reports state cancelled with code memory_cancelled, a person's cancel stays cancelled", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: TOTAL, freeMemoryBytes: 100 * GB, tier: "p128" });
+  registerJobRunner("video_code_test", async (_job, signal) => { await new Promise<void>((_r, reject) => signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true })); return {}; }, { generator: { role: "video", memory: () => ({ requestedBytes: 4 * GB }) } });
+  const submitted = submitJob({ kind: "video_code_test" });
+  if ("refused" in submitted) throw new Error(submitted.reason);
+  await Bun.sleep(20);
+  cancelGeneratorsForMemory("running", "Stopped.");
+  await Bun.sleep(30);
+  const job = getJob(submitted.job.id)!;
+  expect(job.status).toBe(PAUSED_LOW_MEMORY);
 });
 
 test("chat pageout needs two consecutive rising swapout samples", async () => {
@@ -615,6 +731,7 @@ test("same-name unregistered and still-live workers are never signalled", async 
 });
 
 test("unaccounted Stack memory unloads once after two minutes and resolves below two GB", async () => {
+  { const { logsDir: dir } = await import("@/lib/paths"); const { rmSync } = await import("node:fs"); rmSync(join(dir, "stack.log"), { force: true }); }
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: TOTAL, freeMemoryBytes: 80 * GB, tier: "p128" });
   await admit({ id: "chat", kind: "resident", class: "reserved", measuredPeakBytes: 6 * GB, requestedBytes: 6 * GB });
   const sampler = fakeSampler([row({ pid: 500, ppid: 1, rssBytes: 6 * GB }), row({ pid: 620, ppid: 500, ageSeconds: 120, rssBytes: 6 * GB })]);

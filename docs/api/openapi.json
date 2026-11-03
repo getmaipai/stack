@@ -3520,7 +3520,7 @@
             }
           },
           "503": {
-            "description": "Video is off on this computer (not_available_on_this_computer, unsupported), not installed (not_installed), or there is no free memory for it (no_memory).",
+            "description": "Video is off on this computer (not_available_on_this_computer, unsupported), not installed (not_installed), there is no free memory for it (no_memory), or the memory watchdog stopped the clip while it waited (memory_cancelled).",
             "content": {
               "application/json": {
                 "schema": {

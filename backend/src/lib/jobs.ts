@@ -12,7 +12,7 @@ import { markAdultJob } from "@/lib/adultView";
 import { noteComponentUse } from "@/lib/componentUse";
 import { admit, fitsEverForTier, forgetLoadedItem, hasWarmWorkerUnload, unloadWarmWorker, generatorsHeldByMode, getGovernorStatus, getMaxWindow, getReclaimSteps, getRunState, GovernorRules, neverFitReason, neverFitTierReason, peakFor, release, withdraw, type GovernorHandle, type GovernorRequest, type JobTier } from "@/lib/governor";
 import { heavyGate, isolationRules } from "@/lib/heavyGate";
-import { memoryLevel, PAUSED_LOW_MEMORY, waitingText } from "@/lib/memoryState";
+import { memoryLevel, PAUSED_LOW_MEMORY, STOPPED_FOR_MEMORY_MAX, waitingText } from "@/lib/memoryState";
 import { ROLES } from "@/roles";
 import { StackJob, StackJobState } from "@maipai/spec/stack/ts/stack-job.js";
 
@@ -430,7 +430,7 @@ export function cancelGeneratorsForMemory(scope: "queued" | "running", reason: s
     controllers.delete(id);
     pausedJobs.delete(id);
     const maxOwner = (job.input as { tier?: string } | null)?.tier === "max";
-    if (scope === "running" && maxOwner) touch(job, { state: "failed", status: "Memory ran out, so this job stopped and can be started again.", reason: "Memory ran out, so this job stopped and can be started again.", position: null });
+    if (scope === "running" && maxOwner) touch(job, { state: "failed", status: STOPPED_FOR_MEMORY_MAX, reason: "Stopped: this computer got too busy. It can start again in a little while.", position: null });
     else touch(job, { state: "cancelled", status, reason, position: null });
     if (scope === "running") giveBackWarmWorker(job.role);
     stopped.push(id);

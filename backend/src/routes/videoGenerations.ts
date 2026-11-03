@@ -7,7 +7,7 @@
 // band, the surface, the household-name gate and the LoRA rules, then passes
 // down the audience and the allowed LoRA list; the Stack applies the hard
 // limits and the locks it can check (see video/videoGen.ts).
-import { PAUSED_LOW_MEMORY } from "@/lib/memoryState";
+import { MEMORY_CANCELLED_CODE, PAUSED_LOW_MEMORY, STOPPED_FOR_MEMORY_MAX } from "@/lib/memoryState";
 import { adultInput, fullViewAllowed, isAdultJobId } from "@/lib/adultView";
 import { createRoute, z } from "@hono/zod-openapi";
 import type { Context } from "hono";
@@ -90,7 +90,7 @@ const postRoute = createRoute({ method: "post", path: "/generations", tags: ["Vi
   429: { content: { "application/json": { schema: ErrorBody } }, description: "Four clips are already waiting; try again when one finishes." },
   499: { content: { "application/json": { schema: ErrorBody } }, description: "The job was cancelled." },
   500: { content: { "application/json": { schema: ErrorBody } }, description: "The clip failed (failed, worker_stopped)." },
-  503: { content: { "application/json": { schema: ErrorBody } }, description: "Video is off on this computer (not_available_on_this_computer, unsupported), not installed (not_installed), or there is no free memory for it (no_memory)." },
+  503: { content: { "application/json": { schema: ErrorBody } }, description: "Video is off on this computer (not_available_on_this_computer, unsupported), not installed (not_installed), there is no free memory for it (no_memory), or the memory watchdog stopped the clip while it waited (memory_cancelled)." },
   504: { content: { "application/json": { schema: ErrorBody } }, description: "The clip took longer than 15 minutes and was stopped." },
 } });
 const getRoute = createRoute({ method: "get", path: "/generations/{job}", tags: ["Video"], summary: "A clip's state, progress and files", request: { params: z.object({ job: z.string() }) }, responses: {
@@ -203,8 +203,8 @@ function statusOf(job: Job) {
   return {
     job: job.id, tier: tierOf(job), state, phase, progress: Math.round(job.percent), phase_progress: state === "running" && detail ? Math.round(detail.phasePercent) : null, position: job.state === "queued" ? job.position : null,
     ...liveFields(job.id, state === "running"),
-    error: job.state === "failed" ? failure?.message ?? job.reason ?? "The clip failed." : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? job.reason ?? "Paused: this computer is low on memory." : "The clip was cancelled.") : null,
-    code: job.state === "failed" ? (job.status === "no_memory" ? "no_memory" : failure?.code ?? "failed") : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? "no_memory" : "cancelled") : null,
+    error: job.state === "failed" ? (job.status === STOPPED_FOR_MEMORY_MAX ? job.reason : failure?.message ?? job.reason) ?? "The clip failed." : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? job.reason ?? "Paused: this computer is low on memory." : "The clip was cancelled.") : null,
+    code: job.state === "failed" ? (job.status === "no_memory" ? "no_memory" : job.status === STOPPED_FOR_MEMORY_MAX ? MEMORY_CANCELLED_CODE : failure?.code ?? "failed") : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? MEMORY_CANCELLED_CODE : "cancelled") : null,
     data: result ? [entry(result)] : [],
   };
 }
@@ -292,7 +292,7 @@ async function runClip(c: Context, body: z.infer<typeof VideoRequestSchema>, qua
   const settled = await waitForJob(submitted.job.id, body.timeout_ms ?? DEFAULT_WAIT_MS);
   const created = Math.floor(new Date(submitted.job.createdAt).getTime() / 1000);
   if (!settled || settled.state === "queued" || settled.state === "running" || settled.state === "stalled") return reply(c, { created, job: submitted.job.id, data: [] }, 202);
-  if (settled.state === "cancelled" && settled.status === PAUSED_LOW_MEMORY) return fail(c, 503, "no_memory", settled.reason ?? "Paused: this computer is low on memory.", settled.id);
+  if ((settled.state === "cancelled" && settled.status === PAUSED_LOW_MEMORY) || (settled.state === "failed" && settled.status === STOPPED_FOR_MEMORY_MAX)) return fail(c, 503, MEMORY_CANCELLED_CODE, settled.reason ?? "Paused: this computer is low on memory.", settled.id);
   if (settled.state === "cancelled") return fail(c, 499, "cancelled", "The clip was cancelled.", settled.id);
   if (settled.state === "failed" && settled.status === "no_memory") return fail(c, 503, "no_memory", settled.reason ?? "There was not enough free memory.", settled.id);
   if (settled.state !== "done") {

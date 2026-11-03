@@ -24,12 +24,12 @@ function step(): void {
   chain = chain.then(async () => {
     if (wanted) {
       const wasReduced = isReducedChat();
-      const result = await controlReducedChat(true);
+      const result = await controlReducedChat(true, "max-window");
       if (!wanted) return; // closed while entering: the queued close step leaves
       if (result.status === 200) { if (!wasReduced) owned = true; if (owned) arm(renewOverrideMs ?? Math.max(1_000, Math.floor(reducedChatCapMs() / 2))); }
       else if (result.status === 202) arm(retryOverrideMs ?? WAITING_RETRY_MS); // a chat turn is running: try again between turns
     } else if (owned) {
-      const result = await controlReducedChat(false);
+      const result = await controlReducedChat(false, "max-window");
       if (result.status === 200) owned = false;
       else if (result.status === 202) arm(retryOverrideMs ?? WAITING_RETRY_MS);
       else owned = false; // the lease cap or the self-heal owns a swap that failed
