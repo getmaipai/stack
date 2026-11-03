@@ -3104,7 +3104,7 @@
                       ]
                     },
                     "maxItems": 4,
-                    "description": "LoRAs from the household library (GET /stack/v1/video/loras) to apply, by id, with a strength of 0 to 2 (the record's default when left out). Home decides which ids this caller may name."
+                    "description": "LoRAs from the household library (GET /stack/v1/video/loras) to apply, by id, with a strength of 0 to 2 (the record's default when left out). Home decides which ids this caller may name. LTX-2.5 (VIDEO-LORA-05): `ltx25-max` only so far (read `qualities.ltx25max.loras`), at most 2, files whose `base_model` is `ltx-2.5`."
                   },
                   "audience": {
                     "type": "string",
@@ -3420,7 +3420,7 @@
             }
           },
           "422": {
-            "description": "The request cannot be done: bad_size, bad_image, unknown_lora, wrong_base_model, lora_not_allowed, too_many_loras, bad_strength; `error` says what to change.",
+            "description": "The request cannot be done: bad_size, bad_image, unknown_lora, wrong_base_model, lora_not_allowed, too_many_loras, bad_strength, lora_unsupported (LTX-2.5 Standard and Boost, and extend or retake), lora_keys_unsupported (a file the LTX runtime cannot map, such as a kohya file), lora_too_large; `error` says what to change.",
             "content": {
               "application/json": {
                 "schema": {
@@ -14164,6 +14164,66 @@
                                 "lora_base_model": {
                                   "type": "string"
                                 },
+                                "loras": {
+                                  "type": "object",
+                                  "properties": {
+                                    "supported": {
+                                      "type": "boolean",
+                                      "description": "VIDEO-LORA-05: a clip of this profile may carry LoRAs (`loras` on the request, ids from GET /stack/v1/video/loras whose `base_model` is `ltx-2.5`). Standard and Boost report false until a clip with a LoRA has been measured on their runtime; `reason` says so."
+                                    },
+                                    "max": {
+                                      "type": "integer",
+                                      "description": "Most LoRAs on one clip (0 when not supported)."
+                                    },
+                                    "max_strength": {
+                                      "type": "number"
+                                    },
+                                    "mode": {
+                                      "type": "string",
+                                      "enum": [
+                                        "fused",
+                                        "unfused"
+                                      ],
+                                      "description": "How the runtime applies them. Fused changes the weights once when the clip's pipeline is built (Max, bf16: no extra memory and no requantization loss); unfused keeps run-time adapters (needs runtime 0.18.0)."
+                                    },
+                                    "admit_factor": {
+                                      "type": "number",
+                                      "description": "Extra memory admission reserves per byte of LoRA file: 0 when fused, 1.1 when unfused. The request is admitted at the clip's figure plus file bytes x this."
+                                    },
+                                    "runtime": {
+                                      "type": "string"
+                                    },
+                                    "base_models": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "description": "The LoRA bases this profile takes: `ltx-2.5` only. An LTX-2.3 file is refused here (wrong_base_model) and an LTX file's version cannot be read from its tensors, so Home declares it when adding the file (`base_model` on POST /stack/v1/video/loras, or PATCH)."
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "nullable": true
+                                    }
+                                  },
+                                  "required": [
+                                    "supported",
+                                    "max",
+                                    "max_strength",
+                                    "mode",
+                                    "admit_factor",
+                                    "runtime",
+                                    "base_models",
+                                    "reason"
+                                  ]
+                                },
+                                "negative_prompt": {
+                                  "type": "string",
+                                  "enum": [
+                                    "none",
+                                    "nag"
+                                  ],
+                                  "description": "VIDEO-LORA-05: `none`: the distilled path has no guidance, so `negative_prompt` is accepted and has no effect (the runtime refuses one without NAG). Home sends negative text only to a profile that says `nag`; none does yet."
+                                },
                                 "ready": {
                                   "type": "boolean",
                                   "description": "A clip of this model can start now: the tier runs video, the pack is installed and verified, and the runtime environment is built. False while any of those is missing (`installed`, `environment.ready` and `available` say which)."
@@ -14257,6 +14317,8 @@
                                 "install",
                                 "licence",
                                 "lora_base_model",
+                                "loras",
+                                "negative_prompt",
                                 "ready",
                                 "environment",
                                 "profiles"
@@ -14418,6 +14480,66 @@
                                 },
                                 "lora_base_model": {
                                   "type": "string"
+                                },
+                                "loras": {
+                                  "type": "object",
+                                  "properties": {
+                                    "supported": {
+                                      "type": "boolean",
+                                      "description": "VIDEO-LORA-05: a clip of this profile may carry LoRAs (`loras` on the request, ids from GET /stack/v1/video/loras whose `base_model` is `ltx-2.5`). Standard and Boost report false until a clip with a LoRA has been measured on their runtime; `reason` says so."
+                                    },
+                                    "max": {
+                                      "type": "integer",
+                                      "description": "Most LoRAs on one clip (0 when not supported)."
+                                    },
+                                    "max_strength": {
+                                      "type": "number"
+                                    },
+                                    "mode": {
+                                      "type": "string",
+                                      "enum": [
+                                        "fused",
+                                        "unfused"
+                                      ],
+                                      "description": "How the runtime applies them. Fused changes the weights once when the clip's pipeline is built (Max, bf16: no extra memory and no requantization loss); unfused keeps run-time adapters (needs runtime 0.18.0)."
+                                    },
+                                    "admit_factor": {
+                                      "type": "number",
+                                      "description": "Extra memory admission reserves per byte of LoRA file: 0 when fused, 1.1 when unfused. The request is admitted at the clip's figure plus file bytes x this."
+                                    },
+                                    "runtime": {
+                                      "type": "string"
+                                    },
+                                    "base_models": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "description": "The LoRA bases this profile takes: `ltx-2.5` only. An LTX-2.3 file is refused here (wrong_base_model) and an LTX file's version cannot be read from its tensors, so Home declares it when adding the file (`base_model` on POST /stack/v1/video/loras, or PATCH)."
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "nullable": true
+                                    }
+                                  },
+                                  "required": [
+                                    "supported",
+                                    "max",
+                                    "max_strength",
+                                    "mode",
+                                    "admit_factor",
+                                    "runtime",
+                                    "base_models",
+                                    "reason"
+                                  ]
+                                },
+                                "negative_prompt": {
+                                  "type": "string",
+                                  "enum": [
+                                    "none",
+                                    "nag"
+                                  ],
+                                  "description": "VIDEO-LORA-05: `none`: the distilled path has no guidance, so `negative_prompt` is accepted and has no effect (the runtime refuses one without NAG). Home sends negative text only to a profile that says `nag`; none does yet."
                                 },
                                 "ready": {
                                   "type": "boolean",
@@ -14681,6 +14803,8 @@
                                 "install",
                                 "licence",
                                 "lora_base_model",
+                                "loras",
+                                "negative_prompt",
                                 "ready",
                                 "environment",
                                 "profiles",
@@ -14696,7 +14820,7 @@
                             "ltx25",
                             "ltx25max"
                           ],
-                          "description": "VIDEO-LTX-01: the two models. `quick` is the silent clip (the fields above describe it); `detailed` makes a sound track with speech in the same pass, longer clips, and takes LoRAs made for LTX-2.3. Each lists its own limits, install pieces and whether a clip of it could be admitted now. `ltx25` (LTX25-ENGINE-01, request model `ltx25-q8`) is LTX-2.5 distilled q8 with sound: it adds `ready`, its own `environment` and the measured `profiles` table, and has no picture start and no LoRAs yet. `ltx25max` (LTX25-MAX-01, request model `ltx25-max`) is the Max profile: LTX-2.5 distilled bf16 on the dgrauet runtime at 1024x576, 10 s, with sound; the same shape as `ltx25` with one `profiles` row (`name` max); its pack and its environment are its own, so `installed`, `environment.ready` and `ready` are separate from `ltx25`."
+                          "description": "VIDEO-LTX-01: the two models. `quick` is the silent clip (the fields above describe it); `detailed` makes a sound track with speech in the same pass, longer clips, and takes LoRAs made for LTX-2.3. Each lists its own limits, install pieces and whether a clip of it could be admitted now. `ltx25` (LTX25-ENGINE-01, request model `ltx25-q8`) is LTX-2.5 distilled q8 with sound: it adds `ready`, its own `environment` and the measured `profiles` table, and adds `loras` (VIDEO-LORA-05: supported, max, mode, admit_factor, base_models, reason) and `negative_prompt`. `ltx25max` (LTX25-MAX-01, request model `ltx25-max`) is the Max profile: LTX-2.5 distilled bf16 on the dgrauet runtime at 1024x576, 10 s, with sound; the same shape as `ltx25` with one `profiles` row (`name` max); its pack and its environment are its own, so `installed`, `environment.ready` and `ready` are separate from `ltx25`."
                         }
                       },
                       "required": [
@@ -14775,7 +14899,8 @@
                             "type": "string",
                             "enum": [
                               "wan2.2-ti2v-5b",
-                              "ltx-2.3"
+                              "ltx-2.3",
+                              "ltx-2.5"
                             ],
                             "description": "The video model the LoRA was made for, read from its tensors: wan2.2-ti2v-5b is Quick, ltx-2.3 is Detailed. A clip applies only LoRAs of its own model."
                           },
@@ -14924,6 +15049,15 @@
                   "added_by": {
                     "type": "string",
                     "description": "An opaque label Home keeps for who added it."
+                  },
+                  "base_model": {
+                    "type": "string",
+                    "enum": [
+                      "wan2.2-ti2v-5b",
+                      "ltx-2.3",
+                      "ltx-2.5"
+                    ],
+                    "description": "The base the file was made for. The tensors say the family (LTX or Wan) but not an LTX file's version (an LTX-2.3 and an LTX-2.5 LoRA read alike), so Home says it: `ltx-2.5` for a file made for LTX-2.5. Left out, an LTX file is `ltx-2.3`. A file that contradicts what is said (another family, or its own `ss_ltx_version`) is refused (wrong_base_model); an `ltx-2.5` file the runtime cannot map is refused with lora_keys_unsupported."
                   }
                 },
                 "required": [
@@ -14967,7 +15101,8 @@
                       "type": "string",
                       "enum": [
                         "wan2.2-ti2v-5b",
-                        "ltx-2.3"
+                        "ltx-2.3",
+                        "ltx-2.5"
                       ],
                       "description": "The video model the LoRA was made for, read from its tensors: wan2.2-ti2v-5b is Quick, ltx-2.3 is Detailed. A clip applies only LoRAs of its own model."
                     },
@@ -15079,7 +15214,7 @@
             }
           },
           "422": {
-            "description": "Not usable: not_safetensors, not_a_lora, wrong_base_model, licence_acknowledgement_required, lora_refused (a minor in a sexual context: never allowed), bad_name, bad_strength.",
+            "description": "Not usable: not_safetensors, not_a_lora, wrong_base_model, lora_keys_unsupported (an ltx-2.5 file with no lora_A/lora_B tensors the runtime reads, such as a kohya file), licence_acknowledgement_required, lora_refused (a minor in a sexual context: never allowed), bad_name, bad_strength.",
             "content": {
               "application/json": {
                 "schema": {
@@ -15148,6 +15283,15 @@
                   "source_url": {
                     "type": "string",
                     "nullable": true
+                  },
+                  "base_model": {
+                    "type": "string",
+                    "enum": [
+                      "wan2.2-ti2v-5b",
+                      "ltx-2.3",
+                      "ltx-2.5"
+                    ],
+                    "description": "Moves an LTX file between ltx-2.3 and ltx-2.5 (an LTX file's version cannot be read from its tensors). The file is read again: a family that is not LTX, or a version the file itself names otherwise, is refused (wrong_base_model); an ltx-2.5 file the runtime cannot map is refused (lora_keys_unsupported)."
                   }
                 }
               }
@@ -15187,7 +15331,8 @@
                       "type": "string",
                       "enum": [
                         "wan2.2-ti2v-5b",
-                        "ltx-2.3"
+                        "ltx-2.3",
+                        "ltx-2.5"
                       ],
                       "description": "The video model the LoRA was made for, read from its tensors: wan2.2-ti2v-5b is Quick, ltx-2.3 is Detailed. A clip applies only LoRAs of its own model."
                     },

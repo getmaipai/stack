@@ -536,7 +536,7 @@ test.skipIf(!python)("REAL worker: refuses sizes and lengths outside the table, 
   expect(await send("2", { width: 512, height: 256, num_frames: 120 })).toMatchObject({ ok: false, code: "bad_request" });
   expect(await send("3", { width: 768, height: 448, num_frames: 241 })).toMatchObject({ ok: false, code: "bad_request" });
   expect(await send("4", { width: 512, height: 256, num_frames: 121, end_image: "/tmp/x.png" })).toMatchObject({ ok: false, code: "bad_request" });
-  expect(await send("5", { width: 512, height: 256, num_frames: 121, loras: [["/tmp/a.safetensors", 1]] })).toMatchObject({ ok: false, code: "bad_request" });
+  expect(await send("5", { width: 512, height: 256, num_frames: 121, loras: [["/tmp/a.safetensors", 1]] })).toMatchObject({ ok: false, code: "lora_missing" });
   expect(await send("6", { width: 512, height: 256, num_frames: 241 })).toMatchObject({ ok: false, code: "model_missing" });
   handle.kill();
 });

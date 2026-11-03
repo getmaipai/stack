@@ -45,7 +45,7 @@ import { READY_TTL_MS } from "@/roles";
 import darwinArm64Requirements from "./video-gen.darwin-arm64.requirements.txt" with { type: "file" };
 import workerScript from "./video_worker.py" with { type: "file" };
 import ltxWorkerScript from "./ltx_worker.py" with { type: "file" };
-import { ensureLtx25Environment, ensureLtx25MaxEnvironment, ltx25GenRoot, ltx25MaxGenRoot, ltx25MaxModelPaths, ltx25ModelPaths, ltx25WorkerEnv, ltx25WorkerScript, LTX25_DEFAULT_SIZE, LTX25_MAX_DEFAULT_SIZE, LTX25_MAX_MODEL_NAMES, LTX25_MAX_PEAK_BYTES, LTX25_MAX_PROFILE_SECONDS, LTX25_MAX_SECONDS, LTX25_MODEL_NAMES, LTX25_PEAK_BYTES } from "./ltx25";
+import { ltx25LoraMode, ensureLtx25Environment, ensureLtx25MaxEnvironment, ltx25GenRoot, ltx25MaxGenRoot, ltx25MaxModelPaths, ltx25ModelPaths, ltx25WorkerEnv, ltx25WorkerScript, LTX25_DEFAULT_SIZE, LTX25_MAX_DEFAULT_SIZE, LTX25_MAX_MODEL_NAMES, LTX25_MAX_PEAK_BYTES, LTX25_MAX_PROFILE_SECONDS, LTX25_MAX_SECONDS, LTX25_MODEL_NAMES, LTX25_PEAK_BYTES } from "./ltx25";
 
 export const VIDEO_GEN_NAME = "video-gen";
 export const VIDEO_GEN_VERSION = MANAGED_RUNTIMES.find((runtime) => runtime.name === VIDEO_GEN_NAME)?.version ?? "87db56a";
@@ -109,7 +109,7 @@ const deadlineMs = (): number => Number(process.env.VIDEO_DEADLINE_MS ?? 15 * 60
 export class VideoError extends Error {
   constructor(readonly code: string, message: string, readonly status: number) { super(message); }
 }
-const STATUS_BY_CODE: Record<string, number> = { bad_request: 422, model_missing: 503, out_of_memory: 507, timeout: 504, worker_stopped: 500, failed: 500 };
+const STATUS_BY_CODE: Record<string, number> = { bad_request: 422, model_missing: 503, out_of_memory: 507, timeout: 504, worker_stopped: 500, failed: 500, lora_keys_unsupported: 422 };
 
 export function videoRequirementsFileFor(platform = process.platform, arch = process.arch): string | null {
   if (platform === "darwin" && arch === "arm64") return darwinArm64Requirements;
@@ -140,7 +140,7 @@ export async function ensureVideoGenEnvironment(onProgress: (phase: string) => v
  */
 export function buildWorkerRequest(quality: VideoQuality, paths: VideoModelPaths, input: VideoRunInput, jobId: string, output: string, poster: string): WorkerRequest {
   const edit = input.edit;
-  return { id: jobId, op: edit ? edit.kind : "generate", model_dir: paths.modelDir, tokenizer_dir: paths.tokenizerDir, ...(paths.textEncoderDir ? { text_encoder_dir: paths.textEncoderDir, ffmpeg: ffmpegPath(rootOf(quality)) } : {}), ...(quality === "ltx25max" ? { profile: "max" as const } : {}), prompt: input.prompt, negative_prompt: input.negativePrompt, image: input.imagePath, ...(input.endImagePath ? { end_image: input.endImagePath } : {}), width: input.width, height: input.height, num_frames: input.frames, seed: input.seed, loras: input.loras, output, poster, ...(input.previewPath ? { preview: input.previewPath } : {}),
+  return { id: jobId, op: edit ? edit.kind : "generate", model_dir: paths.modelDir, tokenizer_dir: paths.tokenizerDir, ...(paths.textEncoderDir ? { text_encoder_dir: paths.textEncoderDir, ffmpeg: ffmpegPath(rootOf(quality)) } : {}), ...(quality === "ltx25max" ? { profile: "max" as const } : {}), prompt: input.prompt, negative_prompt: input.negativePrompt, image: input.imagePath, ...(input.endImagePath ? { end_image: input.endImagePath } : {}), width: input.width, height: input.height, num_frames: input.frames, seed: input.seed, loras: input.loras, ...(input.loras.length > 0 && usesLtx25Engine(quality) ? { lora_mode: ltx25LoraMode(quality as "ltx25" | "ltx25max") } : {}), output, poster, ...(input.previewPath ? { preview: input.previewPath } : {}),
     // LTX25-EDIT-01: an extend or a retake names the (fitted) source clip and the latent numbers, and the Stack's own ffmpeg and ffprobe.
     ...(edit ? { source_video: edit.sourcePath, ffmpeg: edit.ffmpeg, ffprobe: edit.ffprobe, ...(edit.kind === "extend" ? { extend_frames: edit.extendFrames } : { retake_start_latent: edit.retakeStartLatent }) } : {}) };
 }
@@ -191,6 +191,8 @@ export interface WorkerRequest {
   width: number; height: number; num_frames: number; seed: number; loras: Array<[string, number]>; output: string; poster: string;
   /** GENPREVIEW-01: where the worker writes the first-frame preview once the motion is done. */
   preview?: string;
+  /** VIDEO-LORA-05 (LTX-2.5 only, with `loras`): how the runtime applies them. The worker sets LTX2_LORA_MODE to it before it builds the pipeline; `unfused` is refused by a runtime that has none. */
+  lora_mode?: "fused" | "unfused";
   /** LTX25-MAX-01: `max` selects the Max table and the dgrauet runtime's rules; the worker then refuses a request whose `text_encoder_dir` is not the pack's own Gemma folder. */
   profile?: "max";
   /** LTX25-EDIT-01 (op `extend` or `retake`, Max only): the source clip (on the 64 grid at 24 a second), the ffprobe the runtime reads it with, and the edit's own number in latent frames. */

@@ -498,14 +498,14 @@ that is not installed is 503 `not_installed`. Results carry `quality` and `audio
 for the other stops the first one's worker. The Detailed component (`ltx-2-3-distilled-mlx`, p128 only, 73.6 GB; `plan_need: optional`, so the setup wizard leaves it unchecked, and an upgrade never installs it on its own: it shows as not installed with an Install button) needs the maker's licence accepted
 once: `POST /stack/v1/components/{id}/install` answers 409 `licence_required` until the body carries `accepted_licence` (the `licence.id` the component lists);
 the acceptance is one small file (`licence-acceptances.json`) and no name. Video LoRAs record the model they were made for (`base_model` `wan2.2-ti2v-5b` or
-`ltx-2.3`, read from the tensors; `GET /stack/v1/video/loras` lists `base_models`), and a clip applies only LoRAs of its own model (422 `wrong_base_model`).
+`ltx-2.3` or `ltx-2.5`; the family is read from the tensors, an LTX version is declared, see "LoRAs on LTX-2.5" below; `GET /stack/v1/video/loras` lists `base_models`), and a clip applies only LoRAs of its own model (422 `wrong_base_model`).
 
 **Picture start and end on LTX-2.5 (VIDEO-INPUTS-01).** `POST /v1/videos/generations` with `model` `ltx25-q8` (Standard and Boost sizes) or `ltx25-max` takes the same `image` field
 as Quick and Detailed (base64 or a data: URL; PNG, JPEG or WebP; at most 20 MB) and an additive `end_image` (same encoding and limits). `image` is the first frame: the Stack's ffmpeg
 fits it to the clip's true size (scale to fill, centre crop, never stretched, orientation applied, metadata dropped) and the worker gives it to the runtime as image conditioning at
 frame 0, replacing the first latent. `end_image` guides the last frame (frame index `frames - 1`) and needs `image`: `end_image` alone is 422 `bad_image`; Quick and Detailed
 answer 422 `reference_unsupported` to `end_image`. A picture that is not valid base64 or not a PNG, JPEG or WebP is 422 `bad_image` (the message names the last picture when that is the bad one),
-over 20 MB is 413 `too_large`, a size or length outside the measured table is still 422 `bad_size` or `bad_seconds`, styles are still 422 `lora_unsupported`. Both runtimes take images:
+over 20 MB is 413 `too_large`, a size or length outside the measured table is still 422 `bad_size` or `bad_seconds`. Both runtimes take images:
 the 0.18.0 runtime (Max) through `ImageConditioningInput.at` and `.guide`, the pinned fork (Standard and Boost) through the `(path, frame_idx, strength)` tuple of `ltx_pipelines_mlx.utils.args`;
 the worker refuses a runtime whose `generate_and_save` has no `images` argument instead of making the clip from words. `GET /stack/v1/video` reports `image_to_video: true` and the new
 `end_image: true` on `qualities.ltx25` and `qualities.ltx25max` (false on Quick and Detailed). The result's `mode` is `image-to-video`. The Stack keeps no copy: the files are deleted when the job ends.
@@ -520,8 +520,26 @@ words-only figure, never lower); Max 1024x576 10 s 47.4 in the worker (48.6 in t
 `peak_gb_picture`, `admit_gb_picture` (61.5) and `short_peak_gb_picture` (null) on the `qualities.ltx25max.profiles` row. The progress estimate of a clip from a picture is kept apart from the words-only
 history of the same size, so a picture clip's ETA learns from picture clips (they ran 20 to 30 percent longer at Max: 206 s words only, 248 s with a start picture, 267 s with both).
 
+**LoRAs on LTX-2.5 (VIDEO-LORA-05).** `loras: [{ id, strength? }]` on `POST /v1/videos/generations` now works with `model` `ltx25-max` (the ids come from `GET /stack/v1/video/loras`;
+`strength` 0 to 2, the record's default when left out; at most 2 per clip, 422 `too_many_loras`) and is still 422 `lora_unsupported` on `ltx25-q8` (Standard and Boost) until a LoRA clip is measured there:
+the pinned fork (0.14.15, commit 5795228) has the runtime's `_pending_loras` hook and its fusing code but no unfused mode, and its fusing writes float32 scales and biases (checked on a toy q8 layer;
+0.18.0 keeps bfloat16), so what a Standard or Boost LoRA costs in seconds and memory is unmeasured. Read `qualities.ltx25.loras` and `qualities.ltx25max.loras` on `GET /stack/v1/video`:
+`{ supported, max, max_strength, mode: "fused" | "unfused", admit_factor (0 fused, 1.1 unfused), runtime, base_models: ["ltx-2.5"], reason }`, plus `negative_prompt: "none"` on both (the distilled path has no
+guidance, so a negative prompt is accepted and ignored; Home sends negative text only to a profile that says `nag`, none does yet). Offer a LoRA only where `supported` is true.
+*Base.* An LTX-2.5 LoRA and an LTX-2.3 LoRA have the same tensor layout, width (4096), 48 blocks and rank rules (compared on the real BTS, XPLDV and googlyeyes files: the 2.3 file fits every module of the 2.5 pack and does nothing),
+so the version cannot be read from the file. Home declares it: `base_model` (`ltx-2.5`) on `POST /stack/v1/video/loras`, or `PATCH` with `base_model` to move a file between `ltx-2.3` and `ltx-2.5`. The file can only contradict it
+(another family, or its own `ss_ltx_version`: 422 `wrong_base_model`). Left out, an LTX file is `ltx-2.3`, which only blocks use on an LTX-2.5 clip. The raised file cap is 4 GB (413 `too_large`).
+*Refused before a job exists.* The runtime ignores every tensor it cannot map without an error (a kohya file, `lora_down` and `lora_up`, loads and changes nothing; measured 2026-11-02), so the Stack reads the header
+itself: a file with no ComfyUI-style `diffusion_model...lora_A.weight` and `lora_B.weight` pair is 422 `lora_keys_unsupported` (at import for an `ltx-2.5` file, again at request time, and in the worker), the message says to use a
+copy saved for ComfyUI or diffusers; with the pack installed the file is also matched against the pack's own transformer (names after the runtime's rename table, and the in and out sizes, q8 and bf16 packs): no matching layer is
+`lora_keys_unsupported`, some layers of the wrong size is `wrong_base_model`. A 2.3 file on a 2.5 clip, an unknown id, a duplicate, and an adult-only file on a request whose `audience` is not `adult` (`lora_not_allowed`) are refused as before.
+*How it runs.* The worker hands `[(path, strength)]` to the runtime as `pipe._pending_loras` (what `generate --lora PATH STRENGTH` does) and sets `LTX2_LORA_MODE` before it builds the pipeline (0.18.0 reads it at construction).
+Max is fused (bf16: no extra memory, no requantization; measured +0 GB and a few seconds). The q8 profiles prefer unfused (bench: +0.6 s and +0.76 GB for a 0.34 GB file, against +18 s fused) but only 0.18.0 has it, so they would run fused.
+Admission adds file bytes x 1.1 when unfused and nothing when fused (`admit_factor`). A changed LoRA set rebuilds the pipeline; the same set reuses it. The request also refuses a footprint over the 64 GB per-clip cap (422 `lora_too_large`).
+Extend and retake take no LoRA (422 `lora_unsupported`). Proven for real: see the CHANGELOG entry for the clip, its time and its footprint.
+
 **LTX-2.5 Max (LTX25-MAX-01).** `model` `ltx25-max` (or `ltx25-max-bf16`, or the pack id `ltx-2-5-bf16-distilled-mlx-max`) makes a 1024x576 clip of up to 10 s (241 frames at 24 a second)
-with a sound track and speech, from words or from a start picture and an optional end picture (`image`, `end_image`, see below; no LoRAs: 422 `lora_unsupported`). It is the Max slot of the LTX-2.5 engine and a
+with a sound track and speech, from words or from a start picture and an optional end picture (`image`, `end_image`, see below; LoRAs: see "LoRAs on LTX-2.5"). It is the Max slot of the LTX-2.5 engine and a
 separate quality: `GET /stack/v1/video` has `qualities.ltx25max` in the same shape as `qualities.ltx25` (`ready`, `installed`, `environment`, `install`, `licence`), with
 its own runtime (`ltx25-max-gen`, dgrauet/ltx-2-mlx 0.18.0) and its own pack (`ltx-2-5-bf16-distilled-mlx-max`, the ungated mlx-community conversion, distilled set only, 71 GB, the
 same licence acceptance as the other LTX models). One `profiles` row: `{ name: "max", size: "1024x576", max_seconds: 10, max_frames: 241, peak_gb: 48.6, admit_gb: 51 }`:
@@ -587,7 +605,7 @@ reaches a child's or a teen's request.
 
 **LoRAs.** The household library is `data/video/loras/` (one `.safetensors` per record plus `manifest.json`). `GET /stack/v1/video/loras`;
 `POST /stack/v1/video/loras` (multipart: `file`, or `path` for a file already on the Stack's computer; `name`, `licence`, `licence_acknowledged`,
-`source_url`, `classification`, `strength_default`, `trigger_words` comma separated or a JSON array, `added_by`); `PATCH` and `DELETE /stack/v1/video/loras/{id}`.
+`source_url`, `classification`, `strength_default`, `trigger_words` comma separated or a JSON array, `added_by`, `base_model`); `PATCH` and `DELETE /stack/v1/video/loras/{id}`.
 The id is `lora-` and the first 16 hex of the sha256. The Stack reads the tensor shapes from the file's header: a LoRA for the 14B model (width 5120) or
 the 1.3B model (1536) is refused 422 `wrong_base_model`; a file with no LoRA tensors is `not_a_lora`. An open licence (apache-2.0, mit, cc0-1.0, bsd-2/3-clause,
 unlicense, isc, cc-by-4.0) imports as is; any other needs `licence_acknowledged=true` (422 `licence_acknowledgement_required`) and is recorded as

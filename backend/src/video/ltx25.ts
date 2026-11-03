@@ -201,3 +201,60 @@ export function ltx25MaxModelPaths(): { modelDir: string; gemmaDir: string } | n
   if (!LTX25_MAX_REQUIRED_FILES.every((file) => existsSync(join(model.modelPath!, file)))) return null;
   return { modelDir: model.modelPath, gemmaDir: join(model.modelPath, LTX25_MAX_GEMMA_FOLDER) };
 }
+
+// ---- VIDEO-LORA-05: LoRAs on the LTX-2.5 engine ----
+//
+// What was measured (2026-11-02, ~/video-bench/loras/BENCH.md, runtime 0.18.0, dgrauet packs, one 768x448 5 s clip per cell, direct CLI) and what
+// was only read or probed here:
+//   * 0.18.0 (Max): `pipe._pending_loras = [(path, strength)]` before the clip, the same list `generate --lora PATH STRENGTH` builds. Fused is the
+//     default: bf16 needs no extra memory and no requantization; `LTX2_LORA_MODE=unfused` attaches run-time adapters instead (read when the
+//     pipeline is BUILT, so it is set before construction). q8: fused +18 s and about +0 GB, unfused +0.6 s and +0.76 GB for a 0.34 GB rank-16 file.
+//   * The pinned fork (Standard and Boost, MrMofer q8 pack, 0.14.15, commit 5795228) has the same `_pending_loras` hook and the same fusing code but
+//     NO unfused mode (no `lora_adapters.py`, no `LTX2_LORA_MODE`). Its fusing was checked here on a toy q8 layer: the weights change by the right
+//     amount, but it writes float32 scales and biases (0.18.0 keeps bfloat16), which makes every fused layer's quantized matmul promote to float32.
+//     No Standard or Boost clip with a LoRA has been run, so what that costs in seconds and memory is NOT measured: Standard and Boost report
+//     `loras.supported: false` until one is (LTX25_FORK_LORAS_MEASURED), and the worker already carries the code path for them.
+/** At most this many LoRAs on one LTX-2.5 clip (the library's own cap is 4; Home's launch limit is 2: raised only by a bench). */
+export const LTX25_LORAS_PER_CLIP = 2;
+/** Strength range the runtime is given (the library's limit). */
+export const LTX25_LORA_MAX_STRENGTH = 2;
+export type Ltx25LoraMode = "fused" | "unfused";
+/** Flip to true only after a real Standard or Boost clip with a LoRA ran on the fork and its time and footprint were measured (fills the admission figure too). */
+export const LTX25_FORK_LORAS_MEASURED = false;
+/** Unfused adapters keep each file's A and B factors resident: measured +0.76 GB peak for a 0.34 GB rank-16 file (q8, 0.18.0). Admission reserves the file bytes x 1.1 (the design note's figure); fused adds nothing (the weights change in place). */
+export const LTX25_UNFUSED_ADMIT_FACTOR = 1.1;
+export interface Ltx25LoraProfile {
+  /** A clip of this quality may carry LoRAs. */
+  supported: boolean; max: number; max_strength: number;
+  /** The mode the engine will run: Max fuses (bf16, no requantization loss); the q8 profiles prefer unfused but only 0.18.0 has it. */
+  mode: Ltx25LoraMode; runtime: string; base_models: string[];
+  /** Why not, in a sentence for an admin; null when supported. */
+  reason: string | null;
+}
+/** The bench recommendation (VIDEO-LORA-04): fused on Max (bf16, no requantization), unfused on the q8 profiles. */
+export const ltx25LoraWanted = (quality: "ltx25" | "ltx25max"): Ltx25LoraMode => (quality === "ltx25max" ? "fused" : "unfused");
+const ltx25RuntimeHasUnfused = (quality: "ltx25" | "ltx25max"): boolean => quality === "ltx25max";
+/** The mode a clip runs in: the preferred one, or fused when the profile's runtime has no unfused adapters (the fork). */
+export function ltx25LoraMode(quality: "ltx25" | "ltx25max"): Ltx25LoraMode { return ltx25LoraWanted(quality) === "unfused" && ltx25RuntimeHasUnfused(quality) ? "unfused" : "fused"; }
+export function ltx25LoraProfile(quality: "ltx25" | "ltx25max"): Ltx25LoraProfile {
+  const max = quality === "ltx25max";
+  const supported = max || LTX25_FORK_LORAS_MEASURED;
+  return {
+    supported, max: supported ? LTX25_LORAS_PER_CLIP : 0, max_strength: LTX25_LORA_MAX_STRENGTH, mode: ltx25LoraMode(quality),
+    runtime: max ? `ltx-2-mlx ${LTX25_MAX_GEN_VERSION} (0.18.0)` : `ltx-2-mlx fork ${LTX25_GEN_VERSION} (0.14.15)`, base_models: ["ltx-2.5"],
+    reason: supported ? null : "The Standard and Boost video engine can fuse a LoRA but its cost in time and memory has not been measured yet, so LoRAs run only at Max for now.",
+  };
+}
+/** Extra memory a clip's LoRAs need on top of its measured footprint: nothing when fused, the files' bytes x 1.1 when unfused. */
+export function ltx25LoraAdmitBytes(mode: Ltx25LoraMode, fileBytes: number[]): number {
+  return mode === "unfused" ? Math.round(fileBytes.reduce((sum, bytes) => sum + bytes, 0) * LTX25_UNFUSED_ADMIT_FACTOR) : 0;
+}
+/** The environment variable the 0.18.0 runtime reads when it builds a pipeline (`fused` is its default, so it is set explicitly either way). */
+export const LTX25_LORA_MODE_ENV = "LTX2_LORA_MODE";
+/** The two files a LoRA clip checks against: the pack's distilled transformer header (the same name in the q8 and the bf16 pack). */
+export function ltx25PackTransformer(quality: "ltx25" | "ltx25max"): string | null {
+  const dir = (quality === "ltx25max" ? ltx25MaxModelPaths() : ltx25ModelPaths())?.modelDir;
+  if (!dir) return null;
+  for (const name of ["transformer-distilled.safetensors", "transformer.safetensors"]) if (existsSync(join(dir, name))) return join(dir, name);
+  return null;
+}

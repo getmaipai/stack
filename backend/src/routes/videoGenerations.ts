@@ -22,10 +22,10 @@ import { RoleReplyHeaders } from "@maipai/spec/stack/ts/role-reply-headers.js";
 import { MAX_DRAIN_STATUS, MAX_WAIT_STATUS, cancelJob, getJob, hasJobRunner, isJobPaused, listJobs, submitJob, waitForJob, type Job } from "@/lib/jobs";
 import { TierFieldSchema, TierStatusSchema, governorDecides, tierInput, tierOf } from "@/routes/tierField";
 import { PAUSED_LABEL } from "@/lib/genProgress";
-import { LoraError, resolveLoras } from "@/video/loras";
+import { LoraError, matchLtxLoraToPack, resolveLoras, type LoraBase } from "@/video/loras";
 import { deleteResult, isJobId, messagesPath, posterPath, readResult, videoPath, type VideoResultMeta } from "@/video/results";
 import { memoryVerdict, qualityOfModelName, tierAvailability, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, VIDEO_SPECS, videoGen, videoGenRoot, type VideoQuality } from "@/video/videoGen";
-import { ltx25MaxPeakBytes, ltx25MaxRefusal, ltx25MaxRow, ltx25PeakBytes, ltx25Refusal, ltx25Row, ltx25TrueSize, LTX25_MAX_MEASURED, LTX25_MEASURED } from "@/video/ltx25";
+import { ltx25LoraAdmitBytes, ltx25LoraMode, ltx25LoraProfile, ltx25PackTransformer, LTX25_CLIP_CAP_BYTES, LTX25_LORAS_PER_CLIP, ltx25MaxPeakBytes, ltx25MaxRefusal, ltx25MaxRow, ltx25PeakBytes, ltx25Refusal, ltx25Row, ltx25TrueSize, LTX25_MAX_MEASURED, LTX25_MEASURED } from "@/video/ltx25";
 import { checkEdit, EditSourceError, editRuntime, ltx25EditAdmitBytes, ltx25MaxEditSupported, LTX25_EDIT_EXTEND_MAX_SECONDS, LTX25_EDIT_EXTEND_MIN_SECONDS, LTX25_EDIT_RETAKE_MAX_SECONDS, LTX25_EDIT_RETAKE_MIN_SECONDS, LTX25_MAX_EDIT_MEASURED, planSource, probeSource, type Ltx25EditKind } from "@/video/ltx25Edit";
 import { MediaPathError, resolveReadable } from "@/media/paths";
 import { stashClip, unstashClip, videoFailure, videoPreviewPath, videoProgress, videoTracker, VIDEO_JOB_KIND, type StashedClip } from "@/video/jobs";
@@ -47,7 +47,7 @@ const VideoRequestSchema = z.object({
   preview: z.boolean().optional().openapi({ description: "Default true. While the clip runs, the status carries `preview_url`: the first frame of the clip (JPEG, up to 480 px on the long side), drawn from the finished motion the moment the long frame-building stage starts. Pass false to skip it (it costs about a second)." }),
   seconds: z.number().int().min(1).max(VIDEO_SPECS.detailed.maxSeconds).optional().openapi({ description: `Whole seconds (24 frames a second plus the first frame). Quick: 1 to ${VIDEO_MAX_SECONDS}, default ${VIDEO_MAX_SECONDS}. Detailed: 1 to ${VIDEO_SPECS.detailed.maxSeconds}, default 5. A number past the chosen model ceiling is refused (bad_seconds).` }),
   seed: z.number().int().min(0).max(4_294_967_295).optional(),
-  loras: z.array(LoraEntry).max(4).optional().openapi({ description: "LoRAs from the household library (GET /stack/v1/video/loras) to apply, by id, with a strength of 0 to 2 (the record's default when left out). Home decides which ids this caller may name." }),
+  loras: z.array(LoraEntry).max(4).optional().openapi({ description: "LoRAs from the household library (GET /stack/v1/video/loras) to apply, by id, with a strength of 0 to 2 (the record's default when left out). Home decides which ids this caller may name. LTX-2.5 (VIDEO-LORA-05): `ltx25-max` only so far (read `qualities.ltx25max.loras`), at most 2, files whose `base_model` is `ltx-2.5`." }),
   audience: z.enum(["all-ages", "adult"]).optional().openapi({ description: "Who the clip is for, set by Home from the person's age band and the surface. Default all-ages. An adult-only LoRA in the list with audience all-ages is refused (422 lora_not_allowed)." }),
   timeout_ms: z.number().int().positive().max(MAX_WAIT_MS).optional().openapi({ description: `How long this request waits for the clip before answering 202 with the job id. Default ${DEFAULT_WAIT_MS}. A clip takes about two to three minutes.` }),
   tier: TierFieldSchema,
@@ -86,7 +86,7 @@ const postRoute = createRoute({ method: "post", path: "/generations", tags: ["Vi
   200: { content: { "application/json": { schema: VideoResponseSchema } }, description: "The clip is ready; `data[0].url` is where to fetch it." },
   202: { content: { "application/json": { schema: VideoResponseSchema } }, description: "Still going past timeout_ms (`data` is empty); poll GET /v1/videos/generations/{job}." },
   413: { content: { "application/json": { schema: ErrorBody } }, description: "The reference picture is larger than 20 MB." },
-  422: { content: { "application/json": { schema: ErrorBody } }, description: "The request cannot be done: bad_size, bad_image, unknown_lora, wrong_base_model, lora_not_allowed, too_many_loras, bad_strength; `error` says what to change." },
+  422: { content: { "application/json": { schema: ErrorBody } }, description: "The request cannot be done: bad_size, bad_image, unknown_lora, wrong_base_model, lora_not_allowed, too_many_loras, bad_strength, lora_unsupported (LTX-2.5 Standard and Boost, and extend or retake), lora_keys_unsupported (a file the LTX runtime cannot map, such as a kohya file), lora_too_large; `error` says what to change." },
   429: { content: { "application/json": { schema: ErrorBody } }, description: "Four clips are already waiting; try again when one finishes." },
   499: { content: { "application/json": { schema: ErrorBody } }, description: "The job was cancelled." },
   500: { content: { "application/json": { schema: ErrorBody } }, description: "The clip failed (failed, worker_stopped)." },
@@ -229,7 +229,11 @@ videoV1Routes.openapi(postRoute, async (c) => {
   if (body.image !== undefined && !spec.imageToVideo) return fail(c, 422, "reference_unsupported", "A Detailed video cannot start from a picture yet. Ask for a Quick video to animate a picture, or describe the Detailed video in words.");
   if (body.end_image !== undefined && !spec.endImage) return fail(c, 422, "reference_unsupported", "This video model cannot end on a picture. Ask for an LTX-2.5 video to give both a first and a last picture, or send only the first picture.");
   if (body.end_image !== undefined && body.image === undefined) return fail(c, 422, "bad_image", "A last picture needs a first picture. Send image as well, or leave end_image out.");
-  if ((quality === "ltx25" || quality === "ltx25max") && (body.loras ?? []).length > 0) return fail(c, 422, "lora_unsupported", "This video model takes no style files yet. Leave the styles out, or ask for a Detailed video to use one.");
+  const ltx25Lora = quality === "ltx25" || quality === "ltx25max" ? ltx25LoraProfile(quality) : null;
+  if (ltx25Lora && (body.loras ?? []).length > 0) {
+    if (!ltx25Lora.supported) return fail(c, 422, "lora_unsupported", `${ltx25Lora.reason ?? "This video model takes no style files yet."} Leave the styles out, or ask for a Max video to use one.`);
+    if ((body.loras ?? []).length > ltx25Lora.max) return fail(c, 422, "too_many_loras", `An LTX-2.5 clip can use at most ${ltx25Lora.max} styles. Leave one out.`);
+  }
   const size = parseVideoSize(body.size, quality);
   if (typeof size === "string") return fail(c, 422, "bad_size", size);
   const seconds = body.seconds ?? (quality === "quick" ? VIDEO_MAX_SECONDS : 5);
@@ -248,15 +252,31 @@ videoV1Routes.openapi(postRoute, async (c) => {
     if (name === "image") image = bytes; else endImage = bytes;
   }
   let loras;
-  try { loras = await resolveLoras((body.loras ?? []).map((entry) => ({ id: entry.id, ...(entry.strength !== undefined ? { strength: entry.strength } : {}) })), body.audience ?? "all-ages", spec.loraBase as "wan2.2-ti2v-5b" | "ltx-2.3"); } catch (error) {
+  try { loras = await resolveLoras((body.loras ?? []).map((entry) => ({ id: entry.id, ...(entry.strength !== undefined ? { strength: entry.strength } : {}) })), body.audience ?? "all-ages", spec.loraBase as LoraBase); } catch (error) {
     if (error instanceof LoraError) return fail(c, error.status === 404 ? 422 : error.status, error.code, error.message);
     throw error;
   }
+  // VIDEO-LORA-05: the file is checked against the installed pack's own transformer, so a file whose layers do not fit it (an LTX-2.3 file made for
+  // other shapes, a LoRA saved with other layer names) is refused here in plain words and never reaches a runtime that would ignore it silently.
+  if (ltx25Lora && loras.length > 0) {
+    const transformer = ltx25PackTransformer(quality as "ltx25" | "ltx25max");
+    for (const lora of transformer ? loras : []) {
+      if (!lora.keys) continue;
+      let fit;
+      try { fit = matchLtxLoraToPack(lora.keys, transformer!); } catch (error) { if (error instanceof LoraError) return fail(c, 503, "not_installed", "The video model's files could not be read. Check the model in Settings, Models and storage."); throw error; }
+      if (fit.matched === 0) return fail(c, 422, "lora_keys_unsupported", `"${lora.record.name}" has no layer that fits this video model (${fit.shapeMismatch > 0 ? "its layers are a different size" : "its layer names are not the ones the model has"}), so it would change nothing. Pick a LoRA made for LTX-2.5.`);
+      if (fit.shapeMismatch > 0) return fail(c, 422, "wrong_base_model", `"${lora.record.name}" was made for a different size of video model (${fit.shapeMismatch} of its layers do not fit). Pick a LoRA made for LTX-2.5.`);
+    }
+  }
+  const loraMode = ltx25Lora ? ltx25LoraMode(quality as "ltx25" | "ltx25max") : null;
+  const loraAdmit = loraMode ? ltx25LoraAdmitBytes(loraMode, loras.map((lora) => lora.record.bytes)) : 0;
   const seed = body.seed ?? Math.floor(Math.random() * 2 ** 32);
   const frames = seconds * VIDEO_FPS + 1;
   const loraIds = loras.map((lora) => lora.record.id);
-  const peak = quality === "ltx25max" ? ltx25MaxPeakBytes(image !== null) : quality === "ltx25" ? ltx25PeakBytes(size.width, size.height, seconds * VIDEO_FPS + 1, image !== null) : undefined;
-  return await runClip(c, body, quality, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, endImage, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, preview: body.preview !== false }, { size: `${size.width}x${size.height}`, seconds, mode: image ? "image-to-video" : "text-to-video" }, peak);
+  const basePeak = quality === "ltx25max" ? ltx25MaxPeakBytes(image !== null) : quality === "ltx25" ? ltx25PeakBytes(size.width, size.height, seconds * VIDEO_FPS + 1, image !== null) : undefined;
+  const peak = basePeak === undefined ? undefined : basePeak + loraAdmit;
+  if (peak !== undefined && peak > LTX25_CLIP_CAP_BYTES) return fail(c, 422, "lora_too_large", "These styles are too large to run with this clip on this computer. Use a smaller style, or only one.");
+  return await runClip(c, body, quality, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, endImage, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, preview: body.preview !== false }, { size: `${size.width}x${size.height}`, seconds, mode: image ? "image-to-video" : "text-to-video", ...(loraMode && loras.length > 0 ? { lora_mode: loraMode, lora_admit_bytes: loraAdmit } : {}) }, peak);
 });
 
 /** The queue check, the memory verdict, the stash, the job and the wait: one definition for a made clip and for an edit of one. */

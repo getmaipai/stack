@@ -30,14 +30,17 @@ import { namesRealPerson } from "@/lib/media/loraLibrary";
 export const LORA_BASE_MODEL = "wan2.2-ti2v-5b";
 /** VIDEO-LTX-01: the two bases a LoRA can be made for: Quick's Wan2.2 5B, Detailed's LTX-2.3. */
 export const LORA_BASE_LTX = "ltx-2.3";
-export const LORA_BASE_MODELS = [LORA_BASE_MODEL, LORA_BASE_LTX] as const;
+/** VIDEO-LORA-05: the third base, the LTX-2.5 engine (Standard, Boost and Max). Its tensors read exactly like LTX-2.3's (see `detectLoraBase`). */
+export const LORA_BASE_LTX25 = "ltx-2.5";
+export const LORA_BASE_MODELS = [LORA_BASE_MODEL, LORA_BASE_LTX, LORA_BASE_LTX25] as const;
 export type LoraBase = typeof LORA_BASE_MODELS[number];
 export const LORA_CLASSES = ["all-ages", "adult-only"] as const;
 export type LoraClass = typeof LORA_CLASSES[number];
 export type Audience = "all-ages" | "adult";
 export const MAX_LORAS_PER_JOB = 4;
 export const MAX_LORA_STRENGTH = 2;
-export const MAX_LORA_BYTES = 2 * 1_073_741_824;
+/** 4 GB (VIDEO-LORA-05; Max-sized community LoRAs reach 2.6 GB). */
+export const MAX_LORA_BYTES = 4 * 1_073_741_824;
 const MAX_HEADER_BYTES = 64 * 1_048_576;
 
 export interface LoraRecord {
@@ -98,9 +101,9 @@ function describedAs(parts: Array<string | null | undefined>, metadata: Record<s
 
 export interface SafetensorsInfo { rank: number; modules: number; dims: number[]; metadata: Record<string, unknown> | undefined; /** Tensors named the way LTX transformers name them (transformer_blocks), and the way Wan ones do (blocks, self_attn). */ ltxKeys?: number; wanKeys?: number; }
 
-/** Reads a safetensors header (the first 8 bytes say how long the JSON is) and
- * what it says about LoRA tensors; throws a LoraError that says what to do. */
-export function readLoraHeader(path: string): SafetensorsInfo {
+export interface SafetensorsEntry { dtype?: string; shape?: number[]; data_offsets?: [number, number] }
+/** The parsed header of a safetensors file (the first 8 bytes say how long the JSON is), checked to be whole; throws a LoraError that says what to do. */
+export function readSafetensorsHeader(path: string): { header: Record<string, SafetensorsEntry | Record<string, unknown>>; metadata: Record<string, unknown> | undefined; entries: Array<[string, SafetensorsEntry]> } {
   const fd = openSync(path, "r");
   try {
     const size = fstatSync(fd).size;
@@ -110,25 +113,36 @@ export function readLoraHeader(path: string): SafetensorsInfo {
     if (!Number.isSafeInteger(headerLength) || headerLength <= 2 || headerLength > MAX_HEADER_BYTES || 8 + headerLength > size) throw new LoraError("not_safetensors", "That file is not a LoRA: use a .safetensors file.", 422);
     const raw = Buffer.alloc(headerLength);
     readSync(fd, raw, 0, headerLength, 8);
-    let header: Record<string, { dtype?: string; shape?: number[]; data_offsets?: [number, number] } | Record<string, unknown>>;
+    let header: Record<string, SafetensorsEntry | Record<string, unknown>>;
     try { header = JSON.parse(raw.toString("utf8")); } catch { throw new LoraError("not_safetensors", "That file is not a LoRA: use a .safetensors file.", 422); }
-    const metadata = header.__metadata__ as Record<string, unknown> | undefined;
     const dataLength = size - 8 - headerLength;
-    const dims = new Set<number>();
-    let rank = 0; let modules = 0; let ltxKeys = 0; let wanKeys = 0;
+    const entries: Array<[string, SafetensorsEntry]> = [];
     for (const [key, entry] of Object.entries(header)) {
       if (key === "__metadata__") continue;
-      if (/transformer_blocks\.\d+\.(?:audio_)?attn\d|transformer_blocks\.\d+\.ff\./.test(key)) ltxKeys += 1;
-      else if (/(?:^|\.)blocks\.\d+\.(?:self_attn|cross_attn|ffn)/.test(key)) wanKeys += 1;
-      const tensor = entry as { shape?: number[]; data_offsets?: [number, number] };
+      const tensor = entry as SafetensorsEntry;
       if (!tensor.shape || !tensor.data_offsets || tensor.data_offsets[1] > dataLength) throw new LoraError("not_safetensors", "That file looks cut short or damaged. Download it again.", 422);
-      const down = /\.lora_(?:A|down)\.weight$/.test(key);
-      const up = /\.lora_(?:B|up)\.weight$/.test(key);
-      if (down && tensor.shape.length === 2) { modules += 1; rank = Math.max(rank, tensor.shape[0]!); dims.add(tensor.shape[1]!); }
-      if (up && tensor.shape.length === 2) dims.add(tensor.shape[0]!);
+      entries.push([key, tensor]);
     }
-    return { rank, modules, dims: [...dims], metadata, ltxKeys, wanKeys };
+    return { header, metadata: header.__metadata__ as Record<string, unknown> | undefined, entries };
   } finally { closeSync(fd); }
+}
+
+/** Reads a safetensors header and what it says about LoRA tensors; throws a LoraError that says what to do. */
+export function readLoraHeader(path: string): SafetensorsInfo {
+  const { metadata, entries } = readSafetensorsHeader(path);
+  const dims = new Set<number>();
+  let rank = 0; let modules = 0; let ltxKeys = 0; let wanKeys = 0;
+  for (const [key, tensor] of entries) {
+    // Dotted (ComfyUI, diffusers) and underscored (kohya `lora_unet_transformer_blocks_0_attn1_to_k`) layer names both say LTX; the key check, not this, decides whether the runtime can read them.
+    if (/transformer_blocks[._]\d+[._](?:audio_)?attn\d|transformer_blocks[._]\d+[._]ff[._]/.test(key)) ltxKeys += 1;
+    else if (/(?:^|\.)blocks\.\d+\.(?:self_attn|cross_attn|ffn)/.test(key)) wanKeys += 1;
+    const shape = tensor.shape!;
+    const down = /\.lora_(?:A|down)\.weight$/.test(key);
+    const up = /\.lora_(?:B|up)\.weight$/.test(key);
+    if (down && shape.length === 2) { modules += 1; rank = Math.max(rank, shape[0]!); dims.add(shape[1]!); }
+    if (up && shape.length === 2) dims.add(shape[0]!);
+  }
+  return { rank, modules, dims: [...dims], metadata, ltxKeys, wanKeys };
 }
 
 /** Throws unless the tensors fit the Wan2.2 5B transformer (width 3072). A 14B model is 5120 wide and a 1.3B model 1536. */
@@ -138,21 +152,104 @@ export function assertWan5bLora(info: SafetensorsInfo): void {
 }
 
 /**
- * Which model a LoRA was made for, read from its tensors (never its name). LTX transformers are 4096 wide with transformer_blocks
- * keys; Wan2.2 5B is 3072 wide with blocks keys. A file that fits neither throws wrong_base_model. LTX-2.0 and LTX-2.3 share
- * the key layout, so a 2.0 LoRA reads as LTX here; that uncertainty is why a LoRA of either base starts adult-only unless its
- * importer says otherwise.
+ * Which model a LoRA was made for. The tensors say the FAMILY: LTX transformers are 4096 wide with transformer_blocks keys; Wan2.2 5B is
+ * 3072 wide with blocks keys; a file that fits neither throws wrong_base_model. They cannot say the LTX VERSION: measured 2026-11-02 on real
+ * files, an LTX-2.5 LoRA (DigitalByte XPLDV) and an LTX-2.3 LoRA (TheBurgstall googlyeyes) have the same key layout (`diffusion_model.transformer_blocks.N.attnN.to_k|to_q|to_v|to_out.0`),
+ * the same width (4096), the same 48 blocks and the same rank and shape rules, and the 2.3 file loads on the 2.5 pack and does nothing. So the
+ * version is DECLARED by whoever adds the file (`declared`: Home, from the source's own base field or an admin), and the file can only
+ * contradict it: a trainer's `ss_ltx_version` that names another version, or a family that is not LTX, is refused with wrong_base_model.
+ * With nothing declared an LTX file reads as LTX-2.3 (the behaviour before LTX-2.5 LoRAs existed), which only ever blocks use on an
+ * LTX-2.5 clip; it never lets a file run where it was not declared.
  */
-export function detectLoraBase(info: SafetensorsInfo): LoraBase {
+export function detectLoraBase(info: SafetensorsInfo, declared?: LoraBase | null): LoraBase {
   if (info.modules === 0) throw new LoraError("not_a_lora", "That file has no LoRA weights in a form this video model reads (it needs lora_A and lora_B, or lora_down and lora_up, tensors).", 422);
   if ((info.ltxKeys ?? 0) > 0 && (info.wanKeys ?? 0) === 0 && info.dims.includes(4096)) {
-    // A trainer that writes the LTX version into the file says which one it was made for; a 2.0 file is not a 2.3 LoRA.
+    // A trainer that writes the LTX version into the file says which one it was made for; a 2.0 file is neither a 2.3 nor a 2.5 LoRA.
     const version = String(info.metadata?.ss_ltx_version ?? "");
-    if (version && !version.startsWith("2.3")) throw new LoraError("wrong_base_model", `This LoRA was made for LTX ${version}, and Detailed videos use LTX 2.3. Pick a LoRA made for LTX 2.3.`, 422);
-    return LORA_BASE_LTX;
+    const named: LoraBase | null = version.startsWith("2.3") ? LORA_BASE_LTX : version.startsWith("2.5") ? LORA_BASE_LTX25 : null;
+    if (version && !named) throw new LoraError("wrong_base_model", `This LoRA was made for LTX ${version}, and these videos use LTX 2.3 (Detailed) or LTX 2.5. Pick a LoRA made for one of those.`, 422);
+    if (declared && declared !== LORA_BASE_LTX && declared !== LORA_BASE_LTX25) throw new LoraError("wrong_base_model", "This LoRA is an LTX LoRA, but it was said to be made for a different video model. Say which LTX version it was made for (2.3 or 2.5).", 422);
+    if (declared && named && declared !== named) throw new LoraError("wrong_base_model", `This LoRA's own description says it was made for LTX ${version}, not ${declared === LORA_BASE_LTX25 ? "2.5" : "2.3"}. Pick the version the file names, or a different file.`, 422);
+    return declared ?? named ?? LORA_BASE_LTX;
   }
-  if ((info.wanKeys ?? 0) >= 0 && (info.ltxKeys ?? 0) === 0) { assertWan5bLora(info); return LORA_BASE_MODEL; }
-  throw new LoraError("wrong_base_model", "This LoRA was made for a different video model. Only LoRAs made for Wan2.2 TI2V-5B (Quick) or LTX-2.3 (Detailed) work here.", 422);
+  if ((info.wanKeys ?? 0) >= 0 && (info.ltxKeys ?? 0) === 0) {
+    assertWan5bLora(info);
+    if (declared && declared !== LORA_BASE_MODEL) throw new LoraError("wrong_base_model", "This LoRA was made for Wan2.2 TI2V-5B (Quick), not the video model it was said to be for.", 422);
+    return LORA_BASE_MODEL;
+  }
+  throw new LoraError("wrong_base_model", "This LoRA was made for a different video model. Only LoRAs made for Wan2.2 TI2V-5B (Quick), LTX-2.3 (Detailed) or LTX-2.5 work here.", 422);
+}
+
+// ---- VIDEO-LORA-05: what the LTX runtimes can actually map ----
+//
+// The ltx-2-mlx runtime (the 0.18.0 release and the pinned fork) fuses or attaches a LoRA by matching `<module>.lora_A.weight` and
+// `<module>.lora_B.weight` against the transformer's `<module>.weight`, after one rename table (LTXV_LORA_COMFY_RENAMING_MAP). A key it cannot
+// match is IGNORED WITHOUT AN ERROR: a kohya file (`lora_down`/`lora_up`, `lora_unet_...`) loads, changes no weight and makes the clip
+// without the style (measured 2026-11-02, ~/video-bench/loras/BENCH.md). The Stack therefore reads the header itself and refuses a file that
+// would be a silent no-op, before a job exists. The rename table below mirrors the runtime's; the tests check it against real files.
+const LTX_RENAMES: ReadonlyArray<readonly [string, string]> = [
+  ["diffusion_model.", ""], [".to_out.0.", ".to_out."], [".ff.net.0.proj.", ".ff.proj_in."], [".ff.net.2.", ".ff.proj_out."], [".linear_1.", ".linear1."], [".linear_2.", ".linear2."], ["audio_ff.net.0.proj.", "audio_ff.proj_in."], ["audio_ff.net.2.", "audio_ff.proj_out."],
+];
+/** The module a LoRA tensor key targets, in the transformer's own naming, or null when the key is not a ComfyUI-style `lora_A`/`lora_B` weight. */
+export function ltxLoraModule(key: string): { module: string; side: "A" | "B" } | null {
+  const found = /^(.*)\.lora_([AB])\.weight$/.exec(key);
+  if (!found) return null;
+  let path = `${found[1]}.`;
+  for (const [from, to] of LTX_RENAMES) if (path.includes(from)) path = path.split(from).join(to);
+  return { module: path.slice(0, -1), side: found[2] as "A" | "B" };
+}
+export interface LtxLoraKeys {
+  /** Modules with both a lora_A and a lora_B tensor in the form the runtime reads. */
+  pairs: number;
+  /** Tensors in kohya form (`lora_down` / `lora_up`), which the runtime does not read. */
+  kohya: number;
+  /** Rank (the smallest side of a pair's A) and the module shapes: module -> { in, out }. */
+  modules: Map<string, { in: number; out: number; rank: number }>;
+}
+/** Reads a LoRA file's header and says which of its tensors the LTX runtimes can map (no weights are read). */
+export function inspectLtxLoraKeys(path: string): LtxLoraKeys {
+  const { entries } = readSafetensorsHeader(path);
+  const a = new Map<string, number[]>(); const b = new Map<string, number[]>();
+  let kohya = 0;
+  for (const [key, tensor] of entries) {
+    if (/\.lora_(?:down|up)\.weight$/.test(key)) { kohya += 1; continue; }
+    const target = ltxLoraModule(key);
+    if (!target || tensor.shape!.length !== 2) continue;
+    (target.side === "A" ? a : b).set(target.module, tensor.shape!);
+  }
+  const modules = new Map<string, { in: number; out: number; rank: number }>();
+  for (const [module, down] of a) { const up = b.get(module); if (up && up[1] === down[0]) modules.set(module, { in: down[1]!, out: up[0]!, rank: down[0]! }); }
+  return { pairs: modules.size, kohya, modules };
+}
+/** Throws `lora_keys_unsupported` for a file the LTX runtimes would run as a silent no-op. `name` is how the person knows the file. */
+export function assertLtxLoraKeys(keys: LtxLoraKeys, name = "This LoRA"): void {
+  if (keys.pairs > 0) return;
+  if (keys.kohya > 0) throw new LoraError("lora_keys_unsupported", `${name} uses the kohya tensor names (lora_down and lora_up), which the video model does not read, so it would change nothing. Use a copy saved for ComfyUI or diffusers (tensor names ending in lora_A.weight and lora_B.weight, under diffusion_model), or pick another style.`, 422);
+  throw new LoraError("lora_keys_unsupported", `${name} has no tensors the video model can use (it needs diffusion_model...lora_A.weight and lora_B.weight pairs), so it would change nothing. Pick a LoRA made for LTX-2.3 or LTX-2.5 and saved for ComfyUI, or use another style.`, 422);
+}
+/** How many of a LoRA's modules fit this transformer, from the pack's own header (name and, where it can be told, the in/out size). */
+export function matchLtxLoraToPack(keys: LtxLoraKeys, packTransformerPath: string): { matched: number; total: number; shapeMismatch: number } {
+  const { entries } = readSafetensorsHeader(packTransformerPath);
+  const weights = new Map<string, { shape: number[]; dtype?: string; scales?: number[] }>();
+  for (const [key, tensor] of entries) {
+    const name = key.startsWith("transformer.") ? key.slice("transformer.".length) : key;
+    if (name.endsWith(".weight")) weights.set(name.slice(0, -".weight".length), { shape: tensor.shape!, dtype: tensor.dtype });
+    else if (name.endsWith(".scales")) { const target = weights.get(name.slice(0, -".scales".length)); if (target) target.scales = tensor.shape!; else weights.set(name.slice(0, -".scales".length), { shape: [], scales: tensor.shape! }); }
+  }
+  // A scales tensor can come before its weight in the header; fill both orders.
+  for (const [key, tensor] of entries) {
+    const name = key.startsWith("transformer.") ? key.slice("transformer.".length) : key;
+    if (name.endsWith(".scales")) { const target = weights.get(name.slice(0, -".scales".length)); if (target) target.scales = tensor.shape!; }
+  }
+  let matched = 0; let shapeMismatch = 0;
+  for (const [module, lora] of keys.modules) {
+    const target = weights.get(module);
+    if (!target || target.shape.length !== 2) continue;
+    // A quantized weight is packed (U32): its true input size is the scales' group count times the group size (32, 64 or 128).
+    const inOk = target.dtype === "U32" && target.scales ? [32, 64, 128].some((group) => target.scales![1]! * group === lora.in) : target.shape[1] === lora.in;
+    if (target.shape[0] === lora.out && inOk) matched += 1; else shapeMismatch += 1;
+  }
+  return { matched, total: keys.modules.size, shapeMismatch };
 }
 
 export interface ImportInput {
@@ -166,6 +263,8 @@ export interface ImportInput {
   strengthDefault?: number;
   triggerWords?: string[];
   addedBy?: string | null;
+  /** The base the adder says the file was made for (an LTX file's version cannot be read from its tensors: see detectLoraBase). */
+  declaredBase?: LoraBase | null;
 }
 
 function libraryDir(): string { return join(dataDir, "video", "loras"); }
@@ -221,7 +320,9 @@ export async function importLora(input: ImportInput): Promise<LoraRecord> {
   if (!stat.isFile() || stat.size === 0) throw new LoraError("not_safetensors", "That is not a file.", 422);
   if (stat.size > MAX_LORA_BYTES) throw new LoraError("too_large", `That file is larger than ${MAX_LORA_BYTES / 1_073_741_824} GB, the most a LoRA can be here.`, 413);
   const info = readLoraHeader(input.path);
-  const base = detectLoraBase(info);
+  if (input.declaredBase !== undefined && input.declaredBase !== null && !LORA_BASE_MODELS.includes(input.declaredBase)) throw new LoraError("bad_base_model", `The base model is one of ${LORA_BASE_MODELS.join(", ")}.`, 422);
+  const base = detectLoraBase(info, input.declaredBase);
+  if (base === LORA_BASE_LTX25) assertLtxLoraKeys(inspectLtxLoraKeys(input.path), `"${name}"`);
   const triggerWords = cleanWords(input.triggerWords);
   const text = describedAs([name, ...triggerWords, input.path.split("/").pop(), input.sourceUrl], info.metadata);
   const words = scanWords(text);
@@ -249,7 +350,7 @@ export async function importLora(input: ImportInput): Promise<LoraRecord> {
   });
 }
 
-export interface LoraPatch { name?: string; classification?: LoraClass; strengthDefault?: number; triggerWords?: string[]; sourceUrl?: string | null; }
+export interface LoraPatch { name?: string; classification?: LoraClass; strengthDefault?: number; triggerWords?: string[]; sourceUrl?: string | null; /** Moves an LTX file between LTX-2.3 and LTX-2.5 (the file is read again and may contradict it). */ baseModel?: LoraBase; }
 
 /** Edits a record. The Stack keeps the one fact it can check: a file whose
  * metadata names adult content cannot be set all-ages. Who may change the
@@ -267,6 +368,14 @@ export function updateLora(id: string, patch: LoraPatch): Promise<LoraRecord> {
     if (patch.strengthDefault !== undefined) next.strength_default = patch.strengthDefault;
     if (patch.triggerWords !== undefined) next.trigger_words = cleanWords(patch.triggerWords);
     if (patch.sourceUrl !== undefined) next.source_url = patch.sourceUrl?.slice(0, 2000) ?? null;
+    if (patch.baseModel !== undefined) {
+      if (!LORA_BASE_MODELS.includes(patch.baseModel)) throw new LoraError("bad_base_model", `The base model is one of ${LORA_BASE_MODELS.join(", ")}.`, 422);
+      if (patch.baseModel !== current.base_model) {
+        const info = readLoraHeader(loraFile(id));
+        next.base_model = detectLoraBase(info, patch.baseModel);
+        if (next.base_model === LORA_BASE_LTX25) assertLtxLoraKeys(inspectLtxLoraKeys(loraFile(id)), `"${next.name}"`);
+      }
+    }
     if (patch.classification !== undefined) {
       if (patch.classification === "all-ages") {
         const info = readLoraHeader(loraFile(id));
@@ -292,8 +401,11 @@ export function removeLora(id: string): Promise<boolean> {
   });
 }
 
+/** What a person calls the model a base belongs to (Home owns the wording of its own screens; this is the Stack's plain error text). */
+function baseLabel(base: LoraBase | undefined): string { return base === LORA_BASE_LTX ? "Detailed (LTX 2.3)" : base === LORA_BASE_LTX25 ? "LTX 2.5" : "Quick"; }
+
 export interface LoraRequest { id: string; strength?: number; }
-export interface ResolvedLora { record: LoraRecord; path: string; strength: number; }
+export interface ResolvedLora { record: LoraRecord; path: string; strength: number; /** LTX-2.5 only: what the runtime can map in this file (read again at request time). */ keys?: LtxLoraKeys; }
 
 /** Turns a job's LoRA list into files to apply, or throws a LoraError that
  * says what to change. `audience` is the second lock: an all-ages job never
@@ -308,7 +420,7 @@ export async function resolveLoras(requests: LoraRequest[] | undefined, audience
     if (!isLoraId(entry.id)) throw new LoraError("unknown_lora", `No LoRA with the id ${String(entry.id).slice(0, 40)} is in the library.`, 422);
     const record = getLora(entry.id);
     if (!record) throw new LoraError("unknown_lora", `No LoRA with the id ${entry.id} is in the library.`, 422);
-    if ((record.base_model ?? LORA_BASE_MODEL) !== base) throw new LoraError("wrong_base_model", `"${record.name}" was made for the ${record.base_model === LORA_BASE_LTX ? "Detailed" : "Quick"} video model and this clip is ${base === LORA_BASE_LTX ? "Detailed" : "Quick"}. Pick a style made for the same one.`, 422);
+    if ((record.base_model ?? LORA_BASE_MODEL) !== base) throw new LoraError("wrong_base_model", `"${record.name}" was made for the ${baseLabel(record.base_model)} video model and this clip is ${baseLabel(base)}. Pick a style made for the same one.`, 422);
     const strength = entry.strength ?? record.strength_default;
     if (!(strength >= 0 && strength <= MAX_LORA_STRENGTH)) throw new LoraError("bad_strength", `A LoRA's strength must be between 0 and ${MAX_LORA_STRENGTH}.`, 422);
     if (record.classification === "adult-only" && audience !== "adult") throw new LoraError("lora_not_allowed", "That LoRA is adult-only and this clip is not for an adult audience.", 422);
@@ -318,7 +430,10 @@ export async function resolveLoras(requests: LoraRequest[] | undefined, audience
     if (stat.size !== record.bytes || Math.floor(stat.mtimeMs) !== record.mtime_ms) {
       if ((await sha256OfFile(path)) !== record.sha256) throw new LoraError("lora_changed", `The file for "${record.name}" changed after it was added, so it was not used. Remove it and add it again.`, 422);
     }
-    out.push({ record, path, strength });
+    // LTX-2.5: a file the runtime cannot map would run as a silent no-op, so it is refused here, before a job exists.
+    let keys: LtxLoraKeys | undefined;
+    if (base === LORA_BASE_LTX25) { keys = inspectLtxLoraKeys(path); assertLtxLoraKeys(keys, `"${record.name}"`); }
+    out.push({ record, path, strength, ...(keys ? { keys } : {}) });
   }
   return out;
 }

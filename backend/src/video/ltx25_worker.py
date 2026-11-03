@@ -16,10 +16,16 @@
 #   6. LTX25-EDIT-01: two more modes on the Max runtime, `extend` (ExtendDistilledPipeline: append latent frames after a source clip) and `retake`
 #      (RetakePipeline(distilled=True): regenerate the source from a latent frame to its end). Both keep the source in latent form and decode the
 #      whole clip again; both are refused unless the source is a measured size and length and the Gemma guard passes, like every Max run.
+#   7. VIDEO-LORA-05: LoRAs on a generated clip. The request's `loras` ([path, strength] pairs, at most 2) are handed to the runtime the way its
+#      own `generate --lora PATH STRENGTH` does it (`pipe._pending_loras`, read when the transformer is loaded) and `lora_mode` ("fused" or
+#      "unfused") is put in LTX2_LORA_MODE BEFORE the pipeline is built (the 0.18.0 runtime parses it at construction; the pinned fork has no
+#      unfused mode and is only ever asked for fused). The runtime skips every tensor it cannot map WITHOUT AN ERROR, so each file's header is read
+#      first and a file with no ComfyUI-style lora_A/lora_B pair (a kohya file, or the wrong layers) is refused with a plain message, never run.
 # The engine's disclosure features are left exactly as shipped (licence section 6). Nothing is logged with a prompt: stderr
 # carries the failure class and the Python exception name only.
 import gc
 import json
+import struct
 import os
 import re
 import shutil
@@ -45,6 +51,10 @@ MEASURED_MAX = {(1024, 576): 10}
 # LTX25-EDIT-01: the sizes an extend or a retake was measured at (mirrored from video/ltx25Edit.ts, LTX25_MAX_EDIT_MEASURED) and the source
 # limits: the runtime carries the last 25 pixel frames of a source, and the longest source measured is 10 s (241 frames).
 MEASURED_EDIT = {(768, 448), (1024, 576)}
+# VIDEO-LORA-05 (mirrored from video/ltx25.ts, LTX25_LORAS_PER_CLIP and LTX25_LORA_MAX_STRENGTH).
+MAX_LORAS = 2
+MAX_LORA_STRENGTH = 2.0
+LORA_MODE_ENV = "LTX2_LORA_MODE"
 EDIT_MIN_SOURCE_FRAMES = 25
 EDIT_MAX_SOURCE_FRAMES = 241
 
@@ -63,7 +73,7 @@ MLX_CACHE_LIMIT_BYTES = int(4.41 * (1 << 30))
 mx.set_cache_limit(MLX_CACHE_LIMIT_BYTES)
 
 _real_out = sys.stdout
-_state = {"id": None, "pipe": None, "model_dir": None, "steps": 0, "steps_total": 11, "patched": False, "x0_patched": False}
+_state = {"loras": (), "lora_mode": "fused", "id": None, "pipe": None, "model_dir": None, "steps": 0, "steps_total": 11, "patched": False, "x0_patched": False}
 
 
 def emit(obj):
@@ -99,8 +109,18 @@ def forbid_network():
     socket.create_connection = lambda *a, **k: (_ for _ in ()).throw(OSError("the video engine makes no network connection"))
 
 
+class LoraRefusal(ValueError):
+    """A LoRA the worker will not run: carries its own code and a plain sentence that says what to do (no path, no prompt)."""
+
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
+
+
 def classify(error):
     """(code, plain message) for a failure; the message never contains the prompt."""
+    if isinstance(error, LoraRefusal):
+        return error.code, str(error)
     text = str(error).lower()
     if isinstance(error, MemoryError) or "out of memory" in text or "insufficient memory" in text or "metal" in text and "memory" in text:
         return "out_of_memory", "There was not enough free memory for this clip. Try a smaller size or a shorter clip."
@@ -182,6 +202,78 @@ def max_gemma_dir(model_dir, gemma_dir):
     return gemma_dir
 
 
+def lora_pairs(path):
+    """(pairs, kohya) of a LoRA file's header: the modules with both a ComfyUI-style `lora_A.weight` and `lora_B.weight` tensor, and the tensors in
+    kohya form (`lora_down`/`lora_up`). Only the JSON header is read. The runtime's key match is `<module>.lora_A.weight` after stripping
+    `diffusion_model.`; a key it cannot place is ignored silently, so a file with no pair would make a clip with no style."""
+    with open(path, "rb") as handle:
+        size = os.fstat(handle.fileno()).st_size
+        head = handle.read(8)
+        if len(head) != 8:
+            raise LoraRefusal("bad_request", "A style file could not be read. Add it again.")
+        (length,) = struct.unpack("<Q", head)
+        if length <= 2 or length > 64 * 1024 * 1024 or 8 + length > size:
+            raise LoraRefusal("bad_request", "A style file could not be read. Add it again.")
+        try:
+            header = json.loads(handle.read(length).decode("utf-8"))
+        except ValueError:
+            raise LoraRefusal("bad_request", "A style file could not be read. Add it again.")
+    down, up, kohya = set(), set(), 0
+    for key in header:
+        if key == "__metadata__":
+            continue
+        if key.endswith(".lora_down.weight") or key.endswith(".lora_up.weight"):
+            kohya += 1
+        elif key.endswith(".lora_A.weight"):
+            down.add(key[: -len(".lora_A.weight")])
+        elif key.endswith(".lora_B.weight"):
+            up.add(key[: -len(".lora_B.weight")])
+    return len(down & up), kohya
+
+
+def check_loras(loras, lora_mode, profile):
+    """The request's LoRAs as a tuple of (path, strength), or a refusal. Refuses: more than MAX_LORAS, a strength outside 0 to 2, a missing file,
+    a file with no pair the runtime reads (kohya or the wrong layer names) with a sentence that says what to do, and a mode the profile cannot run."""
+    if not loras:
+        return ()
+    if not isinstance(loras, list) or len(loras) > MAX_LORAS:
+        raise LoraRefusal("too_many_loras", "A clip can use at most %d styles." % MAX_LORAS)
+    if lora_mode not in ("fused", "unfused"):
+        raise LoraRefusal("bad_request", "the LoRA mode must be fused or unfused")
+    out = []
+    for entry in loras:
+        try:
+            path, strength = entry[0], float(entry[1])
+        except (TypeError, ValueError, IndexError, KeyError):
+            raise LoraRefusal("bad_request", "a LoRA needs a file and a strength")
+        if not (0.0 <= strength <= MAX_LORA_STRENGTH):
+            raise LoraRefusal("bad_strength", "A style's strength must be between 0 and %d." % MAX_LORA_STRENGTH)
+        if not isinstance(path, str) or not os.path.isfile(path):
+            raise LoraRefusal("lora_missing", "A style file is missing. Add it again.")
+        pairs, kohya = lora_pairs(path)
+        if pairs == 0 and kohya > 0:
+            raise LoraRefusal("lora_keys_unsupported", "A style file uses the kohya tensor names (lora_down and lora_up), which this video model does not read, so it would change nothing. Use a copy saved for ComfyUI or diffusers, or pick another style.")
+        if pairs == 0:
+            raise LoraRefusal("lora_keys_unsupported", "A style file has no tensors this video model can use (it needs diffusion_model...lora_A.weight and lora_B.weight pairs), so it would change nothing. Pick a LoRA made for LTX-2.5.")
+        out.append((path, strength))
+    if lora_mode == "unfused" and profile != "max":
+        raise LoraRefusal("bad_request", "the Standard and Boost video engine has no unfused LoRA mode")
+    return tuple(out)
+
+
+def apply_loras(pipe, loras, lora_mode):
+    """Hands the LoRAs to the runtime the way its command line does. A runtime without the hook, or one that did not take the mode, would make the
+    clip without the style: refuse instead."""
+    if not hasattr(type(pipe), "_fuse_pending_loras"):
+        raise LoraRefusal("bad_request", "this video runtime cannot apply styles")
+    runtime_mode = getattr(pipe, "lora_mode", None)
+    if runtime_mode is None and lora_mode == "unfused":
+        raise LoraRefusal("bad_request", "this video runtime has no unfused style mode")
+    if runtime_mode is not None and runtime_mode != lora_mode:
+        raise LoraRefusal("bad_request", "the video runtime did not take the style mode")
+    pipe._pending_loras = [(path, strength) for path, strength in loras]
+
+
 def _release_pipeline():
     """One pipeline lives at a time: a different mode (generate, extend, retake) gives the old one's weights back first."""
     _state["pipe"] = None
@@ -190,12 +282,26 @@ def _release_pipeline():
     mx.clear_cache()
 
 
-def _pipeline(model_dir, gemma_dir=None, mode="generate"):
-    key = (mode, model_dir, gemma_dir)
+def _lora_key(loras):
+    """Identity of a LoRA set for the pipeline cache: the file, its size and time, and the strength."""
+    key = []
+    for path, strength in loras:
+        stat = os.stat(path)
+        key.append((path, stat.st_size, int(stat.st_mtime), strength))
+    return tuple(key)
+
+
+def _pipeline(model_dir, gemma_dir=None, mode="generate", loras=(), lora_mode="fused"):
+    key = (mode, model_dir, gemma_dir) + ((_lora_key(loras), lora_mode) if loras else ())
     if _state["pipe"] is not None and _state["model_dir"] == key:
         return _state["pipe"]
     if _state["pipe"] is not None:
         _release_pipeline()
+    if loras:
+        # The 0.18.0 runtime parses LTX2_LORA_MODE when the pipeline is built, so it is set before; the fork ignores it.
+        os.environ[LORA_MODE_ENV] = lora_mode
+    else:
+        os.environ.pop(LORA_MODE_ENV, None)
     if mode == "extend":
         from ltx_pipelines_mlx.extend_distilled import ExtendDistilledPipeline
 
@@ -219,6 +325,8 @@ def _pipeline(model_dir, gemma_dir=None, mode="generate"):
         encoder = getattr(getattr(pipe, "prompt_encoder", None), "gemma_model_id", None)
         if encoder != gemma_dir:
             raise ValueError("the Max video runtime did not take the text encoder folder")
+    if loras:
+        apply_loras(pipe, loras, lora_mode)
     pipe.verbose = False
     if getattr(pipe, "video_decoder_block", None) is not None:
         pipe.video_decoder_block.verbose = False
@@ -301,8 +409,8 @@ def generate(request):
         raise ValueError(problem)
     if request.get("end_image") and not request.get("image"):
         raise ValueError("a last picture needs a first picture")
-    if request.get("loras"):
-        raise ValueError("this video model takes no style files yet")
+    lora_mode = request.get("lora_mode") or "fused"
+    loras = check_loras(request.get("loras"), lora_mode, profile)
     model_dir = request["model_dir"]
     for needed in (MAX_REQUIRED if profile == "max" else REQUIRED):
         if not os.path.exists(os.path.join(model_dir, needed)):
@@ -313,7 +421,7 @@ def generate(request):
     _state["steps_total"] = STEPS_TOTAL
     started = time.time()
     phase("loading", 0)
-    pipe = _pipeline(model_dir, gemma_dir)
+    pipe = _pipeline(model_dir, gemma_dir, "generate", loras, lora_mode)
     mx.reset_peak_memory()
     work = request["output"] + ".work"
     os.makedirs(work, exist_ok=True)
@@ -340,7 +448,7 @@ def generate(request):
         shutil.rmtree(work, ignore_errors=True)
         gc.collect()
         mx.clear_cache()
-    return {"width": real_width or width, "height": real_height or height, "frames": frames, "fps": FPS, "seed": int(request["seed"]), "ms": int((time.time() - started) * 1000), "peak_bytes": int(mx.get_peak_memory()), "audio": bool(has_sound)}
+    return {"width": real_width or width, "height": real_height or height, "frames": frames, "fps": FPS, "seed": int(request["seed"]), "ms": int((time.time() - started) * 1000), "peak_bytes": int(mx.get_peak_memory()), "audio": bool(has_sound), "loras": len(loras), "lora_mode": lora_mode if loras else None}
 
 
 # ---- LTX25-EDIT-01: extend and retake ----
