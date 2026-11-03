@@ -100,21 +100,21 @@ def _quiet_logs():
 
 
 DEFAULT_DIT = "acestep-v15-turbo"
-XL_BF16_DITS = ("acestep-v15-xl-turbo-bf16",)
+XL_BF16_DITS = ("acestep-v15-xl-turbo-bf16", "acestep-v15-xl-sft-bf16")
+# The SFT model is not step-distilled: it takes a step count and guidance scale from the request (Max quality).
+SFT_DITS = ("acestep-v15-xl-sft-bf16",)
 
 
-def _force_bf16_on_instances():
-    """The library loads a DiT as float32 on MPS, which does not fit the XL model's 10 GB bf16 file and doubles its size in memory. An instance flagged `_force_bf16` keeps bfloat16 instead; every other handler behaves as before."""
-    import torch
-    from acestep.handler import AceStepHandler
+def _stage_model_code(ckpt_dir, dit_name):
+    """An XL DiT folder holds weights and config only; transformers loads its two model code files (and the guidance helper) from the same folder, so they are copied from ACE-Step's own pinned source beside it."""
+    kind = "xl_sft" if dit_name in SFT_DITS else "xl_turbo"
+    import acestep
 
-    if getattr(AceStepHandler, "_bf16_patched", False):
-        return
-    AceStepHandler.dtype = property(
-        lambda self: getattr(self, "_d", torch.float32),
-        lambda self, value: setattr(self, "_d", torch.bfloat16 if (value == torch.float32 and getattr(self, "_force_bf16", False)) else value),
-    )
-    AceStepHandler._bf16_patched = True
+    src = os.path.join(os.path.dirname(acestep.__file__), "models", kind)
+    dest = os.path.join(ckpt_dir, dit_name)
+    for name in os.listdir(src):
+        if name.endswith(".py") and name != "__init__.py":
+            shutil.copyfile(os.path.join(src, name), os.path.join(dest, name))
 
 
 def _ensure_models(ckpt_dir, lm_name, cache_gb, dit_name=DEFAULT_DIT):
@@ -134,13 +134,13 @@ def _ensure_models(ckpt_dir, lm_name, cache_gb, dit_name=DEFAULT_DIT):
             _handlers["dit"] = None
             gc.collect()
             mx.clear_cache()
-        bf16 = dit_name in XL_BF16_DITS
-        if bf16:
-            _force_bf16_on_instances()
+        xl = dit_name in XL_BF16_DITS
+        if xl:
+            _stage_model_code(ckpt_dir, dit_name)
         dit = AceStepHandler()
-        dit._force_bf16 = bf16
-        # The XL model runs on the torch MPS path in bf16; the 2B turbo model runs on MLX.
-        message, ok = _ok(dit.initialize_service(project_root=os.path.dirname(ckpt_dir), config_path=dit_name, device="mps", use_mlx_dit=not bf16))
+        # The XL models run on the torch MPS path in float32 (the library's default dtype): the bf16 files are 10 GB each and load as about 28 GB.
+        # bf16 compute on that path made noise on the Studio (2026-11-02); the 2B turbo model runs on MLX.
+        message, ok = _ok(dit.initialize_service(project_root=os.path.dirname(ckpt_dir), config_path=dit_name, device="mps", use_mlx_dit=not xl))
         if not ok:
             raise RuntimeError("model load failed")
         if _handlers["ckpt"] != ckpt_dir:
@@ -148,7 +148,8 @@ def _ensure_models(ckpt_dir, lm_name, cache_gb, dit_name=DEFAULT_DIT):
         _handlers.update(dit=dit, dit_name=dit_name, ckpt=ckpt_dir)
     if lm_name and _handlers["lm"] != lm_name:
         stage("load")
-        if not os.path.isfile(os.path.join(ckpt_dir, lm_name, "model.safetensors")):
+        lm_dir = os.path.join(ckpt_dir, lm_name)
+        if not (os.path.isfile(os.path.join(lm_dir, "model.safetensors")) or os.path.isfile(os.path.join(lm_dir, "model.safetensors.index.json"))):
             raise FileNotFoundError("the music model is not installed")
         if _handlers["llm"] is not None:
             try:
@@ -295,6 +296,11 @@ def generate(request, workdir):
         # Listening test 2026-11-02: shift 3.0 and DCW off gave clearer vocals. The planner codes stay at full strength on the 2B Turbo (at 0 it
         # sings nothing) and drop to 0 on the XL Turbo bf16, where that was the clearest clip.
         codes = 0.0 if _handlers.get("dit_name") in XL_BF16_DITS else 1.0
+        if request.get("codes") is not None:
+            codes = max(0.0, min(1.0, _seconds(request.get("codes"), codes)))
+        if _handlers.get("dit_name") in SFT_DITS:
+            kwargs["inference_steps"] = max(8, min(100, int(request.get("steps") or 70)))
+            kwargs["guidance_scale"] = max(1.0, min(15.0, _seconds(request.get("guidance"), 3.0)))
         params = GenerationParams(task_type="text2music", duration=duration, thinking=True, use_cot_lyrics=False, shift=TEXT2MUSIC_SHIFT, dcw_enabled=False, audio_cover_strength=codes, **kwargs)
     else:
         src = _decode_source(request, workdir)

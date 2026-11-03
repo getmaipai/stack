@@ -25,8 +25,8 @@ import { fileResponse } from "@/routes/videoGenerations";
 import { wasMadeHere, sha256Hex } from "@/music/provenance";
 import { isJobId, lrcOf, readResult, deleteResult, songPath, type MusicResultMeta } from "@/music/results";
 import {
-  memoryVerdict, MUSIC_DEFAULT_SECONDS, MUSIC_MAX_BPM, MUSIC_MAX_EXTEND_SECONDS, MUSIC_MAX_SOURCE_BYTES, MUSIC_MAX_TEXT_CHARS, MUSIC_MIN_BPM, MUSIC_MIN_EXTEND_SECONDS, MUSIC_MIN_SECONDS, MUSIC_LM, MUSIC_QUEUE_MAX,
-  musicGen, musicDitFor, tierAvailability, tierLimits, type MusicQuality, type MusicRunFields,
+  memoryVerdict, MUSIC_DEFAULT_SECONDS, MUSIC_MAX_BPM, MUSIC_MAX_EXTEND_SECONDS, MUSIC_MAX_SOURCE_BYTES, MUSIC_MAX_TEXT_CHARS, MUSIC_MIN_BPM, MUSIC_MIN_EXTEND_SECONDS, MUSIC_MIN_SECONDS, MUSIC_LM, MUSIC_MAX_GUIDANCE, MUSIC_MAX_STEPS, MUSIC_QUEUE_MAX,
+  musicGen, musicDitFor, musicQualityFor, tierAvailability, tierLimits, type MusicQuality, type MusicRunFields,
 } from "@/music/musicGen";
 import { musicFailure, musicHistoryKey, musicTracker, MUSIC_EDIT_JOB_KIND, MUSIC_JOB_KIND, isMusicJob, stashSong, unstashSong } from "@/music/jobs";
 
@@ -51,7 +51,7 @@ const MusicRequestSchema = z.object({
   duration_s: z.number().optional().openapi({ description: `text2music only: ${MUSIC_MIN_SECONDS} to the tier's longest (240 on p128, 120 on p64), default ${MUSIC_DEFAULT_SECONDS}.` }),
   bpm: z.number().optional(), key: z.string().optional(), language: z.string().optional(),
   seed: z.number().int().min(0).max(4_294_967_295).optional(),
-  quality: z.enum(["quick", "detailed"]).optional().openapi({ description: "quick: the 0.6B planning model. detailed: the 1.7B one, on tiers that have it (p128). Default: the tier's own (GET /stack/v1/music)." }),
+  quality: z.enum(["quick", "detailed", "max"]).optional().openapi({ description: "quick (Standard): the 2B Turbo song model and the 0.6B planning model. detailed (Boost): the XL Turbo song model and the 1.7B planner, on tiers that have it (p128). max (Max): the XL SFT song model, 70 steps, and the 4B planner, on p128; without its models installed it runs as detailed. Default: the tier's own (GET /stack/v1/music)." }),
   source: z.string().optional().openapi({ description: `cover, repaint, extend and edit: the song to start from, base64 of the m4a this Stack made, unchanged (a data: URL is fine), at most ${MUSIC_MAX_SOURCE_BYTES / 1024 / 1024} MB.` }),
   source_sha256: z.string().optional().openapi({ description: "The sha256 of the source bytes; must equal it." }),
   from_s: z.number().optional(), to_s: z.number().optional(),
@@ -170,8 +170,10 @@ export function validateMusicRequest(body: z.infer<typeof MusicRequestSchema>, t
   if (!limits.quality.includes(quality)) return refuse(422, "bad_request", `This computer makes songs at ${limits.quality.join(" or ")} quality only. Ask for ${limits.quality[0]}.`);
   // A model task needs something to make from: words, or an instrumental described in words (the worker's own rule).
   if (!caption && (body.instrumental || !lyrics)) return refuse(422, "bad_request", "Describe the music (its style and mood), or give the lyrics.");
-  const dit = musicDitFor(quality as MusicQuality);
-  const withLm = { ...common, lm: MUSIC_LM[quality as keyof typeof MUSIC_LM], ...(dit ? { dit } : {}), lrc: !!lyrics && !body.instrumental };
+  // Max is a new-song quality: cover, repaint and extend keep the XL Turbo model (the SFT model needs its own step count and guidance, set only for a new song).
+  const runQuality = musicQualityFor(body.task === "text2music" ? (quality as MusicQuality) : (quality === "max" ? "detailed" : (quality as MusicQuality)));
+  const dit = musicDitFor(runQuality);
+  const withLm = { ...common, lm: MUSIC_LM[runQuality], ...(dit ? { dit } : {}), ...(runQuality === "max" ? { steps: MUSIC_MAX_STEPS, guidance: MUSIC_MAX_GUIDANCE } : {}), lrc: !!lyrics && !body.instrumental };
   if (body.task === "text2music") {
     if (body.source !== undefined) return refuse(422, "bad_request", "A new song starts from words, not from a song. Use cover, repaint or extend to change one.");
     const duration = body.duration_s ?? Math.min(MUSIC_DEFAULT_SECONDS, limits.max_seconds);
@@ -244,7 +246,7 @@ musicV1Routes.openapi(postRoute, async (c) => {
   const edit = body.task === "edit";
   if (!edit) {
     if (activeSongs() >= MUSIC_QUEUE_MAX) return fail(c, 429, "queue_full", `${MUSIC_QUEUE_MAX} songs are already waiting. Try again when one finishes.`);
-    const verdict = governorDecides(body.tier) ? { ok: true as const } : memoryVerdict();
+    const verdict = governorDecides(body.tier) ? { ok: true as const } : memoryVerdict(checked.fields.dit);
     if (!verdict.ok) return fail(c, 503, "no_memory", verdict.reason);
   }
   const fields = checked.fields;

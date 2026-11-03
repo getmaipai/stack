@@ -37,6 +37,13 @@ export function stashSong(token: string, song: StashedSong): void {
   for (const [key, value] of pending) if (now - value.at > STASH_TTL_MS) pending.delete(key);
   pending.set(token, { ...song, at: now });
 }
+/** The stashed song without taking it (the memory ask reads its song model). */
+export function peekSong(token: string): StashedSong | null {
+  const song = pending.get(token);
+  if (!song) return null;
+  const { at: _at, ...rest } = song;
+  return rest;
+}
 export function unstashSong(token: string): StashedSong | null {
   const song = pending.get(token) ?? null;
   pending.delete(token);
@@ -110,6 +117,6 @@ async function runSong(job: Job, signal: AbortSignal, update: JobProgress): Prom
 }
 
 export function registerMusicJobs(): void {
-  registerJobRunner(MUSIC_JOB_KIND, runSong, { generator: { role: "music", memory: () => { const bytes = musicAdmissionBytes(); return { requestedBytes: bytes, measuredPeakBytes: bytes, engine: "music-gen" }; } } });
+  registerJobRunner(MUSIC_JOB_KIND, runSong, { generator: { role: "music", memory: (job) => { const bytes = musicAdmissionBytes(undefined, peekSong(String((job.input as { token?: string } | null)?.token ?? ""))?.fields.dit); return { requestedBytes: bytes, measuredPeakBytes: bytes, engine: "music-gen" }; } } });
   registerJobRunner(MUSIC_EDIT_JOB_KIND, runSong, { generator: { role: "music", memory: () => { const bytes = musicAdmissionBytes(); return { requestedBytes: bytes, measuredPeakBytes: bytes, engine: "music-gen" }; } } });
 }

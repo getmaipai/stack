@@ -10,14 +10,14 @@ import { join } from "node:path";
 import { app } from "@/app";
 import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, getGovernorStatus } from "@/lib/governor";
 import { __resetJobsForTests, getJob, listJobs } from "@/lib/jobs";
-import { STACK_MODELS, STACK_MUSIC_LM_06, STACK_MUSIC_MODEL, STACK_MUSIC_MODELS, STACK_MUSIC_XL, STACK_MUSIC_XL_CONFIG } from "@/lib/modelCatalog";
+import { STACK_MODELS, STACK_MUSIC_LM_06, STACK_MUSIC_MODEL, STACK_MUSIC_MODELS, STACK_MUSIC_XL, STACK_MUSIC_XL_CONFIG, STACK_MUSIC_SFT, STACK_MUSIC_SFT_CONFIG, STACK_MUSIC_LM_4, STACK_MUSIC_MAX_MODELS } from "@/lib/modelCatalog";
 import { PROFILE_TIERS } from "@/profiles";
 import { ENGINE_BINARIES, MANAGED_RUNTIMES } from "@/lib/engineCatalog";
 import { registerMusicJobs, musicHistoryKey, stashSong, unstashSong, musicTracker } from "@/music/jobs";
 import { __resetMusicProvenanceForTests, recordMadeSong, sha256Hex, wasMadeHere } from "@/music/provenance";
 import { commitResult, deleteResult, readResult, resultsRoot, sweepResults, workDir, type MusicResultMeta } from "@/music/results";
 import {
-  assembleCheckpointDir, memoryVerdict, MUSIC_XL_DIT, musicDitFor, MUSIC_MAX_SECONDS, MUSIC_PEAK_BYTES, musicGen, MusicGenService, musicRequirementsFileFor, musicRoleState, tierAvailability, tierLimits, workerHandle,
+  assembleCheckpointDir, memoryVerdict, MUSIC_DIT, MUSIC_LM, MUSIC_XL_DIT, musicAdmissionBytes, musicDitFor, musicPeakBytes, musicQualityFor, MUSIC_MAX_SECONDS, MUSIC_PEAK_BYTES, musicGen, MusicGenService, musicRequirementsFileFor, musicRoleState, tierAvailability, tierLimits, workerHandle,
   type MusicGenDeps, type WorkerEvent, type WorkerHandle, type WorkerReply, type WorkerRequest,
 } from "@/music/musicGen";
 import { dataDir } from "@/lib/paths";
@@ -393,7 +393,7 @@ test("an edit waits for governor memory like a song", async () => {
 
 // ---- tiers, installs and memory ----
 
-test("music is off on p16 and p32, quick only with 120 seconds on p64, and both qualities with 240 seconds on p128", async () => {
+test("music is off on p16 and p32, quick only with 120 seconds on p64, and all three qualities with 240 seconds on p128", async () => {
   musicGen.useDeps(scripted());
   __setGovernorTuningForTestsOnly({ tier: "p32", totalMemoryBytes: 32 * GB, freeMemoryBytes: 24 * GB });
   const off = await post(song);
@@ -405,7 +405,7 @@ test("music is off on p16 and p32, quick only with 120 seconds on p64, and both 
   expect(tierAvailability("p32")).toMatchObject({ available: false, code: "not_available_on_this_computer" });
   expect(tierLimits("p16")).toBeNull();
   expect(tierLimits("p64")).toEqual({ max_seconds: 120, quality: ["quick"], default_quality: "quick" });
-  expect(tierLimits("p128")).toEqual({ max_seconds: 240, quality: ["quick", "detailed"], default_quality: "detailed" });
+  expect(tierLimits("p128")).toEqual({ max_seconds: 240, quality: ["quick", "detailed", "max"], default_quality: "detailed" });
   // p64
   __setGovernorTuningForTestsOnly({ tier: "p64", totalMemoryBytes: 64 * GB, freeMemoryBytes: 50 * GB });
   const long = await post({ ...song, duration_s: 121 });
@@ -490,7 +490,7 @@ test("a stashed song is taken once", () => {
 test("GET /stack/v1/music says what is installed, what a song may be and what to install", async () => {
   musicGen.useDeps(scripted());
   const status = await (await get("/stack/v1/music")).json() as { music: Record<string, any> };
-  expect(status.music).toMatchObject({ available: true, tier: "p128", state: "needs-setup", code: null, reason: null, quality: ["quick", "detailed"], default_quality: "detailed" });
+  expect(status.music).toMatchObject({ available: true, tier: "p128", state: "needs-setup", code: null, reason: null, quality: ["quick", "detailed", "max"], default_quality: "detailed" });
   expect(status.music.limits).toMatchObject({ min_seconds: 10, max_seconds: 240, default_seconds: 60, min_bpm: 30, max_bpm: 300, max_text_chars: 4000, max_source_mb: 40 });
   expect(status.music.tasks).toEqual(["text2music", "cover", "repaint", "extend", "edit"]);
   expect(status.music.install.models.map((model: { id: string }) => model.id)).toEqual([STACK_MUSIC_MODEL.id, STACK_MUSIC_LM_06.id]);
@@ -563,7 +563,7 @@ test("the worker keeps the keep-warm, offline and memory settings the note measu
   expect(source).toContain("use_cot_lyrics=False");
   // Listening test 2026-11-02: clearest vocals with shift 3 and DCW off; planner codes at 1.0 on the 2B Turbo (0 sings nothing), 0 on the XL bf16.
   expect(source).toContain("TEXT2MUSIC_SHIFT = 3.0");
-  expect(source).toContain('XL_BF16_DITS = ("acestep-v15-xl-turbo-bf16",)');
+  expect(source).toContain('XL_BF16_DITS = ("acestep-v15-xl-turbo-bf16", "acestep-v15-xl-sft-bf16")');
   expect(source).toContain('request.get("dit") or DEFAULT_DIT');
   expect(source).toContain("shift=TEXT2MUSIC_SHIFT, dcw_enabled=False, audio_cover_strength=codes");
   expect(source).toContain("codes = 0.0 if _handlers.get(\"dit_name\") in XL_BF16_DITS else 1.0");
@@ -578,7 +578,7 @@ test("the component is listed in the group music for p64 and p128, optional, wit
   expect(unit.pins.map((pin) => pin.id)).toEqual([STACK_MUSIC_MODEL.id, STACK_MUSIC_LM_06.id]);
   expect(unit.envs.map((env) => env.name)).toEqual(["music-gen"]);
   const catalog = collectComponentsCatalog();
-  expect(catalog.models.filter((pin) => pin.role === "music").map((pin) => pin.id)).toEqual([STACK_MUSIC_MODEL.id, STACK_MUSIC_LM_06.id, STACK_MUSIC_XL.id, STACK_MUSIC_XL_CONFIG.id, "htdemucs", "htdemucs_ft", "htdemucs_6s"]);
+  expect(catalog.models.filter((pin) => pin.role === "music").map((pin) => pin.id)).toEqual([STACK_MUSIC_MODEL.id, STACK_MUSIC_LM_06.id, STACK_MUSIC_XL.id, STACK_MUSIC_XL_CONFIG.id, STACK_MUSIC_SFT.id, STACK_MUSIC_SFT_CONFIG.id, STACK_MUSIC_LM_4.id, "htdemucs", "htdemucs_ft", "htdemucs_6s"]);
   const stemsPins = STACK_MODELS.filter((pin) => ["htdemucs", "htdemucs_ft", "htdemucs_6s"].includes(pin.id));
   expect(stemsPins.map((pin) => pin.download?.files?.map((file) => file.sha256))).toEqual([
     ["d9fa14133cfcc034a6758923bb3a8ca9f8dfd0b582134643bbf83f72c17576dd", "239c445d0b14454d541ad8bd9bb271c9e536d267e8a4625208744cbb2e7bb66c"],
@@ -787,4 +787,23 @@ test("a song job named Boost carries tier in its input and status; an unnamed on
   expect((getJob(plain.job)!.input as { tier?: string }).tier).toBeUndefined();
   expect((await (await app.request(`/v1/audio/music/${plain.job}`)).json() as { tier: string }).tier).toBe("standard");
   expect((await post({ ...song, tier: "turbo" })).status).toBe(400);
+});
+
+test("MUSIC-MAX-01: max is the XL SFT model with the 4B planner at 70 steps, and without its pieces installed it runs as Boost", () => {
+  expect(STACK_MUSIC_MAX_MODELS.map((pin) => pin.id)).toEqual([STACK_MUSIC_SFT.id, STACK_MUSIC_SFT_CONFIG.id, STACK_MUSIC_LM_4.id]);
+  expect(MUSIC_LM.max).toBe("acestep-5Hz-lm-4B");
+  expect(MUSIC_DIT.max).toBe("acestep-v15-xl-sft-bf16");
+  const base = { modelDir: "/m", lm06Dir: "/l" };
+  expect(musicQualityFor("max", base)).toBe("detailed");
+  expect(musicQualityFor("max", { ...base, sft: { weights: "/w", configDir: "/c", lm4Dir: "/l4" } })).toBe("max");
+  expect(musicQualityFor("quick", base)).toBe("quick");
+  expect(musicDitFor("max", base)).toBeUndefined();
+});
+
+test("MUSIC-MAX-01: a song with an XL song model asks the governor for the XL peak, a Standard song for the Standard peak", () => {
+  expect(musicPeakBytes()).toBe(MUSIC_PEAK_BYTES);
+  expect(musicPeakBytes(MUSIC_XL_DIT)).toBe(52_000_000_000);
+  expect(musicPeakBytes(MUSIC_DIT.max)).toBe(52_000_000_000);
+  expect(musicAdmissionBytes(false, MUSIC_XL_DIT)).toBe(52_000_000_000);
+  expect(musicAdmissionBytes(true, MUSIC_DIT.max)).toBe(31_000_000_000);
 });

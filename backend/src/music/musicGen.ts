@@ -34,7 +34,7 @@ import { ensureEngine } from "@/lib/engineInstall";
 import { getGovernorStatus } from "@/lib/governor";
 import { log } from "@/lib/log";
 import { getModel } from "@/lib/modelStore";
-import { STACK_MUSIC_LM_06_ID, STACK_MUSIC_MODEL_ID, STACK_MUSIC_XL_CONFIG_ID, STACK_MUSIC_XL_ID } from "@/lib/modelCatalog";
+import { STACK_MUSIC_LM_06_ID, STACK_MUSIC_LM_4B_ID, STACK_MUSIC_MODEL_ID, STACK_MUSIC_SFT_CONFIG_ID, STACK_MUSIC_SFT_ID, STACK_MUSIC_XL_CONFIG_ID, STACK_MUSIC_XL_ID } from "@/lib/modelCatalog";
 import { engineTagRoot } from "@/lib/store/layout";
 import { ensureUvEnvironment, managedEnv, uvEnvironmentReady, uvVenvPath, uvVenvPython, type UvEnvironmentSpec } from "@/lib/uvEnvironment";
 import type { RoleStateRecord } from "@/roles";
@@ -59,26 +59,34 @@ export const MUSIC_QUEUE_MAX = 4;
  * 120 s and 30 to 32 GB for detailed songs up to 240 s on the Studio, 2026-10-17 (Home's note, section 4.2). One admission covers the worst
  * case with a gigabyte of margin. */
 export const MUSIC_PEAK_BYTES = 33_000_000_000;
+/** The same for a song made with an XL song model (Boost or Max), which the worker runs in float32: 45.1 GB for Boost and 50.3 GB for Max measured
+ * on the Studio, 2026-11-02 (40 s songs), with a gigabyte and a half of margin. */
+export const MUSIC_XL_PEAK_BYTES = 52_000_000_000;
+export function musicPeakBytes(dit?: string): number { return dit === MUSIC_XL_DIT || dit === MUSIC_SFT_DIT ? MUSIC_XL_PEAK_BYTES : MUSIC_PEAK_BYTES; }
 /** What a warm worker (models loaded, between songs) already holds: 21 to 25 GB measured on the Studio, the low end taken. A song
  * on a warm worker only needs the rest of its peak; asking for the whole peak again counted the loaded models twice and refused a
  * second song (an edit right after a song) on a Mac with 50 GB free (MUSIC-GEN-06, 2026-10-17). */
 export const MUSIC_WARM_RESIDENT_BYTES = 21_000_000_000;
 /** The admission a song asks the governor for now: the whole peak on a cold start, the rest of it on a warm worker. */
-export function musicAdmissionBytes(warm: boolean = musicGen.workerAlive): number {
-  return warm ? MUSIC_PEAK_BYTES - MUSIC_WARM_RESIDENT_BYTES : MUSIC_PEAK_BYTES;
+export function musicAdmissionBytes(warm: boolean = musicGen.workerAlive, dit?: string): number {
+  const peak = musicPeakBytes(dit);
+  return warm ? peak - MUSIC_WARM_RESIDENT_BYTES : peak;
 }
 /** Tiers that run music; p16 and p32 keep it in `notAvailable`. */
 export const MUSIC_TIERS = ["p64", "p128"] as const;
 /** The longest song per tier; also passed to the worker as MUSIC_MAX_SECONDS. */
 export const MUSIC_MAX_SECONDS: Record<(typeof MUSIC_TIERS)[number], number> = { p64: 120, p128: 240 };
-export type MusicQuality = "quick" | "detailed";
-/** What each tier offers: p128 both (default detailed), p64 quick only. */
+export type MusicQuality = "quick" | "detailed" | "max";
+/** What each tier offers: p128 all three (default detailed), p64 quick only. quick is Standard, detailed is Boost, max is Max. */
 export const MUSIC_QUALITY: Record<(typeof MUSIC_TIERS)[number], { offered: MusicQuality[]; default: MusicQuality }> = {
   p64: { offered: ["quick"], default: "quick" },
-  p128: { offered: ["quick", "detailed"], default: "detailed" },
+  p128: { offered: ["quick", "detailed", "max"], default: "detailed" },
 };
 /** The planning LM each quality loads. */
-export const MUSIC_LM: Record<MusicQuality, string> = { quick: "acestep-5Hz-lm-0.6B", detailed: "acestep-5Hz-lm-1.7B" };
+export const MUSIC_LM: Record<MusicQuality, string> = { quick: "acestep-5Hz-lm-0.6B", detailed: "acestep-5Hz-lm-1.7B", max: "acestep-5Hz-lm-4B" };
+/** Max songs run the XL SFT model for this many steps at this guidance (2026-11-02 listening test, float32). */
+export const MUSIC_MAX_STEPS = 70;
+export const MUSIC_MAX_GUIDANCE = 3;
 const idleMs = (): number => engineIdleMs("music");
 const deadlineMs = (): number => Number(process.env.MUSIC_DEADLINE_MS ?? 10 * 60_000);
 /** MLX's buffer cache is capped at 2 GB in the worker (Home's note, section 3). */
@@ -127,8 +135,10 @@ export async function ensureMusicGenEnvironment(onProgress: (phase: string) => v
 /** The DiT folder the Boost quality loads (MUSIC-XL-01), beside `acestep-v15-turbo/` in the checkpoints folder. */
 export const MUSIC_XL_DIT = "acestep-v15-xl-turbo-bf16";
 /** The DiT each quality loads; a quality missing here uses the worker's default (the Standard model). */
-export const MUSIC_DIT: Partial<Record<MusicQuality, string>> = { detailed: MUSIC_XL_DIT };
-export interface MusicModelPaths { modelDir: string; lm06Dir: string; /** The XL Turbo bf16 weights file and the folder holding its config and silence latent; both or neither. */ xl?: { weights: string; configDir: string }; }
+/** The Max song model (MUSIC-MAX-01), XL SFT, beside the others in the checkpoints folder. */
+export const MUSIC_SFT_DIT = "acestep-v15-xl-sft-bf16";
+export const MUSIC_DIT: Partial<Record<MusicQuality, string>> = { detailed: MUSIC_XL_DIT, max: MUSIC_SFT_DIT };
+export interface MusicModelPaths { modelDir: string; lm06Dir: string; /** The XL Turbo bf16 weights file and the folder holding its config and silence latent; both or neither. */ xl?: { weights: string; configDir: string }; /** The XL SFT weights file and config folder, and the 4B planning LM folder; all three or none (Max). */ sft?: { weights: string; configDir: string; lm4Dir: string }; }
 /** The installed, verified weights folders (the shared pieces with the 1.7B LM, and the 0.6B LM), or null when either is missing. */
 export function musicModelPaths(): MusicModelPaths | null {
   const model = getModel(STACK_MUSIC_MODEL_ID);
@@ -138,13 +148,29 @@ export function musicModelPaths(): MusicModelPaths | null {
   const xl = getModel(STACK_MUSIC_XL_ID);
   const xlConfig = getModel(STACK_MUSIC_XL_CONFIG_ID);
   const hasXl = !!xl?.modelPath && !!xl.verifiedAt && existsSync(xl.modelPath) && !!xlConfig?.modelPath && !!xlConfig.verifiedAt && existsSync(join(xlConfig.modelPath, "silence_latent.pt"));
-  return { modelDir: model.modelPath, lm06Dir: lm.modelPath, ...(hasXl ? { xl: { weights: xl!.modelPath!, configDir: xlConfig!.modelPath! } } : {}) };
+  const sft = getModel(STACK_MUSIC_SFT_ID);
+  const sftConfig = getModel(STACK_MUSIC_SFT_CONFIG_ID);
+  const lm4 = getModel(STACK_MUSIC_LM_4B_ID);
+  const hasSft = !!sft?.modelPath && !!sft.verifiedAt && existsSync(sft.modelPath) && !!sftConfig?.modelPath && !!sftConfig.verifiedAt && existsSync(join(sftConfig.modelPath, "silence_latent.pt"))
+    && !!lm4?.modelPath && !!lm4.verifiedAt && existsSync(join(lm4.modelPath, "model.safetensors.index.json"));
+  return {
+    modelDir: model.modelPath, lm06Dir: lm.modelPath,
+    ...(hasXl ? { xl: { weights: xl!.modelPath!, configDir: xlConfig!.modelPath! } } : {}),
+    ...(hasSft ? { sft: { weights: sft!.modelPath!, configDir: sftConfig!.modelPath!, lm4Dir: lm4!.modelPath! } } : {}),
+  };
 }
 
 /** The DiT folder a song of this quality loads: the quality's own when it is installed, else undefined (the worker's default Standard model). */
 export function musicDitFor(quality: MusicQuality, paths: MusicModelPaths | null = musicModelPaths()): string | undefined {
   const dit = MUSIC_DIT[quality];
-  return dit === MUSIC_XL_DIT && !paths?.xl ? undefined : dit;
+  if (dit === MUSIC_XL_DIT && !paths?.xl) return undefined;
+  if (dit === MUSIC_SFT_DIT && !paths?.sft) return undefined;
+  return dit;
+}
+
+/** The quality a song actually runs: Max without its three pieces installed runs as Boost (Boost without the XL model keeps its own fallback to the Standard song model). */
+export function musicQualityFor(quality: MusicQuality, paths: MusicModelPaths | null = musicModelPaths()): MusicQuality {
+  return quality === "max" && !paths?.sft ? "detailed" : quality;
 }
 
 /**
@@ -172,6 +198,12 @@ export function assembleCheckpointDir(paths: MusicModelPaths, into: string): str
     symlinkSync(paths.xl.weights, join(into, MUSIC_XL_DIT, "model.safetensors"));
     for (const file of ["config.json", "silence_latent.pt"]) symlinkSync(join(paths.xl.configDir, file), join(into, MUSIC_XL_DIT, file));
   }
+  if (paths.sft) {
+    mkdirSync(join(into, MUSIC_SFT_DIT));
+    symlinkSync(paths.sft.weights, join(into, MUSIC_SFT_DIT, "model.safetensors"));
+    for (const file of ["config.json", "silence_latent.pt"]) symlinkSync(join(paths.sft.configDir, file), join(into, MUSIC_SFT_DIT, file));
+    symlinkSync(paths.sft.lm4Dir, join(into, MUSIC_LM.max));
+  }
   return into;
 }
 
@@ -193,12 +225,12 @@ export function tierLimits(tier: string = getGovernorStatus().tier): { max_secon
 }
 
 /** Whether a song's peak can ever fit beside what is resident right now. A song that cannot is refused now with the numbers; one that only waits on another generator queues. */
-export function memoryVerdict(): { ok: true } | { ok: false; reason: string } {
+export function memoryVerdict(dit?: string): { ok: true } | { ok: false; reason: string } {
   const lowMemory = lowMemoryRefusal();
   if (lowMemory) return { ok: false, reason: lowMemory };
   const status = getGovernorStatus();
   const resident = status.loaded.filter((item) => item.kind === "resident").reduce((sum, item) => sum + item.peakBytes, 0);
-  if (resident + musicAdmissionBytes() > status.capBytes) return { ok: false, reason: "Not enough free memory for music right now. Close other big jobs, or try again in a few minutes." };
+  if (resident + musicAdmissionBytes(undefined, dit) > status.capBytes) return { ok: false, reason: "Not enough free memory for music right now. Close other big jobs, or try again in a few minutes." };
   return { ok: true };
 }
 
@@ -206,7 +238,7 @@ export function memoryVerdict(): { ok: true } | { ok: false; reason: string } {
 
 export interface WorkerRequest {
   id: string; op?: "edit"; task: string; caption?: string; lyrics?: string; instrumental?: boolean; duration_s?: number; bpm?: number; key?: string; language?: string; seed?: number;
-  lm?: string; dit?: string; source?: string; from_s?: number; to_s?: number; add_s?: number; at?: "start" | "end"; strength?: number;
+  lm?: string; dit?: string; steps?: number; guidance?: number; source?: string; from_s?: number; to_s?: number; add_s?: number; at?: "start" | "end"; strength?: number;
   edit?: { op: "trim" | "fade" | "loudness"; from_s?: number; to_s?: number; seconds?: number; where?: "in" | "out" | "both"; lufs?: number };
   output: string; ckpt_dir: string; ffmpeg: string; cache_gb?: number; title?: string; lrc?: boolean;
 }

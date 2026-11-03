@@ -15,7 +15,7 @@ import { createJob, finishJob, getJob, jobSignal, listJobs, updateJob } from "@/
 import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { getModel, installCatalogModel, removeModel, type CatalogModelLike, type DownloadModelOptions } from "@/lib/modelStore";
-import { STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, LTX_LICENCE_NOTICE, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_XL_ID, STACK_MUSIC_XL_MODELS, STACK_STEMS_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_VIDEO_DETAILED_MODEL_ID, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MODEL_ID, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
+import { STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, LTX_LICENCE_NOTICE, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_SFT_ID, STACK_MUSIC_XL_ID, STACK_MUSIC_XL_MODELS, STACK_STEMS_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_VIDEO_DETAILED_MODEL_ID, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MODEL_ID, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
 import { licenceAcceptance, recordLicenceAcceptance, type LicenceNotice } from "@/lib/licenceAcceptance";
 import { buildInstallPlan } from "@/lib/installPlan";
 import { diskPlanForTier, diskTotalsFor, engineDownloadBytes, type DiskPlan } from "@/lib/diskPlan";
@@ -93,7 +93,7 @@ const GB = 1_000_000_000;
 /** Environment downloads come from the disk plan's measured table (one definition with the wizard); the figures are a fallback only. */
 const ENV_BYTES = { stems: engineDownloadBytes("stems") ?? 0.25 * GB, image: engineDownloadBytes("image-gen") ?? 1.1 * GB, video: engineDownloadBytes("video-gen") ?? 1.0 * GB, ltx25: engineDownloadBytes("ltx25-gen") ?? 0.25 * GB, ltx25max: engineDownloadBytes("ltx25-max-gen") ?? 0.25 * GB, music: engineDownloadBytes("music-gen") ?? 0.8 * GB, tools: engineDownloadBytes("image-tools") ?? 0.4 * GB, pocket: engineDownloadBytes("pocket-tts") ?? 0.72 * GB, mlxAudio: engineDownloadBytes("mlx-audio") ?? 0.47 * GB };
 /** The disk plan's row for a component, where the plan has one (its optional rows are the wizard's unchecked extras). */
-const DISK_ROW: Record<string, string> = { "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "image-tools": "image-tools", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "ace-step-1-5-turbo": "music", "ace-step-1-5-xl-turbo-bf16": "music-boost", "htdemucs": "stems", "htdemucs_ft": "stems-ft", "htdemucs_6s": "stems-6s", "ltx-2-3-distilled-mlx": "video-detailed", "ltx-2-5-q8-distilled-mlx": "video-ltx25", "ltx-2-5-bf16-distilled-mlx-max": "video-ltx25-max" };
+const DISK_ROW: Record<string, string> = { "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "image-tools": "image-tools", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "ace-step-1-5-turbo": "music", "ace-step-1-5-xl-turbo-bf16": "music-boost", "ace-step-1-5-xl-sft-bf16": "music-max", "htdemucs": "stems", "htdemucs_ft": "stems-ft", "htdemucs_6s": "stems-6s", "ltx-2-3-distilled-mlx": "video-detailed", "ltx-2-5-q8-distilled-mlx": "video-ltx25", "ltx-2-5-bf16-distilled-mlx-max": "video-ltx25-max" };
 
 const envImage: EnvDef = { name: "image-gen", approxBytes: ENV_BYTES.image, root: imageGenRoot, ready: imageGenEnvironmentReady, build: (onPhase, signal) => ensureImageGenEnvironment(onPhase, { signal }), stop: () => imageGen.stop() };
 const envVideo: EnvDef = {
@@ -162,7 +162,8 @@ const LABELS: Record<string, { label: string; summary: string }> = {
   "flux2-klein-4b": { label: "Pictures: FLUX.2 Klein 4B", summary: "The everyday picture model. Makes and edits pictures in a few seconds." },
   "z-image-turbo": { label: "Pictures: Z-Image-Turbo", summary: "A higher-detail picture model for the largest computers. A big download." },
   "ace-step-1-5-turbo": { label: "Music: ACE-Step 1.5", summary: "Makes and changes songs in chat" },
-  "ace-step-1-5-xl-turbo-bf16": { label: "Music: Boost (ACE-Step XL Turbo)", summary: "A larger song model with clearer voices, used for Boost songs. About 10 GB; a Boost song takes about a minute longer." },
+  "ace-step-1-5-xl-turbo-bf16": { label: "Music: Boost (ACE-Step XL Turbo)", summary: "A larger song model with clearer voices, used for Boost songs. About 10 GB; a Boost song takes about a minute." },
+  "ace-step-1-5-xl-sft-bf16": { label: "Music: Max (ACE-Step XL SFT)", summary: "The best song model, with its larger planning model, used for Max songs. About 18 GB; a Max song takes about three minutes." },
   "fastwan2-2-ti2v-5b-mlx-bf16": { label: "Video: Quick (Wan 2.2 FastWan 5B)", summary: "Makes short silent video clips from words or a picture." },
   "ltx-2-5-q8-distilled-mlx": { label: "Video: LTX-2.5 with sound", summary: "Makes clips up to 10 seconds with a sound track and spoken words, from a sentence. A very large download, and the maker's licence applies." },
   "ltx-2-5-bf16-distilled-mlx-max": { label: "Video: LTX-2.5 Max with sound", summary: "Makes 1024 by 576 clips up to 10 seconds with a sound track and spoken words, from a sentence. A very large download (about 71 GB), and the maker's licence applies." },
@@ -286,6 +287,16 @@ export function componentDefs(): UnitDef[] {
     id: STACK_MUSIC_XL_ID, ...LABELS[STACK_MUSIC_XL_ID]!, group: "music", role: "music", pins: STACK_MUSIC_XL_MODELS, envs: [envMusic], tiers: ["p128"],
     platformBlock: () => musicAvailability().code === "unsupported" ? musicAvailability().reason : null,
     usedBy: () => ["Boost songs in chat"],
+    busy: () => {
+      const state = musicGen.status().state;
+      if (state === "running" || state === "building") return "A song is being made right now.";
+      return activeJobFor((kind) => kind.startsWith("music")) ? "A song is waiting or being made right now." : null;
+    },
+  });
+  units.push({
+    id: STACK_MUSIC_SFT_ID, ...LABELS[STACK_MUSIC_SFT_ID]!, group: "music", role: "music", pins: STACK_MUSIC_MAX_MODELS, envs: [envMusic], tiers: ["p128"],
+    platformBlock: () => musicAvailability().code === "unsupported" ? musicAvailability().reason : null,
+    usedBy: () => ["Max songs in chat"],
     busy: () => {
       const state = musicGen.status().state;
       if (state === "running" || state === "building") return "A song is being made right now.";

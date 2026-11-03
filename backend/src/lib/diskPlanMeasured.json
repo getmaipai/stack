@@ -492,6 +492,18 @@
     "ace-step-1-5-xl-turbo-config": {
       "download_bytes": 3843622,
       "installed_bytes": 3843622
+    },
+    "ace-step-1-5-xl-sft-bf16": {
+      "download_bytes": 9974719930,
+      "installed_bytes": 9974719930
+    },
+    "ace-step-1-5-xl-sft-config": {
+      "download_bytes": 3843740,
+      "installed_bytes": 3843740
+    },
+    "ace-step-1-5-lm-4b": {
+      "download_bytes": 8426078220,
+      "installed_bytes": 8426078220
     }
   }
 }

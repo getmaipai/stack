@@ -995,6 +995,88 @@ export const STACK_MUSIC_XL_CONFIG: CatalogModelLike = {
   },
 };
 export const STACK_MUSIC_XL_MODELS: CatalogModelLike[] = [STACK_MUSIC_XL, STACK_MUSIC_XL_CONFIG];
+
+// MUSIC-MAX-01: the Max song model, ACE-Step XL SFT (50 to 70 steps with guidance) in bf16, and its 4B planning LM. Same shape as Boost: the
+// bf16 weights are a community conversion (Apache-2.0, one file), the maker's config and silence latent are MIT, and the 4B LM (MIT) is a
+// separate repository whose weights come as two shards. The worker loads the XL models as float32 (2026-11-02: bf16 on the torch MPS path
+// made noise on the Studio, float32 sang), so the files stay 10 GB each on disk and hold about 28 GB while a song runs.
+const MUSIC_SFT_WEIGHTS_REPO = "DanielMarius/acestep_v1.5_xl_sft_bf16.safetensors";
+const MUSIC_SFT_WEIGHTS_REVISION = "982a1af323046af40d1da43cde2c307000bed75b";
+const MUSIC_SFT_WEIGHTS_FILE = "acestep_v1.5_xl_sft_bf16.safetensors";
+const MUSIC_SFT_CONFIG_REPO = "ACE-Step/acestep-v15-xl-sft";
+const MUSIC_SFT_CONFIG_REVISION = "d06de46b4622f781cf07f4a013a67d591ca52819";
+const MUSIC_LM4_REPO = "ACE-Step/acestep-5Hz-lm-4B";
+const MUSIC_LM4_REVISION = "0a3ec94b557aea7d508da38b31cfe7341f6ff737";
+export const STACK_MUSIC_SFT_ID = "ace-step-1-5-xl-sft-bf16";
+export const STACK_MUSIC_SFT_CONFIG_ID = "ace-step-1-5-xl-sft-config";
+export const STACK_MUSIC_LM_4B_ID = "ace-step-1-5-lm-4b";
+const MUSIC_SFT_CONFIG_FILES = [
+  { path: "config.json", sha256: "174cf8c4afc2c41212546b4dca9afb11e7958f8b1e1a770d7cd009a82d72a6f1", bytes: 2_525 },
+  { path: "silence_latent.pt", sha256: "a778e9dd942f5e8b2c09c55370782d318834432b03dabbcdf70e6ed49ad6358b", bytes: 3_841_215 },
+];
+const MUSIC_LM4_FILES = [
+  { path: "added_tokens.json", sha256: "db08b66a515fb5d6acca0b3492d25bb44e0deda6241fc1113ac0679d40558c48", bytes: 2_217_787 },
+  { path: "chat_template.jinja", sha256: "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8", bytes: 4_168 },
+  { path: "config.json", sha256: "211bb68b2d641360526e4654b524e508f4046c1292016c08555bb877bd686d1b", bytes: 1_562 },
+  { path: "merges.txt", sha256: "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5", bytes: 1_671_853 },
+  { path: "model-00001-of-00002.safetensors", sha256: "ada9d0d4ff48f112de3f7b82cd4e7d57b4245932657e8b8edc9a5ded6a23b77f", bytes: 4_999_914_896 },
+  { path: "model-00002-of-00002.safetensors", sha256: "6302100c3577e2f1dbf32573e9b5e6e6b1bea7af101b433c2d3d6280faa8ab68", bytes: 3_379_239_240 },
+  { path: "model.safetensors.index.json", sha256: "8a9ec992fbae144ba9b40521f8763a3419546bd7a8864d80b0c3f1e1e3678fcf", bytes: 32_818 },
+  { path: "special_tokens_map.json", sha256: "76e233bfc357b0b03d7b6e6ba8e799244f358552575a7cdadb78d3d19106b298", bytes: 1_824_199 },
+  { path: "tokenizer.json", sha256: "35af56c3f5cb3ea2cc578aa28a8937770981d504f183ac5c8c38baf4bbd4af4d", bytes: 24_321_939 },
+  { path: "tokenizer_config.json", sha256: "6cd70cdd89425971794f5235562edcc608b0629a6c4686ae51a8b8c8b8ba5e95", bytes: 14_072_925 },
+  { path: "vocab.json", sha256: "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910", bytes: 2_776_833 },
+];
+export const STACK_MUSIC_SFT: CatalogModelLike = {
+  id: STACK_MUSIC_SFT_ID,
+  role: "music",
+  component: "dit-xl-sft-bf16",
+  repo: MUSIC_SFT_WEIGHTS_REPO,
+  license: "Apache-2.0",
+  revision: MUSIC_SFT_WEIGHTS_REVISION,
+  engine: MUSIC_ENGINE,
+  sizing: { profile: "p128", quantization: "bf16" },
+  download: {
+    url: hfUrl(`${MUSIC_SFT_WEIGHTS_REPO}/resolve/${MUSIC_SFT_WEIGHTS_REVISION}/${MUSIC_SFT_WEIGHTS_FILE}`),
+    sha256: "3c05ae268353b3540fb1fd7db4fd77ffbda9802ec641b624e15648e030ecf3ce",
+    approx_bytes: 9_974_719_930,
+  },
+};
+export const STACK_MUSIC_SFT_CONFIG: CatalogModelLike = {
+  id: STACK_MUSIC_SFT_CONFIG_ID,
+  role: "music",
+  component: "dit-xl-sft-config",
+  repo: MUSIC_SFT_CONFIG_REPO,
+  license: "MIT",
+  revision: MUSIC_SFT_CONFIG_REVISION,
+  engine: MUSIC_ENGINE,
+  sizing: { profile: "p128", quantization: "bf16" },
+  download: {
+    url: hfUrl(`${MUSIC_SFT_CONFIG_REPO}/resolve/${MUSIC_SFT_CONFIG_REVISION}/config.json`),
+    sha256: MUSIC_SFT_CONFIG_FILES[0]!.sha256,
+    approx_bytes: MUSIC_SFT_CONFIG_FILES.reduce((sum, file) => sum + file.bytes, 0),
+    directory: "ACE-Step-XL-SFT-config",
+    files: MUSIC_SFT_CONFIG_FILES,
+  },
+};
+export const STACK_MUSIC_LM_4: CatalogModelLike = {
+  id: STACK_MUSIC_LM_4B_ID,
+  role: "music",
+  component: "planning-lm-4b",
+  repo: MUSIC_LM4_REPO,
+  license: "MIT",
+  revision: MUSIC_LM4_REVISION,
+  engine: MUSIC_ENGINE,
+  sizing: { profile: "p128", quantization: "bf16" },
+  download: {
+    url: hfUrl(`${MUSIC_LM4_REPO}/resolve/${MUSIC_LM4_REVISION}/model-00001-of-00002.safetensors`),
+    sha256: "ada9d0d4ff48f112de3f7b82cd4e7d57b4245932657e8b8edc9a5ded6a23b77f",
+    approx_bytes: MUSIC_LM4_FILES.reduce((sum, file) => sum + file.bytes, 0),
+    directory: "ACE-Step-5Hz-lm-4B",
+    files: MUSIC_LM4_FILES,
+  },
+};
+export const STACK_MUSIC_MAX_MODELS: CatalogModelLike[] = [STACK_MUSIC_SFT, STACK_MUSIC_SFT_CONFIG, STACK_MUSIC_LM_4];
 // TIER-STEMS-01a: HTDemucs (MIT), pinned to the checkpoint files in the
 // official Hugging Face repository. Safetensors weights plus the upstream
 // YAML architecture are loaded by the pinned Demucs package.
@@ -1378,7 +1460,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_DETAILED_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, ...STACK_MUSIC_XL_MODELS, ...STACK_STEMS_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_DETAILED_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, ...STACK_MUSIC_XL_MODELS, ...STACK_MUSIC_MAX_MODELS, ...STACK_STEMS_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

@@ -24,7 +24,7 @@
     "p64.ai_required_free_bytes": 116341582322,
     "p128.required_free_bytes": 154184224148,
     "p128.minimum_required_free_bytes": 56572612676,
-    "p128.everything_required_free_bytes": 468237564615,
+    "p128.everything_required_free_bytes": 490323134883,
     "p128.needed_bytes": 129352395179,
     "p128.home_required_free_bytes": 3176323277,
     "p128.ai_required_free_bytes": 151007900871
@@ -1664,6 +1664,28 @@
           "basis": "pins"
         },
         {
+          "id": "music-max",
+          "label": "Best songs (ACE-Step XL SFT)",
+          "note": "The best song model and its larger planning model, for Max quality. Optional, about 18 GB.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 18404641890,
+          "installed_bytes": 18404641890,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "ace-step-1-5-xl-sft-bf16",
+            "ace-step-1-5-xl-sft-config",
+            "ace-step-1-5-lm-4b"
+          ],
+          "engines": [
+            "engine:music",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "video-detailed",
           "label": "Detailed videos with sound (LTX-2.3)",
           "note": "Longer clips with a sound track and spoken words, and a large library of styles. Slower than the quick clip. Optional, about 74 GB; it needs the maker's licence accepted once during setup.",
@@ -1980,11 +2002,11 @@
         "required_free_bytes": 56572612676
       },
       "everything": {
-        "download_bytes": 380000106027,
-        "installed_bytes": 384058803670,
+        "download_bytes": 398404747917,
+        "installed_bytes": 402463445560,
         "peak_temp_bytes": 7367000211,
-        "needed_bytes": 391425803881,
-        "required_free_bytes": 468237564615
+        "needed_bytes": 409830445771,
+        "required_free_bytes": 490323134883
       },
       "measured_on": "2026-10-17",
       "default_selected": [
