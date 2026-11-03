@@ -504,6 +504,106 @@
     "ace-step-1-5-lm-4b": {
       "download_bytes": 8426078220,
       "installed_bytes": 8426078220
+    },
+    "qwen-image-2512-q8": {
+      "download_bytes": 2147292004,
+      "installed_bytes": 2147292004
+    },
+    "qwen-image-2512-q8-manifest": {
+      "download_bytes": 78,
+      "installed_bytes": 78
+    },
+    "qwen-image-2512-q8-text-encoder-0": {
+      "download_bytes": 2080974747,
+      "installed_bytes": 2080974747
+    },
+    "qwen-image-2512-q8-text-encoder-1": {
+      "download_bytes": 2136050811,
+      "installed_bytes": 2136050811
+    },
+    "qwen-image-2512-q8-text-encoder-2": {
+      "download_bytes": 2059005283,
+      "installed_bytes": 2059005283
+    },
+    "qwen-image-2512-q8-text-encoder-3": {
+      "download_bytes": 2136050873,
+      "installed_bytes": 2136050873
+    },
+    "qwen-image-2512-q8-text-encoder-4": {
+      "download_bytes": 2059005365,
+      "installed_bytes": 2059005365
+    },
+    "qwen-image-2512-q8-text-encoder-5": {
+      "download_bytes": 2136050879,
+      "installed_bytes": 2136050879
+    },
+    "qwen-image-2512-q8-text-encoder-6": {
+      "download_bytes": 1534150406,
+      "installed_bytes": 1534150406
+    },
+    "qwen-image-2512-q8-text-encoder-model-safetensors-index": {
+      "download_bytes": 24036,
+      "installed_bytes": 24036
+    },
+    "qwen-image-2512-q8-tokenizer-tokenizer": {
+      "download_bytes": 11417006,
+      "installed_bytes": 11417006
+    },
+    "qwen-image-2512-q8-tokenizer-tokenizer-config": {
+      "download_bytes": 269,
+      "installed_bytes": 269
+    },
+    "qwen-image-2512-q8-transformer-1": {
+      "download_bytes": 2129239020,
+      "installed_bytes": 2129239020
+    },
+    "qwen-image-2512-q8-transformer-10": {
+      "download_bytes": 381440612,
+      "installed_bytes": 381440612
+    },
+    "qwen-image-2512-q8-transformer-2": {
+      "download_bytes": 2106788610,
+      "installed_bytes": 2106788610
+    },
+    "qwen-image-2512-q8-transformer-3": {
+      "download_bytes": 2126873449,
+      "installed_bytes": 2126873449
+    },
+    "qwen-image-2512-q8-transformer-4": {
+      "download_bytes": 2126854954,
+      "installed_bytes": 2126854954
+    },
+    "qwen-image-2512-q8-transformer-5": {
+      "download_bytes": 2146920767,
+      "installed_bytes": 2146920767
+    },
+    "qwen-image-2512-q8-transformer-6": {
+      "download_bytes": 2146919309,
+      "installed_bytes": 2146919309
+    },
+    "qwen-image-2512-q8-transformer-7": {
+      "download_bytes": 2146920865,
+      "installed_bytes": 2146920865
+    },
+    "qwen-image-2512-q8-transformer-8": {
+      "download_bytes": 2146920833,
+      "installed_bytes": 2146920833
+    },
+    "qwen-image-2512-q8-transformer-9": {
+      "download_bytes": 2106788684,
+      "installed_bytes": 2106788684
+    },
+    "qwen-image-2512-q8-transformer-model-safetensors-index": {
+      "download_bytes": 241806,
+      "installed_bytes": 241806
+    },
+    "qwen-image-2512-q8-vae-0": {
+      "download_bytes": 253586133,
+      "installed_bytes": 253586133
+    },
+    "qwen-image-2512-q8-vae-model-safetensors-index": {
+      "download_bytes": 13512,
+      "installed_bytes": 13512
     }
   }
 }

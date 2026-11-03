@@ -10,7 +10,7 @@
 import measured from "@/lib/diskPlanMeasured.json";
 import { PROFILE_TIERS, type ProfileTier } from "@/profiles";
 import {
-  CHATTERBOX_ENGINE, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS,
+  CHATTERBOX_ENGINE, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS,
   STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_XL_MODELS, STACK_STEMS_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS,
 } from "@/lib/modelCatalog";
 import { OMLX_OPTIONAL_TIERS } from "@/lib/chatEngines";
@@ -192,6 +192,7 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
     rows.push(modelRow({ id: "pictures", label: "Change pictures (FLUX.2 Klein)", note: "Needed. Edits the pictures you already have, and makes new ones when ERNIE is not installed.", need: "required", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_KLEIN_MODELS));
     if (IMAGE_FAMILIES["ernie-image-turbo"].tiers.some((supportedTier) => supportedTier === tier.id)) rows.push(modelRow({ id: "pictures-ernie", label: "Make pictures (ERNIE)", note: "Recommended. Draws words in pictures correctly. Makes new pictures from a sentence.", need: "recommended", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_ERNIE_MODELS));
     if (TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "pictures-zimage", label: "More picture styles (Z-Image Turbo)", note: "A second picture maker with a different look. Optional.", need: "optional", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_ZIMAGE_MODELS));
+    if (TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "pictures-qwen", label: "Best pictures (Qwen-Image)", note: "The best picture maker, used for Max pictures. Clear words and fine detail. A large download. Optional.", need: "optional", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_QWEN_MODELS));
   }
   if (!tier.notAvailable.includes("video")) rows.push(modelRow({ id: "video", label: "Make videos (Wan2.2)", note: "Recommended. Makes a short clip from a sentence or a picture.", need: "recommended", engines: ["engine:video", "engine:python"] }, STACK_VIDEO_MODELS));
   if (!tier.notAvailable.includes("music")) rows.push(modelRow({ id: "music", label: "Make music (ACE-Step 1.5)", note: "Makes and changes songs in chat. Optional.", need: "optional", engines: ["engine:music", "engine:python"] }, STACK_MUSIC_MODELS));

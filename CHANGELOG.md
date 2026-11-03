@@ -10,6 +10,8 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Changed
 
+- Qwen-Image 20B is installable (INSTALL-EVERYTHING-01): the mflux community's 8-bit Qwen-Image 2512 build (36.1 GB, Apache-2.0, pinned to a revision with every file's sha256) is a picture family `qwen-image-2512-q8` (p128 only, no edits, 30 steps by default, loaded as is with no quantize step), a component of the same id (`pictures-qwen` install-plan row, optional), accepted as `model` on `POST /v1/images/generations` and listed by `GET /stack/v1/image`. It was the Max picture slot with no way to install it.
+
 - ERNIE-Image-Turbo is a component (INSTALL-EVERYTHING-01): `GET /stack/v1/components` lists `ernie-image-turbo` (group pictures, p64 and p128), so it installs and uninstalls from the component list like Z-Image-Turbo and is sized by its `pictures-ernie` install-plan row. It was only reachable through the Setup plan before.
 
 - The memory watchdog gives up the running video, picture or music job last. At CRITICAL it first unloads idle workers, evicts the idle judge and, when nobody is using chat, puts chat on the smaller Reduced model; it re-reads the pressure and cancels the running job only if it is still critical. A person who is chatting keeps the full model. Reduced that the watchdog entered is left again after a minute at normal (MEM-LADDER-01). Pure `criticalStep` with a table test.

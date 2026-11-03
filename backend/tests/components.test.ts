@@ -364,4 +364,8 @@ test("every picture family has a component of its own, sized by its install-plan
   const ernie = (await listComponents(hw())).components.find((c) => c.id === "ernie-image-turbo")!;
   expect(ernie).toMatchObject({ label: "Pictures: ERNIE-Image-Turbo", group: "pictures", can_install: expect.any(Boolean) });
   expect(ernie.full_bytes).toBeGreaterThan(15e9);
+  const qwen = (await listComponents(hw())).components.find((c) => c.id === "qwen-image-2512-q8")!;
+  expect(qwen).toMatchObject({ label: "Pictures: Qwen-Image 20B (best quality)", group: "pictures", requirement: "optional" });
+  expect(qwen.full_bytes).toBeGreaterThan(35e9);
+  expect((await listComponents(hw({ unifiedMemoryGb: 64, totalRamGb: 64 }))).components.find((c) => c.id === "qwen-image-2512-q8")!.requirement).toBe("unsupported");
 });

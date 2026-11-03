@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { app } from "@/app";
 import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, getGovernorStatus } from "@/lib/governor";
 import { __resetJobsForTests, getJob, listJobs } from "@/lib/jobs";
-import { STACK_IMAGE_ENGINE_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_MODELS } from "@/lib/modelCatalog";
+import { STACK_IMAGE_ENGINE_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_MODELS } from "@/lib/modelCatalog";
 import { MANAGED_RUNTIMES } from "@/lib/engineCatalog";
 import { resolveRoleState } from "@/lib/router";
 import { detectImageBase, imageLoras, parseHfLoraUrl, startLoraInstall } from "@/images/loras";
@@ -576,11 +576,12 @@ test("GET /stack/v1/image reports state, models, limits, edit and what to instal
   const body = await (await app.request("/stack/v1/image")).json() as { image: Record<string, any> };
   const image = body.image;
   expect(image).toMatchObject({ state: "needs-setup", available: true, tier: "p128", default_model: "flux2-klein-4b", loras_supported: true, idle_unload_s: 600, edit: { generative: true, masked: true, model: "flux2-klein-4b" } });
-  expect(image.models.map((m: { id: string }) => m.id)).toEqual(["flux2-klein-4b", "z-image-turbo", "ernie-image-turbo"]);
+  expect(image.models.map((m: { id: string }) => m.id)).toEqual(["flux2-klein-4b", "z-image-turbo", "ernie-image-turbo", "qwen-image-2512-q8"]);
   expect(image.models[0]).toMatchObject({ installed: true, default: true, edit: true, steps_default: 4, peak_gb: 15, quantize: 8, available: true });
   expect(image.models[1]).toMatchObject({ steps_default: 9, edit: false, peak_gb: 34 });
   expect(image.models[2]).toMatchObject({ label: "ERNIE-Image-Turbo", steps_default: 8, edit: false, peak_gb: 21 });
   expect(image.models[2].install.models).toHaveLength(12);
+  expect(image.models[3]).toMatchObject({ label: "Qwen-Image 20B", steps_default: 30, edit: false, peak_gb: 41, quantize: null });
   expect(image.limits).toMatchObject({ min_side: 256, max_side: 2048, size_step: 16, max_n: 4, max_loras: 4, queue_max: 4 });
   expect(image.memory.fits).toBe(true);
   __setInstalledFamiliesForTests([]);
@@ -594,7 +595,7 @@ test("GET /stack/v1/image reports state, models, limits, edit and what to instal
 });
 
 test("the pins: every file has a revision, sha256, size, hub path and Apache-2.0; ids are unique; only the files mflux reads", () => {
-  for (const pins of [STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_IMAGE_ERNIE_MODELS]) {
+  for (const pins of [STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_QWEN_MODELS]) {
     expect(pins[0]!.component).toBeUndefined();
     for (const pin of pins) {
       expect(pin.role).toBe("image");
@@ -604,7 +605,7 @@ test("the pins: every file has a revision, sha256, size, hub path and Apache-2.0
       expect(pin.download!.sha256).toMatch(/^[0-9a-f]{64}$/);
       expect(pin.download!.approx_bytes).toBeGreaterThan(0);
       expect(pin.download!.url).toContain(`/resolve/${pin.revision}/${pin.download!.hub_file}`);
-      expect(pin.download!.hub_file).toMatch(/^(vae|transformer|text_encoder|tokenizer|scheduler)\/|^(added_tokens\.json|chat_template\.jinja|model_index\.json)$/);
+      expect(pin.download!.hub_file).toMatch(/^(vae|transformer|text_encoder|tokenizer|scheduler)\/|^(added_tokens\.json|chat_template\.jinja|model_index\.json|manifest\.json)$/);
     }
     expect(pins.slice(1).every((pin) => !!pin.component)).toBe(true);
   }
@@ -612,7 +613,8 @@ test("the pins: every file has a revision, sha256, size, hub path and Apache-2.0
   expect(new Set(ids).size).toBe(ids.length);
   expect(STACK_IMAGE_KLEIN_MODELS.reduce((sum, pin) => sum + pin.download!.approx_bytes, 0)).toBeLessThan(16_100_000_000);
   expect(STACK_IMAGE_ERNIE_MODELS).toHaveLength(12);
-  expect(STACK_IMAGE_ENGINE_MODELS).toHaveLength(STACK_IMAGE_KLEIN_MODELS.length + STACK_IMAGE_ZIMAGE_MODELS.length + STACK_IMAGE_ERNIE_MODELS.length);
+  expect(STACK_IMAGE_QWEN_MODELS).toHaveLength(25);
+  expect(STACK_IMAGE_ENGINE_MODELS).toHaveLength(STACK_IMAGE_KLEIN_MODELS.length + STACK_IMAGE_ZIMAGE_MODELS.length + STACK_IMAGE_ERNIE_MODELS.length + STACK_IMAGE_QWEN_MODELS.length);
   const runtime = MANAGED_RUNTIMES.find((entry) => entry.name === "image-gen")!;
   expect(runtime.roles).toEqual(["image"]);
   expect(imageRequirementsFileFor("darwin", "arm64")).toBeTruthy();

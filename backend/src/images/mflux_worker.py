@@ -189,6 +189,13 @@ def build(request, mode):
         from mflux.models.z_image.variants.z_image import ZImage
 
         model = ZImage(model_config=ModelConfig.z_image_turbo(), **common)
+    elif family == "qwen-image-2512-q8":
+        if mode == "edit":
+            raise ValueError("unsupported_edit")
+        from mflux.models.qwen.variants.txt2img.qwen_image import QwenImage
+
+        # The pinned weights are already 8-bit (quantize stays None), so nothing is converted at load.
+        model = QwenImage(model_config=ModelConfig.qwen_image(), **common)
     else:
         raise ValueError("unknown_family")
     model.callbacks.register(Progress())

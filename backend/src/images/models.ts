@@ -9,11 +9,12 @@
 import { existsSync } from "node:fs";
 import { getGovernorStatus } from "@/lib/governor";
 import { getModel } from "@/lib/modelStore";
-import { STACK_IMAGE_ENGINE_MODELS, STACK_IMAGE_ERNIE_ID, STACK_IMAGE_KLEIN_ID, STACK_IMAGE_ZIMAGE_ID } from "@/lib/modelCatalog";
+import { STACK_IMAGE_ENGINE_MODELS, STACK_IMAGE_ERNIE_ID, STACK_IMAGE_KLEIN_ID, STACK_IMAGE_QWEN_ID, STACK_IMAGE_ZIMAGE_ID } from "@/lib/modelCatalog";
 import { IMAGE_LORA_BASES, type ImageLoraBase } from "@/images/loras";
 import type { CatalogModelLike } from "@/lib/modelStore";
 
-export type ImageFamilyId = ImageLoraBase;
+/** Qwen-Image runs prebuilt 8-bit weights (INSTALL-EVERYTHING-01); picture styles (LoRAs) are not offered for it yet, so it is not an ImageLoraBase. */
+export type ImageFamilyId = ImageLoraBase | typeof STACK_IMAGE_QWEN_ID;
 
 export interface ImageFamily {
   id: ImageFamilyId;
@@ -39,6 +40,7 @@ export const IMAGE_FAMILIES: Record<ImageFamilyId, ImageFamily> = {
   "flux2-klein-4b": { id: "flux2-klein-4b", catalogId: STACK_IMAGE_KLEIN_ID, label: "FLUX.2 Klein 4B", licence: "Apache-2.0", stepsDefault: 4, stepsMax: 12, peak: { gen8: 15 * GB, gen4: 13 * GB, edit: 18 * GB }, loraExtraBytes: 1 * GB, edit: true, tiers: ["p32", "p64", "p128"], warmSeconds: 4.0 },
   "z-image-turbo": { id: "z-image-turbo", catalogId: STACK_IMAGE_ZIMAGE_ID, label: "Z-Image-Turbo", licence: "Apache-2.0", stepsDefault: 9, stepsMax: 20, peak: { gen8: 34 * GB, gen4: 34 * GB, edit: 0 }, loraExtraBytes: 1 * GB, edit: false, tiers: ["p128"], warmSeconds: 12.9 },
   "ernie-image-turbo": { id: "ernie-image-turbo", catalogId: STACK_IMAGE_ERNIE_ID, label: "ERNIE-Image-Turbo", licence: "Apache-2.0", stepsDefault: 8, stepsMax: 20, peak: { gen8: 21 * GB, gen4: 21 * GB, edit: 0 }, loraExtraBytes: 1 * GB, edit: false, tiers: ["p64", "p128"], warmSeconds: 22 },
+  [STACK_IMAGE_QWEN_ID]: { id: STACK_IMAGE_QWEN_ID, catalogId: STACK_IMAGE_QWEN_ID, label: "Qwen-Image 20B", licence: "Apache-2.0", stepsDefault: 30, stepsMax: 50, peak: { gen8: 41 * GB, gen4: 41 * GB, edit: 0 }, loraExtraBytes: 0, edit: false, tiers: ["p128"], warmSeconds: 190 },
 };
 export const DEFAULT_FAMILY: ImageFamilyId = "flux2-klein-4b";
 
@@ -57,7 +59,7 @@ export const IMAGE_FEATHER_MAX = 64;
 export const IMAGE_REFERENCES_MAX = 2;
 export const IMAGE_FEATHER_DEFAULT = 12;
 
-export const isFamilyId = (value: string): value is ImageFamilyId => (IMAGE_LORA_BASES as readonly string[]).includes(value);
+export const isFamilyId = (value: string): value is ImageFamilyId => (IMAGE_LORA_BASES as readonly string[]).includes(value) || value === STACK_IMAGE_QWEN_ID;
 
 function recordsOf(family: ImageFamilyId): CatalogModelLike[] {
   const id = IMAGE_FAMILIES[family].catalogId;
@@ -99,7 +101,7 @@ export function runsOnTier(family: ImageFamilyId, tier: string): boolean { retur
 
 /** Bits the weights are quantized to at load; null for bf16. */
 export function quantizeFor(family: ImageFamilyId, mode: "generate" | "edit", tier: string): number | null {
-  if (mode === "edit") return null;
+  if (mode === "edit" || family === STACK_IMAGE_QWEN_ID) return null;
   if (family === "flux2-klein-4b" && tier === "p32") return 4;
   return 8;
 }

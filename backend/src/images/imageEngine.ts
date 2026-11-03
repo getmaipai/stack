@@ -39,7 +39,7 @@ import workerScript from "./mflux_worker.py" with { type: "file" };
 export const IMAGE_GEN_NAME = "image-gen";
 export const IMAGE_GEN_VERSION = MANAGED_RUNTIMES.find((runtime) => runtime.name === IMAGE_GEN_NAME)?.version ?? "0.23.0";
 const idleMs = (): number => engineIdleMs("image");
-const deadlineMs = (family: ImageFamilyId, count: number): number => Number(process.env.IMAGE_DEADLINE_MS ?? (family === "z-image-turbo" ? 4 : 2) * 60_000 * Math.max(1, count));
+const deadlineMs = (family: ImageFamilyId, count: number): number => Number(process.env.IMAGE_DEADLINE_MS ?? (family === "qwen-image-2512-q8" ? 8 : family === "z-image-turbo" ? 4 : 2) * 60_000 * Math.max(1, count));
 
 export class ImageError extends Error {
   constructor(readonly code: string, message: string, readonly status: number) { super(message); }

@@ -52,6 +52,7 @@ installPlanRoutes.openapi(planRoute, async (c) => {
     ...(rows.has("pictures") ? imageInstallModels("flux2-klein-4b", installedIds) : []),
     ...(rows.has("pictures-ernie") ? imageInstallModels("ernie-image-turbo", installedIds) : []),
     ...(rows.has("pictures-zimage") ? imageInstallModels("z-image-turbo", installedIds) : []),
+    ...(rows.has("pictures-qwen") ? imageInstallModels("qwen-image-2512-q8", installedIds) : []),
     ...(rows.has("video") ? videoInstallModels(installedIds) : []),
   ];
   return c.json({ ...plan, disk, optional_models: optional }, 200);
