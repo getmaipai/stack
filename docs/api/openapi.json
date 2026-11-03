@@ -5669,6 +5669,13 @@
                     "minimum": 0,
                     "exclusiveMinimum": true,
                     "maximum": 1800000
+                  },
+                  "from_s": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "to_s": {
+                    "type": "number"
                   }
                 },
                 "required": [
@@ -5731,6 +5738,21 @@
                           "items": {
                             "type": "integer"
                           }
+                        },
+                        "window": {
+                          "type": "object",
+                          "properties": {
+                            "from_s": {
+                              "type": "number"
+                            },
+                            "to_s": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "from_s",
+                            "to_s"
+                          ]
                         }
                       },
                       "required": [
@@ -5800,6 +5822,21 @@
                           "items": {
                             "type": "integer"
                           }
+                        },
+                        "window": {
+                          "type": "object",
+                          "properties": {
+                            "from_s": {
+                              "type": "number"
+                            },
+                            "to_s": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "from_s",
+                            "to_s"
+                          ]
                         }
                       },
                       "required": [
@@ -6021,6 +6058,21 @@
                           "items": {
                             "type": "integer"
                           }
+                        },
+                        "window": {
+                          "type": "object",
+                          "properties": {
+                            "from_s": {
+                              "type": "number"
+                            },
+                            "to_s": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "from_s",
+                            "to_s"
+                          ]
                         }
                       },
                       "required": [

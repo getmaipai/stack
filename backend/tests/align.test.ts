@@ -5,8 +5,8 @@ import { __resetGovernorForTests, __setGovernorTuningForTestsOnly } from "@/lib/
 import { dataDir } from "@/lib/paths";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { ALIGN_JOB_KIND, __alignStashHasForTests, registerAlignJobs, stashAlign } from "@/align/jobs";
-import { align, alignWorkerEnv, handle, scrubLyrics, type AlignDeps, type AlignRequest, type AlignResult } from "@/align/align";
+import { ALIGN_JOB_KIND, __alignStashHasForTests, alignMemory, registerAlignJobs, stashAlign } from "@/align/jobs";
+import { align, alignPeakBytesFor, alignWorkerEnv, handle, scrubLyrics, type AlignDeps, type AlignRequest, type AlignResult } from "@/align/align";
 import { __resetMusicProvenanceForTests, recordMadeSong, sha256Hex, wasMadeHere } from "@/music/provenance";
 import { PRIVACY_ROWS } from "@/lib/privacy";
 import { removeWorkerDir, startLeakyWorker, waitForWorkerRequest, waitForWorkerTreeGone, waitForWorkerPids } from "./helpers/leakyWorker";
@@ -103,4 +103,38 @@ test("scrubLyrics blanks every lyric word, any case, and leaves other text", () 
 });
 test("the privacy declaration names the align model host", () => {
   const row = PRIVACY_ROWS.find((r) => r.id === "align-model")!; expect(row.hosts).toEqual(["dl.fbaipublicfiles.com"]); expect(row.when).toContain("offline");
+});
+test("from_s and to_s are validated together, ordered and within 4 minutes", async () => {
+  const b = made("win-valid"); align.useDeps(deps(ok));
+  for (const extra of [{ from_s: 5 }, { to_s: 5 }, { from_s: -1, to_s: 5 }, { from_s: 10, to_s: 10 }, { from_s: 10, to_s: 5 }, { from_s: 0, to_s: 240.5 }, { from_s: 10, to_s: 251 }]) expect((await post(body(b, extra))).status).toBe(400);
+  expect((await post(body(b, { from_s: 0, to_s: 240 }))).status).toBe(200);
+  expect((await post(body(b, { from_s: 30.5, to_s: 70 }))).status).toBe(200);
+});
+test("a window sends fromS and toS to the worker and returns times on the original clock", async () => {
+  const b = made("win-offset"); let seen: AlignRequest | null = null; align.useDeps(deps((r) => { seen = r; return ok(r); }));
+  const j = await (await post(body(b, { from_s: 30, to_s: 70 }))).json() as any;
+  expect([seen!.fromS, seen!.toS]).toEqual([30, 70]);
+  expect(j.data.words).toEqual([{ t: 30.5, end: 30.9, text: "Zebra" }, { t: 31, end: 31.4, text: "quokka" }, { t: 32, end: 32.5, text: "Marmalade" }]);
+  expect(j.data.window).toEqual({ from_s: 30, to_s: 70 });
+  expect((await (await get(`/v1/audio/align/${j.job}`)).json() as any).data.window).toEqual({ from_s: 30, to_s: 70 });
+});
+test("without a window nothing changes: no fromS, no window key, times untouched", async () => {
+  const b = made("win-none"); let seen: AlignRequest | null = null; align.useDeps(deps((r) => { seen = r; return ok(r); }));
+  const j = await (await post(body(b))).json() as any;
+  expect(seen!.fromS).toBeUndefined(); expect(seen!.toS).toBeUndefined(); expect("window" in j.data).toBe(false); expect(j.data.words[0].t).toBe(0.5);
+});
+test("admission size follows the window: measured line, floor 3.8 GB, cap 11.1 GB", () => {
+  expect(alignPeakBytesFor(10)).toBe(3_800_000_000); expect(alignPeakBytesFor(40)).toBeGreaterThanOrEqual(3_800_000_000); expect(alignPeakBytesFor(60)).toBeGreaterThanOrEqual(4_670_000_000);
+  expect(alignPeakBytesFor(120)).toBeGreaterThanOrEqual(7_370_000_000); expect(alignPeakBytesFor(240)).toBe(11_100_000_000); expect(alignPeakBytesFor(240)).toBeGreaterThanOrEqual(11_040_000_000);
+  expect(alignPeakBytesFor(40)).toBe(3_940_000_000); expect(alignPeakBytesFor(60)).toBe(4_860_000_000); expect(alignPeakBytesFor(120)).toBe(7_620_000_000);
+});
+test("an align job asks the governor for the window's size, and the full file keeps 11.1 GB", () => {
+  expect(alignMemory({ input: { token: "t", from_s: 0, to_s: 40 } }).requestedBytes).toBe(3_940_000_000);
+  expect(alignMemory({ input: { token: "t", from_s: 10, to_s: 130 } }).measuredPeakBytes).toBe(7_620_000_000);
+  expect(alignMemory({ input: { token: "t" } }).requestedBytes).toBe(11_100_000_000);
+});
+test("a window's errors and logs carry no lyric word", async () => {
+  const b = made("win-priv"); align.useDeps(deps(() => { throw new Error("choked on Marmalade"); }));
+  const r = await post(body(b, { from_s: 5, to_s: 45 })); expect(r.status).toBe(500); expect(JSON.stringify(await r.json()).toLowerCase()).not.toMatch(/marmalade|zebra|quokka|dreams|tonight/);
+  expect(logText().toLowerCase()).not.toMatch(/marmalade|zebra|quokka|dreams|tonight/);
 });

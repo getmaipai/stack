@@ -73,8 +73,13 @@ def decode_mono_16k(request, work_dir):
     """ffmpeg converts any container (m4a, mp3, flac, wav) to a 16 kHz mono wav first; soundfile reads that."""
     import soundfile
     wav_path = os.path.join(work_dir, "align-%s.wav" % request["id"])
-    argv = [request["ffmpeg"], "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", request["source"]]
-    if request.get("maxSeconds"):
+    argv = [request["ffmpeg"], "-nostdin", "-hide_banner", "-loglevel", "error", "-y"]
+    windowed = request.get("fromS") is not None and request.get("toS") is not None
+    if windowed:
+        # Only the window is decoded, so memory follows its length; the times it returns are relative to the window; the Stack adds from_s.
+        argv += ["-ss", str(request["fromS"]), "-t", str(request["toS"] - request["fromS"])]
+    argv += ["-i", request["source"]]
+    if request.get("maxSeconds") and not windowed:
         argv += ["-t", str(request["maxSeconds"] + 1)]
     argv += ["-ac", "1", "-ar", "16000", "-c:a", "pcm_f32le", wav_path]
     try:

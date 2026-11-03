@@ -19,6 +19,8 @@ export const ALIGN_VERSION = "1.0.0";
  * on a real sung song looped to length: 40 s 3.80 GB, 60 s 4.67 GB, 120 s 7.37 GB, 240 s 11.04 GB. The model attends over the whole song, so memory grows with
  * its length; admission uses the longest file the route accepts (240 s) so a long song can never outgrow what was reserved. */
 export const ALIGN_PEAK_BYTES = 11_100_000_000;
+/** Admission size for a window of `seconds`: an upper-bound line through the measured peaks above (2.1 GB plus 0.046 GB per second), never below the 40 s peak and never above the full-file figure. */
+export const alignPeakBytesFor = (seconds: number): number => Math.min(ALIGN_PEAK_BYTES, Math.max(3_800_000_000, Math.ceil(2_100_000_000 + 46_000_000 * seconds)));
 export const ALIGN_MODEL_ID = STACK_ALIGN_MODEL_ID;
 export const ALIGN_MAX_SOURCE_BYTES = 40 * 1024 * 1024;
 export const ALIGN_MAX_LYRICS_CHARS = 8000;
@@ -33,7 +35,7 @@ const spec = (): UvEnvironmentSpec => ({ name: ALIGN_NAME, version: ALIGN_VERSIO
 
 export interface AlignWord { t: number; end: number; text: string; }
 export interface AlignResult { words: AlignWord[]; aligned_words: number; total_words: number; line_starts: number[]; ms: number; }
-export interface AlignRequest { id: string; source: string; lyrics: string; maxSeconds?: number; modelPath: string; modelHash: string; ffmpeg: string; workDir: string; }
+export interface AlignRequest { id: string; source: string; lyrics: string; maxSeconds?: number; fromS?: number; toS?: number; modelPath: string; modelHash: string; ffmpeg: string; workDir: string; }
 export interface AlignHandle { send(request: AlignRequest, cb: (stage: string, fraction: number) => void, signal?: AbortSignal): Promise<AlignResult>; kill(graceMs?: number): void; exited: Promise<number>; pausable?: PausableWorker; }
 export interface AlignDeps { supported: () => boolean; installed: () => boolean; ensure: (stage: (s: string) => void, signal?: AbortSignal) => Promise<void>; runtime: () => { modelPath: string; modelHash: string; ffmpeg: string }; spawn: () => Promise<AlignHandle>; }
 
@@ -107,10 +109,10 @@ export class AlignService {
   get depsAvailable(): boolean { return this.deps.supported(); }
   get installed(): boolean { return this.deps.installed(); }
   get state(): string { return !this.deps.supported() ? "unsupported" : !this.installed ? "not-installed" : this.building ? "building" : this.busy ? "running" : this.worker ? "idle" : "needs-setup"; }
-  run(request: Pick<AlignRequest, "id" | "source" | "lyrics" | "maxSeconds" | "workDir">, onStage: (stage: string, fraction: number) => void, signal?: AbortSignal): Promise<AlignResult> {
+  run(request: Pick<AlignRequest, "id" | "source" | "lyrics" | "maxSeconds" | "fromS" | "toS" | "workDir">, onStage: (stage: string, fraction: number) => void, signal?: AbortSignal): Promise<AlignResult> {
     const job = this.chain.then(() => this.execute(request, onStage, signal), () => this.execute(request, onStage, signal)); this.chain = job.catch(() => {}); return job;
   }
-  private async execute(request: Pick<AlignRequest, "id" | "source" | "lyrics" | "maxSeconds" | "workDir">, stage: (s: string, f: number) => void, signal?: AbortSignal): Promise<AlignResult> {
+  private async execute(request: Pick<AlignRequest, "id" | "source" | "lyrics" | "maxSeconds" | "fromS" | "toS" | "workDir">, stage: (s: string, f: number) => void, signal?: AbortSignal): Promise<AlignResult> {
     if (signal?.aborted) throw new Error("Cancelled.");
     if (!this.deps.installed()) throw new Error("The alignment model is not installed."); this.busy++; if (this.idle) clearTimeout(this.idle);
     let lease: ReturnType<typeof heavyGate.attach> | undefined;

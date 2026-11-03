@@ -5,16 +5,19 @@ import { wasMadeHere, sha256Hex } from "@/music/provenance";
 import { cancelJob, getJob, hasJobRunner, isJobPaused, listJobs, submitJob, waitForJob, type Job } from "@/lib/jobs";
 import { PAUSED_LABEL } from "@/lib/genProgress";
 import { getGovernorStatus } from "@/lib/governor";
-import { align, ALIGN_MAX_LYRICS_CHARS, ALIGN_MAX_SOURCE_BYTES, ALIGN_PEAK_BYTES } from "@/align/align";
+import { align, ALIGN_MAX_LYRICS_CHARS, ALIGN_MAX_SECONDS, ALIGN_MAX_SOURCE_BYTES, ALIGN_PEAK_BYTES, alignPeakBytesFor } from "@/align/align";
 import { ALIGN_JOB_KIND, alignFailure, alignOutput, alignStage, alignTracker, forgetAlignOutput, stashAlign, unstashAlign } from "@/align/jobs";
 import { decode, looksAudio, looksM4a } from "@/routes/stems";
 
 const DEFAULT_WAIT_MS = 30_000;
 const MAX_WAIT_MS = 30 * 60_000;
-const Schema = z.object({ source: z.string().max(56_000_000), source_sha256: z.string().regex(/^[0-9a-fA-F]{64}$/), lyrics: z.string().min(1).max(ALIGN_MAX_LYRICS_CHARS), origin: z.enum(["made_here", "owned_file"]).optional(), timeout_ms: z.number().int().positive().max(MAX_WAIT_MS).optional() });
+const Schema = z.object({ source: z.string().max(56_000_000), source_sha256: z.string().regex(/^[0-9a-fA-F]{64}$/), lyrics: z.string().min(1).max(ALIGN_MAX_LYRICS_CHARS), origin: z.enum(["made_here", "owned_file"]).optional(), timeout_ms: z.number().int().positive().max(MAX_WAIT_MS).optional(), from_s: z.number().min(0).optional(), to_s: z.number().optional() }).superRefine((v, ctx) => {
+  if ((v.from_s === undefined) !== (v.to_s === undefined)) ctx.addIssue({ code: "custom", message: "Send from_s and to_s together." });
+  else if (v.from_s !== undefined && v.to_s !== undefined && (v.to_s <= v.from_s || v.to_s - v.from_s > ALIGN_MAX_SECONDS)) ctx.addIssue({ code: "custom", message: "to_s must be after from_s, and the window at most 4 minutes." });
+});
 const ErrorSchema = z.object({ error: z.string(), code: z.string(), job: z.string().optional() });
 const Word = z.object({ t: z.number(), end: z.number(), text: z.string() });
-const Data = z.object({ words: z.array(Word), aligned_words: z.number().int(), total_words: z.number().int(), line_starts: z.array(z.number().int()) });
+const Data = z.object({ words: z.array(Word), aligned_words: z.number().int(), total_words: z.number().int(), line_starts: z.array(z.number().int()), window: z.object({ from_s: z.number(), to_s: z.number() }).optional() });
 const Reply = z.object({ created: z.number().int(), job: z.string(), data: Data.nullable() });
 const post = createRoute({ method: "post", path: "/", tags: ["Align"], summary: "Time known lyrics against a song, word by word", request: { body: { content: { "application/json": { schema: Schema } } } }, responses: { 200: { content: { "application/json": { schema: Reply } }, description: "Word timings are ready." }, 202: { content: { "application/json": { schema: Reply } }, description: "The alignment is running; poll the job." }, 413: { content: { "application/json": { schema: ErrorSchema } }, description: "Source too large." }, 422: { content: { "application/json": { schema: ErrorSchema } }, description: "Invalid source." }, 429: { content: { "application/json": { schema: ErrorSchema } }, description: "Too many alignment jobs waiting." }, 503: { content: { "application/json": { schema: ErrorSchema } }, description: "Not installed or unavailable." } } });
 const status = createRoute({ method: "get", path: "/{job}", tags: ["Align"], summary: "Alignment job progress and result", request: { params: z.object({ job: z.string() }) }, responses: { 200: { content: { "application/json": { schema: z.object({ job: z.string(), state: z.string(), phase: z.string(), progress: z.number(), progress_fraction: z.number(), stage_label: z.string(), position: z.number().nullable(), stage: z.string().nullable(), eta_seconds: z.number().nullable(), error: z.string().nullable(), code: z.string().nullable(), data: Data.nullable() }) } }, description: "Job state." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "No such alignment job." } } });
@@ -40,9 +43,11 @@ alignV1Routes.openapi(post, async (c) => {
   if (listJobs().filter((job) => job.kind === ALIGN_JOB_KIND && active(job.state)).length >= 4) return fail(c, 429, "queue_full", "Four lyric timing jobs are already waiting. Try again when one finishes.");
   const governor = getGovernorStatus();
   const resident = governor.loaded.filter((item) => item.kind === "resident").reduce((sum, item) => sum + item.peakBytes, 0);
-  if (resident + ALIGN_PEAK_BYTES > governor.capBytes) return fail(c, 503, "no_memory", "Not enough free memory for lyric timing right now. Close other big jobs, or try again.");
+  const windowed = body.from_s !== undefined && body.to_s !== undefined;
+  const need = windowed ? alignPeakBytesFor(body.to_s! - body.from_s!) : ALIGN_PEAK_BYTES;
+  if (resident + need > governor.capBytes) return fail(c, 503, "no_memory", "Not enough free memory for lyric timing right now. Close other big jobs, or try again.");
   const token = crypto.randomUUID(); stashAlign(token, source, body.lyrics);
-  const submitted = submitJob({ kind: ALIGN_JOB_KIND, role: "music", input: { token, origin: owned ? "owned_file" : "made_here" } });
+  const submitted = submitJob({ kind: ALIGN_JOB_KIND, role: "music", input: { token, origin: owned ? "owned_file" : "made_here", ...(windowed ? { from_s: body.from_s, to_s: body.to_s } : {}) } });
   if ("refused" in submitted) { unstashAlign(token); return fail(c, 503, submitted.code ?? "no_memory", submitted.reason); }
   const settled = await waitForJob(submitted.job.id, body.timeout_ms ?? DEFAULT_WAIT_MS);
   const created = Math.floor(Date.parse((settled ?? submitted.job).createdAt) / 1000);
