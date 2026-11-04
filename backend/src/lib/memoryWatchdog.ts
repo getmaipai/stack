@@ -33,7 +33,7 @@ import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { logger } from "@/lib/log";
 import { getSystemSampler, type ProcessRow, type SystemSample, type SystemSampler } from "@/lib/memory/system";
-import { cancelGeneratorsForMemory, runningGeneratorKinds } from "@/lib/jobs";
+import { cancelGeneratorsForMemory, generatorWorkPending, runningGeneratorKinds } from "@/lib/jobs";
 import { getGovernorStatus, setAdmissionGate, videoWindowStats } from "@/lib/governor";
 import { admissionVerdict, chatPagedOut, latestSample, levelSince, memoryLevel, orphanReaperEnabled, recordAction, recentActions, reserveBytes, setChatPagedOut, setLatestSample, setMemoryLevel, watchdogEnabled, WatchdogRules, type WatchdogLevel } from "@/lib/memoryState";
 import { engineRoot } from "@/lib/store/layout";
@@ -46,6 +46,8 @@ import { folderBytes, runSweeps } from "@/lib/sweeps";
 import { descendantsOf as childPids, startTimeOf, commandLineOf } from "@/lib/processTree";
 import { ownedPids, finishedSurvivors } from "@/lib/ownedProcesses";
 import { getMemoryReader } from "@/lib/memory";
+import { settingValues } from "@/settings";
+import { metalHostFault } from "@/lib/hostProbe";
 
 const GB = 1_073_741_824;
 const VOICE_KEEP_MS = 300_000;
@@ -201,6 +203,7 @@ export interface WatchdogActions {
   /** Give chat its normal model back after a reduce this watchdog made. `kept`: Home or the Max window still holds Reduced (the watchdog's hold is dropped); `waiting`: a chat turn is running, try again. */
   restoreChat(): Promise<"restored" | "kept" | "waiting" | "failed">;
   restartChat(): Promise<void>;
+  restartChatGuard(cause: "memory-ceiling" | "maintenance-restart"): Promise<void>;
   notify(data: Record<string, unknown>): void;
 }
 
@@ -236,6 +239,7 @@ export const defaultActions: WatchdogActions = {
     return result.status === 202 ? "waiting" : "failed";
   },
   restartChat: async () => { const supervisor = await import("@/lib/supervisor"); await supervisor.restartRole("chat", "memory-watchdog"); void import("@/lib/supervisor").then(({ getProcess }) => getProcess("chat")).catch(() => {}); },
+  restartChatGuard: async (cause) => { const supervisor = await import("@/lib/supervisor"); await supervisor.restartChatForHostGuard(cause); },
   notify: (data) => { emit({ id: "pressure", data }); },
 };
 
@@ -258,6 +262,12 @@ export interface WatchdogOptions {
   runSweeps?: (reason: string) => unknown;
   /** Reads the kernel's per-process memory figure. */
   processMemoryBytes?: (pid: number) => number | null;
+  chatGuard?: () => Promise<{ pid: number | null; uptimeMs: number | null; engine: string | null; activeRequests: number; kind: string | null }>;
+  chatCapBytes?: () => number | null | Promise<number | null>;
+  ceilingFactor?: () => number;
+  canary?: () => Promise<string | null>;
+  jobsQuiet?: () => boolean;
+  maintenanceHours?: () => number;
 }
 
 export interface TopConsumer { pid: number; name: string; bytes: number; stack: boolean; }
@@ -328,6 +338,20 @@ export class MemoryWatchdog {
   private normalSince: number | null = null;
   private chatIdleNow: () => boolean;
   private processMemoryBytes: (pid: number) => number | null;
+  private chatGuard: NonNullable<WatchdogOptions["chatGuard"]>;
+  private chatCapBytes: () => Promise<number | null>;
+  private ceilingFactor: NonNullable<WatchdogOptions["ceilingFactor"]>;
+  private canary: NonNullable<WatchdogOptions["canary"]>;
+  private jobsQuiet: NonNullable<WatchdogOptions["jobsQuiet"]>;
+  private maintenanceHours: NonNullable<WatchdogOptions["maintenanceHours"]>;
+  private overCeilingLooks = 0;
+  private memoryRestartAt: number[] = [];
+  private maintenanceRestartAt = 0;
+  private hostFaultRaised = false;
+  private metalFaultRaised = false;
+  private restartLimitRaised = false;
+  private chatStartedObservedAt: number | null = null;
+  private quietSince: number | null = null;
 
   constructor(options: WatchdogOptions = {}) {
     this.sampler = options.sampler ?? getSystemSampler();
@@ -345,6 +369,15 @@ export class MemoryWatchdog {
     this.measureFolder = options.folderBytes ?? folderBytes;
     this.sweepDisk = options.runSweeps ?? runSweeps;
     this.processMemoryBytes = options.processMemoryBytes ?? ((pid) => getMemoryReader().processMemoryBytes(pid));
+    this.chatGuard = options.chatGuard ?? (async () => (await import("@/lib/supervisor")).chatProcessRuntime());
+    this.chatCapBytes = async () => {
+      const bytes = await (options.chatCapBytes ? options.chatCapBytes() : (await import("@/lib/supervisor")).chatSplashMemoryCapBytes());
+      return bytes;
+    };
+    this.ceilingFactor = options.ceilingFactor ?? (() => Number(settingValues()["stack.engines.chat.memory_ceiling_factor"] ?? 1.15));
+    this.canary = options.canary ?? (() => metalHostFault("splash"));
+    this.jobsQuiet = options.jobsQuiet ?? (() => !generatorWorkPending());
+    this.maintenanceHours = options.maintenanceHours ?? (() => Number(settingValues()["stack.engines.chat.maintenance_restart_hours"] ?? 12));
   }
 
   private swapGrowth(): number {
@@ -388,6 +421,7 @@ export class MemoryWatchdog {
       const tight = memoryLevel() !== "normal";
       if (tight || this.ticks % WatchdogRules.processEvery === 1) this.rows = this.measureProcesses(this.sampler.processes());
       if (!watchdogEnabled() || sample.degraded) { this.devLoad = { others_bytes: 0, processes: [] }; if (memoryLevel() !== "normal") this.leave(); this.reapSurvivors(); this.checkUnaccounted(); return; }
+      await this.chatGuardTick();
       const reserve = reserveBytes(sample.totalBytes);
       const previous = this.ladder.level;
       this.ladder = stepLadderForChatPageout(this.ladder, { sample, swapGrowthBytes: this.swapGrowth(), reserve }, chatPagedOut());
@@ -406,6 +440,78 @@ export class MemoryWatchdog {
     } finally {
       this.busy = false;
     }
+  }
+
+  /** HOST-GUARD-05: the only reserved role with automatic memory restarts. We require two measured ceiling looks, a two-minute idle window, no queued/held/running generator, and a passing Metal canary. */
+  private async chatGuardTick(): Promise<void> {
+    const process = await this.chatGuard();
+    if (!process.pid || process.kind !== "spawned" || process.engine !== "splash-chat" || process.uptimeMs === null) {
+      this.overCeilingLooks = 0; this.chatStartedObservedAt = null; this.quietSince = null; return;
+    }
+    const startedAt = this.now() - process.uptimeMs;
+    if (this.chatStartedObservedAt !== null && this.chatStartedObservedAt !== startedAt) {
+      resolveHealth("resident-memory-grew.chat");
+      this.restartLimitRaised = false;
+    }
+    this.chatStartedObservedAt = startedAt;
+    const row = this.rows.find((candidate) => candidate.pid === process.pid);
+    const cap = await this.chatCapBytes();
+    if (this.metalFaultRaised) {
+      const recoveryFault = await this.canary();
+      if (recoveryFault) return;
+      resolveHealth("host-metal-fault");
+      this.metalFaultRaised = false;
+    }
+    if (row && cap && row.rssBytes > cap * this.ceilingFactor()) this.overCeilingLooks++;
+    else this.overCeilingLooks = 0;
+    if (this.overCeilingLooks === 0) {
+      resolveHealth("resident-memory-grew.chat");
+      this.restartLimitRaised = false;
+    }
+
+    const now = this.now();
+    this.memoryRestartAt = this.memoryRestartAt.filter((at) => now - at < 24 * 60 * 60_000);
+    const quietNow = this.chatIdleNow() && process.activeRequests === 0 && this.jobsQuiet();
+    this.quietSince = quietNow ? (this.quietSince ?? now) : null;
+    const quiet = quietNow && this.quietSince !== null && now - this.quietSince >= CHAT_IDLE_MS;
+    const canRestart = quiet && this.overCeilingLooks >= 2;
+    const maintenanceHours = this.maintenanceHours();
+    const maintenanceDue = maintenanceHours > 0 && process.uptimeMs >= maintenanceHours * 60 * 60_000 && (this.maintenanceRestartAt === 0 || now - this.maintenanceRestartAt >= 24 * 60 * 60_000);
+    if (!canRestart && !(maintenanceDue && quiet)) return;
+    if (maintenanceDue && quiet) {
+      const fault = await this.canary();
+      if (fault) { this.reportHostFault(fault); return; }
+      if (this.metalFaultRaised) { resolveHealth("host-metal-fault"); this.metalFaultRaised = false; }
+      this.maintenanceRestartAt = now;
+      await this.actions.restartChatGuard("maintenance-restart");
+      resolveHealth("resident-memory-grew.chat");
+      this.restartLimitRaised = false;
+      this.chatStartedObservedAt = null;
+      this.record(memoryLevel(), "maintenance-restart-chat", "chat reached its scheduled uptime in a quiet window");
+      return;
+    }
+    if (!canRestart) return;
+    const fault = await this.canary();
+    if (fault) { this.reportHostFault(fault); return; }
+    if (this.metalFaultRaised) { resolveHealth("host-metal-fault"); this.metalFaultRaised = false; }
+    if (this.memoryRestartAt.length >= 4 || (this.memoryRestartAt.length > 0 && now - this.memoryRestartAt[this.memoryRestartAt.length - 1]! < 60 * 60_000)) {
+      if (!this.restartLimitRaised) raise({ code: "resident-memory-grew.chat", severity: "warning", title: "Chat is using more memory than its limit", text: "Chat stayed above its memory limit. Restart the engine to start it fresh.", cause: "Automatic chat restarts reached their hourly or daily limit.", fix: { label: "Restart engine", action: "restart_engine" } });
+      this.restartLimitRaised = true;
+      return;
+    }
+    this.memoryRestartAt.push(now);
+    this.overCeilingLooks = 0;
+    resolveHealth("resident-memory-grew.chat");
+    this.restartLimitRaised = false;
+    await this.actions.restartChatGuard("memory-ceiling");
+    this.chatStartedObservedAt = null;
+    this.record(memoryLevel(), "memory-ceiling-restart-chat", `chat exceeded ${gb(cap!)} GB by the configured ceiling factor`);
+  }
+
+  private reportHostFault(reason: string): void {
+    if (this.metalFaultRaised) return;
+    this.metalFaultRaised = true;
+    raise({ code: "host-metal-fault", severity: "warning", title: "This Mac cannot restart its Metal engine", text: "The Stack kept chat running because macOS could not pass its Metal check. Check the Mac and try again later.", cause: reason, fix: { label: "Restart engine", action: "restart_engine" } });
   }
 
   /** Keep enumeration cheap: measure the 40 largest RSS processes and every Stack-owned pid. */

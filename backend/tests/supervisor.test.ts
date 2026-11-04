@@ -445,6 +445,24 @@ test("stopping and restarting a role log an engine.retired line with the reason 
   expect(text).toContain("Stopped by a test.");
 });
 
+test("host guard restarts chat and exposes loading state while the old process stops", async () => {
+  const { restartChatForHostGuard } = await import("@/lib/supervisor");
+  let observedDuringRestart: string | null = null;
+  let starts = 0;
+  setSupervisorFactoryForTests(async (role) => {
+    starts++;
+    if (starts > 1) observedDuringRestart = getRoleStatus("chat").state;
+    return scriptedProcess(role, { kind: "spawned" });
+  });
+  await getProcess("chat");
+  await restartChatForHostGuard("memory-ceiling");
+  for (let i = 0; i < 20 && starts < 2; i++) await new Promise((resolve) => setTimeout(resolve, 5));
+  for (let i = 0; i < 20 && getRoleStatus("chat").state !== "ready"; i++) await new Promise((resolve) => setTimeout(resolve, 5));
+  expect(starts).toBe(2);
+  expect(String(observedDuringRestart)).toBe("loading");
+  expect(getRoleStatus("chat").state).toBe("ready");
+});
+
 test("a restart logs who asked for it and how the old process ended", async () => {
   const { logsDir } = await import("@/lib/paths");
   const { restartRole } = await import("@/lib/supervisor");

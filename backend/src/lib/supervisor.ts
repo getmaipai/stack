@@ -1485,10 +1485,14 @@ export function splashLaunchPlan(model: ModelRecord, port: number, contextLength
   const stayingBytes = modeCoding ? governor.loaded.filter((item) => !["chat", "judge", "coding"].includes(item.id)).reduce((sum, item) => sum + item.peakBytes, 0) : 0;
   const draftRecord = getModel(pair.draftPin.id);
   const estimate = splashFootprintEstimateBytes({ weightsBytes: model.sizeBytes ?? 0, draftBytes: draftRecord?.sizeBytes ?? pair.draftPin.download!.approx_bytes, contextTokens: contextLength });
-  const maxMemoryBytes = modeCoding ? Math.max(1, Math.min(governor.capBytes - stayingBytes, estimate + governor.marginBytes)) : null;
   const chatRole = pinName === "splash-chat";
+  // Owner ruling 2026-11-04 lifts resource-management R1 for chat only: Splash gets a full-context Metal cap, and the watchdog may restart this process at its ceiling.
+  const headroomBytes = Math.floor(Number(values["stack.engines.chat.max_memory_headroom_gb"] ?? 12)) * 1_073_741_824;
+  const measuredBytes = model.measuredFootprintBytes ?? 0;
+  const fullContextNeed = Math.max(estimate, measuredBytes) + headroomBytes;
+  const maxMemoryBytes = modeCoding ? Math.max(1, Math.min(governor.capBytes - stayingBytes, estimate + governor.marginBytes)) : chatRole ? Math.max(fullContextNeed + governor.marginBytes, estimate + governor.marginBytes) : null;
   const thinkingBudget = Math.max(0, Math.floor(Number(values["stack.engines.chat.thinking_budget_ceiling"] ?? 2000)));
-  const args = splashArgs({ model: layout.model, revision: layout.revision, port, servedModelName: model.id, thinkingBudgetTokens: chatRole ? thinkingBudget : coding.thinkingBudgetTokens, contextLength, languageOnly: !declaredReadsPictures(model), ...(modeCoding ? { defaultReasoningEffort: "none" as const, maxMemory: `${Math.max(1, Math.floor(maxMemoryBytes! / 1_073_741_824))}G`, decodeShare: 1.0 } : {}) });
+  const args = splashArgs({ model: layout.model, revision: layout.revision, port, servedModelName: model.id, thinkingBudgetTokens: chatRole ? thinkingBudget : coding.thinkingBudgetTokens, contextLength, languageOnly: !declaredReadsPictures(model), ...(modeCoding ? { defaultReasoningEffort: "none" as const, maxMemory: `${Math.max(1, Math.floor(maxMemoryBytes! / 1_073_741_824))}G`, decodeShare: 1.0 } : chatRole ? { maxMemory: `${Math.ceil(maxMemoryBytes! / 1_073_741_824)}G` } : {}) });
   const env = splashEnv(layout);
   if (chatRole) env.DO_NOT_TRACK = "1";
   return {
@@ -2119,6 +2123,8 @@ export type RetireCause =
   | "video-window-shrink"
   | "video-window-restore"
   | "memory-watchdog"
+  | "memory-ceiling"
+  | "maintenance-restart"
   | "canary-request"
   | "tier-reduced-enter"
   | "tier-reduced-leave"
@@ -2213,6 +2219,33 @@ export function setRestartListener(listener: ((role: RoleId) => void) | null): v
 export async function restartRole(requested: RoleId, cause: RetireCause): Promise<void> {
   restartListener?.(processRoleFor(requested));
   await recycleRole(requested, cause);
+}
+
+/** HOST-GUARD-05: recycle chat for a guarded memory-ceiling or maintenance restart. R1 remains in force for every other reserved role. */
+export async function restartChatForHostGuard(cause: Extract<RetireCause, "memory-ceiling" | "maintenance-restart">): Promise<void> {
+  await recycleRole("chat", cause);
+  void getProcess("chat").catch((error: unknown) => logger.appendLine(JSON.stringify({ event: "chat.host-guard-restart-failed", cause, message: error instanceof Error ? error.message : String(error) })));
+}
+
+export function chatProcessRuntime(): { pid: number | null; uptimeMs: number | null; engine: string | null; activeRequests: number; kind: EngineKind | null } {
+  const current = runtime("chat");
+  const processRecord = current.process;
+  const startedAt = processRecord ? spawnedAtOf.get(processRecord) ?? null : null;
+  return { pid: processRecord?.pid ?? null, uptimeMs: startedAt === null ? null : Date.now() - startedAt, engine: processRecord?.engine ?? null, activeRequests: processRecord?.activeRequests ?? 0, kind: processRecord?.kind ?? null };
+}
+
+/** Metal memory ceiling passed to Splash chat at launch, for the memory watchdog's process-size comparison. */
+export function chatSplashMemoryCapBytes(): number | null {
+  const model = selectedModel("chat");
+  if (!model || engineForRole("chat") !== "splash") return null;
+  const pair = splashPairFor(model.id);
+  const draft = getModel(pair.draftPin.id);
+  const contextLength = runtime("chat").process?.contextLength ?? Number(settingValues()["stack.engines.chat.context_length"] ?? 131072);
+  const estimate = splashFootprintEstimateBytes({ weightsBytes: model.sizeBytes ?? 0, draftBytes: draft?.sizeBytes ?? pair.draftPin.download!.approx_bytes, contextTokens: contextLength });
+  // Match splashLaunchPlan: cap never falls below full-context demand plus governor margin.
+  const governor = getGovernorStatus();
+  const headroom = Number(settingValues()["stack.engines.chat.max_memory_headroom_gb"] ?? 12) * 1_073_741_824;
+  return Math.max(Math.max(estimate, model.measuredFootprintBytes ?? 0) + headroom + governor.marginBytes, estimate + governor.marginBytes);
 }
 
 /** Retires the role's process and leaves the next start to the caller, without telling the self-heal controller a person did it (a canary's restart request counts toward the breaker). */

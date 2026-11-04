@@ -13,6 +13,7 @@ import { splashHubDir, splashHomeDir, splashRoot, splashTmpDir } from "@/lib/spl
 import { __setAppleChipForTests } from "@/lib/hardware";
 import { __resetHealthForTests, list as listHealth } from "@/lib/health";
 import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, refreshMeasuredPeak, startGovernor, type GovernorHandle } from "@/lib/governor";
+import { initializeHomeMode } from "@/lib/homeMode";
 
 const verified = { source: "catalog" as const, provenance: { repo: "huihui-ai/Huihui-Qwen3.8-27B-abliterated-GGUF" }, revision: STACK_CHAT_QWEN38_UNCENSORED_MODEL.revision!, sha256: STACK_CHAT_QWEN38_UNCENSORED_MODEL.download!.sha256, licence: "Apache-2.0", verifiedAt: new Date().toISOString() };
 function sparse(path: string, size: number) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, ""); truncateSync(path, size); }
@@ -35,6 +36,7 @@ function installChatEngine() {
 }
 beforeEach(() => {
   clearModelsForTests(); clearChatEngineFailures(); __resetSettingsForTests(); __resetHealthForTests(); resetSupervisorForTests();
+  initializeHomeMode("normal");
   setMachineTier("p64"); setCodingMachineFacts({ platform: "darwin", arch: "arm64", chipGeneration: 3, chipName: "Apple M3", memoryGb: 64, osVersion: "26.4" }); __setAppleChipForTests({ generation: 3, name: "Apple M3" });
 });
 afterEach(() => { resetSupervisorForTests(); clearModelsForTests(); clearChatEngineFailures(); __resetSettingsForTests(); setMachineTier(null); setCodingMachineFacts(null); rmSync(splashRoot(), { recursive: true, force: true }); rmSync(join(engineDir(SPLASH_CHAT_PIN), ".."), { recursive: true, force: true }); });
@@ -67,6 +69,32 @@ test("Splash chat launch uses pinned target and draft, offline args, the disk ca
   expect(plan.env).toMatchObject({ HF_HUB_OFFLINE: "1", DO_NOT_TRACK: "1", HF_HUB_CACHE: splashHubDir(), HOME: splashHomeDir(), TMPDIR: splashTmpDir() });
   expect(existsSync(join(cache, "old-prefix"))).toBe(false);
   expect(plan.command).toContain("--language-only");
+});
+
+test("Splash chat gets a full-context memory cap in normal mode with headroom and governor margin", () => {
+  installModel(STACK_CHAT_QWEN38_UNCENSORED_MODEL); installModel(STACK_CODING_DRAFT_MODEL); installChatEngine();
+  const model = getModel(STACK_CHAT_QWEN38_UNCENSORED_MODEL.id)!;
+  for (const context of [40_960, 131_072, 262_144]) {
+    const plan = splashLaunchPlan(model, 8812, context, "splash-chat");
+    const args = plan.command;
+    const cap = Number(args[args.indexOf("--max-memory") + 1]!.replace(/G$/, ""));
+    expect(args).toContain("--max-memory");
+    expect(cap).toBeGreaterThanOrEqual(Math.ceil((model.sizeBytes! + STACK_CODING_DRAFT_MODEL.download!.approx_bytes) / 1_073_741_824));
+  }
+});
+
+test("coding mode keeps Splash chat's existing governor max-memory formula", async () => {
+  installModel(STACK_CHAT_QWEN38_UNCENSORED_MODEL); installModel(STACK_CODING_DRAFT_MODEL); installChatEngine();
+  const { getGovernorStatus } = await import("@/lib/governor");
+  const { splashFootprintEstimateBytes } = await import("@/lib/splash");
+  initializeHomeMode("coding");
+  const model = getModel(STACK_CHAT_QWEN38_UNCENSORED_MODEL.id)!;
+  const plan = splashLaunchPlan(model, 8812, 131_072, "splash-chat");
+  const status = getGovernorStatus();
+  const estimate = splashFootprintEstimateBytes({ weightsBytes: model.sizeBytes ?? 0, draftBytes: STACK_CODING_DRAFT_MODEL.download!.approx_bytes, contextTokens: 131_072 });
+  const expected = Math.max(1, Math.floor(Math.min(status.capBytes, estimate + status.marginBytes) / 1_073_741_824));
+  expect(plan.command[plan.command.indexOf("--max-memory") + 1]).toBe(`${expected}G`);
+  initializeHomeMode("normal");
 });
 
 test("Splash chat client preserves streaming/tool/usage fields, reasoning split and cancellation while forcing the pinned sampling and thinking ceiling inputs", async () => {

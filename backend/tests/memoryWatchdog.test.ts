@@ -52,6 +52,7 @@ function fakeActions(): WatchdogActions & { log: string[]; running: string[]; qu
     reduceChat: async () => { state.log.push("reduce-chat"); return state.reduceResult; },
     restoreChat: async () => { state.log.push("restore-chat"); return state.restoreResult; },
     restartChat: async () => { state.log.push("restart-chat"); },
+    restartChatGuard: async (cause: "memory-ceiling" | "maintenance-restart") => { state.log.push(`restart-chat-guard:${cause}`); },
     notify: (data: Record<string, unknown>) => { state.notified.push(data); },
   });
 }
@@ -218,6 +219,112 @@ test("watchdog reports measured Stack process memory instead of ps RSS", async (
   expect(report.stack.processes.find((entry) => entry.pid === 501)?.bytes).toBe(100 * GB);
   expect(report.stack.bytes).toBe(112 * GB);
   expect(report.top_consumers.find((entry) => entry.pid === 501)?.bytes).toBe(100 * GB);
+});
+
+test("chat memory ceiling needs two looks, a quiet window, and a passing canary", async () => {
+  let clock = 1_000_000;
+  const sampler = fakeSampler([row({ pid: 500, ppid: 1 }), row({ pid: 501, ppid: 500, name: "splash-chat", rssBytes: 14 * GB })]);
+  const actions = fakeActions();
+  const dog = new MemoryWatchdog({ sampler, actions, now: () => clock, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null, chatGuard: async () => ({ pid: 501, uptimeMs: 20 * 60_000, engine: "splash-chat", activeRequests: 0, kind: "spawned" }), chatCapBytes: () => 10 * GB, canary: async () => null, chatIdle: () => true });
+  await dog.tick(); expect(actions.log).not.toContain("restart-chat-guard:memory-ceiling");
+  clock += 120_000; await dog.tick(); expect(actions.log.filter((entry) => entry === "restart-chat-guard:memory-ceiling")).toHaveLength(1);
+  clock += 5_000; await dog.tick(); expect(actions.log.filter((entry) => entry === "restart-chat-guard:memory-ceiling")).toHaveLength(1);
+});
+
+test("a failed Metal canary prevents chat ceiling restart and reports the host fault", async () => {
+  let clock = 1_000_000;
+  const sampler = fakeSampler([row({ pid: 500, ppid: 1 }), row({ pid: 501, ppid: 500, rssBytes: 20 * GB })]);
+  const actions = fakeActions();
+  const dog = new MemoryWatchdog({ sampler, actions, now: () => clock, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null, chatGuard: async () => ({ pid: 501, uptimeMs: 20 * 60_000, engine: "splash-chat", activeRequests: 0, kind: "spawned" }), chatCapBytes: () => 10 * GB, canary: async () => "Metal compiler unavailable", chatIdle: () => true });
+  await dog.tick(); clock += 120_000; await dog.tick(); clock += 5_000; await dog.tick();
+  expect(actions.log).not.toContain("restart-chat-guard:memory-ceiling");
+  expect(listHealth().some((item) => item.code === "host-metal-fault")).toBe(true);
+});
+
+test("maintenance restart waits for uptime and quiet window, then runs once", async () => {
+  let clock = 1_000_000;
+  let uptime = 11 * 60 * 60_000;
+  const sampler = fakeSampler([row({ pid: 500, ppid: 1 }), row({ pid: 501, ppid: 500, rssBytes: GB })]);
+  const actions = fakeActions();
+  const dog = new MemoryWatchdog({ sampler, actions, now: () => clock, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null, chatGuard: async () => ({ pid: 501, uptimeMs: uptime, engine: "splash-chat", activeRequests: 0, kind: "spawned" }), chatCapBytes: () => 10 * GB, canary: async () => null, chatIdle: () => true });
+  await dog.tick(); clock += 120_000; await dog.tick(); expect(actions.log).not.toContain("restart-chat-guard:maintenance-restart");
+  uptime = 12 * 60 * 60_000; await dog.tick(); expect(actions.log).toContain("restart-chat-guard:maintenance-restart");
+});
+
+function guardedDog(options: { clock: () => number; actions: ReturnType<typeof fakeActions>; rss?: number; uptime?: () => number; active?: () => number; idle?: () => boolean; quiet?: () => boolean; canary?: () => Promise<string | null>; maintenanceHours?: () => number; factor?: () => number }) {
+  const sampler = fakeSampler([row({ pid: 500, ppid: 1 }), row({ pid: 501, ppid: 500, name: "splash-chat", rssBytes: options.rss ?? 20 * GB })]);
+  const dog = new MemoryWatchdog({ sampler, actions: options.actions, now: options.clock, ownPid: 500, engineRoots: [ENGINES], workerEntries: [], kill: () => {}, commandOf: () => null,
+    chatGuard: async () => ({ pid: 501, uptimeMs: options.uptime?.() ?? 30 * 60_000, engine: "splash-chat", activeRequests: options.active?.() ?? 0, kind: "spawned" }),
+    chatCapBytes: () => 10 * GB, ceilingFactor: options.factor ?? (() => 1.15), canary: options.canary ?? (async () => null),
+    jobsQuiet: options.quiet ?? (() => true), maintenanceHours: options.maintenanceHours ?? (() => 0), chatIdle: options.idle ?? (() => true) });
+  return dog;
+}
+
+test("chat ceiling does nothing below the limit or for only one look", async () => {
+  let now = 1_000_000;
+  const actions = fakeActions();
+  const dog = guardedDog({ clock: () => now, actions, rss: 11 * GB });
+  await dog.tick(); await dog.tick();
+  expect(actions.log).not.toContain("restart-chat-guard:memory-ceiling");
+  const aboveActions = fakeActions();
+  const above = guardedDog({ clock: () => now, actions: aboveActions, rss: 12 * GB });
+  await above.tick();
+  expect(aboveActions.log).not.toContain("restart-chat-guard:memory-ceiling");
+});
+
+test("chat ceiling is blocked by active requests, queued work, or a non-idle chat", async () => {
+  for (const busy of [{ active: () => 1 }, { quiet: () => false }, { idle: () => false }]) {
+    let now = 1_000_000;
+    const actions = fakeActions();
+    const dog = guardedDog({ clock: () => now, actions, ...busy });
+    for (let i = 0; i < 40; i++) { await dog.tick(); now += 10_000; }
+    expect(actions.log).not.toContain("restart-chat-guard:memory-ceiling");
+  }
+});
+
+test("a bad canary raises once, then a good canary resolves its fault", async () => {
+  let now = 1_000_000;
+  let fault: string | null = "Metal compiler unavailable";
+  const actions = fakeActions();
+  const dog = guardedDog({ clock: () => now, actions, canary: async () => fault });
+  for (let i = 0; i < 3; i++) { await dog.tick(); now += 120_000; }
+  expect(actions.log).not.toContain("restart-chat-guard:memory-ceiling");
+  expect(listHealth().filter((item) => item.code === "host-metal-fault")).toHaveLength(1);
+  fault = null;
+  await dog.tick();
+  expect(listHealth().some((item) => item.code === "host-metal-fault")).toBe(false);
+});
+
+test("ceiling restarts are rate limited hourly and daily, with one refusal health item", async () => {
+  let now = 1_000_000;
+  const actions = fakeActions();
+  const dog = guardedDog({ clock: () => now, actions });
+  const attempt = async () => { await dog.tick(); now += 120_000; await dog.tick(); };
+  await attempt(); // first allowed
+  now += 30 * 60_000; await attempt(); // second within an hour refused
+  expect(actions.log.filter((entry) => entry === "restart-chat-guard:memory-ceiling")).toHaveLength(1);
+  now += 31 * 60_000; await attempt(); // allowed after the hourly window
+  now += 61 * 60_000; await attempt();
+  now += 61 * 60_000; await attempt();
+  now += 61 * 60_000; await attempt(); // fourth allowed in rolling day
+  now += 61 * 60_000; await attempt(); // fifth within 24h refused
+  expect(actions.log.filter((entry) => entry === "restart-chat-guard:memory-ceiling")).toHaveLength(4);
+  expect(listHealth().filter((item) => item.code === "resident-memory-grew.chat")).toHaveLength(1);
+});
+
+test("maintenance restart honors disabled, due, and once-per-day settings", async () => {
+  let now = 1_000_000;
+  let uptime = 12 * 60 * 60_000;
+  let hours = 0;
+  const actions = fakeActions();
+  const dog = guardedDog({ clock: () => now, actions, rss: GB, uptime: () => uptime, maintenanceHours: () => hours });
+  for (let i = 0; i < 4; i++) { await dog.tick(); now += 120_000; }
+  expect(actions.log).not.toContain("restart-chat-guard:maintenance-restart");
+  hours = 12;
+  await dog.tick(); expect(actions.log).toContain("restart-chat-guard:maintenance-restart");
+  uptime += 60 * 60_000; now += 60 * 60_000;
+  for (let i = 0; i < 3; i++) { await dog.tick(); now += 120_000; }
+  expect(actions.log.filter((entry) => entry === "restart-chat-guard:maintenance-restart")).toHaveLength(1);
 });
 
 test("unreadable processes retain their ps RSS and other-program totals use measured bytes", async () => {
