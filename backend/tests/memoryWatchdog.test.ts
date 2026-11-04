@@ -201,11 +201,38 @@ test("a fitting job stays queued past the old window and runs when memory frees"
 
 // ---- the actions ----
 
-function watchdogWith(sampler: ReturnType<typeof fakeSampler>, actions = fakeActions(), extra: { now?: () => number; kill?: (pid: number, signal: string) => void; commandOf?: (pid: number) => string | null } = {}) {
+function watchdogWith(sampler: ReturnType<typeof fakeSampler>, actions = fakeActions(), extra: { now?: () => number; kill?: (pid: number, signal: string) => void; commandOf?: (pid: number) => string | null; processMemoryBytes?: (pid: number) => number | null } = {}) {
   let clock = 1_000_000;
-  const dog = new MemoryWatchdog({ sampler, actions, now: extra.now ?? (() => clock), ownPid: 500, engineRoots: [ENGINES], workerEntries: ["/data/stack/backend-src/src/index.ts"], kill: (extra.kill ?? (() => {})) as never, commandOf: extra.commandOf ?? ((pid) => sampler.rows.find((r) => r.pid === pid)?.command ?? null) });
+  const dog = new MemoryWatchdog({ sampler, actions, now: extra.now ?? (() => clock), ownPid: 500, engineRoots: [ENGINES], workerEntries: ["/data/stack/backend-src/src/index.ts"], kill: (extra.kill ?? (() => {})) as never, commandOf: extra.commandOf ?? ((pid) => sampler.rows.find((r) => r.pid === pid)?.command ?? null), processMemoryBytes: extra.processMemoryBytes });
   return { dog, advance: (ms: number) => { clock += ms; }, actions };
 }
+
+test("watchdog reports measured Stack process memory instead of ps RSS", async () => {
+  const sampler = fakeSampler([
+    row({ pid: 500, ppid: 1, name: "maipai-stack", command: "/usr/local/maipai-stack serve", rssBytes: 12 * GB }),
+    row({ pid: 501, ppid: 500, name: "splash", command: "/engines/splash serve-native", rssBytes: 12 * GB }),
+  ]);
+  const { dog } = watchdogWith(sampler, fakeActions(), { processMemoryBytes: (pid) => pid === 501 ? 100 * GB : 12 * GB });
+  await dog.tick();
+  const report = dog.report();
+  expect(report.stack.processes.find((entry) => entry.pid === 501)?.bytes).toBe(100 * GB);
+  expect(report.stack.bytes).toBe(112 * GB);
+  expect(report.top_consumers.find((entry) => entry.pid === 501)?.bytes).toBe(100 * GB);
+});
+
+test("unreadable processes retain their ps RSS and other-program totals use measured bytes", async () => {
+  const sampler = fakeSampler([
+    row({ pid: 500, ppid: 1, name: "maipai-stack", command: "/usr/local/maipai-stack serve", rssBytes: GB }),
+    row({ pid: 501, ppid: 500, name: "unreadable", command: "unreadable", rssBytes: 12 * GB }),
+    row({ pid: 777, ppid: 3, name: "other", command: "other", rssBytes: 12 * GB }),
+  ]);
+  const { dog } = watchdogWith(sampler, fakeActions(), { processMemoryBytes: (pid) => pid === 501 ? null : pid === 777 ? 100 * GB : GB });
+  await dog.tick();
+  const report = dog.report();
+  expect(report.stack.processes.find((entry) => entry.pid === 501)?.bytes).toBe(12 * GB);
+  expect(report.dev_load.others_bytes).toBe(100 * GB);
+  expect(report.top_consumers.find((entry) => entry.pid === 777)?.bytes).toBe(100 * GB);
+});
 
 test("WARN holds queued jobs and unloads idle workers; it never cancels queued or running jobs", async () => {
   const sampler = fakeSampler();

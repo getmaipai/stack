@@ -11388,7 +11388,8 @@
                       "type": "object",
                       "properties": {
                         "bytes": {
-                          "type": "number"
+                          "type": "number",
+                          "description": "Total measured memory for Stack processes; macOS includes physical footprint and graphics memory, with ps RSS as fallback."
                         },
                         "tmp_bytes": {
                           "type": "number"
@@ -11425,7 +11426,8 @@
                                 "type": "string"
                               },
                               "bytes": {
-                                "type": "number"
+                                "type": "number",
+                                "description": "Measured process memory, including macOS physical footprint and graphics memory; ps RSS is the fallback."
                               }
                             },
                             "required": [
@@ -11473,7 +11475,7 @@
                         "others_bytes",
                         "processes"
                       ],
-                      "description": "MEM-SPACE-05: what other programs hold beside the Stack. `processes` names the big ones (name and bytes only) and is empty when nothing is flagged."
+                      "description": "MEM-SPACE-05: what other programs hold beside the Stack. Process byte values use measured process memory, including macOS physical footprint and graphics memory, with ps RSS as fallback. `processes` names the big ones (name and bytes only) and is empty when nothing is flagged."
                     },
                     "top_consumers": {
                       "type": "array",
@@ -11487,7 +11489,8 @@
                             "type": "string"
                           },
                           "bytes": {
-                            "type": "number"
+                            "type": "number",
+                            "description": "Measured process memory, including macOS physical footprint and graphics memory; ps RSS is the fallback."
                           },
                           "stack": {
                             "type": "boolean"
@@ -11502,7 +11505,8 @@
                       }
                     },
                     "non_stack_bytes": {
-                      "type": "number"
+                      "type": "number",
+                      "description": "Total measured memory for processes outside the Stack tree, including macOS physical footprint and graphics memory; ps RSS is the fallback."
                     },
                     "isolation": {
                       "type": "object",

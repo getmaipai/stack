@@ -45,6 +45,7 @@ import { dataDir } from "@/lib/paths";
 import { folderBytes, runSweeps } from "@/lib/sweeps";
 import { descendantsOf as childPids, startTimeOf, commandLineOf } from "@/lib/processTree";
 import { ownedPids, finishedSurvivors } from "@/lib/ownedProcesses";
+import { getMemoryReader } from "@/lib/memory";
 
 const GB = 1_073_741_824;
 const VOICE_KEEP_MS = 300_000;
@@ -255,6 +256,8 @@ export interface WatchdogOptions {
   chatIdle?: () => boolean;
   folderBytes?: (dir: string) => number;
   runSweeps?: (reason: string) => unknown;
+  /** Reads the kernel's per-process memory figure. */
+  processMemoryBytes?: (pid: number) => number | null;
 }
 
 export interface TopConsumer { pid: number; name: string; bytes: number; stack: boolean; }
@@ -324,6 +327,7 @@ export class MemoryWatchdog {
   private restoreInFlight = false;
   private normalSince: number | null = null;
   private chatIdleNow: () => boolean;
+  private processMemoryBytes: (pid: number) => number | null;
 
   constructor(options: WatchdogOptions = {}) {
     this.sampler = options.sampler ?? getSystemSampler();
@@ -340,6 +344,7 @@ export class MemoryWatchdog {
     this.chatIdleNow = options.chatIdle ?? (() => { const last = lastInteractiveAt(); return last === null || this.now() - last >= CHAT_IDLE_MS; });
     this.measureFolder = options.folderBytes ?? folderBytes;
     this.sweepDisk = options.runSweeps ?? runSweeps;
+    this.processMemoryBytes = options.processMemoryBytes ?? ((pid) => getMemoryReader().processMemoryBytes(pid));
   }
 
   private swapGrowth(): number {
@@ -381,7 +386,7 @@ export class MemoryWatchdog {
         } else if (this.diskTempRaised) { resolveHealth("disk-temp-grew"); this.diskTempRaised = false; }
       }
       const tight = memoryLevel() !== "normal";
-      if (tight || this.ticks % WatchdogRules.processEvery === 1) this.rows = this.sampler.processes();
+      if (tight || this.ticks % WatchdogRules.processEvery === 1) this.rows = this.measureProcesses(this.sampler.processes());
       if (!watchdogEnabled() || sample.degraded) { this.devLoad = { others_bytes: 0, processes: [] }; if (memoryLevel() !== "normal") this.leave(); this.reapSurvivors(); this.checkUnaccounted(); return; }
       const reserve = reserveBytes(sample.totalBytes);
       const previous = this.ladder.level;
@@ -401,6 +406,20 @@ export class MemoryWatchdog {
     } finally {
       this.busy = false;
     }
+  }
+
+  /** Keep enumeration cheap: measure the 40 largest RSS processes and every Stack-owned pid. */
+  private measureProcesses(rows: ProcessRow[]): ProcessRow[] {
+    const own = descendantsOf(rows, [this.ownPid]);
+    const selected = new Set([...rows].sort((a, b) => b.rssBytes - a.rssBytes).slice(0, 40).map((row) => row.pid));
+    for (const row of rows) if (row.pid === this.ownPid || own.has(row.pid)) selected.add(row.pid);
+    return rows.map((row) => {
+      if (!selected.has(row.pid)) return row;
+      try {
+        const measured = this.processMemoryBytes(row.pid);
+        return measured === null ? row : { ...row, rssBytes: measured };
+      } catch { return row; }
+    });
   }
 
   private leave(): void {
@@ -656,6 +675,7 @@ export class MemoryWatchdog {
       watchdog: { enabled: watchdogEnabled(), level, since: new Date(levelSince()).toISOString(), reserve_bytes: sample ? reserveBytes(sample.totalBytes) : 0, generation_paused: level !== "normal", chat_paged_out: chatPagedOut(), survivors_stopped: this.survivorsStopped },
       ledger: { reserved_bytes: classBytes.reserved, warm_bytes: classBytes.warm, burst_bytes: classBytes.burst, budget_bytes: governor.capBytes, working_margin_bytes: governor.marginBytes, free_bytes: governor.freeMemoryBytes, queue_depth: queueDepth, chat_paged_out: chatPagedOut() },
       memory: sample ? { total_bytes: sample.totalBytes, available_bytes: sample.availableBytes, free_bytes: sample.freeBytes, wired_bytes: sample.wiredBytes, compressor_bytes: sample.compressorBytes, swap_used_bytes: sample.swapUsedBytes, swap_total_bytes: sample.swapTotalBytes, swap_growth_bytes_30s: growth, pressure_level: sample.pressureLevel, pressure: sample.pressure, sampled_at: new Date(sample.at).toISOString() } : null,
+      // 20 GB fresh and 101–103 GB after hours vs 2.6 GB `ps` RSS for the same pid: use the shared process-memory definition.
       stack: { bytes: own.reduce((total, row) => total + row.rssBytes, 0), tmp_bytes: folderBytes(join(dataDir, "tmp")), unaccounted_bytes: Math.max(0, own.reduce((total, row) => total + row.rssBytes, 0) - governor.loaded.reduce((total, item) => total + item.peakBytes, 0)), unregistered: (() => { const registered = ownedPids(); const old = own.filter((row) => row.pid !== this.ownPid && row.ageSeconds > 60 && !registered.has(row.pid)); return { count: old.length, bytes: old.reduce((total, row) => total + row.rssBytes, 0) }; })(), processes: own.sort((a, b) => b.rssBytes - a.rssBytes).slice(0, 10).map((row) => ({ pid: row.pid, name: row.name, bytes: row.rssBytes })) },
       dev_load: this.devLoad,
       top_consumers: this.consumers(),
