@@ -5,7 +5,7 @@
 import { registerJobRunner } from "@/lib/jobs";
 import { ImageToolError, imageTools, keepResult, unstashInput } from "./imageTools";
 
-export interface ImageEditResult { images?: Array<{ result_id: string; width: number; height: number; content_type: "image/png"; operation: string; engine: string; model: string; ms: number }>; rejected?: { code: string; message: string; status: number }; }
+export interface ImageEditResult { images?: Array<{ result_id: string; width: number; height: number; content_type: "image/png"; operation: string; engine: string; model: string; ms: number; status?: string }>; rejected?: { code: string; message: string; status: number }; }
 
 export function registerImageToolJobs(): void {
   registerJobRunner("image_edit", async (job, signal, progress): Promise<ImageEditResult> => {
@@ -15,7 +15,7 @@ export function registerImageToolJobs(): void {
     try {
       const result = await imageTools.run(input, { signal, onStatus: (status) => progress({ status }) });
       keepResult(job.id, result);
-      return { images: [{ result_id: job.id, width: result.width, height: result.height, content_type: "image/png", operation: result.operation, engine: result.engine, model: result.model, ms: result.ms }] };
+      return { images: [{ result_id: job.id, width: result.width, height: result.height, content_type: "image/png", operation: result.operation, engine: result.engine, model: result.model, ms: result.ms, ...(result.status ? { status: result.status } : {}) }] };
     } catch (error) {
       if (signal.aborted) throw error;
       // A refusal the person can act on is the job's answer, not a Stack failure.

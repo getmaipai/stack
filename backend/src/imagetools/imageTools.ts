@@ -115,7 +115,8 @@ async function compileHelper(target: string, sourceName: string, bundled: string
 export interface WorkerRequest { id: string; op: ImageToolOperation; input: string; output: string; mask?: string; params: Record<string, unknown>; models: Record<string, string | null>; helper: string | null; people_helper?: string | null; subjects_helper?: string | null; }
 /** One person Apple's on-device finder saw: a number (the order the finder gave), and a box as fractions of the picture. */
 export interface PersonBox { id: number; x: number; y: number; w: number; h: number; area: number }
-export interface SubjectBox extends PersonBox { kind: "person" | "animal" | "object" }
+export interface SubjectBox extends PersonBox { kind?: "person" | "animal" | "object"; label?: string }
+export interface LookDetection { label: string; score: number; box: number[] }
 export interface WorkerReply { id: string | null; ok: boolean; code?: string; error?: string; width?: number; height?: number; engine?: string; model?: string; ms?: number; crop_px?: number; people?: PersonBox[]; subjects?: SubjectBox[]; }
 export interface WorkerHandle { send(request: WorkerRequest, deadlineMs: number): Promise<WorkerReply>; kill(graceMs?: number): void; exited: Promise<number>; /** ISOLATION-01: the process, for the gate that stops it while chat is working (absent on a scripted worker). */ pausable?: PausableWorker; }
 
@@ -130,6 +131,7 @@ export interface ImageToolsDeps {
   /** Holds the memory the worker may use; a string is a refusal. */
   hold: (signal?: AbortSignal) => Promise<{ release(): void } | string>;
   tmpDir: () => string;
+  detectSubjects?: (image: Uint8Array) => Promise<LookDetection[]>;
 }
 
 export const defaultImageToolsDeps: ImageToolsDeps = {
@@ -140,6 +142,7 @@ export const defaultImageToolsDeps: ImageToolsDeps = {
   ensureSubjectsHelper,
   modelPath: imageToolModelPath,
   tmpDir: imageToolsTmpDir,
+  detectSubjects: async (image) => (await import("@/look/look")).lookService.detectAll(image),
   hold: async (signal) => {
     const request = { id: "image-tools", kind: "jit" as const, requestedBytes: IMAGE_TOOLS_ESTIMATED_BYTES, pinned: true };
     const answer = await admit(request);
@@ -204,7 +207,7 @@ export function workerHandle(child: { pid?: number; stdin: { write(data: string)
 }
 
 export interface ImageToolInput { operation: ImageToolOperation; image: Uint8Array; mask?: Uint8Array; params?: Record<string, unknown>; }
-export interface ImageToolResult { png: Uint8Array; width: number; height: number; engine: string; model: string; ms: number; operation: ImageToolOperation; people?: PersonBox[]; subjects?: SubjectBox[]; }
+export interface ImageToolResult { png: Uint8Array; width: number; height: number; engine: string; model: string; ms: number; operation: ImageToolOperation; people?: PersonBox[]; subjects?: SubjectBox[]; status?: string }
 export type ImageToolsState = "unsupported" | "needs-setup" | "building" | "idle" | "running";
 
 export class ImageToolsService {
@@ -301,10 +304,21 @@ export class ImageToolsService {
       if (input.mask) writeFileSync(files[1]!, input.mask);
       onStatus("working on the picture");
       const aborted = new Promise<never>((_, reject) => options.signal?.addEventListener("abort", () => { this.stopWorker(2_000); reject(new ImageToolError("cancelled", "Cancelled.", 499)); }, { once: true }));
-      const reply = await Promise.race([worker.send({ id: crypto.randomUUID(), op: input.operation, input: files[0]!, output: files[2]!, ...(input.mask ? { mask: files[1]! } : {}), params: input.params ?? {}, models, helper: this.helper ?? null, people_helper: this.peopleHelper ?? null, subjects_helper: this.subjectsHelper ?? null } as WorkerRequest, DEADLINE_MS[input.operation]), aborted]);
+      let params = input.params ?? {};
+      let lookStatus: string | undefined;
+      if (input.operation === "find_subjects") {
+        try {
+          if (!this.deps.detectSubjects) throw new Error("Look integration is unavailable");
+          params = { ...params, look_detections: await this.deps.detectSubjects(input.image) };
+        } catch {
+          lookStatus = "Look is not ready; subjects are labeled as objects.";
+          onStatus(lookStatus);
+        }
+      }
+      const reply = await Promise.race([worker.send({ id: crypto.randomUUID(), op: input.operation, input: files[0]!, output: files[2]!, ...(input.mask ? { mask: files[1]! } : {}), params, models, helper: this.helper ?? null, people_helper: this.peopleHelper ?? null, subjects_helper: this.subjectsHelper ?? null } as WorkerRequest, DEADLINE_MS[input.operation]), aborted]);
       if (!reply.ok) throw new ImageToolError(reply.code ?? "failed", reply.error ?? "The picture could not be processed.", STATUS_BY_CODE[reply.code ?? "failed"] ?? 500);
       const png = new Uint8Array(readFileSync(files[2]!));
-      return { png, width: reply.width ?? 0, height: reply.height ?? 0, engine: reply.engine ?? "unknown", model: reply.model ?? "unknown", ms: reply.ms ?? 0, operation: input.operation, ...(reply.people ? { people: reply.people } : {}), ...(reply.subjects ? { subjects: reply.subjects } : {}) };
+      return { png, width: reply.width ?? 0, height: reply.height ?? 0, engine: reply.engine ?? "unknown", model: reply.model ?? "unknown", ms: reply.ms ?? 0, operation: input.operation, ...(reply.people ? { people: reply.people } : {}), ...(reply.subjects ? { subjects: reply.subjects.map((subject) => classifySubject(subject, (params.look_detections as LookDetection[] | undefined) ?? [])) } : {}), ...(lookStatus ? { status: lookStatus } : {}) } as ImageToolResult;
     } finally {
       for (const file of files) rmSync(file, { force: true });
       lease?.detach();
@@ -312,6 +326,22 @@ export class ImageToolsService {
       if (this.worker && this.busy === 0) this.idleTimer = setTimeout(() => { log("image tools worker stopped after being idle"); this.stopWorker(); }, idleMs());
     }
   }
+}
+
+const ANIMAL_LABELS = new Set(["bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe"]);
+function classifySubject(subject: SubjectBox, detections: LookDetection[]): SubjectBox {
+  const [x, y, w, h] = [subject.x, subject.y, subject.w, subject.h];
+  let best: LookDetection | undefined, bestIou = 0;
+  for (const detection of detections) {
+    const [dx = 0, dy = 0, dw = 0, dh = 0] = detection.box;
+    const iw = Math.max(0, Math.min(x + w, dx + dw) - Math.max(x, dx));
+    const ih = Math.max(0, Math.min(y + h, dy + dh) - Math.max(y, dy));
+    const intersection = iw * ih, union = w * h + dw * dh - intersection;
+    const iou = union > 0 ? intersection / union : 0;
+    if (iou > bestIou) { bestIou = iou; best = detection; }
+  }
+  const label = bestIou > 0 ? best?.label : undefined;
+  return { ...subject, kind: label === "person" ? "person" : label && ANIMAL_LABELS.has(label) ? "animal" : "object", ...(label ? { label } : {}) };
 }
 
 export const imageTools = new ImageToolsService();

@@ -51,6 +51,20 @@ test("a look sends the JPEG bytes to the worker, answers the spec LookResult sha
   expect(released).toBe(1);
 });
 
+test("all vocabulary is an untracked per-call option and the household default is preserved", async () => {
+  const headers: string[] = [];
+  const base = build({ spawn: async () => {
+    spawned += 1;
+    let end!: (code: number) => void;
+    const exited = new Promise<number>((done) => { end = done; });
+    return { exited, kill: () => end(143), request: async (_model, _jpeg, vocabulary) => { headers.push(vocabulary ?? "household"); return goodReply(vocabulary === "all" ? [{ label: "dog", score: 0.9, box: [0, 0, 1, 1] }] : [COUCH]); } };
+  } });
+  expect((await base.service.look("a", JPEG)).objects[0]!.label).toBe("couch");
+  expect((await base.service.detectAll(JPEG))[0]!.label).toBe("dog");
+  expect(headers).toEqual(["household", "all"]);
+  base.service.stop();
+});
+
 test("the answer validates against the spec's look-result schema when the pinned spec checkout is present", async () => {
   const schemaPath = join(import.meta.dir, "..", "..", "..", "commons-tags", "spec-spec-v0.1.208", "spec", "schemas", "look-result.schema.json");
   if (!existsSync(schemaPath)) return;

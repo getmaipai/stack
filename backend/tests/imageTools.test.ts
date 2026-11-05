@@ -201,9 +201,9 @@ test("IMGEDIT-01: a Mac without the person finder answers people_unavailable as 
 
 test("IMG-OPS-07: find_subjects returns boxes and kinds; erase_subjects requires LaMa and passes selected numbers", async () => {
   const subjects = [{ id: 1, x: 0.1, y: 0.2, w: 0.3, h: 0.6, area: 0.1, kind: "animal" as const }, { id: 2, x: 0.6, y: 0.2, w: 0.2, h: 0.5, area: 0.07, kind: "person" as const }];
-  const service = new ImageToolsService(deps({ ensureSubjectsHelper: async () => "/helper/subjectmask", modelPath: () => null }, (request) => ({ id: request.id, ok: true, width: 10, height: 20, engine: "apple-vision", model: "m", ms: 5, subjects })));
+  const service = new ImageToolsService(deps({ ensureSubjectsHelper: async () => "/helper/subjectmask", modelPath: () => null, detectSubjects: async () => [{ label: "dog", score: 0.9, box: [0.1, 0.2, 0.3, 0.6] }, { label: "person", score: 0.8, box: [0.6, 0.2, 0.2, 0.5] }] }, (request) => ({ id: request.id, ok: true, width: 10, height: 20, engine: "apple-vision", model: "m", ms: 5, subjects })));
   const found = await service.run({ operation: "find_subjects", image: PNG });
-  expect(found.subjects).toEqual(subjects);
+  expect(found.subjects).toEqual([{ ...subjects[0]!, kind: "animal", label: "dog" }, { ...subjects[1]!, kind: "person", label: "person" }]);
   expect(requests[0]!.subjects_helper).toBe("/helper/subjectmask");
   const refused = await service.run({ operation: "erase_subjects", image: PNG, params: { subjects: [1] } }).catch((caught) => caught as ImageToolError);
   expect((refused as ImageToolError).code).toBe("model_missing");
@@ -213,6 +213,20 @@ test("IMG-OPS-07: find_subjects returns boxes and kinds; erase_subjects requires
   expect(requests.at(-1)!.params).toEqual({ subjects: [1] });
   expect(requests.at(-1)!.models.lama).toBe("/models/x.onnx");
   withModel.stop();
+});
+
+test("IMG-OPS-09: unmatched instances become objects and Look down is a successful, stated fallback", async () => {
+  const subjects = [{ id: 1, x: 0.1, y: 0.2, w: 0.2, h: 0.2, area: 0.04 }];
+  const service = new ImageToolsService(deps({ ensureSubjectsHelper: async () => "/helper/subjectmask", detectSubjects: async () => [] }, (request) => ({ id: request.id, ok: true, width: 10, height: 20, engine: "apple-vision", model: "m", ms: 5, subjects })));
+  const found = await service.run({ operation: "find_subjects", image: PNG });
+  expect(found.subjects?.[0]).toMatchObject({ kind: "object" });
+  expect(found.subjects?.[0]?.label).toBeUndefined();
+  service.stop();
+  const down = new ImageToolsService(deps({ ensureSubjectsHelper: async () => "/helper/subjectmask", detectSubjects: async () => { throw new Error("Look unavailable"); } }, (request) => ({ id: request.id, ok: true, width: 10, height: 20, engine: "apple-vision", model: "m", ms: 5, subjects })));
+  const fallback = await down.run({ operation: "find_subjects", image: PNG });
+  expect(fallback.subjects?.[0]?.kind).toBe("object");
+  expect(fallback.status).toBe("Look is not ready; subjects are labeled as objects.");
+  down.stop();
 });
 
 test("IMG-OPS-07: the worker refuses unknown subject numbers and a picture with no subjects", async () => {

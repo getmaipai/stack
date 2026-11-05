@@ -61,7 +61,7 @@ def look(header, jpeg):
     light, colours, tags = scene(frame)
     return {
         "ok": True,
-        "detections": decode(raw, scale, width, height),
+        "detections": decode(raw, scale, width, height, header.get("vocabulary", "household")),
         "light": light,
         "colours": colours,
         "tags": tags,

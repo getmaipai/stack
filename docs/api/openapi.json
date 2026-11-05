@@ -2378,7 +2378,7 @@
                   "subjects": {
                     "type": "string",
                     "maxLength": 80,
-                    "description": "erase_subjects: the subjects to remove, numbers from a find_subjects answer joined by commas (\"1,3\"), or \"all\". find_subjects answers with `subjects` (numbered boxes as fractions of the picture, each labeled person, animal or object) and a copy of the picture with boxes and numbers."
+                    "description": "erase_subjects: the subjects to remove, numbers from a find_subjects answer joined by commas (\"1,3\"), or \"all\". find_subjects answers with numbered boxes as fractions of the picture, each with kind person, animal or object and, when Look matches it, a COCO label; it also returns a copy with boxes and numbers."
                   },
                   "seed": {
                     "type": "integer",

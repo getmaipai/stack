@@ -40,7 +40,7 @@ export interface LookResult {
 }
 
 export interface WorkerReply { ok: boolean; code?: string; detections?: LookDetection[]; light?: string; colours?: string[]; tags?: { label: string; score: number }[]; ms?: number }
-export interface LookWorker { request(modelPath: string, jpeg: Uint8Array): Promise<WorkerReply>; kill(): void; exited: Promise<number>; pausable?: PausableWorker }
+export interface LookWorker { request(modelPath: string, jpeg: Uint8Array, vocabulary?: "household" | "all"): Promise<WorkerReply>; kill(): void; exited: Promise<number>; pausable?: PausableWorker }
 
 export interface LookDeps {
   supported: () => boolean;
@@ -74,14 +74,20 @@ export class LookService {
   }
 
   /** Looks at one picture. `source` keys the short memory of what that camera has seen; detail "detailed" is not built yet. */
-  look(source: string, jpeg: Uint8Array, detail: "fast" | "detailed" = "fast", signal?: AbortSignal): Promise<LookResult> {
+  look(source: string, jpeg: Uint8Array, detail: "fast" | "detailed" = "fast", signal?: AbortSignal, vocabulary: "household" | "all" = "household", encodedImage = false): Promise<LookResult> {
     if (detail === "detailed") throw new LookError("detail_unavailable", "The detailed look is not available yet. Ask for detail=fast.", 422);
     if (jpeg.byteLength > LOOK_MAX_IMAGE_BYTES) throw new LookError("too_large", "The picture must be 2 MB or smaller. Send a smaller JPEG.", 413);
-    if (!jpegLooksComplete(jpeg)) throw new LookError("not_jpeg", "Send one complete JPEG picture.", 415);
+    if (!jpegLooksComplete(jpeg) && !(encodedImage && jpeg.length > 8)) throw new LookError("not_jpeg", "Send one complete JPEG picture.", 415);
     this.checkRate(source);
-    const next = this.chain.then(() => this.execute(source, jpeg, signal), () => this.execute(source, jpeg, signal));
+    const next = this.chain.then(() => this.execute(source, jpeg, signal, vocabulary), () => this.execute(source, jpeg, signal, vocabulary));
     this.chain = next.catch(() => {});
     return next;
+  }
+
+  /** Untracked detection for image editing; shares Look's installed model, worker and admission. */
+  async detectAll(jpeg: Uint8Array): Promise<LookDetection[]> {
+    const result = await this.look("image-tools", jpeg, "fast", undefined, "all", true);
+    return result.objects.map(({ label, score, box }) => ({ label, score, box }));
   }
 
   /** Stops the worker now (shutdown, or a test). */
@@ -131,7 +137,7 @@ export class LookService {
     }
   }
 
-  private async execute(source: string, jpeg: Uint8Array, signal?: AbortSignal): Promise<LookResult> {
+  private async execute(source: string, jpeg: Uint8Array, signal?: AbortSignal, vocabulary: "household" | "all" = "household"): Promise<LookResult> {
     if (signal?.aborted) throw new LookError("failed", "Cancelled.", 499);
     this.busy += 1;
     if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
@@ -141,11 +147,11 @@ export class LookService {
       if (!model) throw new LookError("model_missing", MODEL_MISSING, 503);
       const worker = await this.ensureWorker(signal);
       if (worker.pausable) lease = heavyGate.attach({ role: "look", worker: worker.pausable });
-      const reply = await worker.request(model, jpeg);
+      const reply = await worker.request(model, jpeg, vocabulary);
       if (!reply.ok || !reply.detections || !reply.tags) {
         throw new LookError("failed", reply.code === "not_jpeg" ? "That is not a picture Look can read. Send a complete JPEG." : "Look could not read this picture. Try another one.", reply.code === "not_jpeg" ? 415 : 500);
       }
-      const objects = this.tracker.update(source, reply.detections, this.deps.now());
+      const objects = vocabulary === "all" ? reply.detections.map((detection) => ({ ...detection, count: 1, uncertain: false as const })) : this.tracker.update(source, reply.detections, this.deps.now());
       const ms = reply.ms ?? 0;
       this.deps.log("look: %d objects in %d ms", objects.length, Math.round(ms));
       return {
@@ -205,9 +211,9 @@ export function workerHandle(child: { pid?: number; stdin: { write(data: Uint8Ar
     exited,
     pausable,
     kill: () => pausable.killAfterResume(() => { try { child.kill(); } catch { /* already gone */ } }),
-    request: (modelPath, jpeg) => new Promise<WorkerReply>((resolve) => {
+    request: (modelPath, jpeg, vocabulary) => new Promise<WorkerReply>((resolve) => {
       waiting.push(resolve);
-      const header = new TextEncoder().encode(JSON.stringify({ model: modelPath }));
+      const header = new TextEncoder().encode(JSON.stringify({ model: modelPath, vocabulary: vocabulary ?? "household" }));
       const frame = new Uint8Array(8 + header.length + jpeg.length);
       const view = new DataView(frame.buffer);
       view.setUint32(0, header.length);

@@ -89,14 +89,15 @@ def nms(boxes, scores, threshold):
     return kept
 
 
-def decode(raw, scale, width, height):
-    """Household detections from the model output: label, score and a box as fractions of the picture."""
+def decode(raw, scale, width, height, vocabulary="household"):
+    """Detections from the model output; the opt-in all vocabulary keeps COCO's 80 classes."""
     xy = (raw[:, :2] + _GRID) * _STRIDE
     wh = np.exp(raw[:, 2:4]) * _STRIDE
     class_scores = raw[:, 4:5] * raw[:, 5:]
     best_class = class_scores.argmax(axis=1)
     score = class_scores[np.arange(len(best_class)), best_class]
-    keep = np.flatnonzero((score >= SCORE_THRESHOLD) & np.isin(best_class, HOUSEHOLD_IDS))
+    allowed = np.arange(len(COCO)) if vocabulary == "all" else HOUSEHOLD_IDS
+    keep = np.flatnonzero((score >= SCORE_THRESHOLD) & np.isin(best_class, allowed))
     results = []
     for cls in np.unique(best_class[keep]):
         indexes = keep[best_class[keep] == cls]

@@ -303,7 +303,7 @@ def erase_people(request, params):
 
 
 def subjects_labels(request, rgb):
-    """Foreground instance mask and Vision person/animal labels, with cleaned masks and boxes."""
+    """Foreground instance mask with cleaned masks and boxes."""
     helper = request.get("subjects_helper")
     if not helper or not os.path.exists(helper):
         raise Refused("subjects_unavailable", "Finding subjects needs Apple's on-device Vision finder on macOS 14 or later. Try a clearer picture or paint over the subject with the eraser instead.")
@@ -333,7 +333,6 @@ def subjects_labels(request, rgb):
             continue
         cleaned[one > 0] = sid
         box = found[0]
-        box["kind"] = item.get("kind") if item.get("kind") in ("person", "animal") else "object"
         boxes.append(box)
     if not boxes:
         raise Refused("no_subjects", "No subjects were found in this picture. Try a clearer picture.")

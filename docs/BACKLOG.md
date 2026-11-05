@@ -840,6 +840,7 @@ Rules: `home/docs/design/RULES.md` chat rules 4 and 11; record:
 - [x] **IMGEDIT-01 (Stack half): reference pictures for edits, and find_people / erase_people** (M). Built 2026-10-17: `edit` and `edit_masked` take `reference` and `reference2` with their own source declaration and likeness proof; the image tools gain Apple's person finder (numbered boxes, main blob per person, LaMa fill). Tests: `imageGen.test.ts`, `imageTools.test.ts` (including the real worker with `IMAGE_TOOLS_PYTHON`). Measured on the Studio in the Home design note `image-editing-2026-10-17.md`.
 
 - [ ] **IMG-OPS-07: find and erase chosen subjects** (M). Add `find_subjects` and `erase_subjects` using Apple's foreground instance masks and Vision person/animal labels; `erase_subjects` fills selected instances with LaMa. Measure household animals and people on the Studio; wildlife labels remain unclaimed until measured.
+- [ ] **IMG-OPS-09: label `find_subjects` with Look detections** (S). Reuse Look's untracked COCO-80 mode for instance-box IoU labels; default Look and its household robot vocabulary stay unchanged. If Look is unavailable, return object labels with a one-line status. YOLOX-nano animal accuracy remains unmeasured.
 
 ## Video generation (owner approved 2026-10-17)
 
