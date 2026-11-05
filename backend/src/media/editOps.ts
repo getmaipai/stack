@@ -6,7 +6,8 @@
 import { z } from "zod";
 import type { ProbeResult } from "./probe";
 
-export const EDIT_OPS = ["trim", "concat", "mute", "frame", "audio_overlay", "fade", "crossfade", "gain", "reframe", "grade", "speed", "captions"] as const;
+export const TRANSITION_KINDS = ["fade", "dissolve", "wipeleft", "wiperight", "wipeup", "wipedown", "slideleft", "slideright", "slideup", "slidedown", "circleopen", "circleclose", "radial", "smoothleft", "smoothright", "fadeblack", "fadewhite", "zoomin", "pixelize"] as const;
+export const EDIT_OPS = ["trim", "concat", "mute", "frame", "audio_overlay", "fade", "crossfade", "gain", "reframe", "grade", "speed", "captions", "transition", "title_card", "credits"] as const;
 export const MIN_CROSSFADE_S = 0.3;
 export const MAX_CROSSFADE_S = 1.0;
 export const MAX_CROSSFADE_CLIPS = 6;
@@ -59,8 +60,12 @@ const CrossfadeOp = z.object({
   duration_s: z.number().min(MIN_CROSSFADE_S, `must be from ${MIN_CROSSFADE_S} to ${MAX_CROSSFADE_S} seconds`).max(MAX_CROSSFADE_S, `must be from ${MIN_CROSSFADE_S} to ${MAX_CROSSFADE_S} seconds`).default(0.5),
   with: z.array(Index).min(1).max(MAX_EDIT_INPUTS - 1).optional(),
 }).strict();
+const TransitionOp = z.object({ op: z.literal("transition"), kind: z.enum(TRANSITION_KINDS), duration_s: z.number().min(MIN_CROSSFADE_S, `must be from ${MIN_CROSSFADE_S} to ${MAX_CROSSFADE_S} seconds`).max(MAX_CROSSFADE_S, `must be from ${MIN_CROSSFADE_S} to ${MAX_CROSSFADE_S} seconds`).default(0.5), with: z.array(Index).min(1).max(MAX_EDIT_INPUTS - 1).optional() }).strict();
+const Colour = z.union([z.enum(["black", "white"]), z.string().regex(/^#[0-9A-Fa-f]{6}$/)]);
+const TitleCardOp = z.object({ op: z.literal("title_card"), text: z.string().min(1).max(120), subtitle: z.string().max(160).optional(), duration_s: z.number().min(1).max(10), position: z.enum(["center", "lower_third", "top"]), background: Colour, text_color: Colour, fade_in_s: z.number().min(0).max(10).optional(), fade_out_s: z.number().min(0).max(10).optional(), place: z.enum(["start", "end"]) }).strict().refine((op) => (op.fade_in_s ?? 0) + (op.fade_out_s ?? 0) <= op.duration_s, { path: ["fade_out_s"], message: "combined fades must fit within duration_s" });
+const CreditsOp = z.object({ op: z.literal("credits"), lines: z.array(z.object({ role: z.string().max(40).optional(), name: z.string().min(1).max(60) }).strict()).min(1).max(60), duration_s: z.number().min(3).max(120).optional(), speed: z.number().min(1).max(1000).default(60), background: Colour, text_color: Colour, title: z.string().max(120).optional() }).strict();
 
-export const EditOp = z.union([TrimOp, ConcatOp, MuteOp, FrameOp, AudioOverlayOp, FadeOp, CrossfadeOp, GainOp, ReframeOp, GradeOp, SpeedOp, CaptionsOp]);
+export const EditOp = z.union([TrimOp, ConcatOp, MuteOp, FrameOp, AudioOverlayOp, FadeOp, CrossfadeOp, GainOp, ReframeOp, GradeOp, SpeedOp, CaptionsOp, TransitionOp, TitleCardOp, CreditsOp]);
 export type EditOp = z.infer<typeof EditOp>;
 
 export const EditInput = z.object({
@@ -83,6 +88,10 @@ export function editInputProblem(input: unknown): string | null {
     for (let i = 0; i < raw.ops.length; i++) {
       const name = (raw.ops[i] as { op?: unknown } | null)?.op;
       if (typeof name !== "string" || !(EDIT_OPS as readonly string[]).includes(name)) return `Step ${i + 1} asks for ${JSON.stringify(name ?? null)}, which the media service does not know. The steps it knows are ${EDIT_OPS.join(", ")}.`;
+      if (name === "transition") {
+        const kind = (raw.ops[i] as { kind?: unknown } | null)?.kind;
+        if (typeof kind !== "string" || !(TRANSITION_KINDS as readonly string[]).includes(kind)) return `Step ${i + 1} asks for transition ${JSON.stringify(kind ?? null)}. The transitions it knows are ${TRANSITION_KINDS.join(", ")}.`;
+      }
     }
   }
   const parsed = EditInput.safeParse(input);
@@ -123,7 +132,7 @@ function planProblem(input: EditInput): string | null {
 }
 
 /** Input files that concat joins when it names none: every file after the first that no audio_overlay uses. */
-export function concatMembers(input: EditInput, op: Extract<EditOp, { op: "concat" | "crossfade" }>): number[] {
+export function concatMembers(input: EditInput, op: Extract<EditOp, { op: "concat" | "crossfade" | "transition" }>): number[] {
   if (op.with) return op.with;
   const overlays = new Set(input.ops.flatMap((step) => step.op === "audio_overlay" ? [step.input] : []));
   return input.inputs.map((_, index) => index).filter((index) => index > 0 && !overlays.has(index));
@@ -222,6 +231,9 @@ export const crossfadeMinLength = (d: number): number => 2 * d;
  * Every clip is first fitted to the first clip's size and rate (letterboxed) and 48 kHz stereo; a clip with no sound gets silence when any clip has sound.
  */
 export function crossfadeArgs(ffmpeg: string, clips: Clip[], d: number, out: string): string[] {
+  return transitionArgs(ffmpeg, clips, "fade", d, out);
+}
+export function transitionArgs(ffmpeg: string, clips: Clip[], kind: typeof TRANSITION_KINDS[number], d: number, out: string): string[] {
   const target = videoOf(clips[0]!.probe)!;
   const width = Math.max(2, Math.round((target.width ?? 1280) / 2) * 2); const height = Math.max(2, Math.round((target.height ?? 720) / 2) * 2);
   const rate = target.fps && target.fps > 0 ? num(target.fps) : "30";
@@ -240,7 +252,7 @@ export function crossfadeArgs(ffmpeg: string, clips: Clip[], d: number, out: str
   for (let k = 1; k < clips.length; k++) {
     const offset = sum - d; // sum of the previous lengths minus k*d, accumulated
     const last = k === clips.length - 1;
-    parts.push(`${video}[v${k}]xfade=transition=fade:duration=${num(d)}:offset=${num(offset)}[${last ? "v" : `x${k}`}]`);
+    parts.push(`${video}[v${k}]xfade=transition=${kind}:duration=${num(d)}:offset=${num(offset)}[${last ? "v" : `x${k}`}]`);
     video = `[x${k}]`;
     if (anyAudio) { parts.push(`${audio}[a${k}]acrossfade=d=${num(d)}[${last ? "a" : `y${k}`}]`); audio = `[y${k}]`; }
     sum = offset + (clips[k]!.probe.duration_s ?? 0);
@@ -335,11 +347,34 @@ export function speedArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<E
   return [...args, ...FASTSTART, out];
 }
 const drawTextEscape = (text: string): string => text.replace(/\\/g, "\\\\").replace(/:/g, "\\:").replace(/'/g, "\\'").replace(/%/g, "\\%").replace(/\n/g, "\\n").replace(/\r/g, "");
+const filterEscape = (text: string): string => drawTextEscape(text).replace(/[{}]/g, (char) => `\\${char}`);
 export function captionsArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "captions" }>, font: string): string[] {
   const position = op.position === "top" ? "y=h*0.06" : op.position === "middle" ? "y=(h-text_h)/2" : "y=h-text_h-h*0.06";
   const filters = op.lines.map((line) => `drawtext=fontfile='${drawTextEscape(font)}':text='${drawTextEscape(line.text)}':enable='between(t,${num(line.from_s)},${num(line.to_s)})':fontsize=h/18:fontcolor=white:borderw=3:bordercolor=black:x=(w-text_w)/2:${position}`);
   const args = [...BASE(ffmpeg), "-i", clip.path, "-map", "0:v:0?", "-map", "0:a:0?", "-sn", "-dn"];
   if (clip.probe.has_video) args.push("-vf", filters.join(","), ...ENCODE_V);
   if (clip.probe.has_audio) args.push("-c:a", "copy");
+  return [...args, ...FASTSTART, out];
+}
+const targetDimensions = (clip: Clip) => { const video = videoOf(clip.probe)!; return { width: Math.max(2, Math.round((video.width ?? 1280) / 2) * 2), height: Math.max(2, Math.round((video.height ?? 720) / 2) * 2), rate: video.fps && video.fps > 0 ? num(video.fps) : "30", sampleRate: clip.probe.streams.find((stream) => stream.type === "audio")?.sample_rate ?? 48000 }; };
+const rgb = (colour: string): string => colour === "black" ? "0x000000" : colour === "white" ? "0xFFFFFF" : `0x${colour.slice(1)}`;
+export function titleCardArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "title_card" }>, font: string): string[] {
+  const { width, height, rate } = targetDimensions(clip);
+  const y = op.position === "top" ? "h*0.08" : op.position === "lower_third" ? "h*0.68" : "(h-text_h)/2";
+  const textFilter = `drawtext=fontfile='${filterEscape(font)}':text='${filterEscape(op.text)}':fontsize=h/12:fontcolor=${rgb(op.text_color)}:x=(w-text_w)/2:y=${y}`;
+  const subtitle = op.subtitle ? `,drawtext=fontfile='${filterEscape(font)}':text='${filterEscape(op.subtitle)}':fontsize=h/22:fontcolor=${rgb(op.text_color)}:x=(w-text_w)/2:y=${op.position === "top" ? "h*0.2" : op.position === "lower_third" ? "h*0.78" : "(h-text_h)/2+h*0.09"}` : "";
+  const fades = `${op.fade_in_s ? `,fade=t=in:st=0:d=${num(op.fade_in_s)}` : ""}${op.fade_out_s ? `,fade=t=out:st=${num(op.duration_s - op.fade_out_s)}:d=${num(op.fade_out_s)}` : ""}`;
+  const args = [...BASE(ffmpeg), "-f", "lavfi", "-i", `color=c=${rgb(op.background)}:s=${width}x${height}:r=${rate}:d=${num(op.duration_s)}`, "-f", "lavfi", "-i", `anullsrc=r=${targetDimensions(clip).sampleRate}:cl=stereo`, "-filter_complex", `[0:v]format=yuv420p,setsar=1,${textFilter}${subtitle}${fades}[v];[1:a]atrim=0:${num(op.duration_s)},asetpts=PTS-STARTPTS[a]`, "-map", "[v]", "-map", "[a]", "-t", num(op.duration_s), "-shortest", "-r", rate, ...ENCODE_V, ...ENCODE_A];
+  return [...args, ...FASTSTART, out];
+}
+export function creditsArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "credits" }>, font: string): string[] {
+  const { width, height, rate, sampleRate } = targetDimensions(clip);
+  const duration = op.duration_s ?? Math.max(3, Math.min(120, Math.ceil(((op.lines.length * 2 + (op.title ? 2 : 0)) * height) / op.speed / 24)));
+  const entries = [...(op.title ? [{ text: op.title, size: "h/14", y: `h - t*${num(op.speed)}` }] : []), ...op.lines.flatMap((line, i) => [
+    ...(line.role ? [{ text: line.role, size: "h/30", y: `h - t*${num(op.speed)} + ${i * 2 + (op.title ? 2 : 0)}*h/18` }] : []),
+    { text: line.name, size: "h/22", y: `h - t*${num(op.speed)} + ${i * 2 + (op.title ? 2 : 0) + (line.role ? 1 : 0)}*h/18` },
+  ])];
+  const filters = entries.map((entry) => `drawtext=fontfile='${filterEscape(font)}':text='${filterEscape(entry.text)}':fontsize=${entry.size}:fontcolor=${rgb(op.text_color)}:x=(w-text_w)/2:y=${entry.y}`).join(",");
+  const args = [...BASE(ffmpeg), "-f", "lavfi", "-i", `color=c=${rgb(op.background)}:s=${width}x${height}:r=${rate}:d=${num(duration)}`, "-f", "lavfi", "-i", `anullsrc=r=${sampleRate}:cl=stereo`, "-filter_complex", `[0:v]format=yuv420p,setsar=1,${filters}[v];[1:a]atrim=0:${num(duration)},asetpts=PTS-STARTPTS[a]`, "-map", "[v]", "-map", "[a]", "-t", num(duration), "-shortest", "-r", rate, ...ENCODE_V, ...ENCODE_A];
   return [...args, ...FASTSTART, out];
 }

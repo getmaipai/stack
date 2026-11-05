@@ -14,7 +14,7 @@ import { probeFile, type ProbeResult } from "./probe";
 import { idleArgv, spawnRunner, type Runner, type RunResult } from "./run";
 import { defaultToolbox, MediaToolError, type MediaToolbox } from "./tools";
 import { mkdirSync } from "node:fs";
-import { concatCompatible, concatCopyArgs, concatEncodeArgs, concatListLine, crossfadeArgs, crossfadeMinLength, concatMembers, EditInput, editInputProblem, fadeArgs, frameArgs, gainArgs, hasKeyframeAt, keyframeArgs, MAX_EDIT_SECONDS, muteArgs, overlayArgs, trimArgs, reframeArgs, gradeArgs, speedArgs, captionsArgs, type Clip } from "./editOps";
+import { concatCompatible, concatCopyArgs, concatEncodeArgs, concatListLine, crossfadeArgs, transitionArgs, crossfadeMinLength, concatMembers, EditInput, editInputProblem, fadeArgs, frameArgs, gainArgs, hasKeyframeAt, keyframeArgs, MAX_EDIT_SECONDS, muteArgs, overlayArgs, trimArgs, reframeArgs, gradeArgs, speedArgs, captionsArgs, titleCardArgs, creditsArgs, type Clip } from "./editOps";
 import { COLOUR_MATCH_STRENGTH, COMPANION_CLIP_FPS, COMPANION_CLIP_SIZE, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionCrop, companionMetrics, companionReasons, crossfadeLoop, downscaleRgba4, frameDifference, keyOutRgba, selectCompanionWindow } from "./companionClip";
 
 export const MEDIA_KINDS = ["media.probe", "media.fetch", "media.transcode", "media.preview", "media.companion_clip", "media.edit", "media.setup"] as const;
@@ -616,6 +616,33 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
         const font = ["/System/Library/Fonts/Supplemental/Arial.ttf", "/System/Library/Fonts/Helvetica.ttc", "/System/Library/Fonts/Supplemental/Verdana.ttf"].find((path) => existsSync(path));
         if (!font) throw fail({ code: "bad_input", message: "Captions need a system font file. Install a font or choose another computer." });
         args = captionsArgs(ffmpeg, clip, target, op, font);
+      } else if (op.op === "title_card" || op.op === "credits") {
+        needsVideo(op.op);
+        const font = ["/System/Library/Fonts/Supplemental/Arial.ttf", "/System/Library/Fonts/Helvetica.ttc", "/System/Library/Fonts/Supplemental/Verdana.ttf"].find((path) => existsSync(path));
+        if (!font) throw fail({ code: "bad_input", message: `${op.op === "title_card" ? "Title cards" : "Credits"} need a system font file. Install a font or choose another computer.` });
+        const duration = op.op === "title_card" ? op.duration_s : op.duration_s ?? Math.max(3, Math.min(120, Math.ceil(((op.lines.length * 2 + (op.title ? 2 : 0)) * (clip.probe.height ?? 720)) / op.speed / 24)));
+        expected = clip.probe.duration_s ?? 0;
+        const cardPath = join(work, `card${i}.mp4`);
+        const cardArgs = op.op === "title_card" ? titleCardArgs(ffmpeg, clip, cardPath, op, font) : creditsArgs(ffmpeg, clip, cardPath, op, font);
+        const madeCard = await mediaDeps.run(cardArgs, { signal });
+        if (madeCard.aborted || signal.aborted) throw new Error("Cancelled.");
+        if (madeCard.code !== 0 || !existsSync(cardPath)) throw fail({ code: "failed", message: `The edit could not be made at step ${i + 1} (${op.op}). Open Details for what the tool said.`, detail: madeCard.stderr.trim().split("\n").slice(-6).join("\n").slice(-1200) });
+        const cardProbe = await probe(cardPath, `The result of step ${i + 1}`);
+        const card: Clip = { path: cardPath, probe: cardProbe };
+        const clips = op.op === "title_card" && op.place === "start" ? [card, clip] : [clip, card];
+        expected += duration;
+        tooLong("The film", expected);
+        if (last) {
+          const list = join(work, `list${i}.txt`);
+          writeFileSync(list, clips.map((member) => concatListLine(member.path)).join("\n") + "\n");
+          args = concatEncodeArgs(ffmpeg, clips, target); action = "encode";
+        } else {
+        if (concatCompatible(clips)) {
+          const list = join(work, `list${i}.txt`);
+          writeFileSync(list, clips.map((member) => concatListLine(member.path)).join("\n") + "\n");
+          args = concatCopyArgs(ffmpeg, list, target); action = "encode";
+        } else args = concatEncodeArgs(ffmpeg, clips, target);
+        }
       } else if (op.op === "fade") {
         if (op.in_s + op.out_s > (clip.probe.duration_s ?? 0)) throw fail({ code: "bad_input", message: `Step ${i + 1} (fade) fades for ${op.in_s + op.out_s} s in all, longer than the ${Math.round((clip.probe.duration_s ?? 0) * 100) / 100} s clip.` });
         args = fadeArgs(ffmpeg, clip, target, op);
@@ -628,6 +655,14 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
         expected = clips.reduce((sum, member) => sum + (member.probe.duration_s ?? 0), 0) - (clips.length - 1) * op.duration_s;
         tooLong("The blended film", expected);
         args = crossfadeArgs(ffmpeg, clips, op.duration_s, target);
+      } else if (op.op === "transition") {
+        const members = concatMembers(input, op);
+        const clips: Clip[] = [clip, ...members.map((index) => ({ path: sources[index]!, probe: probes[index]! }))];
+        clips.forEach((member, position) => { if (!member.probe.has_video) throw fail({ code: "bad_input", message: `${position === 0 ? "The clip" : `File ${members[position - 1]! + 1}`} has no picture, so it cannot be blended into a film.` }); });
+        clips.forEach((member, position) => { if ((member.probe.duration_s ?? 0) <= crossfadeMinLength(op.duration_s)) throw fail({ code: "bad_input", message: `${position === 0 ? "The clip" : `File ${members[position - 1]! + 1}`} is ${Math.round((member.probe.duration_s ?? 0) * 100) / 100} s long, too short for a ${op.duration_s} s transition. Each clip must be longer than ${crossfadeMinLength(op.duration_s)} s (twice the transition), or use a shorter transition.` }); });
+        expected = clips.reduce((sum, member) => sum + (member.probe.duration_s ?? 0), 0) - (clips.length - 1) * op.duration_s;
+        tooLong("The transitioned film", expected);
+        args = transitionArgs(ffmpeg, clips, op.kind, op.duration_s, target);
       } else {
         const members = concatMembers(input, op);
         const clips: Clip[] = [clip, ...members.map((index) => ({ path: sources[index]!, probe: probes[index]! }))];
