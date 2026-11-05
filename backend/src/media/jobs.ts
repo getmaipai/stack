@@ -14,7 +14,7 @@ import { probeFile, type ProbeResult } from "./probe";
 import { idleArgv, spawnRunner, type Runner, type RunResult } from "./run";
 import { defaultToolbox, MediaToolError, type MediaToolbox } from "./tools";
 import { mkdirSync } from "node:fs";
-import { concatCompatible, concatCopyArgs, concatEncodeArgs, concatListLine, crossfadeArgs, crossfadeMinLength, concatMembers, EditInput, editInputProblem, fadeArgs, frameArgs, gainArgs, hasKeyframeAt, keyframeArgs, MAX_EDIT_SECONDS, muteArgs, overlayArgs, trimArgs, type Clip } from "./editOps";
+import { concatCompatible, concatCopyArgs, concatEncodeArgs, concatListLine, crossfadeArgs, crossfadeMinLength, concatMembers, EditInput, editInputProblem, fadeArgs, frameArgs, gainArgs, hasKeyframeAt, keyframeArgs, MAX_EDIT_SECONDS, muteArgs, overlayArgs, trimArgs, reframeArgs, gradeArgs, speedArgs, captionsArgs, type Clip } from "./editOps";
 import { COLOUR_MATCH_STRENGTH, COMPANION_CLIP_FPS, COMPANION_CLIP_SIZE, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionCrop, companionMetrics, companionReasons, crossfadeLoop, downscaleRgba4, frameDifference, keyOutRgba, selectCompanionWindow } from "./companionClip";
 
 export const MEDIA_KINDS = ["media.probe", "media.fetch", "media.transcode", "media.preview", "media.companion_clip", "media.edit", "media.setup"] as const;
@@ -605,6 +605,17 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
       } else if (op.op === "gain") {
         if (!clip.probe.has_audio) throw fail({ code: "bad_input", message: `Step ${i + 1} (gain) changes the clip's sound level, but the clip has no sound.` });
         args = gainArgs(ffmpeg, clip.path, target, op); action = clip.probe.has_video ? "audio_gain_video_copy" : "audio_gain";
+      } else if (op.op === "reframe") {
+        needsVideo("reframe"); args = reframeArgs(ffmpeg, clip, target, op);
+      } else if (op.op === "grade") {
+        needsVideo("grade"); args = gradeArgs(ffmpeg, clip, target, op);
+      } else if (op.op === "speed") {
+        args = speedArgs(ffmpeg, clip, target, op); expected = (clip.probe.duration_s ?? 0) / op.factor;
+      } else if (op.op === "captions") {
+        needsVideo("captions");
+        const font = ["/System/Library/Fonts/Supplemental/Arial.ttf", "/System/Library/Fonts/Helvetica.ttc", "/System/Library/Fonts/Supplemental/Verdana.ttf"].find((path) => existsSync(path));
+        if (!font) throw fail({ code: "bad_input", message: "Captions need a system font file. Install a font or choose another computer." });
+        args = captionsArgs(ffmpeg, clip, target, op, font);
       } else if (op.op === "fade") {
         if (op.in_s + op.out_s > (clip.probe.duration_s ?? 0)) throw fail({ code: "bad_input", message: `Step ${i + 1} (fade) fades for ${op.in_s + op.out_s} s in all, longer than the ${Math.round((clip.probe.duration_s ?? 0) * 100) / 100} s clip.` });
         args = fadeArgs(ffmpeg, clip, target, op);

@@ -6,7 +6,7 @@
 import { z } from "zod";
 import type { ProbeResult } from "./probe";
 
-export const EDIT_OPS = ["trim", "concat", "mute", "frame", "audio_overlay", "fade", "crossfade", "gain"] as const;
+export const EDIT_OPS = ["trim", "concat", "mute", "frame", "audio_overlay", "fade", "crossfade", "gain", "reframe", "grade", "speed", "captions"] as const;
 export const MIN_CROSSFADE_S = 0.3;
 export const MAX_CROSSFADE_S = 1.0;
 export const MAX_CROSSFADE_CLIPS = 6;
@@ -45,6 +45,13 @@ const AudioOverlayOp = z.object({
 const GainOp = z.object({ op: z.literal("gain"), db: z.number().min(-60, "must be from -60 to 24 dB").max(24, "must be from -60 to 24 dB") }).strict();
 const FadeOp = z.object({ op: z.literal("fade"), in_s: Seconds.default(0), out_s: Seconds.default(0) }).strict()
   .refine((op) => op.in_s > 0 || op.out_s > 0, { path: ["in_s"], message: "needs in_s or out_s above 0" });
+const ReframeOp = z.object({ op: z.literal("reframe"), aspect: z.enum(["9:16", "1:1", "16:9", "4:5"]), fill: z.enum(["crop", "blur"]) }).strict();
+const GradeOp = z.object({ op: z.literal("grade"), brightness: z.number().min(-1).max(1).optional(), contrast: z.number().min(-1).max(1).optional(), saturation: z.number().min(-1).max(1).optional(), warmth: z.number().min(-1).max(1).optional(), grain: z.number().min(0).max(1).optional(), vignette: z.number().min(0).max(1).optional() }).strict()
+  .refine((op) => Object.entries(op).some(([key, value]) => key !== "op" && value !== undefined && value !== 0), { path: ["brightness"], message: "needs at least one value above or below 0" });
+const SpeedOp = z.object({ op: z.literal("speed"), factor: z.number().min(0.25).max(4) }).strict();
+// Speed ramps (from_factor, to_factor, at_s, over_s) are out of scope for this slice.
+const CaptionsOp = z.object({ op: z.literal("captions"), lines: z.array(z.object({ from_s: Seconds, to_s: z.number().gt(0).max(MAX_EDIT_SECONDS), text: z.string().min(1).max(120) }).strict()).min(1).max(40), position: z.enum(["bottom", "middle", "top"]) }).strict()
+  .refine((op) => op.lines.every((line) => line.to_s > line.from_s), { path: ["lines"], message: "each to_s must be after from_s" });
 
 /** Joins like concat, but each seam blends the last duration_s of one clip into the first duration_s of the next. */
 const CrossfadeOp = z.object({
@@ -53,7 +60,7 @@ const CrossfadeOp = z.object({
   with: z.array(Index).min(1).max(MAX_EDIT_INPUTS - 1).optional(),
 }).strict();
 
-export const EditOp = z.union([TrimOp, ConcatOp, MuteOp, FrameOp, AudioOverlayOp, FadeOp, CrossfadeOp, GainOp]);
+export const EditOp = z.union([TrimOp, ConcatOp, MuteOp, FrameOp, AudioOverlayOp, FadeOp, CrossfadeOp, GainOp, ReframeOp, GradeOp, SpeedOp, CaptionsOp]);
 export type EditOp = z.infer<typeof EditOp>;
 
 export const EditInput = z.object({
@@ -288,4 +295,51 @@ export function fadeArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<Ed
   if (clip.probe.has_audio) args.push("-af", audio.join(","), ...ENCODE_A);
   args.push(...FASTSTART, out);
   return args;
+}
+
+const ASPECT_SIZES: Record<Extract<EditOp, { op: "reframe" }>['aspect'], [number, number]> = { "9:16": [1080, 1920], "1:1": [1080, 1080], "16:9": [1920, 1080], "4:5": [1080, 1350] };
+function reframeSize(probe: ProbeResult, aspect: Extract<EditOp, { op: "reframe" }>['aspect']): [number, number] {
+  const [baseW, baseH] = ASPECT_SIZES[aspect]; const sw = probe.width ?? baseW; const sh = probe.height ?? baseH;
+  const sourceLongSide = Math.max(sw, sh); const targetLongSide = Math.max(baseW, baseH);
+  const factor = Math.min(1, (sourceLongSide * 2) / targetLongSide);
+  return [Math.max(2, Math.floor(baseW * factor / 2) * 2), Math.max(2, Math.floor(baseH * factor / 2) * 2)];
+}
+export function reframeArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "reframe" }>): string[] {
+  const [w, h] = reframeSize(clip.probe, op.aspect);
+  const graph = op.fill === "crop"
+    ? `[0:v:0]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},setsar=1[v]`
+    : `[0:v:0]split=2[bg][fg];[bg]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},boxblur=20:10[blur];[fg]scale=${w}:${h}:force_original_aspect_ratio=decrease[sharp];[blur][sharp]overlay=(W-w)/2:(H-h)/2,setsar=1[v]`;
+  return [...BASE(ffmpeg), "-i", clip.path, "-filter_complex", graph, "-map", "[v]", "-map", "0:a:0?", "-sn", "-dn", ...ENCODE_V, ...(clip.probe.has_audio ? ENCODE_A : []), ...FASTSTART, out];
+}
+export function gradeArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "grade" }>): string[] {
+  const filters: string[] = [];
+  if (op.brightness !== undefined || op.contrast !== undefined || op.saturation !== undefined) filters.push(`eq=brightness=${num(op.brightness ?? 0)}:contrast=${num(1 + (op.contrast ?? 0))}:saturation=${num(1 + (op.saturation ?? 0))}`);
+  if (op.warmth !== undefined && op.warmth !== 0) filters.push(`colorbalance=rs=${num(op.warmth * 0.2)}:bs=${num(-op.warmth * 0.2)}`);
+  if (op.grain !== undefined && op.grain > 0) filters.push(`noise=alls=${num(op.grain * 20)}:allf=t`);
+  if (op.vignette !== undefined && op.vignette > 0) filters.push(`vignette=angle=${num(op.vignette * Math.PI / 4)}`);
+  const args = [...BASE(ffmpeg), "-i", clip.path, "-map", "0:v:0?", "-map", "0:a:0?", "-sn", "-dn"];
+  if (clip.probe.has_video) args.push("-vf", filters.join(","), ...ENCODE_V);
+  if (clip.probe.has_audio) args.push("-c:a", "copy");
+  return [...args, ...FASTSTART, out];
+}
+export function speedArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "speed" }>): string[] {
+  const video = `setpts=PTS/${num(op.factor)}`; const audio: string[] = [];
+  let remaining = op.factor;
+  // atempo accepts 0.5..2 per stage, so split extreme factors into a safe chain.
+  while (remaining > 2) { audio.push("atempo=2"); remaining /= 2; }
+  while (remaining < 0.5) { audio.push("atempo=0.5"); remaining /= 0.5; }
+  audio.push(`atempo=${num(remaining)}`);
+  const args = [...BASE(ffmpeg), "-i", clip.path, "-map", "0:v:0?", "-map", "0:a:0?", "-sn", "-dn"];
+  if (clip.probe.has_video) args.push("-vf", video, ...ENCODE_V);
+  if (clip.probe.has_audio) args.push("-af", audio.join(","), ...ENCODE_A);
+  return [...args, ...FASTSTART, out];
+}
+const drawTextEscape = (text: string): string => text.replace(/\\/g, "\\\\").replace(/:/g, "\\:").replace(/'/g, "\\'").replace(/%/g, "\\%").replace(/\n/g, "\\n").replace(/\r/g, "");
+export function captionsArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "captions" }>, font: string): string[] {
+  const position = op.position === "top" ? "y=h*0.06" : op.position === "middle" ? "y=(h-text_h)/2" : "y=h-text_h-h*0.06";
+  const filters = op.lines.map((line) => `drawtext=fontfile='${drawTextEscape(font)}':text='${drawTextEscape(line.text)}':enable='between(t,${num(line.from_s)},${num(line.to_s)})':fontsize=h/18:fontcolor=white:borderw=3:bordercolor=black:x=(w-text_w)/2:${position}`);
+  const args = [...BASE(ffmpeg), "-i", clip.path, "-map", "0:v:0?", "-map", "0:a:0?", "-sn", "-dn"];
+  if (clip.probe.has_video) args.push("-vf", filters.join(","), ...ENCODE_V);
+  if (clip.probe.has_audio) args.push("-c:a", "copy");
+  return [...args, ...FASTSTART, out];
 }
