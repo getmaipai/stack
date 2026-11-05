@@ -280,7 +280,7 @@ test("chat ceiling is blocked by active requests, queued work, or a non-idle cha
     for (let i = 0; i < 40; i++) { await dog.tick(); now += 10_000; }
     expect(actions.log).not.toContain("restart-chat-guard:memory-ceiling");
   }
-});
+}, 30_000); // 120 real watchdog ticks: about 5.5 s in the full suite, over bun's 5 s default (measured on origin/main 2026-11-05)
 
 test("a bad canary raises once, then a good canary resolves its fault", async () => {
   let now = 1_000_000;
