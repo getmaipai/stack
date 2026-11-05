@@ -302,6 +302,99 @@ def erase_people(request, params):
     return {"width": width, "height": height, "engine": "apple-vision+lama", "model": "VNGeneratePersonInstanceMaskRequest+big-lama-onnx", "crop_px": crop, "people": boxes}
 
 
+def subjects_labels(request, rgb):
+    """Foreground instance mask and Vision person/animal labels, with cleaned masks and boxes."""
+    helper = request.get("subjects_helper")
+    if not helper or not os.path.exists(helper):
+        raise Refused("subjects_unavailable", "Finding subjects needs Apple's on-device Vision finder on macOS 14 or later. Try a clearer picture or paint over the subject with the eraser instead.")
+    prepared = request["output"] + ".subjects.png"
+    labels_path = request["output"] + ".subject-labels.png"
+    Image.fromarray(rgb, "RGB").save(prepared, format="PNG")
+    try:
+        run = subprocess.run([helper, prepared, labels_path], capture_output=True, timeout=120)
+        if run.returncode == 5 or (run.returncode == 0 and not run.stdout.strip()):
+            raise Refused("no_subjects", "No subjects were found in this picture. Try a clearer picture.")
+        if run.returncode != 0:
+            raise Refused("subjects_unavailable", "Apple's subject finder failed on this picture. Try a clearer picture or paint over the subject with the eraser instead.")
+        labels = np.asarray(Image.open(labels_path).convert("L"))
+        raw_boxes = [json.loads(line) for line in run.stdout.decode().splitlines() if line.startswith("{")]
+    finally:
+        for path in (prepared, labels_path):
+            try: os.remove(path)
+            except OSError: pass
+    if labels.shape[:2] != rgb.shape[:2]:
+        labels = cv2.resize(labels, (rgb.shape[1], rgb.shape[0]), interpolation=cv2.INTER_NEAREST)
+    cleaned = np.zeros_like(labels)
+    boxes = []
+    for item in raw_boxes:
+        sid = int(item["id"])
+        one, found = clean_labels((labels == sid).astype(np.uint8), rgb.shape[1], rgb.shape[0])
+        if not found:
+            continue
+        cleaned[one > 0] = sid
+        box = found[0]
+        box["kind"] = item.get("kind") if item.get("kind") in ("person", "animal") else "object"
+        boxes.append(box)
+    if not boxes:
+        raise Refused("no_subjects", "No subjects were found in this picture. Try a clearer picture.")
+    boxes.sort(key=lambda item: item["id"])
+    return cleaned, boxes
+
+
+def draw_subject_boxes(rgb, boxes):
+    shown = rgb.copy()
+    height, width = shown.shape[:2]
+    thick = max(2, round(max(height, width) / 300))
+    for box in boxes:
+        x0, y0 = int(box["x"] * width), int(box["y"] * height)
+        x1, y1 = int((box["x"] + box["w"]) * width), int((box["y"] + box["h"]) * height)
+        cv2.rectangle(shown, (x0, y0), (x1, y1), (255, 0, 0), thick)
+        scale = max(1.0, max(height, width) / 700)
+        label = str(box["id"])
+        (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, scale, thick)
+        cv2.rectangle(shown, (x0, y0), (x0 + tw + 12, y0 + th + 14), (255, 0, 0), -1)
+        cv2.putText(shown, label, (x0 + 6, y0 + th + 6), cv2.FONT_HERSHEY_SIMPLEX, scale, (255, 255, 255), thick, cv2.LINE_AA)
+    return shown
+
+
+def find_subjects(request, params):
+    src = load(request["input"], "erase_in")
+    rgb = np.ascontiguousarray(np.asarray(src.convert("RGB")))
+    height, width = rgb.shape[:2]
+    _, boxes = subjects_labels(request, rgb)
+    save_png(draw_subject_boxes(rgb, boxes), request["output"])
+    return {"width": width, "height": height, "engine": "apple-vision", "model": "VNGenerateForegroundInstanceMaskRequest", "subjects": boxes}
+
+
+def chosen_subjects_mask(request, params, rgb):
+    height, width = rgb.shape[:2]
+    labels, boxes = subjects_labels(request, rgb)
+    wanted = params.get("subjects", "all")
+    ids = [b["id"] for b in boxes] if wanted == "all" else [int(v) for v in wanted]
+    unknown = [v for v in ids if v not in [b["id"] for b in boxes]]
+    if not ids or unknown:
+        raise Refused("subjects_required", "Choose subject numbers from find_subjects, or all, before erasing.")
+    mask = np.isin(labels, ids).astype(np.uint8) * 255
+    k = max(5, int(round(max(height, width) * 0.018)) | 1)
+    mask = cv2.dilate(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
+    if mask.mean() / 255 > 0.5:
+        raise Refused("mask_too_big", "The subjects to remove cover more than half of the picture. Choose fewer subjects and try again.")
+    return mask, boxes
+
+
+def erase_subjects(request, params):
+    src = load(request["input"], "erase_in")
+    rgba = np.asarray(src.convert("RGBA"))
+    rgb = np.ascontiguousarray(rgba[..., :3])
+    height, width = rgb.shape[:2]
+    mask, boxes = chosen_subjects_mask(request, params, rgb)
+    sess = session("lama", request["models"].get("lama"))
+    filled, crop = lama_fill(sess, rgb, mask)
+    out = np.dstack([filled, rgba[..., 3]]) if "A" in src.getbands() else filled
+    save_png(out, request["output"])
+    return {"width": width, "height": height, "engine": "apple-vision+lama", "model": "VNGenerateForegroundInstanceMaskRequest+big-lama-onnx", "crop_px": crop, "subjects": boxes}
+
+
 def tile_upscale(sess, array, tile=256, pad=12):
     height, width = array.shape[:2]
     name = sess.get_inputs()[0].name
@@ -366,7 +459,7 @@ def resize(request, params):
     return {"width": new_w, "height": new_h, "engine": "lanczos", "model": "none"}
 
 
-OPS = {"remove_background": remove_background, "erase": erase, "upscale": upscale, "resize": resize, "find_people": find_people, "people_mask": people_mask, "erase_people": erase_people}
+OPS = {"remove_background": remove_background, "erase": erase, "upscale": upscale, "resize": resize, "find_people": find_people, "people_mask": people_mask, "erase_people": erase_people, "find_subjects": find_subjects, "erase_subjects": erase_subjects}
 
 
 def main():
@@ -382,7 +475,7 @@ def main():
             reply["id"] = request.get("id")
             op = OPS.get(request.get("op"))
             if op is None:
-                raise Refused("bad_operation", "That operation is not one of remove_background, erase, upscale, resize, find_people or erase_people.")
+                raise Refused("bad_operation", "That operation is not one of remove_background, erase, upscale, resize, find_people, erase_people, find_subjects or erase_subjects.")
             reply.update(op(request, request.get("params") or {}))
             reply["ok"] = True
         except Refused as refused:

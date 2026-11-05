@@ -2345,6 +2345,8 @@
                       "find_people",
                       "people_mask",
                       "erase_people",
+                      "find_subjects",
+                      "erase_subjects",
                       "edit",
                       "edit_masked"
                     ],
@@ -2372,6 +2374,11 @@
                     "type": "string",
                     "maxLength": 80,
                     "description": "erase_people: the people to remove, numbers from a find_people answer joined by commas (\"1,3\"), or \"all\". find_people answers with `people` (numbered boxes as fractions of the picture) and a copy of the picture with the boxes drawn and numbered."
+                  },
+                  "subjects": {
+                    "type": "string",
+                    "maxLength": 80,
+                    "description": "erase_subjects: the subjects to remove, numbers from a find_subjects answer joined by commas (\"1,3\"), or \"all\". find_subjects answers with `subjects` (numbered boxes as fractions of the picture, each labeled person, animal or object) and a copy of the picture with boxes and numbers."
                   },
                   "seed": {
                     "type": "integer",
@@ -13318,6 +13325,13 @@
                           "type": "boolean",
                           "description": "True once Apple's on-device foreground finder helper is built; background removal then uses it first."
                         },
+                        "people": {
+                          "type": "boolean"
+                        },
+                        "subjects": {
+                          "type": "boolean",
+                          "description": "True once Apple's foreground instance and person/animal labeling helper is built (macOS 14+)."
+                        },
                         "models": {
                           "type": "object",
                           "additionalProperties": {
@@ -13347,6 +13361,8 @@
                         "state",
                         "phase",
                         "vision",
+                        "people",
+                        "subjects",
                         "models",
                         "limits",
                         "operations",

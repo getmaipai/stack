@@ -12,6 +12,8 @@ const StatusSchema = z.object({
   state: z.enum(["unsupported", "needs-setup", "building", "idle", "running"]).openapi({ description: "needs-setup: nothing is running; the first edit builds the environment (first time only) and starts the worker, which stops by itself when idle." }),
   phase: z.string().nullable(),
   vision: z.boolean().openapi({ description: "True once Apple's on-device foreground finder helper is built; background removal then uses it first." }),
+  people: z.boolean(),
+  subjects: z.boolean().openapi({ description: "True once Apple's foreground instance and person/animal labeling helper is built (macOS 14+)." }),
   models: z.record(z.string(), z.boolean()).openapi({ description: "isnet, lama and esrgan: whether each pinned model file is installed and verified." }),
   limits: z.record(z.string(), z.number()).openapi({ description: "Megapixels each tool accepts." }),
   operations: z.array(z.string()),

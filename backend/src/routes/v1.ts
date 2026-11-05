@@ -355,6 +355,7 @@ const ImageEditFormSchema = z.object({
   region: z.string().optional().openapi({ description: "edit_masked: x,y,width,height as fractions of the picture, like 0.4,0.5,0.2,0.2; the area to change when no mask is sent." }),
   feather: z.coerce.number().min(0).max(64).optional().openapi({ description: "edit_masked: pixels of soft edge on the mask (default 12). 0 changes exactly the mask." }),
   people: z.string().max(80).optional().openapi({ description: "erase_people: the people to remove, numbers from a find_people answer joined by commas (\"1,3\"), or \"all\". find_people answers with `people` (numbered boxes as fractions of the picture) and a copy of the picture with the boxes drawn and numbered." }),
+  subjects: z.string().max(80).optional().openapi({ description: "erase_subjects: the subjects to remove, numbers from a find_subjects answer joined by commas (\"1,3\"), or \"all\". find_subjects answers with `subjects` (numbered boxes as fractions of the picture, each labeled person, animal or object) and a copy of the picture with boxes and numbers." }),
   seed: z.coerce.number().int().min(0).optional(),
   steps: z.coerce.number().int().min(1).max(30).optional(),
   scale: z.coerce.number().int().optional(),
@@ -394,7 +395,7 @@ v1Routes.openapi(imageEditsRoute, async (c) => {
   if (form.mask && form.mask.size > MAX_UPLOAD_BYTES) return jsonReply(c, { error: "The mask is too big.", code: "too_large" }, 413, identityHeaders(null)) as never;
   if (!hasJobRunner("image_edit")) return jsonReply(c, { error: "The image tools are not available on this machine.", code: "unsupported" }, 503, identityHeaders(null)) as never;
   const token = crypto.randomUUID();
-  const params: Record<string, unknown> = { ...(form.scale !== undefined ? { scale: form.scale } : {}), ...(form.width !== undefined ? { width: form.width } : {}), ...(form.height !== undefined ? { height: form.height } : {}), ...(form.factor !== undefined ? { factor: form.factor } : {}), ...(form.engine ? { engine: form.engine } : {}), ...(form.people ? { people: form.people === "all" ? "all" : form.people.split(",").map((value) => Number(value.trim())).filter((value) => Number.isInteger(value) && value > 0) } : {}) };
+  const params: Record<string, unknown> = { ...(form.scale !== undefined ? { scale: form.scale } : {}), ...(form.width !== undefined ? { width: form.width } : {}), ...(form.height !== undefined ? { height: form.height } : {}), ...(form.factor !== undefined ? { factor: form.factor } : {}), ...(form.engine ? { engine: form.engine } : {}), ...(form.people ? { people: form.people === "all" ? "all" : form.people.split(",").map((value) => Number(value.trim())).filter((value) => Number.isInteger(value) && value > 0) } : {}), ...(form.subjects ? { subjects: form.subjects === "all" ? "all" : form.subjects.split(",").map((value) => Number(value.trim())).filter((value) => Number.isInteger(value) && value > 0) } : {}) };
   stashInput(token, { operation: form.operation as typeof IMAGE_TOOLS_OPERATIONS[number], image: new Uint8Array(await form.image.arrayBuffer()), ...(form.mask ? { mask: new Uint8Array(await form.mask.arrayBuffer()) } : {}), params });
   const submitted = submitJob({ kind: "image_edit", role: "image", input: { operation: form.operation, params, token } });
   if ("refused" in submitted) return jsonReply(c, { error: submitted.reason, code: submitted.code ?? "unsupported" }, 503, identityHeaders(null)) as never;
@@ -408,7 +409,7 @@ v1Routes.openapi(imageEditsRoute, async (c) => {
   if (outcome?.rejected) return jsonReply(c, { error: outcome.rejected.message, code: outcome.rejected.code, job: settled.id }, outcome.rejected.status, identityHeaders(null)) as never;
   const kept = takeResult(settled.id);
   if (!kept) return jsonReply(c, { error: "The result is no longer held; run the edit again.", code: "expired", job: settled.id }, 500, identityHeaders(null)) as never;
-  return jsonReply(c, { created, job: settled.id, data: [{ b64_json: Buffer.from(kept.png).toString("base64"), width: kept.width, height: kept.height, content_type: "image/png", operation: kept.operation, engine: kept.engine, model: kept.model, ms: kept.ms, ...(kept.people ? { people: kept.people } : {}) }] }, 200, identityHeaders(null)) as never;
+  return jsonReply(c, { created, job: settled.id, data: [{ b64_json: Buffer.from(kept.png).toString("base64"), width: kept.width, height: kept.height, content_type: "image/png", operation: kept.operation, engine: kept.engine, model: kept.model, ms: kept.ms, ...(kept.people ? { people: kept.people } : {}), ...(kept.subjects ? { subjects: kept.subjects } : {}) }] }, 200, identityHeaders(null)) as never;
 });
 v1Routes.openapi(imageEditResultRoute, (c) => {
   const kept = takeResult(c.req.valid("param").job);

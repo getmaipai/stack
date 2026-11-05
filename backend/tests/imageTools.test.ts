@@ -199,6 +199,34 @@ test("IMGEDIT-01: a Mac without the person finder answers people_unavailable as 
   service.stop();
 });
 
+test("IMG-OPS-07: find_subjects returns boxes and kinds; erase_subjects requires LaMa and passes selected numbers", async () => {
+  const subjects = [{ id: 1, x: 0.1, y: 0.2, w: 0.3, h: 0.6, area: 0.1, kind: "animal" as const }, { id: 2, x: 0.6, y: 0.2, w: 0.2, h: 0.5, area: 0.07, kind: "person" as const }];
+  const service = new ImageToolsService(deps({ ensureSubjectsHelper: async () => "/helper/subjectmask", modelPath: () => null }, (request) => ({ id: request.id, ok: true, width: 10, height: 20, engine: "apple-vision", model: "m", ms: 5, subjects })));
+  const found = await service.run({ operation: "find_subjects", image: PNG });
+  expect(found.subjects).toEqual(subjects);
+  expect(requests[0]!.subjects_helper).toBe("/helper/subjectmask");
+  const refused = await service.run({ operation: "erase_subjects", image: PNG, params: { subjects: [1] } }).catch((caught) => caught as ImageToolError);
+  expect((refused as ImageToolError).code).toBe("model_missing");
+  service.stop();
+  const withModel = new ImageToolsService(deps({ ensureSubjectsHelper: async () => "/helper/subjectmask" }, (request) => ({ id: request.id, ok: true, width: 10, height: 20, engine: "apple-vision+lama", model: "m", ms: 5, subjects })));
+  await withModel.run({ operation: "erase_subjects", image: PNG, params: { subjects: [1] } });
+  expect(requests.at(-1)!.params).toEqual({ subjects: [1] });
+  expect(requests.at(-1)!.models.lama).toBe("/models/x.onnx");
+  withModel.stop();
+});
+
+test("IMG-OPS-07: the worker refuses unknown subject numbers and a picture with no subjects", async () => {
+  const service = new ImageToolsService(deps({ ensureSubjectsHelper: async () => "/helper/subjectmask" }, (request) => ({ id: request.id, ok: false, code: "subjects_required", error: "Choose subject numbers from find_subjects, or all, before erasing." })));
+  const error = await service.run({ operation: "erase_subjects", image: PNG, params: { subjects: [99] } }).catch((caught) => caught as ImageToolError);
+  expect((error as ImageToolError).status).toBe(422);
+  expect((error as ImageToolError).message).toContain("find_subjects");
+  service.stop();
+  const empty = new ImageToolsService(deps({ ensureSubjectsHelper: async () => "/helper/subjectmask" }, (request) => ({ id: request.id, ok: false, code: "no_subjects", error: "No subjects were found in this picture. Try a clearer picture." })));
+  const noSubjects = await empty.run({ operation: "find_subjects", image: PNG }).catch((caught) => caught as ImageToolError);
+  expect((noSubjects as ImageToolError).message).toContain("Try a clearer picture");
+  empty.stop();
+});
+
 // The real worker on real pixels, only where a prepared environment is named (the scratch run sets IMAGE_TOOLS_PYTHON).
 const python = process.env.IMAGE_TOOLS_PYTHON;
 test.skipIf(!python)("the real worker resizes, strips metadata and applies orientation", async () => {
