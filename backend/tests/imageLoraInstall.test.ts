@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
+import { app } from "@/app";
 import { getJob, __resetJobsForTests } from "@/lib/jobs";
 import { dataDir } from "@/lib/paths";
 import { imageLoras, startLoraInstall, __resetImageLoraInstallForTests } from "@/images/loras";
@@ -167,6 +168,51 @@ test("one install at a time", async () => {
   })));
   const job = startLoraInstall({ url: HF, name: "x", licence: "mit" }, { fetch: slow.fetch });
   expect(() => startLoraInstall({ url: HF, name: "y", licence: "mit" }, { fetch: slow.fetch })).toThrow(/Another style/);
+  release();
+  expect((await finish(job.id)).state).toBe("done");
+});
+
+// Regression 2026-11-05: the shared installer threw the video library's LoraError, which the picture route did not recognise, so a plain refusal
+// (a link from the wrong host) came back as a 500 from the live Stack. The route is what Home calls, so the refusals are asserted through it.
+const post = (body: Record<string, unknown>) => app.request("/stack/v1/image/loras/install", {
+  method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+});
+
+test("the route refuses a link from another host with 422 host_not_allowed, not a 500", async () => {
+  const response = await post({ url: "https://example.com/x.safetensors", name: "probe" });
+  expect(response.status).toBe(422);
+  expect(await response.json()).toMatchObject({ code: "host_not_allowed" });
+});
+
+test("the route refuses a bad Civitai link and a bad hash with 422 and their codes", async () => {
+  const link = await post({ site: "civitai", url: "https://civitai.com/models/12345", name: "probe" });
+  expect(link.status).toBe(422);
+  expect(await link.json()).toMatchObject({ code: "bad_url" });
+  const hash = await post({ url: HF, name: "probe", sha256_expected: "not-a-hash" });
+  expect(hash.status).toBe(422);
+  expect(await hash.json()).toMatchObject({ code: "bad_hash" });
+});
+
+test("the route answers 409 duplicate_lora with the existing id when the expected hash is already in the library", async () => {
+  const buffer = bytes("r");
+  const { fetch } = scripted(() => ok(buffer));
+  expect((await finish(startLoraInstall({ url: HF, name: "first", licence: "mit" }, { fetch }).id)).state).toBe("done");
+  const existingId = imageLoras.list()[0]!.id;
+  const response = await post({ url: HF, name: "again", licence: "mit", sha256_expected: sha(buffer) });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ code: "duplicate_lora", existing_id: existingId });
+});
+
+test("the route answers 503 install_busy while a download runs", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const slow = scripted(() => new Response(new ReadableStream({
+    async start(controller) { await gate; controller.enqueue(new Uint8Array(bytes("q"))); controller.close(); },
+  })));
+  const job = startLoraInstall({ url: HF, name: "x", licence: "mit" }, { fetch: slow.fetch });
+  const busy = await post({ url: HF, name: "y", licence: "mit" });
+  expect(busy.status).toBe(503);
+  expect(await busy.json()).toMatchObject({ code: "install_busy" });
   release();
   expect((await finish(job.id)).state).toBe("done");
 });

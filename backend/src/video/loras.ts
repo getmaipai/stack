@@ -25,7 +25,7 @@ import { closeSync, copyFileSync, existsSync, fstatSync, mkdirSync, openSync, re
 import { join } from "node:path";
 import { dataDir } from "@/lib/paths";
 import { sha256OfFile } from "@/lib/fileHash";
-import { namesRealPerson } from "@/lib/media/loraLibrary";
+import { LoraError, namesRealPerson } from "@/lib/media/loraLibrary";
 
 export const LORA_BASE_MODEL = "wan2.2-ti2v-5b";
 /** VIDEO-LTX-01: the two bases a LoRA can be made for: Quick's Wan2.2 5B, Detailed's LTX-2.3. */
@@ -66,9 +66,8 @@ export interface LoraRecord {
   added_at: string;
 }
 
-export class LoraError extends Error {
-  constructor(readonly code: string, message: string, readonly status: number) { super(message); }
-}
+// One class for both libraries: a second copy made the picture route miss the installer's refusals and answer 500 (2026-11-05).
+export { LoraError };
 
 const FREE_LICENCES = new Set(["apache-2.0", "mit", "cc0-1.0", "bsd-2-clause", "bsd-3-clause", "unlicense", "isc", "cc-by-4.0"]);
 export function licenceClass(licence: string): "free" | "acknowledged" { return FREE_LICENCES.has(licence.trim().toLowerCase()) ? "free" : "acknowledged"; }
