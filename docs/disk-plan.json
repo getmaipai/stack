@@ -6,25 +6,25 @@
   "installer": {
     "p16.required_free_bytes": 17380172093,
     "p16.minimum_required_free_bytes": 13741867392,
-    "p16.everything_required_free_bytes": 20436360700,
+    "p16.everything_required_free_bytes": 20479390302,
     "p16.needed_bytes": 14969300760,
     "p16.home_required_free_bytes": 3176323277,
     "p16.ai_required_free_bytes": 14203848816,
     "p32.required_free_bytes": 36131983613,
     "p32.minimum_required_free_bytes": 30813284198,
-    "p32.everything_required_free_bytes": 39188172220,
+    "p32.everything_required_free_bytes": 39231201822,
     "p32.needed_bytes": 30595810360,
     "p32.home_required_free_bytes": 3176323277,
     "p32.ai_required_free_bytes": 32955660336,
     "p64.required_free_bytes": 119517905599,
     "p64.minimum_required_free_bytes": 56572612676,
-    "p64.everything_required_free_bytes": 164301340011,
+    "p64.everything_required_free_bytes": 164344369613,
     "p64.needed_bytes": 100337332611,
     "p64.home_required_free_bytes": 3176323277,
     "p64.ai_required_free_bytes": 116341582322,
     "p128.required_free_bytes": 154184224148,
     "p128.minimum_required_free_bytes": 56572612676,
-    "p128.everything_required_free_bytes": 536249183366,
+    "p128.everything_required_free_bytes": 536292212969,
     "p128.needed_bytes": 129352395179,
     "p128.home_required_free_bytes": 3176323277,
     "p128.ai_required_free_bytes": 151007900871
@@ -156,11 +156,12 @@
           "kind": "model",
           "need": "optional",
           "selectable": true,
-          "download_bytes": 3659407,
-          "installed_bytes": 3659407,
+          "download_bytes": 39517409,
+          "installed_bytes": 39517409,
           "peak_temp_bytes": 0,
           "model_ids": [
-            "image-tool-yolox-nano"
+            "image-tool-yolox-nano",
+            "image-tool-yolox-s"
           ],
           "engines": [
             "engine:image-tools",
@@ -355,11 +356,11 @@
         "required_free_bytes": 13741867392
       },
       "everything": {
-        "download_bytes": 12116811946,
-        "installed_bytes": 14226180501,
+        "download_bytes": 12152669948,
+        "installed_bytes": 14262038503,
         "peak_temp_bytes": 3364944098,
-        "needed_bytes": 17591124599,
-        "required_free_bytes": 20436360700
+        "needed_bytes": 17626982601,
+        "required_free_bytes": 20479390302
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -533,11 +534,12 @@
           "kind": "model",
           "need": "optional",
           "selectable": true,
-          "download_bytes": 3659407,
-          "installed_bytes": 3659407,
+          "download_bytes": 39517409,
+          "installed_bytes": 39517409,
           "peak_temp_bytes": 0,
           "model_ids": [
-            "image-tool-yolox-nano"
+            "image-tool-yolox-nano",
+            "image-tool-yolox-s"
           ],
           "engines": [
             "engine:image-tools",
@@ -732,11 +734,11 @@
         "required_free_bytes": 30813284198
       },
       "everything": {
-        "download_bytes": 27743321546,
-        "installed_bytes": 29852690101,
+        "download_bytes": 27779179548,
+        "installed_bytes": 29888548103,
         "peak_temp_bytes": 3364944098,
-        "needed_bytes": 33217634199,
-        "required_free_bytes": 39188172220
+        "needed_bytes": 33253492201,
+        "required_free_bytes": 39231201822
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -977,11 +979,12 @@
           "kind": "model",
           "need": "optional",
           "selectable": true,
-          "download_bytes": 3659407,
-          "installed_bytes": 3659407,
+          "download_bytes": 39517409,
+          "installed_bytes": 39517409,
           "peak_temp_bytes": 0,
           "model_ids": [
-            "image-tool-yolox-nano"
+            "image-tool-yolox-nano",
+            "image-tool-yolox-s"
           ],
           "engines": [
             "engine:image-tools",
@@ -1323,11 +1326,11 @@
         "required_free_bytes": 56572612676
       },
       "everything": {
-        "download_bytes": 127973315538,
-        "installed_bytes": 131452602052,
+        "download_bytes": 128009173540,
+        "installed_bytes": 131488460054,
         "peak_temp_bytes": 6558217548,
-        "needed_bytes": 138010819600,
-        "required_free_bytes": 164301340011
+        "needed_bytes": 138046677602,
+        "required_free_bytes": 164344369613
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -1590,11 +1593,12 @@
           "kind": "model",
           "need": "optional",
           "selectable": true,
-          "download_bytes": 3659407,
-          "installed_bytes": 3659407,
+          "download_bytes": 39517409,
+          "installed_bytes": 39517409,
           "peak_temp_bytes": 0,
           "model_ids": [
-            "image-tool-yolox-nano"
+            "image-tool-yolox-nano",
+            "image-tool-yolox-s"
           ],
           "engines": [
             "engine:image-tools",
@@ -2186,11 +2190,11 @@
         "required_free_bytes": 56572612676
       },
       "everything": {
-        "download_bytes": 436236325642,
-        "installed_bytes": 440360152629,
+        "download_bytes": 436272183644,
+        "installed_bytes": 440396010631,
         "peak_temp_bytes": 7817000211,
-        "needed_bytes": 448177152840,
-        "required_free_bytes": 536249183366
+        "needed_bytes": 448213010842,
+        "required_free_bytes": 536292212969
       },
       "measured_on": "2026-10-17",
       "default_selected": [
