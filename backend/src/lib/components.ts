@@ -235,8 +235,8 @@ export function componentDefs(): UnitDef[] {
     usedBy: () => ["The picture editor"],
     busy: () => { const state = imageTools.status().state; return state === "running" || state === "building" ? "A picture edit is running right now." : null; },
   });
-  const lookPin = STACK_IMAGE_TOOL_MODELS.find((pin) => pin.component === "tool-look");
-  if (lookPin) units.push({ id: "tool-look", ...LABELS["tool-look"]!, group: "tools", role: "image", pins: [lookPin], envs: [envTools], usedBy: () => ["Look at a picture"], busy: () => null });
+  const lookPins = STACK_IMAGE_TOOL_MODELS.filter((pin) => pin.component === "tool-look");
+  if (lookPins.length) units.push({ id: "tool-look", ...LABELS["tool-look"]!, group: "tools", role: "image", pins: lookPins, envs: [envTools], usedBy: () => ["Look at a picture"], busy: () => null });
   units.push({
     id: STACK_VIDEO_MODELS[0]!.id, ...LABELS[STACK_VIDEO_MODELS[0]!.id]!, group: "video", role: "video", pins: STACK_VIDEO_MODELS, envs: [envVideo], tiers: ["p128"],
     platformBlock: () => videoAvailability().code === "unsupported" ? videoAvailability().reason : null,

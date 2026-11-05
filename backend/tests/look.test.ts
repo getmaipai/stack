@@ -65,6 +65,26 @@ test("all vocabulary is an untracked per-call option and the household default i
   base.service.stop();
 });
 
+test("all vocabulary selects YOLOX-s when present and falls back to nano with a status", async () => {
+  const chosen: string[] = [];
+  let largeInstalled = true;
+  const paths = (vocabulary?: "household" | "all") => vocabulary === "all" ? largeInstalled ? "/verified/yolox-s.onnx" : null : "/verified/yolox-nano.onnx";
+  const { service } = build({ modelPath: paths, spawn: async () => {
+    spawned += 1;
+    let end!: (code: number) => void;
+    const exited = new Promise<number>((done) => { end = done; });
+    return { exited, kill: () => end(143), request: async (model) => { chosen.push(model); return goodReply(); } };
+  } });
+  await service.look("house", JPEG);
+  await service.detectAll(JPEG);
+  expect(chosen).toEqual(["/verified/yolox-nano.onnx", "/verified/yolox-s.onnx"]);
+  largeInstalled = false;
+  const fallback = await service.detectAllWithStatus(JPEG);
+  expect(chosen[2]).toBe("/verified/yolox-nano.onnx");
+  expect(fallback.status).toContain("using the household detector");
+  service.stop();
+});
+
 test("the answer validates against the spec's look-result schema when the pinned spec checkout is present", async () => {
   const schemaPath = join(import.meta.dir, "..", "..", "..", "commons-tags", "spec-spec-v0.1.208", "spec", "schemas", "look-result.schema.json");
   if (!existsSync(schemaPath)) return;
@@ -157,6 +177,12 @@ test("the YOLOX pin is the Look part and matches the spec digest", () => {
   expect(pin.download?.hub_file).toBeUndefined();
   expect(pin.download?.sha256).toBe("c789161ed43c8269fcd4e67c67eeeb4e80c622da2eb296a20bc6007bd18a0b7d");
   expect(pin.download?.approx_bytes).toBe(3_659_407);
+  const large = STACK_IMAGE_TOOL_MODELS.find((candidate) => candidate.id === "image-tool-yolox-s")!;
+  expect(large.component).toBe("tool-look");
+  expect(large.download?.url).toBe("https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_s.onnx");
+  expect(large.download?.sha256).toBe("c5c2d13e59ae883e6af3b45daea64af4833a4951c92d116ec270d9ddbe998063");
+  expect(large.download?.approx_bytes).toBe(35_858_002);
+  expect(large.measured).toBeUndefined(); // the 2026-11-04 benchmark measured accuracy, not resident memory
   const assets = join(import.meta.dir, "..", "..", "..", "commons-tags", "spec-spec-v0.1.208", "spec", "assets", "robot-assets.json");
   if (!existsSync(assets)) return;
   const spec = (JSON.parse(require("node:fs").readFileSync(assets, "utf8")) as { id: string; sha256: string }[]).find((row) => row.id === "yolox-nano-0_1_1rc0");

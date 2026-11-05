@@ -45,6 +45,7 @@ export type ImageToolOperation = typeof IMAGE_TOOLS_OPERATIONS[number];
 /** The pinned model records the worker loads, by the name the worker uses. */
 export const IMAGE_TOOL_MODEL_IDS = { isnet: "image-tool-isnet-general", lama: "image-tool-lama-big", esrgan: "image-tool-realesrgan-general-x4v3" } as const;
 export const LOOK_MODEL_ID = "image-tool-yolox-nano";
+export const LOOK_ALL_MODEL_ID = "image-tool-yolox-s";
 /** What the worker holds at its largest (IS-Net on CPU peaked at 3.2 GB in the bench, plus the decoded picture), asked of the governor while the worker lives. */
 export const IMAGE_TOOLS_ESTIMATED_BYTES = 4 * 1_073_741_824;
 /** Megapixels each tool accepts; the worker enforces them and says them in words. Mirrored here so the status route and the docs state them once. */
@@ -131,7 +132,7 @@ export interface ImageToolsDeps {
   /** Holds the memory the worker may use; a string is a refusal. */
   hold: (signal?: AbortSignal) => Promise<{ release(): void } | string>;
   tmpDir: () => string;
-  detectSubjects?: (image: Uint8Array) => Promise<LookDetection[]>;
+  detectSubjects?: (image: Uint8Array) => Promise<{ detections: LookDetection[]; status?: string }>;
 }
 
 export const defaultImageToolsDeps: ImageToolsDeps = {
@@ -142,7 +143,7 @@ export const defaultImageToolsDeps: ImageToolsDeps = {
   ensureSubjectsHelper,
   modelPath: imageToolModelPath,
   tmpDir: imageToolsTmpDir,
-  detectSubjects: async (image) => (await import("@/look/look")).lookService.detectAll(image),
+  detectSubjects: async (image) => (await import("@/look/look")).lookService.detectAllWithStatus(image),
   hold: async (signal) => {
     const request = { id: "image-tools", kind: "jit" as const, requestedBytes: IMAGE_TOOLS_ESTIMATED_BYTES, pinned: true };
     const answer = await admit(request);
@@ -309,7 +310,9 @@ export class ImageToolsService {
       if (input.operation === "find_subjects") {
         try {
           if (!this.deps.detectSubjects) throw new Error("Look integration is unavailable");
-          params = { ...params, look_detections: await this.deps.detectSubjects(input.image) };
+          const result = await this.deps.detectSubjects(input.image);
+          params = { ...params, look_detections: result.detections };
+          if (result.status) { lookStatus = result.status; onStatus(lookStatus); }
         } catch {
           lookStatus = "Look is not ready; subjects are labeled as objects.";
           onStatus(lookStatus);

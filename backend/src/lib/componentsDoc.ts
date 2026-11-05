@@ -125,7 +125,7 @@ export function renderComponentsDoc(catalog: ComponentsCatalog): string {
     }
     if (components.length) {
       lines.push("");
-      lines.push(`Installed beside the model, never selected on its own: ${components.map((component) => `\`${component.id}\` (${component.component}, ${gb(component.download?.approx_bytes)}, ${component.license ?? "licence unknown"}, ${component.repo ?? "catalog"} @ ${component.revision ?? "unknown"})`).join("; ")}.`);
+      lines.push(`Installed beside the model, never selected on its own: ${components.map((component) => `\`${component.id}\` (${component.component}, ${gb(component.download?.approx_bytes)}, ${component.license ?? "licence unknown"}, ${component.repo ?? "catalog"} @ ${component.revision ?? "unknown"}${component.id === "image-tool-yolox-s" && !component.measured ? "; resident footprint unmeasured" : ""})`).join("; ")}.`);
     }
     if (modelRole === "tts") {
       // What the Stack fetches for the voice engine on an explicit need,

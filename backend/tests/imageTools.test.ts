@@ -144,7 +144,7 @@ test("pictures wait in memory only between the route and the runner, and results
 });
 
 test("the three pins are verified components of the image role with licences, never a selectable image model", () => {
-  const editorPins = STACK_IMAGE_TOOL_MODELS.filter((pin) => pin.id !== "image-tool-yolox-nano");
+  const editorPins = STACK_IMAGE_TOOL_MODELS.filter((pin) => pin.component !== "tool-look");
   expect(editorPins.map((pin) => pin.id).sort()).toEqual(Object.values(IMAGE_TOOL_MODEL_IDS).sort());
   for (const pin of editorPins) {
     expect(pin.role).toBe("image");
@@ -201,7 +201,7 @@ test("IMGEDIT-01: a Mac without the person finder answers people_unavailable as 
 
 test("IMG-OPS-07: find_subjects returns boxes and kinds; erase_subjects requires LaMa and passes selected numbers", async () => {
   const subjects = [{ id: 1, x: 0.1, y: 0.2, w: 0.3, h: 0.6, area: 0.1, kind: "animal" as const }, { id: 2, x: 0.6, y: 0.2, w: 0.2, h: 0.5, area: 0.07, kind: "person" as const }];
-  const service = new ImageToolsService(deps({ ensureSubjectsHelper: async () => "/helper/subjectmask", modelPath: () => null, detectSubjects: async () => [{ label: "dog", score: 0.9, box: [0.1, 0.2, 0.3, 0.6] }, { label: "person", score: 0.8, box: [0.6, 0.2, 0.2, 0.5] }] }, (request) => ({ id: request.id, ok: true, width: 10, height: 20, engine: "apple-vision", model: "m", ms: 5, subjects })));
+  const service = new ImageToolsService(deps({ ensureSubjectsHelper: async () => "/helper/subjectmask", modelPath: () => null, detectSubjects: async () => ({ detections: [{ label: "dog", score: 0.9, box: [0.1, 0.2, 0.3, 0.6] }, { label: "person", score: 0.8, box: [0.6, 0.2, 0.2, 0.5] }] }) }, (request) => ({ id: request.id, ok: true, width: 10, height: 20, engine: "apple-vision", model: "m", ms: 5, subjects })));
   const found = await service.run({ operation: "find_subjects", image: PNG });
   expect(found.subjects).toEqual([{ ...subjects[0]!, kind: "animal", label: "dog" }, { ...subjects[1]!, kind: "person", label: "person" }]);
   expect(requests[0]!.subjects_helper).toBe("/helper/subjectmask");
@@ -217,7 +217,7 @@ test("IMG-OPS-07: find_subjects returns boxes and kinds; erase_subjects requires
 
 test("IMG-OPS-09: unmatched instances become objects and Look down is a successful, stated fallback", async () => {
   const subjects = [{ id: 1, x: 0.1, y: 0.2, w: 0.2, h: 0.2, area: 0.04 }];
-  const service = new ImageToolsService(deps({ ensureSubjectsHelper: async () => "/helper/subjectmask", detectSubjects: async () => [] }, (request) => ({ id: request.id, ok: true, width: 10, height: 20, engine: "apple-vision", model: "m", ms: 5, subjects })));
+  const service = new ImageToolsService(deps({ ensureSubjectsHelper: async () => "/helper/subjectmask", detectSubjects: async () => ({ detections: [] }) }, (request) => ({ id: request.id, ok: true, width: 10, height: 20, engine: "apple-vision", model: "m", ms: 5, subjects })));
   const found = await service.run({ operation: "find_subjects", image: PNG });
   expect(found.subjects?.[0]).toMatchObject({ kind: "object" });
   expect(found.subjects?.[0]?.label).toBeUndefined();

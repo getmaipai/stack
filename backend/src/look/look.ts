@@ -6,14 +6,13 @@
 // governor admission while it lives, is paused by the heavy gate while chat works, and is stopped after
 // LOOK_IDLE_MS without a request. No log line carries a label, tag, colour or box: counts and milliseconds only.
 // There is no way to fetch a look by id (Robot vision R1): the caller gets the answer to its own request.
-import { existsSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { admit, release, type GovernorHandle } from "@/lib/governor";
 import { heavyGate, PausableProcess, type Lease, type PausableWorker } from "@/lib/heavyGate";
 import { log } from "@/lib/log";
-import { getModel } from "@/lib/modelStore";
 import { ensureUvEnvironment, managedEnv, uvVenvPython } from "@/lib/uvEnvironment";
-import { imageToolsEnvironmentSpec, imageToolsRequirementsFileFor, imageToolsRoot, LOOK_MODEL_ID } from "@/imagetools/imageTools";
+import { imageToolModelPath, imageToolsEnvironmentSpec, imageToolsRequirementsFileFor, imageToolsRoot, LOOK_ALL_MODEL_ID, LOOK_MODEL_ID } from "@/imagetools/imageTools";
 import workerScript from "./look_worker.py" with { type: "file" };
 import coreScript from "./look_core.py" with { type: "file" };
 import { LOOK_TRACK_TTL_S, LookTracker, type LookDetection, type LookObject } from "./lookTracker";
@@ -45,7 +44,7 @@ export interface LookWorker { request(modelPath: string, jpeg: Uint8Array, vocab
 export interface LookDeps {
   supported: () => boolean;
   ensureEnvironment: () => Promise<void>;
-  modelPath: () => string | null;
+  modelPath: (vocabulary?: "household" | "all") => string | null;
   /** Holds the memory the worker may use; a string is a refusal. */
   hold: (signal?: AbortSignal) => Promise<{ release(): void } | string>;
   spawn: () => Promise<LookWorker>;
@@ -67,10 +66,10 @@ export class LookService {
 
   constructor(private readonly deps: LookDeps = defaultLookDeps) {}
 
-  status(): { state: "unsupported" | "needs-setup" | "building" | "idle" | "running"; models: { yolox_nano: boolean }; reason: string | null } {
+  status(): { state: "unsupported" | "needs-setup" | "building" | "idle" | "running"; models: { yolox_nano: boolean; yolox_s: boolean }; reason: string | null } {
     const supported = this.deps.supported();
     const state = !supported ? "unsupported" : this.building ? "building" : this.busy > 0 ? "running" : this.worker ? "idle" : "needs-setup";
-    return { state, models: { yolox_nano: this.deps.modelPath() !== null }, reason: supported ? null : `Look is not available on ${process.platform} ${process.arch} yet.` };
+    return { state, models: { yolox_nano: this.deps.modelPath("household") !== null, yolox_s: this.deps.modelPath("all") !== null }, reason: supported ? null : `Look is not available on ${process.platform} ${process.arch} yet.` };
   }
 
   /** Looks at one picture. `source` keys the short memory of what that camera has seen; detail "detailed" is not built yet. */
@@ -88,6 +87,13 @@ export class LookService {
   async detectAll(jpeg: Uint8Array): Promise<LookDetection[]> {
     const result = await this.look("image-tools", jpeg, "fast", undefined, "all", true);
     return result.objects.map(({ label, score, box }) => ({ label, score, box }));
+  }
+
+  async detectAllWithStatus(jpeg: Uint8Array): Promise<{ detections: LookDetection[]; status?: string }> {
+    const hasLargeModel = this.deps.modelPath("all") !== null;
+    const result = await this.look("image-tools", jpeg, "fast", undefined, "all", true);
+    const detections = result.objects.map(({ label, score, box }) => ({ label, score, box }));
+    return { detections, ...(!hasLargeModel ? { status: "YOLOX-s is not installed; using the household detector for subject labels." } : {}) };
   }
 
   /** Stops the worker now (shutdown, or a test). */
@@ -143,7 +149,7 @@ export class LookService {
     if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
     let lease: Lease | undefined;
     try {
-      const model = this.deps.modelPath();
+      const model = this.deps.modelPath(vocabulary) ?? this.deps.modelPath("household");
       if (!model) throw new LookError("model_missing", MODEL_MISSING, 503);
       const worker = await this.ensureWorker(signal);
       if (worker.pausable) lease = heavyGate.attach({ role: "look", worker: worker.pausable });
@@ -229,10 +235,7 @@ export function workerHandle(child: { pid?: number; stdin: { write(data: Uint8Ar
 export const defaultLookDeps: LookDeps = {
   supported: () => imageToolsRequirementsFileFor() !== null,
   ensureEnvironment: () => ensureUvEnvironment(imageToolsEnvironmentSpec(), () => {}),
-  modelPath: () => {
-    const record = getModel(LOOK_MODEL_ID);
-    return record?.modelPath && record.verifiedAt && existsSync(record.modelPath) ? record.modelPath : null;
-  },
+  modelPath: (vocabulary) => imageToolModelPath(vocabulary === "all" ? LOOK_ALL_MODEL_ID : LOOK_MODEL_ID),
   hold: holdMemory,
   spawn: async () => {
     const root = imageToolsRoot();

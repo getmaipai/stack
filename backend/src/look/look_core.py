@@ -41,14 +41,14 @@ HOUSEHOLD = (
 HOUSEHOLD_IDS = np.array(sorted(COCO.index(name) for name in HOUSEHOLD))
 
 
-def letterbox(frame):
-    """Scale the picture into a 416 square, padded with 114; returns (1, 3, 416, 416) and the scale."""
+def letterbox(frame, input_size=INPUT):
+    """Scale the picture into the selected square, padded with 114, and return its scale."""
     height, width = frame.shape[:2]
-    scale = min(INPUT / height, INPUT / width)
+    scale = min(input_size / height, input_size / width)
     new_h, new_w = max(1, round(height * scale)), max(1, round(width * scale))
     rows = np.minimum((np.arange(new_h) / scale).astype(np.int32), height - 1)
     cols = np.minimum((np.arange(new_w) / scale).astype(np.int32), width - 1)
-    canvas = np.full((INPUT, INPUT, 3), 114, dtype=np.float32)
+    canvas = np.full((input_size, input_size, 3), 114, dtype=np.float32)
     canvas[:new_h, :new_w] = frame[rows][:, cols]
     return canvas.transpose(2, 0, 1)[None], scale
 
@@ -89,10 +89,23 @@ def nms(boxes, scores, threshold):
     return kept
 
 
-def decode(raw, scale, width, height, vocabulary="household"):
+def decode(raw, scale, width, height, vocabulary="household", input_size=INPUT):
     """Detections from the model output; the opt-in all vocabulary keeps COCO's 80 classes."""
-    xy = (raw[:, :2] + _GRID) * _STRIDE
-    wh = np.exp(raw[:, 2:4]) * _STRIDE
+    if input_size == INPUT:
+        grid, stride = _GRID, _STRIDE
+    else:
+        cells, strides = [], []
+        for step in STRIDES:
+            size = input_size // step
+            yy, xx = np.meshgrid(np.arange(size), np.arange(size), indexing="ij")
+            cells.append(np.stack([xx, yy], axis=-1).reshape(-1, 2))
+            strides.append(np.full((size * size, 1), step))
+        grid = np.concatenate(cells).astype(np.float32)
+        stride = np.concatenate(strides).astype(np.float32)
+    if len(raw) != len(grid):
+        raise ValueError(f"Unsupported YOLOX output layout {raw.shape} for {input_size} input")
+    xy = (raw[:, :2] + grid) * stride
+    wh = np.exp(raw[:, 2:4]) * stride
     class_scores = raw[:, 4:5] * raw[:, 5:]
     best_class = class_scores.argmax(axis=1)
     score = class_scores[np.arange(len(best_class)), best_class]

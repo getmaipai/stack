@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from look_core import decode, letterbox, scene  # noqa: E402
 
 _session = None
-_input_name = None
+_session_path = None
 
 
 def read_exact(stream, size):
@@ -38,15 +38,22 @@ def read_exact(stream, size):
 
 
 def session_for(path):
-    global _session, _input_name
-    if _session is None:
+    global _session, _session_path
+    if _session_path != path:
+        _session = None
         options = ort.SessionOptions()
         options.intra_op_num_threads = 1
         options.inter_op_num_threads = 1
         options.log_severity_level = 3
-        _session = ort.InferenceSession(path, options, providers=["CPUExecutionProvider"])
-        _input_name = _session.get_inputs()[0].name
-    return _session, _input_name
+        session = ort.InferenceSession(path, options, providers=["CPUExecutionProvider"])
+        input_meta = session.get_inputs()[0]
+        shape = input_meta.shape
+        height, width = shape[-2:]
+        if not isinstance(height, int) or height != width:
+            raise ValueError(f"Unsupported YOLOX input shape {shape}")
+        _session = (session, input_meta.name, height)
+        _session_path = path
+    return _session
 
 
 def look(header, jpeg):
@@ -55,13 +62,15 @@ def look(header, jpeg):
     if frame is None:
         return {"ok": False, "code": "not_jpeg"}
     height, width = frame.shape[:2]
-    blob, scale = letterbox(frame)
-    session, input_name = session_for(header["model"])
+    session, input_name, input_size = session_for(header["model"])
+    blob, scale = letterbox(frame, input_size)
     raw = session.run(None, {input_name: blob})[0][0]
+    if raw.ndim != 2 or raw.shape[1] != 85:
+        raise ValueError(f"Unsupported YOLOX output layout {raw.shape}")
     light, colours, tags = scene(frame)
     return {
         "ok": True,
-        "detections": decode(raw, scale, width, height, header.get("vocabulary", "household")),
+        "detections": decode(raw, scale, width, height, header.get("vocabulary", "household"), input_size),
         "light": light,
         "colours": colours,
         "tags": tags,
