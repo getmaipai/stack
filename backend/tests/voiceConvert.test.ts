@@ -1,0 +1,25 @@
+import { afterEach,beforeEach,expect,test } from "bun:test";
+import { app } from "@/app";
+import { __resetJobsForTests } from "@/lib/jobs";
+import { __resetGovernorForTests,__setGovernorTuningForTestsOnly } from "@/lib/governor";
+import { dataDir } from "@/lib/paths";
+import { mkdirSync,readFileSync,rmSync,writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { registerVoiceConvertJobs,stashVoiceConvert } from "@/voiceConvert/jobs";
+import { handle,voiceConvert,voiceConvertWorkerEnv,type VoiceConvertDeps, type VoiceConvertRequest } from "@/voiceConvert/voiceConvert";
+import { removeWorkerDir,startLeakyWorker,waitForWorkerPids,waitForWorkerRequest,waitForWorkerTreeGone } from "./helpers/leakyWorker";
+
+const GB=1_073_741_824, audio=(label:string)=>new TextEncoder().encode(`0000ftypM4A-${label}`);
+function validWav(seconds:number){const rate=8000,frames=rate*seconds,data=Buffer.alloc(frames*2),header=Buffer.alloc(44);header.write("RIFF",0);header.writeUInt32LE(36+data.length,4);header.write("WAVE",8);header.write("fmt ",12);header.writeUInt32LE(16,16);header.writeUInt16LE(1,20);header.writeUInt16LE(1,22);header.writeUInt32LE(rate,24);header.writeUInt32LE(rate*2,28);header.writeUInt16LE(2,32);header.writeUInt16LE(16,34);header.write("data",36);header.writeUInt32LE(data.length,40);return new Uint8Array(Buffer.concat([header,data]));}
+function deps(run:(r:VoiceConvertRequest)=>void):VoiceConvertDeps{return {supported:()=>true,installed:()=>true,ensure:async()=>{},runtime:()=>({checkpoint:"model",config:"config",rmvpe:"f0",whisper:"whisper"}),spawn:async()=>({exited:new Promise<number>(()=>{}),kill:()=>{},send:async(r,stage)=>{stage("loading",.1);stage("converting",.5);writeFileSync(r.output,"ftyp-converted");run(r);return {ms:1};}})};}
+const post=(body:any)=>app.request("/v1/audio/voice-convert",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)}), get=(p:string)=>app.request(p);
+function body(source=audio("src"),reference=audio("ref"),other:any={}){return {source:Buffer.from(source).toString("base64"),reference:Buffer.from(reference).toString("base64"),...other};}
+beforeEach(()=>{__resetJobsForTests();__resetGovernorForTests();rmSync(join(dataDir,"music"),{recursive:true,force:true});__setGovernorTuningForTestsOnly({totalMemoryBytes:128*GB,freeMemoryBytes:90*GB,tier:"p128"});registerVoiceConvertJobs();});
+afterEach(()=>{voiceConvert.useDeps(null);rmSync(join(dataDir,"music"),{recursive:true,force:true});});
+test("status route reports model, reference and memory limits",async()=>{voiceConvert.useDeps(deps(()=>{}));const r=await get("/stack/v1/voice-convert");expect(r.status).toBe(200);const s=(await r.json() as any).voice_convert;expect(s.limits.reference_min_seconds).toBe(6);expect(s.limits.reference_max_seconds).toBe(30);expect(s.limits.peak_bytes).toBe(8_000_000_000);});
+test("fake conversion completes through poll and fetch",async()=>{voiceConvert.useDeps(deps(()=>{}));const r=await post(body(audio("src"),validWav(10)));expect(r.status).toBe(200);const b=await r.json() as any;expect(b.data.url).toBe(`/v1/audio/voice-convert/${b.job}/file`);expect(await (await get(b.data.url)).text()).toBe("ftyp-converted");});
+test("unsupported tier is reported and request refused",async()=>{voiceConvert.useDeps({...deps(()=>{}),supported:()=>false});const s=await (await get("/stack/v1/voice-convert")).json() as any;expect(s.voice_convert.state).toBe("unsupported");expect((await post(body(audio("src"),validWav(10)))).status).toBe(503);});
+test("bad reference clip duration is rejected",async()=>{voiceConvert.useDeps(deps(()=>{}));const r=await post(body(audio("src"),validWav(5)));expect(r.status).toBe(422);expect(((await r.json()) as any).code).toBe("bad_reference_length");});
+test("pitch_shift outside the supported range is rejected",async()=>{voiceConvert.useDeps(deps(()=>{}));expect((await post(body(audio("s"),audio("r"),{pitch_shift:13}))).status).toBe(400);});
+test("no clip names are sent to worker logs or status",async()=>{let seen:any;voiceConvert.useDeps(deps((r)=>{seen=JSON.stringify(r);}));const r=await post(body(audio("private-filename"),validWav(10)));expect(r.status).toBe(200);expect(seen).not.toContain("private-filename");const job=(await r.json() as any).job;expect((await get(`/v1/audio/voice-convert/${job}`)).status).toBe(200);});
+test("cancel kills the voice conversion worker process tree",async()=>{process.env.MAIPAI_TEST_NO_PORTS="1";let dir="";voiceConvert.useDeps({...deps(()=>{}),spawn:async()=>{const s=startLeakyWorker(handle as any);dir=s.dir;return s.worker as any;}});try{const r=await post(body(audio("cancel"),validWav(10),{timeout_ms:1}));const id=(await r.json() as any).job;for(let i=0;i<500&&!dir;i++)await Bun.sleep(20);const pids=await waitForWorkerPids(join(dir,"pids"));await waitForWorkerRequest(join(dir,"accepted"));await app.request(`/v1/audio/voice-convert/${id}`,{method:"DELETE"});expect(await waitForWorkerTreeGone(pids)).toBe(true);}finally{if(dir)removeWorkerDir(dir);}},30_000);

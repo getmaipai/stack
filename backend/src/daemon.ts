@@ -15,7 +15,7 @@ import { migrateLegacyEngineTags } from "@/lib/engineInstall";
 import { reconcilePinDeclarations } from "@/lib/modelStore";
 import { pullMissingDeclaredParts } from "@/lib/installJobs";
 import { ensureChatEngineAssets } from "@/lib/chatEngineAssets";
-import { STACK_MODELS, STACK_STEMS_MODELS } from "@/lib/modelCatalog";
+import { STACK_MODELS, STACK_STEMS_MODELS, STACK_VOICE_CONVERT_MODELS } from "@/lib/modelCatalog";
 import { startSelfHeal } from "@/lib/selfHeal";
 import { ddgsSupervisor } from "@/search/ddgsSidecar";
 import { imageTools } from "@/imagetools/imageTools";
@@ -52,7 +52,7 @@ async function serve(): Promise<void> {
   for (const moved of migrateLegacyEngineTags()) console.log(`Renamed engine ${moved.name} ${moved.from} to ${moved.to}.`);
   applyPendingSettings();
   // An installed model gets what its pin now declares (picture input) before anything launches.
-  for (const id of reconcilePinDeclarations([...STACK_MODELS, ...STACK_STEMS_MODELS])) console.log(`Updated the record of ${id} to match its pin.`);
+  for (const id of reconcilePinDeclarations([...STACK_MODELS, ...STACK_STEMS_MODELS, ...STACK_VOICE_CONVERT_MODELS])) console.log(`Updated the record of ${id} to match its pin.`);
   // TIER-ROUTES-01: the Max window swaps chat to Reduced and back by itself.
   wireMaxWindowReduced();
   // The governor's working margin follows the machine's tier from here on.

@@ -1114,6 +1114,36 @@ export const STACK_STEMS_6S_MODEL: CatalogModelLike = {
 };
 export const STACK_STEMS_MODELS: CatalogModelLike[] = [STACK_STEMS_MODEL, STACK_STEMS_FT_MODEL, STACK_STEMS_6S_MODEL];
 
+// SVC-01: SoulX-Singer singing voice conversion (Apache-2.0 code and weights).
+// Model and RMVPE files are installed through the ordinary checksum-verifying model store.
+const SOULX_REVISION = "40493ad90286056c7a9095035164434a79daa8c9";
+const SOULX_PREPROCESS_REVISION = "83dc50289d22a81b1e9998f5b9e111aef7c1fdcd";
+export const STACK_VOICE_CONVERT_MODEL_ID = "soulx-singer-svc";
+export const STACK_VOICE_CONVERT_MODEL: CatalogModelLike = {
+  id: STACK_VOICE_CONVERT_MODEL_ID, role: "music", component: "voice-convert", repo: "Soul-AILab/SoulX-Singer", license: "Apache-2.0", revision: SOULX_REVISION, engine: "voice-convert",
+  sizing: { profile: "p64", quantization: "fp32" },
+  download: { url: hfUrl(`Soul-AILab/SoulX-Singer/resolve/${SOULX_REVISION}/model-svc.pt`), sha256: "38e72d9e15be6eef3cc937daaf81421a7b5b546816786530bb9aa346cee5d43c", approx_bytes: 2_793_965_154, directory: "soulx-singer-svc", files: [
+    { path: "model-svc.pt", sha256: "38e72d9e15be6eef3cc937daaf81421a7b5b546816786530bb9aa346cee5d43c", bytes: 2_793_965_154 },
+    { path: "config.yaml", sha256: "d164c978dde6f57e1075bc21ef5f9b7b27895267f35b735cebe863418492be38", bytes: 579 },
+  ] },
+};
+export const STACK_VOICE_CONVERT_F0_ID = "soulx-singer-rmvpe";
+export const STACK_VOICE_CONVERT_F0: CatalogModelLike = {
+  id: STACK_VOICE_CONVERT_F0_ID, role: "music", component: "voice-convert", repo: "Soul-AILab/SoulX-Singer-Preprocess", license: "Apache-2.0", revision: SOULX_PREPROCESS_REVISION, engine: "voice-convert",
+  sizing: { profile: "p64", quantization: "fp32" },
+  download: { url: hfUrl(`Soul-AILab/SoulX-Singer-Preprocess/resolve/${SOULX_PREPROCESS_REVISION}/rmvpe/rmvpe.pt`), sha256: "6d62215f4306e3ca278246188607209f09af3dc77ed4232efdd069798c4ec193", approx_bytes: 181_184_272 },
+};
+export const STACK_VOICE_CONVERT_WHISPER: CatalogModelLike = {
+  id: "soulx-singer-whisper-base", role: "music", component: "voice-convert", repo: "openai/whisper-base", license: "Apache-2.0", revision: "e37978b90ca9030d5170a5c07aadb050351a65bb", engine: "voice-convert",
+  sizing: { profile: "p64", quantization: "fp32" },
+  download: { url: hfUrl("openai/whisper-base/resolve/e37978b90ca9030d5170a5c07aadb050351a65bb/model.safetensors"), sha256: "07cadb9f25677c8d50df603e66a98fbd842cce45047139baeb16e6219a1e807b", approx_bytes: 290_403_936, directory: "soulx-singer-whisper-base", files: [
+    { path: "model.safetensors", sha256: "07cadb9f25677c8d50df603e66a98fbd842cce45047139baeb16e6219a1e807b", bytes: 290_403_936 },
+    { path: "config.json", sha256: "a153c53883a6799b6f056b4a8d1a515c9926d03994682ba88a7616618d7da0c1", bytes: 1_983 },
+    { path: "preprocessor_config.json", sha256: "9b5cd03a36fbb8a627c64d98a5b5b126ead95a77720723944487311f0110b666", bytes: 184_990 },
+  ] },
+};
+export const STACK_VOICE_CONVERT_MODELS: CatalogModelLike[] = [STACK_VOICE_CONVERT_MODEL, STACK_VOICE_CONVERT_F0, STACK_VOICE_CONVERT_WHISPER];
+
 // MUSIC-GEN-20b: the forced aligner behind POST /v1/audio/align, torchaudio's MMS_FA bundle (Meta's MMS wav2vec2 CTC
 // alignment model, the file torchaudio would fetch itself, here pinned by sha256 and installed through the normal
 // download path so nothing is fetched at run time). Licence: CC-BY-NC-4.0 (the MMS release): household use, no resale.
@@ -1474,7 +1504,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_DETAILED_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, ...STACK_MUSIC_XL_MODELS, ...STACK_MUSIC_MAX_MODELS, ...STACK_STEMS_MODELS, ...STACK_ALIGN_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_DETAILED_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, ...STACK_MUSIC_XL_MODELS, ...STACK_MUSIC_MAX_MODELS, ...STACK_STEMS_MODELS, ...STACK_ALIGN_MODELS, ...STACK_VOICE_CONVERT_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

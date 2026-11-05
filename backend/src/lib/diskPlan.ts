@@ -130,9 +130,10 @@ const ENGINE_ROWS: Record<string, () => DiskRow> = {
   "engine:music": () => engineRow("engine:music", "music-gen", "Music engine tools", "What making songs runs on."),
   "engine:stems": () => engineRow("engine:stems", "stems", "Stem splitting tools", "What separating song stems runs on."),
   "engine:align": () => engineRow("engine:align", "align", "Lyric timing tools", "What timing a song's words runs on."),
+  "engine:voice-convert": () => engineRow("engine:voice-convert", "voice-convert", "Voice conversion tools", "What converting a singing voice runs on."),
   "engine:chat-mlx": () => engineRow("engine:chat-mlx", "omlx", "Faster chat engine tools (oMLX)", "What the faster chat engine runs on. llama.cpp stays as the fallback."),
 };
-const PYTHON_ENGINES = ["engine:chat-mlx", "engine:voice", "engine:voice-better", "engine:pictures", "engine:image-tools", "engine:video", "engine:video-ltx25", "engine:video-ltx25-max", "engine:music", "engine:stems", "engine:align"];
+const PYTHON_ENGINES = ["engine:chat-mlx", "engine:voice", "engine:voice-better", "engine:pictures", "engine:image-tools", "engine:video", "engine:video-ltx25", "engine:video-ltx25-max", "engine:music", "engine:stems", "engine:align", "engine:voice-convert"];
 
 function totals(rows: DiskRow[], selected: Set<string>, only?: "home" | "ai"): DiskTotals {
   const chosen = rows.filter((row) => selected.has(row.id));
@@ -206,6 +207,7 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   rows.push(modelRow({ id: "stems-ft", label: "Finer stem splitter (HTDemucs fine-tuned)", note: "An optional four model package for finer stem separation.", need: "optional", engines: ["engine:stems", "engine:python"] }, [STACK_STEMS_MODELS[1]!]));
   rows.push(modelRow({ id: "stems-6s", label: "Six-part stem splitter (guitar and piano)", note: "An optional model that separates guitar and piano too.", need: "optional", engines: ["engine:stems", "engine:python"] }, [STACK_STEMS_MODELS[2]!]));
   rows.push(modelRow({ id: "align", label: "Time song lyrics (MMS aligner)", note: "Finds when each word of a song's lyrics is sung, for the lyrics display. Optional, about 1.3 GB.", need: "optional", engines: ["engine:align", "engine:python"] }, STACK_ALIGN_MODELS));
+  rows.push(modelRow({ id: "voice-convert", label: "Change the singing voice (SoulX-Singer)", note: "Converts a vocal toward a reference voice. Optional, about 3 GB.", need: "optional", engines: ["engine:voice-convert", "engine:python"] }, STACK_MODELS.filter((pin) => pin.component === "voice-convert")));
   const search = table.engines["search-helper"]!;
   rows.push({ id: "search", label: "Search helper", note: "Looks up web search results for adults, when web search is turned on.", kind: "model", need: "recommended", selectable: false, download_bytes: search.download_bytes, installed_bytes: search.installed_bytes, peak_temp_bytes: search.peak_temp_bytes, model_ids: [], engines: [], installed: false, basis: search.basis });
   const used = new Set(rows.flatMap((row) => row.engines));

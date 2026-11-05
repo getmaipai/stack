@@ -1,0 +1,11 @@
+import { createRoute,z } from "@hono/zod-openapi";
+import { apiRouter } from "@maipai/core/src/openapi";
+import type { AppEnv } from "@/types";
+import { listModels } from "@/lib/modelStore";
+import { modelView } from "@/routes/models";
+import { voiceConvert,VOICE_CONVERT_IDLE_MS,VOICE_CONVERT_PEAK_BYTES,VOICE_CONVERT_NAME,VOICE_CONVERT_VERSION } from "@/voiceConvert/voiceConvert";
+import { voiceConvertInstallModels } from "@/lib/installPlan";
+const Model=z.object({id:z.string(),role:z.string(),repo:z.string().optional(),url:z.string(),sha256:z.string(),approx_bytes:z.number().int(),licence:z.string(),revision:z.string(),engine:z.string().optional(),archive:z.boolean().optional(),hub_file:z.string().optional(),component:z.string().optional(),starter:z.boolean(),installed:z.boolean()});
+const route=createRoute({method:"get",path:"/",tags:["Voice conversion"],summary:"Voice conversion availability and limits",responses:{200:{content:{"application/json":{schema:z.object({voice_convert:z.object({state:z.string(),available:z.boolean(),engine:z.string(),version:z.string(),models:z.array(Model),installed:z.boolean(),ready:z.boolean(),limits:z.object({max_source_mb:z.number(),reference_min_seconds:z.number(),reference_max_seconds:z.number(),pitch_shift_min:z.number(),pitch_shift_max:z.number(),peak_bytes:z.number(),idle_exit_seconds:z.number()})})})}},description:"Voice conversion status."}}});
+export const voiceConvertRoutes=apiRouter<AppEnv>();
+voiceConvertRoutes.openapi(route,(c)=>{const available=voiceConvert.depsAvailable, installedIds=listModels().map(modelView).filter(m=>m.state==="installed").map(m=>m.id),models=voiceConvertInstallModels(installedIds).map(m=>({...m,installed:voiceConvert.installed}));return c.json({voice_convert:{state:!available?"unsupported":voiceConvert.state,available,engine:VOICE_CONVERT_NAME,version:VOICE_CONVERT_VERSION,models,installed:voiceConvert.installed,ready:voiceConvert.installed&&voiceConvert.state==="idle",limits:{max_source_mb:40,reference_min_seconds:6,reference_max_seconds:30,pitch_shift_min:-12,pitch_shift_max:12,peak_bytes:VOICE_CONVERT_PEAK_BYTES,idle_exit_seconds:VOICE_CONVERT_IDLE_MS/1000}}},200 as const);});

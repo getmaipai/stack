@@ -6,25 +6,25 @@
   "installer": {
     "p16.required_free_bytes": 17380172093,
     "p16.minimum_required_free_bytes": 13741867392,
-    "p16.everything_required_free_bytes": 20479390302,
+    "p16.everything_required_free_bytes": 35598054336,
     "p16.needed_bytes": 14969300760,
     "p16.home_required_free_bytes": 3176323277,
     "p16.ai_required_free_bytes": 14203848816,
     "p32.required_free_bytes": 36131983613,
     "p32.minimum_required_free_bytes": 30813284198,
-    "p32.everything_required_free_bytes": 39231201822,
+    "p32.everything_required_free_bytes": 54349865856,
     "p32.needed_bytes": 30595810360,
     "p32.home_required_free_bytes": 3176323277,
     "p32.ai_required_free_bytes": 32955660336,
     "p64.required_free_bytes": 119517905599,
     "p64.minimum_required_free_bytes": 56572612676,
-    "p64.everything_required_free_bytes": 164344369613,
+    "p64.everything_required_free_bytes": 179463033648,
     "p64.needed_bytes": 100337332611,
     "p64.home_required_free_bytes": 3176323277,
     "p64.ai_required_free_bytes": 116341582322,
     "p128.required_free_bytes": 154184224148,
     "p128.minimum_required_free_bytes": 56572612676,
-    "p128.everything_required_free_bytes": 536292212969,
+    "p128.everything_required_free_bytes": 551410877003,
     "p128.needed_bytes": 129352395179,
     "p128.home_required_free_bytes": 3176323277,
     "p128.ai_required_free_bytes": 151007900871
@@ -251,6 +251,28 @@
           "basis": "pins"
         },
         {
+          "id": "voice-convert",
+          "label": "Change the singing voice (SoulX-Singer)",
+          "note": "Converts a vocal toward a reference voice. Optional, about 3 GB.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 3265553362,
+          "installed_bytes": 3265553362,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "soulx-singer-svc",
+            "soulx-singer-rmvpe",
+            "soulx-singer-whisper-base"
+          ],
+          "engines": [
+            "engine:voice-convert",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -339,6 +361,21 @@
           "engines": [],
           "installed": false,
           "basis": "estimate"
+        },
+        {
+          "id": "engine:voice-convert",
+          "label": "Voice conversion tools",
+          "note": "What converting a singing voice runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 4000000000,
+          "installed_bytes": 6000000000,
+          "peak_temp_bytes": 4000000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
         }
       ],
       "default": {
@@ -356,11 +393,11 @@
         "required_free_bytes": 13741867392
       },
       "everything": {
-        "download_bytes": 12152669948,
-        "installed_bytes": 14262038503,
-        "peak_temp_bytes": 3364944098,
-        "needed_bytes": 17626982601,
-        "required_free_bytes": 20479390302
+        "download_bytes": 19418223310,
+        "installed_bytes": 23527591865,
+        "peak_temp_bytes": 7364944098,
+        "needed_bytes": 30892535963,
+        "required_free_bytes": 35598054336
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -629,6 +666,28 @@
           "basis": "pins"
         },
         {
+          "id": "voice-convert",
+          "label": "Change the singing voice (SoulX-Singer)",
+          "note": "Converts a vocal toward a reference voice. Optional, about 3 GB.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 3265553362,
+          "installed_bytes": 3265553362,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "soulx-singer-svc",
+            "soulx-singer-rmvpe",
+            "soulx-singer-whisper-base"
+          ],
+          "engines": [
+            "engine:voice-convert",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -717,6 +776,21 @@
           "engines": [],
           "installed": false,
           "basis": "estimate"
+        },
+        {
+          "id": "engine:voice-convert",
+          "label": "Voice conversion tools",
+          "note": "What converting a singing voice runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 4000000000,
+          "installed_bytes": 6000000000,
+          "peak_temp_bytes": 4000000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
         }
       ],
       "default": {
@@ -734,11 +808,11 @@
         "required_free_bytes": 30813284198
       },
       "everything": {
-        "download_bytes": 27779179548,
-        "installed_bytes": 29888548103,
-        "peak_temp_bytes": 3364944098,
-        "needed_bytes": 33253492201,
-        "required_free_bytes": 39231201822
+        "download_bytes": 35044732910,
+        "installed_bytes": 39154101465,
+        "peak_temp_bytes": 7364944098,
+        "needed_bytes": 46519045563,
+        "required_free_bytes": 54349865856
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -1161,6 +1235,28 @@
           "basis": "pins"
         },
         {
+          "id": "voice-convert",
+          "label": "Change the singing voice (SoulX-Singer)",
+          "note": "Converts a vocal toward a reference voice. Optional, about 3 GB.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 3265553362,
+          "installed_bytes": 3265553362,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "soulx-singer-svc",
+            "soulx-singer-rmvpe",
+            "soulx-singer-whisper-base"
+          ],
+          "engines": [
+            "engine:voice-convert",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -1309,6 +1405,21 @@
           "engines": [],
           "installed": false,
           "basis": "estimate"
+        },
+        {
+          "id": "engine:voice-convert",
+          "label": "Voice conversion tools",
+          "note": "What converting a singing voice runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 4000000000,
+          "installed_bytes": 6000000000,
+          "peak_temp_bytes": 4000000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
         }
       ],
       "default": {
@@ -1326,11 +1437,11 @@
         "required_free_bytes": 56572612676
       },
       "everything": {
-        "download_bytes": 128009173540,
-        "installed_bytes": 131488460054,
-        "peak_temp_bytes": 6558217548,
-        "needed_bytes": 138046677602,
-        "required_free_bytes": 164344369613
+        "download_bytes": 135274726902,
+        "installed_bytes": 140754013416,
+        "peak_temp_bytes": 10558217548,
+        "needed_bytes": 151312230964,
+        "required_free_bytes": 179463033648
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -1980,6 +2091,28 @@
           "basis": "pins"
         },
         {
+          "id": "voice-convert",
+          "label": "Change the singing voice (SoulX-Singer)",
+          "note": "Converts a vocal toward a reference voice. Optional, about 3 GB.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 3265553362,
+          "installed_bytes": 3265553362,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "soulx-singer-svc",
+            "soulx-singer-rmvpe",
+            "soulx-singer-whisper-base"
+          ],
+          "engines": [
+            "engine:voice-convert",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -2173,6 +2306,21 @@
           "engines": [],
           "installed": false,
           "basis": "estimate"
+        },
+        {
+          "id": "engine:voice-convert",
+          "label": "Voice conversion tools",
+          "note": "What converting a singing voice runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 4000000000,
+          "installed_bytes": 6000000000,
+          "peak_temp_bytes": 4000000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
         }
       ],
       "default": {
@@ -2190,11 +2338,11 @@
         "required_free_bytes": 56572612676
       },
       "everything": {
-        "download_bytes": 436272183644,
-        "installed_bytes": 440396010631,
-        "peak_temp_bytes": 7817000211,
-        "needed_bytes": 448213010842,
-        "required_free_bytes": 536292212969
+        "download_bytes": 443537737006,
+        "installed_bytes": 449661563993,
+        "peak_temp_bytes": 11817000211,
+        "needed_bytes": 461478564204,
+        "required_free_bytes": 551410877003
       },
       "measured_on": "2026-10-17",
       "default_selected": [

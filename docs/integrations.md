@@ -48,6 +48,7 @@ OpenAI-shaped, so an existing client library works unchanged.
 | `POST /v1/videos/generations` | `video` | the job API with a wait; progress by phase, cancel, the clip fetched by URL (see Video generation below) |
 | `POST /v1/audio/music` | `music` | the job API with a wait; progress by stage, cancel, the song fetched by URL (see Music generation below) |
 | `POST /v1/audio/stems` | `music` | the job API with a wait; splits a song made here into vocals, drums, bass and other; each result can seed later music edits |
+| `POST /v1/audio/voice-convert` | `music` | the job API with a wait; converts a vocal toward a reference voice |
 | `POST /v1/audio/align` | `music` | the job API with a wait; known lyrics plus a song in, one `{ t, end, text }` per word out (MMS forced aligner); see "Lyric timing" below |
 | `GET /v1/models` | all | role ids plus installed model ids in OpenAI's list shape; `?role=coding` lists only the coding role's served model with `context_length` and `thinking_budget_ceiling` (an empty list when none is installed; never starts the engine) |
 
@@ -637,6 +638,8 @@ runs with `HF_HUB_OFFLINE=1`, and makes no network request. Tiers: `p128` (songs
 Design and the measurements: Home `docs/design/music-generation-2026-10-17.md`, sections 3, 4 and 12.
 
 `POST /v1/audio/stems` accepts `{ source, source_sha256, model: "htdemucs", timeout_ms? }`. `source` is base64 of an unchanged m4a this Stack made; both the hash and made-here ledger entry must match. A successful response's `data` lists the present stems as AAC `audio/mp4` files at 44.1 kHz stereo; stems below RMS `1e-4` are omitted. The queued job reports `loading`, `splitting` and `encoding`, supports `DELETE /v1/audio/stems/{job}`, and returns 202 with an empty `data` array when it outlasts the wait. Results share music's ten-minute, newest-six retention. `GET /stack/v1/stems` reports model installation and the 2 GB governor admission. Demucs 4.1.0 loads the pinned safetensors model through its own `demucs.hf.load_safetensors_model` loader; the YAML manifest, checkpoint revision and checksums are pinned in the Stack catalog.
+
+`POST /v1/audio/voice-convert` accepts `{ source, reference, source_sha256?, reference_sha256?, pitch_shift?, auto_shift?, timeout_ms? }`; both audio values are base64. The source vocal may be up to 40 MB; the reference must be 6–30 seconds, and the optional pitch shift is an integer from -12 to 12 semitones. Defaults are `pitch_shift: 0` and `auto_shift: false`, preserving the source key. The same job poll, cancel and fetch flow returns one AAC `audio/mp4` vocal at `/v1/audio/voice-convert/{job}`; a conversion that outlasts its wait returns 202 with `data: null`. Results use music's ten-minute, newest-six retention. `GET /stack/v1/voice-convert` reports installation and limits. SoulX-Singer SVC and its RMVPE pitch model are pinned by Hugging Face revision and SHA-256; Apache-2.0. Audio and names are never logged. The worker is offline after installation and runs under the music-role 6.5 GB admission reservation.
 
 ### Lyric timing (MUSIC-GEN-20b)
 

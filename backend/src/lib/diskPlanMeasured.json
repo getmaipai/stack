@@ -88,6 +88,12 @@
       "download_bytes": 450000000,
       "peak_temp_bytes": 450000000,
       "basis": "estimate"
+    },
+    "voice-convert": {
+      "installed_bytes": 6000000000,
+      "download_bytes": 4000000000,
+      "peak_temp_bytes": 4000000000,
+      "basis": "estimate"
     }
   },
   "pins": {
@@ -618,6 +624,18 @@
     "mms-fa-align": {
       "download_bytes": 1262047414,
       "installed_bytes": 1262047414
+    },
+    "soulx-singer-svc": {
+      "download_bytes": 2793965154,
+      "installed_bytes": 2793965154
+    },
+    "soulx-singer-rmvpe": {
+      "download_bytes": 181184272,
+      "installed_bytes": 181184272
+    },
+    "soulx-singer-whisper-base": {
+      "download_bytes": 290403936,
+      "installed_bytes": 290403936
     }
   }
 }

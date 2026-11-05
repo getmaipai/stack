@@ -345,7 +345,7 @@ export type ChatEngine = typeof CHAT_ENGINES[number];
 /** The role each engine name serves, for the routes that act on "the
  * engine's role" (start, stop, restart, the swap's drain). */
 export type EngineRole = "chat" | "coding" | "tts" | "image" | "video" | "music";
-export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", splash: "coding", "splash-chat": "chat", "mlx-serve": "chat", omlx: "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", comfyui: "image", "video-gen": "video", "ltx25-gen": "video", "ltx25-max-gen": "video", "music-gen": "music", "stems": "music", align: "music", "image-gen": "image" };
+export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", splash: "coding", "splash-chat": "chat", "mlx-serve": "chat", omlx: "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", comfyui: "image", "video-gen": "video", "ltx25-gen": "video", "ltx25-max-gen": "video", "music-gen": "music", "stems": "music", align: "music", "voice-convert": "music", "image-gen": "image" };
 export function engineRole(name: string): EngineRole { return ENGINE_ROLE[name] ?? "chat"; }
 
 /** Runtimes the Stack assembles from pinned wheels through uv, in an
@@ -354,6 +354,7 @@ export interface ManagedRuntime { name: string; version: string; roles: string[]
 export const MANAGED_RUNTIMES: ManagedRuntime[] = [
   { name: "align", version: "1.0.0", roles: ["music"], platforms: "macOS 14 or later on arm64 (torch and torchaudio 2.10.0 with the pinned MMS forced-alignment model; cold-start lyric timing)" },
   { name: "stems", version: "4.1.0", roles: ["music"], platforms: "macOS 14 or later on arm64 (Demucs 4.1.0 and optional pinned htdemucs, htdemucs_ft and htdemucs_6s; cold-start stem splitting)" },
+  { name: "voice-convert", version: "1.0.0", roles: ["music"], platforms: "macOS 14 or later on arm64 (SoulX-Singer SVC, PyTorch MPS, pinned Apache-2.0 weights; singing voice conversion)" },
   { name: "pocket-tts", version: "3.1.0", roles: ["tts"], platforms: "macOS 14 or later on arm64 (torch 2.13 ships macOS 14 wheels only; a hashed requirements file per platform, the Linux files land with the first Linux tts run)" },
   { name: "mlx-audio", version: "0.5.9", roles: ["tts"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the Stack's second voice engine, Chatterbox Turbo, VOICE-STUDIO-01; no Linux file)" },
   { name: "omlx", version: "0.7.0", roles: ["chat"], platforms: "macOS 15 or later on arm64 (MLX is Apple silicon only; opt-in chat engine (`stack.engines.chat.engine` = `omlx`), never the default: llama-server is the default on every tier, ENGINE-MLX-02; no Linux file)" },

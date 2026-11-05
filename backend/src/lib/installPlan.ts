@@ -106,6 +106,11 @@ export function stemsInstallModels(installedIds: Iterable<string> = []): PlanMod
   return STACK_STEMS_MODELS.flatMap((pin) => view(pin, installed, false) ?? []);
 }
 
+export function voiceConvertInstallModels(installedIds: Iterable<string> = []): PlanModel[] {
+  const installed = new Set(installedIds);
+  return STACK_MODELS.filter((pin) => pin.component === "voice-convert").flatMap((pin) => view(pin, installed, false) ?? []);
+}
+
 /** The pins the picture generator needs, in the shape of a pull, for the image status route: Home installs a family when the person turns pictures on (FLUX.2 Klein 4B by default; Z-Image-Turbo is offered on the biggest computers). Klein is in the first-run plan on every tier that has image (AIMODELS-DATA-01); the other families are not. */
 export function imageInstallModels(family: ImageFamilyId, installedIds: Iterable<string> = []): PlanModel[] {
   const installed = new Set(installedIds);
