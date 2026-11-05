@@ -42,7 +42,7 @@ export type JobRefusal = { reason: string; code?: string; /** 422 when the input
 export interface JobLane { name: string; cap: number; deadlineMs?: (job: Job) => number; precheck?: (input: Record<string, unknown>) => JobRefusal | null; }
 export interface JobRunnerOptions {
   /** A generator: queued per role and admitted through the governor. */
-  generator?: { role: string; memory: (job: Job) => JobMemory };
+  generator?: { role: string; memory: (job: Job) => JobMemory; /** Higher-priority generator roles this queue waits behind before governor admission. */ queueBehind?: string[] };
   /** Work on an idle lane: queued first in first out, one at a time. */
   lane?: JobLane;
 }
@@ -102,6 +102,10 @@ async function waitToStart(role: string): Promise<void> {
     if (remaining <= 0) return;
     await queueSleep(Math.min(25, remaining));
   }
+}
+
+async function waitForGeneratorRoles(roles: string[]): Promise<void> {
+  while (roles.some((role) => (queues.get(role)?.length ?? 0) > 0 || inFlight.has(role) || admitting.has(role))) await queueSleep(25);
 }
 
 /** ISOLATION-01: the job card's stage string while the Stack has stopped the worker so a chat or voice request runs at full speed (rule S6: the existing status field, no new surface). */
@@ -271,6 +275,15 @@ function renumber(role: string): void {
 async function pump(role: string): Promise<void> {
   if (inFlight.has(role) || admitting.has(role) || pumping.has(role)) return;
   if (!(queues.get(role)?.length)) return;
+  const head = queues.get(role)![0]!;
+  const queueBehind = runners.get(head.kind)?.options.generator?.queueBehind ?? [];
+  if (queueBehind.some((higher) => (queues.get(higher)?.length ?? 0) > 0 || inFlight.has(higher) || admitting.has(higher))) {
+    pumping.add(role);
+    await waitForGeneratorRoles(queueBehind);
+    pumping.delete(role);
+    if (queues.get(role)?.length) void pump(role);
+    return;
+  }
   if (heavyGate.status().interactive_in_flight > 0 || memoryLevel() !== "normal") {
     pumping.add(role);
     await waitToStart(role);

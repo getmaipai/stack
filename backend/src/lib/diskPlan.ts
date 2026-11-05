@@ -11,7 +11,7 @@ import measured from "@/lib/diskPlanMeasured.json";
 import { PROFILE_TIERS, type ProfileTier } from "@/profiles";
 import {
   CHATTERBOX_ENGINE, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS,
-  STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_STEMS_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS,
+  STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_STEMS_MODELS, STACK_RECORDED_SPEECH_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS,
 } from "@/lib/modelCatalog";
 import { OMLX_OPTIONAL_TIERS } from "@/lib/chatEngines";
 import { plannedPinsFor } from "@/lib/installPlan";
@@ -131,9 +131,10 @@ const ENGINE_ROWS: Record<string, () => DiskRow> = {
   "engine:stems": () => engineRow("engine:stems", "stems", "Stem splitting tools", "What separating song stems runs on."),
   "engine:align": () => engineRow("engine:align", "align", "Lyric timing tools", "What timing a song's words runs on."),
   "engine:voice-convert": () => engineRow("engine:voice-convert", "voice-convert", "Voice conversion tools", "What converting a singing voice runs on."),
+  "engine:recorded-speech": () => engineRow("engine:recorded-speech", "recorded-speech", "Recorded speech tools", "What recorded speech rendering runs on."),
   "engine:chat-mlx": () => engineRow("engine:chat-mlx", "omlx", "Faster chat engine tools (oMLX)", "What the faster chat engine runs on. llama.cpp stays as the fallback."),
 };
-const PYTHON_ENGINES = ["engine:chat-mlx", "engine:voice", "engine:voice-better", "engine:pictures", "engine:image-tools", "engine:video", "engine:video-ltx25", "engine:video-ltx25-max", "engine:music", "engine:stems", "engine:align", "engine:voice-convert"];
+const PYTHON_ENGINES = ["engine:chat-mlx", "engine:voice", "engine:voice-better", "engine:pictures", "engine:image-tools", "engine:video", "engine:video-ltx25", "engine:video-ltx25-max", "engine:music", "engine:stems", "engine:align", "engine:voice-convert", "engine:recorded-speech"];
 
 function totals(rows: DiskRow[], selected: Set<string>, only?: "home" | "ai"): DiskTotals {
   const chosen = rows.filter((row) => selected.has(row.id));
@@ -208,6 +209,7 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   rows.push(modelRow({ id: "stems-6s", label: "Six-part stem splitter (guitar and piano)", note: "An optional model that separates guitar and piano too.", need: "optional", engines: ["engine:stems", "engine:python"] }, [STACK_STEMS_MODELS[2]!]));
   rows.push(modelRow({ id: "align", label: "Time song lyrics (MMS aligner)", note: "Finds when each word of a song's lyrics is sung, for the lyrics display. Optional, about 1.3 GB.", need: "optional", engines: ["engine:align", "engine:python"] }, STACK_ALIGN_MODELS));
   rows.push(modelRow({ id: "voice-convert", label: "Change the singing voice (SoulX-Singer)", note: "Converts a vocal toward a reference voice. Optional, about 3 GB.", need: "optional", engines: ["engine:voice-convert", "engine:python"] }, STACK_MODELS.filter((pin) => pin.component === "voice-convert")));
+  rows.push(modelRow({ id: "recorded-speech", label: "Recorded speech (Fish Audio Drama 3)", note: "Makes a finished voice recording from typed words, including dialogue. Optional, about 24 GB; needs a 64 GB or larger computer.", need: "optional", engines: ["engine:recorded-speech", "engine:python"] }, STACK_RECORDED_SPEECH_MODELS));
   const search = table.engines["search-helper"]!;
   rows.push({ id: "search", label: "Search helper", note: "Looks up web search results for adults, when web search is turned on.", kind: "model", need: "recommended", selectable: false, download_bytes: search.download_bytes, installed_bytes: search.installed_bytes, peak_temp_bytes: search.peak_temp_bytes, model_ids: [], engines: [], installed: false, basis: search.basis });
   const used = new Set(rows.flatMap((row) => row.engines));

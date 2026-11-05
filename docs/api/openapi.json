@@ -6617,6 +6617,474 @@
         }
       }
     },
+    "/v1/audio/speech/recorded": {
+      "post": {
+        "tags": [
+          "Recorded speech"
+        ],
+        "summary": "Render recorded speech",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "reference": {
+                    "type": "string",
+                    "maxLength": 56000000
+                  },
+                  "reference_text": {
+                    "type": "string",
+                    "maxLength": 12000
+                  },
+                  "reference_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-fA-F]{64}$"
+                  },
+                  "speakers": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "reference": {
+                          "type": "string",
+                          "maxLength": 56000000
+                        },
+                        "reference_text": {
+                          "type": "string",
+                          "maxLength": 12000
+                        },
+                        "reference_sha256": {
+                          "type": "string",
+                          "pattern": "^[0-9a-fA-F]{64}$"
+                        }
+                      },
+                      "required": [
+                        "reference"
+                      ]
+                    }
+                  },
+                  "format": {
+                    "type": "string",
+                    "enum": [
+                      "m4a",
+                      "wav"
+                    ],
+                    "default": "m4a"
+                  },
+                  "timeout_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true,
+                    "maximum": 1800000
+                  }
+                },
+                "required": [
+                  "text"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Speech rendered.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "url": {
+                          "type": "string"
+                        },
+                        "content_type": {
+                          "type": "string",
+                          "enum": [
+                            "audio/mp4",
+                            "audio/wav"
+                          ]
+                        },
+                        "bytes": {
+                          "type": "integer"
+                        },
+                        "sha256": {
+                          "type": "string"
+                        },
+                        "duration": {
+                          "type": "number"
+                        },
+                        "sample_rate": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "url",
+                        "content_type",
+                        "bytes",
+                        "sha256",
+                        "duration",
+                        "sample_rate"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "job",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Rendering is running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "url": {
+                          "type": "string"
+                        },
+                        "content_type": {
+                          "type": "string",
+                          "enum": [
+                            "audio/mp4",
+                            "audio/wav"
+                          ]
+                        },
+                        "bytes": {
+                          "type": "integer"
+                        },
+                        "sha256": {
+                          "type": "string"
+                        },
+                        "duration": {
+                          "type": "number"
+                        },
+                        "sample_rate": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "url",
+                        "content_type",
+                        "bytes",
+                        "sha256",
+                        "duration",
+                        "sample_rate"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "job",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Reference clip too large.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid text or reference.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unsupported, not installed, or insufficient memory.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audio/speech/recorded/{job}": {
+      "get": {
+        "tags": [
+          "Recorded speech"
+        ],
+        "summary": "Recorded speech job progress and result",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "phase": {
+                      "type": "string"
+                    },
+                    "progress": {
+                      "type": "number"
+                    },
+                    "progress_fraction": {
+                      "type": "number"
+                    },
+                    "stage_label": {
+                      "type": "string"
+                    },
+                    "position": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "stage": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "eta_seconds": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "code": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "url": {
+                          "type": "string"
+                        },
+                        "content_type": {
+                          "type": "string",
+                          "enum": [
+                            "audio/mp4",
+                            "audio/wav"
+                          ]
+                        },
+                        "bytes": {
+                          "type": "integer"
+                        },
+                        "sha256": {
+                          "type": "string"
+                        },
+                        "duration": {
+                          "type": "number"
+                        },
+                        "sample_rate": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "url",
+                        "content_type",
+                        "bytes",
+                        "sha256",
+                        "duration",
+                        "sample_rate"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "state",
+                    "phase",
+                    "progress",
+                    "progress_fraction",
+                    "stage_label",
+                    "position",
+                    "stage",
+                    "eta_seconds",
+                    "error",
+                    "code",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Recorded speech"
+        ],
+        "summary": "Cancel or delete a recorded speech job",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cancelled or deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "state"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audio/speech/recorded/{job}/file": {
+      "get": {
+        "tags": [
+          "Recorded speech"
+        ],
+        "summary": "Fetch rendered speech",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rendered speech audio.",
+            "content": {
+              "audio/mp4": {
+                "schema": {
+                  "nullable": true
+                }
+              },
+              "audio/wav": {
+                "schema": {
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found."
+          }
+        }
+      }
+    },
     "/v1/images/generations/{job}": {
       "get": {
         "tags": [
@@ -17434,6 +17902,176 @@
                   },
                   "required": [
                     "voice_convert"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/speech-recorded": {
+      "get": {
+        "tags": [
+          "Recorded speech"
+        ],
+        "summary": "Recorded speech availability and limits",
+        "responses": {
+          "200": {
+            "description": "Recorded speech status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "recorded_speech": {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": "string"
+                        },
+                        "available": {
+                          "type": "boolean"
+                        },
+                        "engine": {
+                          "type": "string"
+                        },
+                        "version": {
+                          "type": "string"
+                        },
+                        "model": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "installed": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "installed"
+                          ]
+                        },
+                        "models": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "role": {
+                                "type": "string"
+                              },
+                              "repo": {
+                                "type": "string"
+                              },
+                              "url": {
+                                "type": "string"
+                              },
+                              "sha256": {
+                                "type": "string"
+                              },
+                              "approx_bytes": {
+                                "type": "integer"
+                              },
+                              "licence": {
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "string"
+                              },
+                              "engine": {
+                                "type": "string"
+                              },
+                              "archive": {
+                                "type": "boolean"
+                              },
+                              "hub_file": {
+                                "type": "string"
+                              },
+                              "component": {
+                                "type": "string"
+                              },
+                              "starter": {
+                                "type": "boolean"
+                              },
+                              "installed": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "role",
+                              "url",
+                              "sha256",
+                              "approx_bytes",
+                              "licence",
+                              "revision",
+                              "starter",
+                              "installed"
+                            ]
+                          }
+                        },
+                        "installed": {
+                          "type": "boolean"
+                        },
+                        "ready": {
+                          "type": "boolean"
+                        },
+                        "limits": {
+                          "type": "object",
+                          "properties": {
+                            "max_text_chars": {
+                              "type": "number"
+                            },
+                            "max_reference_mb": {
+                              "type": "number"
+                            },
+                            "reference_min_seconds": {
+                              "type": "number"
+                            },
+                            "reference_max_seconds": {
+                              "type": "number"
+                            },
+                            "max_speakers": {
+                              "type": "number"
+                            },
+                            "peak_bytes": {
+                              "type": "number"
+                            },
+                            "idle_exit_seconds": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "max_text_chars",
+                            "max_reference_mb",
+                            "reference_min_seconds",
+                            "reference_max_seconds",
+                            "max_speakers",
+                            "peak_bytes",
+                            "idle_exit_seconds"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "available",
+                        "engine",
+                        "version",
+                        "model",
+                        "models",
+                        "installed",
+                        "ready",
+                        "limits"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "recorded_speech"
                   ]
                 }
               }

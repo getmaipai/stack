@@ -1155,6 +1155,36 @@ export const STACK_ALIGN_MODEL: CatalogModelLike = {
 };
 export const STACK_ALIGN_MODELS: CatalogModelLike[] = [STACK_ALIGN_MODEL];
 
+// REC-VOICE-01: non-realtime recorded speech (the live tts role remains
+// Chatterbox Turbo). This MLX conversion is pinned file-by-file so the
+// household installs and verifies the weights through the ordinary store.
+export const STACK_RECORDED_SPEECH_MODEL_ID = "fish-audio-drama-3-4bit";
+const FISH_DRAMA3_REPO = "mlx-community/fish-audio-drama-3-4bit";
+const FISH_DRAMA3_REVISION = "2b0c8028998533972e77359cce56b8bf1c5d6d4a";
+const FISH_DRAMA3_FILES = [
+  { path: "model-00001.safetensors", sha256: "b536cbc7a6da2d499e119d929063d60f8d11cf98bd5a823e9f9655b3aeee73cf", bytes: 4_324_625_361 },
+  { path: "model-00002.safetensors", sha256: "0447f2ddba6053bc148d49fed29272232b0d10defab789c9de1bfceecdd97709", bytes: 4_390_422_858 },
+  { path: "model-00003.safetensors", sha256: "48d4c171fd6bfe29cbd064a9ca78b953c51da1002a6599b7e3eedc70d7af9955", bytes: 4_304_379_873 },
+  { path: "model-00004.safetensors", sha256: "2abf029c2002f66b52448259d7b7060afb64114044e098a87b752c5ae28252b0", bytes: 4_426_404_468 },
+  { path: "model-00005.safetensors", sha256: "37afe300c944dadcdfae3570b13d9b0ff2cf89d79bd3e093886ef1c932ef14f9", bytes: 4_302_695_649 },
+  { path: "model-00006.safetensors", sha256: "e82053be4e90178f9789ab83310512248af16ce58bf35bbc41129282ce94ed0e", bytes: 439_426_211 },
+  { path: "codec.safetensors", sha256: "6ff9d6f07920b2155e3a48ada21956004b96df9114d255ed9f0788484ba73040", bytes: 1_572_080_341 },
+  { path: "config.json", sha256: "a829790347e2786a6c37096a986a34d25d8aef8dc51147604f5a64045b7bee19", bytes: 53_444 },
+  { path: "tokenizer.json", sha256: "0e9b9db76b2f0389b04b6ef057a2ac3b89100b7e96f2dd7034d19580a09654d6", bytes: 20_791_070 },
+  { path: "tokenizer_config.json", sha256: "00e800279d8436c324b924e97872c7eacd2b19406aa0fe71eeb557b4cd53aa3e", bytes: 103_580 },
+  { path: "special_tokens_map.json", sha256: "08aed9e321dc05275ac68cf883bfa96006b3fc09ff5cccadf262b6bce0873adb", bytes: 102_779 },
+  { path: "chat_template.jinja", sha256: "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715", bytes: 7_756 },
+  { path: "LICENSE", sha256: "733a32442087acbda12ecafe8e71eb8ee5890c89b50ce7ac4ea3777faa3c823e", bytes: 19_685 },
+  { path: "NOTICE", sha256: "b076fbafebd5a20d4c812109aa34f36dbd4c1db1deb645c3d3935482d13ace11", bytes: 983 },
+];
+export const STACK_RECORDED_SPEECH_MODEL: CatalogModelLike = {
+  id: STACK_RECORDED_SPEECH_MODEL_ID, role: "tts", component: "recorded-speech", repo: FISH_DRAMA3_REPO,
+  license: "fish-audio-community", revision: FISH_DRAMA3_REVISION, engine: "recorded-speech",
+  sizing: { profile: "p64", quantization: "MLX 4-bit" },
+  download: { url: hfUrl(`${FISH_DRAMA3_REPO}/resolve/${FISH_DRAMA3_REVISION}/model-00001.safetensors`), sha256: FISH_DRAMA3_FILES[0]!.sha256, approx_bytes: FISH_DRAMA3_FILES.reduce((n, file) => n + file.bytes, 0), directory: "fish-audio-drama-3-4bit", files: FISH_DRAMA3_FILES },
+};
+export const STACK_RECORDED_SPEECH_MODELS: CatalogModelLike[] = [STACK_RECORDED_SPEECH_MODEL];
+
 // VIDEO-LTX-01: the Detailed video model. LTX-2.3 22B distilled (Lightricks), the MLX layout of prince-canuma's conversion
 // (an ungated Hugging Face repository: no account is needed), at one revision, every file by sha256 and size. It makes the
 // picture and its sound track in one pass (speech included), up to 10 s a clip at 768 x 448, with an 8 + 3 step distilled
@@ -1504,7 +1534,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_DETAILED_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, ...STACK_MUSIC_XL_MODELS, ...STACK_MUSIC_MAX_MODELS, ...STACK_STEMS_MODELS, ...STACK_ALIGN_MODELS, ...STACK_VOICE_CONVERT_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_RECORDED_SPEECH_MODEL, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_DETAILED_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, ...STACK_MUSIC_XL_MODELS, ...STACK_MUSIC_MAX_MODELS, ...STACK_STEMS_MODELS, ...STACK_ALIGN_MODELS, ...STACK_VOICE_CONVERT_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

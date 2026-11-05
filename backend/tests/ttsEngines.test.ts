@@ -12,7 +12,7 @@ import { MANAGED_RUNTIMES } from "@/lib/engineCatalog";
 import { list as listHealth, __resetHealthForTests } from "@/lib/health";
 import { buildInstallPlan } from "@/lib/installPlan";
 import { clearModelsForTests, upsertModel } from "@/lib/modelStore";
-import { STACK_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
+import { STACK_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS, STACK_RECORDED_SPEECH_MODEL } from "@/lib/modelCatalog";
 import { activeTtsChoice, resetSupervisorForTests, scriptedProcess, selectedModel, setMachineTier, setSupervisorFactoryForTests, speakRole, speechForm, ttsEngineInEffect, ttsEngineInstalled } from "@/lib/supervisor";
 import { ENV_READY_MARKER } from "@/lib/uvEnvironment";
 import { engineTagRoot } from "@/lib/store/layout";
@@ -104,6 +104,15 @@ test("the Chatterbox pins are complete records: one commit, a sha256 and size ea
   expect(STACK_TTS_CHATTERBOX_MODEL.component).toBeUndefined();
   expect(STACK_TTS_CHATTERBOX_PARTS.every((pin) => !!pin.component)).toBe(true);
   expect(STACK_TTS_CHATTERBOX_PARTS.map((pin) => pin.download!.hub_file).sort()).toEqual(["added_tokens.json", "conds.safetensors", "config.json", "merges.txt", "special_tokens_map.json", "tokenizer_config.json", "vocab.json"]);
+});
+
+test("recorded Fish speech is a separate pinned tts component and does not replace Chatterbox", () => {
+  expect(STACK_RECORDED_SPEECH_MODEL).toMatchObject({ id: "fish-audio-drama-3-4bit", role: "tts", component: "recorded-speech", engine: "recorded-speech", license: "fish-audio-community" });
+  expect(STACK_RECORDED_SPEECH_MODEL.revision).toMatch(/^[0-9a-f]{40}$/);
+  expect(STACK_RECORDED_SPEECH_MODEL.download!.files).toHaveLength(14);
+  expect(STACK_RECORDED_SPEECH_MODEL.download!.approx_bytes).toBe(23_781_114_058);
+  expect(STACK_MODELS).toContain(STACK_RECORDED_SPEECH_MODEL);
+  expect(STACK_TTS_CHATTERBOX_MODEL.engine).toBe("chatterbox-turbo");
 });
 
 test("the install plan brings Chatterbox Turbo beside Pocket TTS on p64 and p128, and only there", () => {

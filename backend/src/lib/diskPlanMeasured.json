@@ -94,6 +94,12 @@
       "download_bytes": 4000000000,
       "peak_temp_bytes": 4000000000,
       "basis": "estimate"
+    },
+    "recorded-speech": {
+      "installed_bytes": 2500000000,
+      "download_bytes": 1700000000,
+      "peak_temp_bytes": 1700000000,
+      "basis": "estimate"
     }
   },
   "pins": {
@@ -636,6 +642,10 @@
     "soulx-singer-whisper-base": {
       "download_bytes": 290403936,
       "installed_bytes": 290403936
+    },
+    "fish-audio-drama-3-4bit": {
+      "download_bytes": 23781114058,
+      "installed_bytes": 23781114058
     }
   }
 }

@@ -6,25 +6,25 @@
   "installer": {
     "p16.required_free_bytes": 17380172093,
     "p16.minimum_required_free_bytes": 13741867392,
-    "p16.everything_required_free_bytes": 35598054336,
+    "p16.everything_required_free_bytes": 68835391206,
     "p16.needed_bytes": 14969300760,
     "p16.home_required_free_bytes": 3176323277,
     "p16.ai_required_free_bytes": 14203848816,
     "p32.required_free_bytes": 36131983613,
     "p32.minimum_required_free_bytes": 30813284198,
-    "p32.everything_required_free_bytes": 54349865856,
+    "p32.everything_required_free_bytes": 87587202726,
     "p32.needed_bytes": 30595810360,
     "p32.home_required_free_bytes": 3176323277,
     "p32.ai_required_free_bytes": 32955660336,
     "p64.required_free_bytes": 119517905599,
     "p64.minimum_required_free_bytes": 56572612676,
-    "p64.everything_required_free_bytes": 179463033648,
+    "p64.everything_required_free_bytes": 212700370517,
     "p64.needed_bytes": 100337332611,
     "p64.home_required_free_bytes": 3176323277,
     "p64.ai_required_free_bytes": 116341582322,
     "p128.required_free_bytes": 154184224148,
     "p128.minimum_required_free_bytes": 56572612676,
-    "p128.everything_required_free_bytes": 551410877003,
+    "p128.everything_required_free_bytes": 584648213873,
     "p128.needed_bytes": 129352395179,
     "p128.home_required_free_bytes": 3176323277,
     "p128.ai_required_free_bytes": 151007900871
@@ -273,6 +273,26 @@
           "basis": "pins"
         },
         {
+          "id": "recorded-speech",
+          "label": "Recorded speech (Fish Audio Drama 3)",
+          "note": "Makes a finished voice recording from typed words, including dialogue. Optional, about 24 GB; needs a 64 GB or larger computer.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 23781114058,
+          "installed_bytes": 23781114058,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "fish-audio-drama-3-4bit"
+          ],
+          "engines": [
+            "engine:recorded-speech",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -376,6 +396,21 @@
           "engines": [],
           "installed": false,
           "basis": "estimate"
+        },
+        {
+          "id": "engine:recorded-speech",
+          "label": "Recorded speech tools",
+          "note": "What recorded speech rendering runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 1700000000,
+          "installed_bytes": 2500000000,
+          "peak_temp_bytes": 1700000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
         }
       ],
       "default": {
@@ -393,11 +428,11 @@
         "required_free_bytes": 13741867392
       },
       "everything": {
-        "download_bytes": 19418223310,
-        "installed_bytes": 23527591865,
-        "peak_temp_bytes": 7364944098,
-        "needed_bytes": 30892535963,
-        "required_free_bytes": 35598054336
+        "download_bytes": 44899337368,
+        "installed_bytes": 49808705923,
+        "peak_temp_bytes": 9064944098,
+        "needed_bytes": 58873650021,
+        "required_free_bytes": 68835391206
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -688,6 +723,26 @@
           "basis": "pins"
         },
         {
+          "id": "recorded-speech",
+          "label": "Recorded speech (Fish Audio Drama 3)",
+          "note": "Makes a finished voice recording from typed words, including dialogue. Optional, about 24 GB; needs a 64 GB or larger computer.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 23781114058,
+          "installed_bytes": 23781114058,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "fish-audio-drama-3-4bit"
+          ],
+          "engines": [
+            "engine:recorded-speech",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -791,6 +846,21 @@
           "engines": [],
           "installed": false,
           "basis": "estimate"
+        },
+        {
+          "id": "engine:recorded-speech",
+          "label": "Recorded speech tools",
+          "note": "What recorded speech rendering runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 1700000000,
+          "installed_bytes": 2500000000,
+          "peak_temp_bytes": 1700000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
         }
       ],
       "default": {
@@ -808,11 +878,11 @@
         "required_free_bytes": 30813284198
       },
       "everything": {
-        "download_bytes": 35044732910,
-        "installed_bytes": 39154101465,
-        "peak_temp_bytes": 7364944098,
-        "needed_bytes": 46519045563,
-        "required_free_bytes": 54349865856
+        "download_bytes": 60525846968,
+        "installed_bytes": 65435215523,
+        "peak_temp_bytes": 9064944098,
+        "needed_bytes": 74500159621,
+        "required_free_bytes": 87587202726
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -1257,6 +1327,26 @@
           "basis": "pins"
         },
         {
+          "id": "recorded-speech",
+          "label": "Recorded speech (Fish Audio Drama 3)",
+          "note": "Makes a finished voice recording from typed words, including dialogue. Optional, about 24 GB; needs a 64 GB or larger computer.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 23781114058,
+          "installed_bytes": 23781114058,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "fish-audio-drama-3-4bit"
+          ],
+          "engines": [
+            "engine:recorded-speech",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -1420,6 +1510,21 @@
           "engines": [],
           "installed": false,
           "basis": "estimate"
+        },
+        {
+          "id": "engine:recorded-speech",
+          "label": "Recorded speech tools",
+          "note": "What recorded speech rendering runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 1700000000,
+          "installed_bytes": 2500000000,
+          "peak_temp_bytes": 1700000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
         }
       ],
       "default": {
@@ -1437,11 +1542,11 @@
         "required_free_bytes": 56572612676
       },
       "everything": {
-        "download_bytes": 135274726902,
-        "installed_bytes": 140754013416,
-        "peak_temp_bytes": 10558217548,
-        "needed_bytes": 151312230964,
-        "required_free_bytes": 179463033648
+        "download_bytes": 160755840960,
+        "installed_bytes": 167035127474,
+        "peak_temp_bytes": 12258217548,
+        "needed_bytes": 179293345022,
+        "required_free_bytes": 212700370517
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -2113,6 +2218,26 @@
           "basis": "pins"
         },
         {
+          "id": "recorded-speech",
+          "label": "Recorded speech (Fish Audio Drama 3)",
+          "note": "Makes a finished voice recording from typed words, including dialogue. Optional, about 24 GB; needs a 64 GB or larger computer.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 23781114058,
+          "installed_bytes": 23781114058,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "fish-audio-drama-3-4bit"
+          ],
+          "engines": [
+            "engine:recorded-speech",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -2321,6 +2446,21 @@
           "engines": [],
           "installed": false,
           "basis": "estimate"
+        },
+        {
+          "id": "engine:recorded-speech",
+          "label": "Recorded speech tools",
+          "note": "What recorded speech rendering runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 1700000000,
+          "installed_bytes": 2500000000,
+          "peak_temp_bytes": 1700000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
         }
       ],
       "default": {
@@ -2338,11 +2478,11 @@
         "required_free_bytes": 56572612676
       },
       "everything": {
-        "download_bytes": 443537737006,
-        "installed_bytes": 449661563993,
-        "peak_temp_bytes": 11817000211,
-        "needed_bytes": 461478564204,
-        "required_free_bytes": 551410877003
+        "download_bytes": 469018851064,
+        "installed_bytes": 475942678051,
+        "peak_temp_bytes": 13517000211,
+        "needed_bytes": 489459678262,
+        "required_free_bytes": 584648213873
       },
       "measured_on": "2026-10-17",
       "default_selected": [

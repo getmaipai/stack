@@ -22,7 +22,7 @@ export interface StageDef {
   fixed?: boolean;
 }
 
-export type GenKind = "image" | "video" | "video_detailed" | "video_edit" | "music";
+export type GenKind = "image" | "video" | "video_detailed" | "video_edit" | "music" | "speech";
 
 /** Video stages. Weights and seconds are the medians of measured runs (832x480, 5 s, 128 GB Mac); see the design note "Stack API as built". */
 export const VIDEO_STAGES: StageDef[] = [
@@ -71,7 +71,13 @@ export const MUSIC_STAGES: StageDef[] = [
   { id: "save", weight: 0.045, seconds: 1, label: () => "Saving" },
 ];
 
-export const stagesFor = (kind: GenKind): StageDef[] => (kind === "video" ? VIDEO_STAGES : kind === "video_detailed" ? VIDEO_DETAILED_STAGES : kind === "video_edit" ? VIDEO_EDIT_STAGES : kind === "music" ? MUSIC_STAGES : IMAGE_STAGES);
+export const SPEECH_STAGES: StageDef[] = [
+  { id: "load", weight: 0.12, seconds: 30, fixed: true, label: () => "Loading the speech model" },
+  { id: "render", weight: 0.83, seconds: 45, label: () => "Rendering the recording" },
+  { id: "save", weight: 0.05, seconds: 1, fixed: true, label: () => "Saving the recording" },
+];
+
+export const stagesFor = (kind: GenKind): StageDef[] => (kind === "video" ? VIDEO_STAGES : kind === "video_detailed" ? VIDEO_DETAILED_STAGES : kind === "video_edit" ? VIDEO_EDIT_STAGES : kind === "music" ? MUSIC_STAGES : kind === "speech" ? SPEECH_STAGES : IMAGE_STAGES);
 
 // ---- history: the last few stage durations per kind and size ----
 
