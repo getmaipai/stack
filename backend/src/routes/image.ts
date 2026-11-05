@@ -79,13 +79,16 @@ const importRoute = createRoute({ method: "post", path: "/loras", tags: ["Images
   413: { content: { "application/json": { schema: ErrorBody } }, description: "Larger than 2 GB." },
   422: { content: { "application/json": { schema: ErrorBody } }, description: "Not usable: not_safetensors, not_a_lora, wrong_base_model, licence_acknowledgement_required, lora_refused (a minor in a sexual context: never allowed), bad_name, bad_strength." },
 } });
-const urlRoute = createRoute({ method: "post", path: "/loras/install", tags: ["Images"], summary: "Add a LoRA from a Hugging Face link (an install job)", request: { body: { content: { "application/json": { schema: z.object({
-  url: z.string().openapi({ description: "https://huggingface.co/<owner>/<repo>/resolve/<revision>/<file>.safetensors (a /blob/ link works too). No other host is fetched." }),
-  name: z.string(), licence: z.string().optional().openapi({ description: "Left out: read from the repository's card; \"unknown\" when it has none." }), licence_acknowledged: z.boolean().optional(),
-  classification: z.enum(LORA_CLASSES).optional(), strength_default: z.number().min(0).max(MAX_LORA_STRENGTH).optional(), trigger_words: z.array(z.string()).optional(), added_by: z.string().optional(),
+const urlRoute = createRoute({ method: "post", path: "/loras/install", tags: ["Images"], summary: "Add a picture LoRA from Hugging Face or Civitai (an install job)", request: { body: { content: { "application/json": { schema: z.object({
+  url: z.string().openapi({ description: "A Hugging Face .safetensors resolve or blob link, or a Civitai model download link." }),
+  name: z.string(), site: z.enum(["huggingface", "civitai"]).default("huggingface").optional(), sha256_expected: z.string().optional(), token: z.string().optional().openapi({ description: "Optional site token, kept only in memory for this install and sent only to that site's own host." }), base_model: z.enum(IMAGE_LORA_BASES).optional(),
+  licence: z.string().optional().openapi({ description: "Left out for Hugging Face: read from the repository card; unknown when it has none." }), licence_acknowledged: z.boolean().optional(),
+  classification: z.enum(LORA_CLASSES).optional(), audience: z.enum(LORA_CLASSES).optional().openapi({ description: "Alias for classification." }), source_url: z.string().optional(), strength_default: z.number().min(0).max(MAX_LORA_STRENGTH).optional(), trigger_words: z.array(z.string()).optional(), added_by: z.string().optional(),
 }) } } } }, responses: {
-  202: { content: { "application/json": { schema: z.object({ job: z.string() }) } }, description: "The install job (/stack/v1/jobs/{id}); when done its `result.lora` is the record, when failed its `reason` starts with the code (licence_acknowledgement_required, lora_refused, wrong_base_model, ...)." },
-  422: { content: { "application/json": { schema: ErrorBody } }, description: "bad_url: not a huggingface.co file link." },
+  202: { content: { "application/json": { schema: z.object({ job: z.string() }) } }, description: "The install job (/stack/v1/jobs/{id}); its input names no file, site or person. It checks every HTTPS redirect, scopes tokens to the source host, resumes partial downloads, reads the safetensors header and verifies sha256 before import." },
+  409: { content: { "application/json": { schema: ErrorBody.extend({ existing_id: z.string().optional() }) } }, description: "duplicate_lora: already in the library; when the expected hash is known this is returned before downloading." },
+  422: { content: { "application/json": { schema: ErrorBody } }, description: "host_not_allowed, bad_url, bad_hash, hash_mismatch, download_cut_short, not_safetensors, or a file the picture library cannot use." },
+  503: { content: { "application/json": { schema: ErrorBody } }, description: "install_busy or source_busy." },
 } });
 const patchRoute = createRoute({ method: "patch", path: "/loras/{id}", tags: ["Images"], summary: "Edit a LoRA's name, class, default strength or trigger words", request: { params: z.object({ id: z.string() }), body: { content: { "application/json": { schema: z.object({ name: z.string().optional(), classification: z.enum(LORA_CLASSES).optional(), strength_default: z.number().min(0).max(MAX_LORA_STRENGTH).optional(), trigger_words: z.array(z.string()).optional(), source_url: z.string().nullable().optional() }) } } } }, responses: {
   200: { content: { "application/json": { schema: LoraSchema } }, description: "Updated." },
@@ -176,10 +179,10 @@ imageRoutes.openapi(importRoute, async (c) => {
 imageRoutes.openapi(urlRoute, (c) => {
   const body = c.req.valid("json");
   try {
-    const job = startLoraInstall({ url: body.url, name: body.name, licence: body.licence, licenceAcknowledged: body.licence_acknowledged, classification: body.classification, strengthDefault: body.strength_default, triggerWords: body.trigger_words, addedBy: body.added_by ?? null });
+    const job = startLoraInstall({ site: body.site, url: body.url, name: body.name, licence: body.licence ?? undefined, licenceAcknowledged: body.licence_acknowledged, classification: body.classification ?? body.audience, strengthDefault: body.strength_default, triggerWords: body.trigger_words, addedBy: body.added_by ?? null, sha256Expected: body.sha256_expected, token: body.token, baseModel: body.base_model, sourceUrl: body.source_url });
     return c.json({ job: job.id }, 202);
   } catch (error) {
-    if (error instanceof LoraError) return c.json({ error: error.message, code: error.code }, 422);
+    if (error instanceof LoraError) return c.json({ error: error.message, code: error.code, ...(error instanceof Error && "existingId" in error ? { existing_id: String((error as LoraError & { existingId: unknown }).existingId) } : {}) }, error.status as 409 | 422 | 503);
     throw error;
   }
 });

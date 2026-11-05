@@ -17726,7 +17726,7 @@
         "tags": [
           "Images"
         ],
-        "summary": "Add a LoRA from a Hugging Face link (an install job)",
+        "summary": "Add a picture LoRA from Hugging Face or Civitai (an install job)",
         "requestBody": {
           "content": {
             "application/json": {
@@ -17735,14 +17735,37 @@
                 "properties": {
                   "url": {
                     "type": "string",
-                    "description": "https://huggingface.co/<owner>/<repo>/resolve/<revision>/<file>.safetensors (a /blob/ link works too). No other host is fetched."
+                    "description": "A Hugging Face .safetensors resolve or blob link, or a Civitai model download link."
                   },
                   "name": {
                     "type": "string"
                   },
+                  "site": {
+                    "type": "string",
+                    "enum": [
+                      "huggingface",
+                      "civitai"
+                    ],
+                    "default": "huggingface"
+                  },
+                  "sha256_expected": {
+                    "type": "string"
+                  },
+                  "token": {
+                    "type": "string",
+                    "description": "Optional site token, kept only in memory for this install and sent only to that site's own host."
+                  },
+                  "base_model": {
+                    "type": "string",
+                    "enum": [
+                      "flux2-klein-4b",
+                      "z-image-turbo",
+                      "ernie-image-turbo"
+                    ]
+                  },
                   "licence": {
                     "type": "string",
-                    "description": "Left out: read from the repository's card; \"unknown\" when it has none."
+                    "description": "Left out for Hugging Face: read from the repository card; unknown when it has none."
                   },
                   "licence_acknowledged": {
                     "type": "boolean"
@@ -17753,6 +17776,17 @@
                       "all-ages",
                       "adult-only"
                     ]
+                  },
+                  "audience": {
+                    "type": "string",
+                    "enum": [
+                      "all-ages",
+                      "adult-only"
+                    ],
+                    "description": "Alias for classification."
+                  },
+                  "source_url": {
+                    "type": "string"
                   },
                   "strength_default": {
                     "type": "number",
@@ -17779,7 +17813,7 @@
         },
         "responses": {
           "202": {
-            "description": "The install job (/stack/v1/jobs/{id}); when done its `result.lora` is the record, when failed its `reason` starts with the code (licence_acknowledgement_required, lora_refused, wrong_base_model, ...).",
+            "description": "The install job (/stack/v1/jobs/{id}); its input names no file, site or person. It checks every HTTPS redirect, scopes tokens to the source host, resumes partial downloads, reads the safetensors header and verifies sha256 before import.",
             "content": {
               "application/json": {
                 "schema": {
@@ -17796,8 +17830,53 @@
               }
             }
           },
+          "409": {
+            "description": "duplicate_lora: already in the library; when the expected hash is known this is returned before downloading.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "existing_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
           "422": {
-            "description": "bad_url: not a huggingface.co file link.",
+            "description": "host_not_allowed, bad_url, bad_hash, hash_mismatch, download_cut_short, not_safetensors, or a file the picture library cannot use.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "install_busy or source_busy.",
             "content": {
               "application/json": {
                 "schema": {

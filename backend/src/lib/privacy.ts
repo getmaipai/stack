@@ -49,6 +49,15 @@ export const PRIVACY_ROWS: PrivacyRow[] = [
     carries: "A GET for one .safetensors file address the admin chose, with User-Agent: MaiPai-Stack. The admin's saved key or token for that site goes as a Bearer header to huggingface.co or civitai.com only, never to the file host a redirect names, never in the address; nothing about the household, people or prompts",
     receiver: "Hugging Face (huggingface.co and its file hosts) or Civitai (civitai.com and the file host it redirects to), straight from this computer",
     setting: null,
+    hosts: ["civitai.com", "huggingface.co", "hf.co"],
+  },
+  {
+    id: "image-lora-install",
+    what: "Downloading a picture style (LoRA) file an admin chose",
+    when: "Only when an owner or admin installs a style from Hugging Face or Civitai in Home; one download at a time, resumed from where it stopped, never on a schedule",
+    carries: "A GET for one .safetensors file address the admin chose, with User-Agent: MaiPai-Stack. The admin's saved key or token for that site goes as a Bearer header to huggingface.co or civitai.com only, never to the file host a redirect names, never in the address; nothing about the household, people or prompts",
+    receiver: "Hugging Face (huggingface.co and its file hosts) or Civitai (civitai.com and the file host it redirects to), straight from this computer",
+    setting: null,
     hosts: ["civitai.com"],
   },
   {

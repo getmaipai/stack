@@ -4,11 +4,12 @@
 // one base model, read from its tensors: the Stack never asks the person which.
 // Add by file, by path, or by Hugging Face URL through an install job that
 // downloads, hashes and records the file.
-import { createWriteStream, mkdirSync, rmSync, statSync } from "node:fs";
+import { mkdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { dataDir } from "@/lib/paths";
-import { createJob, finishJob, jobSignal, updateJob, type Job } from "@/lib/jobs";
+import { type Job } from "@/lib/jobs";
 import { createLoraLibrary, LoraError, MAX_LORA_BYTES, type SafetensorsInfo, type LoraRecord } from "@/lib/media/loraLibrary";
+import { LORA_INSTALL_SITES, parseInstallUrl, startInstall, sweepParts, type InstallSource } from "@/lib/media/loraInstallCore";
 
 export const IMAGE_LORA_BASES = ["flux2-klein-4b", "z-image-turbo", "ernie-image-turbo"] as const;
 export type ImageLoraBase = typeof IMAGE_LORA_BASES[number];
@@ -39,6 +40,30 @@ export function detectImageBase(info: SafetensorsInfo): ImageLoraBase {
 
 export const imageLoras = createLoraLibrary({ dir: () => join(dataDir, "images", "loras"), noun: "picture", maxPerJob: MAX_LORAS_PER_IMAGE, detectBase: detectImageBase });
 
+const imagePartDirectory = () => join(dataDir, "tmp", "image-lora-install");
+let imageInstalling: string | null = null;
+export function __resetImageLoraInstallForTests(): void { imageInstalling = null; }
+export type ImageLoraInstallInput = Omit<InstallSource, "site" | "licence"> & { licence?: string; site?: typeof LORA_INSTALL_SITES[number]; baseModel?: ImageLoraBase | null };
+export function startLoraInstall(input: ImageLoraInstallInput, deps: { fetch?: typeof fetch } = {}): Job {
+  const site = input.site ?? "huggingface";
+  const prepared = { ...input, site };
+  const fetchImpl = deps.fetch ?? fetch;
+  return startInstall({ ...prepared, licence: input.licence ?? "unknown" }, { kind: "image.lora.install", role: "image", noun: "picture", duplicateCode: "already_added", partDir: imagePartDirectory, parseUrl: parseInstallUrl, get: imageLoras.get, importFile: async (options) => {
+    let metadata: HfCard | null = null;
+    if (site === "huggingface" && !input.licence?.trim()) { const source = parseHfLoraUrl(input.url); metadata = await fetchHfCard(source.repo, fetchImpl); }
+    return imageLoras.importFile({ ...options, licence: input.licence?.trim() || metadata?.licence || "unknown", sourceUrl: input.sourceUrl ?? (site === "huggingface" ? input.url.replace("/resolve/", "/blob/") : input.url), extraDescription: metadata?.tags ?? [] } as Parameters<typeof imageLoras.importFile>[0]);
+  }, readHeader: (path) => {
+    try {
+      imageLoras.readHeader(path);
+    } catch (error) {
+      if (error instanceof Error && "code" in error && "status" in error) {
+        throw new LoraError(String((error as { code: unknown }).code), error.message, Number((error as { status: unknown }).status));
+      }
+      throw error;
+    }
+  }, maxBytes: MAX_LORA_BYTES }, () => imageInstalling !== null, (id) => { imageInstalling = id; }, deps);
+}
+
 // ---- by Hugging Face URL ----
 
 export interface HfLoraSource { repo: string; revision: string; file: string; }
@@ -68,61 +93,5 @@ export async function fetchHfCard(repo: string, fetchImpl: typeof fetch = fetch)
 }
 
 export interface LoraUrlInput {
-  url: string;
-  name: string;
-  licence?: string;
-  licenceAcknowledged?: boolean;
-  classification?: "all-ages" | "adult-only";
-  strengthDefault?: number;
-  triggerWords?: string[];
-  addedBy?: string | null;
-}
-
-/** Streams the file to a temporary path with a size cap and no knowledge of its hash (the hash is computed on the bytes that arrived and recorded; nothing is trusted from the server). */
-async function fetchTo(url: string, target: string, signal: AbortSignal | undefined, onBytes: (done: number, total: number) => void, fetchImpl: typeof fetch): Promise<void> {
-  const response = await fetchImpl(url, { signal, redirect: "follow" });
-  if (!response.ok || !response.body) throw new LoraError("download_failed", `Hugging Face answered ${response.status} for that file. Check the link, and that the repository is public.`, 502);
-  const total = Number(response.headers.get("content-length") ?? 0);
-  if (total > MAX_LORA_BYTES) throw new LoraError("too_large", `That file is larger than ${MAX_LORA_BYTES / 1_073_741_824} GB, the most a LoRA can be here.`, 413);
-  mkdirSync(join(target, ".."), { recursive: true, mode: 0o700 });
-  const out = createWriteStream(target, { mode: 0o600 });
-  const reader = response.body.getReader();
-  let done = 0;
-  try {
-    while (true) {
-      const { value, done: finished } = await reader.read();
-      if (finished) break;
-      done += value.length;
-      if (done > MAX_LORA_BYTES) throw new LoraError("too_large", `That file is larger than ${MAX_LORA_BYTES / 1_073_741_824} GB, the most a LoRA can be here.`, 413);
-      if (!out.write(value)) await new Promise<void>((resolve) => out.once("drain", () => resolve()));
-      onBytes(done, total);
-    }
-  } finally {
-    await new Promise<void>((resolve) => out.end(() => resolve()));
-  }
-}
-
-/** Starts an install job that fetches a LoRA from Hugging Face, hashes it and adds it to the library. The job's result is the record. */
-export function startLoraInstall(input: LoraUrlInput, deps: { fetch?: typeof fetch } = {}): Job {
-  const fetchImpl = deps.fetch ?? fetch;
-  const source = parseHfLoraUrl(input.url);
-  const job = createJob({ kind: "image.lora.install", role: "image", status: "downloading", input: { repo: source.repo, file: source.file } });
-  const staging = join(dataDir, "tmp", "image-lora", `${job.id}.safetensors`);
-  void (async () => {
-    try {
-      const card = await fetchHfCard(source.repo, fetchImpl);
-      const licence = input.licence?.trim() || card.licence || "unknown";
-      await fetchTo(`https://huggingface.co/${source.repo}/resolve/${source.revision}/${source.file.split("/").map(encodeURIComponent).join("/")}`, staging, jobSignal(job.id), (done, total) => updateJob(job.id, { completedBytes: done, totalBytes: total || done }), fetchImpl);
-      updateJob(job.id, { status: "checking the file" });
-      if (statSync(staging).size === 0) throw new LoraError("not_safetensors", "The download was empty.", 422);
-      const record = await imageLoras.importFile({
-        path: staging, name: input.name, licence, licenceAcknowledged: input.licenceAcknowledged, sourceUrl: `https://huggingface.co/${source.repo}/blob/${source.revision}/${source.file}`,
-        classification: input.classification, strengthDefault: input.strengthDefault, triggerWords: input.triggerWords, addedBy: input.addedBy, extraDescription: [source.repo, ...card.tags],
-      });
-      finishJob(job.id, { ok: true, result: { lora: record satisfies LoraRecord } });
-    } catch (error) {
-      finishJob(job.id, { ok: false, reason: error instanceof LoraError ? `${error.code}: ${error.message}` : error instanceof Error ? error.message : String(error) });
-    } finally { rmSync(staging, { force: true }); }
-  })();
-  return job;
+  url: string; name: string; licence?: string; licenceAcknowledged?: boolean; classification?: "all-ages" | "adult-only"; strengthDefault?: number; triggerWords?: string[]; addedBy?: string | null;
 }

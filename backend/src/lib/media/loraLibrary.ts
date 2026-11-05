@@ -198,6 +198,7 @@ export function createLoraLibrary(config: LoraLibraryConfig) {
   const list = (): LoraRecord[] => readManifest().map((record) => ({ ...record }));
   const get = (id: string): LoraRecord | null => readManifest().find((record) => record.id === id) ?? null;
   const bySha = (sha256: string): LoraRecord | null => readManifest().find((record) => record.sha256 === sha256) ?? null;
+  const readHeader = (path: string): SafetensorsInfo => readLoraHeader(path);
 
   async function importFile(input: ImportInput): Promise<LoraRecord> {
     const name = input.name.trim();
@@ -306,7 +307,7 @@ export function createLoraLibrary(config: LoraLibraryConfig) {
     return out;
   }
 
-  return { list, get, bySha, importFile, update, remove, resolve, path: loraFile, dir: config.dir };
+  return { list, get, bySha, readHeader, importFile, update, remove, resolve, path: loraFile, dir: config.dir };
 }
 
 export function sha256OfBytes(bytes: Uint8Array): string { return createHash("sha256").update(bytes).digest("hex"); }
