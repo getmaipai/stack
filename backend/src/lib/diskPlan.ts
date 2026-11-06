@@ -130,11 +130,12 @@ const ENGINE_ROWS: Record<string, () => DiskRow> = {
   "engine:music": () => engineRow("engine:music", "music-gen", "Music engine tools", "What making songs runs on."),
   "engine:stems": () => engineRow("engine:stems", "stems", "Stem splitting tools", "What separating song stems runs on."),
   "engine:align": () => engineRow("engine:align", "align", "Lyric timing tools", "What timing a song's words runs on."),
+  "engine:beats": () => engineRow("engine:beats", "beats", "Beat analysis tools", "What detecting beats and sections runs on."),
   "engine:voice-convert": () => engineRow("engine:voice-convert", "voice-convert", "Voice conversion tools", "What converting a singing voice runs on."),
   "engine:recorded-speech": () => engineRow("engine:recorded-speech", "recorded-speech", "Recorded speech tools", "What recorded speech rendering runs on."),
   "engine:chat-mlx": () => engineRow("engine:chat-mlx", "omlx", "Faster chat engine tools (oMLX)", "What the faster chat engine runs on. llama.cpp stays as the fallback."),
 };
-const PYTHON_ENGINES = ["engine:chat-mlx", "engine:voice", "engine:voice-better", "engine:pictures", "engine:image-tools", "engine:video", "engine:video-ltx25", "engine:video-ltx25-max", "engine:music", "engine:stems", "engine:align", "engine:voice-convert", "engine:recorded-speech"];
+const PYTHON_ENGINES = ["engine:chat-mlx", "engine:voice", "engine:voice-better", "engine:pictures", "engine:image-tools", "engine:video", "engine:video-ltx25", "engine:video-ltx25-max", "engine:music", "engine:stems", "engine:align", "engine:beats", "engine:voice-convert", "engine:recorded-speech"];
 
 function totals(rows: DiskRow[], selected: Set<string>, only?: "home" | "ai"): DiskTotals {
   const chosen = rows.filter((row) => selected.has(row.id));

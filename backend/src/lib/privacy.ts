@@ -34,6 +34,15 @@ export const PRIVACY_ROWS: PrivacyRow[] = [
     hosts: ["huggingface.co", "github.com"],
   },
   {
+    id: "beats-environment",
+    what: "Building the offline beat analysis environment",
+    when: "Only when Home installs beat and section analysis or its first request builds the environment",
+    carries: "The names and hashes of the pinned Python packages; audio remains on this computer and the worker has no network access",
+    receiver: "The Python Package Index, straight from this computer",
+    setting: null,
+    hosts: ["pypi.org", "files.pythonhosted.org"],
+  },
+  {
     id: "align-model",
     what: "Downloading the pinned lyric alignment model (MMS forced aligner, 1,262,047,414 bytes), and running it",
     when: "The download happens only when Home installs the lyric timing component, once, never on a schedule. Timing lyrics afterwards runs offline: the worker has no network, no token and no proxy (HF_HUB_OFFLINE=1, TORCH_HOME on this computer), and reads only the file this computer holds",

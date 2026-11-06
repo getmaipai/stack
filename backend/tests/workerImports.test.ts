@@ -28,6 +28,12 @@ const workers = [
     // yaml is provided by pyyaml==.
     provided: ["yaml"],
   },
+  {
+    name: "beats",
+    source: "../src/beats/beats_worker.py",
+    requirements: "../src/beats/beats.darwin-arm64.requirements.txt",
+    provided: [],
+  },
 ];
 
 function importedModules(source: string): string[] {

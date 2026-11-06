@@ -6201,6 +6201,531 @@
         }
       }
     },
+    "/v1/audio/beats": {
+      "post": {
+        "tags": [
+          "Beats"
+        ],
+        "summary": "Detect beats, downbeats and sections in audio",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "maxLength": 56000000
+                  },
+                  "source_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-fA-F]{64}$"
+                  },
+                  "timeout_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true,
+                    "maximum": 1800000
+                  }
+                },
+                "required": [
+                  "source",
+                  "source_sha256"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Analysis is ready.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "tempo_bpm": {
+                          "type": "number"
+                        },
+                        "beats": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          }
+                        },
+                        "confidence": {
+                          "type": "number"
+                        },
+                        "meter": {
+                          "type": "integer"
+                        },
+                        "downbeats": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          }
+                        },
+                        "downbeat_confidence": {
+                          "type": "number"
+                        },
+                        "sections": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "start_s": {
+                                "type": "number"
+                              },
+                              "end_s": {
+                                "type": "number"
+                              },
+                              "label": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "start_s",
+                              "end_s",
+                              "label"
+                            ]
+                          }
+                        },
+                        "duration_s": {
+                          "type": "number"
+                        },
+                        "engine": {
+                          "type": "string",
+                          "enum": [
+                            "librosa"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "tempo_bpm",
+                        "beats",
+                        "confidence",
+                        "meter",
+                        "downbeats",
+                        "downbeat_confidence",
+                        "sections",
+                        "duration_s",
+                        "engine"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "job",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Analysis is running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "tempo_bpm": {
+                          "type": "number"
+                        },
+                        "beats": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          }
+                        },
+                        "confidence": {
+                          "type": "number"
+                        },
+                        "meter": {
+                          "type": "integer"
+                        },
+                        "downbeats": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          }
+                        },
+                        "downbeat_confidence": {
+                          "type": "number"
+                        },
+                        "sections": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "start_s": {
+                                "type": "number"
+                              },
+                              "end_s": {
+                                "type": "number"
+                              },
+                              "label": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "start_s",
+                              "end_s",
+                              "label"
+                            ]
+                          }
+                        },
+                        "duration_s": {
+                          "type": "number"
+                        },
+                        "engine": {
+                          "type": "string",
+                          "enum": [
+                            "librosa"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "tempo_bpm",
+                        "beats",
+                        "confidence",
+                        "meter",
+                        "downbeats",
+                        "downbeat_confidence",
+                        "sections",
+                        "duration_s",
+                        "engine"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "job",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Audio is too large.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid audio.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Engine unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audio/beats/{job}": {
+      "get": {
+        "tags": [
+          "Beats"
+        ],
+        "summary": "Beat analysis progress and result",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "phase": {
+                      "type": "string"
+                    },
+                    "progress": {
+                      "type": "number"
+                    },
+                    "progress_fraction": {
+                      "type": "number"
+                    },
+                    "stage_label": {
+                      "type": "string"
+                    },
+                    "position": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "stage": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "eta_seconds": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "code": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "tempo_bpm": {
+                          "type": "number"
+                        },
+                        "beats": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          }
+                        },
+                        "confidence": {
+                          "type": "number"
+                        },
+                        "meter": {
+                          "type": "integer"
+                        },
+                        "downbeats": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          }
+                        },
+                        "downbeat_confidence": {
+                          "type": "number"
+                        },
+                        "sections": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "start_s": {
+                                "type": "number"
+                              },
+                              "end_s": {
+                                "type": "number"
+                              },
+                              "label": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "start_s",
+                              "end_s",
+                              "label"
+                            ]
+                          }
+                        },
+                        "duration_s": {
+                          "type": "number"
+                        },
+                        "engine": {
+                          "type": "string",
+                          "enum": [
+                            "librosa"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "tempo_bpm",
+                        "beats",
+                        "confidence",
+                        "meter",
+                        "downbeats",
+                        "downbeat_confidence",
+                        "sections",
+                        "duration_s",
+                        "engine"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "state",
+                    "phase",
+                    "progress",
+                    "progress_fraction",
+                    "stage_label",
+                    "position",
+                    "stage",
+                    "eta_seconds",
+                    "error",
+                    "code",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such analysis job.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Beats"
+        ],
+        "summary": "Cancel or delete a beat analysis",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cancelled or deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "state"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/audio/voice-convert": {
       "post": {
         "tags": [
@@ -17748,6 +18273,86 @@
                   },
                   "required": [
                     "stems"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/beats": {
+      "get": {
+        "tags": [
+          "Beats"
+        ],
+        "summary": "Beat analysis availability and limits",
+        "responses": {
+          "200": {
+            "description": "Beat analysis status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "beats": {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": "string"
+                        },
+                        "available": {
+                          "type": "boolean"
+                        },
+                        "installed": {
+                          "type": "boolean"
+                        },
+                        "ready": {
+                          "type": "boolean"
+                        },
+                        "engine": {
+                          "type": "string"
+                        },
+                        "version": {
+                          "type": "string"
+                        },
+                        "limits": {
+                          "type": "object",
+                          "properties": {
+                            "max_source_mb": {
+                              "type": "number"
+                            },
+                            "max_seconds": {
+                              "type": "number"
+                            },
+                            "peak_bytes": {
+                              "type": "number"
+                            },
+                            "idle_exit_seconds": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "max_source_mb",
+                            "max_seconds",
+                            "peak_bytes",
+                            "idle_exit_seconds"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "available",
+                        "installed",
+                        "ready",
+                        "engine",
+                        "version",
+                        "limits"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "beats"
                   ]
                 }
               }

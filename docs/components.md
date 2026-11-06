@@ -297,6 +297,7 @@ Engines per platform:
 | Engine | Build | Platform | Status |
 |---|---|---|---|
 | `music-gen-ca1e85f-macos-arm64` | ca1e85f | darwin arm64 | pinned, verified (the engine's source; its environment is the row below) |
+| `beats` | 1.0.0 | macOS 14 or later on arm64 (librosa 1.0.0, soundfile and bundled ffmpeg; beat, downbeat and section analysis without model files) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
 | `align` | 1.0.0 | macOS 14 or later on arm64 (torch and torchaudio 2.10.0 with the pinned MMS forced-alignment model; cold-start lyric timing) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
 | `stems` | 4.1.0 | macOS 14 or later on arm64 (Demucs 4.1.0 and optional pinned htdemucs, htdemucs_ft and htdemucs_6s; cold-start stem splitting) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |
 | `voice-convert` | 1.0.1 | macOS 14 or later on arm64 (SoulX-Singer SVC, PyTorch MPS, pinned Apache-2.0 weights; singing voice conversion) | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |

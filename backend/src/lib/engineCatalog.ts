@@ -345,13 +345,14 @@ export type ChatEngine = typeof CHAT_ENGINES[number];
 /** The role each engine name serves, for the routes that act on "the
  * engine's role" (start, stop, restart, the swap's drain). */
 export type EngineRole = "chat" | "coding" | "tts" | "image" | "video" | "music";
-export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", splash: "coding", "splash-chat": "chat", "mlx-serve": "chat", omlx: "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", "recorded-speech": "tts", comfyui: "image", "video-gen": "video", "ltx25-gen": "video", "ltx25-max-gen": "video", "music-gen": "music", "stems": "music", align: "music", "voice-convert": "music", "image-gen": "image" };
+export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", splash: "coding", "splash-chat": "chat", "mlx-serve": "chat", omlx: "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", "recorded-speech": "tts", comfyui: "image", "video-gen": "video", "ltx25-gen": "video", "ltx25-max-gen": "video", "music-gen": "music", "stems": "music", align: "music", beats: "music", "voice-convert": "music", "image-gen": "image" };
 export function engineRole(name: string): EngineRole { return ENGINE_ROLE[name] ?? "chat"; }
 
 /** Runtimes the Stack assembles from pinned wheels through uv, in an
  * environment under data/engines/<name>/<version>/ (STACK-94c). */
 export interface ManagedRuntime { name: string; version: string; roles: string[]; platforms: string; }
 export const MANAGED_RUNTIMES: ManagedRuntime[] = [
+  { name: "beats", version: "1.0.0", roles: ["music"], platforms: "macOS 14 or later on arm64 (librosa 1.0.0, soundfile and bundled ffmpeg; beat, downbeat and section analysis without model files)" },
   { name: "align", version: "1.0.0", roles: ["music"], platforms: "macOS 14 or later on arm64 (torch and torchaudio 2.10.0 with the pinned MMS forced-alignment model; cold-start lyric timing)" },
   { name: "stems", version: "4.1.0", roles: ["music"], platforms: "macOS 14 or later on arm64 (Demucs 4.1.0 and optional pinned htdemucs, htdemucs_ft and htdemucs_6s; cold-start stem splitting)" },
   { name: "voice-convert", version: "1.0.1", roles: ["music"], platforms: "macOS 14 or later on arm64 (SoulX-Singer SVC, PyTorch MPS, pinned Apache-2.0 weights; singing voice conversion)" },

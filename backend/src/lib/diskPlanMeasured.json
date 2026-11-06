@@ -100,6 +100,12 @@
       "download_bytes": 1700000000,
       "peak_temp_bytes": 1700000000,
       "basis": "estimate"
+    },
+    "beats": {
+      "installed_bytes": 340000000,
+      "download_bytes": 300000000,
+      "peak_temp_bytes": 300000000,
+      "basis": "estimate"
     }
   },
   "pins": {

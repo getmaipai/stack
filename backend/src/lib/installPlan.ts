@@ -106,6 +106,8 @@ export function stemsInstallModels(installedIds: Iterable<string> = []): PlanMod
   return STACK_STEMS_MODELS.flatMap((pin) => view(pin, installed, false) ?? []);
 }
 
+export function beatsInstallModels(installedIds: Iterable<string> = []): PlanModel[] { return []; }
+
 export function voiceConvertInstallModels(installedIds: Iterable<string> = []): PlanModel[] {
   const installed = new Set(installedIds);
   return STACK_MODELS.filter((pin) => pin.component === "voice-convert").flatMap((pin) => view(pin, installed, false) ?? []);
