@@ -42,6 +42,7 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Added
 
+- `media.edit` adds `{ op: "upscale", factor?: 2 }` for clips, reusing the installed image-tools Real-ESRGAN model and its existing memory admission. It sharpens each frame, downsamples the 4x result to 2x with Lanczos, preserves frame rate and duration, and copies audio. Inputs are limited to 6 MP per frame, 60 seconds and 20 minutes of estimated work (about 1.2 seconds per frame).
 - `media.edit` takes a `gain` op and overlay fades (VIDEO-STUDIO-06, additive): `{ op: "gain", db (-60 to 24) }` changes the working clip's own sound level and copies the picture (a clip with no sound fails with a plain `bad_input` sentence); `audio_overlay` takes `fade_in_s` (0), `fade_out_s` (0) and `end_s` (optional, seconds on the clip's timeline) so one lane fades in and out and ends at a time without touching the clip's sound. Refusals are plain sentences: `end_s` not after `start_s`, `end_s` past the clip, fades longer than the overlay. Measured with real ffmpeg: -6.02 dB halves the level within 0.5 dB, fades ramp over the start and end windows, `end_s` cuts the overlay.
 - `media.edit` takes a `crossfade` op (additive): `{ op: "crossfade", duration_s (0.3 to 1.0, default 0.5), with? }` joins like `concat` but blends each seam with `xfade` (picture) and `acrossfade` (sound), 2 to 6 clips, re-encoded to the first clip's size and rate, silence for a clip without sound; each clip must be longer than twice the blend. Refusals are plain `bad_input` sentences.
 

@@ -16,6 +16,7 @@ import { defaultToolbox, MediaToolError, type MediaToolbox } from "./tools";
 import { mkdirSync } from "node:fs";
 import { concatCompatible, concatCopyArgs, concatEncodeArgs, concatListLine, crossfadeArgs, transitionArgs, crossfadeMinLength, concatMembers, EditInput, editInputProblem, fadeArgs, frameArgs, gainArgs, hasKeyframeAt, keyframeArgs, MAX_EDIT_SECONDS, muteArgs, overlayArgs, trimArgs, reframeArgs, gradeArgs, filmLookArgs, letterboxArgs, speedArgs, speedRampArgs, reverseArgs, reverseDurationProblem, freezeArgs, loopArgs, kenBurnsArgs, fpsBoostArgs, flipArgs, rotateArgs, sharpenArgs, denoiseArgs, pipArgs, captionsArgs, titleCardArgs, creditsArgs, type Clip } from "./editOps";
 import { COLOUR_MATCH_STRENGTH, COMPANION_CLIP_FPS, COMPANION_CLIP_SIZE, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionCrop, companionMetrics, companionReasons, crossfadeLoop, downscaleRgba4, frameDifference, keyOutRgba, selectCompanionWindow } from "./companionClip";
+import { upscaleClip, upscaleProblem, UPSCALE_DEADLINE_MS, UpscaleFailure } from "./upscale";
 
 export const MEDIA_KINDS = ["media.probe", "media.fetch", "media.transcode", "media.preview", "media.companion_clip", "media.edit", "media.setup"] as const;
 export type MediaKind = typeof MEDIA_KINDS[number];
@@ -95,7 +96,7 @@ function precheck(kind: MediaKind): (input: Record<string, unknown>) => JobRefus
   };
 }
 
-const laneFor = (kind: MediaKind): JobLane => ({ name: MEDIA_LANE, cap: MEDIA_QUEUE_CAP, deadlineMs: () => MEDIA_DEADLINES_MS[kind], precheck: precheck(kind) });
+const laneFor = (kind: MediaKind): JobLane => ({ name: MEDIA_LANE, cap: MEDIA_QUEUE_CAP, deadlineMs: (job) => kind === "media.edit" && Array.isArray((job.input as { ops?: unknown[] } | null)?.ops) && ((job.input as { ops: Array<{ op?: string }> }).ops.some((op) => op.op === "upscale")) ? UPSCALE_DEADLINE_MS : MEDIA_DEADLINES_MS[kind], precheck: precheck(kind) });
 
 type Status = (status: string) => void;
 const statusOf = (progress: JobProgress): Status => (status) => progress({ status });
@@ -561,8 +562,18 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
     cancelled(signal);
     const found = await probe(sources[index]!, `File ${index + 1}`);
     tooLong(`File ${index + 1}`, found.duration_s);
+    if (index === 0) {
+      const upscale = input.ops.find((op) => op.op === "upscale");
+      if (upscale?.op === "upscale") {
+        const limit = upscaleProblem(found);
+        if (limit) throw fail({ code: "bad_input", message: limit });
+      }
+    }
     probes.push(found);
   }
+  // Reject the actual working clip before any frame extraction or model call.
+  // Earlier ops can change duration/size, so check immediately before the op
+  // as well when upscale is not the first step.
   mkdirSync(work, { recursive: true });
   const steps: EditResult["steps"] = [];
   let clip: Clip = { path: sources[0]!, probe: probes[0]! };
@@ -636,6 +647,21 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
       } else if (op.op === "rotate") { needsVideo("rotate"); args = rotateArgs(ffmpeg, clip, target, op.degrees);
       } else if (op.op === "sharpen") { needsVideo("sharpen"); args = sharpenArgs(ffmpeg, clip, target, op.amount);
       } else if (op.op === "denoise") { needsVideo("denoise"); args = denoiseArgs(ffmpeg, clip, target, op.amount);
+      } else if (op.op === "upscale") {
+        needsVideo("upscale");
+        const limit = upscaleProblem(clip.probe);
+        if (limit) throw fail({ code: "bad_input", message: limit });
+        try {
+          await upscaleClip({ ffmpeg, run: mediaDeps.run, input: clip.path, target, work, probe: clip.probe, signal, progress, basePercent: Math.round((i / input.ops.length) * 100), percentSpan: Math.round(100 / input.ops.length) });
+        } catch (error) {
+          rmSync(target, { force: true });
+          if (error instanceof UpscaleFailure) throw fail({ code: error.code, message: error.message });
+          throw error;
+        }
+        const resized = { ...clip.probe, width: Math.max(2, Math.round((clip.probe.width ?? 0) * 2 / 2) * 2), height: Math.max(2, Math.round((clip.probe.height ?? 0) * 2 / 2) * 2) };
+        clip = { path: target, probe: resized }; action = "upscale";
+        // This op performs its own frame-based progress and final mux.
+        args = [];
       } else if (op.op === "pip") {
         needsVideo("pip"); const other = probes[op.input]!; if (!other.has_video) throw fail({ code: "bad_input", message: `File ${op.input + 1} has no picture for picture-in-picture.` }); args = pipArgs(ffmpeg, clip, { path: sources[op.input]!, probe: other }, target, op);
       } else if (op.op === "captions") {
@@ -697,6 +723,11 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
         } else args = concatEncodeArgs(ffmpeg, clips, target);
       }
       const base = i / input.ops.length; const share = 1 / input.ops.length;
+      if (op.op === "upscale") {
+        const checked = await probe(target, `The result of step ${i + 1}`);
+        steps.push({ op: op.op, action }); clip = { path: target, probe: checked };
+        continue;
+      }
       const result = await mediaDeps.run(args, { signal, onStdoutLine: (line) => { const seconds = parseProgressSeconds(line); if (seconds !== null && expected > 0) progress({ status: label, percent: Math.min(99, Math.round((base + Math.min(1, seconds / expected) * share) * 100)) }); } });
       if (result.aborted || signal.aborted) throw new Error("Cancelled.");
       if (op.op === "trim" && action === "copy" && result.code === 0 && existsSync(target)) {

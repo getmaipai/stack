@@ -16,7 +16,7 @@ const XFADE_NAME: Record<string, string> = { dissolve: "fade", speckle: "dissolv
 export const TRANSITION_KINDS = ["fade", "dissolve", "speckle", "wipeleft", "wiperight", "wipeup", "wipedown", "slideleft", "slideright", "slideup", "slidedown", "circleopen", "circleclose", "radial", "smoothleft", "smoothright", "fadeblack", "fadewhite", "zoomin", "pixelize"] as const;
 export const FILM_LOOK_PRESETS = ["70s_color", "noir", "teal_orange", "bleach_bypass", "technicolor", "faded_vintage", "cool_thriller"] as const;
 export const LETTERBOX_RATIOS = ["2.39:1", "2:1", "1.85:1", "1.33:1"] as const;
-export const EDIT_OPS = ["trim", "concat", "mute", "frame", "audio_overlay", "fade", "crossfade", "gain", "reframe", "grade", "film_look", "letterbox", "speed", "speed_ramp", "reverse", "freeze", "loop", "kenburns", "fps_boost", "flip", "rotate", "sharpen", "denoise", "pip", "captions", "transition", "title_card", "credits"] as const;
+export const EDIT_OPS = ["trim", "concat", "mute", "frame", "audio_overlay", "fade", "crossfade", "gain", "reframe", "grade", "film_look", "letterbox", "speed", "speed_ramp", "reverse", "freeze", "loop", "kenburns", "fps_boost", "flip", "rotate", "sharpen", "denoise", "upscale", "pip", "captions", "transition", "title_card", "credits"] as const;
 export const MIN_CROSSFADE_S = 0.3;
 export const MAX_CROSSFADE_S = 1.0;
 export const MAX_CROSSFADE_CLIPS = 6;
@@ -72,6 +72,7 @@ const RotateOp = z.object({ op: z.literal("rotate"), degrees: z.union([z.literal
 const AmountOp = z.number().min(0).max(1);
 const SharpenOp = z.object({ op: z.literal("sharpen"), amount: AmountOp }).strict();
 const DenoiseOp = z.object({ op: z.literal("denoise"), amount: AmountOp }).strict();
+const UpscaleOp = z.object({ op: z.literal("upscale"), factor: z.literal(2).optional() }).strict();
 const PipOp = z.object({ op: z.literal("pip"), input: Index, corner: z.enum(["top_left", "top_right", "bottom_left", "bottom_right"]), size: z.number().min(0.15).max(0.5), margin: z.number().min(0).max(0.1) }).strict();
 const CaptionsOp = z.object({ op: z.literal("captions"), lines: z.array(z.object({ from_s: Seconds, to_s: z.number().gt(0).max(MAX_EDIT_SECONDS), text: z.string().min(1).max(120) }).strict()).min(1).max(40), position: z.enum(["bottom", "middle", "top"]) }).strict()
   .refine((op) => op.lines.every((line) => line.to_s > line.from_s), { path: ["lines"], message: "each to_s must be after from_s" });
@@ -87,7 +88,7 @@ const Colour = z.union([z.enum(["black", "white"]), z.string().regex(/^#[0-9A-Fa
 const TitleCardOp = z.object({ op: z.literal("title_card"), text: z.string().min(1).max(120), subtitle: z.string().max(160).optional(), duration_s: z.number().min(1).max(10), position: z.enum(["center", "lower_third", "top"]), background: Colour, text_color: Colour, fade_in_s: z.number().min(0).max(10).optional(), fade_out_s: z.number().min(0).max(10).optional(), place: z.enum(["start", "end"]) }).strict().refine((op) => (op.fade_in_s ?? 0) + (op.fade_out_s ?? 0) <= op.duration_s, { path: ["fade_out_s"], message: "combined fades must fit within duration_s" });
 const CreditsOp = z.object({ op: z.literal("credits"), lines: z.array(z.object({ role: z.string().max(40).optional(), name: z.string().min(1).max(60) }).strict()).min(1).max(60), duration_s: z.number().min(3).max(120).optional(), speed: z.number().min(1).max(1000).default(60), background: Colour, text_color: Colour, title: z.string().max(120).optional() }).strict();
 
-export const EditOp = z.union([TrimOp, ConcatOp, MuteOp, FrameOp, AudioOverlayOp, FadeOp, CrossfadeOp, GainOp, ReframeOp, GradeOp, FilmLookOp, LetterboxOp, SpeedOp, SpeedRampOp, ReverseOp, FreezeOp, LoopOp, KenBurnsOp, FpsBoostOp, FlipOp, RotateOp, SharpenOp, DenoiseOp, PipOp, CaptionsOp, TransitionOp, TitleCardOp, CreditsOp]);
+export const EditOp = z.union([TrimOp, ConcatOp, MuteOp, FrameOp, AudioOverlayOp, FadeOp, CrossfadeOp, GainOp, ReframeOp, GradeOp, FilmLookOp, LetterboxOp, SpeedOp, SpeedRampOp, ReverseOp, FreezeOp, LoopOp, KenBurnsOp, FpsBoostOp, FlipOp, RotateOp, SharpenOp, DenoiseOp, UpscaleOp, PipOp, CaptionsOp, TransitionOp, TitleCardOp, CreditsOp]);
 export type EditOp = z.infer<typeof EditOp>;
 
 export const EditInput = z.object({
