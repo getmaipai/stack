@@ -366,7 +366,7 @@ export const MANAGED_RUNTIMES: ManagedRuntime[] = [
   { name: "ltx25-max-gen", version: "b82b97e", roles: ["video"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the dgrauet ltx-2-mlx 0.18.0 source archive plus a hashed requirements file; the Max LTX-2.5 slot, 1024x576 with a sound track; needs 128 GB; no Linux file)" },
   { name: "music-gen", version: "ca1e85f", roles: ["music"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the ACE-Step 1.5 source archive plus a hashed requirements file; songs with sung lyrics, remakes, covers, repaints and extensions; needs 64 GB or more; no Linux file)" },
   { name: "image-gen", version: "0.23.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; mflux 0.23.0 and a hashed requirements file; FLUX.2 Klein 4B and Z-Image-Turbo, text to picture, image to picture, LoRAs and reference edits; needs 32 GB of memory or more)" },
-  { name: "image-tools", version: "1.0.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (onnxruntime, numpy, pillow, opencv; no torch; remove background, erase, upscale and resize on a picture the person has; the Linux file lands with the robot's first image run)" },
+  { name: "image-tools", version: "1.0.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (onnxruntime, numpy, pillow, opencv; no torch; remove background, erase, upscale and resize on a picture the person has, and sharpen clips through the media.edit upscale op; the Linux file lands with the robot's first image run)" },
 ];
 
 export const ENGINE_READY_MARKER = ".engine-ready";
