@@ -11,7 +11,7 @@ const XFADE_NAME: Record<string, string> = { dissolve: "fade", speckle: "dissolv
 export const TRANSITION_KINDS = ["fade", "dissolve", "speckle", "wipeleft", "wiperight", "wipeup", "wipedown", "slideleft", "slideright", "slideup", "slidedown", "circleopen", "circleclose", "radial", "smoothleft", "smoothright", "fadeblack", "fadewhite", "zoomin", "pixelize"] as const;
 export const FILM_LOOK_PRESETS = ["70s_color", "noir", "teal_orange", "bleach_bypass", "technicolor", "faded_vintage", "cool_thriller"] as const;
 export const LETTERBOX_RATIOS = ["2.39:1", "2:1", "1.85:1", "1.33:1"] as const;
-export const EDIT_OPS = ["trim", "concat", "mute", "frame", "audio_overlay", "fade", "crossfade", "gain", "reframe", "grade", "film_look", "letterbox", "speed", "captions", "transition", "title_card", "credits"] as const;
+export const EDIT_OPS = ["trim", "concat", "mute", "frame", "audio_overlay", "fade", "crossfade", "gain", "reframe", "grade", "film_look", "letterbox", "speed", "speed_ramp", "reverse", "freeze", "loop", "kenburns", "fps_boost", "flip", "rotate", "sharpen", "denoise", "pip", "captions", "transition", "title_card", "credits"] as const;
 export const MIN_CROSSFADE_S = 0.3;
 export const MAX_CROSSFADE_S = 1.0;
 export const MAX_CROSSFADE_CLIPS = 6;
@@ -56,7 +56,18 @@ const GradeOp = z.object({ op: z.literal("grade"), brightness: z.number().min(-1
 const FilmLookOp = z.object({ op: z.literal("film_look"), preset: z.enum(FILM_LOOK_PRESETS), strength: z.number().min(0.2).max(1).default(1) }).strict();
 const LetterboxOp = z.object({ op: z.literal("letterbox"), ratio: z.enum(LETTERBOX_RATIOS) }).strict();
 const SpeedOp = z.object({ op: z.literal("speed"), factor: z.number().min(0.25).max(4) }).strict();
-// Speed ramps (from_factor, to_factor, at_s, over_s) are out of scope for this slice.
+const SpeedRampOp = z.object({ op: z.literal("speed_ramp"), from_factor: z.number().min(0.25).max(4), to_factor: z.number().min(0.25).max(4), at_s: Seconds, over_s: z.number().min(0.3).max(10) }).strict();
+const ReverseOp = z.object({ op: z.literal("reverse") }).strict();
+const FreezeOp = z.object({ op: z.literal("freeze"), at_s: Seconds, hold_s: z.number().min(0.5).max(5) }).strict();
+const LoopOp = z.object({ op: z.literal("loop"), times: z.number().int().min(2).max(6) }).strict();
+const KenBurnsOp = z.object({ op: z.literal("kenburns"), zoom_from: z.number().min(1).max(2), zoom_to: z.number().min(1).max(2), pan: z.enum(["none", "left", "right", "up", "down"]), duration_s: z.number().min(1).max(30).optional() }).strict();
+const FpsBoostOp = z.object({ op: z.literal("fps_boost"), fps: z.union([z.literal(30), z.literal(48), z.literal(60)]) }).strict();
+const FlipOp = z.object({ op: z.literal("flip"), direction: z.enum(["horizontal", "vertical"]) }).strict();
+const RotateOp = z.object({ op: z.literal("rotate"), degrees: z.union([z.literal(90), z.literal(180), z.literal(270)]) }).strict();
+const AmountOp = z.number().min(0).max(1);
+const SharpenOp = z.object({ op: z.literal("sharpen"), amount: AmountOp }).strict();
+const DenoiseOp = z.object({ op: z.literal("denoise"), amount: AmountOp }).strict();
+const PipOp = z.object({ op: z.literal("pip"), input: Index, corner: z.enum(["top_left", "top_right", "bottom_left", "bottom_right"]), size: z.number().min(0.15).max(0.5), margin: z.number().min(0).max(0.1) }).strict();
 const CaptionsOp = z.object({ op: z.literal("captions"), lines: z.array(z.object({ from_s: Seconds, to_s: z.number().gt(0).max(MAX_EDIT_SECONDS), text: z.string().min(1).max(120) }).strict()).min(1).max(40), position: z.enum(["bottom", "middle", "top"]) }).strict()
   .refine((op) => op.lines.every((line) => line.to_s > line.from_s), { path: ["lines"], message: "each to_s must be after from_s" });
 
@@ -71,7 +82,7 @@ const Colour = z.union([z.enum(["black", "white"]), z.string().regex(/^#[0-9A-Fa
 const TitleCardOp = z.object({ op: z.literal("title_card"), text: z.string().min(1).max(120), subtitle: z.string().max(160).optional(), duration_s: z.number().min(1).max(10), position: z.enum(["center", "lower_third", "top"]), background: Colour, text_color: Colour, fade_in_s: z.number().min(0).max(10).optional(), fade_out_s: z.number().min(0).max(10).optional(), place: z.enum(["start", "end"]) }).strict().refine((op) => (op.fade_in_s ?? 0) + (op.fade_out_s ?? 0) <= op.duration_s, { path: ["fade_out_s"], message: "combined fades must fit within duration_s" });
 const CreditsOp = z.object({ op: z.literal("credits"), lines: z.array(z.object({ role: z.string().max(40).optional(), name: z.string().min(1).max(60) }).strict()).min(1).max(60), duration_s: z.number().min(3).max(120).optional(), speed: z.number().min(1).max(1000).default(60), background: Colour, text_color: Colour, title: z.string().max(120).optional() }).strict();
 
-export const EditOp = z.union([TrimOp, ConcatOp, MuteOp, FrameOp, AudioOverlayOp, FadeOp, CrossfadeOp, GainOp, ReframeOp, GradeOp, FilmLookOp, LetterboxOp, SpeedOp, CaptionsOp, TransitionOp, TitleCardOp, CreditsOp]);
+export const EditOp = z.union([TrimOp, ConcatOp, MuteOp, FrameOp, AudioOverlayOp, FadeOp, CrossfadeOp, GainOp, ReframeOp, GradeOp, FilmLookOp, LetterboxOp, SpeedOp, SpeedRampOp, ReverseOp, FreezeOp, LoopOp, KenBurnsOp, FpsBoostOp, FlipOp, RotateOp, SharpenOp, DenoiseOp, PipOp, CaptionsOp, TransitionOp, TitleCardOp, CreditsOp]);
 export type EditOp = z.infer<typeof EditOp>;
 
 export const EditInput = z.object({
@@ -106,6 +117,22 @@ export function editInputProblem(input: unknown): string | null {
         const ratio = (raw.ops[i] as { ratio?: unknown } | null)?.ratio;
         if (typeof ratio !== "string" || !(LETTERBOX_RATIOS as readonly string[]).includes(ratio)) return `Step ${i + 1} asks for letterbox ratio ${JSON.stringify(ratio ?? null)}. The ratios it knows are ${LETTERBOX_RATIOS.join(", ")}.`;
       }
+      if (name === "pip") {
+        const corner = (raw.ops[i] as { corner?: unknown } | null)?.corner;
+        if (typeof corner !== "string" || !["top_left", "top_right", "bottom_left", "bottom_right"].includes(corner)) return `Step ${i + 1} asks for picture-in-picture corner ${JSON.stringify(corner ?? null)}. Choose top_left, top_right, bottom_left or bottom_right.`;
+      }
+      if (name === "fps_boost") {
+        const fps = (raw.ops[i] as { fps?: unknown } | null)?.fps;
+        if (![30, 48, 60].includes(fps as number)) return `Step ${i + 1} (fps_boost) accepts 30, 48 or 60 fps.`;
+      }
+      if (name === "flip") {
+        const direction = (raw.ops[i] as { direction?: unknown } | null)?.direction;
+        if (direction !== "horizontal" && direction !== "vertical") return `Step ${i + 1} (flip) accepts horizontal or vertical.`;
+      }
+      if (name === "rotate") {
+        const degrees = (raw.ops[i] as { degrees?: unknown } | null)?.degrees;
+        if (![90, 180, 270].includes(degrees as number)) return `Step ${i + 1} (rotate) accepts 90, 180 or 270 degrees.`;
+      }
     }
   }
   const parsed = EditInput.safeParse(input);
@@ -124,6 +151,7 @@ function planProblem(input: EditInput): string | null {
   for (let i = 0; i < input.ops.length; i++) {
     const op = input.ops[i]!;
     if (op.op === "audio_overlay" && op.input >= input.inputs.length) return `Step ${i + 1} (audio_overlay) uses file ${op.input + 1}, but the edit lists only ${input.inputs.length}.`;
+    if (op.op === "pip" && (op.input >= input.inputs.length || op.input === 0)) return `Step ${i + 1} (pip) needs a second file from inputs[]. Add the picture-in-picture clip after the working clip.`;
     if (op.op === "audio_overlay" && op.input === 0) return `Step ${i + 1} (audio_overlay) uses the clip itself as the overlay. List the voice or music as another file.`;
     if (op.op === "audio_overlay" && op.end_s !== undefined) {
       if (op.end_s <= op.start_s) return `Step ${i + 1} (audio_overlay) ends at ${op.end_s} s but starts at ${op.start_s} s. end_s must be after start_s.`;
@@ -387,6 +415,44 @@ export function speedArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<E
   if (clip.probe.has_audio) args.push("-af", audio.join(","), ...ENCODE_A);
   return [...args, ...FASTSTART, out];
 }
+export function reverseDurationProblem(duration: number): string | null { return duration > 60 ? "Reverse works only on clips up to 60 seconds. Trim the clip first." : null; }
+export function speedRampArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "speed_ramp" }>): string[] {
+  const d = clip.probe.duration_s ?? 0; const rampEnd = Math.min(d, op.at_s + op.over_s);
+  const slope = (op.to_factor - op.from_factor) / op.over_s;
+  const during = Math.abs(slope) < 1e-9
+    ? `(T*TB-${num(op.at_s)})/${num(op.from_factor)}`
+    : `log((${num(op.from_factor)}+${num(slope)}*(T*TB-${num(op.at_s)}))/${num(op.from_factor)})/${num(slope)}`;
+  const rampLength = Math.abs(slope) < 1e-9 ? num(op.over_s / op.from_factor) : `log(${num(op.to_factor / op.from_factor)})/${num(slope)}`;
+  const mapped = `if(lt(T*TB,${num(op.at_s)}),T*TB/${num(op.from_factor)},if(lt(T*TB,${num(rampEnd)}),${num(op.at_s / op.from_factor)}+${during},${num(op.at_s / op.from_factor)}+${rampLength}+(T*TB-${num(rampEnd)})/${num(op.to_factor)}))/TB`;
+  if (!clip.probe.has_audio) return [...BASE(ffmpeg), "-i", clip.path, "-vf", `setpts='${mapped}'`, "-map", "0:v:0", "-an", "-sn", "-dn", ...ENCODE_V, ...FASTSTART, out];
+  const parts = [`[0:v:0]setpts='${mapped}'[v]`]; const audioLabels: string[] = [];
+  const addAudioSegment = (from: number, to: number, factor: number, index: number) => {
+    let remaining = factor; const chain: string[] = [];
+    while (remaining > 2) { chain.push("atempo=2"); remaining /= 2; }
+    while (remaining < 0.5) { chain.push("atempo=0.5"); remaining /= 0.5; }
+    chain.push(`atempo=${num(remaining)}`);
+    parts.push(`[0:a:0]atrim=${num(from)}:${num(to)},asetpts=PTS-STARTPTS,${chain.join(",")}[a${index}]`); audioLabels.push(`[a${index}]`);
+  };
+  if (op.at_s > 0) addAudioSegment(0, Math.min(op.at_s, d), op.from_factor, 0);
+  const pieces = Math.max(1, Math.ceil((rampEnd - op.at_s) * 24));
+  for (let i = 0; i < pieces && rampEnd > op.at_s; i++) {
+    const from = op.at_s + (rampEnd - op.at_s) * i / pieces; const to = op.at_s + (rampEnd - op.at_s) * (i + 1) / pieces;
+    const factor = op.from_factor + slope * ((from + to) / 2 - op.at_s); addAudioSegment(from, to, factor, audioLabels.length);
+  }
+  if (d > rampEnd) addAudioSegment(rampEnd, d, op.to_factor, audioLabels.length);
+  parts.push(`${audioLabels.join("")}concat=n=${audioLabels.length}:v=0:a=1[a]`);
+  return [...BASE(ffmpeg), "-i", clip.path, "-filter_complex", parts.join(";"), "-map", "[v]", "-map", "[a]", "-sn", "-dn", ...ENCODE_V, ...ENCODE_A, ...FASTSTART, out];
+}
+export function reverseArgs(ffmpeg:string,clip:Clip,out:string):string[]{return [...BASE(ffmpeg),"-i",clip.path,"-vf","reverse,setpts=PTS-STARTPTS","-af","areverse,asetpts=PTS-STARTPTS","-map","0:v:0?","-map","0:a:0?","-sn","-dn","-c:v","libx264","-preset","veryfast","-crf","0","-pix_fmt","yuv420p",...(clip.probe.has_audio?ENCODE_A:[]),...FASTSTART,out];}
+export function freezeArgs(ffmpeg:string,clip:Clip,out:string,op:Extract<EditOp,{op:"freeze"}>):string[]{const video=`[0:v:0]trim=0:${num(op.at_s)},setpts=PTS-STARTPTS[a];[0:v:0]trim=${num(op.at_s)}:${num(op.at_s+0.04)},setpts=PTS-STARTPTS,loop=loop=${Math.max(1,Math.round(op.hold_s*24))}:size=1:start=0,setpts=PTS-STARTPTS[b];[0:v:0]trim=${num(op.at_s)},setpts=PTS-STARTPTS[c];[a][b][c]concat=n=3:v=1:a=0[v]`;const audio=clip.probe.has_audio?`;[0:a:0]atrim=0:${num(op.at_s)},asetpts=PTS-STARTPTS[x];anullsrc=r=48000:cl=stereo,atrim=0:${num(op.hold_s)}[sil];[0:a:0]atrim=${num(op.at_s)},asetpts=PTS-STARTPTS[y];[x][sil][y]concat=n=3:v=0:a=1[a]`:"";return [...BASE(ffmpeg),"-i",clip.path,"-filter_complex",video+audio,"-map","[v]",...(clip.probe.has_audio?["-map","[a]"]:[]),"-sn","-dn",...ENCODE_V,...(clip.probe.has_audio?ENCODE_A:[]),...FASTSTART,out];}
+export function loopArgs(ffmpeg:string,clip:Clip,out:string,times:number):string[]{const inputs=Array.from({length:times},()=>["-i",clip.path]).flat();const parts:string[]=[];const labels:string[]=[];for(let i=0;i<times;i++){parts.push(`[${i}:v:0]setpts=PTS-STARTPTS[v${i}]`);labels.push(`[v${i}]`);if(clip.probe.has_audio){parts.push(`[${i}:a:0]asetpts=PTS-STARTPTS[a${i}]`);labels.push(`[a${i}]`);}}parts.push(`${labels.join("")}concat=n=${times}:v=1:a=${clip.probe.has_audio?1:0}[v]${clip.probe.has_audio?"[a]":""}`);return [...BASE(ffmpeg),...inputs,"-filter_complex",parts.join(";"),"-map","[v]",...(clip.probe.has_audio?["-map","[a]"]:[]),"-sn","-dn",...ENCODE_V,...(clip.probe.has_audio?ENCODE_A:[]),...FASTSTART,out];}
+export function kenBurnsArgs(ffmpeg:string,clip:Clip,out:string,op:Extract<EditOp,{op:"kenburns"}>,still=false):string[]{const w=still?1280:Math.max(2,Math.round((clip.probe.width??1280)/2)*2),h=still?720:Math.max(2,Math.round((clip.probe.height??720)/2)*2),dur=op.duration_s??5;const pan=op.pan==="left"?"x=(iw-iw/zoom)*(1-on/(duration*24))":op.pan==="right"?"x=(iw-iw/zoom)*on/(duration*24)":op.pan==="up"?"y=(ih-ih/zoom)*(1-on/(duration*24))":op.pan==="down"?"y=(ih-ih/zoom)*on/(duration*24)":"x=(iw-iw/zoom)/2:y=(ih-ih/zoom)/2";const zoom=`z='${num(op.zoom_from)}+((${num(op.zoom_to)}-${num(op.zoom_from)})*on/(duration*24))'`;const vf=`scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},zoompan=${zoom}:${pan}:d=1:s=${w}x${h}:fps=24`;const args=[...BASE(ffmpeg),...(still?["-loop","1"]:[]),"-i",clip.path];if(still)args.push("-f","lavfi","-i","anullsrc=r=48000:cl=stereo");args.push("-vf",vf,"-t",String(dur),"-map","0:v:0",...(still?["-map","1:a:0"]:["-map","0:a:0?"]),"-sn","-dn",...ENCODE_V,...(still?ENCODE_A:clip.probe.has_audio?["-c:a","copy"]:[]),...(still?["-shortest"]:[]),...FASTSTART,out);return args;}
+export function fpsBoostArgs(ffmpeg:string,clip:Clip,out:string,fps:number):string[]{return [...BASE(ffmpeg),"-i",clip.path,"-vf",`minterpolate=fps=${fps}:mi_mode=mci:mc_mode=aobmc:vsbmc=1`,"-map","0:v:0","-map","0:a:0?","-sn","-dn",...ENCODE_V,...(clip.probe.has_audio?["-c:a","copy"]:[]),...FASTSTART,out];}
+export function flipArgs(ffmpeg:string,clip:Clip,out:string,direction:string):string[]{return [...BASE(ffmpeg),"-i",clip.path,"-vf",direction==="horizontal"?"hflip":"vflip","-map","0:v:0","-map","0:a:0?","-sn","-dn",...ENCODE_V,...(clip.probe.has_audio?["-c:a","copy"]:[]),...FASTSTART,out];}
+export function rotateArgs(ffmpeg:string,clip:Clip,out:string,degrees:number):string[]{const vf=degrees===90?"transpose=1":degrees===270?"transpose=2":"hflip,vflip";return [...BASE(ffmpeg),"-i",clip.path,"-vf",vf,"-map","0:v:0","-map","0:a:0?","-sn","-dn",...ENCODE_V,...(clip.probe.has_audio?["-c:a","copy"]:[]),...FASTSTART,out];}
+export function sharpenArgs(ffmpeg:string,clip:Clip,out:string,amount:number):string[]{return [...BASE(ffmpeg),"-i",clip.path,"-vf",`unsharp=5:5:${num(amount*2)}:5:5:0`,"-map","0:v:0","-map","0:a:0?","-sn","-dn",...ENCODE_V,...(clip.probe.has_audio?["-c:a","copy"]:[]),...FASTSTART,out];}
+export function denoiseArgs(ffmpeg:string,clip:Clip,out:string,amount:number):string[]{return [...BASE(ffmpeg),"-i",clip.path,"-vf",`hqdn3d=${num(amount*4.5)}:${num(amount*3.375)}:${num(amount*6.75)}:${num(amount*4.5)}`,"-map","0:v:0","-map","0:a:0?","-sn","-dn",...ENCODE_V,...(clip.probe.has_audio?["-c:a","copy"]:[]),...FASTSTART,out];}
+export function pipArgs(ffmpeg:string,clip:Clip,other:Clip,out:string,op:Extract<EditOp,{op:"pip"}>):string[]{const w=Math.max(2,Math.floor((clip.probe.width??1280)*op.size/2)*2),x=op.corner.endsWith("right")?`W-w-W*${num(op.margin)}`:`W*${num(op.margin)}`,y=op.corner.startsWith("bottom")?`H-h-H*${num(op.margin)}`:`H*${num(op.margin)}`;const graph=`[1:v:0]scale=${w}:-2[small];[0:v:0][small]overlay=${x}:${y}:shortest=0[v]`;return [...BASE(ffmpeg),"-i",clip.path,"-stream_loop","-1","-i",other.path,"-filter_complex",graph,"-map","[v]","-map","0:a:0?","-t",num(clip.probe.duration_s??0),"-sn","-dn",...ENCODE_V,...(clip.probe.has_audio?["-c:a","copy"]:[]),...FASTSTART,out];}
 const drawTextEscape = (text: string): string => text.replace(/\\/g, "\\\\").replace(/:/g, "\\:").replace(/'/g, "\\'").replace(/%/g, "\\%").replace(/\n/g, "\\n").replace(/\r/g, "");
 const filterEscape = (text: string): string => drawTextEscape(text).replace(/[{}]/g, (char) => `\\${char}`);
 export function captionsArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "captions" }>, font: string): string[] {

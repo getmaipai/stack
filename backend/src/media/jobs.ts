@@ -14,7 +14,7 @@ import { probeFile, type ProbeResult } from "./probe";
 import { idleArgv, spawnRunner, type Runner, type RunResult } from "./run";
 import { defaultToolbox, MediaToolError, type MediaToolbox } from "./tools";
 import { mkdirSync } from "node:fs";
-import { concatCompatible, concatCopyArgs, concatEncodeArgs, concatListLine, crossfadeArgs, transitionArgs, crossfadeMinLength, concatMembers, EditInput, editInputProblem, fadeArgs, frameArgs, gainArgs, hasKeyframeAt, keyframeArgs, MAX_EDIT_SECONDS, muteArgs, overlayArgs, trimArgs, reframeArgs, gradeArgs, filmLookArgs, letterboxArgs, speedArgs, captionsArgs, titleCardArgs, creditsArgs, type Clip } from "./editOps";
+import { concatCompatible, concatCopyArgs, concatEncodeArgs, concatListLine, crossfadeArgs, transitionArgs, crossfadeMinLength, concatMembers, EditInput, editInputProblem, fadeArgs, frameArgs, gainArgs, hasKeyframeAt, keyframeArgs, MAX_EDIT_SECONDS, muteArgs, overlayArgs, trimArgs, reframeArgs, gradeArgs, filmLookArgs, letterboxArgs, speedArgs, speedRampArgs, reverseArgs, reverseDurationProblem, freezeArgs, loopArgs, kenBurnsArgs, fpsBoostArgs, flipArgs, rotateArgs, sharpenArgs, denoiseArgs, pipArgs, captionsArgs, titleCardArgs, creditsArgs, type Clip } from "./editOps";
 import { COLOUR_MATCH_STRENGTH, COMPANION_CLIP_FPS, COMPANION_CLIP_SIZE, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionCrop, companionMetrics, companionReasons, crossfadeLoop, downscaleRgba4, frameDifference, keyOutRgba, selectCompanionWindow } from "./companionClip";
 
 export const MEDIA_KINDS = ["media.probe", "media.fetch", "media.transcode", "media.preview", "media.companion_clip", "media.edit", "media.setup"] as const;
@@ -617,6 +617,27 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
         catch (error) { throw fail({ code: "bad_input", message: `Step ${i + 1} (letterbox): ${error instanceof Error ? error.message : String(error)}` }); }
       } else if (op.op === "speed") {
         args = speedArgs(ffmpeg, clip, target, op); expected = (clip.probe.duration_s ?? 0) / op.factor;
+      } else if (op.op === "speed_ramp") {
+        args = speedRampArgs(ffmpeg, clip, target, op); expected = Math.max(0, Math.min(op.at_s, clip.probe.duration_s ?? 0) / op.from_factor) + Math.max(0, Math.min(op.over_s, (clip.probe.duration_s ?? 0) - op.at_s) / ((op.from_factor + op.to_factor) / 2)) + Math.max(0, (clip.probe.duration_s ?? 0) - op.at_s - op.over_s) / op.to_factor;
+      } else if (op.op === "reverse") {
+        const limit = reverseDurationProblem(clip.probe.duration_s ?? 0); if (limit) throw fail({ code: "bad_input", message: `Step ${i + 1} (reverse) ${limit[0]!.toLowerCase()}${limit.slice(1)}` });
+        needsVideo("reverse"); args = reverseArgs(ffmpeg, clip, target);
+      } else if (op.op === "freeze") {
+        needsVideo("freeze"); if (op.at_s >= (clip.probe.duration_s ?? 0)) throw fail({ code: "bad_input", message: `Step ${i + 1} (freeze) asks for ${op.at_s} s but the clip is only ${clip.probe.duration_s ?? 0} s long. Choose an earlier frame.` });
+        args = freezeArgs(ffmpeg, clip, target, op); expected += op.hold_s;
+      } else if (op.op === "loop") {
+        needsVideo("loop"); expected *= op.times; tooLong("The looped film", expected); args = loopArgs(ffmpeg, clip, target, op.times);
+      } else if (op.op === "kenburns") {
+        const still = i === 0 && /\.(png|jpe?g)$/i.test(sources[0]!);
+        needsVideo("kenburns"); args = kenBurnsArgs(ffmpeg, clip, target, op, still); expected = op.duration_s ?? 5;
+      } else if (op.op === "fps_boost") {
+        needsVideo("fps_boost"); if ((clip.probe.duration_s ?? 0) > 30) throw fail({ code: "bad_input", message: `Step ${i + 1} (fps_boost) is slow on clips longer than 30 seconds. Trim the clip first.` }); args = fpsBoostArgs(ffmpeg, clip, target, op.fps);
+      } else if (op.op === "flip") { needsVideo("flip"); args = flipArgs(ffmpeg, clip, target, op.direction);
+      } else if (op.op === "rotate") { needsVideo("rotate"); args = rotateArgs(ffmpeg, clip, target, op.degrees);
+      } else if (op.op === "sharpen") { needsVideo("sharpen"); args = sharpenArgs(ffmpeg, clip, target, op.amount);
+      } else if (op.op === "denoise") { needsVideo("denoise"); args = denoiseArgs(ffmpeg, clip, target, op.amount);
+      } else if (op.op === "pip") {
+        needsVideo("pip"); const other = probes[op.input]!; if (!other.has_video) throw fail({ code: "bad_input", message: `File ${op.input + 1} has no picture for picture-in-picture.` }); args = pipArgs(ffmpeg, clip, { path: sources[op.input]!, probe: other }, target, op);
       } else if (op.op === "captions") {
         needsVideo("captions");
         const font = ["/System/Library/Fonts/Supplemental/Arial.ttf", "/System/Library/Fonts/Helvetica.ttc", "/System/Library/Fonts/Supplemental/Verdana.ttf"].find((path) => existsSync(path));
