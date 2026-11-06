@@ -33,7 +33,7 @@ describe("media.edit film operation builders", () => {
     const hostile = "quote' colon: slash\\ percent% %{x}\nnext";
     const title = titleCardArgs("ffmpeg", clip, "/o.mp4", { op: "title_card", text: hostile, duration_s: 2, position: "top", background: "white", text_color: "black", place: "end" }, font).join(" ");
     const credits = creditsArgs("ffmpeg", clip, "/o.mp4", { op: "credits", lines: [{ role: hostile, name: hostile }], background: "white", text_color: "black", speed: 60 }, font).join(" ");
-    for (const args of [title, credits]) { expect(args).toContain("\\'"); expect(args).toContain("\\:"); expect(args).toContain("\\\\"); expect(args).toContain("\\%"); expect(args).toContain("\\{"); expect(args).toContain("\\n"); }
+    for (const args of [title, credits]) { expect(args).toContain("quote\u2019 colon"); expect(args).not.toContain("quote\\'"); expect(args).toContain("\\:"); expect(args).toContain("\\\\"); expect(args).toContain("\\%"); expect(args).toContain("\\{"); expect(args).toContain("\\n"); }
   });
 });
 
