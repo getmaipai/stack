@@ -85,7 +85,8 @@ export function ltx25RequirementsFileFor(platform = process.platform, arch = pro
   return platform === "darwin" && arch === "arm64" ? darwinArm64Requirements : null;
 }
 export function ltx25GenRoot(): string { return engineTagRoot(LTX25_GEN_NAME, LTX25_GEN_VERSION); }
-export function ltx25GenProof(): string { return join(uvVenvPath(ltx25GenRoot()), "lib", "python3.12", "site-packages", "mlx", "__init__.py"); }
+/** mlx is a namespace package (no `__init__.py`; found 2026-11-06 when the first clean install failed on this very check), so the proof is the language-model package the pipelines import beside it, as for Max. */
+export function ltx25GenProof(): string { return join(uvVenvPath(ltx25GenRoot()), "lib", "python3.12", "site-packages", "mlx_lm", "__init__.py"); }
 /** The runtime's two source packages (the workspace members the worker imports), on PYTHONPATH. */
 export function ltx25SourcePaths(root = ltx25GenRoot()): string[] {
   return [join(root, "packages", "ltx-core-mlx", "src"), join(root, "packages", "ltx-pipelines-mlx", "src")];
