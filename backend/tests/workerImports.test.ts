@@ -94,3 +94,10 @@ test("the voice conversion environment pins librosa, which the SoulX mel transfo
   const requirements = readFileSync(join(import.meta.dir, "../src/voiceConvert/voice-convert.darwin-arm64.requirements.txt"), "utf8");
   for (const name of ["librosa", "scikit-learn", "soxr", "joblib", "audioread", "lazy-loader", "pooch", "decorator", "msgpack", "platformdirs", "threadpoolctl"]) expect(requirements).toMatch(new RegExp(`^${name}==`, "m"));
 });
+
+test("the voice conversion environment pins the transformers the SoulX attention code was written for", () => {
+  // SoulX's vendored llama.py calls LlamaAttention with the 4.41 signature; transformers 4.57 fails with a missing position_embeddings argument (measured live 2026-11-06).
+  const requirements = readFileSync(join(import.meta.dir, "../src/voiceConvert/voice-convert.darwin-arm64.requirements.txt"), "utf8");
+  expect(requirements).toMatch(/^transformers==4\.41\.2 /m);
+  expect(requirements).toMatch(/^tokenizers==0\.19\.1 /m);
+});
