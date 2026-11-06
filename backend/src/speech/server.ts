@@ -14,6 +14,8 @@ import type { SttWireEvent } from "@maipai/spec/stack/ts/stt-wire-event.js";
 
 export const SESSION_PATH = "/v1/audio/transcriptions/stream";
 export const TRANSCRIBE_PATH = "/v1/audio/transcriptions";
+export const TRANSCRIBE_TIMED_PATH = "/v1/audio/transcriptions/timed-span";
+export const TRANSCRIBE_SPANS_PATH = "/v1/audio/transcriptions/detect-spans";
 
 export interface SpeechServerOptions {
   port: number;
@@ -66,6 +68,33 @@ export function startSpeechServer(options: SpeechServerOptions) {
         } catch (error) {
           if (error instanceof WaveFormatError) return jsonResponse({ error: error.message }, 400);
           return jsonResponse({ error: (error as Error).message }, 500);
+        }
+      }
+      if (request.method === "POST" && url.pathname === TRANSCRIBE_TIMED_PATH) {
+        const body = await request.json().catch(() => null) as { audio_base64?: unknown; hotwords?: unknown } | null;
+        if (typeof body?.audio_base64 !== "string") return jsonResponse({ error: "Send audio_base64 containing a 16 kHz WAV." }, 400);
+        const detailed = (options.transcriber as typeof options.transcriber & { transcribeTimed?: (samples: Float32Array, hotwords?: string) => Promise<{ text: string; lang?: string; tokens?: string[]; timestamps?: number[]; ys_log_probs?: number[] }> }).transcribeTimed;
+        if (!detailed) return jsonResponse({ error: "Token timing is not available for the installed speech model." }, 422);
+        try {
+          const decoded = decodeWave(Uint8Array.from(Buffer.from(body.audio_base64, "base64")));
+          const result = await detailed(toRecognizerRate(decoded), typeof body.hotwords === "string" ? body.hotwords : undefined);
+          return jsonResponse(result);
+        } catch (error) {
+          if (error instanceof WaveFormatError) return jsonResponse({ error: error.message }, 400);
+          return jsonResponse({ error: "The speech engine could not transcribe this span." }, 500);
+        }
+      }
+      if (request.method === "POST" && url.pathname === TRANSCRIBE_SPANS_PATH) {
+        const body = await request.json().catch(() => null) as { audio_base64?: unknown } | null;
+        if (typeof body?.audio_base64 !== "string") return jsonResponse({ error: "Send audio_base64 containing a 16 kHz WAV." }, 400);
+        try {
+          const decoded = decodeWave(Uint8Array.from(Buffer.from(body.audio_base64, "base64")));
+          const detector = options.detector(); detector.reset();
+          const { splitSpeechSpans } = await import("@/speech/transcriptSpans");
+          return jsonResponse({ spans: splitSpeechSpans(toRecognizerRate(decoded), detector) }, 200);
+        } catch (error) {
+          if (error instanceof WaveFormatError) return jsonResponse({ error: error.message }, 400);
+          return jsonResponse({ error: "Speech spans could not be detected." }, 500);
         }
       }
       return jsonResponse({ error: "Not found." }, 404);

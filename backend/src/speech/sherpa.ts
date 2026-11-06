@@ -19,8 +19,9 @@ export const PARAKEET_FILES = { encoder: "encoder.int8.onnx", decoder: "decoder.
 // any length, so the detector re-chunks them.
 const VAD_WINDOW = 512;
 
+interface SherpaResult { text: string; lang?: string; tokens?: string[]; timestamps?: number[]; ys_log_probs?: number[]; }
 interface SherpaModule {
-  OfflineRecognizer: new (config: unknown) => { createStream(): SherpaStream; decodeAsync(stream: SherpaStream): Promise<void>; getResult(stream: SherpaStream): { text: string } };
+  OfflineRecognizer: new (config: unknown) => { createStream(hotwords?: string): SherpaStream; decodeAsync(stream: SherpaStream): Promise<void>; getResult(stream: SherpaStream): SherpaResult };
   Vad: new (config: unknown, bufferSizeInSeconds: number) => { acceptWaveform(samples: Float32Array): void; isDetected(): boolean; reset(): void; clear(): void };
 }
 interface SherpaStream { acceptWaveform(input: { samples: Float32Array; sampleRate: number }): void; }
@@ -83,7 +84,7 @@ export function recognizerKind(dir: string): "moonshine" | "parakeet" {
   return existsSync(join(dir, PARAKEET_FILES.joiner)) ? "parakeet" : "moonshine";
 }
 
-function transcriber(recognizer: InstanceType<SherpaModule["OfflineRecognizer"]>): Transcriber {
+function transcriber(recognizer: InstanceType<SherpaModule["OfflineRecognizer"]>): Transcriber & { transcribeTimed(samples: Float32Array, hotwords?: string): Promise<SherpaResult> } {
   let queue: Promise<unknown> = Promise.resolve();
   return {
     transcribe(samples) {
@@ -95,6 +96,12 @@ function transcriber(recognizer: InstanceType<SherpaModule["OfflineRecognizer"]>
       });
       queue = run.catch(() => {});
       return run;
+    },
+    async transcribeTimed(samples, hotwords) {
+      const stream = recognizer.createStream(hotwords);
+      stream.acceptWaveform({ samples, sampleRate: TARGET_SAMPLE_RATE });
+      await recognizer.decodeAsync(stream);
+      return recognizer.getResult(stream);
     },
   };
 }

@@ -1,0 +1,28 @@
+import { afterEach, beforeEach, expect, test } from "bun:test";
+import { app } from "@/app";
+import { __resetJobsForTests } from "@/lib/jobs";
+import { __resetGovernorForTests, __setGovernorTuningForTestsOnly } from "@/lib/governor";
+import { dataDir } from "@/lib/paths";
+import { transcriptionDeps, TRANSCRIPTION_MAX_BYTES, registerTranscriptionJobs, setTranscriptionAvailabilityForTests } from "@/speech/transcriptionJobs";
+import { setSupervisorFactoryForTests, scriptedProcess, resetSupervisorForTests } from "@/lib/supervisor";
+import { sha256Hex } from "@/music/provenance";
+import { existsSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { mediaDeps, resetMediaDepsForTests } from "@/media/jobs";
+
+const GB = 1_073_741_824;
+function wav(seconds: number): Uint8Array { const samples = new Float32Array(seconds * 16_000); const bytes = new Uint8Array(44 + samples.length * 2); const view = new DataView(bytes.buffer); const tag = (p: number, s: string) => [...s].forEach((c, i) => bytes[p + i] = c.charCodeAt(0)); tag(0,"RIFF"); view.setUint32(4, bytes.length-8,true); tag(8,"WAVE"); tag(12,"fmt "); view.setUint32(16,16,true); view.setUint16(20,1,true); view.setUint16(22,1,true); view.setUint32(24,16000,true); view.setUint32(28,32000,true); view.setUint16(32,2,true); view.setUint16(34,16,true); tag(36,"data"); view.setUint32(40,samples.length*2,true); for(let i=0;i<samples.length;i++) view.setInt16(44+i*2,0,true); return bytes; }
+const source = wav(2);
+const request = (payload: Record<string, unknown>) => app.request("/v1/audio/transcriptions/jobs", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({timeout_ms:20_000,...payload}) });
+const base = (bytes = source, extra: Record<string, unknown> = {}) => ({ source:Buffer.from(bytes).toString("base64"), source_sha256:sha256Hex(bytes), ...extra });
+const original = { ...transcriptionDeps };
+beforeEach(() => { __resetJobsForTests(); __resetGovernorForTests(); __setGovernorTuningForTestsOnly({ totalMemoryBytes:128*GB, freeMemoryBytes:90*GB, tier:"p128" }); registerTranscriptionJobs(); setTranscriptionAvailabilityForTests(()=>true); setSupervisorFactoryForTests(async(role)=>scriptedProcess(role)); mediaDeps.toolbox={path:async(tool)=>tool==="ffmpeg"?"/fake/ffmpeg":"/fake/ffprobe",installed:()=>true}; mediaDeps.run=async()=>({code:0,stdout:"",stderr:"",aborted:false} as any); transcriptionDeps.probe=async()=>({has_audio:true,duration_s:2} as any); transcriptionDeps.extract=async(_ffmpeg,_src,out,_signal)=>{await Bun.write(out,source);}; transcriptionDeps.detect=async()=>[{startSample:0,endSample:16_000}]; transcriptionDeps.transcribe=async()=>({text:"Hello there",tokens:["▁Hello","▁there"],timestamps:[0.1,0.6],ys_log_probs:[-0.1,-0.2]}); });
+afterEach(()=>{ Object.assign(transcriptionDeps,original); resetMediaDepsForTests(); setTranscriptionAvailabilityForTests(null); setSupervisorFactoryForTests(null); resetSupervisorForTests(); rmSync(join(dataDir,"tmp","transcriptions"),{recursive:true,force:true}); });
+
+test("scripted engine extracts, times words, reports ignored vocabulary and keeps transcript results in memory", async()=>{ const r=await request(base(source,{vocabulary:["MaiPai"]})); expect(r.status).toBe(200); const data=(await r.json() as any).data; expect(data.language).toBe("en"); expect(data.vocabulary_applied).toBe(false); expect(data.segments[0].words).toEqual([{text:"Hello",start:0.1,end:0.6},{text:"there",start:0.6,end:1}]); });
+test("unsupported language, nonmedia file, bad checksum and oversize input are refused",async()=>{expect((await request(base(source,{language:"fr"}))).status).toBe(422);expect((await request(base(new Uint8Array([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24])))).status).toBe(422);expect((await request({...base(),source_sha256:"0".repeat(64)})).status).toBe(422); const big=new Uint8Array(TRANSCRIPTION_MAX_BYTES+1); expect((await request(base(big))).status).toBe(413);});
+test("range and memory estimate use only the selected range",async()=>{ const estimate=(await import("@/speech/transcriptionJobs")).transcriptionMemory({input:{from_s:10,to_s:20}} as any); expect(estimate.requestedBytes).toBe(2_306_000_000); });
+test("cancel interrupts a transcription while it waits between spans",async()=>{ transcriptionDeps.transcribe=(_base,_samples,_hotwords,signal)=>new Promise((_resolve,reject)=>signal.addEventListener("abort",()=>reject(new Error("Cancelled.")),{once:true})); const r=await request(base(source,{timeout_ms:1})); const {job}=await r.json() as any; const cancelled=await app.request(`/v1/audio/transcriptions/jobs/${job}`,{method:"DELETE"}); expect(cancelled.status).toBe(200); expect((await cancelled.json() as any).state).toBe("cancelled"); });
+test("a gated installed-engine probe is available on the dispatcher host", async()=>{ if(process.env.MAIPAI_REAL_ENGINES!=="1") return; const session=await (await import("@/lib/supervisor")).openRoleSession("stt"); try { const result=await transcriptionDeps.transcribe(session.baseUrl,new Float32Array(16_000),undefined,new AbortController().signal); expect(result.text.length).toBeGreaterThan(0); } finally { session.release(); } });
+
+test("duration and out of file range errors use 413 and 422",async()=>{ transcriptionDeps.probe=async()=>({has_audio:true,duration_s:TRANSCRIPTION_MAX_BYTES as any} as any); let response=await request(base()); expect(response.status).toBe(413); transcriptionDeps.probe=async()=>({has_audio:true,duration_s:2} as any); response=await request(base(source,{from_s:1,to_s:4})); expect(response.status).toBe(422); });

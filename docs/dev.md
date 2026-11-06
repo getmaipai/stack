@@ -1190,6 +1190,12 @@ bytes, minimum free 5.42 GB, worst pressure normal: pass. The pin's
 `measured` block in `modelCatalog.ts` carries the second run's
 footprint, so the components inventory prints it.
 
+## Long-file transcription (CAPTION-01b, 2026-11-06)
+
+`POST /v1/audio/transcriptions/jobs` extracts mono 16 kHz audio with the media toolbox's pinned ffmpeg, probes the source with pinned ffprobe, and calls the already-loaded `stt` worker's Silero span detector and Parakeet token timing endpoint. Transcript strings and word timings remain in a bounded in-memory result map. Cancellation aborts ffmpeg and the worker fetch, and is checked between VAD spans. The worker endpoint stays loopback-only. Admission reserves 2.3 GB plus 0.6 MB per audio second, capped at 8.5 GB, to cover the 1.94 GB Parakeet residency and decoded buffers.
+
+Measured 2026-11-06 on the Mac Studio, installed Parakeet TDT 0.6B v2 int8 plus Silero through the same adapters, on a 57 s English clip made with the system voice: real-time factor 0.059 (a 3 hour file is about 11 minutes), word error rate 2.8 percent against the script, 180 of 180 words timed, times monotonic, process memory 2.2 GB. Word timing accuracy against a hand-timed reference is not yet measured (the system voice gives no ground truth); the first word starts at 0.14 s as heard. If a later check finds a median error above 250 ms, fall back to forced alignment of the finished text with the align worker.
+
 ## The speech roles: `stt` and `tts`, designed (STACK-94a, 2026-09-20)
 
 The design note the backlog item asked for, so 94b (`stt`) and 94c

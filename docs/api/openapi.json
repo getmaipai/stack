@@ -6198,6 +6198,512 @@
         }
       }
     },
+    "/v1/audio/transcriptions/jobs": {
+      "post": {
+        "tags": [
+          "Transcriptions"
+        ],
+        "summary": "Transcribe a long audio or video file",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "maxLength": 350000000
+                  },
+                  "source_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-fA-F]{64}$"
+                  },
+                  "from_s": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "to_s": {
+                    "type": "number",
+                    "minimum": 0,
+                    "exclusiveMinimum": true
+                  },
+                  "language": {
+                    "type": "string"
+                  },
+                  "vocabulary": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100
+                    },
+                    "maxItems": 100
+                  },
+                  "timeout_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true,
+                    "maximum": 1800000
+                  }
+                },
+                "required": [
+                  "source",
+                  "source_sha256"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transcript ready.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "language": {
+                          "type": "string"
+                        },
+                        "segments": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "start": {
+                                "type": "number"
+                              },
+                              "end": {
+                                "type": "number"
+                              },
+                              "text": {
+                                "type": "string"
+                              },
+                              "words": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "text": {
+                                      "type": "string"
+                                    },
+                                    "start": {
+                                      "type": "number"
+                                    },
+                                    "end": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "text",
+                                    "start",
+                                    "end"
+                                  ]
+                                }
+                              },
+                              "confidence": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "start",
+                              "end",
+                              "text",
+                              "words"
+                            ]
+                          }
+                        },
+                        "vocabulary_applied": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "language",
+                        "segments",
+                        "vocabulary_applied"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "job",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Transcription is running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "language": {
+                          "type": "string"
+                        },
+                        "segments": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "start": {
+                                "type": "number"
+                              },
+                              "end": {
+                                "type": "number"
+                              },
+                              "text": {
+                                "type": "string"
+                              },
+                              "words": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "text": {
+                                      "type": "string"
+                                    },
+                                    "start": {
+                                      "type": "number"
+                                    },
+                                    "end": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "text",
+                                    "start",
+                                    "end"
+                                  ]
+                                }
+                              },
+                              "confidence": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "start",
+                              "end",
+                              "text",
+                              "words"
+                            ]
+                          }
+                        },
+                        "vocabulary_applied": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "language",
+                        "segments",
+                        "vocabulary_applied"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "job",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "File exceeds the size or duration limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unsupported file, language or range.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Model, engine or memory unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audio/transcriptions/jobs/{job}": {
+      "get": {
+        "tags": [
+          "Transcriptions"
+        ],
+        "summary": "Transcription job progress and result",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "phase": {
+                      "type": "string"
+                    },
+                    "progress": {
+                      "type": "number"
+                    },
+                    "progress_fraction": {
+                      "type": "number"
+                    },
+                    "stage_label": {
+                      "type": "string"
+                    },
+                    "position": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "stage": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "eta_seconds": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "code": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "language": {
+                          "type": "string"
+                        },
+                        "segments": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "start": {
+                                "type": "number"
+                              },
+                              "end": {
+                                "type": "number"
+                              },
+                              "text": {
+                                "type": "string"
+                              },
+                              "words": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "text": {
+                                      "type": "string"
+                                    },
+                                    "start": {
+                                      "type": "number"
+                                    },
+                                    "end": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "text",
+                                    "start",
+                                    "end"
+                                  ]
+                                }
+                              },
+                              "confidence": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "start",
+                              "end",
+                              "text",
+                              "words"
+                            ]
+                          }
+                        },
+                        "vocabulary_applied": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "language",
+                        "segments",
+                        "vocabulary_applied"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "state",
+                    "phase",
+                    "progress",
+                    "progress_fraction",
+                    "stage_label",
+                    "position",
+                    "stage",
+                    "eta_seconds",
+                    "error",
+                    "code",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such job."
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Transcriptions"
+        ],
+        "summary": "Cancel or delete a transcription job",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cancelled or deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "state"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such job."
+          }
+        }
+      }
+    },
     "/v1/audio/beats": {
       "post": {
         "tags": [
