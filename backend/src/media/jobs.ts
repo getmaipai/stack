@@ -626,7 +626,7 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
         needsVideo(op.op);
         const font = ["/System/Library/Fonts/Supplemental/Arial.ttf", "/System/Library/Fonts/Helvetica.ttc", "/System/Library/Fonts/Supplemental/Verdana.ttf"].find((path) => existsSync(path));
         if (!font) throw fail({ code: "bad_input", message: `${op.op === "title_card" ? "Title cards" : "Credits"} need a system font file. Install a font or choose another computer.` });
-        const duration = op.op === "title_card" ? op.duration_s : op.duration_s ?? Math.max(3, Math.min(120, Math.ceil(((op.lines.length * 2 + (op.title ? 2 : 0)) * (clip.probe.height ?? 720)) / op.speed / 24)));
+        const duration = op.op === "title_card" ? op.duration_s : op.duration_s ?? Math.max(3, Math.min(120, Math.ceil((((op.lines.length * 2 + (op.title ? 2 : 0)) / 11 + 1) * (clip.probe.height ?? 720)) / op.speed)));
         expected = clip.probe.duration_s ?? 0;
         const cardPath = join(work, `card${i}.mp4`);
         const cardArgs = op.op === "title_card" ? titleCardArgs(ffmpeg, clip, cardPath, op, font) : creditsArgs(ffmpeg, clip, cardPath, op, font);
@@ -638,17 +638,10 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
         const clips = op.op === "title_card" && op.place === "start" ? [card, clip] : [clip, card];
         expected += duration;
         tooLong("The film", expected);
-        if (last) {
-          const list = join(work, `list${i}.txt`);
-          writeFileSync(list, clips.map((member) => concatListLine(member.path)).join("\n") + "\n");
-          args = concatEncodeArgs(ffmpeg, clips, target); action = "encode";
-        } else {
-        if (concatCompatible(clips)) {
-          const list = join(work, `list${i}.txt`);
-          writeFileSync(list, clips.map((member) => concatListLine(member.path)).join("\n") + "\n");
-          args = concatCopyArgs(ffmpeg, list, target); action = "encode";
-        } else args = concatEncodeArgs(ffmpeg, clips, target);
-        }
+        // Always re-encoded: a stream-copy join of a card onto a clip left timestamps that a later audio overlay stretched (video 83 s, audio 42 s).
+        const list = join(work, `list${i}.txt`);
+        writeFileSync(list, clips.map((member) => concatListLine(member.path)).join("\n") + "\n");
+        args = concatEncodeArgs(ffmpeg, clips, target); action = "encode";
       } else if (op.op === "fade") {
         if (op.in_s + op.out_s > (clip.probe.duration_s ?? 0)) throw fail({ code: "bad_input", message: `Step ${i + 1} (fade) fades for ${op.in_s + op.out_s} s in all, longer than the ${Math.round((clip.probe.duration_s ?? 0) * 100) / 100} s clip.` });
         args = fadeArgs(ffmpeg, clip, target, op);

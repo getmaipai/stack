@@ -15,7 +15,7 @@ const findTool = (name: string) => { const configured = process.env[name === "ff
 
 describe("media.edit film operation builders", () => {
   test("all transition kinds use xfade and bad kinds are refused", () => {
-    for (const kind of TRANSITION_KINDS) expect(transitionArgs("ffmpeg", [clip, clip], kind, 0.5, "/o.mp4").join(" ")).toContain(`xfade=transition=${kind}:duration=0.5`);
+    for (const kind of TRANSITION_KINDS) expect(transitionArgs("ffmpeg", [clip, clip], kind, 0.5, "/o.mp4").join(" ")).toContain(`xfade=transition=${kind === "dissolve" ? "fade" : kind === "speckle" ? "dissolve" : kind}:duration=0.5`); // dissolve is the smooth blend, speckle is ffmpeg's grainy dissolve
     expect(crossfadeArgs("ffmpeg", [clip, clip], 0.5, "/o.mp4").join(" ")).toContain("xfade=transition=fade");
     expect(editInputProblem({ ...base, ops: [{ op: "transition", kind: "inject", duration_s: 0.5 }] })).toMatch(/fade.*dissolve.*pixelize/);
   });
@@ -65,3 +65,13 @@ real("real ffmpeg transition, title card and rolling credits produce the expecte
     expect(finalProbe.has_audio).toBe(true); expect(finalProbe.has_video).toBe(true);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }, 120_000);
+
+// A title or credits card joined to a clip is always re-encoded: stream-copying it left a timestamp gap that a later audio overlay stretched into a film twice as long (video 83 s, audio 42 s).
+import { readFileSync as readSrc } from "node:fs";
+test("title and credits cards are always joined by re-encoding, never by stream copy", () => {
+  const source = readSrc(new URL("../src/media/jobs.ts", import.meta.url), "utf8");
+  const start = source.indexOf('op.op === "title_card" || op.op === "credits"');
+  const end = source.indexOf('op.op === "fade"', start);
+  expect(start).toBeGreaterThan(0);
+  expect(source.slice(start, end)).not.toContain("concatCopyArgs");
+});

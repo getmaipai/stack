@@ -6,7 +6,9 @@
 import { z } from "zod";
 import type { ProbeResult } from "./probe";
 
-export const TRANSITION_KINDS = ["fade", "dissolve", "wipeleft", "wiperight", "wipeup", "wipedown", "slideleft", "slideright", "slideup", "slidedown", "circleopen", "circleclose", "radial", "smoothleft", "smoothright", "fadeblack", "fadewhite", "zoomin", "pixelize"] as const;
+/** `dissolve` is the smooth blend people expect (ffmpeg calls that `fade`); ffmpeg's own `dissolve` is a grainy speckle, kept as `speckle`. */
+const XFADE_NAME: Record<string, string> = { dissolve: "fade", speckle: "dissolve" };
+export const TRANSITION_KINDS = ["fade", "dissolve", "speckle", "wipeleft", "wiperight", "wipeup", "wipedown", "slideleft", "slideright", "slideup", "slidedown", "circleopen", "circleclose", "radial", "smoothleft", "smoothright", "fadeblack", "fadewhite", "zoomin", "pixelize"] as const;
 export const FILM_LOOK_PRESETS = ["70s_color", "noir", "teal_orange", "bleach_bypass", "technicolor", "faded_vintage", "cool_thriller"] as const;
 export const LETTERBOX_RATIOS = ["2.39:1", "2:1", "1.85:1", "1.33:1"] as const;
 export const EDIT_OPS = ["trim", "concat", "mute", "frame", "audio_overlay", "fade", "crossfade", "gain", "reframe", "grade", "film_look", "letterbox", "speed", "captions", "transition", "title_card", "credits"] as const;
@@ -264,7 +266,7 @@ export function transitionArgs(ffmpeg: string, clips: Clip[], kind: typeof TRANS
   for (let k = 1; k < clips.length; k++) {
     const offset = sum - d; // sum of the previous lengths minus k*d, accumulated
     const last = k === clips.length - 1;
-    parts.push(`${video}[v${k}]xfade=transition=${kind}:duration=${num(d)}:offset=${num(offset)}[${last ? "v" : `x${k}`}]`);
+    parts.push(`${video}[v${k}]xfade=transition=${XFADE_NAME[kind] ?? kind}:duration=${num(d)}:offset=${num(offset)}[${last ? "v" : `x${k}`}]`);
     video = `[x${k}]`;
     if (anyAudio) { parts.push(`${audio}[a${k}]acrossfade=d=${num(d)}[${last ? "a" : `y${k}`}]`); audio = `[y${k}]`; }
     sum = offset + (clips[k]!.probe.duration_s ?? 0);
@@ -400,18 +402,18 @@ const rgb = (colour: string): string => colour === "black" ? "0x000000" : colour
 export function titleCardArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "title_card" }>, font: string): string[] {
   const { width, height, rate } = targetDimensions(clip);
   const y = op.position === "top" ? "h*0.08" : op.position === "lower_third" ? "h*0.68" : "(h-text_h)/2";
-  const textFilter = `drawtext=fontfile='${filterEscape(font)}':text='${filterEscape(op.text)}':fontsize=h/12:fontcolor=${rgb(op.text_color)}:x=(w-text_w)/2:y=${y}`;
-  const subtitle = op.subtitle ? `,drawtext=fontfile='${filterEscape(font)}':text='${filterEscape(op.subtitle)}':fontsize=h/22:fontcolor=${rgb(op.text_color)}:x=(w-text_w)/2:y=${op.position === "top" ? "h*0.2" : op.position === "lower_third" ? "h*0.78" : "(h-text_h)/2+h*0.09"}` : "";
+  const textFilter = `drawtext=fontfile='${filterEscape(font)}':text='${filterEscape(op.text)}':fontsize=h/9:fontcolor=${rgb(op.text_color)}:x=(w-text_w)/2:y=${y}`;
+  const subtitle = op.subtitle ? `,drawtext=fontfile='${filterEscape(font)}':text='${filterEscape(op.subtitle)}':fontsize=h/16:fontcolor=${rgb(op.text_color)}:x=(w-text_w)/2:y=${op.position === "top" ? "h*0.2" : op.position === "lower_third" ? "h*0.78" : "(h-text_h)/2+h*0.09"}` : "";
   const fades = `${op.fade_in_s ? `,fade=t=in:st=0:d=${num(op.fade_in_s)}` : ""}${op.fade_out_s ? `,fade=t=out:st=${num(op.duration_s - op.fade_out_s)}:d=${num(op.fade_out_s)}` : ""}`;
   const args = [...BASE(ffmpeg), "-f", "lavfi", "-i", `color=c=${rgb(op.background)}:s=${width}x${height}:r=${rate}:d=${num(op.duration_s)}`, "-f", "lavfi", "-i", `anullsrc=r=${targetDimensions(clip).sampleRate}:cl=stereo`, "-filter_complex", `[0:v]format=yuv420p,setsar=1,${textFilter}${subtitle}${fades}[v];[1:a]atrim=0:${num(op.duration_s)},asetpts=PTS-STARTPTS[a]`, "-map", "[v]", "-map", "[a]", "-t", num(op.duration_s), "-shortest", "-r", rate, ...ENCODE_V, ...ENCODE_A];
   return [...args, ...FASTSTART, out];
 }
 export function creditsArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "credits" }>, font: string): string[] {
   const { width, height, rate, sampleRate } = targetDimensions(clip);
-  const duration = op.duration_s ?? Math.max(3, Math.min(120, Math.ceil(((op.lines.length * 2 + (op.title ? 2 : 0)) * height) / op.speed / 24)));
-  const entries = [...(op.title ? [{ text: op.title, size: "h/14", y: `h - t*${num(op.speed)}` }] : []), ...op.lines.flatMap((line, i) => [
-    ...(line.role ? [{ text: line.role, size: "h/30", y: `h - t*${num(op.speed)} + ${i * 2 + (op.title ? 2 : 0)}*h/18` }] : []),
-    { text: line.name, size: "h/22", y: `h - t*${num(op.speed)} + ${i * 2 + (op.title ? 2 : 0) + (line.role ? 1 : 0)}*h/18` },
+  const duration = op.duration_s ?? Math.max(3, Math.min(120, Math.ceil((((op.lines.length * 2 + (op.title ? 2 : 0)) / 11 + 1) * height) / op.speed)));
+  const entries = [...(op.title ? [{ text: op.title, size: "h/11", y: `h - t*${num(op.speed)}` }] : []), ...op.lines.flatMap((line, i) => [
+    ...(line.role ? [{ text: line.role, size: "h/24", y: `h - t*${num(op.speed)} + ${i * 2 + (op.title ? 2 : 0)}*h/11` }] : []),
+    { text: line.name, size: "h/15", y: `h - t*${num(op.speed)} + ${i * 2 + (op.title ? 2 : 0) + (line.role ? 1 : 0)}*h/11` },
   ])];
   const filters = entries.map((entry) => `drawtext=fontfile='${filterEscape(font)}':text='${filterEscape(entry.text)}':fontsize=${entry.size}:fontcolor=${rgb(op.text_color)}:x=(w-text_w)/2:y=${entry.y}`).join(",");
   const args = [...BASE(ffmpeg), "-f", "lavfi", "-i", `color=c=${rgb(op.background)}:s=${width}x${height}:r=${rate}:d=${num(duration)}`, "-f", "lavfi", "-i", `anullsrc=r=${sampleRate}:cl=stereo`, "-filter_complex", `[0:v]format=yuv420p,setsar=1,${filters}[v];[1:a]atrim=0:${num(duration)},asetpts=PTS-STARTPTS[a]`, "-map", "[v]", "-map", "[a]", "-t", num(duration), "-shortest", "-r", rate, ...ENCODE_V, ...ENCODE_A];
