@@ -355,7 +355,7 @@ export const MANAGED_RUNTIMES: ManagedRuntime[] = [
   { name: "beats", version: "1.0.0", roles: ["music"], platforms: "macOS 14 or later on arm64 (librosa 1.0.0, soundfile and bundled ffmpeg; beat, downbeat and section analysis without model files)" },
   { name: "align", version: "1.0.0", roles: ["music"], platforms: "macOS 14 or later on arm64 (torch and torchaudio 2.10.0 with the pinned MMS forced-alignment model; cold-start lyric timing)" },
   { name: "stems", version: "4.1.0", roles: ["music"], platforms: "macOS 14 or later on arm64 (Demucs 4.1.0 and optional pinned htdemucs, htdemucs_ft and htdemucs_6s; cold-start stem splitting)" },
-  { name: "voice-convert", version: "1.0.1", roles: ["music"], platforms: "macOS 14 or later on arm64 (SoulX-Singer SVC, PyTorch MPS, pinned Apache-2.0 weights; singing voice conversion)" },
+  { name: "voice-convert", version: "1.0.2", roles: ["music"], platforms: "macOS 14 or later on arm64 (SoulX-Singer SVC, PyTorch MPS, pinned Apache-2.0 weights; singing voice conversion)" },
   { name: "recorded-speech", version: "1.0.0", roles: ["tts"], platforms: "macOS 14 or later on arm64 (separate mlx-audio 0.6.4 environment and pinned Fish Audio Drama 3 4-bit model; recorded speech only)" },
   { name: "pocket-tts", version: "3.1.0", roles: ["tts"], platforms: "macOS 14 or later on arm64 (torch 2.13 ships macOS 14 wheels only; a hashed requirements file per platform, the Linux files land with the first Linux tts run)" },
   { name: "mlx-audio", version: "0.5.9", roles: ["tts"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the Stack's second voice engine, Chatterbox Turbo, VOICE-STUDIO-01; no Linux file)" },

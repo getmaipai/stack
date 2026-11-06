@@ -89,3 +89,8 @@ for (const [name, worker, service, iface] of keyChecks) {
     expect(read.filter((key) => !sent.has(key))).toEqual([]);
   });
 }
+
+test("the voice conversion environment pins librosa, which the SoulX mel transform imports", () => {
+  const requirements = readFileSync(join(import.meta.dir, "../src/voiceConvert/voice-convert.darwin-arm64.requirements.txt"), "utf8");
+  for (const name of ["librosa", "scikit-learn", "soxr", "joblib", "audioread", "lazy-loader", "pooch", "decorator", "msgpack", "platformdirs", "threadpoolctl"]) expect(requirements).toMatch(new RegExp(`^${name}==`, "m"));
+});

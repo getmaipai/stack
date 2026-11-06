@@ -1,5 +1,5 @@
 """Offline JSON-lines worker for SoulX-Singer SVC."""
-import json, os, select, subprocess, sys, time, wave
+import json, os, select, subprocess, sys, time, traceback, wave
 from pathlib import Path
 
 IDLE_SECONDS = 60
@@ -81,6 +81,7 @@ def main():
             req = json.loads(line); emit({"id":req["id"],"event":"stage","stage":"loading","fraction":.05})
             result=run(req); emit({"id":req["id"],"ok":True,**result})
         except Exception:
+            traceback.print_exc(file=sys.stderr)
             emit({"id":req.get("id",""),"ok":False,"error":"The voice conversion failed. Check the audio and try again."})
         last=time.monotonic()
 
