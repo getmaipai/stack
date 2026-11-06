@@ -14,7 +14,7 @@ import { probeFile, type ProbeResult } from "./probe";
 import { idleArgv, spawnRunner, type Runner, type RunResult } from "./run";
 import { defaultToolbox, MediaToolError, type MediaToolbox } from "./tools";
 import { mkdirSync } from "node:fs";
-import { concatCompatible, concatCopyArgs, concatEncodeArgs, concatListLine, crossfadeArgs, transitionArgs, crossfadeMinLength, concatMembers, EditInput, editInputProblem, fadeArgs, frameArgs, gainArgs, hasKeyframeAt, keyframeArgs, MAX_EDIT_SECONDS, muteArgs, overlayArgs, trimArgs, reframeArgs, gradeArgs, speedArgs, captionsArgs, titleCardArgs, creditsArgs, type Clip } from "./editOps";
+import { concatCompatible, concatCopyArgs, concatEncodeArgs, concatListLine, crossfadeArgs, transitionArgs, crossfadeMinLength, concatMembers, EditInput, editInputProblem, fadeArgs, frameArgs, gainArgs, hasKeyframeAt, keyframeArgs, MAX_EDIT_SECONDS, muteArgs, overlayArgs, trimArgs, reframeArgs, gradeArgs, filmLookArgs, letterboxArgs, speedArgs, captionsArgs, titleCardArgs, creditsArgs, type Clip } from "./editOps";
 import { COLOUR_MATCH_STRENGTH, COMPANION_CLIP_FPS, COMPANION_CLIP_SIZE, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionCrop, companionMetrics, companionReasons, crossfadeLoop, downscaleRgba4, frameDifference, keyOutRgba, selectCompanionWindow } from "./companionClip";
 
 export const MEDIA_KINDS = ["media.probe", "media.fetch", "media.transcode", "media.preview", "media.companion_clip", "media.edit", "media.setup"] as const;
@@ -609,6 +609,12 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
         needsVideo("reframe"); args = reframeArgs(ffmpeg, clip, target, op);
       } else if (op.op === "grade") {
         needsVideo("grade"); args = gradeArgs(ffmpeg, clip, target, op);
+      } else if (op.op === "film_look") {
+        needsVideo("film_look"); args = filmLookArgs(ffmpeg, clip, target, op);
+      } else if (op.op === "letterbox") {
+        needsVideo("letterbox");
+        try { args = letterboxArgs(ffmpeg, clip, target, op); }
+        catch (error) { throw fail({ code: "bad_input", message: `Step ${i + 1} (letterbox): ${error instanceof Error ? error.message : String(error)}` }); }
       } else if (op.op === "speed") {
         args = speedArgs(ffmpeg, clip, target, op); expected = (clip.probe.duration_s ?? 0) / op.factor;
       } else if (op.op === "captions") {

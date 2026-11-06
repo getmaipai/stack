@@ -7,7 +7,9 @@ import { z } from "zod";
 import type { ProbeResult } from "./probe";
 
 export const TRANSITION_KINDS = ["fade", "dissolve", "wipeleft", "wiperight", "wipeup", "wipedown", "slideleft", "slideright", "slideup", "slidedown", "circleopen", "circleclose", "radial", "smoothleft", "smoothright", "fadeblack", "fadewhite", "zoomin", "pixelize"] as const;
-export const EDIT_OPS = ["trim", "concat", "mute", "frame", "audio_overlay", "fade", "crossfade", "gain", "reframe", "grade", "speed", "captions", "transition", "title_card", "credits"] as const;
+export const FILM_LOOK_PRESETS = ["70s_color", "noir", "teal_orange", "bleach_bypass", "technicolor", "faded_vintage", "cool_thriller"] as const;
+export const LETTERBOX_RATIOS = ["2.39:1", "2:1", "1.85:1", "1.33:1"] as const;
+export const EDIT_OPS = ["trim", "concat", "mute", "frame", "audio_overlay", "fade", "crossfade", "gain", "reframe", "grade", "film_look", "letterbox", "speed", "captions", "transition", "title_card", "credits"] as const;
 export const MIN_CROSSFADE_S = 0.3;
 export const MAX_CROSSFADE_S = 1.0;
 export const MAX_CROSSFADE_CLIPS = 6;
@@ -49,6 +51,8 @@ const FadeOp = z.object({ op: z.literal("fade"), in_s: Seconds.default(0), out_s
 const ReframeOp = z.object({ op: z.literal("reframe"), aspect: z.enum(["9:16", "1:1", "16:9", "4:5"]), fill: z.enum(["crop", "blur"]) }).strict();
 const GradeOp = z.object({ op: z.literal("grade"), brightness: z.number().min(-1).max(1).optional(), contrast: z.number().min(-1).max(1).optional(), saturation: z.number().min(-1).max(1).optional(), warmth: z.number().min(-1).max(1).optional(), grain: z.number().min(0).max(1).optional(), vignette: z.number().min(0).max(1).optional() }).strict()
   .refine((op) => Object.entries(op).some(([key, value]) => key !== "op" && value !== undefined && value !== 0), { path: ["brightness"], message: "needs at least one value above or below 0" });
+const FilmLookOp = z.object({ op: z.literal("film_look"), preset: z.enum(FILM_LOOK_PRESETS), strength: z.number().min(0.2).max(1).default(1) }).strict();
+const LetterboxOp = z.object({ op: z.literal("letterbox"), ratio: z.enum(LETTERBOX_RATIOS) }).strict();
 const SpeedOp = z.object({ op: z.literal("speed"), factor: z.number().min(0.25).max(4) }).strict();
 // Speed ramps (from_factor, to_factor, at_s, over_s) are out of scope for this slice.
 const CaptionsOp = z.object({ op: z.literal("captions"), lines: z.array(z.object({ from_s: Seconds, to_s: z.number().gt(0).max(MAX_EDIT_SECONDS), text: z.string().min(1).max(120) }).strict()).min(1).max(40), position: z.enum(["bottom", "middle", "top"]) }).strict()
@@ -65,7 +69,7 @@ const Colour = z.union([z.enum(["black", "white"]), z.string().regex(/^#[0-9A-Fa
 const TitleCardOp = z.object({ op: z.literal("title_card"), text: z.string().min(1).max(120), subtitle: z.string().max(160).optional(), duration_s: z.number().min(1).max(10), position: z.enum(["center", "lower_third", "top"]), background: Colour, text_color: Colour, fade_in_s: z.number().min(0).max(10).optional(), fade_out_s: z.number().min(0).max(10).optional(), place: z.enum(["start", "end"]) }).strict().refine((op) => (op.fade_in_s ?? 0) + (op.fade_out_s ?? 0) <= op.duration_s, { path: ["fade_out_s"], message: "combined fades must fit within duration_s" });
 const CreditsOp = z.object({ op: z.literal("credits"), lines: z.array(z.object({ role: z.string().max(40).optional(), name: z.string().min(1).max(60) }).strict()).min(1).max(60), duration_s: z.number().min(3).max(120).optional(), speed: z.number().min(1).max(1000).default(60), background: Colour, text_color: Colour, title: z.string().max(120).optional() }).strict();
 
-export const EditOp = z.union([TrimOp, ConcatOp, MuteOp, FrameOp, AudioOverlayOp, FadeOp, CrossfadeOp, GainOp, ReframeOp, GradeOp, SpeedOp, CaptionsOp, TransitionOp, TitleCardOp, CreditsOp]);
+export const EditOp = z.union([TrimOp, ConcatOp, MuteOp, FrameOp, AudioOverlayOp, FadeOp, CrossfadeOp, GainOp, ReframeOp, GradeOp, FilmLookOp, LetterboxOp, SpeedOp, CaptionsOp, TransitionOp, TitleCardOp, CreditsOp]);
 export type EditOp = z.infer<typeof EditOp>;
 
 export const EditInput = z.object({
@@ -91,6 +95,14 @@ export function editInputProblem(input: unknown): string | null {
       if (name === "transition") {
         const kind = (raw.ops[i] as { kind?: unknown } | null)?.kind;
         if (typeof kind !== "string" || !(TRANSITION_KINDS as readonly string[]).includes(kind)) return `Step ${i + 1} asks for transition ${JSON.stringify(kind ?? null)}. The transitions it knows are ${TRANSITION_KINDS.join(", ")}.`;
+      }
+      if (name === "film_look") {
+        const preset = (raw.ops[i] as { preset?: unknown } | null)?.preset;
+        if (typeof preset !== "string" || !(FILM_LOOK_PRESETS as readonly string[]).includes(preset)) return `Step ${i + 1} asks for film look ${JSON.stringify(preset ?? null)}. The film looks it knows are ${FILM_LOOK_PRESETS.join(", ")}.`;
+      }
+      if (name === "letterbox") {
+        const ratio = (raw.ops[i] as { ratio?: unknown } | null)?.ratio;
+        if (typeof ratio !== "string" || !(LETTERBOX_RATIOS as readonly string[]).includes(ratio)) return `Step ${i + 1} asks for letterbox ratio ${JSON.stringify(ratio ?? null)}. The ratios it knows are ${LETTERBOX_RATIOS.join(", ")}.`;
       }
     }
   }
@@ -333,6 +345,33 @@ export function gradeArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<E
   if (clip.probe.has_video) args.push("-vf", filters.join(","), ...ENCODE_V);
   if (clip.probe.has_audio) args.push("-c:a", "copy");
   return [...args, ...FASTSTART, out];
+}
+const filmFilters: Record<(typeof FILM_LOOK_PRESETS)[number], string> = {
+  "70s_color": "eq=contrast=1.08:saturation=0.82:gamma=1.08,colorbalance=rs=0.05:gs=0.05:bs=-0.08:rh=0.09:gh=0.07:bh=-0.11,noise=c0s=12:c0f=t,vignette=angle=0.62",
+  noir: "hue=s=0,eq=contrast=1.65:brightness=-0.035:gamma=0.78,noise=c0s=26:c0f=t,vignette=angle=0.9",
+  teal_orange: "eq=saturation=1.16,colorbalance=rs=0.04:gs=-0.025:bs=-0.09:rh=0.12:gh=0.015:bh=-0.1,noise=c0s=5:c0f=t",
+  bleach_bypass: "eq=saturation=0.6:contrast=1.28,colorbalance=rs=-0.015:gs=0.025:bs=0.02,noise=c0s=8:c0f=t",
+  technicolor: "eq=saturation=1.32:brightness=-0.02:contrast=1.1,colorchannelmixer=rr=1.05:rg=0.01:gg=1.0:gb=0.0:bb=1.0",
+  faded_vintage: "curves=master='0/0.08 0.25/0.29 0.75/0.76 1/1',eq=contrast=0.82:saturation=0.72,colorbalance=rs=0.045:gs=0.025:bs=-0.07,noise=c0s=5:c0f=t",
+  cool_thriller: "eq=saturation=0.72:contrast=1.2:brightness=-0.015,colorbalance=rs=-0.04:gs=-0.015:bs=0.09:rh=-0.035:gh=0.005:bh=0.06,vignette=angle=0.72,noise=c0s=5:c0f=t",
+};
+export function filmLookArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "film_look" }>): string[] {
+  const graph = `[0:v:0]split=2[original][source];[source]${filmFilters[op.preset]}[graded0]`;
+  const fixedGraph = op.preset === "70s_color"
+    ? `[0:v:0]split=2[original][source];[source]${filmFilters[op.preset]},split=2[base][hot];[hot]gblur=sigma=12[soft];[base][soft]blend=c0_mode=screen:c0_opacity=${op.preset === "70s_color" ? "0.16" : "0.04"}:c1_opacity=0:c2_opacity=0[graded];[original][graded]blend=all_expr='A*(1-${num(op.strength)})+B*${num(op.strength)}'[v]`
+    : `${graph};[original][graded0]blend=all_expr='A*(1-${num(op.strength)})+B*${num(op.strength)}'[v]`;
+  return [...BASE(ffmpeg), "-i", clip.path, "-filter_complex", fixedGraph, "-map", "[v]", "-map", "0:a:0?", "-sn", "-dn", ...ENCODE_V, ...(clip.probe.has_audio ? ["-c:a", "copy"] : []), ...FASTSTART, out];
+}
+function ratioValue(ratio: (typeof LETTERBOX_RATIOS)[number]): number { const [w, h] = ratio.split(":").map(Number); return w! / h!; }
+export function letterboxArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "letterbox" }>): string[] {
+  const width = Math.max(2, Math.round((clip.probe.width ?? 1280) / 2) * 2);
+  const height = Math.max(2, Math.round((clip.probe.height ?? 720) / 2) * 2);
+  const frameRatio = width / height; const ratio = ratioValue(op.ratio);
+  if (Math.abs(frameRatio - ratio) < 0.005 || (ratio > 1.33 && frameRatio >= ratio) || (ratio <= 1.33 && frameRatio <= ratio)) throw new Error(`The frame already matches ${op.ratio} or has no area to add those bars to. Choose a ratio that changes the picture.`);
+  const cropW = ratio > frameRatio ? width : Math.max(2, Math.floor(height * ratio / 2) * 2);
+  const cropH = ratio > frameRatio ? Math.max(2, Math.floor(width / ratio / 2) * 2) : height;
+  const graph = `[0:v:0]crop=${cropW}:${cropH}:(iw-${cropW})/2:(ih-${cropH})/2,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1[v]`;
+  return [...BASE(ffmpeg), "-i", clip.path, "-filter_complex", graph, "-map", "[v]", "-map", "0:a:0?", "-sn", "-dn", ...ENCODE_V, ...(clip.probe.has_audio ? ["-c:a", "copy"] : []), ...FASTSTART, out];
 }
 export function speedArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "speed" }>): string[] {
   const video = `setpts=PTS/${num(op.factor)}`; const audio: string[] = [];
