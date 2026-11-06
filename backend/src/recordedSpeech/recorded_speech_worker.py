@@ -47,7 +47,7 @@ def run(request):
     if not np.isfinite(audio).all() or not np.any(np.abs(audio) > 1e-6):
         raise RuntimeError("Speech rendering produced silent audio.")
     emit({"id": request["id"], "event": "stage", "stage": "saving", "fraction": .9})
-    wav_path = Path(request["output_wav"])
+    wav_path = Path(request["outputWav"])
     pcm = (np.clip(audio, -1.0, 1.0) * 32767).astype("<i2")
     with wave.open(str(wav_path), "wb") as stream:
         stream.setnchannels(1)

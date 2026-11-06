@@ -15,9 +15,9 @@ def run(request):
     from omegaconf import OmegaConf
     from torchaudio import functional as AF
 
-    started = time.time(); work = Path(request["work_dir"]); work.mkdir(parents=True, exist_ok=True)
+    started = time.time(); work = Path(request["workDir"]); work.mkdir(parents=True, exist_ok=True)
     source_wav, prompt_wav = work / "source.wav", work / "reference.wav"
-    output_wav = Path(request["output_wav"])
+    output_wav = Path(request["outputWav"])
     def decode(path, target):
         subprocess.run(["/usr/bin/afconvert", "-f", "WAVE", "-d", "LEI16@44100", str(path), str(target)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     # WAV inputs can be length-checked without decoding; other containers are probed by afinfo.

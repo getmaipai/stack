@@ -73,3 +73,18 @@ test("recorded speech worker renders without a reference clip (the default voice
   // 2026-11-05 live: a request with no reference raised NameError on ref_audio; Fish speaks fine with ref_audio=None.
   expect(source).toContain("if not refs:\n        ref_audio, ref_text = None, None");
 });
+
+for (const [name, worker, service, iface] of [
+  ["recorded speech", "recordedSpeech/recorded_speech_worker.py", "recordedSpeech/recordedSpeech.ts", "RecordedSpeechRequest"],
+  ["voice conversion", "voiceConvert/voice_convert_worker.py", "voiceConvert/voiceConvert.ts", "VoiceConvertRequest"],
+]) {
+  test(`the ${name} worker reads only the request keys the Stack sends`, () => {
+    const py = readFileSync(join(import.meta.dir, "../src", worker), "utf8");
+    const ts = readFileSync(join(import.meta.dir, "../src", service), "utf8");
+    const body = ts.match(new RegExp(`export interface ${iface} \\{([^}]*)\\}`))?.[1] ?? "";
+    const sent = new Set([...body.matchAll(/(\w+)\s*\??:/g)].map((m) => m[1]));
+    const read = [...py.matchAll(/request\["(\w+)"\]/g)].map((m) => m[1]);
+    expect(read.length).toBeGreaterThan(5);
+    expect(read.filter((key) => !sent.has(key))).toEqual([]);
+  });
+}
