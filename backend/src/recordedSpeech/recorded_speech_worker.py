@@ -13,7 +13,6 @@ def emit(value):
 def run(request):
     global _model, _model_path
     import numpy as np
-    import soundfile as sf
     import mlx.core as mx
     from mlx_audio.tts.utils import load_model
 
@@ -47,7 +46,12 @@ def run(request):
         raise RuntimeError("Speech rendering produced silent audio.")
     emit({"id": request["id"], "event": "stage", "stage": "saving", "fraction": .9})
     wav_path = Path(request["output_wav"])
-    sf.write(wav_path, audio, int(model.sample_rate), subtype="PCM_16")
+    pcm = (np.clip(audio, -1.0, 1.0) * 32767).astype("<i2")
+    with wave.open(str(wav_path), "wb") as stream:
+        stream.setnchannels(1)
+        stream.setsampwidth(2)
+        stream.setframerate(int(model.sample_rate))
+        stream.writeframes(pcm.tobytes())
     if request["format"] == "m4a":
         subprocess.run(["/usr/bin/afconvert", "-f", "m4af", "-d", "aac", "-b", "192000", str(wav_path), request["output"]], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     else:
@@ -68,6 +72,8 @@ def main():
             result = run(request)
             emit({"id": request["id"], "ok": True, **result})
         except Exception:
+            import traceback
+            traceback.print_exc(file=sys.stderr)
             emit({"id": request.get("id"), "ok": False, "error": "Recorded speech could not be rendered. Check the clip and try again."})
 
 if __name__ == "__main__":
