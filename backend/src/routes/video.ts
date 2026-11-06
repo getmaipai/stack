@@ -15,7 +15,7 @@ import type { AppEnv } from "@/types";
 import { dataDir } from "@/lib/paths";
 import { installedEnginePin } from "@/lib/engineCatalog";
 import { listModels } from "@/lib/modelStore";
-import { videoDetailedInstallModels, videoInstallModels, videoLtx25InstallModels, videoLtx25MaxInstallModels } from "@/lib/installPlan";
+import { videoInstallModels, videoLtx25InstallModels, videoLtx25MaxInstallModels } from "@/lib/installPlan";
 import { modelView } from "@/routes/models";
 import { LORA_INSTALL_SITES, startVideoLoraInstall } from "@/video/loraInstall";
 import { importLora, listLoras, LORA_BASE_MODEL, LORA_BASE_MODELS, LORA_CLASSES, LoraError, MAX_LORA_BYTES, MAX_LORAS_PER_JOB, MAX_LORA_STRENGTH, removeLora, updateLora, isLoraId } from "@/video/loras";
@@ -30,18 +30,18 @@ const PlanModelSchema = z.object({
   engine: z.string().optional(), archive: z.boolean().optional(), hub_file: z.string().optional(), component: z.string().optional(), starter: z.boolean(), installed: z.boolean(),
 });
 const LoraSchema = z.object({
-  id: z.string(), name: z.string(), file: z.string(), sha256: z.string(), bytes: z.number().int(), rank: z.number().int(), modules: z.number().int(), base_model: z.enum(LORA_BASE_MODELS).openapi({ description: "The video model the LoRA was made for, read from its tensors: wan2.2-ti2v-5b is Quick, ltx-2.3 is Detailed. A clip applies only LoRAs of its own model." }),
+  id: z.string(), name: z.string(), file: z.string(), sha256: z.string(), bytes: z.number().int(), rank: z.number().int(), modules: z.number().int(), base_model: z.enum(LORA_BASE_MODELS).openapi({ description: "The video model the LoRA was made for. `ltx-2.3` is retained for old records, but new styles for that retired model are refused." }),
   licence: z.string(), licence_class: z.enum(["free", "acknowledged"]), source_url: z.string().nullable(),
   classification: z.enum(LORA_CLASSES), classification_note: z.string().nullable(), strength_default: z.number(), trigger_words: z.array(z.string()), added_by: z.string().nullable(), added_at: z.string(),
 });
 const ErrorBody = z.object({ error: z.string(), code: z.string().optional() });
 const QualitySchema = z.object({
-  id: z.string(), installed: z.boolean(), available: z.boolean(), audio: z.boolean(), image_to_video: z.boolean().openapi({ description: "A picture can start a clip of this model (Quick, Detailed, and LTX-2.5 Standard, Boost and Max)." }),
+  id: z.string(), installed: z.boolean(), available: z.boolean(), audio: z.boolean(), image_to_video: z.boolean().openapi({ description: "A picture can start a clip of this model." }),
   end_image: z.boolean().openapi({ description: "A second picture can end the clip (`end_image` on the generation request; start and end together). True only on LTX-2.5 Standard, Boost and Max." }),
   limits: z.record(z.string(), z.union([z.number(), z.string()])),
   memory: z.object({ fits: z.boolean(), reason: z.string().nullable(), peak_gb: z.number() }),
   install: z.object({ models: z.array(PlanModelSchema), remaining_bytes: z.number().int(), download_bytes: z.number().int() }),
-  licence: z.object({ id: z.string(), name: z.string(), url: z.string() }).nullable().openapi({ description: "Detailed only: the model licence. Home shows its summary (GET /stack/v1/components, the component's `licence`) and an admin accepts it once before this installs." }),
+  licence: z.object({ id: z.string(), name: z.string(), url: z.string() }).nullable().openapi({ description: "The model maker's licence. Home shows its summary and an admin accepts it before install." }),
   lora_base_model: z.string(),
 });
 const Ltx25LorasSchema = z.object({
@@ -83,7 +83,7 @@ const StatusSchema = z.object({
   worker: z.object({ alive: z.boolean(), idle_exit_seconds: z.number().int() }),
   environment: z.object({ engine: z.string(), version: z.string(), source: z.boolean(), ready: z.boolean() }),
   install: z.object({ models: z.array(PlanModelSchema), remaining_bytes: z.number().int() }).openapi({ description: "The pinned models to pull (POST /stack/v1/models, shaped as an install-plan model) and how many bytes are still to come." }),
-  qualities: z.object({ quick: QualitySchema, detailed: QualitySchema, ltx25: Ltx25QualitySchema, ltx25max: Ltx25MaxQualitySchema }).openapi({ description: "VIDEO-LTX-01: the two models. `quick` is the silent clip (the fields above describe it); `detailed` makes a sound track with speech in the same pass, longer clips, and takes LoRAs made for LTX-2.3. Each lists its own limits, install pieces and whether a clip of it could be admitted now. `ltx25` (LTX25-ENGINE-01, request model `ltx25-q8`) is LTX-2.5 distilled q8 with sound: it adds `ready`, its own `environment` and the measured `profiles` table, and adds `loras` (VIDEO-LORA-05: supported, max, mode, admit_factor, base_models, reason) and `negative_prompt`. `ltx25max` (LTX25-MAX-01, request model `ltx25-max`) is the Max profile: LTX-2.5 distilled bf16 on the dgrauet runtime at 1024x576, 10 s, with sound; the same shape as `ltx25` with one `profiles` row (`name` max); its pack and its environment are its own, so `installed`, `environment.ready` and `ready` are separate from `ltx25`." }),
+  qualities: z.object({ quick: QualitySchema, detailed: QualitySchema.openapi({ description: "Deprecated compatibility entry. The Detailed video model was retired. Use ltx25 or ltx25max." }), ltx25: Ltx25QualitySchema, ltx25max: Ltx25MaxQualitySchema }).openapi({ description: "`quick` is Wan Quick. `detailed` is deprecated and retained for older Home versions; the model was retired. Use `ltx25` (LTX-2.5 Standard and Boost) or `ltx25max` (LTX-2.5 Max)." }),
 });
 const statusRoute = createRoute({ method: "get", path: "/", tags: ["Video"], summary: "The video role's state, limits, and what to install", responses: { 200: { content: { "application/json": { schema: z.object({ video: StatusSchema }) } }, description: "Additive. Home enables the video control from `available` and `state`." } } });
 
@@ -99,7 +99,7 @@ const importForm = z.object({
   strength_default: z.coerce.number().min(0).max(MAX_LORA_STRENGTH).optional(),
   trigger_words: z.string().optional().openapi({ description: "Comma separated, or a JSON array." }),
   added_by: z.string().optional().openapi({ description: "An opaque label Home keeps for who added it." }),
-  base_model: z.enum(LORA_BASE_MODELS).optional().openapi({ description: "The base the file was made for. The tensors say the family (LTX or Wan) but not an LTX file's version (an LTX-2.3 and an LTX-2.5 LoRA read alike), so Home says it: `ltx-2.5` for a file made for LTX-2.5. Left out, an LTX file is `ltx-2.3`. A file that contradicts what is said (another family, or its own `ss_ltx_version`) is refused (wrong_base_model); an `ltx-2.5` file the runtime cannot map is refused with lora_keys_unsupported." }),
+  base_model: z.enum(LORA_BASE_MODELS).optional().openapi({ description: "The base the file was made for. Use `ltx-2.5` for LTX-2.5. New files with retired base `ltx-2.3` are refused with wrong_base_model; when omitted, an LTX file must identify itself as LTX-2.5." }),
 });
 const importRoute = createRoute({ method: "post", path: "/loras", tags: ["Video"], summary: "Add a LoRA to the library", request: { body: { content: { "multipart/form-data": { schema: importForm } } } }, responses: {
   200: { content: { "application/json": { schema: LoraSchema } }, description: "Added; the id is `lora-` and the first 16 hex of the sha256." },
@@ -128,7 +128,7 @@ const installRoute = createRoute({ method: "post", path: "/loras/install", tags:
   422: { content: { "application/json": { schema: ErrorBody } }, description: "The request cannot be used: bad_url, host_not_allowed, bad_source, bad_hash, bad_classification." },
   503: { content: { "application/json": { schema: ErrorBody } }, description: "install_busy: one download at a time." },
 } });
-const patchRoute = createRoute({ method: "patch", path: "/loras/{id}", tags: ["Video"], summary: "Edit a LoRA's name, class, default strength or trigger words", request: { params: z.object({ id: z.string() }), body: { content: { "application/json": { schema: z.object({ name: z.string().optional(), classification: z.enum(LORA_CLASSES).optional(), strength_default: z.number().min(0).max(MAX_LORA_STRENGTH).optional(), trigger_words: z.array(z.string()).optional(), source_url: z.string().nullable().optional(), base_model: z.enum(LORA_BASE_MODELS).optional().openapi({ description: "Moves an LTX file between ltx-2.3 and ltx-2.5 (an LTX file's version cannot be read from its tensors). The file is read again: a family that is not LTX, or a version the file itself names otherwise, is refused (wrong_base_model); an ltx-2.5 file the runtime cannot map is refused (lora_keys_unsupported)." }) }) } } } }, responses: {
+const patchRoute = createRoute({ method: "patch", path: "/loras/{id}", tags: ["Video"], summary: "Edit a LoRA's name, class, default strength or trigger words", request: { params: z.object({ id: z.string() }), body: { content: { "application/json": { schema: z.object({ name: z.string().optional(), classification: z.enum(LORA_CLASSES).optional(), strength_default: z.number().min(0).max(MAX_LORA_STRENGTH).optional(), trigger_words: z.array(z.string()).optional(), source_url: z.string().nullable().optional(), base_model: z.enum(LORA_BASE_MODELS).optional().openapi({ description: "Moves an LTX file to `ltx-2.5`. The retired `ltx-2.3` base is recognized for old records but refused for edits." }) }) } } } }, responses: {
   200: { content: { "application/json": { schema: LoraSchema } }, description: "Updated." },
   404: { content: { "application/json": { schema: ErrorBody } }, description: "No such LoRA." },
   409: { content: { "application/json": { schema: ErrorBody } }, description: "classification_locked: the file's own description names adult content, so it cannot be all-ages." },
@@ -139,7 +139,7 @@ const removeRoute = createRoute({ method: "delete", path: "/loras/{id}", tags: [
 export const videoRoutes = apiRouter<AppEnv>();
 
 type PlanModel = ReturnType<typeof videoInstallModels>[number];
-function qualityView(quality: "quick" | "detailed" | "ltx25" | "ltx25max", models: PlanModel[], _installed: string[], available: boolean) {
+function qualityView(quality: "quick" | "ltx25" | "ltx25max", models: PlanModel[], _installed: string[], available: boolean) {
   const spec = VIDEO_SPECS[quality];
   const verdict = memoryVerdict(quality);
   const remaining = models.filter((model) => !model.installed).reduce((sum, model) => sum + model.approx_bytes, 0);
@@ -148,7 +148,7 @@ function qualityView(quality: "quick" | "detailed" | "ltx25" | "ltx25max", model
     limits: { max_seconds: available ? spec.maxSeconds : 0, fps: VIDEO_FPS, default_size: spec.defaultSize, max_pixels: spec.maxPixels, size_step: spec.sizeStep, min_side: spec.minSide, max_frames: spec.maxSeconds * VIDEO_FPS + 1 },
     memory: { fits: verdict.ok, reason: verdict.ok ? null : verdict.reason, peak_gb: Math.round(spec.peakBytes / 1e8) / 10 },
     install: { models, remaining_bytes: remaining, download_bytes: models.reduce((sum, model) => sum + model.approx_bytes, 0) },
-    licence: quality === "detailed" || quality === "ltx25" || quality === "ltx25max" ? { id: LTX_LICENCE_NOTICE.id, name: LTX_LICENCE_NOTICE.name, url: LTX_LICENCE_NOTICE.url } : null,
+    licence: quality === "ltx25" || quality === "ltx25max" ? { id: LTX_LICENCE_NOTICE.id, name: LTX_LICENCE_NOTICE.name, url: LTX_LICENCE_NOTICE.url } : null,
     lora_base_model: spec.loraBase,
   };
 }
@@ -220,7 +220,7 @@ videoRoutes.openapi(statusRoute, (c) => {
     install: { models, remaining_bytes: models.filter((model) => !model.installed).reduce((sum, model) => sum + model.approx_bytes, 0) },
     qualities: {
       quick: qualityView("quick", models, installed, availability.available),
-      detailed: qualityView("detailed", videoDetailedInstallModels(installed), installed, availability.available),
+      detailed: { id: "ltx-2-3-distilled-mlx", installed: false, available: false, audio: true, image_to_video: false, end_image: false, reason: "The Detailed video model was retired. Use ltx25 or ltx25max.", limits: { max_seconds: 0, fps: VIDEO_FPS, default_size: "768x448", max_pixels: 768 * 448, size_step: 64, min_side: 256, max_frames: 0 }, memory: { fits: false, reason: "The Detailed video model was retired.", peak_gb: 0 }, install: { models: [], remaining_bytes: 0, download_bytes: 0 }, licence: null, lora_base_model: "ltx-2.3" },
       ltx25: ltx25View(videoLtx25InstallModels(installed), installed, availability.available),
       ltx25max: ltx25MaxView(videoLtx25MaxInstallModels(installed), installed, availability.available),
     },

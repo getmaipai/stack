@@ -24,7 +24,7 @@
     "p64.ai_required_free_bytes": 116341582322,
     "p128.required_free_bytes": 154184224148,
     "p128.minimum_required_free_bytes": 56572612676,
-    "p128.everything_required_free_bytes": 584648213873,
+    "p128.everything_required_free_bytes": 496360241384,
     "p128.needed_bytes": 129352395179,
     "p128.home_required_free_bytes": 3176323277,
     "p128.ai_required_free_bytes": 151007900871
@@ -2055,27 +2055,6 @@
           "basis": "pins"
         },
         {
-          "id": "video-detailed",
-          "label": "Detailed videos with sound (LTX-2.3)",
-          "note": "Longer clips with a sound track and spoken words, and a large library of styles. Slower than the quick clip. Optional, about 74 GB; it needs the maker's licence accepted once during setup.",
-          "kind": "model",
-          "need": "optional",
-          "selectable": true,
-          "download_bytes": 73573310407,
-          "installed_bytes": 73573310407,
-          "peak_temp_bytes": 0,
-          "model_ids": [
-            "ltx-2-3-distilled-mlx",
-            "video-gemma-3-12b-text-encoder"
-          ],
-          "engines": [
-            "engine:video",
-            "engine:python"
-          ],
-          "installed": false,
-          "basis": "pins"
-        },
-        {
           "id": "video-ltx25",
           "label": "Videos with sound (LTX-2.5)",
           "note": "Clips with a sound track and spoken words, up to 10 seconds. Optional, about 38 GB; it needs the maker's licence accepted once during setup.",
@@ -2478,11 +2457,11 @@
         "required_free_bytes": 56572612676
       },
       "everything": {
-        "download_bytes": 469018851064,
-        "installed_bytes": 475942678051,
+        "download_bytes": 395445540657,
+        "installed_bytes": 402369367644,
         "peak_temp_bytes": 13517000211,
-        "needed_bytes": 489459678262,
-        "required_free_bytes": 584648213873
+        "needed_bytes": 415886367855,
+        "required_free_bytes": 496360241384
       },
       "measured_on": "2026-10-17",
       "default_selected": [

@@ -20,7 +20,7 @@ const ComponentSchema = z.object({
   requirement: z.enum(["required", "optional", "unsupported"]).openapi({ description: "For this computer's tier: required (Home installs it), optional, or unsupported (see requirement_reason)." }),
   requirement_reason: z.string().nullable(), last_used_at: z.string().nullable(), used_by: z.array(z.string()), depends_on: z.array(z.string()),
   job: z.string().nullable(), percent: z.number().nullable(), failure: z.string().nullable(),
-  licence: z.object({ id: z.string(), name: z.string(), url: z.string(), summary: z.array(z.string()), accepted_at: z.string().nullable() }).nullable().openapi({ description: "A licence with terms of its own (the Detailed video model). It is accepted once, by an admin, before the first install: POST the install with its `id` as `accepted_licence`. null for every other part." }),
+  licence: z.object({ id: z.string(), name: z.string(), url: z.string(), summary: z.array(z.string()), accepted_at: z.string().nullable() }).nullable().openapi({ description: "The LTX-2.5 maker's licence. It is accepted once, by an admin, before the first install: POST the install with its `id` as `accepted_licence`. null for every other part." }),
   can_install: z.boolean(), install_block: z.string().nullable(), can_uninstall: z.boolean(), uninstall_block: z.string().nullable(),
 });
 const ErrorBody = z.object({ error: z.string(), code: z.string() });

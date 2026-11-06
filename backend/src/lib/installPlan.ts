@@ -5,7 +5,7 @@
 import { PROFILE_MODEL_BINDINGS, sizeMachine, type ProfileTier } from "@/profiles";
 import { knownAppleChip, type HardwareInfo, type MemorySource } from "@/lib/hardware";
 import { splashDraftWanted } from "@/lib/splash";
-import { STACK_CHAT_MODEL, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_XL_MODELS, STACK_STEMS_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
+import { STACK_CHAT_MODEL, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_XL_MODELS, STACK_STEMS_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
 import { tierDefaultTtsEngine } from "@/speech/ttsEngines";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import type { RoleId } from "@/roles";
@@ -65,12 +65,6 @@ export function videoInstallModels(installedIds: Iterable<string> = []): PlanMod
   const installed = new Set(installedIds);
   return STACK_VIDEO_MODELS.flatMap((pin) => view(pin, installed, false) ?? []);
 }
-/** VIDEO-LTX-01: the Detailed model's pins (the LTX weights and the Gemma text encoder), in the shape of a pull. */
-export function videoDetailedInstallModels(installedIds: Iterable<string> = []): PlanModel[] {
-  const installed = new Set(installedIds);
-  return STACK_VIDEO_DETAILED_MODELS.flatMap((pin) => view(pin, installed, false) ?? []);
-}
-
 /** LTX25-ENGINE-01: the LTX-2.5 pack (one pin: weights, text encoder and VAEs together), in the shape of a pull. */
 export function videoLtx25InstallModels(installedIds: Iterable<string> = []): PlanModel[] {
   const installed = new Set(installedIds);

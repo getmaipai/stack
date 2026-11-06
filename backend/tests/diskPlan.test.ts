@@ -70,7 +70,7 @@ test("home and AI parts add up to the whole within a byte per part", () => {
   }
 });
 
-test("tiers: p16 and p32 have no generators, p64 has Klein and ERNIE, p128 adds Z-Image and Quick video; Detailed video is an optional extra", () => {
+test("tiers: p16 and p32 have no generators, p64 has Klein and ERNIE, p128 adds Z-Image and Quick video; Detailed is retired", () => {
   const ids = (tier: string) => buildDiskPlan(PROFILE_TIERS.find((t) => t.id === tier)!).rows.map((row) => row.id);
   for (const tier of ["p16", "p32"]) for (const id of ["pictures", "pictures-ernie", "pictures-zimage", "video", "voice-better"]) expect(ids(tier)).not.toContain(id);
   expect(ids("p64")).toContain("pictures");
@@ -78,7 +78,7 @@ test("tiers: p16 and p32 have no generators, p64 has Klein and ERNIE, p128 adds 
   expect(ids("p64")).toContain("voice-better");
   for (const id of ["pictures-zimage", "video", "video-detailed"]) expect(ids("p64")).not.toContain(id);
   const p128 = buildDiskPlan(PROFILE_TIERS.find((t) => t.id === "p128")!);
-  for (const id of ["pictures-zimage", "video-detailed"]) { const row = p128.rows.find((r) => r.id === id)!; expect(row.need).toBe("optional"); expect(p128.default_selected).not.toContain(id); }
+  expect(p128.rows.find((r) => r.id === "pictures-zimage")!.need).toBe("optional"); expect(p128.default_selected).not.toContain("pictures-zimage"); expect(p128.rows.some((r) => r.id === "video-detailed")).toBe(false);
   expect(p128.rows.find((r) => r.id === "pictures")!.need).toBe("required");
   for (const tier of ["p64", "p128"]) {
     const plan = buildDiskPlan(PROFILE_TIERS.find((candidate) => candidate.id === tier)!);
@@ -104,14 +104,6 @@ test("turning an optional row on or off moves the total by that row and its engi
   const base = diskTotalsFor(plan, plan.default_selected);
   const video = plan.rows.find((r) => r.id === "video")!;
   const videoEngine = plan.rows.find((r) => r.id === "engine:video")!;
-  const detailed = plan.rows.find((r) => r.id === "video-detailed")!;
-  // Quick video is on by default and brings the video engine, so Detailed video adds only its own weights.
-  expect(plan.default_selected).toContain("video");
-  const withDetailed = diskTotalsFor(plan, [...plan.default_selected, "video-detailed"]);
-  expect(withDetailed.installed_bytes - base.installed_bytes).toBe(detailed.installed_bytes);
-  const noVideo = diskTotalsFor(plan, plan.default_selected.filter((id) => id !== "video"));
-  const withBoth = diskTotalsFor(plan, [...plan.default_selected.filter((id) => id !== "video"), "video-detailed"]);
-  expect(withBoth.installed_bytes - noVideo.installed_bytes).toBe(detailed.installed_bytes + videoEngine.installed_bytes);
   const zimage = plan.rows.find((r) => r.id === "pictures-zimage")!;
   const withZ = diskTotalsFor(plan, [...plan.default_selected, "pictures-zimage"]);
   expect(withZ.installed_bytes - base.installed_bytes).toBe(zimage.installed_bytes); // the picture engine is already counted for Klein
@@ -194,41 +186,13 @@ test("pictures is required on every tier that makes pictures", () => {
   }
 });
 
-test("video is recommended and video-detailed is optional on p128", () => {
+test("the p128 video row is recommended and no Detailed row or pin is planned", () => {
   const plan = buildDiskPlan(PROFILE_TIERS.find((t) => t.id === "p128")!);
-  expect(plan.rows.find((r) => r.id === "video")!).toMatchObject({ label: "Make videos (Wan2.2)", note: "Recommended. Makes a short clip from a sentence or a picture.", need: "recommended", selectable: true });
-  const detailed = plan.rows.find((r) => r.id === "video-detailed")!;
-  expect(detailed).toMatchObject({ label: "Detailed videos with sound (LTX-2.3)", need: "optional", selectable: true });
-  expect(detailed.note).toContain("Optional");
-  expect(detailed.note).toContain("74 GB");
-  expect(detailed.note).toContain("licence");
-  expect(detailed.note).not.toContain("On by default");
-  // Neither video row rides the first-run plan: Quick is a recommended row the person can turn off, Detailed an optional extra.
+  expect(plan.rows.find((r) => r.id === "video")!).toMatchObject({ label: "Make videos (Wan2.2)", need: "recommended", selectable: true });
+  expect(plan.rows.some((r) => r.id === "video-detailed")).toBe(false);
+  expect(plan.default_selected).not.toContain("video-detailed");
   const planned = new Set(plannedPinsFor(PROFILE_TIERS.find((t) => t.id === "p128")!).map((entry) => entry.pin.id));
   for (const pin of STACK_VIDEO_MODELS) expect(planned.has(pin.id)).toBe(false);
-});
-
-test("the p128 default selection includes video and excludes video-detailed", () => {
-  const plan = buildDiskPlan(PROFILE_TIERS.find((t) => t.id === "p128")!);
-  expect(plan.default_selected).toContain("pictures");
-  expect(plan.default_selected).toContain("video");
-  expect(plan.default_selected).not.toContain("video-detailed");
-});
-
-test("Detailed video (LTX-2.3) is optional on p128 only: off by default, about 74 GB more free space when turned on, never in the first-run install plan (AIMODELS-DATA-01)", () => {
-  const p128 = buildDiskPlan(PROFILE_TIERS.find((t) => t.id === "p128")!);
-  const row = p128.rows.find((r) => r.id === "video-detailed")!;
-  expect(row).toMatchObject({ need: "optional", selectable: true });
-  expect(p128.default_selected).not.toContain("video-detailed");
-  expect(row.download_bytes).toBeGreaterThan(70e9);
-  const withDetailed = diskTotalsFor(p128, [...p128.default_selected, "video-detailed"]);
-  expect(withDetailed.required_free_bytes - p128.default.required_free_bytes).toBeGreaterThan(70e9);
-  for (const tier of PROFILE_TIERS) {
-    const plan = buildDiskPlan(tier);
-    if (tier.id !== "p128") expect(plan.rows.find((r) => r.id === "video-detailed")).toBeUndefined();
-    // The install plan (what an install or an upgrade pulls on its own) never carries it: only a checked row or an explicit install does.
-    expect(plannedPinsFor(tier).some((entry) => row.model_ids.includes(entry.pin.id))).toBe(false);
-  }
 });
 
 test("AIMODELS-VISION-01: p128 has a recommended picture-reader row (model plus projector); no other tier does; reads-pictures excludes it", () => {

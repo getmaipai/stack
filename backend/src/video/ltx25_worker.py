@@ -1,4 +1,4 @@
-# The Stack's LTX-2.5 video worker (LTX25-ENGINE-01). Same protocol as video_worker.py and ltx_worker.py (JSON lines on stdin and
+# The Stack's LTX-2.5 video worker (LTX25-ENGINE-01). Same protocol as video_worker.py (JSON lines on stdin and
 # stdout, no port, one clip at a time, started on the first clip and stopped by the Stack when idle or cancelled), but it runs the
 # LTX-2.5 distilled q8 model through the ltx-2-mlx fork (MIT, MrMoferFRAN branch ltx25, commit 5795228) that the judged clips were
 # made with: the Gemma 4 text encoder that ships in the pack, an 8 + 3 step distilled schedule with the x2 spatial upscaler, and a

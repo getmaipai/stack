@@ -278,25 +278,14 @@ test("the Parakeet listening model shows a plain name, not its raw id", async ()
   expect(row?.summary).not.toBe("");
 });
 
-// ---- VIDEO-LTX-01: the Detailed video model's licence, size and gate ----
+// ---- LTX licence acknowledgement remains for LTX-2.5 ----
 
-test("the real list offers Detailed video on a 128 GB computer only: optional, its plain size, and the licence it needs accepted", async () => {
+test("the component list retires Detailed while keeping current video components", async () => {
   __setComponentUnitsForTests(null);
   const list = await listComponents(hw());
-  const detailed = list.components.find((c) => c.id === "ltx-2-3-distilled-mlx")!;
-  expect(detailed).toMatchObject({ label: "Video: Detailed (LTX-2.3)", group: "video", requirement: "optional", state: "notInstalled", can_install: true, plan_need: "optional" });
-  expect(detailed.full_bytes).toBeGreaterThan(70e9);
-  expect(detailed.licence).toMatchObject({ id: "ltx-2.x-community-2026-08-11", accepted_at: null });
-  expect(detailed.licence!.summary.join(" ")).toContain("$10 million");
-  expect(detailed.licence!.summary.join(" ")).toContain("children");
-  const quick = list.components.find((c) => c.id === "fastwan2-2-ti2v-5b-mlx-bf16")!;
-  expect(quick.licence).toBeNull();
-  expect(quick.label).toContain("Quick");
-  for (const tier of [{ unifiedMemoryGb: 64, totalRamGb: 64 }, { unifiedMemoryGb: 32, totalRamGb: 32 }]) {
-    const small = (await listComponents(hw(tier))).components.find((c) => c.id === "ltx-2-3-distilled-mlx")!;
-    expect(small.requirement).toBe("unsupported");
-    expect(small.can_install).toBe(false);
-  }
+  expect(list.components.some((component) => component.id === "ltx-2-3-distilled-mlx")).toBe(false);
+  expect(list.components.find((component) => component.id === "fastwan2-2-ti2v-5b-mlx-bf16")?.label).toContain("Quick");
+  expect(list.components.find((component) => component.id === "ltx-2-5-q8-distilled-mlx")).toBeDefined();
 });
 
 test("Detailed video does not install until the licence is accepted, then installs and asks no more", async () => {

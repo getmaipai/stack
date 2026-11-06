@@ -9,7 +9,7 @@ import { __setComponentUnitsForTests, componentDefs } from "@/lib/components";
 import { planTidy, runTidy } from "@/lib/tidy";
 import { runSweeps } from "@/lib/sweeps";
 import { createJob, finishJob } from "@/lib/jobs";
-import { STACK_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_QWEN_MODELS } from "@/lib/modelCatalog";
+import { STACK_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_QWEN_MODELS } from "@/lib/modelCatalog";
 
 afterEach(() => { __setComponentUnitsForTests(null); clearModelsForTests(); rmSync(modelsDir, { recursive: true, force: true }); mkdirSync(modelsDir, { recursive: true }); });
 
@@ -62,13 +62,27 @@ test("a record-referenced model directory is not listed as an orphan", async () 
   const plan = await planTidy(); expect(plan.items.some((item) => item.id === path)).toBe(false);
 });
 
-test("LTX 2.3 is catalog-declared as superseded and stays blocked without a ready successor", async () => {
+test("retired LTX-2.3 model records do not protect their old folders from TIDY-01", async () => {
+  const path = join(modelsDir, "ltx-2-3-distilled-mlx"); mkdirSync(path); writeFileSync(join(path, "weights.bin"), "old");
+  const encoder = join(modelsDir, "video-gemma-3-12b-text-encoder"); mkdirSync(encoder); writeFileSync(join(encoder, "weights.bin"), "old");
+  const old = new Date(Date.now() - 25 * 3600_000); utimesSync(path, old, old); utimesSync(encoder, old, old);
+  upsertModel({ id: "ltx-2-3-distilled-mlx", roles: ["video"], source: "catalog", provenance: {}, revision: "r1", modelPath: path, sizeBytes: 3 });
+  upsertModel({ id: "video-gemma-3-12b-text-encoder", roles: ["video"], source: "catalog", provenance: {}, revision: "r1", modelPath: encoder, sizeBytes: 3 });
+  const plan = await planTidy();
+  expect(plan.items.filter((item) => item.kind === "orphan_folder").map((item) => item.id).sort()).toEqual([encoder, path].sort());
+  const result = await runTidy(false);
+  expect(result.removed.map((item) => item.id).sort()).toEqual([encoder, path].sort());
+  expect(existsSync(path)).toBe(false); expect(existsSync(encoder)).toBe(false);
+});
+
+test("a synthetic catalog pin stays blocked without a ready successor", async () => {
   __setComponentUnitsForTests(null);
-  const response = await app.request("/stack/v1/components");
-  const body = await response.json() as { components: Array<{ id: string; superseded_by: string[] }> };
-  expect(body.components.find((item) => item.id === "ltx-2-3-distilled-mlx")?.superseded_by).toEqual(["ltx-2-5-q8-distilled-mlx"]);
-  const model = join(modelsDir, "ltx-2-3-distilled-mlx", "weights.bin"); mkdirSync(join(model, ".."), { recursive: true }); writeFileSync(model, "old");
-  upsertModel({ id: "ltx-2-3-distilled-mlx", roles: ["video"], source: "catalog", provenance: {}, revision: "r1", modelPath: model, sizeBytes: 3 });
+  const { STACK_VIDEO_MODELS } = await import("@/lib/modelCatalog");
+  const successor = { ...STACK_VIDEO_MODELS[0]!, id: "synthetic-successor", download: { ...STACK_VIDEO_MODELS[0]!.download!, directory: "synthetic-successor" } };
+  const synthetic = { ...STACK_VIDEO_MODELS[0]!, id: "synthetic-retired-video", download: { ...STACK_VIDEO_MODELS[0]!.download!, directory: "synthetic-retired-video" }, superseded_by: [successor.id] };
+  __setComponentUnitsForTests([ { id: "synthetic-retired-video", label: "Synthetic old video", summary: "Test", group: "video", role: "video", pins: [synthetic], envs: [], usedBy: () => [], busy: () => null } as any, { id: successor.id, label: "Synthetic successor", summary: "Test", group: "video", role: "video", pins: [successor], envs: [], usedBy: () => [], busy: () => null } as any ]);
+  const model = join(modelsDir, "synthetic-retired-video", "weights.bin"); mkdirSync(join(model, ".."), { recursive: true }); writeFileSync(model, "old");
+  upsertModel({ id: "synthetic-retired-video", roles: ["video"], source: "catalog", provenance: {}, revision: "r1", modelPath: model, sizeBytes: 3 });
   const plan = await planTidy(); const candidate = plan.items.find((item) => item.kind === "superseded");
   expect(candidate?.blocked).toContain("must be installed"); expect(existsSync(model)).toBe(true);
 });
@@ -96,7 +110,7 @@ test("live model layout protects named folders and active installs; removes only
 });
 
 test("every real catalog pin id is known by the tidy folder rule", async () => {
-  const ids = [...STACK_MODELS, ...STACK_VIDEO_DETAILED_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_IMAGE_KLEIN_MODELS, ...STACK_IMAGE_ZIMAGE_MODELS, ...STACK_IMAGE_ERNIE_MODELS, ...STACK_IMAGE_QWEN_MODELS, ...componentDefs().flatMap((unit) => unit.pins)].map((pin) => pin.id);
+  const ids = [...STACK_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_IMAGE_KLEIN_MODELS, ...STACK_IMAGE_ZIMAGE_MODELS, ...STACK_IMAGE_ERNIE_MODELS, ...STACK_IMAGE_QWEN_MODELS, ...componentDefs().flatMap((unit) => unit.pins)].map((pin) => pin.id);
   for (const id of new Set(ids)) { mkdirSync(join(modelsDir, id), { recursive: true }); }
   const plan = await planTidy();
   expect(plan.items.filter((item) => item.kind === "orphan_folder").map((item) => item.id)).toEqual([]);

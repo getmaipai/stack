@@ -1,4 +1,4 @@
-// LTX25-ENGINE-01 (VIDEO-TIERS-01 in Home): the LTX-2.5 video engine beside Quick (Wan) and Detailed (LTX-2.3). The runtime is the
+// LTX25-ENGINE-01 (VIDEO-TIERS-01 in Home): the LTX-2.5 video engine beside Quick (Wan). The runtime is the
 // fork MrMoferFRAN/ltx-2-mlx (branch ltx25, commit 5795228, MIT) pinned in engineCatalog as `ltx25-gen`; its packages are the
 // pinned source archive on PYTHONPATH and its Python packages are a hashed requirements file built into one managed Python 3.12
 // environment by the same uv builder as every other engine. The weights are the ungated q8 distilled pack (modelCatalog,

@@ -37,14 +37,13 @@ import { getGovernorStatus } from "@/lib/governor";
 import { log } from "@/lib/log";
 import { ffmpegPath, makeMessagesCopy } from "@/video/messages";
 import { getModel } from "@/lib/modelStore";
-import { LTX_PEAK_BYTES, STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODEL_ID, STACK_VIDEO_DETAILED_MODEL_ID, STACK_VIDEO_MODEL_ID, STACK_VIDEO_TEXT_ENCODER_ID, STACK_VIDEO_TOKENIZER_ID } from "@/lib/modelCatalog";
+import { STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODEL_ID, STACK_VIDEO_MODEL_ID, STACK_VIDEO_TOKENIZER_ID } from "@/lib/modelCatalog";
 import { engineTagRoot } from "@/lib/store/layout";
 import { ensureUvEnvironment, managedEnv, uvEnvironmentReady, uvVenvPath, uvVenvPython, type UvEnvironmentSpec } from "@/lib/uvEnvironment";
 import type { RoleStateRecord } from "@/roles";
 import { READY_TTL_MS } from "@/roles";
 import darwinArm64Requirements from "./video-gen.darwin-arm64.requirements.txt" with { type: "file" };
 import workerScript from "./video_worker.py" with { type: "file" };
-import ltxWorkerScript from "./ltx_worker.py" with { type: "file" };
 import { ltx25LoraMode, ensureLtx25Environment, ensureLtx25MaxEnvironment, ltx25GenRoot, ltx25MaxGenRoot, ltx25MaxModelPaths, ltx25ModelPaths, ltx25WorkerEnv, ltx25WorkerScript, LTX25_DEFAULT_SIZE, LTX25_MAX_DEFAULT_SIZE, LTX25_MAX_MODEL_NAMES, LTX25_MAX_PEAK_BYTES, LTX25_MAX_PROFILE_SECONDS, LTX25_MAX_SECONDS, LTX25_MODEL_NAMES, LTX25_PEAK_BYTES } from "./ltx25";
 
 export const VIDEO_GEN_NAME = "video-gen";
@@ -67,24 +66,21 @@ export const VIDEO_PEAK_BYTES = 44_088_747_800;
 export const VIDEO_TIERS = ["p128"] as const;
 
 /**
- * VIDEO-LTX-01: the two video models, named the way pictures name theirs. Quick is the FastWan clip (silent, up to 5 s);
- * Detailed is LTX-2.3 (a sound track with speech made in the same pass, longer clips, a large community LoRA library).
- * Every number is a hard ceiling in the Stack, measured on the Studio, never a setting.
+ * The video models are Wan Quick and LTX-2.5 Standard, Boost and Max. Every number is a hard ceiling in the Stack, measured on the Studio, never a setting.
  */
-export type VideoQuality = "quick" | "detailed" | "ltx25" | "ltx25max";
-export const VIDEO_QUALITIES: readonly VideoQuality[] = ["quick", "detailed", "ltx25", "ltx25max"];
+export type VideoQuality = "quick" | "ltx25" | "ltx25max";
+export const VIDEO_QUALITIES: readonly VideoQuality[] = ["quick", "ltx25", "ltx25max"];
 export interface VideoSpec {
   quality: VideoQuality; modelId: string; maxSeconds: number; frameStep: number; defaultSize: string; maxPixels: number; sizeStep: number; minSide: number;
   /** A clip of this model has a sound track. */
-  audio: boolean; peakBytes: number; loraBase: string; worker: "video_worker.py" | "ltx_worker.py" | "ltx25_worker.py";
-  /** A picture can start a clip of this model. Detailed can since the worker builds the picture encoder from the shape of the shipped weights (the shipped config disagrees with them: ltx_worker.py, item 4). */
+  audio: boolean; peakBytes: number; loraBase: string; worker: "video_worker.py" | "ltx25_worker.py";
+  /** A picture can start a clip of this model. */
   imageToVideo: boolean;
   /** VIDEO-INPUTS-01: a second picture can end the clip (`end_image`). Only the LTX-2.5 runtimes take one. */
   endImage: boolean;
 }
 export const VIDEO_SPECS: Record<VideoQuality, VideoSpec> = {
   quick: { quality: "quick", modelId: STACK_VIDEO_MODEL_ID, maxSeconds: VIDEO_MAX_SECONDS, frameStep: 4, defaultSize: VIDEO_DEFAULT_SIZE, maxPixels: VIDEO_MAX_PIXELS, sizeStep: VIDEO_SIZE_STEP, minSide: VIDEO_MIN_SIDE, audio: false, peakBytes: VIDEO_PEAK_BYTES, loraBase: "wan2.2-ti2v-5b", worker: "video_worker.py", imageToVideo: true, endImage: false },
-  detailed: { quality: "detailed", modelId: STACK_VIDEO_DETAILED_MODEL_ID, maxSeconds: 10, frameStep: 8, defaultSize: "768x448", maxPixels: 768 * 448, sizeStep: 64, minSide: 256, audio: true, peakBytes: LTX_PEAK_BYTES, loraBase: "ltx-2.3", worker: "ltx_worker.py", imageToVideo: true, endImage: false },
   // LTX25-ENGINE-01: the sizes and lengths are the measured table in video/ltx25.ts (checked by the route and the worker), the peak is its largest row.
   ltx25: { quality: "ltx25", modelId: STACK_VIDEO_LTX25_MODEL_ID, maxSeconds: LTX25_MAX_SECONDS, frameStep: 8, defaultSize: LTX25_DEFAULT_SIZE, maxPixels: 768 * 448, sizeStep: 32, minSide: 256, audio: true, peakBytes: LTX25_PEAK_BYTES, loraBase: "ltx-2.5", worker: "ltx25_worker.py", imageToVideo: true, endImage: true },
   // LTX25-MAX-01: the Max profile (1024x576, 10 s) on the dgrauet runtime and the bf16 pack; the peak is its admission figure (measured footprint with headroom).
@@ -92,11 +88,11 @@ export const VIDEO_SPECS: Record<VideoQuality, VideoSpec> = {
 };
 /** Whether a quality's runtime and weights come from the LTX-2.5 engine (its own environment). */
 export const usesLtx25Engine = (quality: VideoQuality): boolean => quality === "ltx25" || quality === "ltx25max";
-/** The quality a request's `model` names: "video" and the Quick pin's id are Quick, "detailed" and the LTX pin's id are Detailed, anything else is unknown. */
+/** The quality a request's `model` names. Retired Detailed values remain recognizable for a clear refusal. */
 export function qualityOfModelName(name: string | undefined): VideoQuality | null {
   // Home's lane guard sends a teen or a child the Quick model by this id (Wan 2.2 FastWan); it names the same model.
   if (name === undefined || name === "" || name === "video" || name === "quick" || name === VIDEO_SPECS.quick.modelId || name === "wan2.2-ti2v-5b-fastwan-mlx") return "quick";
-  if (name === "detailed" || name === VIDEO_SPECS.detailed.modelId) return "detailed";
+  if (name === "detailed" || name === "ltx-2-3-distilled-mlx") return null;
   if ((LTX25_MODEL_NAMES as readonly string[]).includes(name) || name === VIDEO_SPECS.ltx25.modelId) return "ltx25";
   if ((LTX25_MAX_MODEL_NAMES as readonly string[]).includes(name) || name === VIDEO_SPECS.ltx25max.modelId) return "ltx25max";
   return null;
@@ -145,18 +141,11 @@ export function buildWorkerRequest(quality: VideoQuality, paths: VideoModelPaths
     ...(edit ? { source_video: edit.sourcePath, ffmpeg: edit.ffmpeg, ffprobe: edit.ffprobe, ...(edit.kind === "extend" ? { extend_frames: edit.extendFrames } : { retake_start_latent: edit.retakeStartLatent }) } : {}) };
 }
 
-export interface VideoModelPaths { modelDir: string; tokenizerDir: string; /** Detailed only: the Gemma folder the model reads the prompt with. */ textEncoderDir?: string; }
+export interface VideoModelPaths { modelDir: string; tokenizerDir: string; /** The model's own text folder, when required by its worker. */ textEncoderDir?: string; }
 /** The installed, verified weights and text folders of one quality, or null when any is missing. */
 export function videoModelPaths(quality: VideoQuality = "quick"): VideoModelPaths | null {
   if (quality === "ltx25max") { const paths = ltx25MaxModelPaths(); return paths ? { modelDir: paths.modelDir, tokenizerDir: paths.gemmaDir, textEncoderDir: paths.gemmaDir } : null; }
   if (quality === "ltx25") { const paths = ltx25ModelPaths(); return paths ? { modelDir: paths.modelDir, tokenizerDir: join(paths.modelDir, "text_encoder"), textEncoderDir: join(paths.modelDir, "text_encoder") } : null; }
-  if (quality === "detailed") {
-    const ltx = getModel(STACK_VIDEO_DETAILED_MODEL_ID);
-    const encoder = getModel(STACK_VIDEO_TEXT_ENCODER_ID);
-    if (!ltx?.modelPath || !ltx.verifiedAt || !existsSync(join(ltx.modelPath, "transformer", "model-00000-of-00018.safetensors")) || !existsSync(join(ltx.modelPath, "ltx-2.3-spatial-upscaler-x2-1.1.safetensors"))) return null;
-    if (!encoder?.modelPath || !encoder.verifiedAt || !existsSync(join(encoder.modelPath, "model-00001-of-00005.safetensors"))) return null;
-    return { modelDir: ltx.modelPath, tokenizerDir: encoder.modelPath, textEncoderDir: encoder.modelPath };
-  }
   const model = getModel(STACK_VIDEO_MODEL_ID);
   const tokenizer = getModel(STACK_VIDEO_TOKENIZER_ID);
   if (!model?.modelPath || !model.verifiedAt || !existsSync(join(model.modelPath, "model.safetensors"))) return null;
@@ -185,7 +174,7 @@ export function memoryVerdict(quality: VideoQuality = "quick", peakBytes: number
 // ---- the worker protocol ----
 
 export interface WorkerRequest {
-  id: string; op: "generate" | "extend" | "retake"; model_dir: string; tokenizer_dir: string; /** Detailed: the Gemma folder, and the ffmpeg that joins sound to picture. */ text_encoder_dir?: string; ffmpeg?: string | null; prompt: string; negative_prompt: string | null; image: string | null;
+  id: string; op: "generate" | "extend" | "retake"; model_dir: string; tokenizer_dir: string; /** The model text folder and ffmpeg path, when its worker needs them. */ text_encoder_dir?: string; ffmpeg?: string | null; prompt: string; negative_prompt: string | null; image: string | null;
   /** VIDEO-INPUTS-01: the picture the clip ends on (LTX-2.5 only), with `image` as the start. */
   end_image?: string | null;
   width: number; height: number; num_frames: number; seed: number; loras: Array<[string, number]>; output: string; poster: string;
@@ -220,9 +209,7 @@ export const defaultVideoGenDeps: VideoGenDeps = {
   spawn: async (quality) => {
     if (quality === "ltx25" || quality === "ltx25max") return spawnLtx25(quality);
     const root = videoGenRoot();
-    // The Detailed worker imports the Quick worker's helpers (one definition of the protocol), so both files are written.
     writeFileSync(join(root, "video_worker.py"), await Bun.file(workerScript).text());
-    writeFileSync(join(root, "ltx_worker.py"), await Bun.file(ltxWorkerScript).text());
     const script = join(root, VIDEO_SPECS[quality].worker);
     const cwd = join(root, "run");
     mkdirSync(cwd, { recursive: true });
@@ -351,8 +338,8 @@ export class VideoGenService {
 
   status(): { state: VideoState; phase: string | null; building: string | null; models: boolean; environment: boolean } {
     const availability = tierAvailability();
-    // Either model counts: a computer with only Detailed installed can make a video.
-    const models = this.deps.paths("quick") !== null || this.deps.paths("detailed") !== null || this.deps.paths("ltx25") !== null || this.deps.paths("ltx25max") !== null;
+    // Any installed video pack can make a video.
+    const models = this.deps.paths("quick") !== null || this.deps.paths("ltx25") !== null || this.deps.paths("ltx25max") !== null;
     const state: VideoState = !this.deps.supported() ? "unsupported" : !availability.available ? "off" : !models ? "not-installed" : this.building ? "building" : this.busy > 0 ? "running" : this.worker ? "idle" : "needs-setup";
     return { state, phase: this.busy > 0 ? this.lastPhase : null, building: this.building, models, environment: videoGenEnvironmentReady() };
   }
@@ -412,7 +399,7 @@ export class VideoGenService {
     if (options.signal?.aborted) throw new VideoError("cancelled", "Cancelled.", 499);
     const quality = input.quality ?? "quick";
     const paths = this.deps.paths(quality);
-    if (!paths) throw new VideoError("model_missing", quality === "detailed" ? "The Detailed video model is not installed yet. An admin can install it in Settings, Models and storage, then try again." : quality === "ltx25max" ? "The LTX-2.5 Max video model is not installed yet. An admin can install it in Settings, Models and storage, then try again." : quality === "ltx25" ? "The LTX-2.5 video model is not installed yet. An admin can install it in Settings, Models and storage, then try again." : "The video model is not installed yet. Install it from Home's Engines page, then try again.", 503);
+    if (!paths) throw new VideoError("model_missing", quality === "ltx25max" ? "The LTX-2.5 Max video model is not installed yet. An admin can install it in Settings, Models and storage, then try again." : quality === "ltx25" ? "The LTX-2.5 video model is not installed yet. An admin can install it in Settings, Models and storage, then try again." : "The video model is not installed yet. Install it from Home's Engines page, then try again.", 503);
     this.busy += 1;
     if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
     let lease: Lease | undefined;

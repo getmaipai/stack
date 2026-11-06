@@ -1,4 +1,4 @@
-// LTX25-ENGINE-01: the LTX-2.5 video engine (distilled q8 with sound) beside Quick and Detailed: the router, the measured table
+// LTX25-ENGINE-01: the LTX-2.5 video engine (distilled q8 with sound) beside Quick: the router, the measured table
 // (sizes and lengths outside it are refused), admission from the measured footprints, the pins, the status route, the privacy
 // posture, driven by a scripted worker (no weights, no GPU, no network). The real worker on the real weights is exercised only where
 // LTX25_GEN_PYTHON names a prepared environment (the checks that need no weights) and LTX25_REAL_MODEL names the pack.
@@ -35,7 +35,7 @@ function scripted(reply: (request: WorkerRequest) => WorkerReply = okReply): Vid
   return {
     supported: () => true,
     ensureEnvironment: async (_progress, _signal, quality) => { ensured.push(quality); },
-    paths: (quality) => (installed[quality] ? (quality === "ltx25" ? { modelDir: "/models/ltx25", tokenizerDir: "/models/ltx25/text_encoder", textEncoderDir: "/models/ltx25/text_encoder" } : quality === "detailed" ? { modelDir: "/models/ltx", tokenizerDir: "/models/gemma", textEncoderDir: "/models/gemma" } : { modelDir: "/models/video", tokenizerDir: "/models/tok" }) : null),
+    paths: (quality) => (installed[quality] ? (quality === "ltx25" ? { modelDir: "/models/ltx25", tokenizerDir: "/models/ltx25/text_encoder", textEncoderDir: "/models/ltx25/text_encoder" } : { modelDir: "/models/video", tokenizerDir: "/models/tok" }) : null),
     spawn: async (quality): Promise<WorkerHandle> => {
       spawnedQualities.push(quality);
       let end!: (code: number) => void;
@@ -70,11 +70,12 @@ afterEach(() => clean());
 const post = (body: Record<string, unknown>) => app.request("/v1/videos/generations", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 type Entry = Record<string, unknown>;
 
-test("the model names map to the LTX-2.5 quality, and Quick and Detailed keep theirs", () => {
+test("the model names map to LTX-2.5 and Quick, while retired Detailed is not a runnable quality", () => {
   for (const name of ["ltx25-q8", "ltx25", STACK_VIDEO_LTX25_MODEL_ID]) expect(qualityOfModelName(name)).toBe("ltx25");
   expect(qualityOfModelName(undefined)).toBe("quick");
   expect(qualityOfModelName("wan2.2-ti2v-5b-fastwan-mlx")).toBe("quick");
-  expect(qualityOfModelName("detailed")).toBe("detailed");
+  expect(qualityOfModelName("detailed")).toBeNull();
+  expect(qualityOfModelName("ltx-2-3-distilled-mlx")).toBeNull();
   expect(qualityOfModelName("ltx-3")).toBeNull();
 });
 
@@ -209,15 +210,16 @@ test("VIDEO-INPUTS-01: bad picture bytes, a wrong size, a last picture without a
   expect(requests).toEqual([]);
 });
 
-test("VIDEO-INPUTS-01: Quick and Detailed take no last picture (reference_unsupported); Detailed and Quick still start from one", async () => {
+test("VIDEO-INPUTS-01: Quick and LTX-2.5 take pictures; retired Detailed requests are refused", async () => {
   videoGen.useDeps(scripted());
-  for (const model of ["quick", "detailed"]) {
+  for (const model of ["quick"]) {
     const response = await post({ prompt: "x", model, image: PNG_B64, end_image: PNG_B64 });
     expect([response.status, ((await response.json()) as { code: string }).code]).toEqual([422, "reference_unsupported"]);
   }
+  const retired = await post({ prompt: "x", model: "detailed", image: PNG_B64 });
+  expect([retired.status, ((await retired.json()) as { code: string }).code]).toEqual([422, "retired_model"]);
   expect(VIDEO_SPECS.quick.endImage).toBe(false);
-  expect(VIDEO_SPECS.detailed.endImage).toBe(false);
-  expect(VIDEO_SPECS.detailed.imageToVideo && VIDEO_SPECS.quick.imageToVideo).toBe(true);
+  expect(VIDEO_SPECS.quick.imageToVideo).toBe(true);
   expect(VIDEO_SPECS.ltx25).toMatchObject({ imageToVideo: true, endImage: true });
   expect(VIDEO_SPECS.ltx25max).toMatchObject({ imageToVideo: true, endImage: true });
 });
@@ -373,13 +375,13 @@ test("the component and the disk plan offer it on a 128 GB computer only, option
   for (const tier of ["p16", "p32", "p64"] as const) expect(diskPlanForTier(tier)!.rows.some((candidate) => candidate.id === "video-ltx25")).toBe(false);
 });
 
-test("the tier table lists the measured rows and keeps them off every tier until Home's slot step (Wan and LTX-2.3 rows stay)", () => {
+test("the tier table lists measured rows and keeps LTX-2.5 off every tier until Home's slot step", () => {
   const candidate = TIER_CANDIDATES.find((item) => item.id === STACK_VIDEO_LTX25_MODEL_ID)!;
   expect(candidate.tiers).toEqual([]);
   expect(candidate.vetting).toContain("VIDEO-TIERS-01");
   expect(candidate.peaks.map((peak) => peak.peakBytes)).toEqual([25_300_000_000, 39_400_000_000, 32_400_000_000, 45_800_000_000]);
   expect(candidate.peaks.every((peak) => peak.status === "measured")).toBe(true);
-  expect(TIER_CANDIDATES.filter((item) => item.category === "video" && item.tiers.length > 0).map((item) => item.id)).toEqual(["fastwan2-2-ti2v-5b-mlx-bf16", "ltx-2-3-distilled-mlx"]);
+  expect(TIER_CANDIDATES.filter((item) => item.category === "video" && item.tiers.length > 0).map((item) => item.id)).toEqual(["fastwan2-2-ti2v-5b-mlx-bf16"]);
 });
 
 // ---- privacy: generation makes no outbound connection ----

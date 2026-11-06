@@ -255,7 +255,7 @@ test("size and length are held to the measured limits", async () => {
     expect(response.status).toBe(422);
     expect(((await response.json()) as { code: string }).code).toBe("bad_size");
   }
-  // Past Quick's 5 seconds is a plain refusal that points at Detailed; past every model's ceiling is a malformed request.
+  // Past Quick's 5 seconds is refused; past every model's ceiling is a malformed request.
   const tooLong = await post({ prompt: "x", seconds: 6 });
   expect(tooLong.status).toBe(422);
   expect(await tooLong.json()).toMatchObject({ code: "bad_seconds" });

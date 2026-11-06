@@ -15,7 +15,7 @@ import { createJob, finishJob, getJob, jobSignal, listJobs, updateJob } from "@/
 import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { getModel, installCatalogModel, removeModel, removeModelsAtomically, type CatalogModelLike, type DownloadModelOptions } from "@/lib/modelStore";
-import { STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, LTX_LICENCE_NOTICE, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_SFT_ID, STACK_MUSIC_XL_ID, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_STEMS_MODELS, STACK_RECORDED_SPEECH_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_VIDEO_DETAILED_MODEL_ID, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MODEL_ID, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
+import { STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, LTX_LICENCE_NOTICE, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_SFT_ID, STACK_MUSIC_XL_ID, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_STEMS_MODELS, STACK_RECORDED_SPEECH_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MODEL_ID, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
 import { licenceAcceptance, recordLicenceAcceptance, type LicenceNotice } from "@/lib/licenceAcceptance";
 import { buildInstallPlan } from "@/lib/installPlan";
 import { diskPlanForTier, diskTotalsFor, engineDownloadBytes, type DiskPlan } from "@/lib/diskPlan";
@@ -98,7 +98,7 @@ const GB = 1_000_000_000;
 const ENV_BYTES = { align: engineDownloadBytes("align") ?? 0.3 * GB, beats: engineDownloadBytes("beats") ?? 0.5 * GB, stems: engineDownloadBytes("stems") ?? 0.25 * GB, voiceConvert: engineDownloadBytes("voice-convert") ?? 4 * GB, recordedSpeech: engineDownloadBytes("recorded-speech") ?? 1.7 * GB, image: engineDownloadBytes("image-gen") ?? 1.1 * GB, video: engineDownloadBytes("video-gen") ?? 1.0 * GB, ltx25: engineDownloadBytes("ltx25-gen") ?? 0.25 * GB, ltx25max: engineDownloadBytes("ltx25-max-gen") ?? 0.25 * GB, music: engineDownloadBytes("music-gen") ?? 0.8 * GB, tools: engineDownloadBytes("image-tools") ?? 0.4 * GB, pocket: engineDownloadBytes("pocket-tts") ?? 0.72 * GB, mlxAudio: engineDownloadBytes("mlx-audio") ?? 0.47 * GB };
 /** The disk plan's row for a component, where the plan has one (its optional rows are the wizard's unchecked extras). */
 /** The install-plan row each component stands for (the size and need shown beside it). A test keeps every plan row covered. */
-export const DISK_ROW: Record<string, string> = { "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "ernie-image-turbo": "pictures-ernie", "qwen-image-2512-q8": "pictures-qwen", "image-tools": "image-tools", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fish-audio-drama-3-4bit": "recorded-speech", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "ace-step-1-5-turbo": "music", "ace-step-1-5-xl-turbo-bf16": "music-boost", "ace-step-1-5-xl-sft-bf16": "music-max", "htdemucs": "stems", "htdemucs_ft": "stems-ft", "htdemucs_6s": "stems-6s", "mms-fa-align": "align", "soulx-singer-svc": "voice-convert", "soulx-singer-rmvpe": "voice-convert", "soulx-singer-whisper-base": "voice-convert", "ltx-2-3-distilled-mlx": "video-detailed", "ltx-2-5-q8-distilled-mlx": "video-ltx25", "ltx-2-5-bf16-distilled-mlx-max": "video-ltx25-max" };
+export const DISK_ROW: Record<string, string> = { "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "ernie-image-turbo": "pictures-ernie", "qwen-image-2512-q8": "pictures-qwen", "image-tools": "image-tools", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fish-audio-drama-3-4bit": "recorded-speech", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "ace-step-1-5-turbo": "music", "ace-step-1-5-xl-turbo-bf16": "music-boost", "ace-step-1-5-xl-sft-bf16": "music-max", "htdemucs": "stems", "htdemucs_ft": "stems-ft", "htdemucs_6s": "stems-6s", "mms-fa-align": "align", "soulx-singer-svc": "voice-convert", "soulx-singer-rmvpe": "voice-convert", "soulx-singer-whisper-base": "voice-convert", "ltx-2-5-q8-distilled-mlx": "video-ltx25", "ltx-2-5-bf16-distilled-mlx-max": "video-ltx25-max" };
 
 const envImage: EnvDef = { name: "image-gen", approxBytes: ENV_BYTES.image, root: imageGenRoot, ready: imageGenEnvironmentReady, build: (onPhase, signal) => ensureImageGenEnvironment(onPhase, { signal }), stop: () => imageGen.stop() };
 const envVideo: EnvDef = {
@@ -178,7 +178,6 @@ const LABELS: Record<string, { label: string; summary: string }> = {
   "fastwan2-2-ti2v-5b-mlx-bf16": { label: "Video: Quick (Wan 2.2 FastWan 5B)", summary: "Makes short silent video clips from words or a picture." },
   "ltx-2-5-q8-distilled-mlx": { label: "Video: LTX-2.5 with sound", summary: "Makes clips up to 10 seconds with a sound track and spoken words, from a sentence. A very large download, and the maker's licence applies." },
   "ltx-2-5-bf16-distilled-mlx-max": { label: "Video: LTX-2.5 Max with sound", summary: "Makes 1024 by 576 clips up to 10 seconds with a sound track and spoken words, from a sentence. A very large download (about 71 GB), and the maker's licence applies." },
-  "ltx-2-3-distilled-mlx": { label: "Video: Detailed (LTX-2.3)", summary: "Makes longer clips with sound and spoken words. A very large download, and the maker's licence applies." },
 };
 
 function dedupe<T>(items: T[], key: (item: T) => string): T[] { const seen = new Set<string>(); return items.filter((item) => { const k = key(item); if (seen.has(k)) return false; seen.add(k); return true; }); }
@@ -246,17 +245,7 @@ export function componentDefs(): UnitDef[] {
   units.push({
     id: STACK_VIDEO_MODELS[0]!.id, ...LABELS[STACK_VIDEO_MODELS[0]!.id]!, group: "video", role: "video", pins: STACK_VIDEO_MODELS, envs: [envVideo], tiers: ["p128"],
     platformBlock: () => videoAvailability().code === "unsupported" ? videoAvailability().reason : null,
-    usedBy: () => { const count = listVideoLoras().filter((lora) => lora.base_model !== "ltx-2.3").length; return ["The Video app", ...(count ? [`${count} video style${count === 1 ? "" : "s"} (LoRAs)`] : [])]; },
-    busy: () => {
-      const state = videoGen.status().state;
-      if (state === "running" || state === "building") return "A video clip is being made right now.";
-      return activeJobFor((kind) => kind.startsWith("video")) ? "A video clip is waiting or being made right now." : null;
-    },
-  });
-  units.push({
-    id: STACK_VIDEO_DETAILED_MODEL_ID, ...LABELS[STACK_VIDEO_DETAILED_MODEL_ID]!, group: "video", role: "video", pins: STACK_VIDEO_DETAILED_MODELS, envs: [envVideo], tiers: ["p128"], licenceNotice: LTX_LICENCE_NOTICE,
-    platformBlock: () => videoAvailability().code === "unsupported" ? videoAvailability().reason : null,
-    usedBy: () => { const count = listVideoLoras().filter((lora) => lora.base_model === "ltx-2.3").length; return ["Detailed videos in chat and the Video app", ...(count ? [`${count} Detailed video style${count === 1 ? "" : "s"} (LoRAs)`] : [])]; },
+    usedBy: () => { const count = listVideoLoras().filter((lora) => lora.base_model === "wan2.2-ti2v-5b" || lora.base_model === "ltx-2.5").length; return ["The Video app", ...(count ? [`${count} video style${count === 1 ? "" : "s"} (LoRAs)`] : [])]; },
     busy: () => {
       const state = videoGen.status().state;
       if (state === "running" || state === "building") return "A video clip is being made right now.";

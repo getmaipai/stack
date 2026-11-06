@@ -28,9 +28,9 @@ import { sha256OfFile } from "@/lib/fileHash";
 import { LoraError, namesRealPerson } from "@/lib/media/loraLibrary";
 
 export const LORA_BASE_MODEL = "wan2.2-ti2v-5b";
-/** VIDEO-LTX-01: the two bases a LoRA can be made for: Quick's Wan2.2 5B, Detailed's LTX-2.3. */
+/** Retained so old manifests parse; uploads and edits using this retired base are refused. */
 export const LORA_BASE_LTX = "ltx-2.3";
-/** VIDEO-LORA-05: the third base, the LTX-2.5 engine (Standard, Boost and Max). Its tensors read exactly like LTX-2.3's (see `detectLoraBase`). */
+/** VIDEO-LORA-05: the LTX-2.5 engine (Standard, Boost and Max). */
 export const LORA_BASE_LTX25 = "ltx-2.5";
 export const LORA_BASE_MODELS = [LORA_BASE_MODEL, LORA_BASE_LTX, LORA_BASE_LTX25] as const;
 export type LoraBase = typeof LORA_BASE_MODELS[number];
@@ -153,12 +153,11 @@ export function assertWan5bLora(info: SafetensorsInfo): void {
 /**
  * Which model a LoRA was made for. The tensors say the FAMILY: LTX transformers are 4096 wide with transformer_blocks keys; Wan2.2 5B is
  * 3072 wide with blocks keys; a file that fits neither throws wrong_base_model. They cannot say the LTX VERSION: measured 2026-11-02 on real
- * files, an LTX-2.5 LoRA (DigitalByte XPLDV) and an LTX-2.3 LoRA (TheBurgstall googlyeyes) have the same key layout (`diffusion_model.transformer_blocks.N.attnN.to_k|to_q|to_v|to_out.0`),
+ * files, two LTX-2.5 LoRAs from different sources have the same key layout (`diffusion_model.transformer_blocks.N.attnN.to_k|to_q|to_v|to_out.0`),
  * the same width (4096), the same 48 blocks and the same rank and shape rules, and the 2.3 file loads on the 2.5 pack and does nothing. So the
  * version is DECLARED by whoever adds the file (`declared`: Home, from the source's own base field or an admin), and the file can only
  * contradict it: a trainer's `ss_ltx_version` that names another version, or a family that is not LTX, is refused with wrong_base_model.
- * With nothing declared an LTX file reads as LTX-2.3 (the behaviour before LTX-2.5 LoRAs existed), which only ever blocks use on an
- * LTX-2.5 clip; it never lets a file run where it was not declared.
+ * A declared LTX-2.3 base is rejected as retired, and undeclared LTX files are also rejected.
  */
 export function detectLoraBase(info: SafetensorsInfo, declared?: LoraBase | null): LoraBase {
   if (info.modules === 0) throw new LoraError("not_a_lora", "That file has no LoRA weights in a form this video model reads (it needs lora_A and lora_B, or lora_down and lora_up, tensors).", 422);
@@ -166,17 +165,19 @@ export function detectLoraBase(info: SafetensorsInfo, declared?: LoraBase | null
     // A trainer that writes the LTX version into the file says which one it was made for; a 2.0 file is neither a 2.3 nor a 2.5 LoRA.
     const version = String(info.metadata?.ss_ltx_version ?? "");
     const named: LoraBase | null = version.startsWith("2.3") ? LORA_BASE_LTX : version.startsWith("2.5") ? LORA_BASE_LTX25 : null;
-    if (version && !named) throw new LoraError("wrong_base_model", `This LoRA was made for LTX ${version}, and these videos use LTX 2.3 (Detailed) or LTX 2.5. Pick a LoRA made for one of those.`, 422);
-    if (declared && declared !== LORA_BASE_LTX && declared !== LORA_BASE_LTX25) throw new LoraError("wrong_base_model", "This LoRA is an LTX LoRA, but it was said to be made for a different video model. Say which LTX version it was made for (2.3 or 2.5).", 422);
+    if (version && !named) throw new LoraError("wrong_base_model", `This LoRA was made for LTX ${version}, and this Stack accepts LTX-2.5 styles only. Pick an LTX-2.5 style.`, 422);
+    if (declared === LORA_BASE_LTX || named === LORA_BASE_LTX) throw new LoraError("wrong_base_model", "That style was made for a retired video model.", 422);
+    if (declared && declared !== LORA_BASE_LTX25) throw new LoraError("wrong_base_model", "This LoRA is an LTX LoRA, but it was said to be made for a different video model. Say whether it was made for LTX-2.5.", 422);
     if (declared && named && declared !== named) throw new LoraError("wrong_base_model", `This LoRA's own description says it was made for LTX ${version}, not ${declared === LORA_BASE_LTX25 ? "2.5" : "2.3"}. Pick the version the file names, or a different file.`, 422);
-    return declared ?? named ?? LORA_BASE_LTX;
+    if (!declared && !named) throw new LoraError("wrong_base_model", "That style was made for a retired video model.", 422);
+    return declared ?? named!;
   }
   if ((info.wanKeys ?? 0) >= 0 && (info.ltxKeys ?? 0) === 0) {
     assertWan5bLora(info);
     if (declared && declared !== LORA_BASE_MODEL) throw new LoraError("wrong_base_model", "This LoRA was made for Wan2.2 TI2V-5B (Quick), not the video model it was said to be for.", 422);
     return LORA_BASE_MODEL;
   }
-  throw new LoraError("wrong_base_model", "This LoRA was made for a different video model. Only LoRAs made for Wan2.2 TI2V-5B (Quick), LTX-2.3 (Detailed) or LTX-2.5 work here.", 422);
+  throw new LoraError("wrong_base_model", "This LoRA was made for a different video model. Only LoRAs made for Wan2.2 TI2V-5B (Quick) or LTX-2.5 work here.", 422);
 }
 
 // ---- VIDEO-LORA-05: what the LTX runtimes can actually map ----
@@ -224,7 +225,7 @@ export function inspectLtxLoraKeys(path: string): LtxLoraKeys {
 export function assertLtxLoraKeys(keys: LtxLoraKeys, name = "This LoRA"): void {
   if (keys.pairs > 0) return;
   if (keys.kohya > 0) throw new LoraError("lora_keys_unsupported", `${name} uses the kohya tensor names (lora_down and lora_up), which the video model does not read, so it would change nothing. Use a copy saved for ComfyUI or diffusers (tensor names ending in lora_A.weight and lora_B.weight, under diffusion_model), or pick another style.`, 422);
-  throw new LoraError("lora_keys_unsupported", `${name} has no tensors the video model can use (it needs diffusion_model...lora_A.weight and lora_B.weight pairs), so it would change nothing. Pick a LoRA made for LTX-2.3 or LTX-2.5 and saved for ComfyUI, or use another style.`, 422);
+  throw new LoraError("lora_keys_unsupported", `${name} has no tensors the video model can use (it needs diffusion_model...lora_A.weight and lora_B.weight pairs), so it would change nothing. Pick a LoRA made for LTX-2.5 and saved for ComfyUI, or use another style.`, 422);
 }
 /** How many of a LoRA's modules fit this transformer, from the pack's own header (name and, where it can be told, the in/out size). */
 export function matchLtxLoraToPack(keys: LtxLoraKeys, packTransformerPath: string): { matched: number; total: number; shapeMismatch: number } {
@@ -320,6 +321,7 @@ export async function importLora(input: ImportInput): Promise<LoraRecord> {
   if (stat.size > MAX_LORA_BYTES) throw new LoraError("too_large", `That file is larger than ${MAX_LORA_BYTES / 1_073_741_824} GB, the most a LoRA can be here.`, 413);
   const info = readLoraHeader(input.path);
   if (input.declaredBase !== undefined && input.declaredBase !== null && !LORA_BASE_MODELS.includes(input.declaredBase)) throw new LoraError("bad_base_model", `The base model is one of ${LORA_BASE_MODELS.join(", ")}.`, 422);
+  if (input.declaredBase === LORA_BASE_LTX) throw new LoraError("wrong_base_model", "That style was made for a retired video model.", 422);
   const base = detectLoraBase(info, input.declaredBase);
   if (base === LORA_BASE_LTX25) assertLtxLoraKeys(inspectLtxLoraKeys(input.path), `"${name}"`);
   const triggerWords = cleanWords(input.triggerWords);
@@ -349,7 +351,7 @@ export async function importLora(input: ImportInput): Promise<LoraRecord> {
   });
 }
 
-export interface LoraPatch { name?: string; classification?: LoraClass; strengthDefault?: number; triggerWords?: string[]; sourceUrl?: string | null; /** Moves an LTX file between LTX-2.3 and LTX-2.5 (the file is read again and may contradict it). */ baseModel?: LoraBase; }
+export interface LoraPatch { name?: string; classification?: LoraClass; strengthDefault?: number; triggerWords?: string[]; sourceUrl?: string | null; /** Moves an LTX file to LTX-2.5 (the file is read again and may contradict it). */ baseModel?: LoraBase; }
 
 /** Edits a record. The Stack keeps the one fact it can check: a file whose
  * metadata names adult content cannot be set all-ages. Who may change the
@@ -369,6 +371,7 @@ export function updateLora(id: string, patch: LoraPatch): Promise<LoraRecord> {
     if (patch.sourceUrl !== undefined) next.source_url = patch.sourceUrl?.slice(0, 2000) ?? null;
     if (patch.baseModel !== undefined) {
       if (!LORA_BASE_MODELS.includes(patch.baseModel)) throw new LoraError("bad_base_model", `The base model is one of ${LORA_BASE_MODELS.join(", ")}.`, 422);
+      if (patch.baseModel === LORA_BASE_LTX) throw new LoraError("wrong_base_model", "That style was made for a retired video model.", 422);
       if (patch.baseModel !== current.base_model) {
         const info = readLoraHeader(loraFile(id));
         next.base_model = detectLoraBase(info, patch.baseModel);
@@ -401,7 +404,7 @@ export function removeLora(id: string): Promise<boolean> {
 }
 
 /** What a person calls the model a base belongs to (Home owns the wording of its own screens; this is the Stack's plain error text). */
-function baseLabel(base: LoraBase | undefined): string { return base === LORA_BASE_LTX ? "Detailed (LTX 2.3)" : base === LORA_BASE_LTX25 ? "LTX 2.5" : "Quick"; }
+function baseLabel(base: LoraBase | undefined): string { return base === LORA_BASE_LTX ? "retired video model" : base === LORA_BASE_LTX25 ? "LTX 2.5" : "Quick"; }
 
 export interface LoraRequest { id: string; strength?: number; }
 export interface ResolvedLora { record: LoraRecord; path: string; strength: number; /** LTX-2.5 only: what the runtime can map in this file (read again at request time). */ keys?: LtxLoraKeys; }

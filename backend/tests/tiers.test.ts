@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { STACK_IMAGE_ERNIE_ID, STACK_IMAGE_KLEIN_ID, STACK_IMAGE_ZIMAGE_ID, STACK_MUSIC_MODEL_ID, STACK_VIDEO_DETAILED_MODEL_ID, STACK_VIDEO_MODEL_ID } from "@/lib/modelCatalog";
+import { STACK_IMAGE_ERNIE_ID, STACK_IMAGE_KLEIN_ID, STACK_IMAGE_ZIMAGE_ID, STACK_MUSIC_MODEL_ID, STACK_VIDEO_MODEL_ID } from "@/lib/modelCatalog";
 import { budgetSlots, tierCandidateLists, customPickRefusal, minorTierClamp, resolveLadder, resolveTier, thinkingAllowedFor, TIER_CANDIDATES } from "@/lib/tiers";
 
 const GB = 1_000_000_000;
@@ -16,7 +16,7 @@ describe("tier resolver", () => {
     }
     const reduced = resolveTier({ category: "chat", tier: "reduced", profile: "p128", roomBytes: 72 * GB });
     expect(slots.find((row) => row.category === "chat" && row.tier === "reduced")?.peak_bytes).toBe(reduced?.peakBytes);
-    expect(slots.map(({ category, tier }) => `${category}:${tier}`)).toEqual(["chat:reduced", "chat:standard", "chat:boost", "chat:max", "pictures:standard", "pictures:boost", "pictures:max", "video:standard", "video:boost", "music:standard"]);
+    expect(slots.map(({ category, tier }) => `${category}:${tier}`)).toEqual(["chat:reduced", "chat:standard", "chat:boost", "chat:max", "pictures:standard", "pictures:boost", "pictures:max", "video:standard", "music:standard"]);
     expect(budgetSlots("p16", 12 * GB).every((row) => row.category === "chat")).toBe(true);
     expect(budgetSlots("p16", 12 * GB).some((row) => row.category === "pictures" || row.category === "video" || row.category === "music")).toBe(false);
     expect(budgetSlots(null)).toEqual([]);
@@ -53,7 +53,7 @@ describe("tier resolver", () => {
     expect(tight[0]?.resolved).toBeNull();
     expect(tight[1]?.resolved).toBeNull();
     const roomy = resolveLadder("video", "p128", 72 * GB);
-    expect(roomy.map((row) => row.resolved?.model ?? null)).toEqual(["fastwan2-2-ti2v-5b-mlx-bf16", "ltx-2-3-distilled-mlx", null]);
+    expect(roomy.map((row) => row.resolved?.model ?? null)).toEqual(["fastwan2-2-ti2v-5b-mlx-bf16", null, null]);
     expect(roomy[0]?.resolved?.verified).toBe(true);
     expect(resolveLadder("voice", "p128", 72 * GB).map((row) => row.resolved?.model ?? null)).toEqual(["chatterbox-turbo-fp16", null, null]);
   });
@@ -85,7 +85,7 @@ describe("tier resolver", () => {
 
   test("candidate ids match the catalog constants", () => {
     const ids = new Set(TIER_CANDIDATES.map((candidate) => candidate.id));
-    for (const id of [STACK_IMAGE_ERNIE_ID, STACK_IMAGE_KLEIN_ID, STACK_IMAGE_ZIMAGE_ID, STACK_MUSIC_MODEL_ID, STACK_VIDEO_DETAILED_MODEL_ID, STACK_VIDEO_MODEL_ID]) expect(ids.has(id)).toBe(true);
+    for (const id of [STACK_IMAGE_ERNIE_ID, STACK_IMAGE_KLEIN_ID, STACK_IMAGE_ZIMAGE_ID, STACK_MUSIC_MODEL_ID, STACK_VIDEO_MODEL_ID]) expect(ids.has(id)).toBe(true);
   });
 
   test("exports complete candidates and minor rules", () => {
@@ -122,7 +122,7 @@ describe("tier candidate lists for the slot dialog", () => {
 
   test("a model this computer can never hold says so", () => {
     const max = tierCandidateLists("video", "p128", 30 * GB)[2]!;
-    expect(max.candidates.find((row) => row.id === "ltx-2-3-distilled-mlx")!.refusal).toBe("This needs 40 GB and this computer can never hold it.");
+    expect(max.candidates.some((row) => row.id === "ltx-2-3-distilled-mlx")).toBe(false);
   });
 
   test("a vetting-only model is catalogued but never resolved or offered", () => {

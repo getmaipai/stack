@@ -2,7 +2,7 @@
 // headers shaped like the real ones read on 2026-11-02 (BTS and XPLDV for LTX-2.5, googlyeyes for LTX-2.3, a kohya file): the key names, the
 // widths and the 48-block layout. The worker's own Python is run with a stubbed mlx and runtime, as the Max tests do.
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { app } from "@/app";
@@ -14,6 +14,7 @@ import { registerVideoJobs } from "@/video/jobs";
 import { __resetProvenanceForTests } from "@/video/provenance";
 import { __resetMemoryStateForTests } from "@/lib/memoryState";
 import { dataDir } from "@/lib/paths";
+import { loraPath } from "@/video/loras";
 import { LTX25_CLIP_CAP_BYTES, LTX25_MAX_PEAK_BYTES, LTX25_LORAS_PER_CLIP, ltx25LoraAdmitBytes, ltx25LoraMode, ltx25LoraProfile, ltx25LoraWanted } from "@/video/ltx25";
 import { assertLtxLoraKeys, detectLoraBase, importLora, inspectLtxLoraKeys, listLoras, LoraError, ltxLoraModule, matchLtxLoraToPack, readLoraHeader, removeLora, resolveLoras, updateLora } from "@/video/loras";
 import { buildWorkerRequest, videoGen, type VideoGenDeps, type VideoRunInput, type WorkerHandle, type WorkerReply, type WorkerRequest } from "@/video/videoGen";
@@ -110,17 +111,17 @@ const add25 = (name: string, path: string, extra: Record<string, unknown> = {}) 
 
 // ---- the base: family from tensors, version declared ----
 
-test("an LTX-2.5 and an LTX-2.3 LoRA have the same tensors, so the version is declared; a contradiction is refused; undeclared stays LTX-2.3", async () => {
+test("an LTX LoRA must identify itself as LTX-2.5; the retired version and undeclared files are refused", async () => {
   const path = writeSafetensors("style", comfyModules());
   const info = readLoraHeader(path);
-  expect(detectLoraBase(info)).toBe("ltx-2.3");
-  expect(detectLoraBase(info, "ltx-2.3")).toBe("ltx-2.3");
+  expect(() => detectLoraBase(info)).toThrow("That style was made for a retired video model.");
+  expect(() => detectLoraBase(info, "ltx-2.3")).toThrow("That style was made for a retired video model.");
   expect(detectLoraBase(info, "ltx-2.5")).toBe("ltx-2.5");
   expect(() => detectLoraBase(info, "wan2.2-ti2v-5b")).toThrow(LoraError);
   // A trainer's own version field can only agree with the declaration.
   const named25 = readLoraHeader(writeSafetensors("n25", comfyModules(), { ss_ltx_version: "2.5.0" }));
   expect(detectLoraBase(named25)).toBe("ltx-2.5");
-  expect(() => detectLoraBase(named25, "ltx-2.3")).toThrow(/2\.5/);
+  expect(() => detectLoraBase(named25, "ltx-2.3")).toThrow("That style was made for a retired video model.");
   const named20 = readLoraHeader(writeSafetensors("n20", comfyModules(), { ss_ltx_version: "2.0" }));
   expect(() => detectLoraBase(named20, "ltx-2.5")).toThrow(LoraError);
   // A Wan-shaped file cannot be declared an LTX one.
@@ -133,7 +134,7 @@ test("an LTX-2.5 and an LTX-2.3 LoRA have the same tensors, so the version is de
   expect(listLoras().map((item) => item.base_model)).toEqual(["ltx-2.5"]);
 });
 
-test("the 4 GB file cap and the three bases are what the library reports", async () => {
+test("the 4 GB file cap and recognized bases are what the library reports", async () => {
   const body = await (await app.request("/stack/v1/video/loras")).json() as { base_models: string[]; max_per_clip: number };
   expect(body.base_models).toEqual(["wan2.2-ti2v-5b", "ltx-2.3", "ltx-2.5"]);
 });
@@ -178,17 +179,15 @@ test("matching a file against the pack: every module of a right file fits (bf16 
 test("resolveLoras for ltx-2.5: refuses a base mismatch, an unknown id and the adult second lock; keeps the keys it read", async () => {
   const good = await add25("Good", writeSafetensors("good", comfyModules()));
   const adult = await add25("Adult", writeSafetensors("adult", comfyModules()), { classification: "adult-only" });
-  const old = await importLora({ path: writeSafetensors("old", comfyModules()), name: "Old", licence: "mit", classification: "all-ages" });
-  expect(old.base_model).toBe("ltx-2.3");
+  const oldPath = writeSafetensors("old", comfyModules());
+  await expect(importLora({ path: oldPath, name: "Old", licence: "mit", classification: "all-ages" })).rejects.toMatchObject({ code: "wrong_base_model", message: "That style was made for a retired video model." });
+  await expect(importLora({ path: oldPath, name: "Old2", licence: "mit", classification: "all-ages", declaredBase: "ltx-2.3" })).rejects.toMatchObject({ code: "wrong_base_model", message: "That style was made for a retired video model." });
   const resolved = await resolveLoras([{ id: good.id, strength: 0.8 }], "all-ages", "ltx-2.5");
   expect(resolved[0]).toMatchObject({ strength: 0.8, keys: { pairs: 14 } });
-  await expect(resolveLoras([{ id: old.id }], "all-ages", "ltx-2.5")).rejects.toMatchObject({ code: "wrong_base_model" });
   await expect(resolveLoras([{ id: good.id }], "all-ages", "ltx-2.3")).rejects.toMatchObject({ code: "wrong_base_model" });
   await expect(resolveLoras([{ id: adult.id }], "all-ages", "ltx-2.5")).rejects.toMatchObject({ code: "lora_not_allowed" });
   expect((await resolveLoras([{ id: adult.id }], "adult", "ltx-2.5"))).toHaveLength(1);
   // The file is read again at request time: replaced by a kohya file of the same size would fail the hash; a header that lost its pairs is refused.
-  const moved = await updateLora(old.id, { baseModel: "ltx-2.5" });
-  expect(moved.base_model).toBe("ltx-2.5");
   await expect(updateLora(good.id, { baseModel: "wan2.2-ti2v-5b" })).rejects.toMatchObject({ code: "wrong_base_model" });
 });
 
@@ -237,7 +236,6 @@ test("a Max clip without a LoRA sends no lora_mode; the request builder adds it 
   expect(buildWorkerRequest("ltx25max", paths, input, "j", "/tmp/o.mp4", "/tmp/p.jpg").lora_mode).toBeUndefined();
   expect(buildWorkerRequest("ltx25max", paths, { ...input, loras: [["/l/a.safetensors", 1]] }, "j", "/tmp/o.mp4", "/tmp/p.jpg").lora_mode).toBe("fused");
   expect(buildWorkerRequest("ltx25", paths, { ...input, loras: [["/l/a.safetensors", 1]] }, "j", "/tmp/o.mp4", "/tmp/p.jpg").lora_mode).toBe("fused");
-  expect(buildWorkerRequest("detailed", paths, { ...input, loras: [["/l/a.safetensors", 1]] }, "j", "/tmp/o.mp4", "/tmp/p.jpg").lora_mode).toBeUndefined();
 });
 
 test("request validation: Standard refuses a LoRA (lora_unsupported), three is too many, a 2.3 file, a kohya file and an adult file on an all-ages clip are refused before a job exists", async () => {
@@ -245,7 +243,13 @@ test("request validation: Standard refuses a LoRA (lora_unsupported), three is t
   const good = await add25("Good", writeSafetensors("good", comfyModules()));
   const second = await add25("Second", writeSafetensors("second", comfyModules(4096, 32)));
   const third = await add25("Third", writeSafetensors("third", comfyModules(4096, 8)));
-  const old = await importLora({ path: writeSafetensors("old", comfyModules()), name: "Old", licence: "mit", classification: "all-ages" });
+  const oldPath = writeSafetensors("old", comfyModules());
+  await expect(importLora({ path: oldPath, name: "Old", licence: "mit", classification: "all-ages" })).rejects.toMatchObject({ code: "wrong_base_model" });
+  const old = await importLora({ path: writeSafetensors("old-wan", { "diffusion_model.blocks.0.self_attn.q.lora_A.weight": { dtype: "F16", shape: [16, 3072] }, "diffusion_model.blocks.0.self_attn.q.lora_B.weight": { dtype: "F16", shape: [3072, 16] } }), name: "Old", licence: "mit", classification: "all-ages" });
+  const legacy = { ...old, base_model: "ltx-2.3" as const };
+  const manifest = JSON.parse(readFileSync(join(dataDir, "video", "loras", "manifest.json"), "utf8")) as { loras: Array<Record<string, unknown>> };
+  manifest.loras[0] = legacy; writeFileSync(join(dataDir, "video", "loras", "manifest.json"), JSON.stringify(manifest, null, 1));
+  const legacyBytes = await Bun.file(oldPath).arrayBuffer(); writeFileSync(loraPath(old.id), new Uint8Array(legacyBytes));
   const adult = await add25("Adult", writeSafetensors("adult", comfyModules(4096, 4)), { classification: "adult-only" });
   const base = { prompt: "x", model: "ltx25-max", size: "1024x576", seconds: 5, timeout_ms: 5000 };
   const standard = await post({ prompt: "x", model: "ltx25-q8", loras: [{ id: good.id }] });

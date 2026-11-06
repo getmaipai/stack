@@ -152,7 +152,6 @@ test("every long-lived MLX worker caps its cache at startup and clears it after 
   const workers = [
     "../src/images/mflux_worker.py",
     "../src/video/video_worker.py",
-    "../src/video/ltx_worker.py",
     "../src/video/ltx25_worker.py",
     "../src/music/music_worker.py",
   ];

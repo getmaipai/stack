@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { meta } from "@/db/schema";
 import { componentDefs, listComponents, uninstallComponent } from "@/lib/components";
 import { listModels, getModel, type CatalogModelLike } from "@/lib/modelStore";
-import { STACK_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_QWEN_MODELS } from "@/lib/modelCatalog";
+import { STACK_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_QWEN_MODELS } from "@/lib/modelCatalog";
 import { modelsDir } from "@/lib/paths";
 import { readSettings } from "@/settings";
 import { loadedRoleForModel } from "@/lib/supervisor";
@@ -20,7 +20,9 @@ export interface TidyItem { id: string; kind: TidyKind; bytes: number; reason: s
 export interface TidyPlan { reclaimable_bytes: number; items: TidyItem[]; }
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
-const catalogPins = (): CatalogModelLike[] => [...STACK_MODELS, ...STACK_VIDEO_DETAILED_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_IMAGE_KLEIN_MODELS, ...STACK_IMAGE_ZIMAGE_MODELS, ...STACK_IMAGE_ERNIE_MODELS, ...STACK_IMAGE_QWEN_MODELS, ...componentDefs().flatMap((component) => component.pins)];
+// These legacy records may remain after an upgrade removes the retired component from the catalog.
+const RETIRED_VIDEO_MODEL_IDS = new Set(["ltx-2-3-distilled-mlx", "video-gemma-3-12b-text-encoder"]);
+const catalogPins = (): CatalogModelLike[] => [...STACK_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_IMAGE_KLEIN_MODELS, ...STACK_IMAGE_ZIMAGE_MODELS, ...STACK_IMAGE_ERNIE_MODELS, ...STACK_IMAGE_QWEN_MODELS, ...componentDefs().flatMap((component) => component.pins)];
 function graceHours(): number { const value = Number(settingValues()["stack.storage.tidy_grace_hours"] ?? 24); return Number.isFinite(value) ? Math.max(0, value) : 24; }
 function pathBytes(path: string): number { try { const s = lstatSync(path); if (s.isSymbolicLink()) return 0; if (!s.isDirectory()) return s.size; return readdirSync(path).reduce((n, name) => n + pathBytes(join(path, name)), 0); } catch { return 0; } }
 function settingPointsAt(id: string): string | null {
@@ -42,7 +44,7 @@ function successorReadySince(successor: string, componentInstalled: boolean): nu
   return since;
 }
 function blockerFor(id: string, componentId: string, componentModelIds: string[]): string | null {
-  const depended = listLoras().filter((lora) => (id === "ltx-2-3-distilled-mlx" && lora.base_model === "ltx-2.3") || (id === "ltx-2-5-q8-distilled-mlx" && lora.base_model === "ltx-2.5"));
+  const depended = listLoras().filter((lora) => id === "ltx-2-5-q8-distilled-mlx" && lora.base_model === "ltx-2.5");
   if (depended.length) return `Installed video style${depended.length === 1 ? "" : "s"} ${depended.map((lora) => lora.name).join(", ")} depend on ${id}; remove those styles first.`;
   const runningJob = listJobs().find((job) => ["running", "queued", "paused", "stalled"].includes(job.state) && componentModelIds.some((modelId) => JSON.stringify(job.input ?? {}).includes(modelId)));
   if (runningJob) return `Job ${runningJob.id} is using ${id}; let it finish or cancel it first.`;
@@ -62,7 +64,7 @@ function safeModelsPath(path: string): boolean {
 }
 function referencedPaths(): Set<string> {
   const paths = new Set<string>();
-  for (const model of listModels()) { if (model.modelPath) paths.add(resolve(model.modelPath)); }
+  for (const model of listModels()) { if (model.modelPath && !RETIRED_VIDEO_MODEL_IDS.has(model.id)) paths.add(resolve(model.modelPath)); }
   for (const pin of catalogPins()) if (pin.repo && pin.revision && pin.download?.hub_file) {
     const snapshot = resolve(modelsDir, "hub", `models--${pin.repo.replaceAll("/", "--")}`, "snapshots", pin.revision, pin.download.hub_file);
     if (existsSync(snapshot)) paths.add(snapshot);
@@ -71,7 +73,7 @@ function referencedPaths(): Set<string> {
   return paths;
 }
 function knownFolderNames(): Set<string> {
-  return new Set([...catalogPins().map((pin) => pin.id), ...listModels().map((model) => model.id), ...listModelManifests().map((manifest) => manifest.id), "hub", "manifests", "store"]);
+  return new Set([...catalogPins().map((pin) => pin.id), ...listModels().map((model) => model.id).filter((id) => !RETIRED_VIDEO_MODEL_IDS.has(id)), ...listModelManifests().map((manifest) => manifest.id), "hub", "manifests", "store"]);
 }
 function activeInputModelIds(): Set<string> {
   const ids = new Set<string>();
