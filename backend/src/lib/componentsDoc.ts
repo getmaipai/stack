@@ -73,6 +73,7 @@ export function renderComponentsDoc(catalog: ComponentsCatalog): string {
   lines.push("# Components inventory");
   lines.push("");
   lines.push("This table is every engine build and model this build of the Stack ships as a pin, per role and per machine profile, drawn from the code by `bun run gen:components-doc` so it cannot drift from what the daemon installs at first run. The tier is the machine profile (`p16` to `p128`, by unified memory on Apple silicon and by VRAM elsewhere), and for each role the Stack starts the model the tier binds it to, or else the largest pinned model that fits the machine's tier. What is available beyond these pins is the Catalog's business: its signed engine index (`getmaipai/catalog`, `engines/index.json`, STACK-97) is what the updates route reads for engines, and its model index will do the same for models; a role with no pin here lists its candidates from `dev.md` and the backlog, or says not yet.");
+  lines.push("Media titles, credits and captions use libass ASS scripts with Didot, Bodoni 72 or Baskerville display type, Gill Sans, Futura or Helvetica Neue small caps, and Baskerville, Hoefler Text or Didot names. When these font families cannot be resolved, the Stack falls back to its existing Arial drawtext rendering.");
   lines.push("");
   for (const role of catalog.roles) {
     lines.push(`## ${role} (${catalog.labels[role] ?? role})`);

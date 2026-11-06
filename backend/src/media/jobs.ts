@@ -642,7 +642,7 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
         needsVideo("captions");
         const font = ["/System/Library/Fonts/Supplemental/Arial.ttf", "/System/Library/Fonts/Helvetica.ttc", "/System/Library/Fonts/Supplemental/Verdana.ttf"].find((path) => existsSync(path));
         if (!font) throw fail({ code: "bad_input", message: "Captions need a system font file. Install a font or choose another computer." });
-        args = captionsArgs(ffmpeg, clip, target, op, font);
+        args = captionsArgs(ffmpeg, clip, target, op, font, join(work, `captions${i}.ass`));
       } else if (op.op === "title_card" || op.op === "credits") {
         needsVideo(op.op);
         const font = ["/System/Library/Fonts/Supplemental/Arial.ttf", "/System/Library/Fonts/Helvetica.ttc", "/System/Library/Fonts/Supplemental/Verdana.ttf"].find((path) => existsSync(path));
@@ -650,7 +650,8 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
         const duration = op.op === "title_card" ? op.duration_s : op.duration_s ?? Math.max(3, Math.min(120, Math.ceil((((op.lines.length * 2 + (op.title ? 2 : 0)) / 11 + 1) * (clip.probe.height ?? 720)) / op.speed)));
         expected = clip.probe.duration_s ?? 0;
         const cardPath = join(work, `card${i}.mp4`);
-        const cardArgs = op.op === "title_card" ? titleCardArgs(ffmpeg, clip, cardPath, op, font) : creditsArgs(ffmpeg, clip, cardPath, op, font);
+        const assPath = join(work, `card${i}.ass`);
+        const cardArgs = op.op === "title_card" ? titleCardArgs(ffmpeg, clip, cardPath, op, font, assPath) : creditsArgs(ffmpeg, clip, cardPath, op, font, assPath);
         const madeCard = await mediaDeps.run(cardArgs, { signal });
         if (madeCard.aborted || signal.aborted) throw new Error("Cancelled.");
         if (madeCard.code !== 0 || !existsSync(cardPath)) throw fail({ code: "failed", message: `The edit could not be made at step ${i + 1} (${op.op}). Open Details for what the tool said.`, detail: madeCard.stderr.trim().split("\n").slice(-6).join("\n").slice(-1200) });

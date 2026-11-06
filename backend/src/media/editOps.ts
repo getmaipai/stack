@@ -5,6 +5,11 @@
 // separate argv entry and every input is a local file the path guards passed.
 import { z } from "zod";
 import type { ProbeResult } from "./probe";
+import { ASS_HEADER, assColor, assText, fitTitleFontSize, resolveFonts, wrapTitle, writeAss } from "./typography";
+
+const assTime = (seconds: number): string => { const cs = Math.round(seconds * 100); return `0:${String(Math.floor(cs / 6000)).padStart(2, "0")}:${String(Math.floor(cs / 100) % 60).padStart(2, "0")}.${String(cs % 100).padStart(2, "0")}`; };
+const assFilterPath = (path: string): string => path.replace(/\\/g, "\\\\").replace(/:/g, "\\:").replace(/'/g, "\\'").replace(/,/g, "\\,").replace(/\[/g, "\\[").replace(/\]/g, "\\]");
+const wrapCaption = (text: string): string => { const words = text.split(/\s+/), lines: string[] = []; let line = ""; for (const word of words) { if (line && (line.length + word.length + 1 > 42 || lines.length === 0 && line.length + word.length + 1 > 42)) { lines.push(line); line = word; } else line += `${line ? " " : ""}${word}`; } if (line) lines.push(line); return lines.slice(0, 2).join("\\N"); };
 
 /** `dissolve` is the smooth blend people expect (ffmpeg calls that `fade`); ffmpeg's own `dissolve` is a grainy speckle, kept as `speckle`. */
 const XFADE_NAME: Record<string, string> = { dissolve: "fade", speckle: "dissolve" };
@@ -456,7 +461,9 @@ export function pipArgs(ffmpeg:string,clip:Clip,other:Clip,out:string,op:Extract
 /** An apostrophe cannot be escaped inside the single-quoted drawtext value (ffmpeg ends the quote at it, found 2026-11-06 with a title "The Lighthouse's Secret"), so it is drawn as the typographic apostrophe, which is what a printed title uses anyway. */
 export const drawTextEscape = (text: string): string => text.replace(/\\/g, "\\\\").replace(/:/g, "\\:").replace(/'/g, "\u2019").replace(/%/g, "\\%").replace(/\n/g, "\\n").replace(/\r/g, "");
 export const filterEscape = (text: string): string => drawTextEscape(text).replace(/[{}]/g, (char) => `\\${char}`);
-export function captionsArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "captions" }>, font: string): string[] {
+export function captionsArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "captions" }>, font: string, assPath?: string): string[] {
+  const fonts = resolveFonts();
+  if (fonts && assPath) { const { width, height } = targetDimensions(clip); const events = op.lines.map((line) => `Dialogue: 0,${assTime(line.from_s)},${assTime(line.to_s)},Caption,,0,0,${Math.round(height * 0.06)},,${assText(wrapCaption(line.text))}`).join("\n"); writeAss(assPath, ASS_HEADER(width, height, `Style: Caption,${fonts.caption},${Math.round(height / 24)},&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,2,2,40,40,${Math.round(height * 0.06)},1`) + events + "\n"); const args = [...BASE(ffmpeg), "-i", clip.path, "-map", "0:v:0?", "-map", "0:a:0?", "-sn", "-dn"]; if (clip.probe.has_video) args.push("-vf", `ass=${assFilterPath(assPath)}:fontsdir=${assFilterPath(fonts.fontsdir)}`, ...ENCODE_V); if (clip.probe.has_audio) args.push("-c:a", "copy"); return [...args, ...FASTSTART, out]; }
   const position = op.position === "top" ? "y=h*0.06" : op.position === "middle" ? "y=(h-text_h)/2" : "y=h-text_h-h*0.06";
   const filters = op.lines.map((line) => `drawtext=fontfile='${drawTextEscape(font)}':text='${drawTextEscape(line.text)}':enable='between(t,${num(line.from_s)},${num(line.to_s)})':fontsize=h/18:fontcolor=white:borderw=3:bordercolor=black:x=(w-text_w)/2:${position}`);
   const args = [...BASE(ffmpeg), "-i", clip.path, "-map", "0:v:0?", "-map", "0:a:0?", "-sn", "-dn"];
@@ -466,8 +473,21 @@ export function captionsArgs(ffmpeg: string, clip: Clip, out: string, op: Extrac
 }
 const targetDimensions = (clip: Clip) => { const video = videoOf(clip.probe)!; return { width: Math.max(2, Math.round((video.width ?? 1280) / 2) * 2), height: Math.max(2, Math.round((video.height ?? 720) / 2) * 2), rate: video.fps && video.fps > 0 ? num(video.fps) : "30", sampleRate: clip.probe.streams.find((stream) => stream.type === "audio")?.sample_rate ?? 48000 }; };
 const rgb = (colour: string): string => colour === "black" ? "0x000000" : colour === "white" ? "0xFFFFFF" : `0x${colour.slice(1)}`;
-export function titleCardArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "title_card" }>, font: string): string[] {
+export function titleCardArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "title_card" }>, font: string, assPath?: string): string[] {
   const { width, height, rate } = targetDimensions(clip);
+  const fonts = resolveFonts();
+  if (fonts && assPath) {
+    const duration = op.duration_s, fadeIn = op.fade_in_s ?? 1.4, fadeOut = op.fade_out_s ?? 0.9, title = op.text.toLocaleUpperCase();
+    const wrapped = wrapTitle(title, width, height), size = Math.min(fitTitleFontSize(title, width, height), height / 10), wrappedTitle = wrapped.includes("\\N"), cy = op.position === "top" ? height * 0.25 : op.position === "lower_third" ? height * 0.72 : height * (wrappedTitle ? 0.44 : 0.48);
+    const common = `\\fad(${Math.round(fadeIn * 1000)},${Math.round(fadeOut * 1000)})`;
+    const titleEvent = `Dialogue: 0,0:00:00.00,${assTime(duration)},Title,,0,0,0,,{\\an5\\pos(${width / 2},${Math.round(cy)})${common}\\blur1.2\\fsp${Math.round(size * 0.06)}\\t(0,${Math.round(duration * 1000)},\\fsp${Math.round(size * 0.07)})}${assText(wrapped)}`;
+    const ry = Math.round(cy + size * (wrapped.includes("\\N") ? 1.1 : 0.8));
+    const rule = `Dialogue: 0,0:00:00.00,${assTime(duration)},Rule,,0,0,0,,{\\an5\\pos(${width / 2},${ry})${common}\\p1\\bord0\\shad0}m -${Math.round(width * .06)} 0 l ${Math.round(width * .06)} 0 l ${Math.round(width * .06)} 1 l -${Math.round(width * .06)} 1{\\p0}`;
+    const sub = op.subtitle ? `\nDialogue: 0,0:00:00.00,${assTime(duration)},Sub,,0,0,0,,{\\an5\\pos(${width / 2},${ry + Math.round(size * .62)})${common}\\fsp${Math.round(height * .006)}}${assText(op.subtitle.toLocaleUpperCase())}` : "";
+    const styles = `Style: Title,${fonts.display},${Math.round(size)},${assColor(op.text_color)},${assColor(op.text_color)},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1\nStyle: Sub,${fonts.smallCaps},${Math.round(height / 32)},${assColor(op.text_color)},${assColor(op.text_color)},&H00000000,&H00000000,0,0,0,0,100,100,${Math.round(height * .006)},0,1,0,0,5,0,0,0,1\nStyle: Rule,${fonts.display},10,${assColor(op.text_color)},${assColor(op.text_color)},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1`;
+    writeAss(assPath, ASS_HEADER(width, height, styles) + titleEvent + "\n" + rule + sub + "\n");
+    const args = [...BASE(ffmpeg), "-f", "lavfi", "-i", `color=c=${rgb(op.background)}:s=${width}x${height}:r=${rate}:d=${num(duration)}`, "-f", "lavfi", "-i", `anullsrc=r=${targetDimensions(clip).sampleRate}:cl=stereo`, "-filter_complex", `[0:v]format=yuv420p,setsar=1,ass=${assFilterPath(assPath)}:fontsdir=${assFilterPath(fonts.fontsdir)}[v];[1:a]atrim=0:${num(duration)},asetpts=PTS-STARTPTS[a]`, "-map", "[v]", "-map", "[a]", "-t", num(duration), "-shortest", "-r", rate, ...ENCODE_V, ...ENCODE_A]; return [...args, ...FASTSTART, out];
+  }
   const y = op.position === "top" ? "h*0.08" : op.position === "lower_third" ? "h*0.68" : "(h-text_h)/2";
   const textFilter = `drawtext=fontfile='${filterEscape(font)}':text='${filterEscape(op.text)}':fontsize=h/9:fontcolor=${rgb(op.text_color)}:x=(w-text_w)/2:y=${y}`;
   const subtitle = op.subtitle ? `,drawtext=fontfile='${filterEscape(font)}':text='${filterEscape(op.subtitle)}':fontsize=h/16:fontcolor=${rgb(op.text_color)}:x=(w-text_w)/2:y=${op.position === "top" ? "h*0.2" : op.position === "lower_third" ? "h*0.78" : "(h-text_h)/2+h*0.09"}` : "";
@@ -475,9 +495,21 @@ export function titleCardArgs(ffmpeg: string, clip: Clip, out: string, op: Extra
   const args = [...BASE(ffmpeg), "-f", "lavfi", "-i", `color=c=${rgb(op.background)}:s=${width}x${height}:r=${rate}:d=${num(op.duration_s)}`, "-f", "lavfi", "-i", `anullsrc=r=${targetDimensions(clip).sampleRate}:cl=stereo`, "-filter_complex", `[0:v]format=yuv420p,setsar=1,${textFilter}${subtitle}${fades}[v];[1:a]atrim=0:${num(op.duration_s)},asetpts=PTS-STARTPTS[a]`, "-map", "[v]", "-map", "[a]", "-t", num(op.duration_s), "-shortest", "-r", rate, ...ENCODE_V, ...ENCODE_A];
   return [...args, ...FASTSTART, out];
 }
-export function creditsArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "credits" }>, font: string): string[] {
+export function creditsArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "credits" }>, font: string, assPath?: string): string[] {
   const { width, height, rate, sampleRate } = targetDimensions(clip);
   const duration = op.duration_s ?? Math.max(3, Math.min(120, Math.ceil((((op.lines.length * 2 + (op.title ? 2 : 0)) / 11 + 1) * height) / op.speed)));
+  const fonts = resolveFonts();
+  if (fonts && assPath) {
+    const end = -Math.round(height * .45), rows: string[] = [];
+    const rowOffset = op.title ? 1.4 : 0;
+    if (op.title) rows.push(`Dialogue: 0,0:00:00.00,${assTime(duration)},Title,,0,0,0,,{\\an5\\move(${width / 2},${height},${width / 2},${end})}${assText(op.title.toLocaleUpperCase())}`);
+    op.lines.forEach((line, i) => { const y0 = Math.round(height + (i + rowOffset) * height / 11), y1 = Math.round(end + (i + rowOffset) * height / 11); if (!line.role) rows.push(`Dialogue: 0,0:00:00.00,${assTime(duration)},Name,,0,0,0,,{\\an5\\move(${width / 2},${y0},${width / 2},${y1})}${assText(line.name)}`); else { rows.push(`Dialogue: 0,0:00:00.00,${assTime(duration)},Role,,0,0,0,,{\\an6\\move(${Math.round(width * .49)},${y0},${Math.round(width * .49)},${y1})}${assText(line.role.toLocaleUpperCase())}`); rows.push(`Dialogue: 0,0:00:00.00,${assTime(duration)},Name,,0,0,0,,{\\an4\\move(${Math.round(width * .51)},${y0},${Math.round(width * .51)},${y1})}${assText(line.name)}`); } });
+    const styles = `Style: Role,${fonts.smallCaps},${Math.round(height / 36)},${assColor(op.text_color)},${assColor(op.text_color)},&H00000000,&H00000000,0,0,0,0,100,100,${Math.round(height * .006)},0,1,0,0,6,0,0,0,1\nStyle: Name,${fonts.names},${Math.round(height / 24)},${assColor(op.text_color)},${assColor(op.text_color)},&H00000000,&H00000000,0,0,0,0,100,100,${Math.round(height * .002)},0,1,0,0,4,0,0,0,1\nStyle: Title,${fonts.display},${Math.round(height / 12)},${assColor(op.text_color)},${assColor(op.text_color)},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1`;
+    writeAss(assPath, ASS_HEADER(width, height, styles) + rows.join("\n") + "\n");
+    const graph = `[0:v]format=yuv420p,setsar=1,ass=${assFilterPath(assPath)}:fontsdir=${assFilterPath(fonts.fontsdir)}[v];[1:a]atrim=0:${num(duration)},asetpts=PTS-STARTPTS[a]`;
+    return [...BASE(ffmpeg), "-f", "lavfi", "-i", `color=c=${rgb(op.background)}:s=${width}x${height}:r=${rate}:d=${num(duration)}`, "-f", "lavfi", "-i", `anullsrc=r=${sampleRate}:cl=stereo`, "-filter_complex", graph, "-map", "[v]", "-map", "[a]", "-t", num(duration), "-shortest", "-r", rate, ...ENCODE_V, ...ENCODE_A, ...FASTSTART, out];
+  }
+
   const entries = [...(op.title ? [{ text: op.title, size: "h/11", y: `h - t*${num(op.speed)}` }] : []), ...op.lines.flatMap((line, i) => [
     ...(line.role ? [{ text: line.role, size: "h/24", y: `h - t*${num(op.speed)} + ${i * 2 + (op.title ? 2 : 0)}*h/11` }] : []),
     { text: line.name, size: "h/15", y: `h - t*${num(op.speed)} + ${i * 2 + (op.title ? 2 : 0) + (line.role ? 1 : 0)}*h/11` },

@@ -9,6 +9,7 @@ with Home's releases, so this file tracks what a Home release picks up.
 ## [Unreleased]
 
 ### Added
+- Media title cards, credits and captions use cinematic ASS typography with installed serif and small caps families, fitted title sizing, tracked titles, a fine rule and two-column rolling credits. Existing drawtext rendering remains the fallback when those fonts are unavailable.
 
 - TIDY-01: catalog components can name successors with `superseded_by`; the Stack exposes a dry-run tidy plan and safe tidy action for replaced components, orphan model folders and stale partial downloads. The existing storage sweep runs tidy after blob pruning. The retired LTX-2.3 files are no longer in the catalog, and TIDY-01 finds their folders as orphans after its grace period.
 
