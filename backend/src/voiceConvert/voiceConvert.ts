@@ -1,5 +1,6 @@
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { engineTagRoot } from "@/lib/store/layout";
 import { dataDir } from "@/lib/paths";
 import { getModel } from "@/lib/modelStore";
@@ -14,7 +15,6 @@ import workerAsset from "./voice_convert_worker.py" with { type: "file" };
 import requirements from "./voice-convert.darwin-arm64.requirements.txt" with { type: "file" };
 import { extractArchive } from "@maipai/core/src/archive";
 import soulxSource from "./soulx-singer-source.tar.gz" with { type: "file" };
-import { sha256OfFile } from "@/lib/download";
 
 export const VOICE_CONVERT_NAME = "voice-convert";
 export const VOICE_CONVERT_VERSION = "1.0.0";
@@ -23,6 +23,22 @@ export const VOICE_CONVERT_MAX_SOURCE_BYTES = 40 * 1024 * 1024;
 export const VOICE_CONVERT_IDLE_MS = 60_000;
 export const voiceConvertRoot = () => engineTagRoot(VOICE_CONVERT_NAME, VOICE_CONVERT_VERSION);
 const root = voiceConvertRoot;
+const VOICE_CONVERT_SOURCE_SHA256 = "c446f166e66badb6476f336faaca74e961a7754be1c272ff95e5e2afb5367085";
+export type EmbeddedArchiveReader = (path: string) => Promise<ArrayBuffer | Uint8Array>;
+export async function extractVoiceConvertSource(assetPath: string, expectedHash: string, destination: string, readAsset: EmbeddedArchiveReader = (path) => Bun.file(path).arrayBuffer()): Promise<void> {
+  const bytes = new Uint8Array(await readAsset(assetPath));
+  const sourceHash = createHash("sha256").update(bytes).digest("hex");
+  if (sourceHash !== expectedHash) throw new Error("The pinned voice conversion source did not verify.");
+  if (existsSync(join(destination, "soulxsinger", "models", "soulxsinger_svc.py"))) return;
+  mkdirSync(destination, { recursive: true });
+  const archivePath = join(dirname(destination), "soulx-singer-source.tar.gz");
+  try {
+    await Bun.write(archivePath, bytes);
+    await extractArchive(archivePath, destination);
+  } finally {
+    rmSync(archivePath, { force: true });
+  }
+}
 const proof = () => join(uvVenvPath(root()), "lib", "python3.12", "site-packages", "torch", "__init__.py");
 export const voiceConvertEnvironmentReady = (): boolean => uvEnvironmentReady({ name: VOICE_CONVERT_NAME, version: VOICE_CONVERT_VERSION, root: root(), proof: proof() });
 const spec = (): UvEnvironmentSpec => ({ name: VOICE_CONVERT_NAME, version: VOICE_CONVERT_VERSION, root: root(), requirements: process.platform === "darwin" && process.arch === "arm64" ? requirements : null, proof: proof() });
@@ -35,7 +51,7 @@ const paths = () => { const model = getModel(STACK_VOICE_CONVERT_MODEL.id), f0 =
 export const defaultVoiceConvertDeps: VoiceConvertDeps = {
   supported: () => process.platform === "darwin" && process.arch === "arm64",
   installed: () => { const p=paths(); return !!p?.ready && uvEnvironmentReady(spec()) && existsSync(join(root(),"source","soulxsinger","models","soulxsinger_svc.py")); },
-  ensure: async (_stage, signal) => { if (!paths()?.ready) throw new Error("The voice conversion models are not installed."); const sourceHash = await sha256OfFile(soulxSource); if (sourceHash !== "c446f166e66badb6476f336faaca74e961a7754be1c272ff95e5e2afb5367085") throw new Error("The pinned voice conversion source did not verify."); const sourceRoot = join(root(), "source"); if (!existsSync(join(sourceRoot, "soulxsinger", "models", "soulxsinger_svc.py"))) { mkdirSync(sourceRoot, { recursive: true }); await extractArchive(soulxSource, sourceRoot); } await ensureUvEnvironment(spec(), _stage, { signal }); },
+  ensure: async (_stage, signal) => { if (!paths()?.ready) throw new Error("The voice conversion models are not installed."); const sourceRoot = join(root(), "source"); await extractVoiceConvertSource(soulxSource, VOICE_CONVERT_SOURCE_SHA256, sourceRoot); await ensureUvEnvironment(spec(), _stage, { signal }); },
   runtime: () => { const p = paths(); if (!p?.ready) throw new Error("The voice conversion models are not installed."); return { checkpoint: p.checkpoint, config: p.config, rmvpe: p.rmvpe, whisper: p.whisperModel }; },
   spawn: async () => { const dir = root(); mkdirSync(join(dir, "run"), { recursive: true }); const script = join(dir, "voice_convert_worker.py"); writeFileSync(script, await Bun.file(workerAsset).text()); const env = voiceConvertWorkerEnv(); env.PYTHONPATH = join(dir, "source"); env.TRANSFORMERS_OFFLINE = "1"; env.HF_HUB_OFFLINE = "1"; env.HF_HOME = join(dataDir,"models"); env.NUMBA_CACHE_DIR = join(dir, "numba-cache"); const child = Bun.spawn([process.env.VOICE_CONVERT_PYTHON ?? uvVenvPython(dir), "-s", script], { cwd: join(dir, "run"), stdin: "pipe", stdout: "pipe", stderr: "pipe", env }); return handle(child); },
 };
