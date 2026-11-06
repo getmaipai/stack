@@ -1256,6 +1256,7 @@ const LTX_FILES = [
 ];
 export const STACK_VIDEO_DETAILED_MODEL: CatalogModelLike = {
   id: STACK_VIDEO_DETAILED_MODEL_ID,
+  superseded_by: ["ltx-2-5-q8-distilled-mlx"],
   role: "video",
   repo: LTX_REPO,
   license: LTX_LICENCE,

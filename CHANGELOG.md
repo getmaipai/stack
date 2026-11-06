@@ -8,6 +8,10 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ## [Unreleased]
 
+### Added
+
+- TIDY-01: catalog components can name successors with `superseded_by`; the Stack exposes a dry-run tidy plan and safe tidy action for replaced components, orphan model folders and stale partial downloads. The existing storage sweep runs tidy after blob pruning. LTX-2.3 Detailed is marked superseded by LTX-2.5, with readiness grace, usage/choice/tier/LoRA blockers and removal logging.
+
 ### Changed
 
 - Qwen-Image 20B is installable (INSTALL-EVERYTHING-01): the mflux community's 8-bit Qwen-Image 2512 build (36.1 GB, Apache-2.0, pinned to a revision with every file's sha256) is a picture family `qwen-image-2512-q8` (p128 only, no edits, 30 steps by default, loaded as is with no quantize step), a component of the same id (`pictures-qwen` install-plan row, optional), accepted as `model` on `POST /v1/images/generations` and listed by `GET /stack/v1/image`. It was the Max picture slot with no way to install it.

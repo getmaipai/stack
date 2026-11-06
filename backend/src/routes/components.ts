@@ -7,9 +7,10 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { ComponentError, listComponents, startComponentInstall, uninstallComponent } from "@/lib/components";
+import { planTidy, runTidy } from "@/lib/tidy";
 
 const ComponentSchema = z.object({
-  id: z.string(), label: z.string(), summary: z.string(), group: z.enum(["chat", "voice", "pictures", "video", "music", "stems", "tools", "loras"]), kind: z.enum(["model", "lora"]),
+  id: z.string(), label: z.string(), summary: z.string(), group: z.enum(["chat", "voice", "pictures", "video", "music", "stems", "tools", "loras"]), kind: z.enum(["model", "lora"]), superseded_by: z.array(z.string()),
   state: z.enum(["installed", "installing", "notInstalled", "failed"]),
   size_bytes: z.number().int().nullable().openapi({ description: "Bytes on disk now (models and their engine environment); null when nothing is installed." }),
   download_bytes: z.number().int().openapi({ description: "What an install would still download; 0 when installed." }),
@@ -46,8 +47,13 @@ const removeRoute = createRoute({
     409: { content: { "application/json": { schema: ErrorBody } }, description: "in_use (a request or job is using it), required (Home needs it on this tier), chat_model_in_use or only_chat_model (chat would be left with no model); the error says what to do first." },
   },
 });
+const TidyItemSchema = z.object({ id: z.string(), kind: z.enum(["superseded", "orphan_folder", "partial_download"]), bytes: z.number().int().nonnegative(), reason: z.string(), blocked: z.string().nullable() });
+const tidyPlanRoute = createRoute({ method: "get", path: "/tidy", tags: ["Components"], summary: "Plan safe removal of replaced or abandoned model files", responses: { 200: { content: { "application/json": { schema: z.object({ reclaimable_bytes: z.number().int(), items: z.array(TidyItemSchema) }) } }, description: "Candidates include blockers and grace-period reasons." } } });
+const tidyRunRoute = createRoute({ method: "post", path: "/tidy", tags: ["Components"], summary: "Remove safe replaced or abandoned model files", request: { body: { required: false, content: { "application/json": { schema: z.object({ dry_run: z.boolean().default(true) }) } } } }, responses: { 200: { content: { "application/json": { schema: z.object({ dry_run: z.boolean(), removed: z.array(TidyItemSchema), skipped: z.array(TidyItemSchema) }) } }, description: "Removed candidates and items skipped with the reason." } } });
 
 export const componentsRoutes = apiRouter<AppEnv>();
+componentsRoutes.openapi(tidyPlanRoute, async (c) => c.json(await planTidy(), 200));
+componentsRoutes.openapi(tidyRunRoute, async (c) => { const body = await c.req.json().catch(() => ({})) as { dry_run?: boolean }; return c.json(await runTidy(body.dry_run ?? true), 200); });
 componentsRoutes.openapi(listRoute, async (c) => c.json(await listComponents(), 200));
 componentsRoutes.openapi(installRoute, async (c) => {
   try {

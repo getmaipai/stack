@@ -71,6 +71,7 @@ export function gpuLayersFor(role: string, values: Record<string, SettingValue> 
 }
 
 export const SETTINGS: SettingDeclaration[] = [
+  { ...stack, key: "stack.storage.tidy_grace_hours", selector: "number", range: { min: 0, max: 8760 }, default: 24, label: "Storage tidy grace period", help: "How long a replacement must be ready before the Stack removes the older model.", section: { id: "storage", order: 10 }, level: "advanced", needs_restart: false },
   { ...stack, key: "stack.memory.model_budget_bytes", selector: "number", range: { min: 0, max: defaultModelBudgetBytes() + 8 * 1_073_741_824 }, default: defaultModelBudgetBytes(), label: "Memory for models", help: "The maximum memory the Stack may use for loaded models. The rest stays available for the computer.", section: { id: "memory", order: 10 }, level: "basic", needs_restart: false },
   { ...stack, key: "stack.memory.low_water_pct", selector: "number", range: { min: 1, max: 99 }, default: 10, label: "Low memory percentage", help: "Warn when available memory falls below this percentage.", section: { id: "memory", order: 20 }, level: "advanced", needs_restart: false },
   { ...stack, key: "stack.memory.low_water_floor_bytes", selector: "number", range: { min: 0, max: defaultModelBudgetBytes() }, default: 1_073_741_824, label: "Low memory floor", help: "Warn when available memory falls below this many bytes.", section: { id: "memory", order: 30 }, level: "advanced", needs_restart: false },

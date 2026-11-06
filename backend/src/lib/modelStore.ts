@@ -83,6 +83,8 @@ export interface CatalogModelLike {
    * this model whatever engine they are for (the coding model's Splash
    * draft, CODE-STACK-01 S5a); the projector keeps its own `imageInput`. */
   companions?: string[];
+  /** Catalog component ids that replace this model after they are ready. */
+  superseded_by?: string[];
   /** `archive`: the download is a tar or zip package extracted next to
    * itself; `modelPath` is the extracted directory. `hub_file`: the file
    * is placed in the Stack's Hugging Face hub cache at the record's
@@ -582,6 +584,41 @@ export function removeModel(id: string): boolean {
   emit({ id: "model.installed", data: { model: id, removed: true } });
   bumpStackGeneration(`model ${id} removed`);
   return true;
+}
+
+/** Stage a set of records' owned files before deleting any record, so a
+ * filesystem failure can restore the files and leave the database intact. */
+export function removeModelsAtomically(ids: string[]): boolean {
+  const present = [...new Set(ids)].map((id) => getModel(id)).filter((model): model is ModelRecord => !!model);
+  const staged: Array<{ original: string; parked: string }> = [];
+  const token = `tidy-${process.pid}-${Date.now()}`;
+  try {
+    for (const model of present) {
+      const archive = readModelManifest(model.id)?.blobs[0]?.path;
+      const paths = [model.modelPath, archive, join(modelsDir, model.id)].filter((path): path is string => !!path && path.startsWith(modelsDir) && existsSync(path));
+      const uniquePaths = [...new Set(paths)].sort((a, b) => a.length - b.length).filter((path, index, all) => !all.slice(0, index).some((parent) => path.startsWith(parent + sep)));
+      for (const path of uniquePaths) {
+        if (isStoreFixedDir(path) || !realpathSync(path).startsWith(realpathSync(modelsDir) + sep)) continue;
+        const parked = `${path}.${token}.removing`;
+        renameSync(path, parked);
+        staged.push({ original: path, parked });
+      }
+    }
+    for (const item of staged) rmSync(item.parked, { recursive: true, force: false });
+    for (const model of present) {
+      removeModelManifest(model.id);
+      db.delete(models).where(eq(models.id, model.id)).run();
+      releaseSplashLayoutFor(model.id);
+      emit({ id: "model.installed", data: { model: model.id, removed: true } });
+      bumpStackGeneration(`model ${model.id} removed`);
+    }
+    return present.length > 0;
+  } catch (error) {
+    for (const item of staged.reverse()) {
+      try { if (existsSync(item.parked)) renameSync(item.parked, item.original); } catch { /* preserve the original failure */ }
+    }
+    throw error;
+  }
 }
 
 /** The one place a test may empty the models table: only a scratch data

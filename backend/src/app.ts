@@ -147,6 +147,7 @@ app.route("/stack/v1/search", searchRoutes);
 app.route("/stack/v1/image-tools", imageToolsRoutes);
 app.route("/stack/v1/media", mediaRoutes);
 app.route("/stack/v1/components", componentsRoutes);
+app.route("/stack/v1", componentsRoutes);
 app.route("/stack/v1/video", videoRoutes);
 app.route("/stack/v1/music", musicRoutes);
 app.route("/stack/v1/stems", stemsRoutes);

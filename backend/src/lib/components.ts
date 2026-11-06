@@ -14,7 +14,7 @@ import { detectHardware, knownAppleChip, type HardwareInfo } from "@/lib/hardwar
 import { createJob, finishJob, getJob, jobSignal, listJobs, updateJob } from "@/lib/jobs";
 import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
-import { getModel, installCatalogModel, removeModel, type CatalogModelLike, type DownloadModelOptions } from "@/lib/modelStore";
+import { getModel, installCatalogModel, removeModel, removeModelsAtomically, type CatalogModelLike, type DownloadModelOptions } from "@/lib/modelStore";
 import { STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, LTX_LICENCE_NOTICE, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_SFT_ID, STACK_MUSIC_XL_ID, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_STEMS_MODELS, STACK_RECORDED_SPEECH_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_VIDEO_DETAILED_MODEL_ID, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MODEL_ID, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
 import { licenceAcceptance, recordLicenceAcceptance, type LicenceNotice } from "@/lib/licenceAcceptance";
 import { buildInstallPlan } from "@/lib/installPlan";
@@ -375,6 +375,7 @@ function jobFor(id: string) {
 
 export interface ComponentView {
   id: string; label: string; summary: string; group: ComponentGroup; kind: "model" | "lora";
+  superseded_by: string[];
   state: ComponentState;
   /** Bytes on disk now; null when nothing is installed. */
   size_bytes: number | null;
@@ -474,6 +475,7 @@ export async function listComponents(hw?: HardwareInfo): Promise<ComponentList> 
     const present = installed || unitPartlyInstalled(unit);
     return {
       id: unit.id, label: unit.label, summary: unit.summary, group: unit.group, kind: "model" as const, state,
+      superseded_by: unit.pins.flatMap((pin) => pin.superseded_by ?? []),
       size_bytes: present ? unitDiskBytes(unit, defs) : null, download_bytes: remaining, full_bytes: totals ? totals.download_bytes : totalDownload(unit), required_free_bytes: requiredFree, plan_need: row ? row.need : null,
       requirement, requirement_reason: reason, last_used_at: lastUsedOf([unit.id, ...unit.pins.map((pin) => pin.id)]), used_by: unit.usedBy(), depends_on: [],
       job: job?.id ?? null, percent: job ? job.percent : null, failure: state === "failed" ? failure : null,
@@ -484,7 +486,7 @@ export async function listComponents(hw?: HardwareInfo): Promise<ComponentList> 
   });
   // The household's LoRA files: removable items, never installable here (they are added from the Pictures and Video pages).
   const loraView = (kindLabel: "picture" | "video", id: string, name: string, bytes: number, lastBase: string, group: ComponentGroup): ComponentView => ({
-    id: `lora.${kindLabel}.${id}`, label: `Style: ${name}`, summary: `A ${kindLabel} style (LoRA) the household added.`, group: "loras", kind: "lora", state: "installed",
+    id: `lora.${kindLabel}.${id}`, label: `Style: ${name}`, summary: `A ${kindLabel} style (LoRA) the household added.`, group: "loras", kind: "lora", superseded_by: [], state: "installed",
     size_bytes: bytes, download_bytes: 0, full_bytes: bytes, required_free_bytes: 0, plan_need: null, requirement: "optional", requirement_reason: null, last_used_at: null, used_by: [group === "pictures" ? "Pictures" : "The Video app"], depends_on: [lastBase],
     job: null, percent: null, failure: null, licence: null, can_install: false, install_block: `Add it again from the ${kindLabel === "picture" ? "Pictures" : "Video"} page.`, can_uninstall: true, uninstall_block: null,
   });
@@ -597,13 +599,12 @@ export async function uninstallComponent(id: string, hw?: HardwareInfo): Promise
   if (guard) throw guard;
   const before = unitDiskBytes(unit, defs);
   let freed = 0;
+  const modelIds = unit.pins.filter((pin) => !!getModel(pin.id)).map((pin) => pin.id);
   for (const pin of unit.pins) {
-    const record = getModel(pin.id);
-    if (!record) continue;
     const hub = pin.download?.hub_file && pin.repo && pin.revision;
     if (hub) freed += releaseHfFile(pin.repo!, pin.revision!, pin.download!.hub_file!);
-    removeModel(pin.id);
   }
+  removeModelsAtomically(modelIds);
   for (const env of unit.envs) {
     // An environment another installed component still runs in stays.
     const shared = defs.some((other) => other !== unit && other.envs.includes(env) && other.pins.some(pinInstalled));

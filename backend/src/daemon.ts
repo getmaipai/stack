@@ -90,8 +90,8 @@ async function serve(): Promise<void> {
   // Clips an earlier run left half-made are removed and old results swept; the video worker itself starts on the first clip and exits after ten idle minutes.
   // Songs: half-made work removed and old results swept; the music worker starts on the first song and exits after five idle minutes.
   // The same for pictures (IMGGEN-STACK-02): half-made work removed, old results swept; the picture worker starts on the first request and exits after ten idle minutes.
-  runSweeps("start");
-  const sweeps = setInterval(() => runSweeps("timer"), 10 * 60_000);
+  void runSweeps("start");
+  const sweeps = setInterval(() => { void runSweeps("timer"); }, 10 * 60_000);
   (sweeps as unknown as { unref?: () => void }).unref?.();
   const idle = setInterval(() => {
     const values = settingValues();

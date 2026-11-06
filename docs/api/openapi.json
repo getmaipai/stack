@@ -14941,6 +14941,190 @@
         }
       }
     },
+    "/stack/v1/components/tidy": {
+      "get": {
+        "tags": [
+          "Components"
+        ],
+        "summary": "Plan safe removal of replaced or abandoned model files",
+        "responses": {
+          "200": {
+            "description": "Candidates include blockers and grace-period reasons.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "reclaimable_bytes": {
+                      "type": "integer"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "superseded",
+                              "orphan_folder",
+                              "partial_download"
+                            ]
+                          },
+                          "bytes": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "blocked": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "bytes",
+                          "reason",
+                          "blocked"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "reclaimable_bytes",
+                    "items"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Components"
+        ],
+        "summary": "Remove safe replaced or abandoned model files",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "dry_run": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Removed candidates and items skipped with the reason.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "dry_run": {
+                      "type": "boolean"
+                    },
+                    "removed": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "superseded",
+                              "orphan_folder",
+                              "partial_download"
+                            ]
+                          },
+                          "bytes": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "blocked": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "bytes",
+                          "reason",
+                          "blocked"
+                        ]
+                      }
+                    },
+                    "skipped": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "superseded",
+                              "orphan_folder",
+                              "partial_download"
+                            ]
+                          },
+                          "bytes": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "blocked": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "bytes",
+                          "reason",
+                          "blocked"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "dry_run",
+                    "removed",
+                    "skipped"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/components": {
       "get": {
         "tags": [
@@ -15002,6 +15186,12 @@
                               "model",
                               "lora"
                             ]
+                          },
+                          "superseded_by": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
                           },
                           "state": {
                             "type": "string",
@@ -15135,6 +15325,7 @@
                           "summary",
                           "group",
                           "kind",
+                          "superseded_by",
                           "state",
                           "size_bytes",
                           "download_bytes",
@@ -15317,6 +15508,665 @@
       }
     },
     "/stack/v1/components/{id}": {
+      "delete": {
+        "tags": [
+          "Components"
+        ],
+        "summary": "Uninstall a component and report the space freed",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "example": "z-image-turbo"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Removed; removed=false (and freed_bytes 0) when it was not installed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "component": {
+                      "type": "string"
+                    },
+                    "freed_bytes": {
+                      "type": "integer"
+                    },
+                    "removed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "component",
+                    "freed_bytes",
+                    "removed"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unknown_component.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "in_use (a request or job is using it), required (Home needs it on this tier), chat_model_in_use or only_chat_model (chat would be left with no model); the error says what to do first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/tidy": {
+      "get": {
+        "tags": [
+          "Components"
+        ],
+        "summary": "Plan safe removal of replaced or abandoned model files",
+        "responses": {
+          "200": {
+            "description": "Candidates include blockers and grace-period reasons.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "reclaimable_bytes": {
+                      "type": "integer"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "superseded",
+                              "orphan_folder",
+                              "partial_download"
+                            ]
+                          },
+                          "bytes": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "blocked": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "bytes",
+                          "reason",
+                          "blocked"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "reclaimable_bytes",
+                    "items"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Components"
+        ],
+        "summary": "Remove safe replaced or abandoned model files",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "dry_run": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Removed candidates and items skipped with the reason.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "dry_run": {
+                      "type": "boolean"
+                    },
+                    "removed": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "superseded",
+                              "orphan_folder",
+                              "partial_download"
+                            ]
+                          },
+                          "bytes": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "blocked": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "bytes",
+                          "reason",
+                          "blocked"
+                        ]
+                      }
+                    },
+                    "skipped": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "superseded",
+                              "orphan_folder",
+                              "partial_download"
+                            ]
+                          },
+                          "bytes": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "blocked": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "bytes",
+                          "reason",
+                          "blocked"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "dry_run",
+                    "removed",
+                    "skipped"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1": {
+      "get": {
+        "tags": [
+          "Components"
+        ],
+        "summary": "Every installable component, its state, size and what it needs",
+        "responses": {
+          "200": {
+            "description": "Additive. `free_disk_bytes` is the data volume's, the same figure the install plan uses.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tier": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "free_disk_bytes": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "disk_margin_bytes": {
+                      "type": "integer"
+                    },
+                    "installed_bytes": {
+                      "type": "integer"
+                    },
+                    "components": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "group": {
+                            "type": "string",
+                            "enum": [
+                              "chat",
+                              "voice",
+                              "pictures",
+                              "video",
+                              "music",
+                              "stems",
+                              "tools",
+                              "loras"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "model",
+                              "lora"
+                            ]
+                          },
+                          "superseded_by": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "installed",
+                              "installing",
+                              "notInstalled",
+                              "failed"
+                            ]
+                          },
+                          "size_bytes": {
+                            "type": "integer",
+                            "nullable": true,
+                            "description": "Bytes on disk now (models and their engine environment); null when nothing is installed."
+                          },
+                          "download_bytes": {
+                            "type": "integer",
+                            "description": "What an install would still download; 0 when installed."
+                          },
+                          "full_bytes": {
+                            "type": "integer",
+                            "description": "The size of a fresh install, for the setup estimate."
+                          },
+                          "required_free_bytes": {
+                            "type": "integer",
+                            "description": "Free space the data volume needs before an install starts (the disk plan's sum: installed size, margin and peak temporary space); 0 when installed."
+                          },
+                          "plan_need": {
+                            "type": "string",
+                            "nullable": true,
+                            "enum": [
+                              "required",
+                              "recommended",
+                              "optional",
+                              null
+                            ],
+                            "description": "The setup wizard plan's word for it on this tier; recommended parts are on by default, optional ones (Z-Image-Turbo) off."
+                          },
+                          "requirement": {
+                            "type": "string",
+                            "enum": [
+                              "required",
+                              "optional",
+                              "unsupported"
+                            ],
+                            "description": "For this computer's tier: required (Home installs it), optional, or unsupported (see requirement_reason)."
+                          },
+                          "requirement_reason": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "last_used_at": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "used_by": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "depends_on": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "job": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "percent": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "failure": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "licence": {
+                            "type": "object",
+                            "nullable": true,
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "url": {
+                                "type": "string"
+                              },
+                              "summary": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "accepted_at": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "url",
+                              "summary",
+                              "accepted_at"
+                            ],
+                            "description": "A licence with terms of its own (the Detailed video model). It is accepted once, by an admin, before the first install: POST the install with its `id` as `accepted_licence`. null for every other part."
+                          },
+                          "can_install": {
+                            "type": "boolean"
+                          },
+                          "install_block": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "can_uninstall": {
+                            "type": "boolean"
+                          },
+                          "uninstall_block": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "label",
+                          "summary",
+                          "group",
+                          "kind",
+                          "superseded_by",
+                          "state",
+                          "size_bytes",
+                          "download_bytes",
+                          "full_bytes",
+                          "required_free_bytes",
+                          "plan_need",
+                          "requirement",
+                          "requirement_reason",
+                          "last_used_at",
+                          "used_by",
+                          "depends_on",
+                          "job",
+                          "percent",
+                          "failure",
+                          "licence",
+                          "can_install",
+                          "install_block",
+                          "can_uninstall",
+                          "uninstall_block"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "tier",
+                    "free_disk_bytes",
+                    "disk_margin_bytes",
+                    "installed_bytes",
+                    "components"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/{id}/install": {
+      "post": {
+        "tags": [
+          "Components"
+        ],
+        "summary": "Install a component (one job: the files, then its engine environment)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "example": "z-image-turbo"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "accepted_licence": {
+                    "type": "string",
+                    "maxLength": 120,
+                    "description": "The id of the licence notice the admin accepted (from the component's `licence`). Needed only the first time, for a part that has one."
+                  },
+                  "accepted_by": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "An opaque label Home keeps for who accepted it."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Already installed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "nullable": true
+                    },
+                    "component": {
+                      "type": "string"
+                    },
+                    "already_installed": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "component",
+                    "already_installed"
+                  ]
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "The install job (/stack/v1/jobs/{id}); a second call while one runs joins it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    },
+                    "component": {
+                      "type": "string"
+                    },
+                    "joined": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "component",
+                    "joined"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unknown_component.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "not_available (this computer cannot run it), not_enough_space (the data volume cannot hold it) or licence_required (the part has a licence an admin has not accepted yet); the error is a sentence for the person.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/{id}": {
       "delete": {
         "tags": [
           "Components"
@@ -20604,10 +21454,10 @@
         "tags": [
           "Declarations"
         ],
-        "summary": "Prune orphaned blobs past their grace period",
+        "summary": "Prune orphaned blobs and run the tidy cleanup",
         "responses": {
           "200": {
-            "description": "The digests removed.",
+            "description": "Orphaned blobs removed and per-sweep cleanup totals, including tidy.",
             "content": {
               "application/json": {
                 "schema": {
@@ -20618,10 +21468,53 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "sweep": {
+                      "type": "object",
+                      "properties": {
+                        "reason": {
+                          "type": "string"
+                        },
+                        "removed_files": {
+                          "type": "integer"
+                        },
+                        "freed_bytes": {
+                          "type": "integer"
+                        },
+                        "per_sweep": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "removed": {
+                                "type": "integer"
+                              },
+                              "bytes": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "removed",
+                              "bytes"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "reason",
+                        "removed_files",
+                        "freed_bytes",
+                        "per_sweep"
+                      ]
                     }
                   },
                   "required": [
-                    "removed"
+                    "removed",
+                    "sweep"
                   ]
                 }
               }
