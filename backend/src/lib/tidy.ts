@@ -8,7 +8,7 @@ import { listModels, getModel, type CatalogModelLike } from "@/lib/modelStore";
 import { STACK_MODELS, STACK_VIDEO_DETAILED_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_QWEN_MODELS } from "@/lib/modelCatalog";
 import { modelsDir } from "@/lib/paths";
 import { readSettings } from "@/settings";
-import { loadedRoleForModel, selectedModel } from "@/lib/supervisor";
+import { loadedRoleForModel } from "@/lib/supervisor";
 import { listJobs } from "@/lib/jobs";
 import { logger } from "@/lib/log";
 import { settingValues } from "@/settings";
@@ -30,11 +30,12 @@ function settingPointsAt(id: string): string | null {
   }
   return null;
 }
-function successorReadySince(successor: string): number | null {
+function successorReadySince(successor: string, componentInstalled: boolean): number | null {
   const key = `tidy.successor_ready.${successor}`;
-  const installed = getModel(successor)?.modelPath && existsSync(getModel(successor)!.modelPath!);
+  // Ready means the successor's whole component is installed (files and its engine environment, the list says so) and the video role is up.
+  // It does not have to be the role's default model: a level such as Boost or Standard is chosen per request, not by the role's selected model.
   const roleState = resolveRoleState("video");
-  if (!installed || roleState.state !== "ready" || selectedModel("video")?.id !== successor) { db.delete(meta).where(eq(meta.key, key)).run(); return null; }
+  if (!componentInstalled || roleState.state !== "ready") { db.delete(meta).where(eq(meta.key, key)).run(); return null; }
   const stored = db.select({ value: meta.value }).from(meta).where(eq(meta.key, key)).get()?.value;
   if (stored) return Number(stored);
   const since = Date.now();
@@ -117,7 +118,8 @@ export async function planTidy(now = Date.now()): Promise<TidyPlan> {
     if (!oldRecord?.modelPath) continue;
     let blocked: string | null = null; let removableAt = now;
     for (const successor of oldPin.superseded_by!) {
-      const since = successorReadySince(successor);
+      const successorUnit = componentDefs().find((candidate) => candidate.pins.some((pin) => pin.id === successor));
+      const since = successorReadySince(successor, byId.get(successorUnit?.id ?? successor)?.state === "installed");
       if (!since) { blocked = `${successor} must be installed and the video role must report it ready first.`; break; }
       removableAt = Math.max(removableAt, since + graceHours() * HOUR);
     }
