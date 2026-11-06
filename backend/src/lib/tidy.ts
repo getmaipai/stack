@@ -13,7 +13,6 @@ import { listJobs } from "@/lib/jobs";
 import { logger } from "@/lib/log";
 import { settingValues } from "@/settings";
 import { readModelManifest, listModelManifests } from "@/lib/store/manifests";
-import { resolveRoleState } from "@/lib/router";
 import { listLoras } from "@/video/loras";
 
 export type TidyKind = "superseded" | "orphan_folder" | "partial_download";
@@ -32,10 +31,10 @@ function settingPointsAt(id: string): string | null {
 }
 function successorReadySince(successor: string, componentInstalled: boolean): number | null {
   const key = `tidy.successor_ready.${successor}`;
-  // Ready means the successor's whole component is installed (files and its engine environment, the list says so) and the video role is up.
-  // It does not have to be the role's default model: a level such as Boost or Standard is chosen per request, not by the role's selected model.
-  const roleState = resolveRoleState("video");
-  if (!componentInstalled || roleState.state !== "ready") { db.delete(meta).where(eq(meta.key, key)).run(); return null; }
+  // Ready means the successor's whole component is installed: its files and its engine environment (the component list says so only then).
+  // It does not have to be the role's default model, and the role-wide readiness check is not used: that check reports the role's default
+  // engine (it failed on this machine while LTX-2.5 was fully installed), so it says nothing about the successor.
+  if (!componentInstalled) { db.delete(meta).where(eq(meta.key, key)).run(); return null; }
   const stored = db.select({ value: meta.value }).from(meta).where(eq(meta.key, key)).get()?.value;
   if (stored) return Number(stored);
   const since = Date.now();
