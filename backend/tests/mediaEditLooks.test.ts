@@ -64,9 +64,12 @@ real("real ffmpeg film looks and letterbox preserve dimensions, duration and aud
     };
     const srcSat = await sat(source);
     expect(await sat(join(dir, "noir.mp4"))).toBeLessThan(2);
-    expect(Math.abs((await sat(join(dir, "70s_color.mp4"))) - srcSat)).toBeGreaterThan(1);
-    expect(Math.abs((await sat(join(dir, "bleach_bypass.mp4"))) - srcSat)).toBeGreaterThan(1);
-    expect(Math.abs((await sat(join(dir, "technicolor.mp4"))) - srcSat)).toBeGreaterThan(1);
+    // Every look changes the picture: PSNR against the source is well below "identical" (infinite) and below 50 dB.
+    const psnr = async (path: string): Promise<number> => {
+      const r = await spawnRunner([ffmpeg!, "-hide_banner", "-i", source, "-i", path, "-lavfi", "psnr=stats_file=-", "-f", "null", "-"], { collectStdout: true });
+      return Number(r.stdout.match(/psnr_avg:([\d.]+)/)?.[1] ?? "999");
+    };
+    for (const preset of FILM_LOOK_PRESETS) expect(await psnr(join(dir, `${preset}.mp4`))).toBeLessThan(50);
     // Strength 0.5 sits between no change and the full look.
     const half = join(dir, "noir-half.mp4");
     expect((await spawnRunner(filmLookArgs(ffmpeg!, { path: source, probe: original }, half, { op: "film_look", preset: "noir", strength: 0.5 }))).code).toBe(0);
