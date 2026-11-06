@@ -17,7 +17,7 @@ import { extractArchive } from "@maipai/core/src/archive";
 import soulxSource from "./soulx-singer-source.tar.gz" with { type: "file" };
 
 export const VOICE_CONVERT_NAME = "voice-convert";
-export const VOICE_CONVERT_VERSION = "1.0.0";
+export const VOICE_CONVERT_VERSION = "1.0.1";
 export const VOICE_CONVERT_PEAK_BYTES = 8_000_000_000;
 export const VOICE_CONVERT_MAX_SOURCE_BYTES = 40 * 1024 * 1024;
 export const VOICE_CONVERT_IDLE_MS = 60_000;

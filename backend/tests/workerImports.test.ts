@@ -61,3 +61,9 @@ test("worker imports are present in the pinned engine requirements", () => {
     expect(missing, `${worker.name} imports without a pinned provider`).toEqual([]);
   }
 });
+
+test("recorded speech worker renders without a reference clip (the default voice)", async () => {
+  const source = readFileSync(new URL("../src/recordedSpeech/recorded_speech_worker.py", import.meta.url), "utf8");
+  // 2026-11-05 live: a request with no reference raised NameError on ref_audio; Fish speaks fine with ref_audio=None.
+  expect(source).toContain("if not refs:\n        ref_audio, ref_text = None, None");
+});

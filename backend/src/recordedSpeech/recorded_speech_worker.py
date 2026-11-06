@@ -32,7 +32,9 @@ def run(request):
         if duration < 6 or duration > 30:
             raise RuntimeError("The reference clip must be 6 to 30 seconds long.")
         refs.append({"audio": str(wav), "text": ref["text"]})
-    if len(refs) == 1:
+    if not refs:
+        ref_audio, ref_text = None, None
+    elif len(refs) == 1:
         ref_audio, ref_text = refs[0]["audio"], refs[0]["text"]
     else:
         ref_audio, ref_text = [r["audio"] for r in refs], [r["text"] for r in refs]
