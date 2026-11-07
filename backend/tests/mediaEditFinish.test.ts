@@ -39,7 +39,7 @@ describe("media.edit finishing operation plans", () => {
     expect(editInputProblem({ ...base, ops: [{ op: "reframe", aspect: "2:3", fill: "crop" }] })).not.toBeNull();
     expect(editInputProblem({ ...base, ops: [{ op: "grade", brightness: 0, contrast: 0, saturation: 0, warmth: 0, grain: 0, vignette: 0 }] })).toMatch(/at least one/);
     expect(editInputProblem({ ...base, ops: [{ op: "speed", factor: 0.1 }] })).toMatch(/factor/);
-    expect(editInputProblem({ ...base, ops: [{ op: "captions", position: "bottom", lines: Array.from({ length: 41 }, () => ({ from_s: 0, to_s: 1, text: "hi" })) }] })).toMatch(/40/);
+    expect(editInputProblem({ ...base, ops: [{ op: "captions", position: "bottom", lines: Array.from({ length: 2001 }, () => ({ from_s: 0, to_s: 1, text: "hi" })) }] })).toMatch(/2000/);
     expect(editInputProblem({ ...base, ops: [{ op: "captions", position: "bottom", lines: [{ from_s: 0, to_s: 1, text: "' : \\ %{\n" }] }] })).toBeNull();
     expect((await post({ ...base, ops: [{ op: "speed", factor: 0.1 }] })).status).toBe(422);
   });

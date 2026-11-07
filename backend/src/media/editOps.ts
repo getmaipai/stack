@@ -80,7 +80,7 @@ const DenoiseOp = z.object({ op: z.literal("denoise"), amount: AmountOp, deblock
 const RippleOp = z.object({ op: z.literal("ripple"), amount: AmountOp }).strict();
 const UpscaleOp = z.object({ op: z.literal("upscale"), factor: z.literal(2).optional() }).strict();
 const PipOp = z.object({ op: z.literal("pip"), input: Index, corner: z.enum(["top_left", "top_right", "bottom_left", "bottom_right"]), size: z.number().min(0.15).max(0.5), margin: z.number().min(0).max(0.1) }).strict();
-const CaptionsOp = z.object({ op: z.literal("captions"), lines: z.array(z.object({ from_s: Seconds, to_s: z.number().gt(0).max(MAX_EDIT_SECONDS), text: z.string().min(1).max(120) }).strict()).min(1).max(40), position: z.enum(["bottom", "middle", "top"]) }).strict()
+const CaptionsOp = z.object({ op: z.literal("captions"), lines: z.array(z.object({ from_s: Seconds, to_s: z.number().gt(0).max(MAX_EDIT_SECONDS), text: z.string().min(1).max(120) }).strict()).min(1).max(2000), position: z.enum(["bottom", "middle", "top"]) }).strict()
   .refine((op) => op.lines.every((line) => line.to_s > line.from_s), { path: ["lines"], message: "each to_s must be after from_s" });
 
 /** Joins like concat, but each seam blends the last duration_s of one clip into the first duration_s of the next. */
