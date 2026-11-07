@@ -470,8 +470,9 @@ inside the job (`status` says so), which can take a couple of minutes on a slow 
 | `fps_boost` | `{ fps }`; interpolates picture to 30, 48 or 60 fps, copies sound, and accepts clips up to 30 seconds. |
 | `flip` | `{ direction }`; direction is `horizontal` or `vertical`. Sound is copied. |
 | `rotate` | `{ degrees }`; degrees is 90, 180 or 270. Sound is copied. |
-| `sharpen` | `{ amount }`; amount is 0 to 1. Sound is copied. |
-| `denoise` | `{ amount }`; amount is 0 to 1. Sound is copied. |
+| `sharpen` | `{ amount }`; amount is 0 to 1.5. 1 is strong; above 1 up to 1.5 is Sharpen+ (it sharpens edges and cannot recover missing detail). Sound is copied. |
+| `denoise` | `{ amount, deblock? }`; amount is 0 to 1. `deblock: true` (default false) smooths compression blocks before the denoise. Sound is copied. |
+| `ripple` | `{ amount }`; amount is 0 to 1. A gentle whole-frame water-like wobble (about 1% of the height at 1); a look, not simulated water. Sound is copied. |
 | `pip` | `{ input, corner, size, margin }`; `input` names a later file, corner is `top_left`, `top_right`, `bottom_left` or `bottom_right`, size is 0.15 to 0.5 of frame width, and margin is 0 to 0.1. The second clip's sound is ignored. |
 
 **Quiet mode.** The limiter keys a site by its registrable host (`www.`, `m.` and other subdomains share a key; `media.example.co.uk` is `example.co.uk`).
