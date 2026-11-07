@@ -21,13 +21,16 @@ import { cutoutClip, CUTOUT_FAILED, CUTOUT_MODEL_MISSING, CUTOUT_NO_MEMORY, CUTO
 import { log } from "@/lib/log";
 import { COLOUR_MATCH_STRENGTH, COMPANION_CLIP_FPS, COMPANION_CLIP_SIZE, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionCrop, companionMetrics, companionReasons, crossfadeLoop, downscaleRgba4, frameDifference, keyOutRgba, selectCompanionWindow } from "./companionClip";
 import { upscaleClip, upscaleProblem, UPSCALE_DEADLINE_MS, UpscaleFailure } from "./upscale";
+import { runTtsBatch } from "./tts";
+import { runMix } from "./mix";
+import { RECORDED_SPEECH_PEAK_BYTES } from "@/recordedSpeech/recordedSpeech";
 
-export const MEDIA_KINDS = ["media.probe", "media.fetch", "media.transcode", "media.preview", "media.companion_clip", "media.edit", "media.setup"] as const;
+export const MEDIA_KINDS = ["media.probe", "media.fetch", "media.transcode", "media.preview", "media.companion_clip", "media.edit", "media.tts", "media.mix", "media.setup"] as const;
 export type MediaKind = typeof MEDIA_KINDS[number];
 export const MEDIA_LANE = "idle";
 export const MEDIA_QUEUE_CAP = 64;
 const MINUTE = 60_000;
-export const MEDIA_DEADLINES_MS: Record<MediaKind, number> = { "media.probe": 3 * MINUTE, "media.preview": 20 * MINUTE, "media.fetch": 3 * 60 * MINUTE, "media.transcode": 12 * 60 * MINUTE, "media.companion_clip": 20 * MINUTE, "media.edit": 30 * MINUTE, "media.setup": 30 * MINUTE };
+export const MEDIA_DEADLINES_MS: Record<MediaKind, number> = { "media.probe": 3 * MINUTE, "media.preview": 20 * MINUTE, "media.fetch": 3 * 60 * MINUTE, "media.transcode": 12 * 60 * MINUTE, "media.companion_clip": 20 * MINUTE, "media.edit": 30 * MINUTE, "media.tts": 30 * MINUTE, "media.mix": 30 * MINUTE, "media.setup": 30 * MINUTE };
 
 type RawInputRunner = (argv: string[], inputPath: string, signal: AbortSignal) => Promise<RunResult>;
 async function spawnRawInputRunner(argv: string[], inputPath: string, signal: AbortSignal): Promise<RunResult> {
@@ -829,5 +832,7 @@ export function registerMediaJobs(): void {
   registerJobRunner("media.preview", runPreview, { lane: laneFor("media.preview") });
   registerJobRunner("media.companion_clip", runCompanionClip, { lane: laneFor("media.companion_clip") });
   registerJobRunner("media.edit", runEdit, { lane: laneFor("media.edit") });
+  registerJobRunner("media.tts", runTtsBatch, { generator: { role: "tts", queueBehind: ["image", "video", "music"], memory: () => ({ requestedBytes: RECORDED_SPEECH_PEAK_BYTES, measuredPeakBytes: RECORDED_SPEECH_PEAK_BYTES, engine: "recorded-speech" }) } });
+  registerJobRunner("media.mix", runMix, { lane: laneFor("media.mix") });
   registerJobRunner("media.setup", runSetup, { lane: laneFor("media.setup") });
 }
