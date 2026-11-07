@@ -405,7 +405,7 @@ if (!haveBench) console.warn("SPATIAL-07 bench-clip tests skipped: needs ffmpeg,
     setMediaDepsForTests({ toolbox: { installed: () => true, path: async (tool) => tool === "ffmpeg" ? FFMPEG! : FFPROBE! }, run: spawnRunner, limiter: new HostLimiter() }); registerMediaJobs();
     service = new LookService({
       supported: () => true, ensureEnvironment: async () => {}, modelPath: () => NANO, hold: async () => ({ release: () => {} }), now: () => Date.now(), log: () => {},
-      spawn: async () => workerHandle(Bun.spawn([join(IMAGE_TOOLS, "venv/bin/python"), "-I", join(import.meta.dir, "../src/look/look_worker.py")], { stdin: "pipe", stdout: "pipe", stderr: "pipe", env: { PATH: process.env.PATH ?? "", PYTHONUNBUFFERED: "1", PYTHONDONTWRITEBYTECODE: "1" } })),
+      spawn: async () => workerHandle(Bun.spawn([join(IMAGE_TOOLS, "venv/bin/python"), "-I", "-B", join(import.meta.dir, "../src/look/look_worker.py")], { stdin: "pipe", stdout: "pipe", stderr: "pipe", env: { PATH: process.env.PATH ?? "", PYTHONUNBUFFERED: "1", PYTHONDONTWRITEBYTECODE: "1" } })),
     });
     setSpatialDepsForTests({ look: (frames, signal) => service!.lookFrames(frames, signal), lookAll: (frames, signal) => service!.lookFrames(frames, signal, "all"), speech: async () => [] });
   });

@@ -212,7 +212,7 @@ if (!haveReal) console.warn("SPATIAL-02 real Look test skipped: needs ffmpeg, th
   test("the man standing on the left of pan-left.mp4 is found at about -0.75 while he talks, and no frame stays behind", async () => {
     service = new LookService({
       supported: () => true, ensureEnvironment: async () => {}, modelPath: () => MODEL, hold: async () => ({ release: () => {} }), now: () => Date.now(), log: () => {},
-      spawn: async () => workerHandle(Bun.spawn([join(IMAGE_TOOLS, "venv/bin/python"), "-I", join(import.meta.dir, "../src/look/look_worker.py")], { stdin: "pipe", stdout: "pipe", stderr: "pipe", env: { PATH: process.env.PATH ?? "", PYTHONUNBUFFERED: "1", PYTHONDONTWRITEBYTECODE: "1" } })),
+      spawn: async () => workerHandle(Bun.spawn([join(IMAGE_TOOLS, "venv/bin/python"), "-I", "-B", join(import.meta.dir, "../src/look/look_worker.py")], { stdin: "pipe", stdout: "pipe", stderr: "pipe", env: { PATH: process.env.PATH ?? "", PYTHONUNBUFFERED: "1", PYTHONDONTWRITEBYTECODE: "1" } })),
     });
     const work = mkdtempSync(join(tmpdir(), "spatial-real-"));
     const track = await computeSpatialTrack({ ffmpeg: FFMPEG!, source: CLIP, work, run: spawnRunner, signal: new AbortController().signal, deps: { look: (frames, signal) => service!.lookFrames(frames, signal), speech: async () => [{ startSample: Math.round(1.8 * 16_000), endSample: Math.round(3.77 * 16_000) }] } });
