@@ -358,3 +358,15 @@ test("every picture family has a component of its own, sized by its install-plan
   expect(qwen.full_bytes).toBeGreaterThan(35e9);
   expect((await listComponents(hw({ unifiedMemoryGb: 64, totalRamGb: 64 }))).components.find((c) => c.id === "qwen-image-2512-q8")!.requirement).toBe("unsupported");
 });
+
+test("the real list has a beat analysis unit with no model files that installs the beats environment", async () => {
+  __setComponentUnitsForTests(null);
+  const unit = componentDefs().find((candidate) => candidate.id === "beats-analysis")!;
+  expect(unit).toBeTruthy();
+  expect(unit.pins).toEqual([]);
+  expect(unit.envs.map((e) => e.name)).toEqual(["beats"]);
+  expect(unit.busy()).toBeNull();
+  const list = await listComponents(hw());
+  const view = list.components.find((candidate) => candidate.id === "beats-analysis")!;
+  expect(view).toMatchObject({ label: "Music: beat and section analysis", group: "stems", requirement: "optional", used_by: ["Cut to the beat in a video edit"] });
+});

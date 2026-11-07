@@ -34,6 +34,7 @@ import { ensureLtx25Environment, ensureLtx25MaxEnvironment, ltx25EnvironmentRead
 import { ensureVideoGenEnvironment, tierAvailability as videoAvailability, videoGen, videoGenEnvironmentReady, videoGenRoot, VIDEO_GEN_NAME } from "@/video/videoGen";
 import { ensureMusicGenEnvironment, tierAvailability as musicAvailability, musicGen, musicGenEnvironmentReady, musicGenRoot, MUSIC_GEN_NAME } from "@/music/musicGen";
 import { align, ALIGN_NAME, ensureAlignEnvironment, alignRoot, alignEnvironmentReady } from "@/align/align";
+import { BEATS_JOB_KIND } from "@/beats/jobs";
 import { beats, BEATS_NAME, ensureBeatsEnvironment, beatsRoot, beatsEnvironmentReady } from "@/beats/beats";
 import { stems, STEMS_NAME, ensureStemsEnvironment, stemsRoot, stemsEnvironmentReady } from "@/stems/stems";
 import { voiceConvert, VOICE_CONVERT_NAME, ensureVoiceConvertEnvironment, voiceConvertRoot, voiceConvertEnvironmentReady } from "@/voiceConvert/voiceConvert";
@@ -275,6 +276,7 @@ export function componentDefs(): UnitDef[] {
   units.push({ id: "htdemucs", label: "Music: HTDemucs stem splitter", summary: "Separates a song made here into vocals, drums, bass and other.", group: "stems", role: "music", pins: [STACK_STEMS_MODELS[0]!], envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
   units.push({ id: "htdemucs-ft", label: "Music: finer stem splitter (HTDemucs fine-tuned)", summary: "Separates songs into four finer stems.", group: "stems", role: "music", pins: [STACK_STEMS_MODELS[1]!], envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
   units.push({ id: "mms-fa-align", label: "Music: lyric timing (MMS aligner)", summary: "Finds when each word of a song's lyrics is sung.", group: "stems", role: "music", pins: STACK_ALIGN_MODELS, envs: [envAlign], usedBy: () => ["Word-by-word lyrics on a song card"], busy: () => activeJobFor((kind) => kind === "align_generation") ? "A song's lyrics are being timed right now." : null });
+  units.push({ id: "beats-analysis", label: "Music: beat and section analysis", summary: "Finds the beats, bars and sections of a song so edits can land on the beat.", group: "stems", role: "music", pins: [], envs: [envBeats], usedBy: () => ["Cut to the beat in a video edit"], busy: () => activeJobFor((kind) => kind === BEATS_JOB_KIND) ? "A song is being analysed for its beats right now." : null });
   units.push({ id: "soulx-singer-svc", label: "Music: singing voice conversion (SoulX-Singer)", summary: "Changes the singer in a vocal toward a reference voice.", group: "stems", role: "music", pins: STACK_MODELS.filter((pin) => pin.component === "voice-convert"), envs: [envVoiceConvert], usedBy: () => ["Voice conversion in music remix"], busy: () => activeJobFor((kind) => kind === "voice_convert_generation") ? "A vocal is being converted right now." : null });
   units.push({ id: "fish-audio-drama-3-4bit", label: "Voice: recorded speech (Fish Audio Drama 3)", summary: "Makes a finished speech recording with optional voice references and dialogue.", group: "voice", role: "tts", pins: STACK_RECORDED_SPEECH_MODELS, envs: [envRecordedSpeech], tiers: ["p64", "p128"], platformBlock: () => recordedSpeech.depsAvailable ? null : "Recorded speech is available on macOS with Apple silicon.", usedBy: () => ["Recorded speech jobs in Home"], busy: () => activeJobFor((kind) => kind === "recorded_speech_generation") ? "A recorded speech job is waiting or rendering right now." : null });
   units.push({ id: "htdemucs-6s", label: "Music: six-part stem splitter (guitar and piano)", summary: "Separates songs into six stems, including guitar and piano.", group: "stems", role: "music", pins: [STACK_STEMS_MODELS[2]!], envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
@@ -411,12 +413,12 @@ function planOf(hardware: HardwareInfo): { tier: Tier | null; planned: Set<strin
 function requirementFor(unit: UnitDef, tier: Tier | null, planned: Set<string>): { requirement: ComponentRequirement; reason: string | null } {
   const platform = unit.platformBlock?.() ?? null;
   if (platform) return { requirement: "unsupported", reason: platform };
-  const primary = unit.pins[0]!;
+  const primary = unit.pins[0];
   if (unit.id === "htdemucs" && tier && TIER_RANK[tier] < TIER_RANK.p64) return { requirement: "unsupported", reason: "Stem splitting needs a computer with 64 GB of memory or more." };
-  const profile = (primary.sizing as { profile?: string } | undefined)?.profile as Tier | undefined;
+  const profile = (primary?.sizing as { profile?: string } | undefined)?.profile as Tier | undefined;
   const tooBig = tier && ((unit.tiers && !unit.tiers.includes(tier)) || (!unit.tiers && profile && TIER_RANK[profile] > TIER_RANK[tier]));
   if (tooBig) return { requirement: "unsupported", reason: unit.group === "video" ? "Video needs a computer with 128 GB of memory." : unit.id === "htdemucs" ? "Stem splitting needs a computer with 64 GB of memory or more." : unit.group === "music" ? "Music needs a computer with 64 GB of memory or more." : unit.tiers ? "This needs a computer with more memory than this one." : "This model needs more memory than this computer has." };
-  if (planned.has(primary.id)) return { requirement: "required", reason: "Home installs this on a computer of this size." };
+  if (primary && planned.has(primary.id)) return { requirement: "required", reason: "Home installs this on a computer of this size." };
   return { requirement: "optional", reason: null };
 }
 
