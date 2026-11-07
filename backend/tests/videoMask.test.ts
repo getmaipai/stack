@@ -103,3 +103,9 @@ test("the worker script is written to a real file Python can open (the compiled 
   expect(existsSync(path)).toBe(true);
   expect(readFileSync(path, "utf8")).toContain("build_sam2_video_predictor");
 });
+
+test("the SAM 2 config is passed as the Hydra config name, never an absolute path (the live Stack said 'Cannot find primary config')", async () => {
+  const { MASK_CONFIG_NAME } = await import("@/video/mask");
+  expect(MASK_CONFIG_NAME.startsWith("/")).toBe(false);
+  expect(MASK_CONFIG_NAME).toBe("configs/sam2.1/sam2.1_hiera_s.yaml");
+});

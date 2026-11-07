@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { admit, release, withdraw, type GovernorHandle } from "@/lib/governor";
 import { imageTools } from "@/imagetools/imageTools";
-import { maskConfigPath, maskEnvironmentReady, maskModelPath, maskPython, maskWorkerEnv, materializeMaskWorker } from "@/video/mask";
+import { MASK_CONFIG_NAME, maskEnvironmentReady, maskModelPath, maskPython, maskWorkerEnv, materializeMaskWorker } from "@/video/mask";
 import { log } from "@/lib/log";
 import type { JobProgress } from "@/lib/jobs";
 import type { ProbeResult } from "./probe";
@@ -116,7 +116,7 @@ export async function cutoutClip(args: { run: Runner; ffmpeg: string; input: str
     } else lease = request;
     signal.removeEventListener("abort", queuedCancel);
     queuedCancel = null;
-    await track({ python: maskPython(), script: await materializeMaskWorker(), env: maskWorkerEnv(), framesDir, outDir: masksDir, model, config: maskConfigPath(), prompt, total: names.length, progress, signal });
+    await track({ python: maskPython(), script: await materializeMaskWorker(), env: maskWorkerEnv(), framesDir, outDir: masksDir, model, config: MASK_CONFIG_NAME, prompt, total: names.length, progress, signal });
     const masks = readdirSync(masksDir).filter((name) => name.endsWith(".png"));
     if (masks.length !== names.length) throw new Error("SAM produced an incomplete set of masks.");
     const argv = cutoutCompositeArgs({ ffmpeg, input, output, masksDir, probe, background: op.background, featherPx: op.feather_px });

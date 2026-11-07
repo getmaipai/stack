@@ -22,7 +22,7 @@ def main(req):
         predictor.add_new_points_or_box(state, frame_idx=prompt["frame"], obj_id=1, points=np.array([[p["x"], p["y"]] for p in points], dtype=np.float32), labels=np.array([p["label"] for p in points], dtype=np.int32))
     total = len(frames)
     for idx, _, logits in predictor.propagate_in_video(state):
-        mask = (logits[0] > 0).detach().cpu().numpy().astype("uint8") * 255
+        mask = (logits[0, 0] > 0).detach().cpu().numpy().astype("uint8") * 255
         Image.fromarray(mask).save(Path(req["out_dir"]) / f"{idx:05d}.png")
         emit({"id": req["id"], "progress": idx + 1, "total": total})
     emit({"id": req["id"], "ok": True, "total": total})

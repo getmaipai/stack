@@ -28,7 +28,9 @@ export async function ensureMaskEnvironment(onProgress: (phase: string) => void 
 export function maskWorkerEnv(): Record<string, string> { const env = managedEnv({ PYTHONUNBUFFERED: "1", PYTHONDONTWRITEBYTECODE: "1", PYTHONPATH: maskGenRoot(), SAM2_BUILD_CUDA: "0", PYTORCH_ENABLE_MPS_FALLBACK: "1", HF_HUB_OFFLINE: "1", TRANSFORMERS_OFFLINE: "1" }); delete env.HF_TOKEN; delete env.HUGGING_FACE_HUB_TOKEN; return env; }
 export function maskModelPath(): string | null { const model = getModel(MASK_MODEL_ID); return model?.modelPath && model.verifiedAt && existsSync(model.modelPath) ? model.modelPath : null; }
 export function maskPython(): string { return join(uvVenvPath(maskGenRoot()), "bin", "python"); }
-export function maskConfigPath(): string { return join(maskGenRoot(), "configs", "sam2.1", "sam2.1_hiera_s.yaml"); }
+/** SAM 2 builds its model from a Hydra config NAME relative to the package (`sam2/configs/...`), not from a file path (an absolute path failed on the live Stack: "Cannot find primary config"). */
+export const MASK_CONFIG_NAME = "configs/sam2.1/sam2.1_hiera_s.yaml";
+export function maskConfigPath(): string { return join(maskGenRoot(), "sam2", MASK_CONFIG_NAME); }
 /** The worker script as a real file. In the compiled Stack the embedded asset path is a virtual `/$bunfs/...` path that Python cannot open (found 2026-11-06 on the first live cutout), so it is written under the engine folder first, as the other engines do. */
 export async function materializeMaskWorker(): Promise<string> {
   const root = maskGenRoot();
