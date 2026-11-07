@@ -20,6 +20,7 @@ import { endWithStream, heavyGate } from "@/lib/heavyGate";
 import { editImages, generateImages, ImageGenerationBodySchema, type ImageGenerationBody } from "@/routes/imageGenerations";
 import { imageEngineActive } from "@/images/imageEngine";
 import { IMAGE_TOOLS_OPERATIONS, stashInput, takeResult } from "@/imagetools/imageTools";
+import { imageDimensions, pngDimensions, segmentStill, STILL_MASK_BAD_PROMPT, STILL_MASK_MAX_PIXELS, STILL_MASK_MAX_SIDE, STILL_MASK_TOO_LARGE, validateStillMaskPrompt } from "@/media/maskStill";
 import type { ImageEditResult } from "@/imagetools/jobs";
 import { RoleRequest } from "@maipai/spec/stack/ts/role-request.js";
 import { RoleReplyHeaders } from "@maipai/spec/stack/ts/role-reply-headers.js";
@@ -349,9 +350,9 @@ const MAX_UPLOAD_BYTES = 40 * 1024 * 1024;
 const ImageEditFormSchema = z.object({
   image: z.custom<File>((value) => value instanceof File, "The picture in the `image` field.").openapi({ type: "string", format: "binary" }),
   mask: z.custom<File>((value) => value instanceof File, "The mask in the `mask` field.").openapi({ type: "string", format: "binary" }).optional(),
-  operation: z.enum([...IMAGE_TOOLS_OPERATIONS, "edit", "edit_masked"]).openapi({ description: "remove_background (a transparent PNG), erase (needs `mask`: white is removed), upscale (`scale` 2 or 4), resize (`width` and/or `height`, or `factor`); edit (change the picture as the `instruction` says) and edit_masked (the same, but only the painted `mask` or the `region` can change: the rest is the original, bit for bit, beyond a feathered edge) answer like /v1/images/generations: data[] has `url` and `b64_json`, and the files are under /v1/images/generations/{job}/0.png." }),
+  operation: z.enum([...IMAGE_TOOLS_OPERATIONS, "edit", "edit_masked", "segment"]).openapi({ description: "segment: SAM 2.1 still-picture mask; prompt is JSON {box?: [x0,y0,x1,y1], points?: [{x,y,label:1|0}]} in picture pixels. Other operations include background removal, erase, upscale, resize, people masks and edits." }),
   instruction: z.string().optional().openapi({ description: "edit and edit_masked: what to change, in words (`prompt` is accepted too)." }),
-  prompt: z.string().optional(),
+  prompt: z.string().optional().openapi({ description: "segment: JSON prompt with an optional pixel box and up to 16 positive (label 1) or negative (label 0) points; at least a box or positive point is required. Picture limit: 12 megapixels and 4096 pixels on the long side." }),
   region: z.string().optional().openapi({ description: "edit_masked: x,y,width,height as fractions of the picture, like 0.4,0.5,0.2,0.2; the area to change when no mask is sent." }),
   feather: z.coerce.number().min(0).max(64).optional().openapi({ description: "edit_masked: pixels of soft edge on the mask (default 12). 0 changes exactly the mask." }),
   people: z.string().max(80).optional().openapi({ description: "erase_people: the people to remove, numbers from a find_people answer joined by commas (\"1,3\"), or \"all\". find_people answers with `people` (numbered boxes as fractions of the picture) and a copy of the picture with the boxes drawn and numbered." }),
@@ -371,10 +372,10 @@ const ImageEditFormSchema = z.object({
   reference2_source: z.enum(["generated", "uploaded", "household_photo"]).optional(),
   audience: z.enum(["all-ages", "adult"]).optional().openapi({ description: "edit and edit_masked: who the picture is for." }),
 });
-const ImageEditResponseSchema = z.object({ created: z.number().int(), job: z.string(), data: z.array(z.record(z.string(), z.unknown())) });
+const ImageEditResponseSchema = z.object({ created: z.number().int().optional(), job: z.string().optional(), data: z.array(z.object({ b64_json: z.string().optional(), width: z.number().optional(), height: z.number().optional(), content_type: z.string().optional(), operation: z.string().optional(), engine: z.string().optional(), model: z.string().optional(), ms: z.number().optional(), area: z.number().min(0).max(1).optional() }).passthrough()) });
 const ImageEditErrorSchema = z.object({ error: z.string(), code: z.string().optional(), job: z.string().optional() });
 const imageEditsRoute = createRoute({ method: "post", path: "/images/edits", tags: ["Roles"], summary: "Image edits: remove background, erase, upscale, resize (the job API with a wait)", request: { body: { content: { "multipart/form-data": { schema: ImageEditFormSchema } } } }, responses: {
-  200: { content: { "application/json": { schema: ImageEditResponseSchema } }, description: "`data` holds one `{ b64_json, width, height, content_type, operation, engine, model, ms }`: a PNG with no metadata." },
+  200: { content: { "application/json": { schema: ImageEditResponseSchema } }, description: "`data` holds one `{ b64_json, width, height, content_type, operation, engine, model, ms }`: a PNG with no metadata. `segment` also returns `area` (0 to 1)." },
   202: { content: { "application/json": { schema: ImageEditResponseSchema } }, description: "Still running past timeout_ms; fetch the PNG from GET /v1/images/edits/{job} when /stack/v1/jobs/{job} says done." },
   400: { content: { "application/json": { schema: ImageEditErrorSchema } }, description: "The form is incomplete." },
   413: { content: { "application/json": { schema: ImageEditErrorSchema } }, description: "The picture is bigger than the tool takes; `error` says the limit." },
@@ -386,6 +387,27 @@ const imageEditResultRoute = createRoute({ method: "get", path: "/images/edits/{
 
 v1Routes.openapi(imageEditsRoute, async (c) => {
   const form = c.req.valid("form");
+  if (form.operation === "segment") {
+    if (form.image.size === 0 || form.image.size > MAX_UPLOAD_BYTES) return jsonReply(c, { error: `The picture must be between 1 byte and ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.`, code: "too_large" }, 413, identityHeaders(null)) as never;
+    const bytes = new Uint8Array(await form.image.arrayBuffer());
+    const dimensions = imageDimensions(bytes);
+    if (!dimensions) return jsonReply(c, { error: "This picture could not be read. Send a JPEG, PNG or WebP picture.", code: "bad_image" }, 422, identityHeaders(null)) as never;
+    if (dimensions.width * dimensions.height > STILL_MASK_MAX_PIXELS || Math.max(dimensions.width, dimensions.height) > STILL_MASK_MAX_SIDE) return jsonReply(c, { error: STILL_MASK_TOO_LARGE, code: "too_large" }, 413, identityHeaders(null)) as never;
+    let raw: unknown;
+    try { raw = JSON.parse(form.prompt ?? ""); } catch { raw = null; }
+    const prompt = validateStillMaskPrompt(raw, dimensions.width, dimensions.height);
+    if (!prompt) return jsonReply(c, { error: STILL_MASK_BAD_PROMPT, code: "bad_prompt" }, 422, identityHeaders(null)) as never;
+    try {
+      const result = await segmentStill({ image: bytes, width: dimensions.width, height: dimensions.height, prompt, signal: c.req.raw.signal, ffmpeg: process.env.STACK_MEDIA_FFMPEG ?? "ffmpeg" });
+      const size = pngDimensions(result.png)!;
+      return jsonReply(c, { data: [{ b64_json: Buffer.from(result.png).toString("base64"), width: size.width, height: size.height, content_type: "image/png", operation: "segment", engine: "sam2.1-hiera-small", model: "sam2.1-hiera-small", ms: result.ms, area: result.area }] }, 200, identityHeaders(null)) as never;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The picture could not be segmented.";
+      const code = message === STILL_MASK_TOO_LARGE ? "too_large" : message === "The subject model is not installed yet. An admin can add it in Settings, Models and storage." ? "model_missing" : message === "Home is busy with something larger. Try again in a minute." ? "no_memory" : message === "Give a box or at least one positive point inside the picture." ? "bad_prompt" : message === "Cancelled." ? "cancelled" : "failed";
+      const status = code === "too_large" ? 413 : code === "bad_prompt" ? 422 : code === "failed" ? 500 : code === "cancelled" ? 499 : 503;
+      return jsonReply(c, { error: message, code }, status, identityHeaders(null)) as never;
+    }
+  }
   if (form.operation === "edit" || form.operation === "edit_masked") {
     if (form.image.size === 0 || form.image.size > MAX_UPLOAD_BYTES) return jsonReply(c, { error: `The picture must be between 1 byte and ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.`, code: "too_large" }, 413, identityHeaders(null)) as never;
     if (form.mask && form.mask.size > MAX_UPLOAD_BYTES) return jsonReply(c, { error: "The mask is too big.", code: "too_large" }, 413, identityHeaders(null)) as never;

@@ -2348,16 +2348,18 @@
                       "find_subjects",
                       "erase_subjects",
                       "edit",
-                      "edit_masked"
+                      "edit_masked",
+                      "segment"
                     ],
-                    "description": "remove_background (a transparent PNG), erase (needs `mask`: white is removed), upscale (`scale` 2 or 4), resize (`width` and/or `height`, or `factor`); edit (change the picture as the `instruction` says) and edit_masked (the same, but only the painted `mask` or the `region` can change: the rest is the original, bit for bit, beyond a feathered edge) answer like /v1/images/generations: data[] has `url` and `b64_json`, and the files are under /v1/images/generations/{job}/0.png."
+                    "description": "segment: SAM 2.1 still-picture mask; prompt is JSON {box?: [x0,y0,x1,y1], points?: [{x,y,label:1|0}]} in picture pixels. Other operations include background removal, erase, upscale, resize, people masks and edits."
                   },
                   "instruction": {
                     "type": "string",
                     "description": "edit and edit_masked: what to change, in words (`prompt` is accepted too)."
                   },
                   "prompt": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "segment: JSON prompt with an optional pixel box and up to 16 positive (label 1) or negative (label 0) points; at least a box or positive point is required. Picture limit: 12 megapixels and 4096 pixels on the long side."
                   },
                   "region": {
                     "type": "string",
@@ -2476,7 +2478,7 @@
         },
         "responses": {
           "200": {
-            "description": "`data` holds one `{ b64_json, width, height, content_type, operation, engine, model, ms }`: a PNG with no metadata.",
+            "description": "`data` holds one `{ b64_json, width, height, content_type, operation, engine, model, ms }`: a PNG with no metadata. `segment` also returns `area` (0 to 1).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2492,6 +2494,37 @@
                       "type": "array",
                       "items": {
                         "type": "object",
+                        "properties": {
+                          "b64_json": {
+                            "type": "string"
+                          },
+                          "width": {
+                            "type": "number"
+                          },
+                          "height": {
+                            "type": "number"
+                          },
+                          "content_type": {
+                            "type": "string"
+                          },
+                          "operation": {
+                            "type": "string"
+                          },
+                          "engine": {
+                            "type": "string"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "ms": {
+                            "type": "number"
+                          },
+                          "area": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          }
+                        },
                         "additionalProperties": {
                           "nullable": true
                         }
@@ -2499,8 +2532,6 @@
                     }
                   },
                   "required": [
-                    "created",
-                    "job",
                     "data"
                   ]
                 }
@@ -2524,6 +2555,37 @@
                       "type": "array",
                       "items": {
                         "type": "object",
+                        "properties": {
+                          "b64_json": {
+                            "type": "string"
+                          },
+                          "width": {
+                            "type": "number"
+                          },
+                          "height": {
+                            "type": "number"
+                          },
+                          "content_type": {
+                            "type": "string"
+                          },
+                          "operation": {
+                            "type": "string"
+                          },
+                          "engine": {
+                            "type": "string"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "ms": {
+                            "type": "number"
+                          },
+                          "area": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          }
+                        },
                         "additionalProperties": {
                           "nullable": true
                         }
@@ -2531,8 +2593,6 @@
                     }
                   },
                   "required": [
-                    "created",
-                    "job",
                     "data"
                   ]
                 }
