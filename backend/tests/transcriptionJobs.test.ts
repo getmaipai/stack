@@ -26,3 +26,49 @@ test("cancel interrupts a transcription while it waits between spans",async()=>{
 test("a gated installed-engine probe is available on the dispatcher host", async()=>{ if(process.env.MAIPAI_REAL_ENGINES!=="1") return; const session=await (await import("@/lib/supervisor")).openRoleSession("stt"); try { const result=await transcriptionDeps.transcribe(session.baseUrl,new Float32Array(16_000),undefined,new AbortController().signal); expect(result.text.length).toBeGreaterThan(0); } finally { session.release(); } });
 
 test("duration and out of file range errors use 413 and 422",async()=>{ transcriptionDeps.probe=async()=>({has_audio:true,duration_s:TRANSCRIPTION_MAX_BYTES as any} as any); let response=await request(base()); expect(response.status).toBe(413); transcriptionDeps.probe=async()=>({has_audio:true,duration_s:2} as any); response=await request(base(source,{from_s:1,to_s:4})); expect(response.status).toBe(422); });
+
+// CAPTION-01g
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { assignSpeakers, validateDiarizeOptions, DIARIZATION_FILES } from "@/speech/diarization";
+const diarDir = (withFiles: boolean) => { const dir = mkdtempSync(join(tmpdir(), "diar-")); if (withFiles) for (const file of Object.values(DIARIZATION_FILES)) writeFileSync(join(dir, file), "x"); process.env.MAIPAI_DIARIZATION_DIR = dir; return dir; };
+afterEach(() => { delete process.env.MAIPAI_DIARIZATION_DIR; });
+
+test("a selected range is cut by ffmpeg and every time is offset back to the original timeline", async () => {
+  let seen: { fromS: number; toS: number } | undefined;
+  transcriptionDeps.probe = async () => ({ has_audio: true, duration_s: 100 } as any);
+  transcriptionDeps.extract = async (_f, _s, out, _sig, _p, range) => { seen = range; await Bun.write(out, source); };
+  const r = await request(base(source, { from_s: 40, to_s: 42 })); expect(r.status).toBe(200);
+  expect(seen).toEqual({ fromS: 40, toS: 42 });
+  const segment = (await r.json() as any).data.segments[0]; expect(segment.words[0]).toEqual({ text: "Hello", start: 40.1, end: 40.6 }); expect(segment.start).toBe(40.1);
+});
+test("range and option validation use plain 422 messages", async () => {
+  for (const extra of [{ from_s: 5 }, { from_s: 5, to_s: 5 }, { from_s: 5, to_s: 3 }, { num_speakers: 2 }, { diarize: true, num_speakers: 0 }, { diarize: true, num_speakers: 2.5 }, { diarize: true, num_speakers: 99 }]) {
+    const r = await request(base(source, extra)); expect(r.status).toBe(422); expect(((await r.json()) as any).error.length).toBeGreaterThan(20);
+  }
+  expect(validateDiarizeOptions(true, 3)).toBeNull(); expect(validateDiarizeOptions(true)).toBeNull();
+});
+test("assignSpeakers picks the greatest overlap and numbers speakers by first appearance", () => {
+  const segs = [{ start: 0, end: 4 }, { start: 4, end: 8 }, { start: 8, end: 10 }, { start: 50, end: 51 }];
+  const turns = [{ start: 0, end: 1, speaker: 1 }, { start: 1, end: 4.5, speaker: 0 }, { start: 4.5, end: 12, speaker: 1 }];
+  const out = assignSpeakers(segs, turns);
+  expect(out.segments.map((s) => s.speaker)).toEqual(["spk-1", "spk-2", "spk-2", undefined]);
+  expect(out.speakers).toEqual([{ id: "spk-1", label: "Speaker 1" }, { id: "spk-2", label: "Speaker 2" }]);
+});
+test("diarize assigns speakers from a fake diarizer, offset by the range", async () => {
+  diarDir(true); let asked: number | undefined;
+  transcriptionDeps.probe = async () => ({ has_audio: true, duration_s: 100 } as any);
+  transcriptionDeps.diarize = async (_b, _wav, n) => { asked = n; return [{ start: 0, end: 1, speaker: 7 }]; };
+  const r = await request(base(source, { diarize: true, num_speakers: 2, from_s: 10, to_s: 12 })); expect(r.status).toBe(200);
+  const data = (await r.json() as any).data; expect(asked).toBe(2);
+  expect(data.diarization).toBe("done"); expect(data.speakers).toEqual([{ id: "spk-1", label: "Speaker 1" }]); expect(data.segments[0].speaker).toBe("spk-1");
+});
+test("missing models, or a diarizer that fails, return the transcript without speakers", async () => {
+  diarDir(false); let called = false; transcriptionDeps.diarize = async () => { called = true; return []; };
+  let data = (await (await request(base(source, { diarize: true }))).json() as any).data;
+  expect(called).toBe(false); expect(data.diarization).toBe("unavailable"); expect(data.diarization_note).toContain("not installed"); expect(data.segments[0].text).toBe("Hello there"); expect(data.speakers).toBeUndefined(); expect(data.segments[0].speaker).toBeUndefined();
+  diarDir(true); transcriptionDeps.diarize = async () => { throw new Error("boom with text"); };
+  const r = await request(base(source, { diarize: true })); expect(r.status).toBe(200); data = (await r.json() as any).data;
+  expect(data.diarization).toBe("unavailable"); expect(data.diarization_note).not.toContain("boom"); expect(data.segments).toHaveLength(1);
+});
+test("without diarize the result has no speaker fields", async () => { const data = (await (await request(base())).json() as any).data; expect(data.diarization).toBeUndefined(); expect(data.speakers).toBeUndefined(); });

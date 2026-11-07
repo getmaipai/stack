@@ -7,6 +7,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { TARGET_SAMPLE_RATE } from "@/speech/audio";
 import type { Transcriber, VoiceDetector } from "@/speech/session";
+import { DIARIZATION_FILES, missingDiarizationFiles, type SpeakerTurn } from "@/speech/diarization";
 
 export const RUNTIME_NAME = "sherpa-onnx-node";
 
@@ -22,6 +23,7 @@ const VAD_WINDOW = 512;
 interface SherpaResult { text: string; lang?: string; tokens?: string[]; timestamps?: number[]; ys_log_probs?: number[]; }
 interface SherpaModule {
   OfflineRecognizer: new (config: unknown) => { createStream(hotwords?: string): SherpaStream; decodeAsync(stream: SherpaStream): Promise<void>; getResult(stream: SherpaStream): SherpaResult };
+  OfflineSpeakerDiarization: new (config: unknown) => { sampleRate: number; process(samples: Float32Array): Array<{ start: number; end: number; speaker: number }> };
   Vad: new (config: unknown, bufferSizeInSeconds: number) => { acceptWaveform(samples: Float32Array): void; isDetected(): boolean; reset(): void; clear(): void };
 }
 interface SherpaStream { acceptWaveform(input: { samples: Float32Array; sampleRate: number }): void; }
@@ -170,6 +172,31 @@ export function loadSilero(modelPath: string): VoiceDetector {
       vad.reset();
       pending = new Float32Array(0);
       voiced = false;
+    },
+  };
+}
+
+export interface Diarizer { diarize(samples: Float32Array, numSpeakers?: number): SpeakerTurn[]; }
+/** pyannote segmentation plus a speaker embedding and fast clustering, all
+ * on the CPU. `numSpeakers` fixes the count; without it the clusterer
+ * decides from a distance threshold. */
+export function loadDiarizer(dir: string, threads = 2): Diarizer {
+  const missing = missingDiarizationFiles(dir);
+  if (missing.length) throw new Error(`The speaker detection models at ${dir} are missing ${missing.join(", ")}.`);
+  const sherpa = loadModule();
+  const make = (numClusters: number) => new sherpa.OfflineSpeakerDiarization({
+    segmentation: { pyannote: { model: join(dir, DIARIZATION_FILES.segmentation) }, numThreads: threads, debug: 0, provider: "cpu" },
+    embedding: { model: join(dir, DIARIZATION_FILES.embedding), numThreads: threads, debug: 0, provider: "cpu" },
+    clustering: { numClusters, threshold: 0.5 },
+    minDurationOn: 0.3,
+    minDurationOff: 0.5,
+  });
+  const cache = new Map<number, ReturnType<typeof make>>();
+  return {
+    diarize(samples, numSpeakers) {
+      const key = numSpeakers ?? -1;
+      let engine = cache.get(key); if (!engine) { engine = make(key); cache.set(key, engine); }
+      return engine.process(samples).map((turn) => ({ start: turn.start, end: turn.end, speaker: turn.speaker }));
     },
   };
 }

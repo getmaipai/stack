@@ -5,6 +5,7 @@ import { GenTracker, recordRun } from "@/lib/genProgress";
 import { dataDir } from "@/lib/paths";
 import { mediaDeps } from "@/media/jobs";
 import { splitSpeechSpans, wordsFromTokenTimes, validateRange, type TimedWord } from "@/speech/transcriptSpans";
+import { assignSpeakers, diarizationDir, DIARIZATION_UNAVAILABLE_NOTE, missingDiarizationFiles, type Speaker, type SpeakerTurn } from "@/speech/diarization";
 import { decodeWave, toRecognizerRate } from "@/speech/audio";
 import { openRoleSession, roleHasEngine, selectedModel } from "@/lib/supervisor";
 import { probeFile } from "@/media/probe";
@@ -15,9 +16,9 @@ export const TRANSCRIPTION_JOB_KIND = "audio_transcription";
 export const TRANSCRIPTION_MAX_BYTES = 250 * 1024 * 1024;
 export const TRANSCRIPTION_MAX_SECONDS = 3 * 60 * 60;
 export const TRANSCRIPTION_PEAK_BYTES = 8_500_000_000;
-export interface TranscriptSegment { start: number; end: number; text: string; words: TimedWord[]; confidence?: number; }
-export interface TranscriptionOutput { language: string; segments: TranscriptSegment[]; vocabulary_applied: boolean; }
-interface Payload { source: Uint8Array; from_s?: number; to_s?: number; language?: string; vocabulary?: string[]; }
+export interface TranscriptSegment { start: number; end: number; text: string; words: TimedWord[]; confidence?: number; speaker?: string; }
+export interface TranscriptionOutput { language: string; segments: TranscriptSegment[]; vocabulary_applied: boolean; diarization?: "done" | "unavailable"; diarization_note?: string; speakers?: Speaker[]; }
+interface Payload { source: Uint8Array; from_s?: number; to_s?: number; language?: string; vocabulary?: string[]; diarize?: boolean; num_speakers?: number; }
 const stash = new Map<string, Payload & { at: number }>();
 const failures = new Map<string, { code: string; message: string; status?: number }>();
 const stages = new Map<string, string>();
@@ -31,12 +32,15 @@ export const forgetTranscriptionOutput = (id: string) => { results.delete(id); }
 const remember = <T>(map: Map<string, T>, key: string, value: T) => { map.set(key, value); while (map.size > 200) map.delete(map.keys().next().value as string); };
 export function stashTranscription(token: string, payload: Payload): void { const now = Date.now(); for (const [key, value] of stash) if (now - value.at > 30 * 60_000) stash.delete(key); stash.set(token, { ...payload, at: now }); }
 export function unstashTranscription(token: string): void { stash.delete(token); }
-export function transcriptionMemory(job: Pick<Job, "input">) { const input = job.input as { from_s?: number; to_s?: number } | null; const seconds = input?.from_s !== undefined && input.to_s !== undefined ? input.to_s - input.from_s : TRANSCRIPTION_MAX_SECONDS; const bytes = Math.min(TRANSCRIPTION_PEAK_BYTES, Math.max(2_300_000_000, Math.ceil(2_300_000_000 + seconds * 600_000))); return { requestedBytes: bytes, measuredPeakBytes: bytes, engine: "sherpa-onnx-parakeet" }; }
+export function transcriptionMemory(job: Pick<Job, "input">) { const input = job.input as { from_s?: number; to_s?: number; diarize?: boolean } | null; const seconds = input?.from_s !== undefined && input.to_s !== undefined ? input.to_s - input.from_s : TRANSCRIPTION_MAX_SECONDS; const bytes = Math.min(TRANSCRIPTION_PEAK_BYTES, Math.max(2_300_000_000, Math.ceil(2_300_000_000 + seconds * 600_000 + (input?.diarize ? 400_000_000 : 0)))); return { requestedBytes: bytes, measuredPeakBytes: bytes, engine: "sherpa-onnx-parakeet" }; }
 
 type TimedResult = { text: string; tokens?: string[]; timestamps?: number[]; ys_log_probs?: number[]; lang?: string };
 export interface TranscriptionDeps {
   probe: typeof probeFile;
-  extract: (ffmpeg: string, source: string, output: string, signal: AbortSignal, progress: (fraction: number) => void) => Promise<void>;
+  /** `range` limits ffmpeg to that window (-ss/-t); the output then starts at range.fromS on the original clock. */
+  extract: (ffmpeg: string, source: string, output: string, signal: AbortSignal, progress: (fraction: number) => void, range?: { fromS: number; toS: number }) => Promise<void>;
+  /** Speaker turns for the 16 kHz wav at `wavPath`, times relative to its start. */
+  diarize: (baseUrl: string, wavPath: string, numSpeakers: number | undefined, signal: AbortSignal) => Promise<SpeakerTurn[]>;
   detect: (baseUrl: string, samples: Float32Array, signal: AbortSignal) => Promise<Array<{ startSample: number; endSample: number }>>;
   transcribe: (baseUrl: string, samples: Float32Array, hotwords: string | undefined, signal: AbortSignal) => Promise<TimedResult>;
 }
@@ -50,13 +54,14 @@ function waveBytes(samples: Float32Array, rate = 16_000): Uint8Array {
 async function fetchJson<T>(url: string, body: unknown, signal: AbortSignal): Promise<T> { const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal }); const result = await response.json() as T & { error?: string }; if (!response.ok) throw new Error(result.error ?? "The speech worker could not finish this request."); return result; }
 export const transcriptionDeps: TranscriptionDeps = {
   probe: probeFile,
-  extract: async (ffmpeg, source, output, signal, progress) => {
-    const child = Bun.spawn([ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-i", source, "-map", "0:a:0", "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", "-f", "wav", output], { stdout: "ignore", stderr: "pipe" });
+  extract: async (ffmpeg, source, output, signal, progress, range) => {
+    const child = Bun.spawn([ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error", "-y", ...(range ? ["-ss", String(range.fromS)] : []), "-i", source, ...(range ? ["-t", String(range.toS - range.fromS)] : []), "-map", "0:a:0", "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", "-f", "wav", output], { stdout: "ignore", stderr: "pipe" });
     const stop = () => { try { child.kill("SIGTERM"); } catch {} }; if (signal.aborted) stop(); else signal.addEventListener("abort", stop, { once: true });
     const stderr = new Response(child.stderr).text().catch(() => ""); const code = await child.exited; signal.removeEventListener("abort", stop); await stderr;
     if (signal.aborted) throw new Error("Cancelled."); if (code !== 0) throw new Error("Audio could not be extracted from this file. Try another audio or video file."); progress(1);
   },
   detect: async (baseUrl, samples, signal) => (await fetchJson<{ spans: Array<{ startSample: number; endSample: number }> }>(`${baseUrl}/v1/audio/transcriptions/detect-spans`, { audio_base64: Buffer.from(waveBytes(samples)).toString("base64") }, signal)).spans,
+  diarize: async (baseUrl, wavPath, numSpeakers, signal) => (await fetchJson<{ turns: SpeakerTurn[] }>(`${baseUrl}/v1/audio/transcriptions/diarize`, { audio_path: wavPath, ...(numSpeakers ? { num_speakers: numSpeakers } : {}) }, signal)).turns,
   transcribe: async (baseUrl, samples, hotwords, signal) => fetchJson<TimedResult>(`${baseUrl}/v1/audio/transcriptions/timed-span`, { audio_base64: Buffer.from(waveBytes(samples)).toString("base64"), ...(hotwords ? { hotwords } : {}) }, signal),
 };
 let availabilityOverride: (() => boolean) | null = null;
@@ -74,14 +79,16 @@ async function run(job: Job, signal: AbortSignal, update: JobProgress) {
     const probe = await transcriptionDeps.probe(mediaDeps.run, await mediaDeps.toolbox.path("ffprobe", (status) => update({ status }), signal), source, signal);
     if (!probe.has_audio || probe.duration_s === null) throw new JobFailure("This file has no readable audio track. Send an audio or video file with sound.", { failure: { code: "bad_request", message: "This file has no readable audio track. Send an audio or video file with sound.", status: 422 } });
     if (probe.duration_s > TRANSCRIPTION_MAX_SECONDS) throw new JobFailure("The audio or video is longer than 3 hours.", { failure: { code: "too_long", message: "The audio or video is longer than 3 hours.", status: 413 } });
+    let range: { fromS: number; toS?: number };
+    try { range = validateRange(input?.from_s, input?.to_s); } catch (error) { const message = error instanceof Error ? error.message : "The requested range is not valid."; throw new JobFailure(message, { failure: { code: "bad_range", message, status: 422 } }); }
+    if (range.toS !== undefined && (range.fromS >= probe.duration_s || range.toS > probe.duration_s + 0.1)) throw new JobFailure("The requested range is outside the file. Pick a start and end inside its length.", { failure: { code: "bad_range", message: "The requested range is outside the file. Pick a start and end inside its length.", status: 422 } });
     stages.set(job.id, "extracting"); update({ status: "extracting", percent: 2 });
-    await transcriptionDeps.extract(ffmpeg, source, wav, signal, (fraction) => update({ percent: 2 + Math.round(fraction * 18) }));
+    await transcriptionDeps.extract(ffmpeg, source, wav, signal, (fraction) => update({ percent: 2 + Math.round(fraction * 18) }), range.toS !== undefined ? { fromS: range.fromS, toS: Math.min(range.toS, probe.duration_s) } : undefined);
     const wave = decodeWave(new Uint8Array(await Bun.file(wav).arrayBuffer())); const samples = toRecognizerRate(wave); const duration = samples.length / 16_000;
     if (!Number.isFinite(duration) || duration <= 0) throw new Error("The file has no readable audio track.");
     if (duration > TRANSCRIPTION_MAX_SECONDS + 0.1) throw new Error("The audio or video is longer than 3 hours.");
-    const range = validateRange(input?.from_s, input?.to_s); const start = Math.round(range.fromS * 16_000); const end = Math.round(Math.min(range.toS ?? duration, duration) * 16_000);
-    if (start >= samples.length || end <= start || (range.toS !== undefined && range.toS > duration + 0.1)) throw new JobFailure("The requested range is outside the file.", { failure: { code: "bad_range", message: "The requested range is outside the file.", status: 422 } });
-    const selected = samples.subarray(start, end);
+    // ffmpeg already cut the range, so the extracted audio starts at range.fromS on the original clock.
+    const selected = samples;
     const session = await openRoleSession("stt");
     try {
       stages.set(job.id, "finding speech"); update({ status: "finding speech", percent: 22 });
@@ -101,7 +108,24 @@ async function run(job: Job, signal: AbortSignal, update: JobProgress) {
         const text = result.text.trim(); if (text) segments.push({ start: words[0]?.start ?? offset, end: words.at(-1)?.end ?? offset + clip.length / 16_000, text, words, ...(Array.isArray(result.ys_log_probs) && result.ys_log_probs.length ? { confidence: Math.exp(result.ys_log_probs.reduce((a, b) => a + b, 0) / result.ys_log_probs.length) } : {}) });
         const percent = 25 + Math.round((index + 1) / Math.max(spans.length, 1) * 70); update({ status: "transcribing", percent });
       }
-      const output: TranscriptionOutput = { language: "en", segments, vocabulary_applied: false }; results.set(job.id, output); while (results.size > 12) results.delete(results.keys().next().value as string); recordRun(tracker.key, tracker.finish()); update({ status: "ready", percent: 100 });
+      let output: TranscriptionOutput = { language: "en", segments, vocabulary_applied: false };
+      if (payload.diarize) {
+        // A failed or missing speaker detection never fails the transcript.
+        const unavailable = { diarization: "unavailable" as const, diarization_note: DIARIZATION_UNAVAILABLE_NOTE };
+        if (missingDiarizationFiles(diarizationDir()).length) output = { ...output, ...unavailable };
+        else {
+          try {
+            stages.set(job.id, "finding speakers"); update({ status: "finding speakers", percent: 96 });
+            const turns = (await transcriptionDeps.diarize(session.baseUrl, wav, payload.num_speakers, signal)).map((turn) => ({ ...turn, start: turn.start + range.fromS, end: turn.end + range.fromS }));
+            const assigned = assignSpeakers(segments, turns); output = { ...output, segments: assigned.segments, speakers: assigned.speakers, diarization: "done" };
+            console.log(JSON.stringify({ event: "transcription.diarized", turns: turns.length, speakers: assigned.speakers.length }));
+          } catch (error) {
+            if (signal.aborted) throw error;
+            console.log(JSON.stringify({ event: "transcription.diarize_failed" }));
+            output = { ...output, diarization: "unavailable", diarization_note: "Speaker detection could not finish for this file, so the transcript has no speaker names. Try again, or send a shorter range." };
+          }
+        }
+      } results.set(job.id, output); while (results.size > 12) results.delete(results.keys().next().value as string); recordRun(tracker.key, tracker.finish()); update({ status: "ready", percent: 100 });
       // Rule 6a: transcript contents stay in memory, and logs carry counts and milliseconds only.
       const ms = Date.now() - started; console.log(JSON.stringify({ event: "transcription.done", segments: segments.length, words: segments.reduce((sum, item) => sum + item.words.length, 0), ms })); return { job: job.id, ms, segments: segments.length };
     } finally { session.release(); }

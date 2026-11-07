@@ -17,12 +17,16 @@ export const TRANSCRIBE_PATH = "/v1/audio/transcriptions";
 export const TRANSCRIBE_TIMED_PATH = "/v1/audio/transcriptions/timed-span";
 export const TRANSCRIBE_SPANS_PATH = "/v1/audio/transcriptions/detect-spans";
 
+export const DIARIZE_PATH = "/v1/audio/transcriptions/diarize";
+
 export interface SpeechServerOptions {
   port: number;
   build: string;
   modelPath: string;
   transcriber: Transcriber;
   detector: () => VoiceDetector;
+  /** Speaker detection; null when its models are not installed. */
+  diarizer?: () => { diarize(samples: Float32Array, numSpeakers?: number): Array<{ start: number; end: number; speaker: number }> } | null;
   session?: Partial<SttSessionConfig>;
 }
 
@@ -95,6 +99,21 @@ export function startSpeechServer(options: SpeechServerOptions) {
         } catch (error) {
           if (error instanceof WaveFormatError) return jsonResponse({ error: error.message }, 400);
           return jsonResponse({ error: "Speech spans could not be detected." }, 500);
+        }
+      }
+      if (request.method === "POST" && url.pathname === DIARIZE_PATH) {
+        // The extracted audio is a wav file the daemon wrote on this computer (a 3 hour file is too big for a request body).
+        const body = await request.json().catch(() => null) as { audio_path?: unknown; num_speakers?: unknown } | null;
+        if (typeof body?.audio_path !== "string" || !body.audio_path.endsWith(".wav") || !body.audio_path.startsWith("/")) return jsonResponse({ error: "Send audio_path: the absolute path of a 16 kHz WAV file." }, 400);
+        const engine = options.diarizer?.() ?? null;
+        if (!engine) return jsonResponse({ error: "Speaker detection models are not installed.", code: "unavailable" }, 422);
+        try {
+          const decoded = decodeWave(new Uint8Array(await Bun.file(body.audio_path).arrayBuffer()));
+          const turns = engine.diarize(toRecognizerRate(decoded), typeof body.num_speakers === "number" ? body.num_speakers : undefined);
+          return jsonResponse({ turns }, 200);
+        } catch (error) {
+          if (error instanceof WaveFormatError) return jsonResponse({ error: error.message }, 400);
+          return jsonResponse({ error: "Speakers could not be detected in this audio." }, 500);
         }
       }
       return jsonResponse({ error: "Not found." }, 404);

@@ -4,7 +4,8 @@
 // the wire on loopback, and exits when its stdin closes or it is
 // signalled, so a daemon that dies never leaves a worker behind.
 import { basename } from "node:path";
-import { loadMoonshine, loadParakeet, loadSilero, recognizerKind, RUNTIME_NAME, runtimeVersion } from "@/speech/sherpa";
+import { diarizationDir, missingDiarizationFiles } from "@/speech/diarization";
+import { loadDiarizer, type Diarizer, loadMoonshine, loadParakeet, loadSilero, recognizerKind, RUNTIME_NAME, runtimeVersion } from "@/speech/sherpa";
 import { startSpeechServer } from "@/speech/server";
 
 export interface WorkerArgs { role: "stt"; port: number; model: string; vad: string; threads: number; }
@@ -31,7 +32,10 @@ export function workerBuild(): string { return `${RUNTIME_NAME}-${runtimeVersion
 export async function runSpeechWorker(argv: string[]): Promise<void> {
   const args = parseWorkerArgs(argv);
   const transcriber = recognizerKind(args.model) === "parakeet" ? loadParakeet(args.model, args.threads) : loadMoonshine(args.model, args.threads);
-  const server = startSpeechServer({ port: args.port, build: workerBuild(), modelPath: args.model, transcriber, detector: () => loadSilero(args.vad) });
+  // Loaded on first use: the models are 0.1 GB and only some jobs ask for speakers.
+  let diarizer: Diarizer | null = null;
+  const diarizerFor = () => { if (!diarizer) { const dir = diarizationDir(); if (missingDiarizationFiles(dir).length) return null; diarizer = loadDiarizer(dir, args.threads); } return diarizer; };
+  const server = startSpeechServer({ diarizer: diarizerFor, port: args.port, build: workerBuild(), modelPath: args.model, transcriber, detector: () => loadSilero(args.vad) });
   console.log(`speech-worker ${args.role} listening on http://127.0.0.1:${server.port} with ${basename(args.model)}`);
   const stop = () => { server.stop(true); process.exit(0); };
   process.once("SIGTERM", stop);
