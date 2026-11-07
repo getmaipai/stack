@@ -4,11 +4,11 @@
 // the wire on loopback, and exits when its stdin closes or it is
 // signalled, so a daemon that dies never leaves a worker behind.
 import { basename } from "node:path";
-import { diarizationDir, missingDiarizationFiles } from "@/speech/diarization";
-import { loadDiarizer, type Diarizer, loadMoonshine, loadParakeet, loadSilero, recognizerKind, RUNTIME_NAME, runtimeVersion } from "@/speech/sherpa";
+import { diarizationDir, missingDiarizationFiles, type DiarizationFiles } from "@/speech/diarization";
+import { loadDiarizer, loadDiarizerFiles, type Diarizer, loadMoonshine, loadParakeet, loadSilero, recognizerKind, RUNTIME_NAME, runtimeVersion } from "@/speech/sherpa";
 import { startSpeechServer } from "@/speech/server";
 
-export interface WorkerArgs { role: "stt"; port: number; model: string; vad: string; threads: number; }
+export interface WorkerArgs { role: "stt"; port: number; model: string; vad: string; threads: number; diarization?: DiarizationFiles; }
 
 export function parseWorkerArgs(argv: string[]): WorkerArgs {
   const value = (flag: string): string | undefined => { const index = argv.indexOf(flag); return index >= 0 ? argv[index + 1] : undefined; };
@@ -21,7 +21,8 @@ export function parseWorkerArgs(argv: string[]): WorkerArgs {
   if (!model) throw new Error("speech-worker needs --model <dir>.");
   if (!vad) throw new Error("speech-worker needs --vad <file>.");
   const threads = Number(value("--threads") ?? 2);
-  return { role, port, model, vad, threads: Number.isInteger(threads) && threads > 0 ? threads : 2 };
+  const segmentation = value("--diar-seg"), embedding = value("--diar-emb");
+  return { role, port, model, vad, threads: Number.isInteger(threads) && threads > 0 ? threads : 2, ...(segmentation && embedding ? { diarization: { segmentation, embedding } } : {}) };
 }
 
 /** What `/props` reports: the runtime and its exact version as the
@@ -34,7 +35,7 @@ export async function runSpeechWorker(argv: string[]): Promise<void> {
   const transcriber = recognizerKind(args.model) === "parakeet" ? loadParakeet(args.model, args.threads) : loadMoonshine(args.model, args.threads);
   // Loaded on first use: the models are 0.1 GB and only some jobs ask for speakers.
   let diarizer: Diarizer | null = null;
-  const diarizerFor = () => { if (!diarizer) { const dir = diarizationDir(); if (missingDiarizationFiles(dir).length) return null; diarizer = loadDiarizer(dir, args.threads); } return diarizer; };
+  const diarizerFor = () => { if (!diarizer && args.diarization) diarizer = loadDiarizerFiles(args.diarization, args.threads); if (!diarizer) { const dir = diarizationDir(); if (missingDiarizationFiles(dir).length) return null; diarizer = loadDiarizer(dir, args.threads); } return diarizer; };
   const server = startSpeechServer({ diarizer: diarizerFor, port: args.port, build: workerBuild(), modelPath: args.model, transcriber, detector: () => loadSilero(args.vad) });
   console.log(`speech-worker ${args.role} listening on http://127.0.0.1:${server.port} with ${basename(args.model)}`);
   const stop = () => { server.stop(true); process.exit(0); };

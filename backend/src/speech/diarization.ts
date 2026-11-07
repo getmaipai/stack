@@ -16,8 +16,32 @@ export interface Speaker { id: string; label: string; }
 
 /** The speech models directory's `diarization` folder; `MAIPAI_DIARIZATION_DIR` overrides it (dev and tests). */
 export function diarizationDir(): string { return process.env.MAIPAI_DIARIZATION_DIR || join(modelsDir, "diarization"); }
+/** The two files the clusterer reads, by absolute path. */
+export interface DiarizationFiles { segmentation: string; embedding: string; }
+/** The segmentation archive extracts to a folder holding this file. */
+export const SEGMENTATION_FILE_IN_PACKAGE = "model.int8.onnx";
+export const DIARIZATION_COMPONENTS = { segmentation: "diarization-segmentation", embedding: "diarization-embedding" } as const;
+/** The files of an override folder (dev and tests), or null when no override is set. */
+export function overrideDiarizationFiles(): DiarizationFiles | null {
+  const dir = process.env.MAIPAI_DIARIZATION_DIR;
+  return dir ? { segmentation: join(dir, DIARIZATION_FILES.segmentation), embedding: join(dir, DIARIZATION_FILES.embedding) } : null;
+}
+/** The files of the installed components (`modelPath` of each record), or null until both are installed and present on disk. */
+export function installedDiarizationFiles(records: ReadonlyArray<{ modelPath: string | null; engineRequirements: { component?: unknown } }>): DiarizationFiles | null {
+  const pathOf = (component: string) => records.find((record) => record.engineRequirements.component === component && record.modelPath)?.modelPath ?? null;
+  const packageDir = pathOf(DIARIZATION_COMPONENTS.segmentation), embedding = pathOf(DIARIZATION_COMPONENTS.embedding);
+  if (!packageDir || !embedding) return null;
+  const files = { segmentation: join(packageDir, SEGMENTATION_FILE_IN_PACKAGE), embedding };
+  return existsSync(files.segmentation) && existsSync(files.embedding) ? files : null;
+}
+/** Where speaker detection reads its models: an override folder when set, else the installed components. */
+export function diarizationFilesFor(records: Parameters<typeof installedDiarizationFiles>[0]): DiarizationFiles | null {
+  const override = overrideDiarizationFiles();
+  if (override) return Object.values(override).every((file) => existsSync(file)) ? override : null;
+  return installedDiarizationFiles(records);
+}
 export function missingDiarizationFiles(dir = diarizationDir()): string[] { return Object.values(DIARIZATION_FILES).filter((file) => !existsSync(join(dir, file))); }
-export const DIARIZATION_UNAVAILABLE_NOTE = "Speaker detection is not installed on this computer, so the transcript has no speaker names. Install the speaker detection models from Home's Engines page and run it again.";
+export const DIARIZATION_UNAVAILABLE_NOTE = "Speaker detection is not installed on this computer, so the transcript has no speaker names. Install pyannote-segmentation-3.0-int8 and titanet-small-en from Home's Engines page and run it again.";
 
 /** Validate the `diarize` / `num_speakers` pair; returns a plain-language problem or null. */
 export function validateDiarizeOptions(diarize?: boolean, numSpeakers?: number): string | null {

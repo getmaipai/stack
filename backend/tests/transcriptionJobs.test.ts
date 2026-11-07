@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { app } from "@/app";
 import { __resetJobsForTests } from "@/lib/jobs";
 import { __resetGovernorForTests, __setGovernorTuningForTestsOnly } from "@/lib/governor";
@@ -28,9 +28,11 @@ test("a gated installed-engine probe is available on the dispatcher host", async
 test("duration and out of file range errors use 413 and 422",async()=>{ transcriptionDeps.probe=async()=>({has_audio:true,duration_s:TRANSCRIPTION_MAX_BYTES as any} as any); let response=await request(base()); expect(response.status).toBe(413); transcriptionDeps.probe=async()=>({has_audio:true,duration_s:2} as any); response=await request(base(source,{from_s:1,to_s:4})); expect(response.status).toBe(422); });
 
 // CAPTION-01g
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { assignSpeakers, validateDiarizeOptions, DIARIZATION_FILES } from "@/speech/diarization";
+import { assignSpeakers, validateDiarizeOptions, DIARIZATION_FILES, diarizationFilesFor, installedDiarizationFiles } from "@/speech/diarization";
+import { parseWorkerArgs } from "@/speech/worker";
+import { speechWorkerCommand } from "@/lib/supervisor";
 const diarDir = (withFiles: boolean) => { const dir = mkdtempSync(join(tmpdir(), "diar-")); if (withFiles) for (const file of Object.values(DIARIZATION_FILES)) writeFileSync(join(dir, file), "x"); process.env.MAIPAI_DIARIZATION_DIR = dir; return dir; };
 afterEach(() => { delete process.env.MAIPAI_DIARIZATION_DIR; });
 
@@ -72,3 +74,46 @@ test("missing models, or a diarizer that fails, return the transcript without sp
   expect(data.diarization).toBe("unavailable"); expect(data.diarization_note).not.toContain("boom"); expect(data.segments).toHaveLength(1);
 });
 test("without diarize the result has no speaker fields", async () => { const data = (await (await request(base())).json() as any).data; expect(data.diarization).toBeUndefined(); expect(data.speakers).toBeUndefined(); });
+
+describe("speaker detection models installed as catalog components", () => {
+  const record = (component: string, modelPath: string | null) => ({ modelPath, engineRequirements: { component } });
+  const installed = () => {
+    const root = mkdtempSync(join(tmpdir(), "diar-installed-"));
+    const packageDir = join(root, "sherpa-onnx-pyannote-segmentation-3-0");
+    mkdirSync(packageDir);
+    writeFileSync(join(packageDir, "model.int8.onnx"), "seg");
+    const embedding = join(root, "nemo_en_titanet_small.onnx");
+    writeFileSync(embedding, "emb");
+    return { packageDir, embedding };
+  };
+
+  test("both components installed give the two file paths; one missing or a deleted file gives none", () => {
+    const { packageDir, embedding } = installed();
+    const records = [record("diarization-segmentation", packageDir), record("diarization-embedding", embedding)];
+    expect(installedDiarizationFiles(records)).toEqual({ segmentation: join(packageDir, "model.int8.onnx"), embedding });
+    expect(installedDiarizationFiles(records.slice(0, 1))).toBeNull();
+    expect(installedDiarizationFiles([record("diarization-segmentation", packageDir), record("diarization-embedding", null)])).toBeNull();
+    expect(installedDiarizationFiles([record("diarization-segmentation", join(packageDir, "gone")), record("diarization-embedding", embedding)])).toBeNull();
+  });
+
+  test("the override folder wins over installed components and is checked on disk", () => {
+    const { packageDir, embedding } = installed();
+    const records = [record("diarization-segmentation", packageDir), record("diarization-embedding", embedding)];
+    const before = process.env.MAIPAI_DIARIZATION_DIR;
+    try {
+      process.env.MAIPAI_DIARIZATION_DIR = join(tmpdir(), "no-such-diar-dir");
+      expect(diarizationFilesFor(records)).toBeNull();
+      delete process.env.MAIPAI_DIARIZATION_DIR;
+      expect(diarizationFilesFor(records)?.embedding).toBe(embedding);
+    } finally { if (before === undefined) delete process.env.MAIPAI_DIARIZATION_DIR; else process.env.MAIPAI_DIARIZATION_DIR = before; }
+  });
+
+  test("the worker command carries the two files and the worker reads them back", () => {
+    const files = { segmentation: "/m/seg/model.int8.onnx", embedding: "/m/emb.onnx" };
+    const command = speechWorkerCommand({ role: "stt", port: 9000, modelPath: "/m/parakeet", vadPath: "/m/vad.onnx", threads: 2, diarization: files }, { execPath: "/usr/bin/bun", main: "/app/index.ts", isCompiled: false });
+    expect(parseWorkerArgs(command.slice(command.indexOf("speech-worker")).slice(0)).diarization).toEqual(files);
+    const plain = speechWorkerCommand({ role: "stt", port: 9000, modelPath: "/m/parakeet", vadPath: "/m/vad.onnx", threads: 2 }, { execPath: "/usr/bin/bun", main: "/app/index.ts", isCompiled: false });
+    expect(plain.includes("--diar-seg")).toBe(false);
+    expect(parseWorkerArgs(plain.slice(plain.indexOf("speech-worker"))).diarization).toBeUndefined();
+  });
+});

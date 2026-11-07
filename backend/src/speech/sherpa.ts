@@ -7,7 +7,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { TARGET_SAMPLE_RATE } from "@/speech/audio";
 import type { Transcriber, VoiceDetector } from "@/speech/session";
-import { DIARIZATION_FILES, missingDiarizationFiles, type SpeakerTurn } from "@/speech/diarization";
+import { DIARIZATION_FILES, missingDiarizationFiles, type DiarizationFiles, type SpeakerTurn } from "@/speech/diarization";
 
 export const RUNTIME_NAME = "sherpa-onnx-node";
 
@@ -183,10 +183,14 @@ export interface Diarizer { diarize(samples: Float32Array, numSpeakers?: number)
 export function loadDiarizer(dir: string, threads = 2): Diarizer {
   const missing = missingDiarizationFiles(dir);
   if (missing.length) throw new Error(`The speaker detection models at ${dir} are missing ${missing.join(", ")}.`);
+  return loadDiarizerFiles({ segmentation: join(dir, DIARIZATION_FILES.segmentation), embedding: join(dir, DIARIZATION_FILES.embedding) }, threads);
+}
+/** The same, from the two installed files wherever the installer put them. */
+export function loadDiarizerFiles(files: DiarizationFiles, threads = 2): Diarizer {
   const sherpa = loadModule();
   const make = (numClusters: number) => new sherpa.OfflineSpeakerDiarization({
-    segmentation: { pyannote: { model: join(dir, DIARIZATION_FILES.segmentation) }, numThreads: threads, debug: 0, provider: "cpu" },
-    embedding: { model: join(dir, DIARIZATION_FILES.embedding), numThreads: threads, debug: 0, provider: "cpu" },
+    segmentation: { pyannote: { model: files.segmentation }, numThreads: threads, debug: 0, provider: "cpu" },
+    embedding: { model: files.embedding, numThreads: threads, debug: 0, provider: "cpu" },
     clustering: { numClusters, threshold: 0.5 },
     minDurationOn: 0.3,
     minDurationOff: 0.5,

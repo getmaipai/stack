@@ -5,7 +5,7 @@ import { GenTracker, recordRun } from "@/lib/genProgress";
 import { dataDir } from "@/lib/paths";
 import { mediaDeps } from "@/media/jobs";
 import { splitSpeechSpans, wordsFromTokenTimes, validateRange, type TimedWord } from "@/speech/transcriptSpans";
-import { assignSpeakers, diarizationDir, DIARIZATION_UNAVAILABLE_NOTE, missingDiarizationFiles, type Speaker, type SpeakerTurn } from "@/speech/diarization";
+import { assignSpeakers, diarizationFilesFor, DIARIZATION_UNAVAILABLE_NOTE, type Speaker, type SpeakerTurn } from "@/speech/diarization";
 import { decodeWave, toRecognizerRate } from "@/speech/audio";
 import { openRoleSession, roleHasEngine, selectedModel } from "@/lib/supervisor";
 import { probeFile } from "@/media/probe";
@@ -112,7 +112,7 @@ async function run(job: Job, signal: AbortSignal, update: JobProgress) {
       if (payload.diarize) {
         // A failed or missing speaker detection never fails the transcript.
         const unavailable = { diarization: "unavailable" as const, diarization_note: DIARIZATION_UNAVAILABLE_NOTE };
-        if (missingDiarizationFiles(diarizationDir()).length) output = { ...output, ...unavailable };
+        if (!diarizationFilesFor(listModels())) output = { ...output, ...unavailable };
         else {
           try {
             stages.set(job.id, "finding speakers"); update({ status: "finding speakers", percent: 96 });
