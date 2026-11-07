@@ -655,7 +655,9 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
           await upscaleClip({ ffmpeg, run: mediaDeps.run, input: clip.path, target, work, probe: clip.probe, signal, progress, basePercent: Math.round((i / input.ops.length) * 100), percentSpan: Math.round(100 / input.ops.length) });
         } catch (error) {
           rmSync(target, { force: true });
-          if (error instanceof UpscaleFailure) throw fail({ code: error.code, message: error.message });
+          // The message is the plain sentence a person reads; the raw detail (an ENOENT path, a tool error)
+          // stays in the job log and in Details, never in the message.
+          if (error instanceof UpscaleFailure) throw fail({ code: error.code, message: error.message, ...(error.detail ? { detail: error.detail } : {}) });
           throw error;
         }
         const resized = { ...clip.probe, width: Math.max(2, Math.round((clip.probe.width ?? 0) * 2 / 2) * 2), height: Math.max(2, Math.round((clip.probe.height ?? 0) * 2 / 2) * 2) };
