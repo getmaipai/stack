@@ -97,7 +97,7 @@ const CutoutSubject = z.object({ frame: z.number().int().min(0).optional(), box:
 const CutoutOp = z.object({ op: z.literal("cutout"), background: z.union([z.enum(["black", "white", "green", "blur", "transparent"]), z.string().regex(/^#[0-9a-fA-F]{6}$/)]), subject: CutoutSubject.optional(), feather_px: z.number().min(0).max(12).default(2) }).strict();
 
 /** SPATIAL-03: direction (and optionally a 5.1 sibling file) for the clip's own sound. The positions are found inside the job, never taken from the request. */
-const SpatialSoundOp = z.object({ op: z.literal("spatial_sound"), surround: z.boolean().optional() }).strict();
+const SpatialSoundOp = z.object({ op: z.literal("spatial_sound"), surround: z.boolean().optional(), side: z.enum(["left", "right"]).optional() }).strict();
 
 export const EditOp = z.union([TrimOp, ConcatOp, MuteOp, FrameOp, AudioOverlayOp, FadeOp, CrossfadeOp, GainOp, ReframeOp, GradeOp, FilmLookOp, LetterboxOp, SpeedOp, SpeedRampOp, ReverseOp, FreezeOp, LoopOp, KenBurnsOp, FpsBoostOp, FlipOp, RotateOp, SharpenOp, DenoiseOp, RippleOp, UpscaleOp, PipOp, CaptionsOp, TransitionOp, TitleCardOp, CreditsOp, CutoutOp, SpatialSoundOp]);
 export type EditOp = z.infer<typeof EditOp>;
@@ -153,6 +153,8 @@ export function editInputProblem(input: unknown): string | null {
       if (name === "spatial_sound") {
         const surround = (raw.ops[i] as { surround?: unknown } | null)?.surround;
         if (surround !== undefined && typeof surround !== "boolean") return `Step ${i + 1} (spatial_sound) takes surround as true or false.`;
+        const side = (raw.ops[i] as { side?: unknown } | null)?.side;
+        if (side !== undefined && side !== "left" && side !== "right") return `Step ${i + 1} (spatial_sound) takes side as "left" or "right".`;
       }
       if (name === "rotate") {
         const degrees = (raw.ops[i] as { degrees?: unknown } | null)?.degrees;

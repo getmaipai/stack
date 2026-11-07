@@ -20,7 +20,9 @@ export const SPATIAL_LINES = {
   no_speech: "Nobody speaks in this clip, so the sound is unchanged stereo.",
   several_people: "Several people are on screen, so the voice stays in the middle and the sound is unchanged stereo.",
   centered: "The speaker stands in the middle of the picture, so the sound is unchanged stereo.",
+  already_spatial: "This clip's sound already moves with the picture, so it is unchanged.",
   applied: "Sound now follows who is talking on screen. Wear headphones to hear it.",
+  applied_effects: "Sound effects now come from the side of the picture where they happen. Wear headphones to hear it.",
   surround: "The 5.1 file plays on a surround system or an Apple TV. Other players play it as stereo.",
   rear_quiet: "This clip's sound had little width, so the back speakers stay quiet.",
   look_missing: "Spatial sound needs the Look part. An admin can install it in Settings, Models and storage, then try again.",
@@ -84,7 +86,11 @@ const esc = (expr: string): string => expr.replace(/,/g, "\\,");
 
 /** The filter_complex of the stereo result (label [out], two channels) or the 5.1 result (label [out], FL FR FC LFE BL BR). */
 export function spatialGraph(segments: SpatialSegment[], durationS: number, surround: boolean): string {
-  const knots = positionKnots(segments, durationS);
+  return spatialGraphKnots(positionKnots(segments, durationS), surround);
+}
+
+/** The same graph from a position curve given as (time, position) knots, strictly increasing in time (SPATIAL-07: the effects pan is a curve, not lines of speech). */
+export function spatialGraphKnots(knots: Array<[number, number]>, surround: boolean): string {
   const gl = esc(expression(knots, (p) => spatialGains(p).l));
   const gr = esc(expression(knots, (p) => spatialGains(p).r));
   const head = "[0:a:0]aformat=sample_fmts=fltp:channel_layouts=stereo,asplit=2[a1][a2];[a1]pan=mono|c0=0.5*c0+0.5*c1,";

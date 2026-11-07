@@ -683,7 +683,7 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
         if (!clip.probe.has_audio) throw fail({ code: "no_audio", message: SPATIAL_LINES.no_audio });
         const wantsSurround = op.surround === true;
         try {
-          spatial = await spatialSoundClip({ run: mediaDeps.run, ffmpeg, input: clip.path, output: target, surroundOutput: wantsSurround ? surroundPartial : null, work: join(work, `spatial${i}`), durationS: clip.probe.duration_s ?? 0, signal, progress: (percent, status) => progress({ status, percent: Math.round(((i + percent / 100) / input.ops.length) * 100) }) });
+          spatial = await spatialSoundClip({ run: mediaDeps.run, ffmpeg, input: clip.path, output: target, surroundOutput: wantsSurround ? surroundPartial : null, ...(op.side ? { side: op.side } : {}), work: join(work, `spatial${i}`), durationS: clip.probe.duration_s ?? 0, signal, progress: (percent, status) => progress({ status, percent: Math.round(((i + percent / 100) / input.ops.length) * 100) }) });
         } catch (error) {
           rmSync(target, { force: true }); rmSync(surroundPartial, { force: true });
           const message = error instanceof Error ? error.message : String(error);

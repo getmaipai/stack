@@ -24,8 +24,11 @@ const CENTERED_BELOW = 0.02;
 
 export interface SpatialSegment { start_s: number; end_s: number; position: number; }
 /** Why a clip gets no direction. null means a position was found. */
-export type SpatialReason = "no_person" | "no_speech" | "several_people" | "centered";
-export interface SpatialTrack { segments: SpatialSegment[]; reason: SpatialReason | null; frames: number; people_frames: number; speech_spans: number; }
+export type SpatialReason = "no_person" | "no_speech" | "several_people" | "centered" | "already_spatial";
+/** What the track saw, kept in memory for the effects pan (SPATIAL-07): person boxes per sampled frame, the speech spans in seconds, the smoothed person position per frame. Never logged, never returned to a caller. */
+export interface SpatialTrackDetail { people: number[][][]; spans_s: Array<{ start_s: number; end_s: number }>; smoothed: number[]; }
+/** `detail` is a non-enumerable property set by computeSpatialTrack, so a track compares and serializes as before. */
+export interface SpatialTrack { segments: SpatialSegment[]; reason: SpatialReason | null; frames: number; people_frames: number; speech_spans: number; detail?: SpatialTrackDetail; }
 export interface SpeechSampleSpan { startSample: number; endSample: number; }
 /** A Look detection as the track reads it: only the label and the [x, y, w, h] box (0..1 of the frame) matter. */
 export interface TrackDetection { label: string; box: number[]; }
@@ -40,6 +43,8 @@ export interface SpatialTrackDeps {
   look(frames: Uint8Array[], signal: AbortSignal): Promise<TrackDetection[][]>;
   /** Speech spans of a mono 16 kHz signal (the speech worker's Silero detector). */
   speech(samples: Float32Array, signal: AbortSignal): Promise<SpeechSampleSpan[]>;
+  /** SPATIAL-07: every Look detection (the `all` vocabulary: trains, cars, boats) for each JPEG. Absent in a test double that only gives `look`; then `look` answers. */
+  lookAll?(frames: Uint8Array[], signal: AbortSignal): Promise<TrackDetection[][]>;
 }
 
 // ---- pure functions ----
@@ -153,6 +158,7 @@ export function setSpatialTrackDepsForTests(deps: Partial<SpatialTrackDeps> | nu
 /** The real parts, loaded on first use (a dynamic import keeps the speech jobs, which import the media jobs, out of a load cycle). */
 export const defaultSpatialTrackDeps: SpatialTrackDeps = {
   look: async (frames, signal) => (await import("@/look/look")).lookService.lookFrames(frames, signal),
+  lookAll: async (frames, signal) => (await import("@/look/look")).lookService.lookFrames(frames, signal, "all"),
   speech: async (samples, signal) => {
     const [{ openRoleSession }, { transcriptionDeps }] = await Promise.all([import("@/lib/supervisor"), import("@/speech/transcriptionJobs")]);
     let session;
@@ -170,6 +176,18 @@ export const defaultSpatialTrackDeps: SpatialTrackDeps = {
   },
 };
 
+/** The deps of a run: the test override (if any) over the real parts, then the caller's own. `lookAll` falls back to a double's `look`, never to the real model behind its back. */
+export function resolveSpatialTrackDeps(own?: Partial<SpatialTrackDeps>): SpatialTrackDeps & { lookAll: NonNullable<SpatialTrackDeps["lookAll"]> } {
+  const merged: SpatialTrackDeps = { ...(depsOverride ?? defaultSpatialTrackDeps), ...(own ?? {}) };
+  const explicit = own?.lookAll ?? (depsOverride && depsOverride.lookAll !== defaultSpatialTrackDeps.lookAll ? depsOverride.lookAll : undefined);
+  return { ...merged, lookAll: explicit ?? (merged.look !== defaultSpatialTrackDeps.look ? merged.look : defaultSpatialTrackDeps.lookAll!) };
+}
+
+function withDetail(track: SpatialTrack, people: number[][][], spans: Array<{ start_s: number; end_s: number }>): SpatialTrack {
+  Object.defineProperty(track, "detail", { value: { people, spans_s: spans, smoothed: smoothPositions(people.map(framePosition)) } satisfies SpatialTrackDetail, enumerable: false });
+  return track;
+}
+
 export interface SpatialTrackOptions {
   ffmpeg: string; source: string;
   /** A folder the job owns; the track makes its own subfolder in it and removes that before it returns. */
@@ -180,7 +198,7 @@ export interface SpatialTrackOptions {
 }
 
 export async function computeSpatialTrack(options: SpatialTrackOptions): Promise<SpatialTrack> {
-  const deps: SpatialTrackDeps = { ...(depsOverride ?? defaultSpatialTrackDeps), ...(options.deps ?? {}) };
+  const deps: SpatialTrackDeps = resolveSpatialTrackDeps(options.deps);
   const { run, signal, progress } = options;
   mkdirSync(options.work, { recursive: true });
   const dir = mkdtempSync(join(options.work, "spatial-track-"));
@@ -202,7 +220,7 @@ export async function computeSpatialTrack(options: SpatialTrackOptions): Promise
     }
     const peopleFrames = people.filter((frame) => frame.length > 0).length;
     // Nobody anywhere: there is no position to find, so the sound is not read at all.
-    if (peopleFrames === 0) return buildTrack(people, []);
+    if (peopleFrames === 0) return withDetail(buildTrack(people, []), people, []);
     cancelled();
     progress?.(65, "finding when someone talks");
     const wav = join(dir, "speech.wav");
@@ -212,7 +230,7 @@ export async function computeSpatialTrack(options: SpatialTrackOptions): Promise
     const samples = toRecognizerRate(decodeWave(new Uint8Array(readFileSync(wav))));
     rmSync(wav, { force: true });
     const spans = (await deps.speech(samples, signal)).map((span) => ({ start_s: span.startSample / 16_000, end_s: span.endSample / 16_000 }));
-    return buildTrack(people, spans);
+    return withDetail(buildTrack(people, spans), people, spans);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

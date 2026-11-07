@@ -86,19 +86,20 @@ export class LookService {
   /**
    * SPATIAL-02: the person boxes of a batch of frames from one clip, in order. For a Stack job, not a camera: no per-minute counter and no
    * camera memory (the tracker would blend frames of a moving shot), but the same worker, the same memory hold, the same heavy-gate pause and
-   * the same one-at-a-time chain as every other look. Nothing is kept; the log lines carry counts and milliseconds only.
+   * the same one-at-a-time chain as every other look. Nothing is kept; the log lines carry counts and milliseconds only. SPATIAL-07: with
+   * vocabulary "all" every COCO class comes back (trains, cars, boats for the sound-source follow), not only people.
    */
-  async lookFrames(jpegs: Uint8Array[], signal?: AbortSignal): Promise<LookDetection[][]> {
+  async lookFrames(jpegs: Uint8Array[], signal?: AbortSignal, vocabulary: "household" | "all" = "household"): Promise<LookDetection[][]> {
     for (const jpeg of jpegs) {
       if (jpeg.byteLength > LOOK_MAX_IMAGE_BYTES) throw new LookError("too_large", "The picture must be 2 MB or smaller. Send a smaller JPEG.", 413);
       if (!jpegLooksComplete(jpeg)) throw new LookError("not_jpeg", "Send one complete JPEG picture.", 415);
     }
     const out: LookDetection[][] = [];
     for (const jpeg of jpegs) {
-      const next = this.chain.then(() => this.execute("clip-frames", jpeg, signal, "household", false), () => this.execute("clip-frames", jpeg, signal, "household", false));
+      const next = this.chain.then(() => this.execute("clip-frames", jpeg, signal, vocabulary, false), () => this.execute("clip-frames", jpeg, signal, vocabulary, false));
       this.chain = next.catch(() => {});
       const result = await next;
-      out.push(result.objects.filter((object) => object.label === "person").map(({ label, score, box }) => ({ label, score, box })));
+      out.push(result.objects.filter((object) => vocabulary === "all" || object.label === "person").map(({ label, score, box }) => ({ label, score, box })));
     }
     return out;
   }
