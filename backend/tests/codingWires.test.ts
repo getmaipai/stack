@@ -387,8 +387,9 @@ test("thinking the caller turned off stays off, and a budget never turns it on",
 
 test("Messages with thinking disabled reaches the engine with enable_thinking false, streaming or not, and the rest untouched", async () => {
   const body = { ...messagesBody, thinking: { type: "disabled" } };
-  await post("/v1/messages", body);
-  await post("/v1/messages", { ...body, stream: true });
+  await (await post("/v1/messages", body)).text();
+  // Drain the stream: an unread streamed reply keeps the heavy-gate lease open, which stalled later files' image and song jobs when the suite shares one process.
+  await (await post("/v1/messages", { ...body, stream: true })).text();
   for (const call of seen) {
     expect(call.body.chat_template_kwargs).toEqual({ enable_thinking: false });
     expect(call.body.thinking).toEqual({ type: "disabled" });
