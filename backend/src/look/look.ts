@@ -83,6 +83,26 @@ export class LookService {
     return next;
   }
 
+  /**
+   * SPATIAL-02: the person boxes of a batch of frames from one clip, in order. For a Stack job, not a camera: no per-minute counter and no
+   * camera memory (the tracker would blend frames of a moving shot), but the same worker, the same memory hold, the same heavy-gate pause and
+   * the same one-at-a-time chain as every other look. Nothing is kept; the log lines carry counts and milliseconds only.
+   */
+  async lookFrames(jpegs: Uint8Array[], signal?: AbortSignal): Promise<LookDetection[][]> {
+    for (const jpeg of jpegs) {
+      if (jpeg.byteLength > LOOK_MAX_IMAGE_BYTES) throw new LookError("too_large", "The picture must be 2 MB or smaller. Send a smaller JPEG.", 413);
+      if (!jpegLooksComplete(jpeg)) throw new LookError("not_jpeg", "Send one complete JPEG picture.", 415);
+    }
+    const out: LookDetection[][] = [];
+    for (const jpeg of jpegs) {
+      const next = this.chain.then(() => this.execute("clip-frames", jpeg, signal, "household", false), () => this.execute("clip-frames", jpeg, signal, "household", false));
+      this.chain = next.catch(() => {});
+      const result = await next;
+      out.push(result.objects.filter((object) => object.label === "person").map(({ label, score, box }) => ({ label, score, box })));
+    }
+    return out;
+  }
+
   /** Untracked detection for image editing; shares Look's installed model, worker and admission. */
   async detectAll(jpeg: Uint8Array): Promise<LookDetection[]> {
     const result = await this.look("image-tools", jpeg, "fast", undefined, "all", true);
@@ -143,7 +163,7 @@ export class LookService {
     }
   }
 
-  private async execute(source: string, jpeg: Uint8Array, signal?: AbortSignal, vocabulary: "household" | "all" = "household"): Promise<LookResult> {
+  private async execute(source: string, jpeg: Uint8Array, signal?: AbortSignal, vocabulary: "household" | "all" = "household", tracked = true): Promise<LookResult> {
     if (signal?.aborted) throw new LookError("failed", "Cancelled.", 499);
     this.busy += 1;
     if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
@@ -157,7 +177,7 @@ export class LookService {
       if (!reply.ok || !reply.detections || !reply.tags) {
         throw new LookError("failed", reply.code === "not_jpeg" ? "That is not a picture Look can read. Send a complete JPEG." : "Look could not read this picture. Try another one.", reply.code === "not_jpeg" ? 415 : 500);
       }
-      const objects = vocabulary === "all" ? reply.detections.map((detection) => ({ ...detection, count: 1, uncertain: false as const })) : this.tracker.update(source, reply.detections, this.deps.now());
+      const objects = vocabulary === "all" || !tracked ? reply.detections.map((detection) => ({ ...detection, count: 1, uncertain: false as const })) : this.tracker.update(source, reply.detections, this.deps.now());
       const ms = reply.ms ?? 0;
       this.deps.log("look: %d objects in %d ms", objects.length, Math.round(ms));
       return {

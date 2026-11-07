@@ -15,6 +15,8 @@ import { idleArgv, spawnRunner, type Runner, type RunResult } from "./run";
 import { defaultToolbox, MediaToolError, type MediaToolbox } from "./tools";
 import { mkdirSync } from "node:fs";
 import { concatCompatible, concatCopyArgs, concatEncodeArgs, concatListLine, crossfadeArgs, transitionArgs, crossfadeMinLength, concatMembers, EditInput, editInputProblem, fadeArgs, frameArgs, gainArgs, hasKeyframeAt, keyframeArgs, MAX_EDIT_SECONDS, muteArgs, overlayArgs, trimArgs, reframeArgs, gradeArgs, filmLookArgs, letterboxArgs, speedArgs, speedRampArgs, reverseArgs, reverseDurationProblem, freezeArgs, loopArgs, kenBurnsArgs, fpsBoostArgs, flipArgs, rotateArgs, sharpenArgs, denoiseArgs, rippleArgs, pipArgs, captionsArgs, titleCardArgs, creditsArgs, type Clip } from "./editOps";
+import { SPATIAL_LINES } from "./spatialRender";
+import { spatialFailure, spatialSoundClip, type SpatialOutcome } from "./spatialSound";
 import { cutoutClip, CUTOUT_FAILED, CUTOUT_MODEL_MISSING, CUTOUT_NO_MEMORY, CUTOUT_NO_SUBJECT } from "./cutout";
 import { log } from "@/lib/log";
 import { COLOUR_MATCH_STRENGTH, COMPANION_CLIP_FPS, COMPANION_CLIP_SIZE, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionCrop, companionMetrics, companionReasons, crossfadeLoop, downscaleRgba4, frameDifference, keyOutRgba, selectCompanionWindow } from "./companionClip";
@@ -535,7 +537,11 @@ async function runCompanionClip(job: Job, signal: AbortSignal, progress: JobProg
 }
 
 // ---- media.edit (EDITOR-11) ----
-export interface EditResult { path: string; size_bytes: number; container: "mp4" | "mov" | "webm" | "png"; duration_s: number | null; width: number | null; height: number | null; video_codec: string | null; audio_codec: string | null; streams: ProbeResult["streams"]; steps: Array<{ op: string; action: string }>; elapsed_ms: number; }
+export interface EditResult { path: string; size_bytes: number; container: "mp4" | "mov" | "webm" | "png"; duration_s: number | null; width: number | null; height: number | null; video_codec: string | null; audio_codec: string | null; streams: ProbeResult["streams"]; steps: Array<{ op: string; action: string }>; elapsed_ms: number;
+  /** SPATIAL-03: present when the edit has a spatial_sound step. files[0] is the stereo result (the same file as `path`); with surround, files[1] is the 5.1 sibling next to it. */
+  files?: Array<{ role: "stereo" | "surround_5_1"; name: string; path: string; size_bytes: number; audio_codec: string | null; channels: number | null }>;
+  spatial?: SpatialOutcome;
+}
 async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Promise<EditResult> {
   const started = mediaDeps.now();
   const problem = editInputProblem(job.input ?? {});
@@ -551,6 +557,11 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
   if (sources.includes(final)) throw fail({ code: "bad_input", message: "The edited file would replace one of the files it is made from. Choose another output folder or name." });
   const extension = extname(name);
   const partial = join(dir, `.${basename(name, extension)}.part${extension}`);
+  // SPATIAL-03: the optional 5.1 file sits beside the result as <name>-5.1.<ext>, written through its own partial.
+  const surroundFinal = join(dir, `${basename(name, extension)}-5.1${extension}`);
+  const surroundPartial = join(dir, `.${basename(name, extension)}-5.1.part${extension}`);
+  if (input.ops.some((op) => op.op === "spatial_sound" && op.surround === true) && sources.includes(surroundFinal)) throw fail({ code: "bad_input", message: "The 5.1 file would replace one of the files it is made from. Choose another output folder or name." });
+  let spatial: SpatialOutcome | null = null; let surroundProbe: ProbeResult | null = null;
   const work = join(jobDir(job.id), "edit-work");
   const tools = await toolPaths(["ffmpeg", "ffprobe"], progress, signal);
   const ffmpeg = tools.ffmpeg!; const ffprobe = tools.ffprobe!;
@@ -667,6 +678,25 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
         action = op.background === "transparent" ? "cutout_alpha" : "cutout";
         const made = await probe(target, `The result of step ${i + 1}`);
         clip = { path: target, probe: made }; steps.push({ op: op.op, action }); continue;
+      } else if (op.op === "spatial_sound") {
+        needsVideo("spatial_sound");
+        if (!clip.probe.has_audio) throw fail({ code: "no_audio", message: SPATIAL_LINES.no_audio });
+        const wantsSurround = op.surround === true;
+        try {
+          spatial = await spatialSoundClip({ run: mediaDeps.run, ffmpeg, input: clip.path, output: target, surroundOutput: wantsSurround ? surroundPartial : null, work: join(work, `spatial${i}`), durationS: clip.probe.duration_s ?? 0, signal, progress: (percent, status) => progress({ status, percent: Math.round(((i + percent / 100) / input.ops.length) * 100) }) });
+        } catch (error) {
+          rmSync(target, { force: true }); rmSync(surroundPartial, { force: true });
+          const message = error instanceof Error ? error.message : String(error);
+          if (signal.aborted || message === "Cancelled.") throw error;
+          const mapped = spatialFailure(error);
+          if (mapped) throw fail(mapped);
+          log("media.edit spatial_sound failed: %s", message);
+          throw fail({ code: "spatial_failed", message: "Spatial sound stopped unexpectedly. Try again, or try a shorter clip." });
+        }
+        if (wantsSurround) surroundProbe = await probe(surroundPartial, "The 5.1 file");
+        action = spatial.applied ? "spatial_sound" : "spatial_sound_unchanged";
+        const made = await probe(target, `The result of step ${i + 1}`);
+        clip = { path: target, probe: made }; steps.push({ op: op.op, action }); continue;
       } else if (op.op === "upscale") {
         needsVideo("upscale");
         const limit = upscaleProblem(clip.probe);
@@ -771,15 +801,18 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
       clip = { path: target, probe: made };
     }
     renameSync(clip.path, final);
+    if (surroundProbe) renameSync(surroundPartial, surroundFinal);
   } catch (error) {
-    rmSync(partial, { force: true });
+    rmSync(partial, { force: true }); rmSync(surroundPartial, { force: true });
     throw error;
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
   const done = clip.probe;
   const isPicture = extension.toLowerCase() === ".png";
-  return { path: final, size_bytes: sizeOf(final), container: isPicture ? "png" : extension.toLowerCase() === ".webm" ? "webm" : extension.toLowerCase() === ".mov" ? "mov" : "mp4", duration_s: isPicture ? null : done.duration_s, width: done.width, height: done.height, video_codec: done.video_codec, audio_codec: done.audio_codec, streams: done.streams, steps, elapsed_ms: mediaDeps.now() - started };
+  const audioOf = (probed: ProbeResult) => ({ audio_codec: probed.audio_codec, channels: probed.channels });
+  const files: EditResult["files"] = spatial ? [{ role: "stereo", name, path: final, size_bytes: sizeOf(final), ...audioOf(done) }, ...(surroundProbe ? [{ role: "surround_5_1" as const, name: basename(surroundFinal), path: surroundFinal, size_bytes: sizeOf(surroundFinal), ...audioOf(surroundProbe) }] : [])] : undefined;
+  return { ...(files ? { files, spatial: spatial! } : {}), path: final, size_bytes: sizeOf(final), container: isPicture ? "png" : extension.toLowerCase() === ".webm" ? "webm" : extension.toLowerCase() === ".mov" ? "mov" : "mp4", duration_s: isPicture ? null : done.duration_s, width: done.width, height: done.height, video_codec: done.video_codec, audio_codec: done.audio_codec, streams: done.streams, steps, elapsed_ms: mediaDeps.now() - started };
 }
 
 // ---- media.setup ----

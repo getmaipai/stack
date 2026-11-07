@@ -5,6 +5,7 @@
 // separate argv entry and every input is a local file the path guards passed.
 import { z } from "zod";
 import type { ProbeResult } from "./probe";
+import { SPATIAL_LINES } from "./spatialRender";
 import { ASS_HEADER, assColor, assText, fitTitleFontSize, resolveFonts, wrapTitle, writeAss } from "./typography";
 
 const assTime = (seconds: number): string => { const cs = Math.round(seconds * 100); return `0:${String(Math.floor(cs / 6000)).padStart(2, "0")}:${String(Math.floor(cs / 100) % 60).padStart(2, "0")}.${String(cs % 100).padStart(2, "0")}`; };
@@ -16,7 +17,7 @@ const XFADE_NAME: Record<string, string> = { dissolve: "fade", speckle: "dissolv
 export const TRANSITION_KINDS = ["fade", "dissolve", "speckle", "wipeleft", "wiperight", "wipeup", "wipedown", "slideleft", "slideright", "slideup", "slidedown", "circleopen", "circleclose", "radial", "smoothleft", "smoothright", "fadeblack", "fadewhite", "zoomin", "pixelize"] as const;
 export const FILM_LOOK_PRESETS = ["70s_color", "noir", "teal_orange", "bleach_bypass", "technicolor", "faded_vintage", "cool_thriller", "night"] as const;
 export const LETTERBOX_RATIOS = ["2.39:1", "2:1", "1.85:1", "1.33:1"] as const;
-export const EDIT_OPS = ["trim", "concat", "mute", "frame", "audio_overlay", "fade", "crossfade", "gain", "reframe", "grade", "film_look", "letterbox", "speed", "speed_ramp", "reverse", "freeze", "loop", "kenburns", "fps_boost", "flip", "rotate", "sharpen", "denoise", "ripple", "upscale", "pip", "captions", "transition", "title_card", "credits", "cutout"] as const;
+export const EDIT_OPS = ["trim", "concat", "mute", "frame", "audio_overlay", "fade", "crossfade", "gain", "reframe", "grade", "film_look", "letterbox", "speed", "speed_ramp", "reverse", "freeze", "loop", "kenburns", "fps_boost", "flip", "rotate", "sharpen", "denoise", "ripple", "upscale", "pip", "captions", "transition", "title_card", "credits", "cutout", "spatial_sound"] as const;
 export const MIN_CROSSFADE_S = 0.3;
 export const MAX_CROSSFADE_S = 1.0;
 export const MAX_CROSSFADE_CLIPS = 6;
@@ -95,7 +96,10 @@ const CreditsOp = z.object({ op: z.literal("credits"), lines: z.array(z.object({
 const CutoutSubject = z.object({ frame: z.number().int().min(0).optional(), box: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional(), point: z.object({ x: z.number(), y: z.number() }).strict().optional() }).strict().refine((s) => !(s.box && s.point), { message: "choose a box or a point" });
 const CutoutOp = z.object({ op: z.literal("cutout"), background: z.union([z.enum(["black", "white", "green", "blur", "transparent"]), z.string().regex(/^#[0-9a-fA-F]{6}$/)]), subject: CutoutSubject.optional(), feather_px: z.number().min(0).max(12).default(2) }).strict();
 
-export const EditOp = z.union([TrimOp, ConcatOp, MuteOp, FrameOp, AudioOverlayOp, FadeOp, CrossfadeOp, GainOp, ReframeOp, GradeOp, FilmLookOp, LetterboxOp, SpeedOp, SpeedRampOp, ReverseOp, FreezeOp, LoopOp, KenBurnsOp, FpsBoostOp, FlipOp, RotateOp, SharpenOp, DenoiseOp, RippleOp, UpscaleOp, PipOp, CaptionsOp, TransitionOp, TitleCardOp, CreditsOp, CutoutOp]);
+/** SPATIAL-03: direction (and optionally a 5.1 sibling file) for the clip's own sound. The positions are found inside the job, never taken from the request. */
+const SpatialSoundOp = z.object({ op: z.literal("spatial_sound"), surround: z.boolean().optional() }).strict();
+
+export const EditOp = z.union([TrimOp, ConcatOp, MuteOp, FrameOp, AudioOverlayOp, FadeOp, CrossfadeOp, GainOp, ReframeOp, GradeOp, FilmLookOp, LetterboxOp, SpeedOp, SpeedRampOp, ReverseOp, FreezeOp, LoopOp, KenBurnsOp, FpsBoostOp, FlipOp, RotateOp, SharpenOp, DenoiseOp, RippleOp, UpscaleOp, PipOp, CaptionsOp, TransitionOp, TitleCardOp, CreditsOp, CutoutOp, SpatialSoundOp]);
 export type EditOp = z.infer<typeof EditOp>;
 
 export const EditInput = z.object({
@@ -146,6 +150,10 @@ export function editInputProblem(input: unknown): string | null {
         const deblock = (raw.ops[i] as { deblock?: unknown } | null)?.deblock;
         if (deblock !== undefined && typeof deblock !== "boolean") return `Step ${i + 1} (denoise) takes deblock as true or false.`;
       }
+      if (name === "spatial_sound") {
+        const surround = (raw.ops[i] as { surround?: unknown } | null)?.surround;
+        if (surround !== undefined && typeof surround !== "boolean") return `Step ${i + 1} (spatial_sound) takes surround as true or false.`;
+      }
       if (name === "rotate") {
         const degrees = (raw.ops[i] as { degrees?: unknown } | null)?.degrees;
         if (![90, 180, 270].includes(degrees as number)) return `Step ${i + 1} (rotate) accepts 90, 180 or 270 degrees.`;
@@ -167,6 +175,12 @@ function planProblem(input: EditInput): string | null {
   if (cutout?.op === "cutout" && (cutout.background === "transparent" ? !/\.webm$/i.test(input.output.name) : !/\.mp4$/i.test(input.output.name))) return "A transparent cutout must be saved as a .webm file; other backgrounds must be saved as .mp4.";
   if (cutout?.op === "cutout" && cutout.background === "transparent" && input.ops.at(-1)?.op !== "cutout") return "A transparent cutout must be the last edit step.";
   const last = input.ops.length - 1;
+  const spatial = input.ops.flatMap((op, index) => op.op === "spatial_sound" ? [{ op, index }] : []);
+  if (spatial.length > 1) return SPATIAL_LINES.only_once;
+  if (spatial[0]?.op.surround === true) {
+    if (spatial[0].index !== last) return SPATIAL_LINES.not_last;
+    if (!/\.(mp4|mov)$/i.test(input.output.name)) return SPATIAL_LINES.surround_container;
+  }
   const png = /\.png$/i.test(input.output.name);
   for (let i = 0; i < input.ops.length; i++) {
     const op = input.ops[i]!;
@@ -357,6 +371,33 @@ export function overlayArgs(ffmpeg: string, clip: Clip, overlayPath: string, out
 
 export function gainArgs(ffmpeg: string, src: string, out: string, op: Extract<EditOp, { op: "gain" }>): string[] {
   return [...BASE(ffmpeg), "-i", src, "-map", "0:v:0?", "-map", "0:a:0", "-sn", "-dn", "-c:v", "copy", "-af", `volume=${num(op.db)}dB`, ...ENCODE_A, ...FASTSTART, out];
+}
+
+/** Below this length the graph is one -filter_complex argument; above it (about 40 segments in 5.1) it goes through a script file the job writes. */
+export const SPATIAL_INLINE_GRAPH_LIMIT = 24_000;
+/**
+ * SPATIAL-03: re-mix the working clip's first sound track with the graph from spatialGraph. The picture is copied byte for byte (-c:v copy), the
+ * container metadata is kept (-map_metadata 0) and -shortest is never used (it cut the picture short in the bench). Stereo is AAC 192k; 5.1 is
+ * E-AC-3 384k. `scriptPath` is set when the graph is too long for one argument; the caller has written the graph to that file.
+ */
+export function spatialArgs(ffmpeg: string, src: string, out: string, plan: { graph: string; surround: boolean; scriptPath: string | null }): string[] {
+  const graph = plan.scriptPath ? ["-/filter_complex", plan.scriptPath] : ["-filter_complex", plan.graph];
+  return [...BASE(ffmpeg), "-i", src, "-map_metadata", "0", ...graph, "-map", "0:v:0?", "-map", "[out]", "-sn", "-dn", "-c:v", "copy", ...(plan.surround ? ["-c:a", "eac3", "-b:a", "384k"] : ["-c:a", "aac", "-b:a", "192k"]), ...FASTSTART, out];
+}
+/** The unchanged-stereo result of spatial_sound: every stream copied, nothing re-encoded. */
+export function spatialUnchangedArgs(ffmpeg: string, src: string, out: string): string[] {
+  return [...BASE(ffmpeg), "-i", src, "-map_metadata", "0", "-map", "0:v:0?", "-map", "0:a:0", "-sn", "-dn", "-c", "copy", ...FASTSTART, out];
+}
+/** Loudness of the side signal (L minus R), read from the stderr lines of volumedetect; it decides whether the back speakers have anything to play. */
+export function spatialSideLevelArgs(ffmpeg: string, src: string): string[] {
+  return [ffmpeg, "-hide_banner", "-nostdin", "-nostats", "-loglevel", "info", "-i", src, "-map", "0:a:0", "-vn", "-af", "aformat=channel_layouts=stereo,pan=mono|c0=0.5*c0-0.5*c1,volumedetect", "-f", "null", "-"];
+}
+/** The mean level in dBFS from volumedetect's output, or -91 (digital silence) when it printed none. */
+export function parseMeanVolume(stderr: string): number {
+  const match = /mean_volume:\s*(-?[\d.]+|-inf)\s*dB/.exec(stderr);
+  if (!match || match[1] === "-inf") return -91;
+  const value = Number(match[1]);
+  return Number.isFinite(value) ? value : -91;
 }
 
 export function fadeArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "fade" }>): string[] {
