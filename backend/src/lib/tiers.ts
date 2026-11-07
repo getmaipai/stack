@@ -5,6 +5,7 @@ const STACK_IMAGE_ZIMAGE_ID = "z-image-turbo";
 const STACK_MUSIC_MODEL_ID = "ace-step-1-5-turbo";
 const STACK_VIDEO_MODEL_ID = "fastwan2-2-ti2v-5b-mlx-bf16";
 const STACK_VIDEO_LTX25_MODEL_ID = "ltx-2-5-q8-distilled-mlx";
+const STACK_VIDEO_MASK_MODEL_ID = "sam2.1-hiera-small";
 
 export type TierId = "reduced" | "standard" | "boost" | "max";
 export type TierCategory = "chat" | "pictures" | "video" | "music" | "voice" | "stems";
@@ -39,6 +40,7 @@ export const TIER_CANDIDATES: TierCandidate[] = [
   { id: STACK_IMAGE_ZIMAGE_ID, category: "pictures", family: "z-image", label: "Z-Image Turbo", profiles: ["p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 25_800_000_000, status: "measured" }], tiers: ["boost"] },
   { id: "qwen-image-2512-q8", category: "pictures", family: "qwen-image", label: "Qwen-Image 20B", profiles: ["p128"], peaks: [{ options: { steps: 30 }, peakBytes: 37_400_000_000, status: "measured", note: "Tier eval 2026-10-30, 1024 x 1024, 181 to 212 s. Nine of 22 prompts; the Max picture slot is the owner's decision of 2026-10-30." }], tiers: ["max"] },
   { id: STACK_VIDEO_MODEL_ID, category: "video", family: "wan", label: "Wan Video", profiles: ["p128"], peaks: [{ options: {}, peakBytes: 25_400_000_000, status: "measured", note: "Tier eval 2026-10-30, 832 x 480, 49 frames. Known artifact: a head can appear behind an umbrella." }], tiers: ["standard"] },
+  { id: STACK_VIDEO_MASK_MODEL_ID, category: "video", family: "sam2", label: "SAM 2.1 subject masks", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 4_900_000_000, status: "measured", note: "LOCAL-BENCH-01, 2026-11-06, 4.9 GB peak; tracking at about 5.5 fps on MPS." }], tiers: [] },
   { id: STACK_VIDEO_LTX25_MODEL_ID, category: "video", family: "ltx", label: "LTX-2.5 Video with sound", profiles: ["p128"], peaks: [
     { options: { size: "512x256", seconds: 5 }, peakBytes: 25_300_000_000, status: "measured", note: "VIDEO-TIERS-01, M5 Max OS footprint, 2026-11-02." },
     { options: { size: "512x256", seconds: 10 }, peakBytes: 39_400_000_000, status: "measured", note: "Standard slot: 241 frames, 43 s." },

@@ -59,4 +59,4 @@ real("real ffmpeg renders ASS title sizes, credits, and captions", async () => {
     expect(readFileSync(captionScript, "utf8")).toContain("Caption,");
     const captionPixels = await pixels(captionOut, 1280, 720, .7, dir), captionRows = brightRows(captionPixels, 1280, 720); expect(captionRows.length).toBeGreaterThan(0); expect(Math.min(...captionRows)).toBeGreaterThan(480);
   } finally { rmSync(dir, { recursive: true, force: true }); }
-});
+}, 60_000); // real ffmpeg renders; a busy machine (load 19 seen 2026-11-06) pushed it past bun's 5 s default

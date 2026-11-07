@@ -15,6 +15,8 @@ import { idleArgv, spawnRunner, type Runner, type RunResult } from "./run";
 import { defaultToolbox, MediaToolError, type MediaToolbox } from "./tools";
 import { mkdirSync } from "node:fs";
 import { concatCompatible, concatCopyArgs, concatEncodeArgs, concatListLine, crossfadeArgs, transitionArgs, crossfadeMinLength, concatMembers, EditInput, editInputProblem, fadeArgs, frameArgs, gainArgs, hasKeyframeAt, keyframeArgs, MAX_EDIT_SECONDS, muteArgs, overlayArgs, trimArgs, reframeArgs, gradeArgs, filmLookArgs, letterboxArgs, speedArgs, speedRampArgs, reverseArgs, reverseDurationProblem, freezeArgs, loopArgs, kenBurnsArgs, fpsBoostArgs, flipArgs, rotateArgs, sharpenArgs, denoiseArgs, pipArgs, captionsArgs, titleCardArgs, creditsArgs, type Clip } from "./editOps";
+import { cutoutClip, CUTOUT_FAILED, CUTOUT_MODEL_MISSING, CUTOUT_NO_MEMORY, CUTOUT_NO_SUBJECT } from "./cutout";
+import { log } from "@/lib/log";
 import { COLOUR_MATCH_STRENGTH, COMPANION_CLIP_FPS, COMPANION_CLIP_SIZE, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionCrop, companionMetrics, companionReasons, crossfadeLoop, downscaleRgba4, frameDifference, keyOutRgba, selectCompanionWindow } from "./companionClip";
 import { upscaleClip, upscaleProblem, UPSCALE_DEADLINE_MS, UpscaleFailure } from "./upscale";
 
@@ -533,7 +535,7 @@ async function runCompanionClip(job: Job, signal: AbortSignal, progress: JobProg
 }
 
 // ---- media.edit (EDITOR-11) ----
-export interface EditResult { path: string; size_bytes: number; container: "mp4" | "mov" | "png"; duration_s: number | null; width: number | null; height: number | null; video_codec: string | null; audio_codec: string | null; streams: ProbeResult["streams"]; steps: Array<{ op: string; action: string }>; elapsed_ms: number; }
+export interface EditResult { path: string; size_bytes: number; container: "mp4" | "mov" | "webm" | "png"; duration_s: number | null; width: number | null; height: number | null; video_codec: string | null; audio_codec: string | null; streams: ProbeResult["streams"]; steps: Array<{ op: string; action: string }>; elapsed_ms: number; }
 async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Promise<EditResult> {
   const started = mediaDeps.now();
   const problem = editInputProblem(job.input ?? {});
@@ -647,6 +649,23 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
       } else if (op.op === "rotate") { needsVideo("rotate"); args = rotateArgs(ffmpeg, clip, target, op.degrees);
       } else if (op.op === "sharpen") { needsVideo("sharpen"); args = sharpenArgs(ffmpeg, clip, target, op.amount);
       } else if (op.op === "denoise") { needsVideo("denoise"); args = denoiseArgs(ffmpeg, clip, target, op.amount);
+      } else if (op.op === "cutout") {
+        needsVideo("cutout");
+        try {
+          await cutoutClip({ run: mediaDeps.run, ffmpeg, input: clip.path, output: target, work: join(work, `cutout${i}`), probe: clip.probe, op, signal, progress: (update) => progress({ ...update, percent: update.percent === undefined ? undefined : Math.round((i / input.ops.length) * 100 + update.percent / input.ops.length) }) });
+        } catch (error) {
+          rmSync(target, { force: true });
+          const message = error instanceof Error ? error.message : String(error);
+          if (signal.aborted || message === "Cancelled.") throw error;
+          if (message === CUTOUT_MODEL_MISSING) throw fail({ code: "model_missing", message });
+          if (message === CUTOUT_NO_MEMORY) throw fail({ code: "no_memory", message });
+          if (message === CUTOUT_NO_SUBJECT || /box must fit|point must be inside|frame must be inside|limited to clips|needs a readable picture/.test(message)) throw fail({ code: "bad_input", message });
+          log("media.edit cutout failed: %s", message);
+          throw fail({ code: "cutout_failed", message: CUTOUT_FAILED });
+        }
+        action = op.background === "transparent" ? "cutout_alpha" : "cutout";
+        const made = await probe(target, `The result of step ${i + 1}`);
+        clip = { path: target, probe: made }; steps.push({ op: op.op, action }); continue;
       } else if (op.op === "upscale") {
         needsVideo("upscale");
         const limit = upscaleProblem(clip.probe);
@@ -759,7 +778,7 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
   }
   const done = clip.probe;
   const isPicture = extension.toLowerCase() === ".png";
-  return { path: final, size_bytes: sizeOf(final), container: isPicture ? "png" : extension.toLowerCase() === ".mov" ? "mov" : "mp4", duration_s: isPicture ? null : done.duration_s, width: done.width, height: done.height, video_codec: done.video_codec, audio_codec: done.audio_codec, streams: done.streams, steps, elapsed_ms: mediaDeps.now() - started };
+  return { path: final, size_bytes: sizeOf(final), container: isPicture ? "png" : extension.toLowerCase() === ".webm" ? "webm" : extension.toLowerCase() === ".mov" ? "mov" : "mp4", duration_s: isPicture ? null : done.duration_s, width: done.width, height: done.height, video_codec: done.video_codec, audio_codec: done.audio_codec, streams: done.streams, steps, elapsed_ms: mediaDeps.now() - started };
 }
 
 // ---- media.setup ----

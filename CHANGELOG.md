@@ -9,6 +9,7 @@ with Home's releases, so this file tracks what a Home release picks up.
 ## [Unreleased]
 
 ### Added
+- VIDEO-MASK-01: optional SAM 2.1 small (`mask`, Apache-2.0 code and weights) enables `{ op: "cutout" }` in `media.edit`: one point or a box tracks a subject through a clip, then composites it over a color, blurred background or transparent WebM. Limited to 60 seconds and 1920 pixels wide; tracking measured about 5.5 fps on MPS at a 4.9 GB peak.
 - Media title cards, credits and captions use cinematic ASS typography with installed serif and small caps families, fitted title sizing, tracked titles, a fine rule and two-column rolling credits. Existing drawtext rendering remains the fallback when those fonts are unavailable.
 
 - TIDY-01: catalog components can name successors with `superseded_by`; the Stack exposes a dry-run tidy plan and safe tidy action for replaced components, orphan model folders and stale partial downloads. The existing storage sweep runs tidy after blob pruning. The retired LTX-2.3 files are no longer in the catalog, and TIDY-01 finds their folders as orphans after its grace period.

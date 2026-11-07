@@ -47,6 +47,7 @@
       "peak_temp_bytes": 250000000,
       "basis": "estimate"
     },
+    "mask-gen": { "installed_bytes": 1200000000, "download_bytes": 55645345, "peak_temp_bytes": 55645345, "basis": "estimate" },
     "music-gen": {
       "installed_bytes": 1200000000,
       "download_bytes": 800000000,
@@ -405,6 +406,7 @@
       "download_bytes": 70994013114,
       "installed_bytes": 70994013114
     },
+    "sam2.1-hiera-small": { "download_bytes": 184416285, "installed_bytes": 184416285 },
     "nomic-embed-text-v1-5-q4-k-m": {
       "download_bytes": 84106624,
       "installed_bytes": 84106624

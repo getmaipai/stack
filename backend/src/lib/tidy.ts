@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { meta } from "@/db/schema";
 import { componentDefs, listComponents, uninstallComponent } from "@/lib/components";
 import { listModels, getModel, type CatalogModelLike } from "@/lib/modelStore";
-import { STACK_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_QWEN_MODELS } from "@/lib/modelCatalog";
+import { STACK_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_MASK_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_QWEN_MODELS } from "@/lib/modelCatalog";
 import { modelsDir } from "@/lib/paths";
 import { readSettings } from "@/settings";
 import { loadedRoleForModel } from "@/lib/supervisor";
@@ -22,7 +22,7 @@ const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 // These legacy records may remain after an upgrade removes the retired component from the catalog.
 const RETIRED_VIDEO_MODEL_IDS = new Set(["ltx-2-3-distilled-mlx", "video-gemma-3-12b-text-encoder"]);
-const catalogPins = (): CatalogModelLike[] => [...STACK_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_IMAGE_KLEIN_MODELS, ...STACK_IMAGE_ZIMAGE_MODELS, ...STACK_IMAGE_ERNIE_MODELS, ...STACK_IMAGE_QWEN_MODELS, ...componentDefs().flatMap((component) => component.pins)];
+const catalogPins = (): CatalogModelLike[] => [...STACK_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_VIDEO_MASK_MODELS, ...STACK_IMAGE_KLEIN_MODELS, ...STACK_IMAGE_ZIMAGE_MODELS, ...STACK_IMAGE_ERNIE_MODELS, ...STACK_IMAGE_QWEN_MODELS, ...componentDefs().flatMap((component) => component.pins)];
 function graceHours(): number { const value = Number(settingValues()["stack.storage.tidy_grace_hours"] ?? 24); return Number.isFinite(value) ? Math.max(0, value) : 24; }
 function pathBytes(path: string): number { try { const s = lstatSync(path); if (s.isSymbolicLink()) return 0; if (!s.isDirectory()) return s.size; return readdirSync(path).reduce((n, name) => n + pathBytes(join(path, name)), 0); } catch { return 0; } }
 function settingPointsAt(id: string): string | null {

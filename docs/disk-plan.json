@@ -24,7 +24,7 @@
     "p64.ai_required_free_bytes": 116341582322,
     "p128.required_free_bytes": 154184224148,
     "p128.minimum_required_free_bytes": 56572612676,
-    "p128.everything_required_free_bytes": 496360241384,
+    "p128.everything_required_free_bytes": 498077186271,
     "p128.needed_bytes": 129352395179,
     "p128.home_required_free_bytes": 3176323277,
     "p128.ai_required_free_bytes": 151007900871
@@ -2095,6 +2095,26 @@
           "basis": "pins"
         },
         {
+          "id": "video-mask",
+          "label": "Subject masks on clips (SAM 2.1)",
+          "note": "Optional background removal and cutouts for clips. Apache-2.0; 4.9 GB measured running peak.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 184416285,
+          "installed_bytes": 184416285,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "sam2.1-hiera-small"
+          ],
+          "engines": [
+            "engine:video-mask",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "stems",
           "label": "Split songs into stems (HTDemucs)",
           "note": "Separates songs made in Home into vocals, drums, bass and other. Recommended, about 0.3 GB.",
@@ -2367,6 +2387,21 @@
           "basis": "estimate"
         },
         {
+          "id": "engine:video-mask",
+          "label": "SAM 2.1 mask tools",
+          "note": "What tracking a subject through a clip runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 55645345,
+          "installed_bytes": 1200000000,
+          "peak_temp_bytes": 55645345,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
+        },
+        {
           "id": "engine:music",
           "label": "Music engine tools",
           "note": "What making songs runs on.",
@@ -2457,11 +2492,11 @@
         "required_free_bytes": 56572612676
       },
       "everything": {
-        "download_bytes": 395445540657,
-        "installed_bytes": 402369367644,
-        "peak_temp_bytes": 13517000211,
-        "needed_bytes": 415886367855,
-        "required_free_bytes": 496360241384
+        "download_bytes": 395685602287,
+        "installed_bytes": 403753783929,
+        "peak_temp_bytes": 13572645556,
+        "needed_bytes": 417326429485,
+        "required_free_bytes": 498077186271
       },
       "measured_on": "2026-10-17",
       "default_selected": [

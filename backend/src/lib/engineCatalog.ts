@@ -35,6 +35,11 @@ export interface EngineBinaryPin {
 
 export const ENGINE_BINARIES: EngineBinaryPin[] = [
   {
+    id: "mask-gen-2b90b9f-macos-arm64", name: "mask-gen", tag: "2b90b9f", platform: "darwin", arch: "arm64", tool: "pyproject.toml", requiresNvidia: false,
+    label: "SAM 2.1 source, Apache-2.0", docsUrl: "https://github.com/facebookresearch/sam2/tree/2b90b9f5ceec907a1c18123530e92e794ad901a4",
+    archive: { label: "SAM 2.1 source", url: "https://codeload.github.com/facebookresearch/sam2/tar.gz/2b90b9f5ceec907a1c18123530e92e794ad901a4", sha256: "1f2fbfad3ffa38110368abac76c6ef9df9c282a66d5c2807bc94abf4d2fb30f8", approxBytes: 55645345 }, verified: true,
+  },
+  {
     id: "gguf-parser-v0.26.4-macos-arm64",
     name: "gguf-parser",
     tag: "v0.26.4",
@@ -345,7 +350,7 @@ export type ChatEngine = typeof CHAT_ENGINES[number];
 /** The role each engine name serves, for the routes that act on "the
  * engine's role" (start, stop, restart, the swap's drain). */
 export type EngineRole = "chat" | "coding" | "tts" | "image" | "video" | "music";
-export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", splash: "coding", "splash-chat": "chat", "mlx-serve": "chat", omlx: "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", "recorded-speech": "tts", comfyui: "image", "video-gen": "video", "ltx25-gen": "video", "ltx25-max-gen": "video", "music-gen": "music", "stems": "music", align: "music", beats: "music", "voice-convert": "music", "image-gen": "image" };
+export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", splash: "coding", "splash-chat": "chat", "mlx-serve": "chat", omlx: "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", "recorded-speech": "tts", comfyui: "image", "video-gen": "video", "ltx25-gen": "video", "ltx25-max-gen": "video", "mask-gen": "video", "music-gen": "music", "stems": "music", align: "music", beats: "music", "voice-convert": "music", "image-gen": "image" };
 export function engineRole(name: string): EngineRole { return ENGINE_ROLE[name] ?? "chat"; }
 
 /** Runtimes the Stack assembles from pinned wheels through uv, in an
@@ -363,6 +368,7 @@ export const MANAGED_RUNTIMES: ManagedRuntime[] = [
   { name: "comfyui", version: "v0.36.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (torch 2.13 ships macOS 14 wheels only; a hashed requirements file per platform, the source archive is the same on every platform)" },
   { name: "video-gen", version: "87db56a", roles: ["video"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the mlx-video source archive plus a hashed requirements file; Wan2.2 TI2V-5B FastWan, text and picture to video, no sound; needs 64 GB or more; no Linux file)" },
   { name: "ltx25-gen", version: "5795228", roles: ["video"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the LTX-2.5 runtime source archive (fork of dgrauet/ltx-2-mlx) plus a hashed requirements file; text to video with a sound track made in the same pass; needs 64 GB or more; no Linux file)" },
+  { name: "mask-gen", version: "2b90b9f", roles: ["video"], platforms: "macOS 14 or later on arm64 (SAM 2.1 source archive and hashed Python 3.12 requirements; MPS tracking; no Linux file yet)" },
   { name: "ltx25-max-gen", version: "b82b97e", roles: ["video"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the dgrauet ltx-2-mlx 0.18.0 source archive plus a hashed requirements file; the Max LTX-2.5 slot, 1024x576 with a sound track; needs 128 GB; no Linux file)" },
   { name: "music-gen", version: "ca1e85f", roles: ["music"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the ACE-Step 1.5 source archive plus a hashed requirements file; songs with sung lyrics, remakes, covers, repaints and extensions; needs 64 GB or more; no Linux file)" },
   { name: "image-gen", version: "0.23.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; mflux 0.23.0 and a hashed requirements file; FLUX.2 Klein 4B and Z-Image-Turbo, text to picture, image to picture, LoRAs and reference edits; needs 32 GB of memory or more)" },

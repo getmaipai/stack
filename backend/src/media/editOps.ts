@@ -16,7 +16,7 @@ const XFADE_NAME: Record<string, string> = { dissolve: "fade", speckle: "dissolv
 export const TRANSITION_KINDS = ["fade", "dissolve", "speckle", "wipeleft", "wiperight", "wipeup", "wipedown", "slideleft", "slideright", "slideup", "slidedown", "circleopen", "circleclose", "radial", "smoothleft", "smoothright", "fadeblack", "fadewhite", "zoomin", "pixelize"] as const;
 export const FILM_LOOK_PRESETS = ["70s_color", "noir", "teal_orange", "bleach_bypass", "technicolor", "faded_vintage", "cool_thriller"] as const;
 export const LETTERBOX_RATIOS = ["2.39:1", "2:1", "1.85:1", "1.33:1"] as const;
-export const EDIT_OPS = ["trim", "concat", "mute", "frame", "audio_overlay", "fade", "crossfade", "gain", "reframe", "grade", "film_look", "letterbox", "speed", "speed_ramp", "reverse", "freeze", "loop", "kenburns", "fps_boost", "flip", "rotate", "sharpen", "denoise", "upscale", "pip", "captions", "transition", "title_card", "credits"] as const;
+export const EDIT_OPS = ["trim", "concat", "mute", "frame", "audio_overlay", "fade", "crossfade", "gain", "reframe", "grade", "film_look", "letterbox", "speed", "speed_ramp", "reverse", "freeze", "loop", "kenburns", "fps_boost", "flip", "rotate", "sharpen", "denoise", "upscale", "pip", "captions", "transition", "title_card", "credits", "cutout"] as const;
 export const MIN_CROSSFADE_S = 0.3;
 export const MAX_CROSSFADE_S = 1.0;
 export const MAX_CROSSFADE_CLIPS = 6;
@@ -87,8 +87,10 @@ const TransitionOp = z.object({ op: z.literal("transition"), kind: z.enum(TRANSI
 const Colour = z.union([z.enum(["black", "white"]), z.string().regex(/^#[0-9A-Fa-f]{6}$/)]);
 const TitleCardOp = z.object({ op: z.literal("title_card"), text: z.string().min(1).max(120), subtitle: z.string().max(160).optional(), duration_s: z.number().min(1).max(10), position: z.enum(["center", "lower_third", "top"]), background: Colour, text_color: Colour, fade_in_s: z.number().min(0).max(10).optional(), fade_out_s: z.number().min(0).max(10).optional(), place: z.enum(["start", "end"]) }).strict().refine((op) => (op.fade_in_s ?? 0) + (op.fade_out_s ?? 0) <= op.duration_s, { path: ["fade_out_s"], message: "combined fades must fit within duration_s" });
 const CreditsOp = z.object({ op: z.literal("credits"), lines: z.array(z.object({ role: z.string().max(40).optional(), name: z.string().min(1).max(60) }).strict()).min(1).max(60), duration_s: z.number().min(3).max(120).optional(), speed: z.number().min(1).max(1000).default(60), background: Colour, text_color: Colour, title: z.string().max(120).optional() }).strict();
+const CutoutSubject = z.object({ frame: z.number().int().min(0).optional(), box: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional(), point: z.object({ x: z.number(), y: z.number() }).strict().optional() }).strict().refine((s) => !(s.box && s.point), { message: "choose a box or a point" });
+const CutoutOp = z.object({ op: z.literal("cutout"), background: z.union([z.enum(["black", "white", "green", "blur", "transparent"]), z.string().regex(/^#[0-9a-fA-F]{6}$/)]), subject: CutoutSubject.optional(), feather_px: z.number().min(0).max(12).default(2) }).strict();
 
-export const EditOp = z.union([TrimOp, ConcatOp, MuteOp, FrameOp, AudioOverlayOp, FadeOp, CrossfadeOp, GainOp, ReframeOp, GradeOp, FilmLookOp, LetterboxOp, SpeedOp, SpeedRampOp, ReverseOp, FreezeOp, LoopOp, KenBurnsOp, FpsBoostOp, FlipOp, RotateOp, SharpenOp, DenoiseOp, UpscaleOp, PipOp, CaptionsOp, TransitionOp, TitleCardOp, CreditsOp]);
+export const EditOp = z.union([TrimOp, ConcatOp, MuteOp, FrameOp, AudioOverlayOp, FadeOp, CrossfadeOp, GainOp, ReframeOp, GradeOp, FilmLookOp, LetterboxOp, SpeedOp, SpeedRampOp, ReverseOp, FreezeOp, LoopOp, KenBurnsOp, FpsBoostOp, FlipOp, RotateOp, SharpenOp, DenoiseOp, UpscaleOp, PipOp, CaptionsOp, TransitionOp, TitleCardOp, CreditsOp, CutoutOp]);
 export type EditOp = z.infer<typeof EditOp>;
 
 export const EditInput = z.object({
@@ -97,7 +99,7 @@ export const EditInput = z.object({
   output: z.object({
     dir: Path.optional(),
     /** File name with extension: .mp4 or .mov for a clip, .png for a frame. */
-    name: z.string().min(1).max(200).regex(/\.(mp4|mov|png)$/i, "must end in .mp4, .mov or .png"),
+    name: z.string().min(1).max(200).regex(/\.(mp4|mov|webm|png)$/i, "must end in .mp4, .mov, .webm or .png"),
   }).strict(),
 }).strict();
 export type EditInput = z.infer<typeof EditInput>;
@@ -152,6 +154,9 @@ export function editInputProblem(input: unknown): string | null {
 
 /** Cross-field rules that need no file: indices exist, a frame ends the edit and goes to a .png, a clip does not go to a .png. */
 function planProblem(input: EditInput): string | null {
+  const cutout = input.ops.find((op) => op.op === "cutout");
+  if (cutout?.op === "cutout" && (cutout.background === "transparent" ? !/\.webm$/i.test(input.output.name) : !/\.mp4$/i.test(input.output.name))) return "A transparent cutout must be saved as a .webm file; other backgrounds must be saved as .mp4.";
+  if (cutout?.op === "cutout" && cutout.background === "transparent" && input.ops.at(-1)?.op !== "cutout") return "A transparent cutout must be the last edit step.";
   const last = input.ops.length - 1;
   const png = /\.png$/i.test(input.output.name);
   for (let i = 0; i < input.ops.length; i++) {
@@ -175,7 +180,7 @@ function planProblem(input: EditInput): string | null {
   }
   const endsInFrame = input.ops[last]!.op === "frame";
   if (endsInFrame && !png) return "A frame is a picture: the output name must end in .png.";
-  if (!endsInFrame && png) return "Only a frame step makes a .png. Name the output .mp4 or .mov.";
+  if (!endsInFrame && png) return "Only a frame step makes a .png. Name the output .mp4, .mov or .webm.";
   return null;
 }
 
