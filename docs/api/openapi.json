@@ -3267,6 +3267,33 @@
                           "poster_bytes"
                         ]
                       }
+                    },
+                    "lora_warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "code": {
+                            "type": "string",
+                            "enum": [
+                              "untested_on_25",
+                              "tested_on_25"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "code",
+                          "message"
+                        ]
+                      },
+                      "description": "LTXD-18B. Present when an LTX-2.3 style ran on an LTX-2.5 clip: one entry per such style. `untested_on_25` = no bench result; `tested_on_25` = a bench clip showed it changes the output."
                     }
                   },
                   "required": [
@@ -3388,6 +3415,33 @@
                           "poster_bytes"
                         ]
                       }
+                    },
+                    "lora_warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "code": {
+                            "type": "string",
+                            "enum": [
+                              "untested_on_25",
+                              "tested_on_25"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "code",
+                          "message"
+                        ]
+                      },
+                      "description": "LTXD-18B. Present when an LTX-2.3 style ran on an LTX-2.5 clip: one entry per such style. `untested_on_25` = no bench result; `tested_on_25` = a bench clip showed it changes the output."
                     }
                   },
                   "required": [
@@ -17643,7 +17697,7 @@
                                       "items": {
                                         "type": "string"
                                       },
-                                      "description": "The LoRA bases this profile takes: `ltx-2.5` only. An LTX-2.3 file is refused here (wrong_base_model) and an LTX file's version cannot be read from its tensors, so Home declares it when adding the file (`base_model` on POST /stack/v1/video/loras, or PATCH)."
+                                      "description": "The LoRA bases this profile takes: `ltx-2.5` only. An LTX-2.3 file runs with a warning, or is refused if its `tested_on_25` mark is `no_effect` (LTXD-18B). An LTX file's version cannot be read from its tensors, so Home declares it when adding the file (`base_model` on POST /stack/v1/video/loras, or PATCH)."
                                     },
                                     "reason": {
                                       "type": "string",
@@ -17960,7 +18014,7 @@
                                       "items": {
                                         "type": "string"
                                       },
-                                      "description": "The LoRA bases this profile takes: `ltx-2.5` only. An LTX-2.3 file is refused here (wrong_base_model) and an LTX file's version cannot be read from its tensors, so Home declares it when adding the file (`base_model` on POST /stack/v1/video/loras, or PATCH)."
+                                      "description": "The LoRA bases this profile takes: `ltx-2.5` only. An LTX-2.3 file runs with a warning, or is refused if its `tested_on_25` mark is `no_effect` (LTXD-18B). An LTX file's version cannot be read from its tensors, so Home declares it when adding the file (`base_model` on POST /stack/v1/video/loras, or PATCH)."
                                     },
                                     "reason": {
                                       "type": "string",
@@ -18374,6 +18428,20 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "tested_on_25": {
+                            "type": "string",
+                            "nullable": true,
+                            "enum": [
+                              "tested",
+                              "no_effect",
+                              null
+                            ],
+                            "description": "LTXD-18B. Only an `ltx-2.3` record has a value: `tested` (a bench clip on LTX-2.5 changed cleanly), `no_effect` (it did nothing; a clip naming it is refused 422 `lora_no_effect`), or null (not tested)."
+                          },
+                          "untested_on_25": {
+                            "type": "boolean",
+                            "description": "LTXD-18B. True for an `ltx-2.3` record with no bench result. It still runs on LTX-2.5 with a warning, but Home does not offer it by default."
+                          },
                           "strength_default": {
                             "type": "number"
                           },
@@ -18575,6 +18643,20 @@
                     "classification_note": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "tested_on_25": {
+                      "type": "string",
+                      "nullable": true,
+                      "enum": [
+                        "tested",
+                        "no_effect",
+                        null
+                      ],
+                      "description": "LTXD-18B. Only an `ltx-2.3` record has a value: `tested` (a bench clip on LTX-2.5 changed cleanly), `no_effect` (it did nothing; a clip naming it is refused 422 `lora_no_effect`), or null (not tested)."
+                    },
+                    "untested_on_25": {
+                      "type": "boolean",
+                      "description": "LTXD-18B. True for an `ltx-2.3` record with no bench result. It still runs on LTX-2.5 with a warning, but Home does not offer it by default."
                     },
                     "strength_default": {
                       "type": "number"
@@ -18916,6 +18998,16 @@
                       "ltx-2.5"
                     ],
                     "description": "Moves an LTX file to `ltx-2.5`. The retired `ltx-2.3` base is recognized for old records but refused for edits."
+                  },
+                  "tested_on_25": {
+                    "type": "string",
+                    "nullable": true,
+                    "enum": [
+                      "tested",
+                      "no_effect",
+                      null
+                    ],
+                    "description": "LTXD-18B: sets or clears (null) the bench mark. Only an `ltx-2.3` record takes it (422 `bad_mark` otherwise)."
                   }
                 }
               }
@@ -18984,6 +19076,20 @@
                     "classification_note": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "tested_on_25": {
+                      "type": "string",
+                      "nullable": true,
+                      "enum": [
+                        "tested",
+                        "no_effect",
+                        null
+                      ],
+                      "description": "LTXD-18B. Only an `ltx-2.3` record has a value: `tested` (a bench clip on LTX-2.5 changed cleanly), `no_effect` (it did nothing; a clip naming it is refused 422 `lora_no_effect`), or null (not tested)."
+                    },
+                    "untested_on_25": {
+                      "type": "boolean",
+                      "description": "LTXD-18B. True for an `ltx-2.3` record with no bench result. It still runs on LTX-2.5 with a warning, but Home does not offer it by default."
                     },
                     "strength_default": {
                       "type": "number"

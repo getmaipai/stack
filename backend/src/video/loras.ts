@@ -64,7 +64,13 @@ export interface LoraRecord {
   trigger_words: string[];
   added_by: string | null;
   added_at: string;
+  /** LTXD-18B: what a bench clip showed for an LTX-2.3 file on an LTX-2.5 clip. "tested" = it changed the output cleanly; "no_effect" = it did nothing (refused on 2.5); null = not tested. Only an `ltx-2.3` record carries a value. */
+  tested_on_25?: Ltx25Mark | null;
+  /** LTXD-18B, derived on read and never stored: true for an `ltx-2.3` record with no bench result. Home does not offer these by default. */
+  untested_on_25?: boolean;
 }
+export const LTX25_MARKS = ["tested", "no_effect"] as const;
+export type Ltx25Mark = (typeof LTX25_MARKS)[number];
 
 // One class for both libraries: a second copy made the picture route miss the installer's refusals and answer 500 (2026-11-05).
 export { LoraError };
@@ -274,13 +280,19 @@ const ID_RE = /^lora-[0-9a-f]{16}$/;
 export const isLoraId = (value: string): boolean => ID_RE.test(value);
 
 function readManifest(): LoraRecord[] {
-  try { const parsed = JSON.parse(readFileSync(manifestPath(), "utf8")) as { loras?: LoraRecord[] }; return Array.isArray(parsed.loras) ? parsed.loras.map((record) => ({ ...record, base_model: record.base_model ?? LORA_BASE_MODEL })) : []; } catch { return []; }
+  try { const parsed = JSON.parse(readFileSync(manifestPath(), "utf8")) as { loras?: LoraRecord[] }; return Array.isArray(parsed.loras) ? parsed.loras.map(withMarkView) : []; } catch { return []; }
+}
+/** Fills the mark fields a reader sees: `tested_on_25` (null when absent) and the derived `untested_on_25`. */
+function withMarkView(record: LoraRecord): LoraRecord {
+  const base = record.base_model ?? LORA_BASE_MODEL;
+  const mark: Ltx25Mark | null = base === LORA_BASE_LTX && (record.tested_on_25 === "tested" || record.tested_on_25 === "no_effect") ? record.tested_on_25 : null;
+  return { ...record, base_model: base, tested_on_25: mark, untested_on_25: base === LORA_BASE_LTX && mark === null };
 }
 function writeManifest(records: LoraRecord[]): void {
   mkdirSync(libraryDir(), { recursive: true, mode: 0o700 });
   const target = manifestPath();
   const temp = `${target}.${process.pid}.tmp`;
-  writeFileSync(temp, JSON.stringify({ loras: records }, null, 1), { mode: 0o600 });
+  writeFileSync(temp, JSON.stringify({ loras: records.map(({ untested_on_25: _derived, ...stored }) => stored) }, null, 1), { mode: 0o600 });
   renameSync(temp, target);
 }
 
@@ -351,7 +363,7 @@ export async function importLora(input: ImportInput): Promise<LoraRecord> {
   });
 }
 
-export interface LoraPatch { name?: string; classification?: LoraClass; strengthDefault?: number; triggerWords?: string[]; sourceUrl?: string | null; /** Moves an LTX file to LTX-2.5 (the file is read again and may contradict it). */ baseModel?: LoraBase; }
+export interface LoraPatch { name?: string; classification?: LoraClass; strengthDefault?: number; triggerWords?: string[]; sourceUrl?: string | null; /** Moves an LTX file to LTX-2.5 (the file is read again and may contradict it). */ baseModel?: LoraBase; /** LTXD-18B: the bench result for an LTX-2.3 file on LTX-2.5; null clears it. */ testedOn25?: Ltx25Mark | null; }
 
 /** Edits a record. The Stack keeps the one fact it can check: a file whose
  * metadata names adult content cannot be set all-ages. Who may change the
@@ -369,6 +381,11 @@ export function updateLora(id: string, patch: LoraPatch): Promise<LoraRecord> {
     if (patch.strengthDefault !== undefined) next.strength_default = patch.strengthDefault;
     if (patch.triggerWords !== undefined) next.trigger_words = cleanWords(patch.triggerWords);
     if (patch.sourceUrl !== undefined) next.source_url = patch.sourceUrl?.slice(0, 2000) ?? null;
+    if (patch.testedOn25 !== undefined) {
+      if (patch.testedOn25 !== null && !LTX25_MARKS.includes(patch.testedOn25)) throw new LoraError("bad_mark", "The bench mark is tested or no_effect. Pick one of those, or clear it.", 422);
+      if (current.base_model !== LORA_BASE_LTX) throw new LoraError("bad_mark", `"${current.name}" was not made for LTX 2.3, so it has no 2.3-on-2.5 mark. Only an LTX 2.3 style takes one.`, 422);
+      next.tested_on_25 = patch.testedOn25;
+    }
     if (patch.baseModel !== undefined) {
       if (!LORA_BASE_MODELS.includes(patch.baseModel)) throw new LoraError("bad_base_model", `The base model is one of ${LORA_BASE_MODELS.join(", ")}.`, 422);
       if (patch.baseModel === LORA_BASE_LTX) throw new LoraError("wrong_base_model", "That style was made for a retired video model.", 422);
@@ -389,7 +406,7 @@ export function updateLora(id: string, patch: LoraPatch): Promise<LoraRecord> {
     }
     records[index] = next;
     writeManifest(records);
-    return next;
+    return withMarkView(next);
   });
 }
 
@@ -406,8 +423,18 @@ export function removeLora(id: string): Promise<boolean> {
 /** What a person calls the model a base belongs to (Home owns the wording of its own screens; this is the Stack's plain error text). */
 function baseLabel(base: LoraBase | undefined): string { return base === LORA_BASE_LTX ? "retired video model" : base === LORA_BASE_LTX25 ? "LTX 2.5" : "Quick"; }
 
+/** Returns the warning for an `ltx-2.3` record on an `ltx-2.5` clip, null for anything else; throws `lora_no_effect` for a record the bench found does nothing. */
+function ltx23On25Warning(record: LoraRecord, clipBase: LoraBase): LoraWarning | null {
+  if (record.base_model !== LORA_BASE_LTX || clipBase !== LORA_BASE_LTX25) return null;
+  if (record.tested_on_25 === "no_effect") throw new LoraError("lora_no_effect", `"${record.name}" was made for LTX 2.3 and changed nothing in a test clip on LTX 2.5, so it was not used. Pick a style made for LTX 2.5.`, 422);
+  if (record.tested_on_25 === "tested") return { id: record.id, code: "tested_on_25", message: `"${record.name}" was made for LTX 2.3. It was tested on LTX 2.5 and changed the clip, but it may look a little different than it did there.` };
+  return { id: record.id, code: "untested_on_25", message: `"${record.name}" was made for LTX 2.3 and has not been tested on LTX 2.5, so it may change nothing or look odd. If it does, pick a style made for LTX 2.5.` };
+}
+
 export interface LoraRequest { id: string; strength?: number; }
-export interface ResolvedLora { record: LoraRecord; path: string; strength: number; /** LTX-2.5 only: what the runtime can map in this file (read again at request time). */ keys?: LtxLoraKeys; }
+/** LTXD-18B: a note about a file that runs although it was made for another LTX version. Home shows `message` and reads `code`. */
+export interface LoraWarning { id: string; code: "untested_on_25" | "tested_on_25"; message: string }
+export interface ResolvedLora { record: LoraRecord; path: string; strength: number; /** Empty unless a 2.3 file runs on a 2.5 clip. */ warnings: LoraWarning[]; /** LTX-2.5 only: what the runtime can map in this file (read again at request time). */ keys?: LtxLoraKeys; }
 
 /** Turns a job's LoRA list into files to apply, or throws a LoraError that
  * says what to change. `audience` is the second lock: an all-ages job never
@@ -422,7 +449,9 @@ export async function resolveLoras(requests: LoraRequest[] | undefined, audience
     if (!isLoraId(entry.id)) throw new LoraError("unknown_lora", `No LoRA with the id ${String(entry.id).slice(0, 40)} is in the library.`, 422);
     const record = getLora(entry.id);
     if (!record) throw new LoraError("unknown_lora", `No LoRA with the id ${entry.id} is in the library.`, 422);
-    if ((record.base_model ?? LORA_BASE_MODEL) !== base) throw new LoraError("wrong_base_model", `"${record.name}" was made for the ${baseLabel(record.base_model)} video model and this clip is ${baseLabel(base)}. Pick a style made for the same one.`, 422);
+    // LTXD-18B: a 2.3 file on a 2.5 clip is a warning (a bench showed Claymation changes a 2.5 clip); a file the bench found does nothing is refused. Every other mismatch (Wan, a 2.5 file on 2.3, unknown base) is refused as before.
+    const warning = ltx23On25Warning(record, base);
+    if ((record.base_model ?? LORA_BASE_MODEL) !== base && !warning) throw new LoraError("wrong_base_model", `"${record.name}" was made for the ${baseLabel(record.base_model)} video model and this clip is ${baseLabel(base)}. Pick a style made for the same one.`, 422);
     const strength = entry.strength ?? record.strength_default;
     if (!(strength >= 0 && strength <= MAX_LORA_STRENGTH)) throw new LoraError("bad_strength", `A LoRA's strength must be between 0 and ${MAX_LORA_STRENGTH}.`, 422);
     if (record.classification === "adult-only" && audience !== "adult") throw new LoraError("lora_not_allowed", "That LoRA is adult-only and this clip is not for an adult audience.", 422);
@@ -435,7 +464,7 @@ export async function resolveLoras(requests: LoraRequest[] | undefined, audience
     // LTX-2.5: a file the runtime cannot map would run as a silent no-op, so it is refused here, before a job exists.
     let keys: LtxLoraKeys | undefined;
     if (base === LORA_BASE_LTX25) { keys = inspectLtxLoraKeys(path); assertLtxLoraKeys(keys, `"${record.name}"`); }
-    out.push({ record, path, strength, ...(keys ? { keys } : {}) });
+    out.push({ record, path, strength, warnings: warning ? [warning] : [], ...(keys ? { keys } : {}) });
   }
   return out;
 }

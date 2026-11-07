@@ -238,7 +238,7 @@ test("a Max clip without a LoRA sends no lora_mode; the request builder adds it 
   expect(buildWorkerRequest("ltx25", paths, { ...input, loras: [["/l/a.safetensors", 1]] }, "j", "/tmp/o.mp4", "/tmp/p.jpg").lora_mode).toBe("fused");
 });
 
-test("request validation: Standard refuses a LoRA (lora_unsupported), three is too many, a 2.3 file, a kohya file and an adult file on an all-ages clip are refused before a job exists", async () => {
+test("request validation: Standard refuses a LoRA (lora_unsupported), three is too many, a 2.3 file marked no_effect, a kohya file and an adult file on an all-ages clip are refused before a job exists", async () => {
   videoGen.useDeps(scripted());
   const good = await add25("Good", writeSafetensors("good", comfyModules()));
   const second = await add25("Second", writeSafetensors("second", comfyModules(4096, 32)));
@@ -246,7 +246,7 @@ test("request validation: Standard refuses a LoRA (lora_unsupported), three is t
   const oldPath = writeSafetensors("old", comfyModules());
   await expect(importLora({ path: oldPath, name: "Old", licence: "mit", classification: "all-ages" })).rejects.toMatchObject({ code: "wrong_base_model" });
   const old = await importLora({ path: writeSafetensors("old-wan", { "diffusion_model.blocks.0.self_attn.q.lora_A.weight": { dtype: "F16", shape: [16, 3072] }, "diffusion_model.blocks.0.self_attn.q.lora_B.weight": { dtype: "F16", shape: [3072, 16] } }), name: "Old", licence: "mit", classification: "all-ages" });
-  const legacy = { ...old, base_model: "ltx-2.3" as const };
+  const legacy = { ...old, base_model: "ltx-2.3" as const, tested_on_25: "no_effect" as const };
   const manifest = JSON.parse(readFileSync(join(dataDir, "video", "loras", "manifest.json"), "utf8")) as { loras: Array<Record<string, unknown>> };
   manifest.loras[0] = legacy; writeFileSync(join(dataDir, "video", "loras", "manifest.json"), JSON.stringify(manifest, null, 1));
   const legacyBytes = await Bun.file(oldPath).arrayBuffer(); writeFileSync(loraPath(old.id), new Uint8Array(legacyBytes));
@@ -256,8 +256,9 @@ test("request validation: Standard refuses a LoRA (lora_unsupported), three is t
   expect([standard.status, await code(standard)]).toEqual([422, "lora_unsupported"]);
   const many = await post({ ...base, loras: [{ id: good.id }, { id: second.id }, { id: third.id }] });
   expect([many.status, await code(many)]).toEqual([422, "too_many_loras"]);
+  // LTXD-18B: a 2.3 label alone no longer refuses on 2.5; a 2.3 file the bench marked no_effect still does (the full matrix is in videoLtx23On25.test.ts).
   const wrongBase = await post({ ...base, loras: [{ id: old.id }] });
-  expect([wrongBase.status, await code(wrongBase)]).toEqual([422, "wrong_base_model"]);
+  expect([wrongBase.status, await code(wrongBase)]).toEqual([422, "lora_no_effect"]);
   const locked = await post({ ...base, loras: [{ id: adult.id }] });
   expect([locked.status, await code(locked)]).toEqual([422, "lora_not_allowed"]);
   const duplicate = await post({ ...base, loras: [{ id: good.id }, { id: good.id }] });

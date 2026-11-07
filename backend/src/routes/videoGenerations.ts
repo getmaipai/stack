@@ -61,7 +61,7 @@ const VideoDataSchema = z.object({
   width: z.number().int(), height: z.number().int(), frames: z.number().int(), fps: z.number().int(), seconds: z.number().int(), seed: z.number().int(),
   model: z.string(), quality: z.enum(["quick", "ltx25", "ltx25max"]), audio: z.boolean().openapi({ description: "Whether the model made a sound track. Wan Quick is silent." }), mode: z.enum(["text-to-video", "image-to-video", "extend", "retake"]), lora_ids: z.array(z.string()), ms: z.number().int(), bytes: z.number().int(), poster_bytes: z.number().int(),
 });
-const VideoResponseSchema = z.object({ created: z.number().int(), job: z.string(), data: z.array(VideoDataSchema) });
+const VideoResponseSchema = z.object({ created: z.number().int(), job: z.string(), data: z.array(VideoDataSchema), lora_warnings: z.array(z.object({ id: z.string(), code: z.enum(["untested_on_25", "tested_on_25"]), message: z.string() })).optional().openapi({ description: "LTXD-18B. Present when an LTX-2.3 style ran on an LTX-2.5 clip: one entry per such style. `untested_on_25` = no bench result; `tested_on_25` = a bench clip showed it changes the output." }) });
 const ErrorBody = z.object({ error: z.string(), code: z.string(), job: z.string().optional() });
 const JobStatusSchema = z.object({
   job: z.string(),
@@ -276,7 +276,7 @@ videoV1Routes.openapi(postRoute, async (c) => {
   const basePeak = quality === "ltx25max" ? ltx25MaxPeakBytes(image !== null) : quality === "ltx25" ? ltx25PeakBytes(size.width, size.height, seconds * VIDEO_FPS + 1, image !== null) : undefined;
   const peak = basePeak === undefined ? undefined : basePeak + loraAdmit;
   if (peak !== undefined && peak > LTX25_CLIP_CAP_BYTES) return fail(c, 422, "lora_too_large", "These styles are too large to run with this clip on this computer. Use a smaller style, or only one.");
-  return await runClip(c, body, quality, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, endImage, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, preview: body.preview !== false }, { size: `${size.width}x${size.height}`, seconds, mode: image ? "image-to-video" : "text-to-video", ...(loraMode && loras.length > 0 ? { lora_mode: loraMode, lora_admit_bytes: loraAdmit } : {}) }, peak);
+  return await runClip(c, body, quality, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, endImage, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, preview: body.preview !== false }, { size: `${size.width}x${size.height}`, seconds, mode: image ? "image-to-video" : "text-to-video", ...(loraMode && loras.length > 0 ? { lora_mode: loraMode, lora_admit_bytes: loraAdmit } : {}), ...(loras.some((lora) => lora.warnings.length > 0) ? { lora_warnings: loras.flatMap((lora) => lora.warnings) } : {}) }, peak);
 });
 
 /** The queue check, the memory verdict, the stash, the job and the wait: one definition for a made clip and for an edit of one. */
@@ -286,12 +286,13 @@ async function runClip(c: Context, body: z.infer<typeof VideoRequestSchema>, qua
   const verdict = governorDecides(body.tier) ? { ok: true as const } : memoryVerdict(quality, peakBytes);
   if (!verdict.ok) return fail(c, 503, "no_memory", verdict.reason);
   const token = crypto.randomUUID();
+  const warned = Array.isArray(jobFields.lora_warnings) ? { lora_warnings: jobFields.lora_warnings } : {};
   stashClip(token, clip);
   const submitted = submitJob({ kind: VIDEO_JOB_KIND, role: "video", input: { token, ...jobFields, ...adultInput(body.audience), seed: clip.seed, quality, lora_ids: clip.loraIds, ...tierInput(body.tier), ...(body.quiet_seconds !== undefined ? { quiet_seconds: body.quiet_seconds } : {}), ...(body.quiet_max_wait_seconds !== undefined ? { quiet_max_wait_seconds: body.quiet_max_wait_seconds } : {}) } });
   if ("refused" in submitted) { unstashClip(token); return fail(c, 503, submitted.code ?? "unsupported", submitted.reason); }
   const settled = await waitForJob(submitted.job.id, body.timeout_ms ?? DEFAULT_WAIT_MS);
   const created = Math.floor(new Date(submitted.job.createdAt).getTime() / 1000);
-  if (!settled || settled.state === "queued" || settled.state === "running" || settled.state === "stalled") return reply(c, { created, job: submitted.job.id, data: [] }, 202);
+  if (!settled || settled.state === "queued" || settled.state === "running" || settled.state === "stalled") return reply(c, { created, job: submitted.job.id, data: [], ...warned }, 202);
   if ((settled.state === "cancelled" && settled.status === PAUSED_LOW_MEMORY) || (settled.state === "failed" && settled.status === STOPPED_FOR_MEMORY_MAX)) return fail(c, 503, MEMORY_CANCELLED_CODE, settled.reason ?? "Paused: this computer is low on memory.", settled.id);
   if (settled.state === "cancelled") return fail(c, 499, "cancelled", "The clip was cancelled.", settled.id);
   if (settled.state === "failed" && settled.status === "no_memory") return fail(c, 503, "no_memory", settled.reason ?? "There was not enough free memory.", settled.id);
@@ -301,7 +302,7 @@ async function runClip(c: Context, body: z.infer<typeof VideoRequestSchema>, qua
   }
   const meta = readResult(settled.id);
   if (!meta) return fail(c, 500, "expired", "The clip is no longer held. Make it again.", settled.id);
-  return reply(c, { created, job: settled.id, data: [entry(meta)] }, 200);
+  return reply(c, { created, job: settled.id, data: [entry(meta)], ...warned }, 200);
 }
 
 /**

@@ -18,7 +18,7 @@ import { listModels } from "@/lib/modelStore";
 import { videoInstallModels, videoLtx25InstallModels, videoLtx25MaxInstallModels } from "@/lib/installPlan";
 import { modelView } from "@/routes/models";
 import { LORA_INSTALL_SITES, startVideoLoraInstall } from "@/video/loraInstall";
-import { importLora, listLoras, LORA_BASE_MODEL, LORA_BASE_MODELS, LORA_CLASSES, LoraError, MAX_LORA_BYTES, MAX_LORAS_PER_JOB, MAX_LORA_STRENGTH, removeLora, updateLora, isLoraId } from "@/video/loras";
+import { LTX25_MARKS, importLora, listLoras, LORA_BASE_MODEL, LORA_BASE_MODELS, LORA_CLASSES, LoraError, MAX_LORA_BYTES, MAX_LORAS_PER_JOB, MAX_LORA_STRENGTH, removeLora, updateLora, isLoraId } from "@/video/loras";
 import { LTX_LICENCE_NOTICE } from "@/lib/modelCatalog";
 import { ltx25EnvironmentReady, ltx25LoraProfile, LTX25_UNFUSED_ADMIT_FACTOR, LTX25_DEFAULT_SIZE, LTX25_MEASURED, LTX25_STANDARD_5S_PEAK_BYTES, LTX25_STANDARD_5S_PICTURE_PEAK_BYTES, LTX25_FPS } from "@/video/ltx25";
 import { ltx25EditAdmitBytes, ltx25EditPeakBytes, ltx25MaxEditSupported, LTX25_EDIT_EXTEND_MAX_SECONDS, LTX25_EDIT_EXTEND_MIN_SECONDS, LTX25_EDIT_MAX_SOURCE_FRAMES, LTX25_EDIT_MIN_SOURCE_FRAMES, LTX25_EDIT_RETAKE_MAX_SECONDS, LTX25_EDIT_RETAKE_MIN_SECONDS, LTX25_MAX_EDIT_MEASURED } from "@/video/ltx25Edit";
@@ -32,7 +32,7 @@ const PlanModelSchema = z.object({
 const LoraSchema = z.object({
   id: z.string(), name: z.string(), file: z.string(), sha256: z.string(), bytes: z.number().int(), rank: z.number().int(), modules: z.number().int(), base_model: z.enum(LORA_BASE_MODELS).openapi({ description: "The video model the LoRA was made for. `ltx-2.3` is retained for old records, but new styles for that retired model are refused." }),
   licence: z.string(), licence_class: z.enum(["free", "acknowledged"]), source_url: z.string().nullable(),
-  classification: z.enum(LORA_CLASSES), classification_note: z.string().nullable(), strength_default: z.number(), trigger_words: z.array(z.string()), added_by: z.string().nullable(), added_at: z.string(),
+  classification: z.enum(LORA_CLASSES), classification_note: z.string().nullable(), tested_on_25: z.enum(LTX25_MARKS).nullable().optional().openapi({ description: "LTXD-18B. Only an `ltx-2.3` record has a value: `tested` (a bench clip on LTX-2.5 changed cleanly), `no_effect` (it did nothing; a clip naming it is refused 422 `lora_no_effect`), or null (not tested)." }), untested_on_25: z.boolean().optional().openapi({ description: "LTXD-18B. True for an `ltx-2.3` record with no bench result. It still runs on LTX-2.5 with a warning, but Home does not offer it by default." }), strength_default: z.number(), trigger_words: z.array(z.string()), added_by: z.string().nullable(), added_at: z.string(),
 });
 const ErrorBody = z.object({ error: z.string(), code: z.string().optional() });
 const QualitySchema = z.object({
@@ -49,7 +49,7 @@ const Ltx25LorasSchema = z.object({
   max: z.number().int().openapi({ description: "Most LoRAs on one clip (0 when not supported)." }), max_strength: z.number(),
   mode: z.enum(["fused", "unfused"]).openapi({ description: "How the runtime applies them. Fused changes the weights once when the clip's pipeline is built (Max, bf16: no extra memory and no requantization loss); unfused keeps run-time adapters (needs runtime 0.18.0)." }),
   admit_factor: z.number().openapi({ description: "Extra memory admission reserves per byte of LoRA file: 0 when fused, 1.1 when unfused. The request is admitted at the clip's figure plus file bytes x this." }),
-  runtime: z.string(), base_models: z.array(z.string()).openapi({ description: "The LoRA bases this profile takes: `ltx-2.5` only. An LTX-2.3 file is refused here (wrong_base_model) and an LTX file's version cannot be read from its tensors, so Home declares it when adding the file (`base_model` on POST /stack/v1/video/loras, or PATCH)." }),
+  runtime: z.string(), base_models: z.array(z.string()).openapi({ description: "The LoRA bases this profile takes: `ltx-2.5` only. An LTX-2.3 file runs with a warning, or is refused if its `tested_on_25` mark is `no_effect` (LTXD-18B). An LTX file's version cannot be read from its tensors, so Home declares it when adding the file (`base_model` on POST /stack/v1/video/loras, or PATCH)." }),
   reason: z.string().nullable(),
 });
 const Ltx25QualitySchema = QualitySchema.extend({
@@ -128,7 +128,7 @@ const installRoute = createRoute({ method: "post", path: "/loras/install", tags:
   422: { content: { "application/json": { schema: ErrorBody } }, description: "The request cannot be used: bad_url, host_not_allowed, bad_source, bad_hash, bad_classification." },
   503: { content: { "application/json": { schema: ErrorBody } }, description: "install_busy: one download at a time." },
 } });
-const patchRoute = createRoute({ method: "patch", path: "/loras/{id}", tags: ["Video"], summary: "Edit a LoRA's name, class, default strength or trigger words", request: { params: z.object({ id: z.string() }), body: { content: { "application/json": { schema: z.object({ name: z.string().optional(), classification: z.enum(LORA_CLASSES).optional(), strength_default: z.number().min(0).max(MAX_LORA_STRENGTH).optional(), trigger_words: z.array(z.string()).optional(), source_url: z.string().nullable().optional(), base_model: z.enum(LORA_BASE_MODELS).optional().openapi({ description: "Moves an LTX file to `ltx-2.5`. The retired `ltx-2.3` base is recognized for old records but refused for edits." }) }) } } } }, responses: {
+const patchRoute = createRoute({ method: "patch", path: "/loras/{id}", tags: ["Video"], summary: "Edit a LoRA's name, class, default strength or trigger words", request: { params: z.object({ id: z.string() }), body: { content: { "application/json": { schema: z.object({ name: z.string().optional(), classification: z.enum(LORA_CLASSES).optional(), strength_default: z.number().min(0).max(MAX_LORA_STRENGTH).optional(), trigger_words: z.array(z.string()).optional(), source_url: z.string().nullable().optional(), base_model: z.enum(LORA_BASE_MODELS).optional().openapi({ description: "Moves an LTX file to `ltx-2.5`. The retired `ltx-2.3` base is recognized for old records but refused for edits." }), tested_on_25: z.enum(LTX25_MARKS).nullable().optional().openapi({ description: "LTXD-18B: sets or clears (null) the bench mark. Only an `ltx-2.3` record takes it (422 `bad_mark` otherwise)." }) }) } } } }, responses: {
   200: { content: { "application/json": { schema: LoraSchema } }, description: "Updated." },
   404: { content: { "application/json": { schema: ErrorBody } }, description: "No such LoRA." },
   409: { content: { "application/json": { schema: ErrorBody } }, description: "classification_locked: the file's own description names adult content, so it cannot be all-ages." },
@@ -281,7 +281,7 @@ videoRoutes.openapi(patchRoute, async (c) => {
   const body = c.req.valid("json");
   if (!isLoraId(id)) return c.json({ error: "No such LoRA in the library.", code: "unknown_lora" }, 404);
   try {
-    return c.json(await updateLora(id, { name: body.name, classification: body.classification, strengthDefault: body.strength_default, triggerWords: body.trigger_words, sourceUrl: body.source_url, baseModel: body.base_model }), 200);
+    return c.json(await updateLora(id, { name: body.name, classification: body.classification, strengthDefault: body.strength_default, triggerWords: body.trigger_words, sourceUrl: body.source_url, baseModel: body.base_model, testedOn25: body.tested_on_25 }), 200);
   } catch (error) {
     if (error instanceof LoraError) return c.json({ error: error.message, code: error.code }, error.status as 404 | 409 | 422);
     throw error;
