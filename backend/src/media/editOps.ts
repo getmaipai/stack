@@ -14,9 +14,9 @@ const wrapCaption = (text: string): string => { const words = text.split(/\s+/),
 /** `dissolve` is the smooth blend people expect (ffmpeg calls that `fade`); ffmpeg's own `dissolve` is a grainy speckle, kept as `speckle`. */
 const XFADE_NAME: Record<string, string> = { dissolve: "fade", speckle: "dissolve" };
 export const TRANSITION_KINDS = ["fade", "dissolve", "speckle", "wipeleft", "wiperight", "wipeup", "wipedown", "slideleft", "slideright", "slideup", "slidedown", "circleopen", "circleclose", "radial", "smoothleft", "smoothright", "fadeblack", "fadewhite", "zoomin", "pixelize"] as const;
-export const FILM_LOOK_PRESETS = ["70s_color", "noir", "teal_orange", "bleach_bypass", "technicolor", "faded_vintage", "cool_thriller"] as const;
+export const FILM_LOOK_PRESETS = ["70s_color", "noir", "teal_orange", "bleach_bypass", "technicolor", "faded_vintage", "cool_thriller", "night"] as const;
 export const LETTERBOX_RATIOS = ["2.39:1", "2:1", "1.85:1", "1.33:1"] as const;
-export const EDIT_OPS = ["trim", "concat", "mute", "frame", "audio_overlay", "fade", "crossfade", "gain", "reframe", "grade", "film_look", "letterbox", "speed", "speed_ramp", "reverse", "freeze", "loop", "kenburns", "fps_boost", "flip", "rotate", "sharpen", "denoise", "upscale", "pip", "captions", "transition", "title_card", "credits", "cutout"] as const;
+export const EDIT_OPS = ["trim", "concat", "mute", "frame", "audio_overlay", "fade", "crossfade", "gain", "reframe", "grade", "film_look", "letterbox", "speed", "speed_ramp", "reverse", "freeze", "loop", "kenburns", "fps_boost", "flip", "rotate", "sharpen", "denoise", "ripple", "upscale", "pip", "captions", "transition", "title_card", "credits", "cutout"] as const;
 export const MIN_CROSSFADE_S = 0.3;
 export const MAX_CROSSFADE_S = 1.0;
 export const MAX_CROSSFADE_CLIPS = 6;
@@ -70,8 +70,13 @@ const FpsBoostOp = z.object({ op: z.literal("fps_boost"), fps: z.union([z.litera
 const FlipOp = z.object({ op: z.literal("flip"), direction: z.enum(["horizontal", "vertical"]) }).strict();
 const RotateOp = z.object({ op: z.literal("rotate"), degrees: z.union([z.literal(90), z.literal(180), z.literal(270)]) }).strict();
 const AmountOp = z.number().min(0).max(1);
-const SharpenOp = z.object({ op: z.literal("sharpen"), amount: AmountOp }).strict();
-const DenoiseOp = z.object({ op: z.literal("denoise"), amount: AmountOp }).strict();
+/** Sharpen amount: 0 to 1 as before (unsharp strength is amount x 2); above 1 up to 1.5 is "Sharpen+" (strength 3). */
+export const SHARPEN_MAX_AMOUNT = 1.5;
+const SharpenOp = z.object({ op: z.literal("sharpen"), amount: z.number().min(0).max(SHARPEN_MAX_AMOUNT) }).strict();
+/** `deblock` (default off) runs ffmpeg's deblocking filter before the denoise, for compression blocks. */
+const DenoiseOp = z.object({ op: z.literal("denoise"), amount: AmountOp, deblock: z.boolean().optional() }).strict();
+/** A gentle whole-frame water-like wobble, 0 (none) to 1 (about 1% of the height); audio untouched. */
+const RippleOp = z.object({ op: z.literal("ripple"), amount: AmountOp }).strict();
 const UpscaleOp = z.object({ op: z.literal("upscale"), factor: z.literal(2).optional() }).strict();
 const PipOp = z.object({ op: z.literal("pip"), input: Index, corner: z.enum(["top_left", "top_right", "bottom_left", "bottom_right"]), size: z.number().min(0.15).max(0.5), margin: z.number().min(0).max(0.1) }).strict();
 const CaptionsOp = z.object({ op: z.literal("captions"), lines: z.array(z.object({ from_s: Seconds, to_s: z.number().gt(0).max(MAX_EDIT_SECONDS), text: z.string().min(1).max(120) }).strict()).min(1).max(40), position: z.enum(["bottom", "middle", "top"]) }).strict()
@@ -90,7 +95,7 @@ const CreditsOp = z.object({ op: z.literal("credits"), lines: z.array(z.object({
 const CutoutSubject = z.object({ frame: z.number().int().min(0).optional(), box: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional(), point: z.object({ x: z.number(), y: z.number() }).strict().optional() }).strict().refine((s) => !(s.box && s.point), { message: "choose a box or a point" });
 const CutoutOp = z.object({ op: z.literal("cutout"), background: z.union([z.enum(["black", "white", "green", "blur", "transparent"]), z.string().regex(/^#[0-9a-fA-F]{6}$/)]), subject: CutoutSubject.optional(), feather_px: z.number().min(0).max(12).default(2) }).strict();
 
-export const EditOp = z.union([TrimOp, ConcatOp, MuteOp, FrameOp, AudioOverlayOp, FadeOp, CrossfadeOp, GainOp, ReframeOp, GradeOp, FilmLookOp, LetterboxOp, SpeedOp, SpeedRampOp, ReverseOp, FreezeOp, LoopOp, KenBurnsOp, FpsBoostOp, FlipOp, RotateOp, SharpenOp, DenoiseOp, UpscaleOp, PipOp, CaptionsOp, TransitionOp, TitleCardOp, CreditsOp, CutoutOp]);
+export const EditOp = z.union([TrimOp, ConcatOp, MuteOp, FrameOp, AudioOverlayOp, FadeOp, CrossfadeOp, GainOp, ReframeOp, GradeOp, FilmLookOp, LetterboxOp, SpeedOp, SpeedRampOp, ReverseOp, FreezeOp, LoopOp, KenBurnsOp, FpsBoostOp, FlipOp, RotateOp, SharpenOp, DenoiseOp, RippleOp, UpscaleOp, PipOp, CaptionsOp, TransitionOp, TitleCardOp, CreditsOp, CutoutOp]);
 export type EditOp = z.infer<typeof EditOp>;
 
 export const EditInput = z.object({
@@ -136,6 +141,10 @@ export function editInputProblem(input: unknown): string | null {
       if (name === "flip") {
         const direction = (raw.ops[i] as { direction?: unknown } | null)?.direction;
         if (direction !== "horizontal" && direction !== "vertical") return `Step ${i + 1} (flip) accepts horizontal or vertical.`;
+      }
+      if (name === "denoise") {
+        const deblock = (raw.ops[i] as { deblock?: unknown } | null)?.deblock;
+        if (deblock !== undefined && typeof deblock !== "boolean") return `Step ${i + 1} (denoise) takes deblock as true or false.`;
       }
       if (name === "rotate") {
         const degrees = (raw.ops[i] as { degrees?: unknown } | null)?.degrees;
@@ -394,6 +403,7 @@ const filmFilters: Record<(typeof FILM_LOOK_PRESETS)[number], string> = {
   bleach_bypass: "eq=saturation=0.6:contrast=1.28,colorbalance=rs=-0.015:gs=0.025:bs=0.02,noise=c0s=8:c0f=t",
   technicolor: "eq=saturation=1.32:brightness=-0.02:contrast=1.1,colorchannelmixer=rr=1.05:rg=0.01:gg=1.0:gb=0.0:bb=1.0",
   faded_vintage: "curves=master='0/0.08 0.25/0.29 0.75/0.76 1/1',eq=contrast=0.82:saturation=0.72,colorbalance=rs=0.045:gs=0.025:bs=-0.07,noise=c0s=5:c0f=t",
+  night: "eq=saturation=0.5:contrast=1.12:brightness=-0.1:gamma=0.82,colorbalance=rs=-0.02:gs=0:bs=0.14:rm=-0.05:bm=0.08:rh=-0.06:bh=0.05,vignette=angle=0.7,noise=c0s=5:c0f=t",
   cool_thriller: "eq=saturation=0.72:contrast=1.2:brightness=-0.015,colorbalance=rs=-0.04:gs=-0.015:bs=0.09:rh=-0.035:gh=0.005:bh=0.06,vignette=angle=0.72,noise=c0s=5:c0f=t",
 };
 export function filmLookArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "film_look" }>): string[] {
@@ -401,7 +411,7 @@ export function filmLookArgs(ffmpeg: string, clip: Clip, out: string, op: Extrac
   const fixedGraph = op.preset === "70s_color"
     ? `[0:v:0]split=2[original][source];[source]${filmFilters[op.preset]},split=2[base][hot];[hot]gblur=sigma=12[soft];[base][soft]blend=c0_mode=screen:c0_opacity=${op.preset === "70s_color" ? "0.16" : "0.04"}:c1_opacity=0:c2_opacity=0[graded];[original][graded]blend=all_expr='A*(1-${num(op.strength)})+B*${num(op.strength)}'[v]`
     : `${graph};[original][graded0]blend=all_expr='A*(1-${num(op.strength)})+B*${num(op.strength)}'[v]`;
-  return [...BASE(ffmpeg), "-i", clip.path, "-filter_complex", fixedGraph, "-map", "[v]", "-map", "0:a:0?", "-sn", "-dn", ...ENCODE_V, ...(clip.probe.has_audio ? ["-c:a", "copy"] : []), ...FASTSTART, out];
+  return [...BASE(ffmpeg), "-i", clip.path, "-map_metadata", "0", "-filter_complex", fixedGraph, "-map", "[v]", "-map", "0:a:0?", "-sn", "-dn", ...ENCODE_V, ...(clip.probe.has_audio ? ["-c:a", "copy"] : []), ...FASTSTART, out];
 }
 function ratioValue(ratio: (typeof LETTERBOX_RATIOS)[number]): number { const [w, h] = ratio.split(":").map(Number); return w! / h!; }
 export function letterboxArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "letterbox" }>): string[] {
@@ -461,8 +471,10 @@ export function kenBurnsArgs(ffmpeg:string,clip:Clip,out:string,op:Extract<EditO
 export function fpsBoostArgs(ffmpeg:string,clip:Clip,out:string,fps:number):string[]{return [...BASE(ffmpeg),"-i",clip.path,"-vf",`minterpolate=fps=${fps}:mi_mode=mci:mc_mode=aobmc:vsbmc=1`,"-map","0:v:0","-map","0:a:0?","-sn","-dn",...ENCODE_V,...(clip.probe.has_audio?["-c:a","copy"]:[]),...FASTSTART,out];}
 export function flipArgs(ffmpeg:string,clip:Clip,out:string,direction:string):string[]{return [...BASE(ffmpeg),"-i",clip.path,"-vf",direction==="horizontal"?"hflip":"vflip","-map","0:v:0","-map","0:a:0?","-sn","-dn",...ENCODE_V,...(clip.probe.has_audio?["-c:a","copy"]:[]),...FASTSTART,out];}
 export function rotateArgs(ffmpeg:string,clip:Clip,out:string,degrees:number):string[]{const vf=degrees===90?"transpose=1":degrees===270?"transpose=2":"hflip,vflip";return [...BASE(ffmpeg),"-i",clip.path,"-vf",vf,"-map","0:v:0","-map","0:a:0?","-sn","-dn",...ENCODE_V,...(clip.probe.has_audio?["-c:a","copy"]:[]),...FASTSTART,out];}
-export function sharpenArgs(ffmpeg:string,clip:Clip,out:string,amount:number):string[]{return [...BASE(ffmpeg),"-i",clip.path,"-vf",`unsharp=5:5:${num(amount*2)}:5:5:0`,"-map","0:v:0","-map","0:a:0?","-sn","-dn",...ENCODE_V,...(clip.probe.has_audio?["-c:a","copy"]:[]),...FASTSTART,out];}
-export function denoiseArgs(ffmpeg:string,clip:Clip,out:string,amount:number):string[]{return [...BASE(ffmpeg),"-i",clip.path,"-vf",`hqdn3d=${num(amount*4.5)}:${num(amount*3.375)}:${num(amount*6.75)}:${num(amount*4.5)}`,"-map","0:v:0","-map","0:a:0?","-sn","-dn",...ENCODE_V,...(clip.probe.has_audio?["-c:a","copy"]:[]),...FASTSTART,out];}
+export function sharpenArgs(ffmpeg:string,clip:Clip,out:string,amount:number):string[]{return [...BASE(ffmpeg),"-i",clip.path,"-map_metadata","0","-vf",`unsharp=5:5:${num(amount*2)}:5:5:0`,"-map","0:v:0","-map","0:a:0?","-sn","-dn",...ENCODE_V,...(clip.probe.has_audio?["-c:a","copy"]:[]),...FASTSTART,out];}
+/** Ripple: each pixel is read from a position shifted by two crossing sine waves that drift with time. Amplitude is amount x height/100 pixels (about 4.5 px at 448 high), wavelength about height/4. */
+export function rippleArgs(ffmpeg:string,clip:Clip,out:string,amount:number):string[]{const a=num(amount),dx=`${a}*H/100*sin(Y*25.6/H+T*5)`,dy=`${a}*H/160*sin(X*25.6/H+T*4)`;const plane=(p:string)=>`${p}='${p}(X+${dx},Y+${dy})'`;return [...BASE(ffmpeg),"-i",clip.path,"-map_metadata","0","-vf",`format=yuv444p,geq=${plane("lum")}:${plane("cb")}:${plane("cr")}`,"-map","0:v:0","-map","0:a:0?","-sn","-dn",...ENCODE_V,...(clip.probe.has_audio?["-c:a","copy"]:[]),...FASTSTART,out];}
+export function denoiseArgs(ffmpeg:string,clip:Clip,out:string,amount:number,deblock=false):string[]{return [...BASE(ffmpeg),"-i",clip.path,"-map_metadata","0","-vf",`${deblock?"deblock=filter=strong:block=8,":""}hqdn3d=${num(amount*4.5)}:${num(amount*3.375)}:${num(amount*6.75)}:${num(amount*4.5)}`,"-map","0:v:0","-map","0:a:0?","-sn","-dn",...ENCODE_V,...(clip.probe.has_audio?["-c:a","copy"]:[]),...FASTSTART,out];}
 export function pipArgs(ffmpeg:string,clip:Clip,other:Clip,out:string,op:Extract<EditOp,{op:"pip"}>):string[]{const w=Math.max(2,Math.floor((clip.probe.width??1280)*op.size/2)*2),x=op.corner.endsWith("right")?`W-w-W*${num(op.margin)}`:`W*${num(op.margin)}`,y=op.corner.startsWith("bottom")?`H-h-H*${num(op.margin)}`:`H*${num(op.margin)}`;const graph=`[1:v:0]scale=${w}:-2[small];[0:v:0][small]overlay=${x}:${y}:shortest=0[v]`;return [...BASE(ffmpeg),"-i",clip.path,"-stream_loop","-1","-i",other.path,"-filter_complex",graph,"-map","[v]","-map","0:a:0?","-t",num(clip.probe.duration_s??0),"-sn","-dn",...ENCODE_V,...(clip.probe.has_audio?["-c:a","copy"]:[]),...FASTSTART,out];}
 /** An apostrophe cannot be escaped inside the single-quoted drawtext value (ffmpeg ends the quote at it, found 2026-11-06 with a title "The Lighthouse's Secret"), so it is drawn as the typographic apostrophe, which is what a printed title uses anyway. */
 export const drawTextEscape = (text: string): string => text.replace(/\\/g, "\\\\").replace(/:/g, "\\:").replace(/'/g, "\u2019").replace(/%/g, "\\%").replace(/\n/g, "\\n").replace(/\r/g, "");

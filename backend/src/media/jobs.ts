@@ -14,7 +14,7 @@ import { probeFile, type ProbeResult } from "./probe";
 import { idleArgv, spawnRunner, type Runner, type RunResult } from "./run";
 import { defaultToolbox, MediaToolError, type MediaToolbox } from "./tools";
 import { mkdirSync } from "node:fs";
-import { concatCompatible, concatCopyArgs, concatEncodeArgs, concatListLine, crossfadeArgs, transitionArgs, crossfadeMinLength, concatMembers, EditInput, editInputProblem, fadeArgs, frameArgs, gainArgs, hasKeyframeAt, keyframeArgs, MAX_EDIT_SECONDS, muteArgs, overlayArgs, trimArgs, reframeArgs, gradeArgs, filmLookArgs, letterboxArgs, speedArgs, speedRampArgs, reverseArgs, reverseDurationProblem, freezeArgs, loopArgs, kenBurnsArgs, fpsBoostArgs, flipArgs, rotateArgs, sharpenArgs, denoiseArgs, pipArgs, captionsArgs, titleCardArgs, creditsArgs, type Clip } from "./editOps";
+import { concatCompatible, concatCopyArgs, concatEncodeArgs, concatListLine, crossfadeArgs, transitionArgs, crossfadeMinLength, concatMembers, EditInput, editInputProblem, fadeArgs, frameArgs, gainArgs, hasKeyframeAt, keyframeArgs, MAX_EDIT_SECONDS, muteArgs, overlayArgs, trimArgs, reframeArgs, gradeArgs, filmLookArgs, letterboxArgs, speedArgs, speedRampArgs, reverseArgs, reverseDurationProblem, freezeArgs, loopArgs, kenBurnsArgs, fpsBoostArgs, flipArgs, rotateArgs, sharpenArgs, denoiseArgs, rippleArgs, pipArgs, captionsArgs, titleCardArgs, creditsArgs, type Clip } from "./editOps";
 import { cutoutClip, CUTOUT_FAILED, CUTOUT_MODEL_MISSING, CUTOUT_NO_MEMORY, CUTOUT_NO_SUBJECT } from "./cutout";
 import { log } from "@/lib/log";
 import { COLOUR_MATCH_STRENGTH, COMPANION_CLIP_FPS, COMPANION_CLIP_SIZE, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionCrop, companionMetrics, companionReasons, crossfadeLoop, downscaleRgba4, frameDifference, keyOutRgba, selectCompanionWindow } from "./companionClip";
@@ -648,7 +648,8 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
       } else if (op.op === "flip") { needsVideo("flip"); args = flipArgs(ffmpeg, clip, target, op.direction);
       } else if (op.op === "rotate") { needsVideo("rotate"); args = rotateArgs(ffmpeg, clip, target, op.degrees);
       } else if (op.op === "sharpen") { needsVideo("sharpen"); args = sharpenArgs(ffmpeg, clip, target, op.amount);
-      } else if (op.op === "denoise") { needsVideo("denoise"); args = denoiseArgs(ffmpeg, clip, target, op.amount);
+      } else if (op.op === "denoise") { needsVideo("denoise"); args = denoiseArgs(ffmpeg, clip, target, op.amount, op.deblock === true);
+      } else if (op.op === "ripple") { needsVideo("ripple"); args = rippleArgs(ffmpeg, clip, target, op.amount);
       } else if (op.op === "cutout") {
         needsVideo("cutout");
         try {
