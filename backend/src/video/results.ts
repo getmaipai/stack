@@ -23,7 +23,7 @@ export interface VideoResultMeta {
   quality?: "quick" | "detailed" | "ltx25" | "ltx25max";
   /** The clip has a sound track the model made (older results have none: no). */
   audio?: boolean;
-  mode: "text-to-video" | "image-to-video" | "extend" | "retake";
+  mode: "text-to-video" | "image-to-video" | "extend" | "retake" | "ic_lora";
   lora_ids: string[];
   /** ADULT-LOCK-04: the clip was made for an adult audience; the Stack serves it only to the full view. */
   audience?: "adult";

@@ -22,13 +22,15 @@ import { RoleReplyHeaders } from "@maipai/spec/stack/ts/role-reply-headers.js";
 import { MAX_DRAIN_STATUS, MAX_WAIT_STATUS, cancelJob, getJob, hasJobRunner, isJobPaused, listJobs, submitJob, waitForJob, type Job } from "@/lib/jobs";
 import { TierFieldSchema, TierStatusSchema, governorDecides, tierInput, tierOf } from "@/routes/tierField";
 import { PAUSED_LABEL } from "@/lib/genProgress";
-import { LoraError, matchLtxLoraToPack, resolveLoras, type LoraBase } from "@/video/loras";
+import { getLora, loraPath, LoraError, matchLtxLoraToPack, resolveLoras, type LoraBase } from "@/video/loras";
 import { deleteResult, isJobId, messagesPath, posterPath, readResult, videoPath, type VideoResultMeta } from "@/video/results";
 import { memoryVerdict, qualityOfModelName, tierAvailability, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, VIDEO_SPECS, videoGen, videoGenRoot, type VideoQuality } from "@/video/videoGen";
 import { ltx25LoraAdmitBytes, ltx25LoraMode, ltx25LoraProfile, ltx25PackTransformer, LTX25_CLIP_CAP_BYTES, LTX25_LORAS_PER_CLIP, ltx25MaxPeakBytes, ltx25MaxRefusal, ltx25MaxRow, ltx25PeakBytes, ltx25Refusal, ltx25Row, ltx25TrueSize, LTX25_MAX_MEASURED, LTX25_MEASURED } from "@/video/ltx25";
 import { checkEdit, EditSourceError, editRuntime, ltx25EditAdmitBytes, ltx25MaxEditSupported, LTX25_EDIT_EXTEND_MAX_SECONDS, LTX25_EDIT_EXTEND_MIN_SECONDS, LTX25_EDIT_RETAKE_MAX_SECONDS, LTX25_EDIT_RETAKE_MIN_SECONDS, LTX25_MAX_EDIT_MEASURED, planSource, probeSource, type Ltx25EditKind } from "@/video/ltx25Edit";
 import { MediaPathError, resolveReadable } from "@/media/paths";
 import { stashClip, unstashClip, videoFailure, videoPreviewPath, videoProgress, videoTracker, VIDEO_JOB_KIND, type StashedClip } from "@/video/jobs";
+import { LTX25_ICLORA_PEAK_BYTES } from "@/video/ltx25";
+import { sha256OfFile } from "@/lib/fileHash";
 
 const DEFAULT_WAIT_MS = 30_000;
 const MAX_WAIT_MS = 30 * 60_000;
@@ -59,7 +61,7 @@ const VideoDataSchema = z.object({
   poster_url: z.string().openapi({ description: "GET this for the JPEG of frame 0." }),
   content_type: z.literal("video/mp4"),
   width: z.number().int(), height: z.number().int(), frames: z.number().int(), fps: z.number().int(), seconds: z.number().int(), seed: z.number().int(),
-  model: z.string(), quality: z.enum(["quick", "ltx25", "ltx25max"]), audio: z.boolean().openapi({ description: "Whether the model made a sound track. Wan Quick is silent." }), mode: z.enum(["text-to-video", "image-to-video", "extend", "retake"]), lora_ids: z.array(z.string()), ms: z.number().int(), bytes: z.number().int(), poster_bytes: z.number().int(),
+  model: z.string(), quality: z.enum(["quick", "ltx25", "ltx25max"]), audio: z.boolean().openapi({ description: "Whether the model made a sound track. Wan Quick is silent." }), mode: z.enum(["text-to-video", "image-to-video", "extend", "retake", "ic_lora"]), lora_ids: z.array(z.string()), ms: z.number().int(), bytes: z.number().int(), poster_bytes: z.number().int(),
 });
 const VideoResponseSchema = z.object({ created: z.number().int(), job: z.string(), data: z.array(VideoDataSchema), lora_warnings: z.array(z.object({ id: z.string(), code: z.enum(["untested_on_25", "tested_on_25"]), message: z.string() })).optional().openapi({ description: "LTXD-18B. Present when an LTX-2.3 style ran on an LTX-2.5 clip: one entry per such style. `untested_on_25` = no bench result; `tested_on_25` = a bench clip showed it changes the output." }) });
 const ErrorBody = z.object({ error: z.string(), code: z.string(), job: z.string().optional() });
@@ -93,6 +95,8 @@ const postRoute = createRoute({ method: "post", path: "/generations", tags: ["Vi
   503: { content: { "application/json": { schema: ErrorBody } }, description: "Video is off on this computer (not_available_on_this_computer, unsupported), not installed (not_installed), there is no free memory for it (no_memory), or the memory watchdog stopped the clip while it waited (memory_cancelled)." },
   504: { content: { "application/json": { schema: ErrorBody } }, description: "The clip took longer than 15 minutes and was stopped." },
 } });
+const RestyleRequest = z.object({ model: z.string().optional(), source: z.string().min(1).max(4096), lora: z.string().min(1).max(40), strength: z.number().default(1), prompt: z.string(), seed: z.number().int().min(0).max(4_294_967_295).optional(), conditioning: z.enum(["source", "edges"]).default("source"), timeout_ms: z.number().int().positive().max(MAX_WAIT_MS).optional(), tier: TierFieldSchema, quiet_seconds: z.number().int().min(20).max(3600).optional(), quiet_max_wait_seconds: z.number().int().min(0).max(86400).nullable().optional() });
+const restyleRoute = createRoute({ method: "post", path: "/restyle", tags: ["Video"], summary: "Restyle a video with an installed IC-LoRA", request: { body: { content: { "application/json": { schema: RestyleRequest } } } }, responses: { 200: { content: { "application/json": { schema: VideoResponseSchema } }, description: "The finished restyled clip." }, 202: { content: { "application/json": { schema: VideoResponseSchema } }, description: "The job is still running." }, 422: { content: { "application/json": { schema: ErrorBody } }, description: "The source, profile, LoRA, strength or prompt is not allowed." }, 503: { content: { "application/json": { schema: ErrorBody } }, description: "The model is not installed or memory is unavailable." } } });
 const getRoute = createRoute({ method: "get", path: "/generations/{job}", tags: ["Video"], summary: "A clip's state, progress and files", request: { params: z.object({ job: z.string() }) }, responses: {
   200: { content: { "application/json": { schema: JobStatusSchema } }, description: "Poll this every second or two while state is queued or running." },
   404: { content: { "application/json": { schema: ErrorBody } }, description: "No such job (it expired or never existed)." },
@@ -277,6 +281,49 @@ videoV1Routes.openapi(postRoute, async (c) => {
   const peak = basePeak === undefined ? undefined : basePeak + loraAdmit;
   if (peak !== undefined && peak > LTX25_CLIP_CAP_BYTES) return fail(c, 422, "lora_too_large", "These styles are too large to run with this clip on this computer. Use a smaller style, or only one.");
   return await runClip(c, body, quality, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, endImage, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, preview: body.preview !== false }, { size: `${size.width}x${size.height}`, seconds, mode: image ? "image-to-video" : "text-to-video", ...(loraMode && loras.length > 0 ? { lora_mode: loraMode, lora_admit_bytes: loraAdmit } : {}), ...(loras.some((lora) => lora.warnings.length > 0) ? { lora_warnings: loras.flatMap((lora) => lora.warnings) } : {}) }, peak);
+});
+
+videoV1Routes.openapi(restyleRoute, async (c) => {
+  const body = c.req.valid("json");
+  const refuse = (error: string) => fail(c, 422, "ic_lora_refused", error);
+  if (body.model !== undefined && body.model !== "ltx25-max") return refuse("IC-LoRA video is Max only. Choose ltx25-max.");
+  if (typeof body.strength !== "number" || !Number.isFinite(body.strength) || body.strength < 0 || body.strength > 2) return refuse("The IC-LoRA strength is outside 0 to 2. Choose a strength in that range.");
+  if (!body.prompt.trim()) return refuse("The prompt is empty. Write a description of the restyled video.");
+  const availability = tierAvailability();
+  if (!availability.available) return fail(c, 503, availability.code ?? "unsupported", availability.reason ?? "Video is not available on this computer.");
+  if (!hasJobRunner(VIDEO_JOB_KIND)) return fail(c, 503, "unsupported", "Video is not available on this machine.");
+  let sourcePath: string;
+  let sourceIsResult = false;
+  try {
+    if (isJobId(body.source)) {
+      if (!readResult(body.source)) return refuse("The source clip is missing. Choose a finished video job or an allowed media path.");
+      sourcePath = videoPath(body.source);
+      sourceIsResult = true;
+    } else sourcePath = resolveReadable(body.source, "The source clip");
+  } catch (error) {
+    if (error instanceof MediaPathError) return refuse("The source clip is missing or unreadable. Choose a finished video job or a path in a declared media folder.");
+    throw error;
+  }
+  try {
+    if (editRuntime.toolbox.installed("ffprobe")) {
+      const ffprobe = await editRuntime.toolbox.path("ffprobe", () => {});
+      const facts = await probeSource(ffprobe, sourcePath, editRuntime.run);
+      if (!facts.hasVideo || facts.frames <= 0) return refuse("The source clip is missing or unreadable. Choose a readable video clip.");
+      if (facts.frames > 241 || facts.frames / (facts.fps || 24) > 10.01) return refuse("The source is over 10 seconds (241 frames). Trim it to 10 seconds or less.");
+    }
+  } catch (error) {
+    if (error instanceof EditSourceError) return refuse("The source clip is missing or unreadable. Choose a readable video clip.");
+    throw error;
+  }
+  const record = getLora(body.lora);
+  const loraFile = loraPath(body.lora);
+  if (!record || !existsSync(loraFile)) return refuse("The IC-LoRA was not found in the installed-LoRA store. Install it or choose an installed IC-LoRA id.");
+  const stat = statSync(loraFile);
+  if (stat.size !== record.bytes || (Math.floor(stat.mtimeMs) !== record.mtime_ms && await sha256OfFile(loraFile) !== record.sha256)) return refuse("The installed IC-LoRA file changed or is incomplete. Install it again, then retry.");
+  const strength = body.strength ?? 1;
+  const seed = body.seed ?? Math.floor(Math.random() * 2 ** 32);
+  const runBody = { prompt: body.prompt, timeout_ms: body.timeout_ms, tier: body.tier, quiet_seconds: body.quiet_seconds, quiet_max_wait_seconds: body.quiet_max_wait_seconds } as z.infer<typeof VideoRequestSchema>;
+  return await runClip(c, runBody, "ltx25max", { prompt: body.prompt, negativePrompt: null, image: null, endImage: null, width: 1024, height: 576, frames: 121, seed, loras: [], loraIds: [body.lora], quality: "ltx25max", icLora: { sourcePath, sourceIsResult, loraPath: loraFile, loraId: body.lora, strength, conditioning: body.conditioning, audio: true } }, { size: "1024x576", seconds: 5, mode: "ic_lora" }, LTX25_ICLORA_PEAK_BYTES);
 });
 
 /** The queue check, the memory verdict, the stash, the job and the wait: one definition for a made clip and for an edit of one. */

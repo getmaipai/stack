@@ -26,6 +26,16 @@ export const LTX25_MODEL_NAMES = ["ltx25-q8", "ltx25"] as const;
 export const LTX25_FPS = 24;
 
 const GB = 1_000_000_000;
+/** IC-LoRA Colorizer OS footprint on Max, M5 Max, 2026-11-07; admit at the measured footprint plus 5% headroom. */
+export const LTX25_ICLORA_PEAK_MEASURED_BYTES = 81.4 * GB;
+export const LTX25_ICLORA_PEAK_BYTES = Math.round(LTX25_ICLORA_PEAK_MEASURED_BYTES * 1.05);
+export function ltx25IcLoraRefusal(profile: "ltx25" | "ltx25max", width: number, height: number, frames: number): string | null {
+  if (profile !== "ltx25max") return "IC-LoRA video runs on the Max profile only. Choose ltx25-max.";
+  if (width !== 1024 || height !== 576) return "IC-LoRA video makes 1024x576 only. Choose that size.";
+  if (!Number.isInteger(frames) || frames < 9 || (frames - 1) % 8 !== 0) return "The source must be prepared as 8n+1 frames; choose a clip the Stack can trim to that length.";
+  if (frames > 241) return "IC-LoRA video supports at most 10 seconds. Trim the source clip first.";
+  return null;
+}
 /** One measured row: a size, the longest clip measured at it, and the OS footprint of that clip. Shorter clips at the same size are admitted at the same figure (a shorter clip never needs more). */
 export interface Ltx25Row { size: string; width: number; height: number; maxSeconds: number; peakBytes: number; /** The footprint of the same clip that starts from a picture (with or without an end picture): the larger of the measured runs, never below `peakBytes`. */ picturePeakBytes: number; /** The slot Home's tier design gives it (Home owns the wording). */ profile: "standard" | "boost" }
 export const LTX25_MEASURED: readonly Ltx25Row[] = [

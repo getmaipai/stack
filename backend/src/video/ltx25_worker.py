@@ -302,7 +302,11 @@ def _pipeline(model_dir, gemma_dir=None, mode="generate", loras=(), lora_mode="f
         os.environ[LORA_MODE_ENV] = lora_mode
     else:
         os.environ.pop(LORA_MODE_ENV, None)
-    if mode == "extend":
+    if mode == "ic_lora":
+        from ltx_pipelines_mlx.ic_lora import ICLoraPipeline
+
+        pipe = ICLoraPipeline(model_dir=model_dir, lora_paths=list(loras), gemma_model_id=gemma_dir, low_memory=True)
+    elif mode == "extend":
         from ltx_pipelines_mlx.extend_distilled import ExtendDistilledPipeline
 
         pipe = ExtendDistilledPipeline(model_dir=model_dir, gemma_model_id=gemma_dir, low_memory=True)
@@ -325,7 +329,7 @@ def _pipeline(model_dir, gemma_dir=None, mode="generate", loras=(), lora_mode="f
         encoder = getattr(getattr(pipe, "prompt_encoder", None), "gemma_model_id", None)
         if encoder != gemma_dir:
             raise ValueError("the Max video runtime did not take the text encoder folder")
-    if loras:
+    if loras and mode != "ic_lora":
         apply_loras(pipe, loras, lora_mode)
     pipe.verbose = False
     if getattr(pipe, "video_decoder_block", None) is not None:
@@ -334,6 +338,21 @@ def _pipeline(model_dir, gemma_dir=None, mode="generate", loras=(), lora_mode="f
     _state["pipe"] = pipe
     _state["model_dir"] = key
     return pipe
+
+
+def prepare_ic_reference(ffmpeg, source, target, conditioning, width=1024, height=576, frames=121):
+    """Fit a bounded source to the IC-LoRA contract (8n+1 frames) and produce grayscale or edge conditioning."""
+    if conditioning not in ("source", "edges"):
+        raise ValueError("conditioning must be source or edges")
+    if frames > 241 or frames < 9 or (frames - 1) % 8:
+        raise ValueError("IC-LoRA reference must be at most 10 seconds and 8n+1 frames")
+    filters = "fps=24,scale=%d:%d:force_original_aspect_ratio=increase:flags=lanczos,crop=%d:%d" % (width, height, width, height)
+    filters += ",trim=end_frame=%d,tpad=stop_mode=clone:stop=%d" % (frames, frames)
+    filters += ",format=gray" if conditioning == "source" else ",edgedetect=mode=colormix:high=0.12:low=0.04,format=gray"
+    done = subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", source, "-an", "-vf", filters, "-frames:v", str(frames), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-map_metadata", "-1", target], capture_output=True)
+    if done.returncode or not os.path.isfile(target) or os.path.getsize(target) == 0:
+        raise ValueError("the source could not be prepared for IC-LoRA; send a readable video clip")
+    return target
 
 
 def _ffmpeg_on_path(ffmpeg):
@@ -567,6 +586,61 @@ def edit(request):
     return {"width": real_width or int(info.width), "height": real_height or int(info.height), "frames": frames, "fps": FPS, "seed": seed, "ms": int((time.time() - started) * 1000), "peak_bytes": int(mx.get_peak_memory()), "audio": bool(has_sound)}
 
 
+def ic_lora(request):
+    """Render with the fork's ICLoraPipeline and restore the source audio after generation."""
+    if request.get("profile") != "max":
+        raise ValueError("IC-LoRA video runs on the Max video model only")
+    if (request.get("width"), request.get("height")) != (1024, 576):
+        raise ValueError("IC-LoRA video makes 1024x576 only")
+    source, lora = request.get("source_video"), request.get("ic_lora_path")
+    if not source or not os.path.isfile(source):
+        raise ValueError("the source clip is missing")
+    if not lora or not os.path.isfile(lora):
+        raise ValueError("the IC-LoRA file is missing; install or choose a readable IC-LoRA file")
+    strength = float(request.get("ic_lora_strength", 1.0))
+    if not 0 <= strength <= 2:
+        raise ValueError("IC-LoRA strength must be between 0 and 2")
+    model_dir = request["model_dir"]
+    gemma_dir = max_gemma_dir(model_dir, request.get("text_encoder_dir"))
+    work = request["output"] + ".work"
+    os.makedirs(work, exist_ok=True)
+    started = time.time()
+    try:
+        ffmpeg = tools_on_path(request.get("ffmpeg"), request.get("ffprobe"), work)
+        from ltx_core_mlx.utils.ffmpeg import probe_video_info
+        info = probe_video_info(source)
+        source_frames = min(241, max(9, int(info.num_frames)))
+        frames = 1 + ((source_frames - 1) // 8) * 8
+        reference = prepare_ic_reference(ffmpeg, source, os.path.join(work, "reference.mp4"), request.get("conditioning", "source"), frames=frames)
+        _state["steps"] = 0
+        _state["steps_total"] = 11
+        stage("source")
+        phase("loading", 0)
+        pipe = _pipeline(model_dir, gemma_dir, "ic_lora", ((lora, strength),))
+        mx.reset_peak_memory()
+        engine_out = os.path.join(work, "engine.mp4")
+        pipe.generate_and_save(prompt=request["prompt"], output_path=engine_out, video_conditioning=[(reference, 1.0)], height=576, width=1024, num_frames=frames, frame_rate=24.0, seed=int(request["seed"]))
+        phase("encoding", 0)
+        stage("save")
+        # Keep source audio and metadata. No -shortest: source duration is the audio authority.
+        muxed = os.path.join(work, "with-audio.mp4")
+        mux = subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", engine_out, "-i", source, "-map", "0:v:0", "-map", "1:a?", "-c:v", "copy", "-c:a", "aac", "-map_metadata", "0", muxed], capture_output=True)
+        if mux.returncode or not os.path.isfile(muxed):
+            raise RuntimeError("the generated clip could not keep the source sound")
+        poster = subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", muxed, "-frames:v", "1", "-q:v", "3", "-map_metadata", "-1", request["poster"]], capture_output=True)
+        if poster.returncode or not os.path.isfile(request["poster"]):
+            raise RuntimeError("no poster")
+        has_sound, real_width, real_height = _probe(ffmpeg, muxed)
+        out_frames = _count_frames(ffmpeg, muxed)
+        os.replace(muxed, request["output"])
+        phase("encoding", 100)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+        gc.collect()
+        mx.clear_cache()
+    return {"width": real_width or 1024, "height": real_height or 576, "frames": out_frames, "fps": FPS, "seed": int(request["seed"]), "ms": int((time.time() - started) * 1000), "peak_bytes": int(mx.get_peak_memory()), "audio": bool(has_sound)}
+
+
 def _count_frames(ffmpeg, path):
     """Pixel frames of the engine's file (the reply reports what the file really holds): ffmpeg's own count of the decoded video stream (a stream copy counts one more than the file holds)."""
     text = subprocess.run([ffmpeg, "-hide_banner", "-i", path, "-map", "0:v:0", "-c", "copy", "-f", "null", "-"], capture_output=True, text=True).stderr or ""
@@ -589,7 +663,7 @@ def main():
             break
         _state["id"] = request.get("id")
         try:
-            result = edit(request) if request.get("op") in ("extend", "retake") else generate(request)
+            result = edit(request) if request.get("op") in ("extend", "retake") else ic_lora(request) if request.get("op") == "ic_lora" else generate(request)
             emit({"id": request["id"], "ok": True, **result})
         except BaseException as error:  # noqa: BLE001 - every failure becomes a reply, the process stays up
             if isinstance(error, (KeyboardInterrupt, SystemExit)):

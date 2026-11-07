@@ -136,7 +136,8 @@ export async function ensureVideoGenEnvironment(onProgress: (phase: string) => v
  */
 export function buildWorkerRequest(quality: VideoQuality, paths: VideoModelPaths, input: VideoRunInput, jobId: string, output: string, poster: string): WorkerRequest {
   const edit = input.edit;
-  return { id: jobId, op: edit ? edit.kind : "generate", model_dir: paths.modelDir, tokenizer_dir: paths.tokenizerDir, ...(paths.textEncoderDir ? { text_encoder_dir: paths.textEncoderDir, ffmpeg: ffmpegPath(rootOf(quality)) } : {}), ...(quality === "ltx25max" ? { profile: "max" as const } : {}), prompt: input.prompt, negative_prompt: input.negativePrompt, image: input.imagePath, ...(input.endImagePath ? { end_image: input.endImagePath } : {}), width: input.width, height: input.height, num_frames: input.frames, seed: input.seed, loras: input.loras, ...(input.loras.length > 0 && usesLtx25Engine(quality) ? { lora_mode: ltx25LoraMode(quality as "ltx25" | "ltx25max") } : {}), output, poster, ...(input.previewPath ? { preview: input.previewPath } : {}),
+  const icLora = input.icLora;
+  return { id: jobId, op: icLora ? "ic_lora" : edit ? edit.kind : "generate", model_dir: paths.modelDir, tokenizer_dir: paths.tokenizerDir, ...(paths.textEncoderDir ? { text_encoder_dir: paths.textEncoderDir, ffmpeg: ffmpegPath(rootOf(quality)) } : {}), ...(quality === "ltx25max" ? { profile: "max" as const } : {}), prompt: input.prompt, negative_prompt: input.negativePrompt, image: input.imagePath, ...(input.endImagePath ? { end_image: input.endImagePath } : {}), width: input.width, height: input.height, num_frames: input.frames, seed: input.seed, loras: icLora ? [[icLora.path, icLora.strength]] : input.loras, ...(input.loras.length > 0 && usesLtx25Engine(quality) ? { lora_mode: ltx25LoraMode(quality as "ltx25" | "ltx25max") } : {}), output, poster, ...(input.previewPath ? { preview: input.previewPath } : {}), ...(icLora ? { source_video: icLora.sourcePath, ic_lora_path: icLora.path, ic_lora_strength: icLora.strength, conditioning: icLora.conditioning, preserve_source_audio: true } : {}),
     // LTX25-EDIT-01: an extend or a retake names the (fitted) source clip and the latent numbers, and the Stack's own ffmpeg and ffprobe.
     ...(edit ? { source_video: edit.sourcePath, ffmpeg: edit.ffmpeg, ffprobe: edit.ffprobe, ...(edit.kind === "extend" ? { extend_frames: edit.extendFrames } : { retake_start_latent: edit.retakeStartLatent }) } : {}) };
 }
@@ -174,10 +175,11 @@ export function memoryVerdict(quality: VideoQuality = "quick", peakBytes: number
 // ---- the worker protocol ----
 
 export interface WorkerRequest {
-  id: string; op: "generate" | "extend" | "retake"; model_dir: string; tokenizer_dir: string; /** The model text folder and ffmpeg path, when its worker needs them. */ text_encoder_dir?: string; ffmpeg?: string | null; prompt: string; negative_prompt: string | null; image: string | null;
+  id: string; op: "generate" | "extend" | "retake" | "ic_lora"; model_dir: string; tokenizer_dir: string; /** The model text folder and ffmpeg path, when its worker needs them. */ text_encoder_dir?: string; ffmpeg?: string | null; prompt: string; negative_prompt: string | null; image: string | null;
   /** VIDEO-INPUTS-01: the picture the clip ends on (LTX-2.5 only), with `image` as the start. */
   end_image?: string | null;
   width: number; height: number; num_frames: number; seed: number; loras: Array<[string, number]>; output: string; poster: string;
+  ic_lora_path?: string; ic_lora_strength?: number; conditioning?: "source" | "edges"; preserve_source_audio?: boolean;
   /** GENPREVIEW-01: where the worker writes the first-frame preview once the motion is done. */
   preview?: string;
   /** VIDEO-LORA-05 (LTX-2.5 only, with `loras`): how the runtime applies them. The worker sets LTX2_LORA_MODE to it before it builds the pipeline; `unfused` is refused by a runtime that has none. */
@@ -292,6 +294,7 @@ export interface VideoRunInput {
   quality?: VideoQuality;
   /** LTX25-EDIT-01: extend or retake a source clip (Max only). `sourcePath` is the fitted private copy; `extendFrames` and `retakeStartLatent` are latent frames (video/ltx25Edit.ts maps seconds to them). */
   edit?: { kind: "extend" | "retake"; sourcePath: string; ffmpeg: string; ffprobe: string; extendFrames?: number; retakeStartLatent?: number };
+  icLora?: { sourcePath: string; path: string; strength: number; conditioning: "source" | "edges" };
   /** Where the worker writes the first-frame preview (a file the job's runner serves while the clip runs). */
   previewPath?: string;
 }

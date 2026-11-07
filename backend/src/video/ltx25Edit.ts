@@ -25,6 +25,11 @@ export const LTX25_EDIT_MAX_SOURCE_FRAMES = 10 * LTX25_FPS + 1;
 /** The shortest piece of the clip a retake keeps untouched and regenerates: the first latent frame (frame 0) is never regenerated. */
 export const LTX25_EDIT_RETAKE_MIN_SECONDS = 1;
 export const LTX25_EDIT_RETAKE_MAX_SECONDS = 9;
+export const LTX25_ICLORA_MAX_FRAMES = 241;
+/** IC-LoRA's additive public request shape, implemented by POST /v1/videos/restyle. */
+export interface Ltx25IcLoraRequest { source: string; lora: string; strength?: number; prompt: string; seed?: number; conditioning?: "source" | "edges"; }
+/** The standard video job result view returned by the restyle route. */
+export interface Ltx25IcLoraResponse { created: number; job: string; data: Array<{ url: string; poster_url: string; content_type: "video/mp4"; width: number; height: number; frames: number; fps: number; seconds: number; seed: number; model: string; quality: "ltx25max"; audio: boolean; mode: "ic_lora"; lora_ids: string[]; ms: number; bytes: number; poster_bytes: number }>; }
 
 export interface Ltx25MaxEditRow {
   size: string; width: number; height: number;

@@ -3288,7 +3288,8 @@
                               "text-to-video",
                               "image-to-video",
                               "extend",
-                              "retake"
+                              "retake",
+                              "ic_lora"
                             ]
                           },
                           "lora_ids": {
@@ -3436,7 +3437,8 @@
                               "text-to-video",
                               "image-to-video",
                               "extend",
-                              "retake"
+                              "retake",
+                              "ic_lora"
                             ]
                           },
                           "lora_ids": {
@@ -3691,6 +3693,439 @@
         }
       }
     },
+    "/v1/videos/restyle": {
+      "post": {
+        "tags": [
+          "Video"
+        ],
+        "summary": "Restyle a video with an installed IC-LoRA",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "lora": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  "strength": {
+                    "type": "number",
+                    "default": 1
+                  },
+                  "prompt": {
+                    "type": "string"
+                  },
+                  "seed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295
+                  },
+                  "conditioning": {
+                    "type": "string",
+                    "enum": [
+                      "source",
+                      "edges"
+                    ],
+                    "default": "source"
+                  },
+                  "timeout_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true,
+                    "maximum": 1800000
+                  },
+                  "tier": {
+                    "type": "string",
+                    "enum": [
+                      "standard",
+                      "boost",
+                      "max"
+                    ],
+                    "description": "Which level the job runs at: `standard` (the default), `boost` or `max`. Boost and Max may use more of the computer's memory than Standard; a Max job opens the Max window (other jobs wait, chat may run on its smaller model until the job ends). A job too big for its level is refused with the reason. Home decides who may ask for Boost or Max; the Stack takes the word as given. The status and GET /stack/v1/jobs/{id} report it."
+                  },
+                  "quiet_seconds": {
+                    "type": "integer",
+                    "minimum": 20,
+                    "maximum": 3600
+                  },
+                  "quiet_max_wait_seconds": {
+                    "type": "integer",
+                    "nullable": true,
+                    "minimum": 0,
+                    "maximum": 86400
+                  }
+                },
+                "required": [
+                  "source",
+                  "lora",
+                  "prompt"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The finished restyled clip.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "description": "GET this for the mp4 (H.264, yuv420p, 24 fps; LTX-2.5 clips can include a sound track, and Quick clips are silent). Supports Range requests."
+                          },
+                          "poster_url": {
+                            "type": "string",
+                            "description": "GET this for the JPEG of frame 0."
+                          },
+                          "content_type": {
+                            "type": "string",
+                            "enum": [
+                              "video/mp4"
+                            ]
+                          },
+                          "width": {
+                            "type": "integer"
+                          },
+                          "height": {
+                            "type": "integer"
+                          },
+                          "frames": {
+                            "type": "integer"
+                          },
+                          "fps": {
+                            "type": "integer"
+                          },
+                          "seconds": {
+                            "type": "integer"
+                          },
+                          "seed": {
+                            "type": "integer"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "quality": {
+                            "type": "string",
+                            "enum": [
+                              "quick",
+                              "ltx25",
+                              "ltx25max"
+                            ]
+                          },
+                          "audio": {
+                            "type": "boolean",
+                            "description": "Whether the model made a sound track. Wan Quick is silent."
+                          },
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "text-to-video",
+                              "image-to-video",
+                              "extend",
+                              "retake",
+                              "ic_lora"
+                            ]
+                          },
+                          "lora_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "ms": {
+                            "type": "integer"
+                          },
+                          "bytes": {
+                            "type": "integer"
+                          },
+                          "poster_bytes": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "poster_url",
+                          "content_type",
+                          "width",
+                          "height",
+                          "frames",
+                          "fps",
+                          "seconds",
+                          "seed",
+                          "model",
+                          "quality",
+                          "audio",
+                          "mode",
+                          "lora_ids",
+                          "ms",
+                          "bytes",
+                          "poster_bytes"
+                        ]
+                      }
+                    },
+                    "lora_warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "code": {
+                            "type": "string",
+                            "enum": [
+                              "untested_on_25",
+                              "tested_on_25"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "code",
+                          "message"
+                        ]
+                      },
+                      "description": "LTXD-18B. Present when an LTX-2.3 style ran on an LTX-2.5 clip: one entry per such style. `untested_on_25` = no bench result; `tested_on_25` = a bench clip showed it changes the output."
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "job",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "The job is still running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "description": "GET this for the mp4 (H.264, yuv420p, 24 fps; LTX-2.5 clips can include a sound track, and Quick clips are silent). Supports Range requests."
+                          },
+                          "poster_url": {
+                            "type": "string",
+                            "description": "GET this for the JPEG of frame 0."
+                          },
+                          "content_type": {
+                            "type": "string",
+                            "enum": [
+                              "video/mp4"
+                            ]
+                          },
+                          "width": {
+                            "type": "integer"
+                          },
+                          "height": {
+                            "type": "integer"
+                          },
+                          "frames": {
+                            "type": "integer"
+                          },
+                          "fps": {
+                            "type": "integer"
+                          },
+                          "seconds": {
+                            "type": "integer"
+                          },
+                          "seed": {
+                            "type": "integer"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "quality": {
+                            "type": "string",
+                            "enum": [
+                              "quick",
+                              "ltx25",
+                              "ltx25max"
+                            ]
+                          },
+                          "audio": {
+                            "type": "boolean",
+                            "description": "Whether the model made a sound track. Wan Quick is silent."
+                          },
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "text-to-video",
+                              "image-to-video",
+                              "extend",
+                              "retake",
+                              "ic_lora"
+                            ]
+                          },
+                          "lora_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "ms": {
+                            "type": "integer"
+                          },
+                          "bytes": {
+                            "type": "integer"
+                          },
+                          "poster_bytes": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "poster_url",
+                          "content_type",
+                          "width",
+                          "height",
+                          "frames",
+                          "fps",
+                          "seconds",
+                          "seed",
+                          "model",
+                          "quality",
+                          "audio",
+                          "mode",
+                          "lora_ids",
+                          "ms",
+                          "bytes",
+                          "poster_bytes"
+                        ]
+                      }
+                    },
+                    "lora_warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "code": {
+                            "type": "string",
+                            "enum": [
+                              "untested_on_25",
+                              "tested_on_25"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "code",
+                          "message"
+                        ]
+                      },
+                      "description": "LTXD-18B. Present when an LTX-2.3 style ran on an LTX-2.5 clip: one entry per such style. `untested_on_25` = no bench result; `tested_on_25` = a bench clip showed it changes the output."
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "job",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The source, profile, LoRA, strength or prompt is not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The model is not installed or memory is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/videos/generations/{job}": {
       "get": {
         "tags": [
@@ -3856,7 +4291,8 @@
                               "text-to-video",
                               "image-to-video",
                               "extend",
-                              "retake"
+                              "retake",
+                              "ic_lora"
                             ]
                           },
                           "lora_ids": {
