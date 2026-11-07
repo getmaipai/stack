@@ -8,7 +8,7 @@ import type { AppEnv } from "@/types";
 import { identityHeaders } from "@/lib/identity";
 import { noEngineResponse, resolveRole, UnknownRoleError, UnverifiedModelError } from "@/lib/router";
 import { ROLE_IDS, ROLES, type RoleId } from "@/roles";
-import { clampThinking, CODING_WIRE_PATHS, CodingRequestError, engineServesWire, refuseUnsupportedResponsesFields, wireNotServedMessage, type CodingWire } from "@/lib/codingWire";
+import { clampThinking, normalizeStopSequences, CODING_WIRE_PATHS, CodingRequestError, engineServesWire, refuseUnsupportedResponsesFields, wireNotServedMessage, type CodingWire } from "@/lib/codingWire";
 import { codingEngineName, codingLaunchSettings, codingServedModel, EngineUnavailableError, getRoleStatus, requestRole, restartRole, roleHasEngine, roleIsBound, speakRole, speechForm, streamRole, ttsEngineInEffect } from "@/lib/supervisor";
 import { listModels, ProvenanceIncompleteError } from "@/lib/modelStore";
 import { DownloadVerificationError } from "@/lib/download";
@@ -205,7 +205,7 @@ async function codingWireReply<T extends Context>(c: T, wire: CodingWire, body: 
     if (!engineServesWire(engine, wire)) return jsonReply(c, { error: wireNotServedMessage(wire, engine), role, wire }, 501, identityHeaders(null));
     const path = CODING_WIRE_PATHS[wire];
     if (wire === "responses") refuseUnsupportedResponsesFields(body);
-    const sent = wire === "count_tokens" ? body : clampThinking(body, codingLaunchSettings().thinkingBudgetTokens);
+    const sent = wire === "count_tokens" ? body : clampThinking(wire === "messages" ? normalizeStopSequences(body) : body, codingLaunchSettings().thinkingBudgetTokens);
     const notServed = (headers: Record<string, string>) => jsonReply(c, { error: wireNotServedMessage(wire, engine), role, wire }, 501, headers);
     if (wire !== "count_tokens" && body.stream === true) {
       const end = heavyGate.begin(role);

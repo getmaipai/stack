@@ -83,6 +83,17 @@ function clampOne(value: unknown, ceiling: number, field: string): number {
   return Math.min(Math.floor(value), ceiling);
 }
 
+/** Splash 1.6.0 answers 400 to a `stop_sequences` that is not an array of strings that each hold a non-whitespace character (1.5.0 took a single string).
+ * The Messages wire defines an array, but clients send a single string, so it becomes a one-item array here; whitespace-only items, which Splash refuses, are dropped.
+ * Any other shape is left for the engine to refuse by name. Returns a new body; the input is not changed. */
+export function normalizeStopSequences(body: Record<string, unknown>): Record<string, unknown> {
+  const raw = body.stop_sequences;
+  if (typeof raw !== "string" && !Array.isArray(raw)) return body;
+  const list = typeof raw === "string" ? [raw] : raw;
+  if (!list.every((item) => typeof item === "string")) return body;
+  return { ...body, stop_sequences: (list as string[]).filter((item) => item.trim() !== "") };
+}
+
 /** Bounds every thinking budget in a coding request by the admin's ceiling.
  *
  * - `thinking_budget_tokens` (the engine's per-request field, also used by

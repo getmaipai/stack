@@ -4,7 +4,7 @@
 // records what it was sent; no model and no llama-server runs.
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { app } from "@/app";
-import { clampThinking, DROPPED_CLIENT_SAMPLING } from "@/lib/codingWire";
+import { clampThinking, normalizeStopSequences, DROPPED_CLIENT_SAMPLING } from "@/lib/codingWire";
 import { __resetEventsForTests } from "@/lib/events";
 import { __resetHealthForTests } from "@/lib/health";
 import { __resetGovernorForTests } from "@/lib/governor";
@@ -509,4 +509,16 @@ test("chat keeps its route: no clamp, no sampling change, the body reaches its e
   const response = await post("/v1/chat/completions", body);
   expect(response.status).toBe(200);
   expect(recorded[0]!.body).toEqual(body);
+});
+
+test("normalizeStopSequences turns a single string into an array (Splash 1.6.0 refuses a string), drops whitespace-only items and leaves other bodies alone", () => {
+  expect(normalizeStopSequences({ model: "coding", stop_sequences: "END" }).stop_sequences).toEqual(["END"]);
+  expect(normalizeStopSequences({ stop_sequences: ["a", "  ", "\n", "b"] }).stop_sequences).toEqual(["a", "b"]);
+  const noStops = { model: "coding" };
+  expect(normalizeStopSequences(noStops)).toBe(noStops);
+  const odd = { stop_sequences: [1, "a"] };
+  expect(normalizeStopSequences(odd)).toBe(odd);
+  const input = { stop_sequences: "x" };
+  normalizeStopSequences(input);
+  expect(input.stop_sequences).toBe("x");
 });
