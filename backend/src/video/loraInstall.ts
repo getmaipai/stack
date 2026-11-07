@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { dataDir } from "@/lib/paths";
-import { LoraError, MAX_LORA_BYTES, type LoraBase, type LoraClass, getLora, importLora, readLoraHeader, readSafetensorsHeader } from "@/video/loras";
+import { MAX_LORA_BYTES, type LoraBase, type LoraClass, getLora, importLora, readLoraHeader, readSafetensorsHeader } from "@/video/loras";
 import { LORA_INSTALL_SITES, SITE_RULES, parseInstallUrl, startInstall, sweepParts, type InstallSource, type LoraInstallFailure } from "@/lib/media/loraInstallCore";
 import type { Job } from "@/lib/jobs";
 
@@ -34,7 +34,6 @@ export function __resetLoraInstallForTests(): void {
 }
 
 export function startVideoLoraInstall(input: VideoLoraInstallInput, deps: { fetch?: typeof fetch } = {}): Job {
-  if (input.baseModel === "ltx-2.3") throw new LoraError("wrong_base_model", "That style was made for a retired video model.", 422);
   const source: InstallSource = { ...input };
   return startInstall(source, {
     kind: LORA_INSTALL_KIND,

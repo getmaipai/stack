@@ -18401,7 +18401,7 @@
                               "ltx-2.3",
                               "ltx-2.5"
                             ],
-                            "description": "The video model the LoRA was made for. `ltx-2.3` is retained for old records, but new styles for that retired model are refused."
+                            "description": "The video model the LoRA was made for. `ltx-2.3` marks a LoRA made for LTX 2.3; the 2.3 video model itself is retired."
                           },
                           "licence": {
                             "type": "string"
@@ -18570,7 +18570,7 @@
                       "ltx-2.3",
                       "ltx-2.5"
                     ],
-                    "description": "The base the file was made for. Use `ltx-2.5` for LTX-2.5. New files with retired base `ltx-2.3` are refused with wrong_base_model; when omitted, an LTX file must identify itself as LTX-2.5."
+                    "description": "The base the file was made for. Use `ltx-2.5` for LTX-2.5. `ltx-2.3` is accepted for a LoRA (it enters untested on LTX-2.5). When omitted, an LTX file must name its version in its own metadata, or the request is refused with wrong_base_model."
                   }
                 },
                 "required": [
@@ -18617,7 +18617,7 @@
                         "ltx-2.3",
                         "ltx-2.5"
                       ],
-                      "description": "The video model the LoRA was made for. `ltx-2.3` is retained for old records, but new styles for that retired model are refused."
+                      "description": "The video model the LoRA was made for. `ltx-2.3` marks a LoRA made for LTX 2.3; the 2.3 video model itself is retired."
                     },
                     "licence": {
                       "type": "string"
@@ -18997,7 +18997,7 @@
                       "ltx-2.3",
                       "ltx-2.5"
                     ],
-                    "description": "Moves an LTX file to `ltx-2.5`. The retired `ltx-2.3` base is recognized for old records but refused for edits."
+                    "description": "Moves an LTX file between `ltx-2.5` and `ltx-2.3`; the file is read again and may contradict it. A base change clears `tested_on_25`."
                   },
                   "tested_on_25": {
                     "type": "string",
@@ -19050,7 +19050,7 @@
                         "ltx-2.3",
                         "ltx-2.5"
                       ],
-                      "description": "The video model the LoRA was made for. `ltx-2.3` is retained for old records, but new styles for that retired model are refused."
+                      "description": "The video model the LoRA was made for. `ltx-2.3` marks a LoRA made for LTX 2.3; the 2.3 video model itself is retired."
                     },
                     "licence": {
                       "type": "string"

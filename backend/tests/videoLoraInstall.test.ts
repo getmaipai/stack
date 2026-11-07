@@ -177,9 +177,12 @@ test("a duplicate by hash: refused before any download when the hash is expected
   expect(await response.json()).toMatchObject({ code: "duplicate_lora", existing_id: existingId });
 });
 
-test("an LTX file with no declared base or retired base is refused", async () => {
+test("an LTX file with no declared base is refused; a declared 2.3 style installs untested", async () => {
   const { fetch } = scripted(() => ok(loraBytes("b")));
-  expect(() => startVideoLoraInstall(base({ baseModel: "ltx-2.3" }), { fetch })).toThrow("That style was made for a retired video model.");
+  const older = scripted(() => ok(loraBytes("c")));
+  const retired = await finish(startVideoLoraInstall(base({ baseModel: "ltx-2.3" }), { fetch: older.fetch }).id);
+  expect(retired.state).toBe("done");
+  expect((retired.result as { lora?: { base_model?: string } }).lora?.base_model).toBe("ltx-2.3");
   const pending = startVideoLoraInstall(base({ baseModel: null }), { fetch });
   const done = await finish(pending.id);
   expect(done.state).toBe("failed");

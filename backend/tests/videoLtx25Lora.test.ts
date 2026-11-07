@@ -114,14 +114,16 @@ const add25 = (name: string, path: string, extra: Record<string, unknown> = {}) 
 test("an LTX LoRA must identify itself as LTX-2.5; the retired version and undeclared files are refused", async () => {
   const path = writeSafetensors("style", comfyModules());
   const info = readLoraHeader(path);
-  expect(() => detectLoraBase(info)).toThrow("That style was made for a retired video model.");
-  expect(() => detectLoraBase(info, "ltx-2.3")).toThrow("That style was made for a retired video model.");
+  expect(() => detectLoraBase(info)).toThrow("Say whether this LTX style was made for LTX 2.5 or LTX 2.3.");
+  expect(detectLoraBase(info, "ltx-2.3")).toBe("ltx-2.3");
   expect(detectLoraBase(info, "ltx-2.5")).toBe("ltx-2.5");
   expect(() => detectLoraBase(info, "wan2.2-ti2v-5b")).toThrow(LoraError);
   // A trainer's own version field can only agree with the declaration.
   const named25 = readLoraHeader(writeSafetensors("n25", comfyModules(), { ss_ltx_version: "2.5.0" }));
   expect(detectLoraBase(named25)).toBe("ltx-2.5");
-  expect(() => detectLoraBase(named25, "ltx-2.3")).toThrow("That style was made for a retired video model.");
+  expect(() => detectLoraBase(named25, "ltx-2.3")).toThrow(/own description says it was made for LTX 2\.5\.0, not 2\.3/);
+  expect(() => detectLoraBase(readLoraHeader(writeSafetensors("n23", comfyModules(), { ss_ltx_version: "2.3.1" })), "ltx-2.5")).toThrow(/LTX 2\.3\.1, not 2\.5/);
+  expect(detectLoraBase(readLoraHeader(writeSafetensors("n23b", comfyModules(), { ss_ltx_version: "2.3.1" })))).toBe("ltx-2.3");
   const named20 = readLoraHeader(writeSafetensors("n20", comfyModules(), { ss_ltx_version: "2.0" }));
   expect(() => detectLoraBase(named20, "ltx-2.5")).toThrow(LoraError);
   // A Wan-shaped file cannot be declared an LTX one.
@@ -180,8 +182,7 @@ test("resolveLoras for ltx-2.5: refuses a base mismatch, an unknown id and the a
   const good = await add25("Good", writeSafetensors("good", comfyModules()));
   const adult = await add25("Adult", writeSafetensors("adult", comfyModules()), { classification: "adult-only" });
   const oldPath = writeSafetensors("old", comfyModules());
-  await expect(importLora({ path: oldPath, name: "Old", licence: "mit", classification: "all-ages" })).rejects.toMatchObject({ code: "wrong_base_model", message: "That style was made for a retired video model." });
-  await expect(importLora({ path: oldPath, name: "Old2", licence: "mit", classification: "all-ages", declaredBase: "ltx-2.3" })).rejects.toMatchObject({ code: "wrong_base_model", message: "That style was made for a retired video model." });
+  await expect(importLora({ path: oldPath, name: "Old", licence: "mit", classification: "all-ages" })).rejects.toMatchObject({ code: "wrong_base_model", message: "Say whether this LTX style was made for LTX 2.5 or LTX 2.3." });
   const resolved = await resolveLoras([{ id: good.id, strength: 0.8 }], "all-ages", "ltx-2.5");
   expect(resolved[0]).toMatchObject({ strength: 0.8, keys: { pairs: 14 } });
   await expect(resolveLoras([{ id: good.id }], "all-ages", "ltx-2.3")).rejects.toMatchObject({ code: "wrong_base_model" });

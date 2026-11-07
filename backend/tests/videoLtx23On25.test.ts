@@ -22,8 +22,8 @@ const scratch: string[] = [];
 const requests: WorkerRequest[] = [];
 
 type Tensor = { dtype: string; shape: number[] };
-function writeSafetensors(name: string, tensors: Record<string, Tensor>): string {
-  const header: Record<string, unknown> = {};
+function writeSafetensors(name: string, tensors: Record<string, Tensor>, metadata?: Record<string, string>): string {
+  const header: Record<string, unknown> = metadata ? { __metadata__: metadata } : {};
   for (const [key, tensor] of Object.entries(tensors)) header[key] = { dtype: tensor.dtype, shape: tensor.shape, data_offsets: [0, 0] };
   const json = Buffer.from(JSON.stringify(header));
   const length = Buffer.alloc(8); length.writeBigUInt64LE(BigInt(json.length));
@@ -148,9 +148,32 @@ test("only a 2.3 record takes the mark; a bad value is refused in plain words", 
   await expect(updateLora(good.id, { testedOn25: "no_effect" })).rejects.toThrow(/Only an LTX 2\.3 style/);
 });
 
-test("new 2.3 uploads and the ss_ltx_version contradiction keep today's wrong_base_model rules", async () => {
+test("a new 2.3 LoRA upload, edit and install enter with a null mark; a 2.3 video model stays refused", async () => {
   const path = writeSafetensors("fresh", ltxModules());
-  await expect(importLora({ path, name: "Fresh", licence: "mit", classification: "all-ages", declaredBase: "ltx-2.3" })).rejects.toMatchObject({ code: "wrong_base_model", message: "That style was made for a retired video model." });
+  const fresh = await importLora({ path, name: "Fresh", licence: "mit", classification: "all-ages", declaredBase: "ltx-2.3" });
+  expect(fresh.base_model).toBe("ltx-2.3");
+  expect(getLora(fresh.id)).toMatchObject({ base_model: "ltx-2.3", tested_on_25: null, untested_on_25: true });
+  // Edit: a 2.5 file moves to 2.3 with no mark, and back clears any mark.
+  const other = await importLora({ path: writeSafetensors("other", ltxModules(8)), name: "Other", licence: "mit", classification: "all-ages", declaredBase: "ltx-2.5" });
+  await expect(updateLora(other.id, { baseModel: "ltx-2.3" })).resolves.toMatchObject({ base_model: "ltx-2.3", tested_on_25: null, untested_on_25: true });
+  await expect(updateLora(other.id, { testedOn25: "tested" })).resolves.toMatchObject({ tested_on_25: "tested" });
+  await expect(updateLora(other.id, { baseModel: "ltx-2.5" })).resolves.toMatchObject({ base_model: "ltx-2.5", tested_on_25: null, untested_on_25: false });
+  // Upload route.
+  const form = new FormData();
+  form.set("file", new Blob([readFileSync(writeSafetensors("route", ltxModules(4)))]), "route.safetensors");
+  form.set("name", "Route"); form.set("licence", "mit"); form.set("classification", "all-ages"); form.set("base_model", "ltx-2.3");
+  const up = await app.request("/stack/v1/video/loras", { method: "POST", body: form });
+  expect(up.status).toBeLessThan(300);
+  expect(await up.json()).toMatchObject({ base_model: "ltx-2.3", tested_on_25: null, untested_on_25: true });
+  // The 2.3 video MODEL is still retired.
+  const res = await app.request("/v1/videos/generations", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: "ltx-2-3-distilled-mlx", prompt: "x" }) });
+  expect(res.status).toBe(422);
+  expect(await res.json()).toMatchObject({ code: "retired_model" });
+});
+
+test("a file whose own version field contradicts the declaration is still refused", async () => {
+  const path = writeSafetensors("named", ltxModules(), { ss_ltx_version: "2.5.0" });
+  await expect(importLora({ path, name: "Named", licence: "mit", classification: "all-ages", declaredBase: "ltx-2.3" })).rejects.toMatchObject({ code: "wrong_base_model" });
 });
 
 test("the generation route accepts an untested 2.3 file with a lora_warnings entry, and refuses a no_effect file before a job exists", async () => {
