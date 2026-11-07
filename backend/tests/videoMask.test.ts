@@ -94,3 +94,12 @@ describe("media.edit cutout contract", () => {
     expect(calls).toBe(0);
   });
 });
+
+test("the worker script is written to a real file Python can open (the compiled Stack's embedded path is virtual: first live cutout failed on it)", async () => {
+  const { materializeMaskWorker } = await import("@/video/mask");
+  const { existsSync, readFileSync } = await import("node:fs");
+  const path = await materializeMaskWorker();
+  expect(path.startsWith("/$bunfs")).toBe(false);
+  expect(existsSync(path)).toBe(true);
+  expect(readFileSync(path, "utf8")).toContain("build_sam2_video_predictor");
+});

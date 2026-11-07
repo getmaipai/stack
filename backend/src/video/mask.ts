@@ -1,5 +1,5 @@
 // VIDEO-MASK-01: optional SAM 2.1 video subject tracking component.
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ensureEngine } from "@/lib/engineInstall";
 import { installedEnginePin, MANAGED_RUNTIMES, selectEngineBinary } from "@/lib/engineCatalog";
@@ -29,4 +29,12 @@ export function maskWorkerEnv(): Record<string, string> { const env = managedEnv
 export function maskModelPath(): string | null { const model = getModel(MASK_MODEL_ID); return model?.modelPath && model.verifiedAt && existsSync(model.modelPath) ? model.modelPath : null; }
 export function maskPython(): string { return join(uvVenvPath(maskGenRoot()), "bin", "python"); }
 export function maskConfigPath(): string { return join(maskGenRoot(), "configs", "sam2.1", "sam2.1_hiera_s.yaml"); }
+/** The worker script as a real file. In the compiled Stack the embedded asset path is a virtual `/$bunfs/...` path that Python cannot open (found 2026-11-06 on the first live cutout), so it is written under the engine folder first, as the other engines do. */
+export async function materializeMaskWorker(): Promise<string> {
+  const root = maskGenRoot();
+  mkdirSync(root, { recursive: true });
+  const target = join(root, "mask_worker.py");
+  writeFileSync(target, await Bun.file(worker).text());
+  return target;
+}
 export { worker as maskWorkerScript };
