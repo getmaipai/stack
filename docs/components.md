@@ -200,7 +200,7 @@ Engines per platform:
 | p64 | resident | `parakeet-tdt-0.6b-v2-int8` | int8 | 0.45 GB | 1.81 GB (Apple M5 Max, 128 GB unified memory) | n/a | CC-BY-4.0 | k2-fsa/sherpa-onnx @ 157c157bc51155e03e37d2466522a3a737dd9c72bb25f36eb18912964161e1ad | pinned |
 | p128 | resident | `parakeet-tdt-0.6b-v2-int8` | int8 | 0.45 GB | 1.81 GB (Apple M5 Max, 128 GB unified memory) | n/a | CC-BY-4.0 | k2-fsa/sherpa-onnx @ 157c157bc51155e03e37d2466522a3a737dd9c72bb25f36eb18912964161e1ad | pinned |
 
-Installed beside the model, never selected on its own: `silero-vad` (vad, 0.6 MB, MIT, k2-fsa/sherpa-onnx @ 9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6); `smart-turn-v3.2` (endpoint, 8.3 MB, BSD-2-Clause, pipecat-ai/smart-turn-v3 @ f766f81d3cfdf7737ac64aad813d91bbfd56bf93).
+Installed beside the model, never selected on its own: `silero-vad` (vad, 0.6 MB, MIT, k2-fsa/sherpa-onnx @ 9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6); `pyannote-segmentation-3.0-int8` (diarization-segmentation, 6.6 MB, MIT, k2-fsa/sherpa-onnx @ 24615ee884c897d9d2ba09bb4d30da6bb1b15e685065962db5b02e76e4996488); `titanet-small-en` (diarization-embedding, 38.4 MB, CC-BY-4.0, k2-fsa/sherpa-onnx @ ad4a1802485d8b34c722d2a9d04249662f2ece5d28a7a039063ca22f515a789e); `smart-turn-v3.2` (endpoint, 8.3 MB, BSD-2-Clause, pipecat-ai/smart-turn-v3 @ f766f81d3cfdf7737ac64aad813d91bbfd56bf93).
 
 ## tts (Voice out)
 
