@@ -648,6 +648,10 @@
     "fish-audio-drama-3-4bit": {
       "download_bytes": 23781114058,
       "installed_bytes": 23781114058
+    },
+    "whisper-large-v3-turbo": {
+      "download_bytes": 1614089644,
+      "installed_bytes": 1614089644
     }
   }
 }

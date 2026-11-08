@@ -215,7 +215,11 @@ are never copied. Nothing migrates Home until STACK-16.
   with an in-process JSON-lines worker instead of `acestep-api`, the
   pins, `/v1/audio/music`, the made-here ledger and the `music`
   component; the measured peak (`MUSIC_PEAK_BYTES`) and the real-worker
-  run are the owning session's.
+  run are the owning session's. MUSIC-GEN-15 adds optional local Whisper
+  transcription to the finished-song result for Home's content checks;
+  the transcript is one-shot, memory-only and fails closed when sung
+  words cannot be read. Its optional pin and 2 GB admission increment
+  are documented in `integrations.md`.
 
 ## Governor and sizing
 

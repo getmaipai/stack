@@ -7,13 +7,13 @@
 // queue and holds the governor's admission for the whole song; `music_edit`
 // (trim, fade, loudness: CPU only, under a second) takes no admission. Both go
 // through the one service chain, so the worker is never shared concurrently.
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { registerJobRunner, type Job, type JobProgress } from "@/lib/jobs";
 import { heavyGate } from "@/lib/heavyGate";
 import { STACK_MUSIC_MODEL_ID } from "@/lib/modelCatalog";
 import { GenTracker, recordRun } from "@/lib/genProgress";
-import { commitResult, rememberLrc, workDir, type MusicResultMeta } from "./results";
+import { commitResult, rememberLrc, rememberTranscript, workDir, type MusicResultMeta } from "./results";
 import { recordMadeSong } from "./provenance";
 import { musicAdmissionBytes, MusicError, musicGen, SONG_FILE, type MusicRunFields } from "./musicGen";
 
@@ -105,9 +105,11 @@ async function runSong(job: Job, signal: AbortSignal, update: JobProgress): Prom
     };
     update({ status: "ready", percent: 100 });
     commitResult(meta, outputDir);
+    if (song.fields.transcribe && typeof result.transcript === "string") rememberTranscript(job.id, result.transcript);
     rememberLrc(job.id, result.lrc);
     return { job: job.id, model: meta.model, task: meta.task, duration_s: meta.duration_s, seed: meta.seed, ms: meta.ms };
   } catch (error) {
+    if (error instanceof MusicError && error.code === "transcript_unavailable" && existsSync(join(work, "out", SONG_FILE))) rmSync(join(work, "out", SONG_FILE), { force: true });
     if (!signal.aborted && error instanceof MusicError) remember(failures, job.id, { code: error.code, message: error.message, status: error.status });
     else if (!signal.aborted) remember(failures, job.id, { code: "failed", message: error instanceof Error ? error.message : String(error), status: 500 });
     throw error;
@@ -117,6 +119,6 @@ async function runSong(job: Job, signal: AbortSignal, update: JobProgress): Prom
 }
 
 export function registerMusicJobs(): void {
-  registerJobRunner(MUSIC_JOB_KIND, runSong, { generator: { role: "music", memory: (job) => { const bytes = musicAdmissionBytes(undefined, peekSong(String((job.input as { token?: string } | null)?.token ?? ""))?.fields.dit); return { requestedBytes: bytes, measuredPeakBytes: bytes, engine: "music-gen" }; } } });
+  registerJobRunner(MUSIC_JOB_KIND, runSong, { generator: { role: "music", memory: (job) => { const fields = peekSong(String((job.input as { token?: string } | null)?.token ?? ""))?.fields; const bytes = musicAdmissionBytes(undefined, fields?.dit, fields?.transcribe); return { requestedBytes: bytes, measuredPeakBytes: bytes, engine: "music-gen" }; } } });
   registerJobRunner(MUSIC_EDIT_JOB_KIND, runSong, { generator: { role: "music", memory: () => { const bytes = musicAdmissionBytes(); return { requestedBytes: bytes, measuredPeakBytes: bytes, engine: "music-gen" }; } } });
 }

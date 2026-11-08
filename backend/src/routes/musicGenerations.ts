@@ -23,7 +23,7 @@ import { TierFieldSchema, TierStatusSchema, governorDecides, tierInput, tierOf }
 import { PAUSED_LABEL } from "@/lib/genProgress";
 import { fileResponse } from "@/routes/videoGenerations";
 import { wasMadeHere, sha256Hex } from "@/music/provenance";
-import { isJobId, lrcOf, readResult, deleteResult, songPath, type MusicResultMeta } from "@/music/results";
+import { isJobId, lrcOf, takeTranscript, readResult, deleteResult, songPath, type MusicResultMeta } from "@/music/results";
 import {
   memoryVerdict, MUSIC_DEFAULT_SECONDS, MUSIC_MAX_BPM, MUSIC_MAX_EXTEND_SECONDS, MUSIC_MAX_SOURCE_BYTES, MUSIC_MAX_TEXT_CHARS, MUSIC_MIN_BPM, MUSIC_MIN_EXTEND_SECONDS, MUSIC_MIN_SECONDS, MUSIC_LM, MUSIC_MAX_GUIDANCE, MUSIC_MAX_STEPS, MUSIC_QUEUE_MAX,
   musicGen, musicDitFor, musicQualityFor, tierAvailability, tierLimits, type MusicQuality, type MusicRunFields,
@@ -48,6 +48,7 @@ const MusicRequestSchema = z.object({
   caption: z.string().optional().openapi({ description: `Genre, mood, instruments, voice, in words. At most ${MUSIC_MAX_TEXT_CHARS} characters.` }),
   lyrics: z.string().optional().openapi({ description: `The words, in ACE-Step's tagged form ([Verse], [Chorus]). At most ${MUSIC_MAX_TEXT_CHARS} characters. Left out: an instrumental.` }),
   instrumental: z.boolean().optional(),
+  transcribe: z.boolean().optional().openapi({ description: "Transcribe the finished song locally and return the words once in this job result. Missing or empty transcription of a sung song fails the job without delivering audio." }),
   duration_s: z.number().optional().openapi({ description: `text2music only: ${MUSIC_MIN_SECONDS} to the tier's longest (240 on p128, 120 on p64), default ${MUSIC_DEFAULT_SECONDS}.` }),
   bpm: z.number().optional(), key: z.string().optional(), language: z.string().optional(),
   seed: z.number().int().min(0).max(4_294_967_295).optional(),
@@ -70,6 +71,7 @@ const MusicDataSchema = z.object({
   task: z.string().openapi({ description: "text2music, cover, repaint, extend, or for an edit trim, fade or loudness." }),
   ms: z.number().int(), bytes: z.number().int(),
   lrc: z.string().nullable().openapi({ description: "Lyric timings (LRC) for a sung song, held in memory only for as long as the song is held; null for an instrumental, an edit, or after a restart." }),
+  transcript: z.string().optional().openapi({ description: "When requested, the locally transcribed words, returned once to the caller of this job and never persisted or logged." }),
 });
 const MusicResponseSchema = z.object({ created: z.number().int(), job: z.string(), data: z.array(MusicDataSchema) });
 const ErrorBody = z.object({ error: z.string(), code: z.string(), job: z.string().optional() });
@@ -95,7 +97,7 @@ const postRoute = createRoute({ method: "post", path: "/", tags: ["Music"], summ
   422: { content: { "application/json": { schema: ErrorBody } }, description: "The request cannot be done: bad_request, bad_range, too_long, source_not_made_here; `error` says what to change." },
   429: { content: { "application/json": { schema: ErrorBody } }, description: "Four songs are already waiting (queue_full)." },
   499: { content: { "application/json": { schema: ErrorBody } }, description: "The job was cancelled." },
-  500: { content: { "application/json": { schema: ErrorBody } }, description: "The song failed (failed, worker_stopped)." },
+  500: { content: { "application/json": { schema: ErrorBody } }, description: "The song failed (failed, worker_stopped, transcript_unavailable). When transcription was requested but unavailable, no audio is delivered." },
   503: { content: { "application/json": { schema: ErrorBody } }, description: "Music is off on this computer (not_available_on_this_computer, unsupported), not installed (not_installed), or there is no free memory for it (no_memory)." },
   504: { content: { "application/json": { schema: ErrorBody } }, description: "The song took longer than 10 minutes and was stopped (timeout)." },
   507: { content: { "application/json": { schema: ErrorBody } }, description: "The computer ran out of memory while making the song (out_of_memory)." },
@@ -121,7 +123,8 @@ function reply<T extends Context>(c: T, body: unknown, status: number) {
 const fail = <T extends Context>(c: T, status: number, code: string, error: string, job?: string) => reply(c, { error, code, ...(job ? { job } : {}) }, status);
 
 function entry(meta: MusicResultMeta) {
-  return { url: `/v1/audio/music/${meta.job}/file`, content_type: "audio/mp4" as const, duration_s: meta.duration_s, seed: meta.seed, model: meta.model, task: meta.task, ms: meta.ms, bytes: meta.bytes, lrc: lrcOf(meta.job) };
+  const transcript = takeTranscript(meta.job);
+  return { url: `/v1/audio/music/${meta.job}/file`, content_type: "audio/mp4" as const, duration_s: meta.duration_s, seed: meta.seed, model: meta.model, task: meta.task, ms: meta.ms, bytes: meta.bytes, lrc: lrcOf(meta.job), ...(transcript !== undefined ? { transcript } : {}) };
 }
 
 /** Bytes of a base64 or data: URL song, or null when it is not valid base64. */
@@ -150,7 +153,7 @@ export function validateMusicRequest(body: z.infer<typeof MusicRequestSchema>, t
   if ((body.title ?? "").length > MAX_TITLE_CHARS || (body.key ?? "").length > 20 || (body.language ?? "").length > 20) return refuse(422, "too_long", "The title, key or language is too long. Shorten it.");
   if (body.bpm !== undefined && (body.bpm < MUSIC_MIN_BPM || body.bpm > MUSIC_MAX_BPM)) return refuse(422, "bad_range", `The tempo must be ${MUSIC_MIN_BPM} to ${MUSIC_MAX_BPM} beats a minute.`);
   const common = {
-    task: body.task, ...(caption ? { caption } : {}), ...(lyrics ? { lyrics } : {}), ...(body.instrumental !== undefined ? { instrumental: body.instrumental } : {}),
+    task: body.task, ...(caption ? { caption } : {}), ...(lyrics ? { lyrics } : {}), ...(body.instrumental !== undefined ? { instrumental: body.instrumental } : {}), ...(body.transcribe ? { transcribe: true } : {}),
     ...(body.bpm !== undefined ? { bpm: Math.round(body.bpm) } : {}), ...(body.key ? { key: body.key } : {}), ...(body.language ? { language: body.language } : {}),
     ...(body.seed !== undefined ? { seed: body.seed } : {}), ...(body.title ? { title: body.title } : {}),
   };
@@ -246,7 +249,7 @@ musicV1Routes.openapi(postRoute, async (c) => {
   const edit = body.task === "edit";
   if (!edit) {
     if (activeSongs() >= MUSIC_QUEUE_MAX) return fail(c, 429, "queue_full", `${MUSIC_QUEUE_MAX} songs are already waiting. Try again when one finishes.`);
-    const verdict = governorDecides(body.tier) ? { ok: true as const } : memoryVerdict(checked.fields.dit);
+    const verdict = governorDecides(body.tier) ? { ok: true as const } : memoryVerdict(checked.fields.dit, checked.fields.transcribe);
     if (!verdict.ok) return fail(c, 503, "no_memory", verdict.reason);
   }
   const fields = checked.fields;
@@ -254,7 +257,7 @@ musicV1Routes.openapi(postRoute, async (c) => {
   const token = crypto.randomUUID();
   stashSong(token, { fields: { ...fields, ...(seed !== undefined ? { seed } : {}) }, source, historyKey: musicHistoryKey(body.task, fields.duration_s) });
   // The job record holds the task, length, quality and seed, never a word of the request.
-  const submitted = submitJob({ kind: edit ? MUSIC_EDIT_JOB_KIND : MUSIC_JOB_KIND, role: "music", input: { token, task: body.task, ...(fields.duration_s !== undefined ? { duration_s: fields.duration_s } : {}), ...(checked.quality ? { quality: checked.quality } : {}), ...(seed !== undefined ? { seed } : {}), ...tierInput(body.tier) } });
+  const submitted = submitJob({ kind: edit ? MUSIC_EDIT_JOB_KIND : MUSIC_JOB_KIND, role: "music", input: { token, task: body.task, ...(fields.transcribe ? { transcribe: true } : {}), ...(fields.duration_s !== undefined ? { duration_s: fields.duration_s } : {}), ...(checked.quality ? { quality: checked.quality } : {}), ...(seed !== undefined ? { seed } : {}), ...tierInput(body.tier) } });
   if ("refused" in submitted) { unstashSong(token); return fail(c, 503, submitted.code ?? "unsupported", submitted.reason); }
   const settled = await waitForJob(submitted.job.id, body.timeout_ms ?? DEFAULT_WAIT_MS);
   const created = Math.floor(new Date(submitted.job.createdAt).getTime() / 1000);

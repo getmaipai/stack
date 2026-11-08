@@ -18,13 +18,13 @@
     "p32.ai_required_free_bytes": 33020007694,
     "p64.required_free_bytes": 119582252957,
     "p64.minimum_required_free_bytes": 56636960034,
-    "p64.everything_required_free_bytes": 212764717875,
+    "p64.everything_required_free_bytes": 214701625448,
     "p64.needed_bytes": 100392115150,
     "p64.home_required_free_bytes": 3176323277,
     "p64.ai_required_free_bytes": 116405929680,
     "p128.required_free_bytes": 154248571506,
     "p128.minimum_required_free_bytes": 56636960034,
-    "p128.everything_required_free_bytes": 498141533629,
+    "p128.everything_required_free_bytes": 500078441202,
     "p128.needed_bytes": 129407177718,
     "p128.home_required_free_bytes": 3176323277,
     "p128.ai_required_free_bytes": 151072248229
@@ -1231,6 +1231,26 @@
           "basis": "pins"
         },
         {
+          "id": "music-transcribe",
+          "label": "Check sung words (Whisper)",
+          "note": "Transcribes finished songs for Home to check. Optional, about 1.6 GB.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 1614089644,
+          "installed_bytes": 1614089644,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "whisper-large-v3-turbo"
+          ],
+          "engines": [
+            "engine:music",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "stems",
           "label": "Split songs into stems (HTDemucs)",
           "note": "Separates songs made in Home into vocals, drums, bass and other. Recommended, about 0.3 GB.",
@@ -1548,11 +1568,11 @@
         "required_free_bytes": 56636960034
       },
       "everything": {
-        "download_bytes": 160803056687,
-        "installed_bytes": 167082951569,
+        "download_bytes": 162417146331,
+        "installed_bytes": 168697041213,
         "peak_temp_bytes": 12265175992,
-        "needed_bytes": 179348127561,
-        "required_free_bytes": 212764717875
+        "needed_bytes": 180962217205,
+        "required_free_bytes": 214701625448
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -2011,6 +2031,26 @@
           "model_ids": [
             "ace-step-1-5-turbo",
             "ace-step-1-5-lm-0-6b"
+          ],
+          "engines": [
+            "engine:music",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "music-transcribe",
+          "label": "Check sung words (Whisper)",
+          "note": "Transcribes finished songs for Home to check. Optional, about 1.6 GB.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 1614089644,
+          "installed_bytes": 1614089644,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "whisper-large-v3-turbo"
           ],
           "engines": [
             "engine:music",
@@ -2500,11 +2540,11 @@
         "required_free_bytes": 56636960034
       },
       "everything": {
-        "download_bytes": 395732818014,
-        "installed_bytes": 403801608024,
+        "download_bytes": 397346907658,
+        "installed_bytes": 405415697668,
         "peak_temp_bytes": 13579604000,
-        "needed_bytes": 417381212024,
-        "required_free_bytes": 498141533629
+        "needed_bytes": 418995301668,
+        "required_free_bytes": 500078441202
       },
       "measured_on": "2026-10-17",
       "default_selected": [

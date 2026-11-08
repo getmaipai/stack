@@ -4904,6 +4904,10 @@
                   "instrumental": {
                     "type": "boolean"
                   },
+                  "transcribe": {
+                    "type": "boolean",
+                    "description": "Transcribe the finished song locally and return the words once in this job result. Missing or empty transcription of a sung song fails the job without delivering audio."
+                  },
                   "duration_s": {
                     "type": "number",
                     "description": "text2music only: 10 to the tier's longest (240 on p128, 120 on p64), default 60."
@@ -5081,6 +5085,10 @@
                             "type": "string",
                             "nullable": true,
                             "description": "Lyric timings (LRC) for a sung song, held in memory only for as long as the song is held; null for an instrumental, an edit, or after a restart."
+                          },
+                          "transcript": {
+                            "type": "string",
+                            "description": "When requested, the locally transcribed words, returned once to the caller of this job and never persisted or logged."
                           }
                         },
                         "required": [
@@ -5159,6 +5167,10 @@
                             "type": "string",
                             "nullable": true,
                             "description": "Lyric timings (LRC) for a sung song, held in memory only for as long as the song is held; null for an instrumental, an edit, or after a restart."
+                          },
+                          "transcript": {
+                            "type": "string",
+                            "description": "When requested, the locally transcribed words, returned once to the caller of this job and never persisted or logged."
                           }
                         },
                         "required": [
@@ -5285,7 +5297,7 @@
             }
           },
           "500": {
-            "description": "The song failed (failed, worker_stopped).",
+            "description": "The song failed (failed, worker_stopped, transcript_unavailable). When transcription was requested but unavailable, no audio is delivered.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5514,6 +5526,10 @@
                             "type": "string",
                             "nullable": true,
                             "description": "Lyric timings (LRC) for a sung song, held in memory only for as long as the song is held; null for an instrumental, an edit, or after a restart."
+                          },
+                          "transcript": {
+                            "type": "string",
+                            "description": "When requested, the locally transcribed words, returned once to the caller of this job and never persisted or logged."
                           }
                         },
                         "required": [
@@ -19816,7 +19832,7 @@
                             "reason",
                             "peak_gb"
                           ],
-                          "description": "Whether a song could be admitted next to what is resident now."
+                          "description": "Whether a song could be admitted next to what is resident now. A requested sung-words transcript adds 2 GB to the admission peak."
                         },
                         "model": {
                           "type": "object",
@@ -19831,6 +19847,17 @@
                           "required": [
                             "id",
                             "installed"
+                          ]
+                        },
+                        "transcribe": {
+                          "type": "object",
+                          "properties": {
+                            "available": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "available"
                           ]
                         },
                         "limits": {
@@ -20161,6 +20188,7 @@
                         "tier",
                         "memory",
                         "model",
+                        "transcribe",
                         "limits",
                         "quality",
                         "default_quality",

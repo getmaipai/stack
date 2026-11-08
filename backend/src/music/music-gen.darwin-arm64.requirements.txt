@@ -1,7 +1,11 @@
 # Compiled 2026-10-17 with uv 0.12.17 (the same recipe as the voice engines, the image tools and video):
 #    MACOSX_DEPLOYMENT_TARGET=14.0 uv pip compile requirements.in --generate-hashes --no-annotate --python-platform aarch64-apple-darwin --python-version 3.12
-# with requirements.in = ACE-Step 1.5's own uv.lock as installed on the Studio (124 packages: torch 2.10.0, mlx 0.30.6, mlx-lm 0.29.1), plus imageio-ffmpeg==0.6.0
-# (the bundled ffmpeg that encodes the AAC file; the same one the video engine uses). ACE-Step itself is the pinned source archive, not a wheel.
+# with requirements.in = ACE-Step 1.5's own uv.lock as installed on the Studio (124 packages: torch 2.10.0, mlx 0.30.6, mlx-lm 0.29.1), plus imageio-ffmpeg==0.6.0, mlx-whisper==0.4.3 and tiktoken==0.12.0.
+# imageio-ffmpeg supplies the AAC encoder; the other two packages support optional local song transcription. ACE-Step itself is the pinned source archive, not a wheel.
+mlx-whisper==0.4.3 \
+    --hash=sha256:6b82b6597a994643a3e5496c7bc229a672e5ca308458455bfe276e76ae024489
+tiktoken==0.12.0 \
+    --hash=sha256:2b90f5ad190a4bb7c3eb30c5fa32e1e182ca1ca79f05e49b448438c3e225a49b
 absl-py==2.4.0 \
     --hash=sha256:88476fd881ca8aab94ffa78b7b6c632a782ab3ba1cd19c9bd423abc4fb4cd28d \
     --hash=sha256:8c6af82722b35cf71e0f4d1d47dcaebfff286e27110a99fc359349b247dfb5d4

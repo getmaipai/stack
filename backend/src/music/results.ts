@@ -1,7 +1,7 @@
 // MUSIC-GEN-02: where a finished song waits for Home to fetch it. One folder
 // per job under data/music/results/<job>/ holding `song.m4a` (AAC-LC, 48 kHz
 // stereo, faststart) and `meta.json` (seed, task, model, duration, timings).
-// Neither the description, the lyrics, the title nor the lyric timings are
+// Neither the description, the lyrics, the title, the transcript nor the lyric timings are
 // ever written here (rule 6a): a record of what a person asked for is Home's,
 // not the Stack's. Songs are held about ten minutes and the six newest; Home
 // stores the file as an attachment and deletes the result the moment it has it.
@@ -36,6 +36,18 @@ export function resultDir(job: string): string {
 export function workDir(job: string): string { return join(dataDir, "tmp", "music", job); }
 export const songPath = (job: string): string => join(resultDir(job), "song.m4a");
 
+/** One-shot transcript delivery, in memory only; absent after the first result response. */
+const transcripts = new Map<string, { value: string; timer: ReturnType<typeof setTimeout> }>();
+function dropTranscript(job: string): void { const entry = transcripts.get(job); if (entry) clearTimeout(entry.timer); transcripts.delete(job); }
+export function rememberTranscript(job: string, transcript: string): void {
+  dropTranscript(job);
+  const timer = setTimeout(() => transcripts.delete(job), keepMs());
+  timer.unref?.();
+  transcripts.set(job, { value: transcript, timer });
+  while (transcripts.size > 12) dropTranscript(transcripts.keys().next().value as string);
+}
+export function takeTranscript(job: string): string | undefined { const entry = transcripts.get(job); if (!entry) return undefined; dropTranscript(job); return entry.value; }
+
 /** The lyric timings of the songs in the result store, in memory only: the words are the person's, so they are never written to disk. A restart loses them (the answer then carries `lrc: null`). */
 const lrcs = new Map<string, string>();
 export function rememberLrc(job: string, lrc: string | null): void {
@@ -61,13 +73,14 @@ export function readResult(job: string, now = Date.now()): MusicResultMeta | nul
   if (!isJobId(job)) return null;
   try {
     const meta = JSON.parse(readFileSync(join(resultDir(job), "meta.json"), "utf8")) as MusicResultMeta;
-    if (!existsSync(songPath(job))) return null;
+    if (!existsSync(songPath(job))) { dropTranscript(job); return null; }
     if (now - statSync(resultDir(job)).mtimeMs > keepMs()) { deleteResult(job); return null; }
     return meta;
-  } catch { return null; }
+  } catch { dropTranscript(job); return null; }
 }
 
 export function deleteResult(job: string): boolean {
+  dropTranscript(job);
   lrcs.delete(job);
   if (!isJobId(job) || !existsSync(resultDir(job))) return false;
   rmSync(resultDir(job), { recursive: true, force: true });
@@ -81,7 +94,7 @@ export function sweepResults(now = Date.now()): number {
   try { entries = readdirSync(resultsRoot()).filter(isJobId).map((job) => ({ job, at: statSync(join(resultsRoot(), job)).mtimeMs })); } catch { return 0; }
   entries.sort((a, b) => b.at - a.at);
   entries.forEach((entry, index) => {
-    if (index >= keepNewest() || now - entry.at > keepMs()) { rmSync(join(resultsRoot(), entry.job), { recursive: true, force: true }); lrcs.delete(entry.job); removed += 1; }
+    if (index >= keepNewest() || now - entry.at > keepMs()) { rmSync(join(resultsRoot(), entry.job), { recursive: true, force: true }); lrcs.delete(entry.job); dropTranscript(entry.job); removed += 1; }
   });
   return removed;
 }

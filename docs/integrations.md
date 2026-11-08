@@ -698,14 +698,14 @@ lrc }] }`, or 202 `{ created, job, data: [] }` when the song is still going at `
 `text2music`, `cover`, `repaint`, `extend`, `edit`), `caption` (style, mood, instruments, voice), `lyrics` (ACE-Step's tagged form), `instrumental`, `duration_s`
 (`text2music` only: 10 to the tier's longest, default 60), `bpm` (30 to 300), `key`, `language`, `seed`, `quality`, `source` (base64 of an m4a this Stack made,
 unchanged; at most 40 MB) with `source_sha256`, `from_s` and `to_s` (`repaint`: at least 2 s), `add_s` (`extend`: 5 to 120 s, default 20; `at` is `end` or `start`),
-`strength` (`cover`: 0.1 to 1, default 0.6), `edit` (`{ op: trim | fade | loudness, from_s, to_s, seconds, where, lufs }`), `title` (written into the file), `timeout_ms`.
+`strength` (`cover`: 0.1 to 1, default 0.6), `transcribe` (optional boolean; returns the locally transcribed words once to this job's caller and fails closed with `transcript_unavailable` if sung words cannot be read), `edit` (`{ op: trim | fade | loudness, from_s, to_s, seconds, where, lufs }`), `title` (written into the file), `timeout_ms`.
 A `text2music` song needs a `caption` or `lyrics` (an instrumental needs a `caption`); the other tasks need `source`, and `repaint` needs `from_s` and `to_s`. The
 chat model writes the lyrics; the Stack never asks ACE-Step to. Errors carry `error` (what happened and what to do) and `code`: 413 `too_large`; 422 `bad_request`
 `bad_range` `too_long` (4000 characters of `caption` or `lyrics`) `source_not_made_here`; 429 `queue_full` (four songs already waiting); 499 `cancelled`; 500 `failed`
 `worker_stopped`; 503 `not_available_on_this_computer` `unsupported` `not_installed` `no_memory` `setup_failed` `model_missing`; 504 `timeout` (10 minutes); 507
 `out_of_memory`. A body that breaks the schema (an unknown `task`, a negative seed) is a plain 400.
 
-`GET /v1/audio/music/{job}` returns `{ job, state, phase, progress, progress_fraction, stage, stage_label, eta_seconds, position, error, code, data }`. `state` is `queued`,
+`GET /v1/audio/music/{job}` returns `{ job, state, phase, progress, progress_fraction, stage, stage_label, eta_seconds, position, error, code, data }`. When `transcribe: true` was sent, `data[0].transcript` contains the locally transcribed sung words once; it is held in memory and removed after delivery or result expiry. `state` is `queued`,
 `running`, `done`, `failed` or `cancelled`. `stage` is `load`, `plan`, `music`, `mix` or `save` and `stage_label` says it in plain words: "Getting ready", "Planning the
 song", "Making the music", "Mixing it down", "Saving". `progress_fraction` (0 to 1, never goes back) is weighted by measured stage times and `progress` is the same as a whole
 percent; `eta_seconds` is whole seconds left, from the medians of the last seven jobs of the same task and length kept as numbers in `data/gen-history.json` (the built-in
@@ -726,15 +726,15 @@ no way to bring a recording in (Home's note, section 9: no uploaded audio and no
 admission, but it goes through the same single chain as a song, so the worker is never shared: an edit sent while a song is being made starts when the song ends.
 
 Memory: a song holds one governor admission through the generator queue (one generator job at a time across pictures, video and music; the loser shows `waiting for memory`)
-of `MUSIC_PEAK_BYTES` (33 GB: the measured 32 GB peak of a 240 s detailed song plus a gigabyte). A song that can never fit beside what is resident is 503 `no_memory` at once, and so is any song while
+of `MUSIC_PEAK_BYTES` (33 GB: the measured 32 GB peak of a 240 s detailed song plus a gigabyte; a requested transcript adds 2 GB, for 35 GB total). XL qualities reserve 52 GB, or 54 GB with a transcript. A song that can never fit beside what is resident is 503 `no_memory` at once, and so is any song while
 the memory watchdog's level is not `normal`. Four songs may be waiting (429 `queue_full`).
 
-`GET /stack/v1/music` returns `{ music: { state, available, code, reason, tier, memory, model, limits, quality, default_quality, tasks, worker, environment, install } }` for Home
+`GET /stack/v1/music` returns `{ music: { state, available, code, reason, tier, memory, model, transcribe: { available }, limits, quality, default_quality, tasks, worker, environment, install } }` for Home
 to enable its control: `state` is `unsupported`, `off` (this tier), `not-installed` (the model files are missing), `needs-setup` (installed; the first song builds the environment
 and starts the worker), `building`, `idle` (the worker waits five minutes for the next song, then exits) or `running`. `limits` holds `min_seconds` (10), `max_seconds` (the tier's, 0 when
 off), `default_seconds`, `min_bpm`, `max_bpm`, `min_extend_seconds`, `max_extend_seconds`, `max_text_chars`, `max_source_mb` and `queue_max`; `quality` is the list this tier offers
 and `default_quality` the one used when a request names none. `install.models` lists the two pins (the 10.1 GB ACE-Step folder, with the 1.7B planning LM, and the 1.37 GB 0.6B
-planning LM) shaped as install-plan models to post to `POST /stack/v1/models`, and `POST /stack/v1/engines/music-gen/install` builds the pinned ACE-Step source and the
+planning LM) shaped as install-plan models to post to `POST /stack/v1/models`; the optional Whisper large-v3-turbo MIT model is a separate music component. `transcribe.available` is true only when its verified files and `mlx-whisper` runtime are installed. `POST /stack/v1/engines/music-gen/install` builds the pinned ACE-Step source and the
 environment ahead of the first song. The `music` component (`GET /stack/v1/components`, group `music`, "Music: ACE-Step 1.5", optional, `p64` and `p128`) installs and removes
 both. The `music` role in `GET /stack/v1/roles` follows the same facts: `notInstalled`, `installed`, `loaded` (the worker is up), `ready` (a song finished in the last hour).
 The worker is handed a checkpoints folder the Stack assembles with links from the two pinned model folders; ACE-Step writes its own model code (two .py files) into the DiT

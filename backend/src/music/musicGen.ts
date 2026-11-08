@@ -34,7 +34,7 @@ import { ensureEngine } from "@/lib/engineInstall";
 import { getGovernorStatus } from "@/lib/governor";
 import { log } from "@/lib/log";
 import { getModel } from "@/lib/modelStore";
-import { STACK_MUSIC_LM_06_ID, STACK_MUSIC_LM_4B_ID, STACK_MUSIC_MODEL_ID, STACK_MUSIC_SFT_CONFIG_ID, STACK_MUSIC_SFT_ID, STACK_MUSIC_XL_CONFIG_ID, STACK_MUSIC_XL_ID } from "@/lib/modelCatalog";
+import { STACK_MUSIC_LM_06_ID, STACK_MUSIC_LM_4B_ID, STACK_MUSIC_MODEL_ID, STACK_MUSIC_SFT_CONFIG_ID, STACK_MUSIC_SFT_ID, STACK_MUSIC_WHISPER_ID, STACK_MUSIC_XL_CONFIG_ID, STACK_MUSIC_XL_ID } from "@/lib/modelCatalog";
 import { engineTagRoot } from "@/lib/store/layout";
 import { ensureUvEnvironment, managedEnv, uvEnvironmentReady, uvVenvPath, uvVenvPython, type UvEnvironmentSpec } from "@/lib/uvEnvironment";
 import type { RoleStateRecord } from "@/roles";
@@ -62,14 +62,14 @@ export const MUSIC_PEAK_BYTES = 33_000_000_000;
 /** The same for a song made with an XL song model (Boost or Max), which the worker runs in float32: 45.1 GB for Boost and 50.3 GB for Max measured
  * on the Studio, 2026-11-02 (40 s songs), with a gigabyte and a half of margin. */
 export const MUSIC_XL_PEAK_BYTES = 52_000_000_000;
-export function musicPeakBytes(dit?: string): number { return dit === MUSIC_XL_DIT || dit === MUSIC_SFT_DIT ? MUSIC_XL_PEAK_BYTES : MUSIC_PEAK_BYTES; }
+export function musicPeakBytes(dit?: string, transcribe = false): number { const peak = dit === MUSIC_XL_DIT || dit === MUSIC_SFT_DIT ? MUSIC_XL_PEAK_BYTES : MUSIC_PEAK_BYTES; return peak + (transcribe ? 2_000_000_000 : 0); }
 /** What a warm worker (models loaded, between songs) already holds: 21 to 25 GB measured on the Studio, the low end taken. A song
  * on a warm worker only needs the rest of its peak; asking for the whole peak again counted the loaded models twice and refused a
  * second song (an edit right after a song) on a Mac with 50 GB free (MUSIC-GEN-06, 2026-10-17). */
 export const MUSIC_WARM_RESIDENT_BYTES = 21_000_000_000;
 /** The admission a song asks the governor for now: the whole peak on a cold start, the rest of it on a warm worker. */
-export function musicAdmissionBytes(warm: boolean = musicGen.workerAlive, dit?: string): number {
-  const peak = musicPeakBytes(dit);
+export function musicAdmissionBytes(warm: boolean = musicGen.workerAlive, dit?: string, transcribe = false): number {
+  const peak = musicPeakBytes(dit, transcribe);
   return warm ? peak - MUSIC_WARM_RESIDENT_BYTES : peak;
 }
 /** Tiers that run music; p16 and p32 keep it in `notAvailable`. */
@@ -95,7 +95,8 @@ const CACHE_GB = 2;
 export class MusicError extends Error {
   constructor(readonly code: string, message: string, readonly status: number) { super(message); }
 }
-const STATUS_BY_CODE: Record<string, number> = { bad_request: 422, model_missing: 503, out_of_memory: 507, timeout: 504, worker_stopped: 500, failed: 500 };
+export const MUSIC_TRANSCRIBE_DEADLINE_MS = 120_000;
+const STATUS_BY_CODE: Record<string, number> = { bad_request: 422, model_missing: 503, out_of_memory: 507, timeout: 504, transcript_unavailable: 500, worker_stopped: 500, failed: 500 };
 
 export function musicRequirementsFileFor(platform = process.platform, arch = process.arch): string | null {
   if (platform === "darwin" && arch === "arm64") return darwinArm64Requirements;
@@ -104,6 +105,7 @@ export function musicRequirementsFileFor(platform = process.platform, arch = pro
 export function musicGenRoot(): string { return engineTagRoot(MUSIC_GEN_NAME, MUSIC_GEN_VERSION); }
 /** A package the sync installs last-ish: proof the environment finished. */
 export function musicGenProof(): string { return join(uvVenvPath(musicGenRoot()), "lib", "python3.12", "site-packages", "mlx_lm", "__init__.py"); }
+export function musicWhisperRuntimeAvailable(): boolean { return musicGenEnvironmentReady() && existsSync(join(uvVenvPath(musicGenRoot()), "lib", "python3.12", "site-packages", "mlx_whisper", "__init__.py")); }
 /** ACE-Step's `acestep` package sits at the root of the extracted source, and the root is the worker's PYTHONPATH. */
 export function musicGenSourceInstalled(): boolean { return existsSync(join(musicGenRoot(), "acestep", "__init__.py")); }
 export function musicGenEnvironmentReady(): boolean { return musicGenSourceInstalled() && uvEnvironmentReady({ name: MUSIC_GEN_NAME, version: MUSIC_GEN_VERSION, root: musicGenRoot(), proof: musicGenProof() }); }
@@ -225,28 +227,28 @@ export function tierLimits(tier: string = getGovernorStatus().tier): { max_secon
 }
 
 /** Whether a song's peak can ever fit beside what is resident right now. A song that cannot is refused now with the numbers; one that only waits on another generator queues. */
-export function memoryVerdict(dit?: string): { ok: true } | { ok: false; reason: string } {
+export function memoryVerdict(dit?: string, transcribe = false): { ok: true } | { ok: false; reason: string } {
   const lowMemory = lowMemoryRefusal();
   if (lowMemory) return { ok: false, reason: lowMemory };
   const status = getGovernorStatus();
   const resident = status.loaded.filter((item) => item.kind === "resident").reduce((sum, item) => sum + item.peakBytes, 0);
-  if (resident + musicAdmissionBytes(undefined, dit) > status.capBytes) return { ok: false, reason: "Not enough free memory for music right now. Close other big jobs, or try again in a few minutes." };
+  if (resident + musicAdmissionBytes(undefined, dit, transcribe) > status.capBytes) return { ok: false, reason: "Not enough free memory for music right now. Close other big jobs, or try again in a few minutes." };
   return { ok: true };
 }
 
 // ---- the worker protocol ----
 
 export interface WorkerRequest {
-  id: string; op?: "edit"; task: string; caption?: string; lyrics?: string; instrumental?: boolean; duration_s?: number; bpm?: number; key?: string; language?: string; seed?: number;
+  id: string; op?: "edit"; task: string; caption?: string; lyrics?: string; instrumental?: boolean; transcribe?: boolean; whisper_dir?: string; duration_s?: number; bpm?: number; key?: string; language?: string; seed?: number;
   lm?: string; dit?: string; steps?: number; guidance?: number; source?: string; from_s?: number; to_s?: number; add_s?: number; at?: "start" | "end"; strength?: number;
   edit?: { op: "trim" | "fade" | "loudness"; from_s?: number; to_s?: number; seconds?: number; where?: "in" | "out" | "both"; lufs?: number };
   output: string; ckpt_dir: string; ffmpeg: string; cache_gb?: number; title?: string; lrc?: boolean;
 }
 export type WorkerEvent = { id: string | null; event: "stage"; stage: "load" | "plan" | "music" | "mix" | "save"; fraction?: number };
-export interface WorkerReply { id: string | null; ok: boolean; code?: string; error?: string; duration_s?: number; seed?: number | null; task?: string; lrc?: string | null; ms?: number; peak_bytes?: number; }
+export interface WorkerReply { id: string | null; ok: boolean; code?: string; error?: string; duration_s?: number; seed?: number | null; task?: string; lrc?: string | null; transcript?: string; ms?: number; peak_bytes?: number; }
 export interface WorkerHandle { send(request: WorkerRequest, options: { onEvent: (event: WorkerEvent) => void; deadlineMs: number }): Promise<WorkerReply>; kill(graceMs?: number): void; exited: Promise<number>; /** ISOLATION-01: the process, for the gate that stops it while chat is working (absent on a scripted worker). */ pausable?: PausableWorker; }
 
-export interface MusicRuntime { ckptDir: string; ffmpeg: string; }
+export interface MusicRuntime { ckptDir: string; ffmpeg: string; whisperDir?: string; }
 export interface MusicGenDeps {
   supported: () => boolean;
   ensureEnvironment: (onProgress: (phase: string) => void, signal?: AbortSignal) => Promise<void>;
@@ -266,7 +268,10 @@ export const defaultMusicGenDeps: MusicGenDeps = {
     if (!paths) throw new MusicError("model_missing", "The music model is not installed yet. Install it from Home's Engines page, then try again.", 503);
     const ffmpeg = musicFfmpegPath();
     if (!ffmpeg) throw new MusicError("failed", "The music tools are not installed on this computer, so the song cannot be saved as a sound file. Install music from Home's Engines page.", 503);
-    return { ckptDir: checkpointDirPath(), ffmpeg };
+    const whisper = getModel(STACK_MUSIC_WHISPER_ID);
+    let whisperDir: string | undefined;
+    try { if (whisper?.verifiedAt && whisper.modelPath && Bun.file(join(whisper.modelPath, "weights.npz")).size > 0 && Bun.file(join(whisper.modelPath, "config.json")).size > 0) whisperDir = whisper.modelPath; } catch { /* missing model */ }
+    return { ckptDir: checkpointDirPath(), ffmpeg, whisperDir };
   },
   spawn: async () => {
     const root = musicGenRoot();
@@ -344,7 +349,7 @@ export type MusicState = "unsupported" | "off" | "not-installed" | "needs-setup"
 /** What a run asks the worker for: the request fields the route validated, and where the song goes. The service adds the id, the output path, the checkpoints folder and ffmpeg. */
 export type MusicRunFields = Omit<WorkerRequest, "id" | "output" | "ckpt_dir" | "ffmpeg" | "cache_gb">;
 export interface MusicRunInput { fields: MusicRunFields; outputDir: string; }
-export interface MusicRunResult { duration_s: number; seed: number | null; task: string; lrc: string | null; ms: number; peakBytes: number | null; }
+export interface MusicRunResult { duration_s: number; seed: number | null; task: string; lrc: string | null; transcript?: string; ms: number; peakBytes: number | null; }
 
 export interface MusicRunOptions {
   signal?: AbortSignal; jobId: string;
@@ -431,6 +436,9 @@ export class MusicGenService {
     const onStage = (stage: string, fraction: number | null) => options.onStage?.(stage, fraction);
     if (options.signal?.aborted) throw new MusicError("cancelled", "Cancelled.", 499);
     if (!this.deps.installed()) throw new MusicError("model_missing", "The music model is not installed yet. Install it from Home's Engines page, then try again.", 503);
+    if (input.fields.transcribe && !input.fields.instrumental && !this.deps.runtime().whisperDir) {
+      throw new MusicError("transcript_unavailable", "The song could not be checked. Make it again.", 500);
+    }
     this.busy += 1;
     if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
     let lease: Lease | undefined;
@@ -440,20 +448,31 @@ export class MusicGenService {
       mkdirSync(input.outputDir, { recursive: true, mode: 0o700 });
       const output = join(input.outputDir, SONG_FILE);
       const runtime = this.deps.runtime();
-      const request: WorkerRequest = { ...input.fields, id: options.jobId, output, ckpt_dir: runtime.ckptDir, ffmpeg: runtime.ffmpeg, cache_gb: CACHE_GB };
+      const request: WorkerRequest = { ...input.fields, id: options.jobId, output, ckpt_dir: runtime.ckptDir, ffmpeg: runtime.ffmpeg, ...(input.fields.transcribe && !input.fields.instrumental && runtime.whisperDir ? { whisper_dir: runtime.whisperDir } : {}), cache_gb: CACHE_GB } as WorkerRequest;
       const aborted = new Promise<never>((_, reject) => {
         const stop = () => { this.stopWorker(2_000); reject(new MusicError("cancelled", "Cancelled.", 499)); };
         if (options.signal?.aborted) stop(); else options.signal?.addEventListener("abort", stop, { once: true });
       });
-      const reply = await Promise.race([worker.send(request, { deadlineMs: deadlineMs(), onEvent: (event) => { if (event.event === "stage") onStage(event.stage, event.fraction ?? null); } }), aborted]);
+      const reply = await Promise.race([worker.send(request, { deadlineMs: deadlineMs() + (input.fields.transcribe ? MUSIC_TRANSCRIBE_DEADLINE_MS : 0), onEvent: (event) => { if (event.event === "stage") onStage(event.stage, event.fraction ?? null); } }), aborted]);
       if (!reply.ok) {
         // A worker that failed mid-song may hold a half-built graph; start the next song from a fresh process.
-        if (reply.code === "out_of_memory" || reply.code === "timeout" || reply.code === "worker_stopped") this.stopWorker();
+        if (reply.code === "out_of_memory" || reply.code === "timeout" || reply.code === "worker_stopped" || (input.fields.transcribe && reply.code === "transcript_unavailable")) this.stopWorker();
+        if (reply.code === "transcript_unavailable") throw new MusicError("transcript_unavailable", "The song could not be checked. Make it again.", 500);
         throw new MusicError(reply.code ?? "failed", reply.error ?? "The song could not be made.", STATUS_BY_CODE[reply.code ?? "failed"] ?? 500);
       }
       if (!existsSync(output)) throw new MusicError("failed", "The music engine finished without a file. Try again.", 500);
+      let transcript: string | undefined;
+      if (input.fields.transcribe) {
+        if (input.fields.instrumental) transcript = "";
+        else if (typeof reply.transcript === "string" && (reply.transcript.trim() || !input.fields.lyrics)) transcript = reply.transcript.trim();
+        if (transcript === undefined) {
+          rmSync(output, { force: true });
+          this.stopWorker();
+          throw new MusicError("transcript_unavailable", "The song could not be checked. Make it again.", 500);
+        }
+      }
       this.lastSuccessAt = Date.now();
-      return { duration_s: reply.duration_s ?? input.fields.duration_s ?? 0, seed: reply.seed ?? null, task: reply.task ?? input.fields.task, lrc: reply.lrc ?? null, ms: reply.ms ?? 0, peakBytes: reply.peak_bytes ?? null };
+      return { duration_s: reply.duration_s ?? input.fields.duration_s ?? 0, seed: reply.seed ?? null, task: reply.task ?? input.fields.task, lrc: reply.lrc ?? null, ...(input.fields.transcribe ? { transcript } : {}), ms: reply.ms ?? 0, peakBytes: reply.peak_bytes ?? null };
     } finally {
       this.busy -= 1;
       lease?.detach();

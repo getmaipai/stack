@@ -32,6 +32,8 @@ import shutil
 import sys
 import time
 import traceback
+import threading
+from contextlib import redirect_stdout, redirect_stderr
 
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
@@ -50,6 +52,10 @@ AAC_BITRATE = "256k"
 _real_out = sys.stdout
 _current = {"id": None, "stage": None}
 _handlers = {"dit": None, "llm": None, "lm": None, "ckpt": None}
+
+
+class TranscriptUnavailable(RuntimeError):
+    pass
 
 
 def emit(obj):
@@ -341,7 +347,51 @@ def generate(request, workdir):
     stage("save")
     data = _read(audio["path"])
     _encode(audio["path"], request["output"], request["ffmpeg"], request.get("title"))
-    return {"duration_s": round(data.shape[0] / SAMPLE_RATE, 2), "seed": int(used_seed) if used_seed is not None else None, "task": task, "lrc": lrc}
+    transcript = None
+    if request.get("transcribe"):
+        transcript = "" if instrumental else _transcribe(request["output"], request.get("whisper_dir"), request.get("language"))
+    return {"duration_s": round(data.shape[0] / SAMPLE_RATE, 2), "seed": int(used_seed) if used_seed is not None else None, "task": task, "lrc": lrc, **({"transcript": transcript} if transcript is not None else {})}
+
+
+def _transcribe(path, model_dir, language=None):
+    if not model_dir or not os.path.isdir(model_dir) or not os.path.isfile(os.path.join(model_dir, "weights.npz")):
+        raise TranscriptUnavailable("transcript unavailable")
+    result_box = {}
+    error_box = {}
+    def infer():
+        try:
+            with open(os.devnull, "w") as quiet, redirect_stdout(quiet), redirect_stderr(quiet):
+                import mlx_whisper
+                result_box["result"] = mlx_whisper.transcribe(
+                    path, path_or_hf_repo=model_dir, language=(language if isinstance(language, str) and language not in ("", "unknown") else None), word_timestamps=True,
+                    condition_on_previous_text=False, hallucination_silence_threshold=2.0,
+                    compression_ratio_threshold=2.0, no_speech_threshold=0.6,
+                )
+        except BaseException as error:  # noqa: BLE001
+            error_box["error"] = error
+    thread = threading.Thread(target=infer, daemon=True)
+    thread.start()
+    thread.join(120)
+    if thread.is_alive():
+        raise TranscriptUnavailable("transcript unavailable")
+    if error_box:
+        raise TranscriptUnavailable("transcript unavailable") from error_box["error"]
+    result = result_box.get("result")
+    try:
+        if not isinstance(result, dict) or not isinstance(result.get("text"), str):
+            raise TranscriptUnavailable("transcript unavailable")
+        text = result["text"].strip()
+        if not text:
+            raise TranscriptUnavailable("transcript unavailable")
+        return text
+    finally:
+        import gc
+        try:
+            import mlx.core as mx
+            mx.clear_cache()
+        except Exception:
+            pass
+        gc.collect()
 
 
 def _lrc(result, params, request):
@@ -424,10 +474,18 @@ def main():
         except BaseException as error:  # noqa: BLE001 - every failure becomes a reply, the process stays up
             if isinstance(error, (KeyboardInterrupt, SystemExit)):
                 raise
-            code, message = classify(error)
+            if isinstance(error, TranscriptUnavailable):
+                code, message = "transcript_unavailable", "The song could not be checked. Make it again."
+                try:
+                    if os.path.exists(request.get("output", "")):
+                        os.remove(request["output"])
+                except OSError:
+                    pass
+            else:
+                code, message = classify(error)
             sys.stderr.write("music worker: %s (%s) at %s\n" % (code, type(error).__name__, _current["stage"]))
             sys.stderr.flush()
-            if os.environ.get("MUSIC_WORKER_DEBUG") == "1":
+            if os.environ.get("MUSIC_WORKER_DEBUG") == "1" and not isinstance(error, TranscriptUnavailable):
                 traceback.print_exc()
             emit({"id": request.get("id"), "ok": False, "code": code, "error": message})
 

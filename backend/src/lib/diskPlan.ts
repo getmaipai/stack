@@ -11,7 +11,7 @@ import measured from "@/lib/diskPlanMeasured.json";
 import { PROFILE_TIERS, type ProfileTier } from "@/profiles";
 import {
   CHATTERBOX_ENGINE, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS,
-  STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_STEMS_MODELS, STACK_RECORDED_SPEECH_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_MASK_MODELS,
+  STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_STEMS_MODELS, STACK_RECORDED_SPEECH_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_MASK_MODELS,
 } from "@/lib/modelCatalog";
 import { OMLX_OPTIONAL_TIERS } from "@/lib/chatEngines";
 import { plannedPinsFor } from "@/lib/installPlan";
@@ -201,6 +201,7 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   }
   if (!tier.notAvailable.includes("video")) rows.push(modelRow({ id: "video", label: "Make videos (Wan2.2)", note: "Recommended. Makes a short clip from a sentence or a picture.", need: "recommended", engines: ["engine:video", "engine:python"] }, STACK_VIDEO_MODELS));
   if (!tier.notAvailable.includes("music")) rows.push(modelRow({ id: "music", label: "Make music (ACE-Step 1.5)", note: "Makes and changes songs in chat. Optional.", need: "optional", engines: ["engine:music", "engine:python"] }, STACK_MUSIC_MODELS));
+  if (!tier.notAvailable.includes("music")) rows.push(modelRow({ id: "music-transcribe", label: "Check sung words (Whisper)", note: "Transcribes finished songs for Home to check. Optional, about 1.6 GB.", need: "optional", engines: ["engine:music", "engine:python"] }, [STACK_MUSIC_WHISPER]));
   if (!tier.notAvailable.includes("music") && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "music-boost", label: "Clearer songs (ACE-Step XL Turbo)", note: "A larger song model for Boost quality, with clearer voices. Optional, about 10 GB.", need: "optional", engines: ["engine:music", "engine:python"] }, STACK_MUSIC_XL_MODELS));
   if (!tier.notAvailable.includes("music") && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "music-max", label: "Best songs (ACE-Step XL SFT)", note: "The best song model and its larger planning model, for Max quality. Optional, about 18 GB.", need: "optional", engines: ["engine:music", "engine:python"] }, STACK_MUSIC_MAX_MODELS));
   if (!tier.notAvailable.includes("video") && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "video-ltx25", label: "Videos with sound (LTX-2.5)", note: "Clips with a sound track and spoken words, up to 10 seconds. Optional, about 38 GB; it needs the maker's licence accepted once during setup.", need: "optional", engines: ["engine:video-ltx25", "engine:python"] }, STACK_VIDEO_LTX25_MODELS));

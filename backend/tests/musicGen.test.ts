@@ -10,17 +10,21 @@ import { join } from "node:path";
 import { app } from "@/app";
 import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, getGovernorStatus } from "@/lib/governor";
 import { __resetJobsForTests, getJob, listJobs } from "@/lib/jobs";
-import { STACK_MODELS, STACK_MUSIC_LM_06, STACK_MUSIC_MODEL, STACK_MUSIC_MODELS, STACK_MUSIC_XL, STACK_MUSIC_XL_CONFIG, STACK_MUSIC_SFT, STACK_MUSIC_SFT_CONFIG, STACK_MUSIC_LM_4, STACK_MUSIC_MAX_MODELS } from "@/lib/modelCatalog";
+import { STACK_MODELS, STACK_MUSIC_LM_06, STACK_MUSIC_MODEL, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_XL, STACK_MUSIC_XL_CONFIG, STACK_MUSIC_SFT, STACK_MUSIC_SFT_CONFIG, STACK_MUSIC_LM_4, STACK_MUSIC_MAX_MODELS } from "@/lib/modelCatalog";
 import { PROFILE_TIERS } from "@/profiles";
 import { ENGINE_BINARIES, MANAGED_RUNTIMES } from "@/lib/engineCatalog";
 import { registerMusicJobs, musicHistoryKey, stashSong, unstashSong, musicTracker } from "@/music/jobs";
 import { __resetMusicProvenanceForTests, recordMadeSong, sha256Hex, wasMadeHere } from "@/music/provenance";
-import { commitResult, deleteResult, readResult, resultsRoot, sweepResults, workDir, type MusicResultMeta } from "@/music/results";
+import { commitResult, deleteResult, readResult, resultsRoot, sweepResults, workDir, takeTranscript, rememberTranscript, type MusicResultMeta } from "@/music/results";
 import {
-  assembleCheckpointDir, memoryVerdict, MUSIC_DIT, MUSIC_LM, MUSIC_XL_DIT, musicAdmissionBytes, musicDitFor, musicPeakBytes, musicQualityFor, MUSIC_MAX_SECONDS, MUSIC_PEAK_BYTES, musicGen, MusicGenService, musicRequirementsFileFor, musicRoleState, tierAvailability, tierLimits, workerHandle,
+  assembleCheckpointDir, memoryVerdict, MUSIC_DIT, MUSIC_LM, MUSIC_XL_DIT, musicAdmissionBytes, musicDitFor, musicPeakBytes, musicQualityFor, MUSIC_MAX_SECONDS, MUSIC_PEAK_BYTES, MUSIC_XL_PEAK_BYTES, musicGen, MusicGenService, musicRequirementsFileFor, musicRoleState, tierAvailability, tierLimits, workerHandle,
   type MusicGenDeps, type WorkerEvent, type WorkerHandle, type WorkerReply, type WorkerRequest,
 } from "@/music/musicGen";
 import { dataDir } from "@/lib/paths";
+import { logsDir } from "@/lib/paths";
+import { clearModelsForTests, upsertModel } from "@/lib/modelStore";
+import { uvVenvPath } from "@/lib/uvEnvironment";
+import { musicGenRoot } from "@/music/musicGen";
 import { __resetGenHistoryForTests, GenTracker, MUSIC_STAGES } from "@/lib/genProgress";
 import { buildDiskPlan } from "@/lib/diskPlan";
 import { collectComponentsCatalog } from "@/lib/componentsDoc";
@@ -39,7 +43,7 @@ type Script = (request: WorkerRequest, emit: (event: WorkerEvent) => void) => Pr
 const fakeM4a = (seed: string): Uint8Array => new TextEncoder().encode(`\u0000\u0000\u0000 ftypM4A \u0000\u0000\u0000\u0000M4A mp42isom fake-audio-${seed}`);
 const okReply = (request: WorkerRequest): WorkerReply => ({
   id: request.id, ok: true, duration_s: request.duration_s ?? 30, seed: request.seed ?? 5, task: request.op === "edit" ? request.edit?.op : request.task,
-  lrc: request.lrc ? "[00:01.00]SECRET-LYRIC-LINE" : null, ms: 1234, peak_bytes: 20_000_000_000,
+  lrc: request.lrc ? "[00:01.00]SECRET-LYRIC-LINE" : null, ...(request.transcribe && !request.instrumental ? { transcript: "Transcript nonce-MUSICTRANSCRIBE" } : {}), ms: 1234, peak_bytes: 20_000_000_000,
 });
 
 function scripted(script: Script = okReply, over: Partial<MusicGenDeps> = {}): MusicGenDeps {
@@ -143,6 +147,68 @@ test("neither the description, the lyrics, the title nor the lyric timings are k
   const history = join(dataDir, "gen-history.json");
   if (existsSync(history)) expect(readFileSync(history, "utf8")).not.toContain("SECRET");
   expect(requests[0]).toMatchObject({ caption: "SECRET-CAPTION", lyrics: "SECRET-LYRICS-WORDS", title: "SECRET-TITLE" });
+});
+
+test("transcription is one-shot, only for the caller, and never persists or logs transcript text", async () => {
+  musicGen.useDeps(scripted(okReply, { runtime: () => ({ ckptDir: "/models/music", ffmpeg: "/bin/ffmpeg", whisperDir: "/models/whisper" }) }));
+  const response = await post({ ...song, transcribe: true, timeout_ms: 5000 });
+  expect(response.status).toBe(200);
+  const body = await response.json() as { job: string; data: Array<Record<string, unknown>> };
+  expect(body.data[0]?.transcript).toBe("Transcript nonce-MUSICTRANSCRIBE");
+  expect(requests[0]).toMatchObject({ transcribe: true });
+  expect(JSON.stringify(getJob(body.job))).not.toContain("Transcript nonce-MUSICTRANSCRIBE");
+  expect(readFileSync(join(resultsRoot(), body.job, "meta.json"), "utf8")).not.toContain("Transcript nonce-MUSICTRANSCRIBE");
+  for (const name of readdirSync(join(resultsRoot(), body.job))) expect(readFileSync(join(resultsRoot(), body.job, name)).toString()).not.toContain("Transcript nonce-MUSICTRANSCRIBE");
+  const again = await (await get(`/v1/audio/music/${body.job}`)).json() as { data: Array<Record<string, unknown>> };
+  expect(again.data[0]?.transcript).toBeUndefined();
+  const logs = join(logsDir, "stack.log");
+  if (existsSync(logs)) expect(readFileSync(logs, "utf8")).not.toContain("Transcript nonce-MUSICTRANSCRIBE");
+});
+
+test("transcription false leaves the protocol untouched, while instrumental returns an empty transcript", async () => {
+  musicGen.useDeps(scripted());
+  const without = await post({ ...song, timeout_ms: 5000 });
+  expect(without.status).toBe(200);
+  expect(requests[0]!.transcribe).toBeUndefined();
+  const instrumental = await post({ ...song, instrumental: true, transcribe: true, timeout_ms: 5000 });
+  expect(instrumental.status).toBe(200);
+  expect((await instrumental.json() as { data: Array<{ transcript?: string }> }).data[0]!.transcript).toBe("");
+  expect(requests[1]!.whisper_dir).toBeUndefined();
+});
+
+test("transcription failures fail closed and remove any generated file", async () => {
+  musicGen.useDeps(scripted((request) => ({ id: request.id, ok: true, duration_s: 30, seed: 5, task: request.task, ms: 100 }), { runtime: () => ({ ckptDir: "/models/music", ffmpeg: "/bin/ffmpeg", whisperDir: "/models/whisper" }) }));
+  const response = await post({ ...song, transcribe: true, timeout_ms: 5000 });
+  expect(response.status).toBe(500);
+  expect(await codeOf(response)).toBe("transcript_unavailable");
+  expect(existsSync(resultsRoot())).toBe(false);
+  expect(existsSync(requests.at(-1)!.output)).toBe(false);
+});
+
+test("a missing whisper model and a worker transcription error both report transcript_unavailable", async () => {
+  musicGen.useDeps(scripted());
+  const missing = await post({ ...song, transcribe: true, timeout_ms: 5000 });
+  expect(await codeOf(missing)).toBe("transcript_unavailable");
+  expect(requests).toHaveLength(0);
+  musicGen.useDeps(scripted((request) => ({ id: request.id, ok: false, code: "transcript_unavailable", error: "The song could not be checked. Make it again." }), { runtime: () => ({ ckptDir: "/models/music", ffmpeg: "/bin/ffmpeg", whisperDir: "/models/whisper" }) }));
+  const failed = await post({ ...song, transcribe: true, timeout_ms: 5000 });
+  expect(await codeOf(failed)).toBe("transcript_unavailable");
+  expect(existsSync(resultsRoot())).toBe(false);
+});
+
+test("the in-memory transcript is discarded when the result expires", () => {
+  const job = "job-12345678-1234-1234-1234-123456789abc";
+  process.env.MUSIC_RESULT_TTL_MS = "1";
+  const meta = { job, created: Date.now() / 1000, task: "text2music", duration_s: 10, seed: 1, model: "music", ms: 1, bytes: 1, mlx_peak_gb: null };
+  const work = workDir(job);
+  mkdirSync(work, { recursive: true });
+  writeFileSync(join(work, "song.m4a"), fakeM4a(job));
+  commitResult(meta, work);
+  rememberTranscript(job, "expiry nonce");
+  utimesSync(join(resultsRoot(), job), new Date(Date.now() - 5000), new Date(Date.now() - 5000));
+  sweepResults();
+  expect(takeTranscript(job)).toBeUndefined();
+  delete process.env.MUSIC_RESULT_TTL_MS;
 });
 
 test("past timeout_ms the answer is 202; the status shows the stage in words with a fraction that only rises and a time left; cancel stops the worker and returns the memory", async () => {
@@ -439,6 +505,7 @@ test("not installed without the model, and refused with the numbers when a song 
   expect(await full.json()).toMatchObject({ code: "no_memory", error: "Not enough free memory for music right now. Close other big jobs, or try again in a few minutes." });
   expect(memoryVerdict().ok).toBe(false);
   expect(MUSIC_PEAK_BYTES).toBe(33_000_000_000);
+  expect(MUSIC_XL_PEAK_BYTES).toBe(52_000_000_000);
 });
 
 // ---- results ----
@@ -493,9 +560,26 @@ test("GET /stack/v1/music says what is installed, what a song may be and what to
   expect(status.music).toMatchObject({ available: true, tier: "p128", state: "needs-setup", code: null, reason: null, quality: ["quick", "detailed", "max"], default_quality: "detailed" });
   expect(status.music.limits).toMatchObject({ min_seconds: 10, max_seconds: 240, default_seconds: 60, min_bpm: 30, max_bpm: 300, max_text_chars: 4000, max_source_mb: 40 });
   expect(status.music.tasks).toEqual(["text2music", "cover", "repaint", "extend", "edit"]);
-  expect(status.music.install.models.map((model: { id: string }) => model.id)).toEqual([STACK_MUSIC_MODEL.id, STACK_MUSIC_LM_06.id]);
+  expect(status.music.install.models.map((model: { id: string }) => model.id)).toEqual([STACK_MUSIC_MODEL.id, STACK_MUSIC_LM_06.id, STACK_MUSIC_WHISPER.id]);
+  expect(status.music.transcribe).toEqual({ available: false });
   expect(status.music.worker.idle_exit_seconds).toBe(300);
   expect(status.music.memory).toMatchObject({ peak_gb: 33 });
+  const whisperPath = join(process.env.STACK_DATA_DIR!, "models", "hub", `models--${STACK_MUSIC_WHISPER.repo!.replaceAll("/", "--")}`, "snapshots", STACK_MUSIC_WHISPER.revision!);
+  mkdirSync(whisperPath, { recursive: true });
+  writeFileSync(join(whisperPath, "weights.npz"), "weights");
+  writeFileSync(join(whisperPath, "config.json"), "{}");
+  upsertModel({ id: STACK_MUSIC_WHISPER.id, roles: ["music"], source: "catalog", provenance: {}, revision: STACK_MUSIC_WHISPER.revision!, sha256: STACK_MUSIC_WHISPER.download!.sha256, licence: "MIT", installedAt: new Date().toISOString(), verifiedAt: new Date().toISOString(), modelPath: whisperPath });
+  const envRoot = join(uvVenvPath(musicGenRoot()), "lib", "python3.12", "site-packages", "mlx_whisper");
+  mkdirSync(join(musicGenRoot(), "acestep"), { recursive: true });
+  writeFileSync(join(musicGenRoot(), "acestep", "__init__.py"), "");
+  writeFileSync(join(musicGenRoot(), ".env-ready"), "");
+  mkdirSync(join(uvVenvPath(musicGenRoot()), "lib", "python3.12", "site-packages", "mlx_lm"), { recursive: true });
+  writeFileSync(join(uvVenvPath(musicGenRoot()), "lib", "python3.12", "site-packages", "mlx_lm", "__init__.py"), "");
+  mkdirSync(envRoot, { recursive: true });
+  writeFileSync(join(envRoot, "__init__.py"), "");
+  musicGen.useDeps(scripted());
+  const available = await (await get("/stack/v1/music")).json() as { music: Record<string, any> };
+  expect(available.music.transcribe).toEqual({ available: true });
   const roles = await (await get("/stack/v1/roles")).json() as { roles: Array<{ id: string; state: { state: string }; endpoints: string[] }> };
   const music = roles.roles.find((role) => role.id === "music")!;
   expect(music.endpoints).toEqual(["/v1/audio/music"]);
@@ -544,8 +628,10 @@ test("the pins are exact: revisions, hashes, file lists that add up, MIT, a comp
   expect(text).toContain("torch==2.10.0");
   expect(text).toContain("mlx-lm==0.29.1");
   expect(text).toContain("imageio-ffmpeg==0.6.0");
+  expect(text).toContain("mlx-whisper==0.4.3");
+  expect(text).toContain("tiktoken==0.12.0");
   expect(text).toContain("--hash=sha256:");
-  expect(text.match(/^[a-z0-9][a-z0-9._-]*==/gim)!.length).toBe(125);
+  expect(text.match(/^[a-z0-9][a-z0-9._-]*==/gim)!.length).toBe(127);
   expect(musicRequirementsFileFor("linux", "x64")).toBeNull();
   const tier = (id: string) => PROFILE_TIERS.find((candidate) => candidate.id === id)!;
   expect(tier("p64").onDemand).toContain("music");
@@ -577,8 +663,11 @@ test("the component is listed in the group music for p64 and p128, optional, wit
   expect(unit).toMatchObject({ id: STACK_MUSIC_MODEL.id, label: "Music: ACE-Step 1.5", summary: "Makes and changes songs in chat", role: "music", tiers: ["p64", "p128"] });
   expect(unit.pins.map((pin) => pin.id)).toEqual([STACK_MUSIC_MODEL.id, STACK_MUSIC_LM_06.id]);
   expect(unit.envs.map((env) => env.name)).toEqual(["music-gen"]);
+  const whisper = componentDefs().find((candidate) => candidate.id === STACK_MUSIC_WHISPER.id)!;
+  expect(whisper).toMatchObject({ label: "Music: sung words check", group: "music", role: "music", tiers: ["p64", "p128"] });
+  expect(whisper.pins.map((pin) => pin.id)).toEqual([STACK_MUSIC_WHISPER.id]);
   const catalog = collectComponentsCatalog();
-  expect(catalog.models.filter((pin) => pin.role === "music").map((pin) => pin.id)).toEqual([STACK_MUSIC_MODEL.id, STACK_MUSIC_LM_06.id, STACK_MUSIC_XL.id, STACK_MUSIC_XL_CONFIG.id, STACK_MUSIC_SFT.id, STACK_MUSIC_SFT_CONFIG.id, STACK_MUSIC_LM_4.id, "htdemucs", "htdemucs_ft", "htdemucs_6s", "mms-fa-align", "soulx-singer-svc", "soulx-singer-rmvpe", "soulx-singer-whisper-base"]);
+  expect(catalog.models.filter((pin) => pin.role === "music").map((pin) => pin.id)).toEqual([STACK_MUSIC_MODEL.id, STACK_MUSIC_LM_06.id, STACK_MUSIC_WHISPER.id, STACK_MUSIC_XL.id, STACK_MUSIC_XL_CONFIG.id, STACK_MUSIC_SFT.id, STACK_MUSIC_SFT_CONFIG.id, STACK_MUSIC_LM_4.id, "htdemucs", "htdemucs_ft", "htdemucs_6s", "mms-fa-align", "soulx-singer-svc", "soulx-singer-rmvpe", "soulx-singer-whisper-base"]);
   const stemsPins = STACK_MODELS.filter((pin) => ["htdemucs", "htdemucs_ft", "htdemucs_6s"].includes(pin.id));
   expect(stemsPins.map((pin) => pin.download?.files?.map((file) => file.sha256))).toEqual([
     ["d9fa14133cfcc034a6758923bb3a8ca9f8dfd0b582134643bbf83f72c17576dd", "239c445d0b14454d541ad8bd9bb271c9e536d267e8a4625208744cbb2e7bb66c"],
@@ -596,6 +685,8 @@ test("the disk plan carries the music rows for the engine and both models on p64
     expect(music).toMatchObject({ need: "optional", selectable: true, model_ids: [STACK_MUSIC_MODEL.id, STACK_MUSIC_LM_06.id], engines: ["engine:music", "engine:python"] });
     expect(music.download_bytes).toBe(STACK_MUSIC_MODELS.reduce((sum, pin) => sum + pin.download!.approx_bytes, 0));
     expect(plan(id).default_selected).not.toContain("music");
+    const transcript = rows.find((row) => row.id === "music-transcribe")!;
+    expect(transcript).toMatchObject({ need: "optional", model_ids: [STACK_MUSIC_WHISPER.id], engines: ["engine:music", "engine:python"] });
     const engine = rows.find((row) => row.id === "engine:music")!;
     expect(engine).toMatchObject({ kind: "engine", installed_bytes: 1_200_000_000, download_bytes: 800_000_000, basis: "estimate" });
   }
@@ -806,4 +897,7 @@ test("MUSIC-MAX-01: a song with an XL song model asks the governor for the XL pe
   expect(musicPeakBytes(MUSIC_DIT.max)).toBe(52_000_000_000);
   expect(musicAdmissionBytes(false, MUSIC_XL_DIT)).toBe(52_000_000_000);
   expect(musicAdmissionBytes(true, MUSIC_DIT.max)).toBe(31_000_000_000);
+  expect(musicPeakBytes(undefined, true)).toBe(35_000_000_000);
+  expect(musicPeakBytes(MUSIC_XL_DIT, true)).toBe(54_000_000_000);
+  expect(musicAdmissionBytes(false, MUSIC_XL_DIT, true)).toBe(54_000_000_000);
 });
