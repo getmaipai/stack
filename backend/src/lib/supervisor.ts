@@ -95,6 +95,8 @@ export interface EngineClient {
    * TTS's /tts), the reply streamed back as is. */
   raw?(path: string, init: { method: string; body?: FormData | string | Uint8Array; headers?: Record<string, string> }, signal?: AbortSignal): Promise<Response>;
   health(): Promise<boolean>;
+  /** ISOLATION-04b: the launch key as a request header, for a caller that talks to the engine directly. */
+  authHeaders?(): Record<string, string>;
 }
 
 export interface RoleProcess {
@@ -2718,7 +2720,7 @@ export async function openRoleSession(requested: RoleId, onRetire: () => void = 
   const session: RoleSession = {
     baseUrl: processRecord.client.baseUrl,
     headers: identityHeaders(processRecord.identity, processRecord.modelRevision),
-    engineHeaders: (processRecord.client as { authHeaders?: () => Record<string, string> }).authHeaders?.() ?? {},
+    engineHeaders: processRecord.client.authHeaders?.() ?? {},
     release() {
       if (released) return;
       released = true;

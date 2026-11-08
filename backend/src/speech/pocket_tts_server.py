@@ -36,7 +36,7 @@ class EngineGuard:
 def main():
     port = int(sys.argv[sys.argv.index("--port") + 1])
     pocket.web_app.add_middleware(EngineGuard)  # added last, so it is outermost: it runs before the CORS layer
-    pocket.serve(host="127.0.0.1", port=port, reload=False, language=None, config=None, default_voice=None, quantize=False)
+    pocket.serve(host="127.0.0.1", port=port, reload=False)  # the other options keep their own defaults, as `pocket-tts serve --host --port` did
 
 
 if __name__ == "__main__":
