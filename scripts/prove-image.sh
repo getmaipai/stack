@@ -42,6 +42,11 @@ trap cleanup EXIT
 
 for _ in $(seq 1 40); do curl -sf "$BASE/healthz" >/dev/null 2>&1 && break; sleep 0.25; done
 curl -sf "$BASE/healthz" >/dev/null || { echo "daemon did not answer"; tail -20 "$LOG"; exit 1; }
+# ISOLATION-04: writes need Home's token; curl reads it from a private config.
+token_file="$DATA/keys/home-view-token"; for _ in $(seq 1 40); do [ -s "$token_file" ] && break; sleep 0.25; done
+[ -s "$token_file" ] || { echo "the Stack made no token file at $token_file"; exit 1; }
+CURL_HOME="$(mktemp -d)"; chmod 700 "$CURL_HOME"; export CURL_HOME
+printf 'header = "x-maipai-home-token: %s"\n' "$(tr -d '\n' < "$token_file")" > "$CURL_HOME/.curlrc"
 
 now() { python3 -c 'import time;print(time.time())'; }
 since() { python3 -c "import time;print(f'{time.time()-$1:.2f}s')"; }

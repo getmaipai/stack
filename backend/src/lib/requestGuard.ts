@@ -43,9 +43,10 @@ export function guardRequest(request: Request): Response | null {
   }
   const origin = request.headers.get("origin");
   if (origin !== null) {
-    let originHost: string | null = null;
-    try { originHost = new URL(origin).host.toLowerCase(); } catch { /* "null" and junk are not an origin we know */ }
-    if (originHost === null || originHost !== (host ?? "").trim().toLowerCase()) {
+    // Both sides go through URL with the Origin's scheme, so a default port (80, 443) is dropped from each the same way.
+    let sameOrigin = false;
+    try { const parsed = new URL(origin); sameOrigin = parsed.host !== "" && parsed.host === new URL(`${parsed.protocol}//${(host ?? "").trim()}`).host; } catch { /* "null" and junk are not an origin we know */ }
+    if (!sameOrigin) {
       return refuse(403, "origin_not_allowed", "The Stack does not take requests from a web page. Use Home, which makes them for you.");
     }
   }
@@ -59,7 +60,11 @@ export function guardRequest(request: Request): Response | null {
   if (presented === null || presented.trim() === "") {
     return refuse(401, "home_token_required", "This request did not carry Home's token, so the Stack did not run it. Make the request through Home. If Home itself got this, restart Home so it reads the Stack's token again.");
   }
-  if (!tokenMatches(presented)) {
+  let matches: boolean;
+  try { matches = tokenMatches(presented); } catch {
+    return refuse(503, "home_token_unavailable", "The Stack could not read or make its token file (keys/home-view-token in its data folder), so it did not run the request. Free some disk space or fix the folder's permissions, then restart the Stack.");
+  }
+  if (!matches) {
     return refuse(401, "home_token_refused", "The Stack does not accept the token Home sent, so it did not run the request. Restart Home so it reads the Stack's current token (the file keys/home-view-token in the Stack's data folder).");
   }
   return null;

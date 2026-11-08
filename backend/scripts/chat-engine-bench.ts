@@ -4,6 +4,7 @@
 //
 //   TARGETS='llama=http://127.0.0.1:8791|model-name|PID,splash=http://127.0.0.1:8792|model-name|PID' bun run bench:chat-engines
 //   DRY_RUN=1 prints the plan. REPEATS (default 5), LONG_WORDS (default 2500), BALLAST_GB (default 0 = skip the lease rows), TOKENS (default 128).
+import "./lib/stackAuth";
 import { loadavg, freemem, totalmem } from "node:os";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";

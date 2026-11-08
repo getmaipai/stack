@@ -19,6 +19,7 @@
 // A watchdog stops the run if the kernel stays at warn pressure (level 2)
 // for three seconds, or reaches critical (level 4) at all: it unloads the
 // role on the scratch Stack and prints what it measured so far.
+import "../lib/stackAuth";
 import { readFileSync } from "node:fs";
 import { extname } from "node:path";
 

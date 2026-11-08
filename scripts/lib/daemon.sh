@@ -21,6 +21,18 @@ daemon_start() {
   echo "daemon pid $DAEMON_PID on port $1, data $2"
   for _ in $(seq 1 40); do curl -sf "$BASE/healthz" >/dev/null 2>&1 && break; sleep 0.25; done
   curl -sf "$BASE/healthz" >/dev/null || { echo "daemon did not answer"; tail -20 "$3"; exit 1; }
+  use_stack_token "$2" || exit 1
+}
+
+# ISOLATION-04: every write to the Stack needs Home's token. After the daemon is up, point curl at a private config that adds it, so each
+# curl call in the calling script carries the header with no change (CURL_HOME/.curlrc). $1 is the Stack's data directory.
+use_stack_token() {
+  local token_file="$1/keys/home-view-token" i
+  for i in $(seq 1 40); do [ -s "$token_file" ] && break; sleep 0.25; done
+  [ -s "$token_file" ] || { echo "the Stack made no token file at $token_file; its log says why"; return 1; }
+  STACK_CURL_HOME="$(mktemp -d)"; chmod 700 "$STACK_CURL_HOME"
+  printf 'header = "x-maipai-home-token: %s"\n' "$(tr -d '\n' < "$token_file")" > "$STACK_CURL_HOME/.curlrc"
+  export CURL_HOME="$STACK_CURL_HOME"
 }
 
 # Stops the daemon: SIGTERM, wait up to 10 s, SIGKILL the whole process

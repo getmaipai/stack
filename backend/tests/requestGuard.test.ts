@@ -49,6 +49,8 @@ test("a page on another origin is refused, a same-origin or absent Origin is not
   expect(localhostPage.status).toBe(403);
   expect((await call("/healthz", { headers: { origin: `http://${hostValue}` } })).status).toBe(200);
   expect((await call("/healthz")).status).toBe(200);
+  expect((await call("/healthz", { headers: { host: "127.0.0.1:80", origin: "http://127.0.0.1:80" } })).status).toBe(200);
+  expect((await call("/healthz", { headers: { host: "127.0.0.1:80", origin: "http://127.0.0.1:81" } })).status).toBe(403);
   const nullOrigin = await call("/healthz", { headers: { origin: "null" } });
   expect(nullOrigin.status).toBe(403);
 });

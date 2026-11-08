@@ -1,3 +1,4 @@
+import "./lib/stackAuth";
 export {};
 const usage = "Usage: bun run scripts/resource-recapture-bench.ts --stack http://127.0.0.1:8770 --kind picture|video|music|stems|all [--wait-seconds N]";
 const args = process.argv.slice(2);

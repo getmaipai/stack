@@ -95,6 +95,11 @@ for _ in $(seq 1 20); do curl -sf "http://127.0.0.1:$VERIFY_PORT/healthz" >/dev/
 if ! curl -sf "http://127.0.0.1:$VERIFY_PORT/healthz"; then
   echo; echo "the compiled binary did not answer /healthz"; tail -30 "$VERIFY_LOG"; exit 1
 fi
+# ISOLATION-04: writes need Home's token; curl reads it from a private config.
+for _ in $(seq 1 40); do [ -s "$VERIFY_DATA/keys/home-view-token" ] && break; sleep 0.25; done
+[ -s "$VERIFY_DATA/keys/home-view-token" ] || { echo "the compiled binary made no token file"; tail -30 "$VERIFY_LOG"; exit 1; }
+CURL_HOME="$(mktemp -d)"; chmod 700 "$CURL_HOME"; export CURL_HOME
+printf 'header = "x-maipai-home-token: %s"\n' "$(tr -d '\n' < "$VERIFY_DATA/keys/home-view-token")" > "$CURL_HOME/.curlrc"
 echo; echo "healthz OK, roles: $(curl -s "http://127.0.0.1:$VERIFY_PORT/stack/v1/roles" | python3 -c "import json,sys;print([r['id'] for r in json.load(sys.stdin)['roles']])")"
 
 if [ "${SKIP_STT_VERIFY:-0}" = "1" ]; then exit 0; fi

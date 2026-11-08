@@ -7,6 +7,7 @@
 //   bun run scripts/install-pin.ts qwen3-vl-4b-instruct-q4-k-m
 // The pin comes from the running Stack's own catalog route, so this
 // script opens no database and reads no settings of its own.
+import "./lib/stackAuth";
 import type { CatalogModelLike } from "@/lib/modelStore";
 
 const id = process.argv[2];
