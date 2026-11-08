@@ -12,21 +12,9 @@
 // that exists now or is added later.
 import { timingSafeEqual } from "node:crypto";
 import { HOME_TOKEN_HEADER, homeViewToken } from "@/lib/adultView";
+import { checkLoopbackCaller, refuse } from "@/lib/loopbackGuard";
 
-const ALLOWED_HOSTNAMES = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
-
-/** The hostname of a Host header value (port removed), lower case; null when it is empty or malformed. */
-function hostnameOf(host: string | null): string | null {
-  const value = (host ?? "").trim().toLowerCase();
-  if (!value) return null;
-  const match = /^(\[[0-9a-f:]+\]|[a-z0-9.-]+)(?::(\d{1,5}))?$/.exec(value);
-  return match ? match[1]! : null;
-}
-
-function refuse(status: number, code: string, error: string, extra: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify({ error, code }), { status, headers: { "content-type": "application/json", "cache-control": "no-store", ...extra } });
-}
 
 function tokenMatches(presented: string | null): boolean {
   if (!presented) return false;
@@ -37,19 +25,8 @@ function tokenMatches(presented: string | null): boolean {
 
 /** A refusal for a request this Stack must not answer, or null when it may go on to the routes. */
 export function guardRequest(request: Request): Response | null {
-  const host = request.headers.get("host");
-  if (!hostnameOf(host) || !ALLOWED_HOSTNAMES.has(hostnameOf(host)!)) {
-    return refuse(421, "host_not_allowed", "The Stack answers only to 127.0.0.1 or localhost. Reach it by that address from this computer, or through Home.");
-  }
-  const origin = request.headers.get("origin");
-  if (origin !== null) {
-    // Both sides go through URL with the Origin's scheme, so a default port (80, 443) is dropped from each the same way.
-    let sameOrigin = false;
-    try { const parsed = new URL(origin); sameOrigin = parsed.host !== "" && parsed.host === new URL(`${parsed.protocol}//${(host ?? "").trim()}`).host; } catch { /* "null" and junk are not an origin we know */ }
-    if (!sameOrigin) {
-      return refuse(403, "origin_not_allowed", "The Stack does not take requests from a web page. Use Home, which makes them for you.");
-    }
-  }
+  const loopback = checkLoopbackCaller(request);
+  if (loopback) return loopback;
   if (READ_METHODS.has(request.method.toUpperCase())) return null;
 
   const contentType = (request.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();

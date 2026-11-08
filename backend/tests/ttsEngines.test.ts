@@ -193,14 +193,18 @@ test("a Chatterbox engine that exits before it is healthy never fails the voice:
   const stub = "#!" + process.execPath + `
 const port = Number(process.argv[process.argv.indexOf("--port") + 1]);
 const header = new Uint8Array(44); new TextEncoder().encodeInto("RIFF", header);
+// ISOLATION-04b: the Stack gives the child a launch key in its environment and must send it as a bearer token on everything but /health.
+const key = process.env.STACK_ENGINE_KEY;
 Bun.serve({ port, hostname: "127.0.0.1", async fetch(request) {
   const path = new URL(request.url).pathname;
   if (path === "/health") return Response.json({ status: "healthy" });
+  if (!key || request.headers.get("authorization") !== "Bearer " + key) return Response.json({ code: "engine_key_required" }, { status: 401 });
   if (path === "/tts") return new Response(new Uint8Array([...header, ...new Uint8Array(4800)]), { headers: { "content-type": "audio/wav" } });
   return new Response("no", { status: 404 });
 } });
 `;
-  fakeEnvironment(pocketTtsRoot(), { "pocket-tts": stub });
+  // ISOLATION-04b: the Stack starts Pocket TTS as `<venv python> pocket_tts_server.py --port N`; the stub stands in for that python and reads --port the same way.
+  fakeEnvironment(pocketTtsRoot(), { "pocket-tts": "#!/bin/sh\n", python: stub });
   expect(activeTtsChoice().engine).toBe("chatterbox-turbo");
   const spoken = await speakRole("tts", speechForm("Clover, the kitchen light is on."));
   expect(spoken.status).toBe(200);
@@ -220,14 +224,18 @@ test("resetSupervisorForTests stops an engine a test really started, so no Pocke
 const port = Number(process.argv[process.argv.indexOf("--port") + 1]);
 await Bun.write(import.meta.dir + "/pid", String(process.pid));
 const header = new Uint8Array(44); new TextEncoder().encodeInto("RIFF", header);
+// ISOLATION-04b: the Stack gives the child a launch key in its environment and must send it as a bearer token on everything but /health.
+const key = process.env.STACK_ENGINE_KEY;
 Bun.serve({ port, hostname: "127.0.0.1", async fetch(request) {
   const path = new URL(request.url).pathname;
   if (path === "/health") return Response.json({ status: "healthy" });
+  if (!key || request.headers.get("authorization") !== "Bearer " + key) return Response.json({ code: "engine_key_required" }, { status: 401 });
   if (path === "/tts") return new Response(new Uint8Array([...header, ...new Uint8Array(4800)]), { headers: { "content-type": "audio/wav" } });
   return new Response("no", { status: 404 });
 } });
 `;
-  fakeEnvironment(pocketTtsRoot(), { "pocket-tts": stub });
+  // ISOLATION-04b: the Stack starts Pocket TTS as `<venv python> pocket_tts_server.py --port N`; the stub stands in for that python and reads --port the same way.
+  fakeEnvironment(pocketTtsRoot(), { "pocket-tts": "#!/bin/sh\n", python: stub });
   const spoken = await speakRole("tts", speechForm("Clover, the kitchen light is on."));
   expect(spoken.status).toBe(200);
   await new Response(spoken.body).arrayBuffer();

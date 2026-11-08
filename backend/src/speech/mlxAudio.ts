@@ -16,6 +16,7 @@ import { engineTagRoot } from "@/lib/store/layout";
 import { ensureUvEnvironment, managedEnv, uvEnvironmentReady, uvVenvPath, type UvEnvironmentSpec } from "@/lib/uvEnvironment";
 import darwinArm64Requirements from "./mlx-audio.darwin-arm64.requirements.txt" with { type: "file" };
 import serverScript from "./mlx_tts_server.py" with { type: "file" };
+import engineGuardScript from "./engine_guard.py" with { type: "file" };
 
 export const MLX_AUDIO_NAME = "mlx-audio";
 export const MLX_AUDIO_VERSION = MANAGED_RUNTIMES.find((runtime) => runtime.name === MLX_AUDIO_NAME)?.version ?? "0.5.9";
@@ -49,6 +50,10 @@ export async function materializeServerScript(root = mlxAudioRoot()): Promise<st
   const target = join(root, "mlx_tts_server.py");
   writeFileSync(target, await Bun.file(serverScript).text());
   chmodSync(target, 0o644);
+  // ISOLATION-04b: the server imports its Host, Origin and launch-key checks from this file, which sits beside it.
+  const guard = join(root, "engine_guard.py");
+  writeFileSync(guard, await Bun.file(engineGuardScript).text());
+  chmodSync(guard, 0o644);
   return target;
 }
 

@@ -47,16 +47,44 @@ copy an admin stored for an engine computer) and sends it on every call.
 Anything a person or a package should reach passes through Home, which owns
 identity and permissions, and Home never proxies the Stack raw.
 
-**The model servers.** Each llama-server the Stack starts (chat, judge,
-router, embed, vision, coding) gets a key of its own at every launch, in
-`LLAMA_API_KEY` (not on the command line), and every request the Stack sends
-it carries that key, so a page that finds one of the random loopback ports
-gets 401 (its `/health` stays open and carries nothing). oMLX already had its
-launch key. Splash, the speech worker, the picture, video and music workers
-and the search sidecar do not take a key yet (follow-up ISOLATION-04b): each
-has its own flags and several direct callers, and was not changed here. They
-sit on random loopback ports, so until 04b a page could only reach one by
-guessing its port.
+**The engines (ISOLATION-04, ISOLATION-04b).** Every engine the Stack starts
+on a loopback port gets a key of its own at every launch (`newLaunchKey()`,
+never on a command line), and the Stack sends it as `Authorization: Bearer`
+on everything it asks that engine:
+
+| Engine | How the key is taken |
+|---|---|
+| llama-server (chat, judge, router, embed, vision, coding) | `LLAMA_API_KEY`; `/health` stays open |
+| oMLX | its own launch key |
+| Splash (coding, chat) | `SPLASH_API_KEY` (its `--api-key`); `/health` and `/ready` stay open |
+| Speech worker (speech to text, a Bun server of ours) | `STACK_ENGINE_KEY`; `backend/src/lib/loopbackGuard.ts` |
+| Voice server (Chatterbox, `mlx_tts_server.py`) | `STACK_ENGINE_KEY`; `speech/engine_guard.py`, placed beside the script at every launch |
+| Pocket TTS | no key option in `pocket-tts serve`, so the Stack starts the same server through `speech/pocket_tts_server.py`, which puts `engine_guard.py` in front of every HTTP and websocket route |
+
+A page that finds one of the random ports gets 421 for a re-pointed name
+(DNS rebinding), 403 for any `Origin`, and 401 without the key (a CORS
+preflight is a 403 or 501, never permission). Our own engines (speech worker,
+voice server, Pocket TTS launcher) apply all three checks to GET too and
+refuse every `Origin` outright, since their callers are programs; only
+`GET /health` (the Stack's liveness probe) skips the key. Direct callers of
+the speech worker (the transcription jobs, spatial sound, the live
+dictation websocket) send `RoleSession.engineHeaders`.
+
+**Not covered yet (follow-up ISOLATION-04c).** Each is a program we do not
+build and cannot add a key to without a wrapper that could not be proven here:
+- ComfyUI (the `image` role's server, `--listen 127.0.0.1`): has no key
+  option. Its built-in same-origin check stops a cross-site page but not DNS
+  rebinding. It is not installed on the live hub today; a wrapper that
+  prepends an aiohttp middleware (as the Pocket TTS launcher does) is the
+  fix, to be proven against a real install.
+- mlx-serve (the older MLX chat server): its key flag, if any, is not
+  checked. Not installed on the live hub today.
+- The search sidecar (`ddgs_sidecar.py`): refuses a forged Host and any
+  `Origin` (so a page cannot read it), but takes no key, because Home calls
+  it directly at the address `GET /stack/v1/search` gives out; a key means a
+  Home change. It serves public search results only.
+The picture, video, music, stems, beats and align engines run as one-shot
+commands that listen on no port.
 
 ## The role contract (`/v1/*`)
 

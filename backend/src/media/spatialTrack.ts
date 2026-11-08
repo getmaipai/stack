@@ -169,7 +169,7 @@ export const defaultSpatialTrackDeps: SpatialTrackDeps = {
       const chunk = 30 * 16_000;
       for (let offset = 0; offset < samples.length; offset += chunk) {
         if (signal.aborted) throw new Error("Cancelled.");
-        for (const span of await transcriptionDeps.detect(session.baseUrl, samples.subarray(offset, Math.min(samples.length, offset + chunk)), signal)) spans.push({ startSample: span.startSample + offset, endSample: span.endSample + offset });
+        for (const span of await transcriptionDeps.detect(session.baseUrl, samples.subarray(offset, Math.min(samples.length, offset + chunk)), signal, session.engineHeaders)) spans.push({ startSample: span.startSample + offset, endSample: span.endSample + offset });
       }
       return spans;
     } finally { session.release(); }

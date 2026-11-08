@@ -7,6 +7,7 @@ import { basename } from "node:path";
 import { diarizationDir, missingDiarizationFiles, type DiarizationFiles } from "@/speech/diarization";
 import { loadDiarizer, loadDiarizerFiles, type Diarizer, loadMoonshine, loadParakeet, loadSilero, recognizerKind, RUNTIME_NAME, runtimeVersion } from "@/speech/sherpa";
 import { startSpeechServer } from "@/speech/server";
+import { ENGINE_KEY_ENV } from "@/lib/loopbackGuard";
 
 export interface WorkerArgs { role: "stt"; port: number; model: string; vad: string; threads: number; diarization?: DiarizationFiles; }
 
@@ -36,7 +37,7 @@ export async function runSpeechWorker(argv: string[]): Promise<void> {
   // Loaded on first use: the models are 0.1 GB and only some jobs ask for speakers.
   let diarizer: Diarizer | null = null;
   const diarizerFor = () => { if (!diarizer && args.diarization) diarizer = loadDiarizerFiles(args.diarization, args.threads); if (!diarizer) { const dir = diarizationDir(); if (missingDiarizationFiles(dir).length) return null; diarizer = loadDiarizer(dir, args.threads); } return diarizer; };
-  const server = startSpeechServer({ diarizer: diarizerFor, port: args.port, build: workerBuild(), modelPath: args.model, transcriber, detector: () => loadSilero(args.vad) });
+  const server = startSpeechServer({ diarizer: diarizerFor, port: args.port, key: process.env[ENGINE_KEY_ENV], build: workerBuild(), modelPath: args.model, transcriber, detector: () => loadSilero(args.vad) });
   console.log(`speech-worker ${args.role} listening on http://127.0.0.1:${server.port} with ${basename(args.model)}`);
   const stop = () => { server.stop(true); process.exit(0); };
   process.once("SIGTERM", stop);

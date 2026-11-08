@@ -69,6 +69,10 @@ test("Splash chat launch uses pinned target and draft, offline args, the disk ca
   expect(plan.env).toMatchObject({ HF_HUB_OFFLINE: "1", DO_NOT_TRACK: "1", HF_HUB_CACHE: splashHubDir(), HOME: splashHomeDir(), TMPDIR: splashTmpDir() });
   expect(existsSync(join(cache, "old-prefix"))).toBe(false);
   expect(plan.command).toContain("--language-only");
+  // ISOLATION-04b: Splash is started with a key of its own (SPLASH_API_KEY at spawn), and the Stack's client for it sends it.
+  expect(plan.apiKey?.length).toBeGreaterThanOrEqual(16);
+  expect(plan.command.join(" ")).not.toContain(plan.apiKey!);
+  expect((plan.client!("http://127.0.0.1:1") as unknown as { inner: { authHeaders(): Record<string, string> } }).inner.authHeaders()).toEqual({ authorization: `Bearer ${plan.apiKey}` });
 });
 
 test("Splash chat gets a full-context memory cap in normal mode with headroom and governor margin", () => {

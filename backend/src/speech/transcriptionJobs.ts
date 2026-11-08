@@ -40,9 +40,9 @@ export interface TranscriptionDeps {
   /** `range` limits ffmpeg to that window (-ss/-t); the output then starts at range.fromS on the original clock. */
   extract: (ffmpeg: string, source: string, output: string, signal: AbortSignal, progress: (fraction: number) => void, range?: { fromS: number; toS: number }) => Promise<void>;
   /** Speaker turns for the 16 kHz wav at `wavPath`, times relative to its start. */
-  diarize: (baseUrl: string, wavPath: string, numSpeakers: number | undefined, signal: AbortSignal) => Promise<SpeakerTurn[]>;
-  detect: (baseUrl: string, samples: Float32Array, signal: AbortSignal) => Promise<Array<{ startSample: number; endSample: number }>>;
-  transcribe: (baseUrl: string, samples: Float32Array, hotwords: string | undefined, signal: AbortSignal) => Promise<TimedResult>;
+  diarize: (baseUrl: string, wavPath: string, numSpeakers: number | undefined, signal: AbortSignal, engineHeaders?: Record<string, string>) => Promise<SpeakerTurn[]>;
+  detect: (baseUrl: string, samples: Float32Array, signal: AbortSignal, engineHeaders?: Record<string, string>) => Promise<Array<{ startSample: number; endSample: number }>>;
+  transcribe: (baseUrl: string, samples: Float32Array, hotwords: string | undefined, signal: AbortSignal, engineHeaders?: Record<string, string>) => Promise<TimedResult>;
 }
 function waveBytes(samples: Float32Array, rate = 16_000): Uint8Array {
   const bytes = new Uint8Array(44 + samples.length * 2); const view = new DataView(bytes.buffer);
@@ -51,7 +51,7 @@ function waveBytes(samples: Float32Array, rate = 16_000): Uint8Array {
   for (let i = 0; i < samples.length; i++) view.setInt16(44 + i * 2, Math.max(-32768, Math.min(32767, Math.round(samples[i]! * 32767))), true);
   return bytes;
 }
-async function fetchJson<T>(url: string, body: unknown, signal: AbortSignal): Promise<T> { const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal }); const result = await response.json() as T & { error?: string }; if (!response.ok) throw new Error(result.error ?? "The speech worker could not finish this request."); return result; }
+async function fetchJson<T>(url: string, body: unknown, signal: AbortSignal, engineHeaders: Record<string, string> = {}): Promise<T> { const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json", ...engineHeaders }, body: JSON.stringify(body), signal }); const result = await response.json() as T & { error?: string }; if (!response.ok) throw new Error(result.error ?? "The speech worker could not finish this request."); return result; }
 export const transcriptionDeps: TranscriptionDeps = {
   probe: probeFile,
   extract: async (ffmpeg, source, output, signal, progress, range) => {
@@ -60,9 +60,9 @@ export const transcriptionDeps: TranscriptionDeps = {
     const stderr = new Response(child.stderr).text().catch(() => ""); const code = await child.exited; signal.removeEventListener("abort", stop); await stderr;
     if (signal.aborted) throw new Error("Cancelled."); if (code !== 0) throw new Error("Audio could not be extracted from this file. Try another audio or video file."); progress(1);
   },
-  detect: async (baseUrl, samples, signal) => (await fetchJson<{ spans: Array<{ startSample: number; endSample: number }> }>(`${baseUrl}/v1/audio/transcriptions/detect-spans`, { audio_base64: Buffer.from(waveBytes(samples)).toString("base64") }, signal)).spans,
-  diarize: async (baseUrl, wavPath, numSpeakers, signal) => (await fetchJson<{ turns: SpeakerTurn[] }>(`${baseUrl}/v1/audio/transcriptions/diarize`, { audio_path: wavPath, ...(numSpeakers ? { num_speakers: numSpeakers } : {}) }, signal)).turns,
-  transcribe: async (baseUrl, samples, hotwords, signal) => fetchJson<TimedResult>(`${baseUrl}/v1/audio/transcriptions/timed-span`, { audio_base64: Buffer.from(waveBytes(samples)).toString("base64"), ...(hotwords ? { hotwords } : {}) }, signal),
+  detect: async (baseUrl, samples, signal, engineHeaders) => (await fetchJson<{ spans: Array<{ startSample: number; endSample: number }> }>(`${baseUrl}/v1/audio/transcriptions/detect-spans`, { audio_base64: Buffer.from(waveBytes(samples)).toString("base64") }, signal, engineHeaders)).spans,
+  diarize: async (baseUrl, wavPath, numSpeakers, signal, engineHeaders) => (await fetchJson<{ turns: SpeakerTurn[] }>(`${baseUrl}/v1/audio/transcriptions/diarize`, { audio_path: wavPath, ...(numSpeakers ? { num_speakers: numSpeakers } : {}) }, signal, engineHeaders)).turns,
+  transcribe: async (baseUrl, samples, hotwords, signal, engineHeaders) => fetchJson<TimedResult>(`${baseUrl}/v1/audio/transcriptions/timed-span`, { audio_base64: Buffer.from(waveBytes(samples)).toString("base64"), ...(hotwords ? { hotwords } : {}) }, signal, engineHeaders),
 };
 let availabilityOverride: (() => boolean) | null = null;
 export function setTranscriptionAvailabilityForTests(check: (() => boolean) | null): void { availabilityOverride = check; }
@@ -97,13 +97,13 @@ async function run(job: Job, signal: AbortSignal, update: JobProgress) {
       for (let offset = 0; offset < selected.length; offset += vadChunkSamples) {
         if (signal.aborted) throw new Error("Cancelled.");
         const chunk = selected.subarray(offset, Math.min(selected.length, offset + vadChunkSamples));
-        for (const span of await transcriptionDeps.detect(session.baseUrl, chunk, signal)) spans.push({ startSample: span.startSample + offset, endSample: span.endSample + offset });
+        for (const span of await transcriptionDeps.detect(session.baseUrl, chunk, signal, session.engineHeaders)) spans.push({ startSample: span.startSample + offset, endSample: span.endSample + offset });
         update({ percent: 22 + Math.round(Math.min(1, (offset + chunk.length) / selected.length) * 3) });
       }
       const segments: TranscriptSegment[] = [];
       for (let index = 0; index < spans.length; index++) {
         if (signal.aborted) throw new Error("Cancelled."); const span = spans[index]!; const clip = selected.subarray(span.startSample, span.endSample); if (!clip.length) continue;
-        stages.set(job.id, "transcribing"); const result = await transcriptionDeps.transcribe(session.baseUrl, clip, payload.vocabulary?.join(","), signal);
+        stages.set(job.id, "transcribing"); const result = await transcriptionDeps.transcribe(session.baseUrl, clip, payload.vocabulary?.join(","), signal, session.engineHeaders);
         const offset = range.fromS + span.startSample / 16_000; const words = result.tokens && result.timestamps ? wordsFromTokenTimes(result.tokens, result.timestamps, clip.length / 16_000, offset) : [];
         const text = result.text.trim(); if (text) segments.push({ start: words[0]?.start ?? offset, end: words.at(-1)?.end ?? offset + clip.length / 16_000, text, words, ...(Array.isArray(result.ys_log_probs) && result.ys_log_probs.length ? { confidence: Math.exp(result.ys_log_probs.reduce((a, b) => a + b, 0) / result.ys_log_probs.length) } : {}) });
         const percent = 25 + Math.round((index + 1) / Math.max(spans.length, 1) * 70); update({ status: "transcribing", percent });
@@ -116,7 +116,7 @@ async function run(job: Job, signal: AbortSignal, update: JobProgress) {
         else {
           try {
             stages.set(job.id, "finding speakers"); update({ status: "finding speakers", percent: 96 });
-            const turns = (await transcriptionDeps.diarize(session.baseUrl, wav, payload.num_speakers, signal)).map((turn) => ({ ...turn, start: turn.start + range.fromS, end: turn.end + range.fromS }));
+            const turns = (await transcriptionDeps.diarize(session.baseUrl, wav, payload.num_speakers, signal, session.engineHeaders)).map((turn) => ({ ...turn, start: turn.start + range.fromS, end: turn.end + range.fromS }));
             const assigned = assignSpeakers(segments, turns); output = { ...output, segments: assigned.segments, speakers: assigned.speakers, diarization: "done" };
             console.log(JSON.stringify({ event: "transcription.diarized", turns: turns.length, speakers: assigned.speakers.length }));
           } catch (error) {

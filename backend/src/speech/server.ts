@@ -8,6 +8,7 @@
 // contract. The engines are injected: the worker hands in sherpa-onnx,
 // the suite hands in scripted ones.
 import type { ServerWebSocket } from "bun";
+import { checkEngineCaller } from "@/lib/loopbackGuard";
 import { decodeWave, frameToSamples, toRecognizerRate, WaveFormatError } from "@/speech/audio";
 import { SttSession, type SttSessionConfig, type Transcriber, type VoiceDetector } from "@/speech/session";
 import type { SttWireEvent } from "@maipai/spec/stack/ts/stt-wire-event.js";
@@ -21,6 +22,8 @@ export const DIARIZE_PATH = "/v1/audio/transcriptions/diarize";
 
 export interface SpeechServerOptions {
   port: number;
+  /** The launch key the Stack made for this worker (ISOLATION-04b); unset only when the worker is started by hand. */
+  key?: string;
   build: string;
   modelPath: string;
   transcriber: Transcriber;
@@ -56,6 +59,8 @@ export function startSpeechServer(options: SpeechServerOptions) {
     port: options.port,
     hostname: "127.0.0.1",
     async fetch(request, bunServer) {
+      const refused = checkEngineCaller(request, options.key);
+      if (refused) return refused;
       const url = new URL(request.url);
       if (request.method === "GET" && url.pathname === "/health") return jsonResponse({ status: "ok" });
       if (request.method === "GET" && url.pathname === "/props") return jsonResponse({ build_info: options.build, model_path: options.modelPath });

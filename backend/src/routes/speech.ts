@@ -48,7 +48,7 @@ speechRoutes.get("/", upgradeWebSocket(() => {
       // session is released at once rather than held forever.
       if (closed) { opened.release(); return; }
       session = opened;
-      const socket = new WebSocket(`${session.baseUrl.replace(/^http/, "ws")}${SESSION_PATH}`);
+      const socket = new WebSocket(`${session.baseUrl.replace(/^http/, "ws")}${SESSION_PATH}`, { headers: session.engineHeaders } as unknown as string[]);
       socket.binaryType = "arraybuffer";
       socket.onopen = () => { for (const frame of held) socket.send(frame as ArrayBuffer); held.length = 0; };
       socket.onmessage = (message) => { if (typeof message.data === "string") { client.send(message.data); heavyGate.begin("stt")(); /* ISOLATION-01: a transcript event means someone is speaking; a heavy job is paused for it and the tail. An open but silent session is not a request. */ } };

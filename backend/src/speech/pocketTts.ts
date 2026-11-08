@@ -5,11 +5,13 @@
 // of which weights the engine loaded. The engine's wire (spec/voice's
 // /tts form and streaming WAV) is spoken by the supervisor's client;
 // nothing here parses audio.
-import { existsSync, readdirSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MANAGED_RUNTIMES } from "@/lib/engineCatalog";
 import { engineTagRoot, hfHubRoot, hfRepoName } from "@/lib/store/layout";
-import { ensureUvEnvironment, managedEnv, uvEnvironmentReady, uvVenvPath, type UvEnvironmentSpec } from "@/lib/uvEnvironment";
+import { ensureUvEnvironment, managedEnv, uvEnvironmentReady, uvVenvPath, uvVenvPython, type UvEnvironmentSpec } from "@/lib/uvEnvironment";
+import engineGuardScript from "./engine_guard.py" with { type: "file" };
+import launcherScript from "./pocket_tts_server.py" with { type: "file" };
 import darwinArm64Requirements from "./pocket-tts.darwin-arm64.requirements.txt" with { type: "file" };
 
 export const POCKET_TTS_NAME = "pocket-tts";
@@ -59,8 +61,22 @@ export function ensurePocketTtsEnvironment(onProgress: (label: string) => void =
   return ensureUvEnvironment(spec(), onProgress, options);
 }
 
-export function pocketTtsCommand(port: number): string[] {
-  return [pocketTtsBinary(), "serve", "--host", "127.0.0.1", "--port", String(port)];
+/** ISOLATION-04b: `pocket-tts serve` has no key option, so the Stack starts the same server through its own launcher
+ * (`pocket_tts_server.py`), which puts the engine guard (`engine_guard.py`: Host, Origin, the launch key) in front of every route.
+ * Both files are rewritten next to the environment at every launch (the compiled daemon's embedded copies live in Bun's virtual
+ * filesystem, which Python cannot open), so they always match the Stack. */
+export async function materializeLauncher(root = pocketTtsRoot()): Promise<string> {
+  mkdirSync(root, { recursive: true });
+  for (const [name, source] of [["engine_guard.py", engineGuardScript], ["pocket_tts_server.py", launcherScript]] as const) {
+    const target = join(root, name);
+    writeFileSync(target, await Bun.file(source).text());
+    chmodSync(target, 0o644);
+  }
+  return join(root, "pocket_tts_server.py");
+}
+
+export function pocketTtsCommand(port: number, launcher: string, root = pocketTtsRoot()): string[] {
+  return [uvVenvPython(root), launcher, "--port", String(port)];
 }
 
 /** Which weights repository the hub cache holds a snapshot of, the

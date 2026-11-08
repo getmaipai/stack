@@ -24,9 +24,10 @@ import { readFileSync } from "node:fs";
 // reads it there too, not only from a checkout.
 import bundledClipFile from "../speech/fixtures/clover-two-seconds.wav" with { type: "file" };
 import { TRANSCRIBE_PATH } from "@/speech/server";
-import { loadedWeightsRepo, pocketTtsCommand, pocketTtsEnv, pocketTtsInstalled, POCKET_TTS_VERSION } from "@/speech/pocketTts";
+import { loadedWeightsRepo, materializeLauncher as materializePocketLauncher, pocketTtsCommand, pocketTtsEnv, pocketTtsInstalled, POCKET_TTS_VERSION } from "@/speech/pocketTts";
 import { ensureCloningWeights, POCKET_TTS_PRESET_VOICES, voiceCloningOn } from "@/speech/voices";
 import { materializeServerScript, mlxAudioCommand, mlxAudioEnv, mlxAudioInstalled, MLX_AUDIO_VERSION } from "@/speech/mlxAudio";
+import { ENGINE_KEY_ENV } from "@/lib/loopbackGuard";
 import { newLaunchKey, omlxCommand, omlxEnv, omlxInstalled, omlxSupportedHere, OMLX_VERSION, prepareModelFolder, resetState as resetOmlxState } from "@/chat/omlx";
 import { OmlxEngineClient } from "@/chat/omlxClient";
 import { CHAT_ENGINE_SETTING, clearChatEngineFailures, FALLBACK_AFTER_FAILURES, markChatEngineFailed, resolveChatEngine, type ChatEngineChoice, type ChatEngineId } from "@/lib/chatEngines";
@@ -258,6 +259,8 @@ export class OpenAIEngineClient implements EngineClient {
   constructor(readonly baseUrl: string, readonly healthPath = "/health", private readonly apiKey?: string) {}
   private url(path: string): string { return `${this.baseUrl.replace(/\/$/, "")}${path}`; }
   /** ISOLATION-04: the launch key, when the engine was started with one. */
+  /** What a direct caller of this engine (the speech worker's session, its transcription routes) sends to be let in. */
+  authHeaders(): Record<string, string> { return this.apiKey ? { authorization: `Bearer ${this.apiKey}` } : {}; }
   private auth(headers?: Record<string, string>): Record<string, string> | undefined { return this.apiKey ? { ...(headers ?? {}), authorization: `Bearer ${this.apiKey}` } : headers; }
 
   async request(path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<{ status: number; body: unknown }> {
@@ -1397,7 +1400,7 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
     // shape (see its own comment, getmaipai/stack#8); no special env
     // needed here either way - a real `bun run` against the vendored
     // source resolves the native binding exactly as dev already does.
-    return { command: speechWorkerCommand({ role, port, modelPath: model.modelPath!, vadPath: vad.modelPath, threads, diarization: installedDiarizationFiles(listModels()) ?? undefined }), engine: "sherpa-onnx-node", build: "bundled", stdin: "pipe", contextLength: 0, kind: "spawned" };
+    return { command: speechWorkerCommand({ role, port, modelPath: model.modelPath!, vadPath: vad.modelPath, threads, diarization: installedDiarizationFiles(listModels()) ?? undefined }), engine: "sherpa-onnx-node", build: "bundled", stdin: "pipe", contextLength: 0, kind: "spawned", apiKey: newLaunchKey() };
   }
   if (role === "image") {
     if (!comfyuiInstalled()) throw new EngineUnavailableError("The ComfyUI environment is not built on this machine.");
@@ -1409,12 +1412,12 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
   if (role === "tts" && activeTtsChoice().engine === "chatterbox-turbo") {
     if (!mlxAudioInstalled()) throw new EngineUnavailableError("The MLX voice environment is not built on this machine.");
     const script = await materializeServerScript();
-    return { command: mlxAudioCommand(script, port, "chatterbox-turbo", TTS_ENGINES["chatterbox-turbo"].repo!), engine: "chatterbox-turbo", build: MLX_AUDIO_VERSION, stdin: "ignore", contextLength: 0, kind: "managed", env: mlxAudioEnv() };
+    return { command: mlxAudioCommand(script, port, "chatterbox-turbo", TTS_ENGINES["chatterbox-turbo"].repo!), engine: "chatterbox-turbo", build: MLX_AUDIO_VERSION, stdin: "ignore", contextLength: 0, kind: "managed", env: mlxAudioEnv(), apiKey: newLaunchKey() };
   }
   if (role === "tts") {
     if (!pocketTtsInstalled()) throw new EngineUnavailableError("The Pocket TTS environment is not built on this machine.");
     // Offline always; the token never travels (STACK-94d).
-    return { command: pocketTtsCommand(port), engine: "pocket-tts", build: POCKET_TTS_VERSION, stdin: "ignore", contextLength: 0, kind: "managed", env: pocketTtsEnv() };
+    return { command: pocketTtsCommand(port, await materializePocketLauncher()), engine: "pocket-tts", build: POCKET_TTS_VERSION, stdin: "ignore", contextLength: 0, kind: "managed", env: pocketTtsEnv(), apiKey: newLaunchKey() };
   }
   const declared = engineSettingValues("engines.llama_server");
   const config = { contextLength: declared.context_length, slots: declared.slots, threads: declared.threads, cacheRamMb: declared.cache_ram_mb, flashAttention: declared.flash_attention } as Record<string, number | boolean | string | string[]>;
@@ -1497,25 +1500,27 @@ export function splashLaunchPlan(model: ModelRecord, port: number, contextLength
   const thinkingBudget = Math.max(0, Math.floor(Number(values["stack.engines.chat.thinking_budget_ceiling"] ?? 2000)));
   const args = splashArgs({ model: layout.model, revision: layout.revision, port, servedModelName: model.id, thinkingBudgetTokens: chatRole ? thinkingBudget : coding.thinkingBudgetTokens, contextLength, languageOnly: !declaredReadsPictures(model), ...(modeCoding ? { defaultReasoningEffort: "none" as const, maxMemory: `${Math.max(1, Math.floor(maxMemoryBytes! / 1_073_741_824))}G`, decodeShare: 1.0 } : chatRole ? { maxMemory: `${Math.ceil(maxMemoryBytes! / 1_073_741_824)}G` } : {}) });
   const env = splashEnv(layout);
+  // ISOLATION-04b: Splash takes a bearer key on every route but /health and /ready (its --api-key, here through SPLASH_API_KEY at spawn).
+  const apiKey = newLaunchKey();
   if (chatRole) env.DO_NOT_TRACK = "1";
   return {
     command: [executable, "-u", join(root, "install", "launcher.py"), ...args],
-    engine: chatRole ? "splash-chat" : "splash", build: tag, stdin: "ignore", contextLength,
+    apiKey, engine: chatRole ? "splash-chat" : "splash", build: tag, stdin: "ignore", contextLength,
     // Splash schedules requests itself (its queue is 32 deep); `slots` is the number of coding requests Home should expect to run at once, reported, not enforced.
     slots: coding.slots, contextScope: "total across slots", kind: "spawned", imageInput: false, pictureTokensMax: null,
     env, healthPath: "/ready", tree: true,
-    client: (baseUrl) => chatRole ? new SplashChatClient(new OpenAIEngineClient(baseUrl, "/ready"), model.id, { ...(model.engineRequirements.sampling as Record<string, unknown> ?? {}), thinking_budget_ceiling: thinkingBudget }) : new ServedNameClient(new OpenAIEngineClient(baseUrl, "/ready"), model.id),
+    client: (baseUrl) => chatRole ? new SplashChatClient(new OpenAIEngineClient(baseUrl, "/ready", apiKey), model.id, { ...(model.engineRequirements.sampling as Record<string, unknown> ?? {}), thinking_budget_ceiling: thinkingBudget }) : new ServedNameClient(new OpenAIEngineClient(baseUrl, "/ready", apiKey), model.id),
     // Splash has no /props: the Stack knows both what it launched and which file it linked.
     identity: { build: `splash-${tag}`, model: modelFileName(model.modelPath!) },
-    verifyServed: (baseUrl) => verifySplashServes(baseUrl, model.id, chatRole ? "chat" : "coding"),
+    verifyServed: (baseUrl) => verifySplashServes(baseUrl, model.id, chatRole ? "chat" : "coding", apiKey),
   };
 }
 
 /** The readiness identity check: the engine on this port lists the served name the Stack gave it and calls itself Splash. */
-export async function verifySplashServes(baseUrl: string, servedName: string, roleLabel = "coding"): Promise<void> {
+export async function verifySplashServes(baseUrl: string, servedName: string, roleLabel = "coding", apiKey?: string): Promise<void> {
   let listed: Array<{ id?: unknown; owned_by?: unknown }> = [];
   try {
-    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/models`, { signal: AbortSignal.timeout(5_000) });
+    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/models`, { headers: apiKey ? { authorization: `Bearer ${apiKey}` } : undefined, signal: AbortSignal.timeout(5_000) });
     const body = await response.json().catch(() => null) as { data?: unknown } | null;
     if (response.ok && Array.isArray(body?.data)) listed = body.data as typeof listed;
   } catch { /* said below */ }
@@ -1720,7 +1725,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   }
   const spawnEngine = () => {
     try {
-      return Bun.spawn(plan.command, { stdout: "ignore", stderr: "pipe", stdin: plan.stdin, env: plan.env ?? { ...process.env, HF_HUB_CACHE: hfHubRoot, ...(plan.apiKey ? { LLAMA_API_KEY: plan.apiKey } : {}) } });
+      return Bun.spawn(plan.command, { stdout: "ignore", stderr: "pipe", stdin: plan.stdin, env: { ...(plan.env ?? { ...process.env, HF_HUB_CACHE: hfHubRoot }), ...(plan.apiKey ? { LLAMA_API_KEY: plan.apiKey, SPLASH_API_KEY: plan.apiKey, [ENGINE_KEY_ENV]: plan.apiKey } : {}) } });
     } catch (error) {
       // A binary that will not even start (a truncated or wrong-arch file)
       // is the same failure as a crash before health, said in one sentence.
@@ -2695,7 +2700,7 @@ export async function runOnRole<T>(requested: RoleId, work: (processRecord: Role
  * counts it as an active request until `release`, so a drain waits for
  * it, and its end is a real request for the `ready` claim, as a
  * stream's end is. */
-export interface RoleSession { baseUrl: string; headers: Record<string, string>; release(): void; }
+export interface RoleSession { baseUrl: string; headers: Record<string, string>; /** The engine's launch key as a request header (ISOLATION-04b): send it with any direct request to `baseUrl`. */ engineHeaders: Record<string, string>; release(): void; }
 
 /** `onRetire` runs when the process is stopped or restarted under the
  * session (the daemon stopping, a "Restart engine" fix): the caller
@@ -2713,6 +2718,7 @@ export async function openRoleSession(requested: RoleId, onRetire: () => void = 
   const session: RoleSession = {
     baseUrl: processRecord.client.baseUrl,
     headers: identityHeaders(processRecord.identity, processRecord.modelRevision),
+    engineHeaders: (processRecord.client as { authHeaders?: () => Record<string, string> }).authHeaders?.() ?? {},
     release() {
       if (released) return;
       released = true;

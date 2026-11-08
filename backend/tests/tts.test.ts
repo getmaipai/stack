@@ -111,7 +111,8 @@ test("the uv pins select by name and never as llama-server; the tool path is uv"
   expect(engineRole("uv")).toBe("tts");
   expect(engineRole("pocket-tts")).toBe("tts");
   expect(engineRole("llama-server")).toBe("chat");
-  expect(pocketTtsCommand(8795).slice(1)).toEqual(["serve", "--host", "127.0.0.1", "--port", "8795"]);
+  // ISOLATION-04b: through the Stack's launcher (engine guard in front), still bound to 127.0.0.1 inside it.
+  expect(pocketTtsCommand(8795, "/x/pocket_tts_server.py", "/x").slice(1)).toEqual(["/x/pocket_tts_server.py", "--port", "8795"]);
 });
 
 test("a platform without a hashed requirements file cannot build the environment and says so", async () => {

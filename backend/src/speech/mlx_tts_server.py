@@ -37,6 +37,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import numpy as np
 
+import engine_guard
+
 SAMPLE_RATE = 24000
 STREAM_INTERVAL_SECONDS = 1.0
 PRIME_TEXT = "Hello there. This is the voice, warming up."
@@ -359,7 +361,18 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
         self.close_connection = True
 
+    def refused(self, method: str) -> bool:
+        """ISOLATION-04b: Host, Origin and the Stack's launch key (engine_guard); True when the caller was answered with a refusal."""
+        bad = engine_guard.refusal(method, self.path, self.headers.get("Host"), self.headers.get("Origin"), self.headers.get("Authorization"))
+        if bad is None:
+            return False
+        status, code, message = bad
+        self.reply_json(status, {"detail": message, "code": code})
+        return True
+
     def do_GET(self) -> None:
+        if self.refused("GET"):
+            return
         if self.path == "/health":
             if STATE["ready"]:
                 return self.reply_json(200, {"status": "ok", "cloning": bool(STATE["engine"].cloner_ready)})
@@ -370,6 +383,8 @@ class Handler(BaseHTTPRequestHandler):
         self.reply_json(404, {"detail": "Not found."})
 
     def do_POST(self) -> None:
+        if self.refused("POST"):
+            return
         if self.path != "/tts":
             return self.reply_json(404, {"detail": "Not found."})
         if not STATE["ready"]:
