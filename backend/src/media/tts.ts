@@ -7,6 +7,16 @@ import type { Job, JobProgress } from "@/lib/jobs";
 import { jobDir, resolveWritableDir } from "./paths";
 
 export const TtsBatchInput = z.object({ lines: z.array(z.object({ id: z.string().min(1).max(40).regex(/^[a-z0-9_-]+$/), text: z.string().min(1).max(4000), voice_url: z.string().optional(), temperature: z.number().optional(), pitch_semitones: z.number().min(-12).max(12).optional() }).strict()).min(1).max(400), output: z.object({ dir: z.string().optional() }).default({}) }).strict();
+/** The speech engine streams its WAV with a placeholder data size (2 000 000 000). Cut every chunk size down to the bytes that really arrived, so the saved file and its length are true. */
+export function finalizeWav(bytes: Uint8Array): void {
+  if (bytes.length < 44) return;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  for (let at = 12; at + 8 <= bytes.length;) {
+    const tag = String.fromCharCode(...bytes.slice(at, at + 4)); const size = view.getUint32(at + 4, true);
+    if (size > bytes.length - (at + 8)) { view.setUint32(at + 4, bytes.length - (at + 8), true); if (tag === "data") view.setUint32(4, bytes.length - 8, true); break; }
+    at += 8 + size + (size & 1);
+  }
+}
 function wavDuration(bytes: Uint8Array): number {
   if (bytes.length < 44 || String.fromCharCode(...bytes.slice(0, 4)) !== "RIFF" || String.fromCharCode(...bytes.slice(8, 12)) !== "WAVE") throw new Error("The speech engine returned an invalid WAV file. Try again or change the voice.");
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength); let rate = 0; let data = 0;
@@ -21,7 +31,7 @@ export async function runTtsBatch(job: Job, signal: AbortSignal, progress: JobPr
     try {
       const reply = await speakRole("tts", speechForm(line.text, line.voice_url, { temperature: line.temperature, pitch_semitones: line.pitch_semitones }), signal);
       if (reply.status < 200 || reply.status >= 300 || !reply.body) throw new Error(`The speech engine returned HTTP ${reply.status}.`);
-      const bytes = new Uint8Array(await new Response(reply.body).arrayBuffer()); const duration_s = wavDuration(bytes); writeFileSync(part, bytes, { mode: 0o600 }); renameSync(part, target);
+      const bytes = new Uint8Array(await new Response(reply.body).arrayBuffer()); finalizeWav(bytes); const duration_s = wavDuration(bytes); writeFileSync(part, bytes, { mode: 0o600 }); renameSync(part, target);
       lines.push({ id: line.id, path: target, duration_s, sha256: createHash("sha256").update(bytes).digest("hex") });
     } catch (error) { rmSync(part, { force: true }); const message = error instanceof Error ? error.message : "the engine did not provide an explanation"; throw new Error(`Line ${line.id} could not be spoken: ${message}. Try again or change the voice.`); }
     progress({ percent: Math.round((i + 1) / input.lines.length * 100), status: `spoken ${i + 1} of ${input.lines.length} lines` });
