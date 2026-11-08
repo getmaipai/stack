@@ -1,7 +1,9 @@
 // The daemon's routes: the role routes on /v1, the control routes on
 // /stack/v1, liveness on /healthz, the generated document and its
-// explorer under /api. No static files, no auth middleware: loopback is
-// the whole authentication (index.ts binds 127.0.0.1 and nothing else).
+// explorer under /api. No static files. Who may call is decided in front of
+// this app by lib/requestGuard.ts (ISOLATION-04: Host, Origin and Home's token
+// on every write, wired in daemon.ts `serveOptions`); index.ts binds 127.0.0.1
+// and nothing else.
 import { apiReference } from "@scalar/hono-api-reference";
 import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@maipai/core/src/openapi";

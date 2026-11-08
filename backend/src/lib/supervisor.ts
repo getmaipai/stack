@@ -251,17 +251,19 @@ async function leaveReducedChatInner(): Promise<{ ok: true; swapMs: number } | {
 
 // ---- the client -----------------------------------------------------------
 
-class OpenAIEngineClient implements EngineClient {
+export class OpenAIEngineClient implements EngineClient {
   /** `healthPath`: the route that says the engine lives; llama-server,
    * the speech worker and Pocket TTS have `/health`, ComfyUI has
    * `/system_stats` and no `status` field, so any 2xx there counts. */
-  constructor(readonly baseUrl: string, readonly healthPath = "/health") {}
+  constructor(readonly baseUrl: string, readonly healthPath = "/health", private readonly apiKey?: string) {}
   private url(path: string): string { return `${this.baseUrl.replace(/\/$/, "")}${path}`; }
+  /** ISOLATION-04: the launch key, when the engine was started with one. */
+  private auth(headers?: Record<string, string>): Record<string, string> | undefined { return this.apiKey ? { ...(headers ?? {}), authorization: `Bearer ${this.apiKey}` } : headers; }
 
   async request(path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<{ status: number; body: unknown }> {
     let response: Response;
     try {
-      response = await fetch(this.url(path), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal });
+      response = await fetch(this.url(path), { method: "POST", headers: this.auth({ "content-type": "application/json" }), body: JSON.stringify(body), signal });
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") throw error;
       throw new EngineUnavailableError(`Engine request failed: ${(error as Error).message}`);
@@ -272,7 +274,7 @@ class OpenAIEngineClient implements EngineClient {
 
   async stream(path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<Response> {
     try {
-      return await fetch(this.url(path), { method: "POST", headers: { "content-type": "application/json", accept: "text/event-stream" }, body: JSON.stringify({ ...body, stream: true }), signal });
+      return await fetch(this.url(path), { method: "POST", headers: this.auth({ "content-type": "application/json", accept: "text/event-stream" }), body: JSON.stringify({ ...body, stream: true }), signal });
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") throw error;
       throw new EngineUnavailableError(`Engine streaming request failed: ${(error as Error).message}`);
@@ -281,7 +283,7 @@ class OpenAIEngineClient implements EngineClient {
 
   async raw(path: string, init: { method: string; body?: FormData | string | Uint8Array; headers?: Record<string, string> }, signal?: AbortSignal): Promise<Response> {
     try {
-      return await fetch(this.url(path), { method: init.method, headers: init.headers, body: init.body, signal });
+      return await fetch(this.url(path), { method: init.method, headers: this.auth(init.headers), body: init.body, signal });
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") throw error;
       throw new EngineUnavailableError(`Engine request failed: ${(error as Error).message}`);
@@ -290,7 +292,7 @@ class OpenAIEngineClient implements EngineClient {
 
   async health(): Promise<boolean> {
     try {
-      const response = await fetch(this.url(this.healthPath), { signal: AbortSignal.timeout(2_000) });
+      const response = await fetch(this.url(this.healthPath), { headers: this.auth(), signal: AbortSignal.timeout(2_000) });
       return response.ok;
     } catch { return false; }
   }
@@ -977,7 +979,7 @@ export function speechWorkerCommand(
   return [runtime.execPath, ...(viaBun ? [runtime.main] : []), ...workerArgs];
 }
 
-export interface LaunchPlan { command: string[]; engine: string; build: string; stdin: "pipe" | "ignore"; contextLength: number; slots?: number; contextScope?: "total across slots" | "per slot"; kind: "spawned" | "managed"; env?: Record<string, string>; healthPath?: string; /** A client of the engine's own (oMLX's wire differs a little from llama-server's). */ client?: (baseUrl: string) => EngineClient; /** What the engine cannot report about itself: the Stack knows both. */ identity?: { build: string; model: string }; /** A projector was loaded: the process reads pictures. */ imageInput?: boolean; /** The engine is a tree of processes (Splash: the launcher that becomes the server, and the native engine under it): a pause, a stop and a memory reading reach every member. */ tree?: boolean; /** Run after the engine is healthy: proves it serves the model the Stack launched (Splash lists its served name); throws EngineUnavailableError when it does not. */ verifyServed?: (baseUrl: string) => Promise<void>; /** The most tokens one picture takes in this process, when the record declares it. */ pictureTokensMax?: number | null; }
+export interface LaunchPlan { command: string[]; engine: string; build: string; stdin: "pipe" | "ignore"; contextLength: number; slots?: number; contextScope?: "total across slots" | "per slot"; kind: "spawned" | "managed"; env?: Record<string, string>; healthPath?: string; /** A client of the engine's own (oMLX's wire differs a little from llama-server's). */ client?: (baseUrl: string) => EngineClient; /** What the engine cannot report about itself: the Stack knows both. */ identity?: { build: string; model: string }; /** A projector was loaded: the process reads pictures. */ imageInput?: boolean; /** The engine is a tree of processes (Splash: the launcher that becomes the server, and the native engine under it): a pause, a stop and a memory reading reach every member. */ tree?: boolean; /** Run after the engine is healthy: proves it serves the model the Stack launched (Splash lists its served name); throws EngineUnavailableError when it does not. */ verifyServed?: (baseUrl: string) => Promise<void>; /** The most tokens one picture takes in this process, when the record declares it. */ pictureTokensMax?: number | null; /** ISOLATION-04: the key this launch made for the engine (llama-server reads it from LLAMA_API_KEY); every request the Stack sends carries it, so a web page that finds the port gets 401. */ apiKey?: string; }
 
 /** The refusal text when the fit plan cannot admit the minimum context:
  * what went wrong in the person's terms, then the next step (org STYLE.md,
@@ -1460,13 +1462,13 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
     const coding = codingLaunchSettings();
     const window = resolvedContextLength ?? coding.contextLength;
     const args = codingServerArgs({ modelPath: model.modelPath!, port, contextLength: window, slots: coding.slots, thinkingBudgetTokens: coding.thinkingBudgetTokens, alias: model.id });
-    return { command: [binary, ...args], engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength: window, slots: coding.slots, contextScope: "total across slots", kind: "spawned", imageInput: false, pictureTokensMax: null };
+    return { command: [binary, ...args], apiKey: newLaunchKey(), engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength: window, slots: coding.slots, contextScope: "total across slots", kind: "spawned", imageInput: false, pictureTokensMax: null };
   }
   const projector = launchProjectorFor(role, model);
   if (role === "vision" && !projector?.modelPath) throw new EngineUnavailableError(`The ${model.id} projector is not installed.`);
   const pictureTokensMax = projector?.modelPath ? declaredPictureTokensMax(model) : null;
   const args = llamaServerArgs({ modelPath: model.modelPath!, port, config, contextLength, kvCacheType: defaultKvCacheType(), gpuLayers: gpuLayersFor(role), embeddings: role === "embed", projectorPath: projector?.modelPath ?? undefined, onePictureSlot: role === "vision", imageMaxTokens: pictureTokensMax ?? undefined, chatTemplateKwargs: declaredChatTemplateKwargs(model) ?? undefined });
-  return { command: [binary, ...args], engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength, slots, contextScope: "per slot", kind: "spawned", imageInput: !!projector?.modelPath, pictureTokensMax };
+  return { command: [binary, ...args], apiKey: newLaunchKey(), engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength, slots, contextScope: "per slot", kind: "spawned", imageInput: !!projector?.modelPath, pictureTokensMax };
 }
 
 /** The coding role on Splash (CODE-STACK-01 S5a): the bundled Python runs the launcher, which becomes the server and starts the native engine under it. The Stack lays out the hub cache first (hardlinks of its own pinned files), so the engine starts offline and downloads nothing; a layout it cannot make is a plain-words refusal that sends the request to llama-server. */
@@ -1718,7 +1720,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   }
   const spawnEngine = () => {
     try {
-      return Bun.spawn(plan.command, { stdout: "ignore", stderr: "pipe", stdin: plan.stdin, env: plan.env ?? { ...process.env, HF_HUB_CACHE: hfHubRoot } });
+      return Bun.spawn(plan.command, { stdout: "ignore", stderr: "pipe", stdin: plan.stdin, env: plan.env ?? { ...process.env, HF_HUB_CACHE: hfHubRoot, ...(plan.apiKey ? { LLAMA_API_KEY: plan.apiKey } : {}) } });
     } catch (error) {
       // A binary that will not even start (a truncated or wrong-arch file)
       // is the same failure as a crash before health, said in one sentence.
@@ -1735,7 +1737,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   // Splash is a tree of processes: remembered by command so a stop or a crash leaves no member holding memory.
   const tree = plan.tree ? new TreeSnapshot(handle.pid) : null;
   const owned = registerOwned(role, tree ?? handle.pid);
-  const client = plan.client ? plan.client(`http://127.0.0.1:${port}`) : new OpenAIEngineClient(`http://127.0.0.1:${port}`, plan.healthPath);
+  const client = plan.client ? plan.client(`http://127.0.0.1:${port}`) : new OpenAIEngineClient(`http://127.0.0.1:${port}`, plan.healthPath, plan.apiKey);
   const stderrText = handle.stderr ? new Response(handle.stderr).text() : Promise.resolve("");
   let exited = false;
   const exitPromise = handle.exited.then((code) => { exited = true; return code; });
@@ -1749,7 +1751,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     if (tree) owned.refresh();
     // The engine answered; it must also be the engine and the model the Stack launched.
     if (plan.verifyServed) await plan.verifyServed(client.baseUrl);
-    let identity = plan.identity ? { host: "local" as const, build: plan.identity.build, model: plan.identity.model, healthy: true } : await readEngineIdentity(client.baseUrl, undefined, plan.healthPath);
+    let identity = plan.identity ? { host: "local" as const, build: plan.identity.build, model: plan.identity.model, healthy: true } : await readEngineIdentity(client.baseUrl, undefined, plan.healthPath, plan.apiKey);
     // A managed engine exposes no build or model of its own; the Stack
     // knows both: the version it installed, and the model it linked (the
     // checkpoint file for ComfyUI; for Pocket TTS the weights the hub

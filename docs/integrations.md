@@ -18,17 +18,45 @@ session's `SttWireEvent` and `SttTranscribeResponse`, and the job.
 The org rule "shared record changes go through the spec first" applies
 to them.
 
-## Authentication: loopback, nothing else
+## Authentication: loopback plus Home's token (ISOLATION-04)
 
 The daemon binds `127.0.0.1` on its declared port (default 8770) and
-nothing else. There is no LAN setting, no key, no session, no operator.
-A process on the same machine is the caller by definition; on the
-household's machine that is Home, installed by Home's installer, with
-the Stack's port declared once in Home's own settings. Anything a
-person or a package should reach passes through Home, which owns
-identity and permissions, and Home never proxies the Stack raw: its
-Admin pages read the Stack's facts through Home's own routes with
-Home's own role check.
+nothing else. There is no LAN setting, no session, no operator. Loopback
+alone is not private from a web page, though: a page in a browser on the
+same computer can send requests to 127.0.0.1 (CSRF), and a page whose name
+is re-pointed at 127.0.0.1 (DNS rebinding) reads the answers. So three
+checks run in front of every route (`backend/src/lib/requestGuard.ts`):
+
+1. **Host.** The name must be `127.0.0.1`, `localhost` or `[::1]`, any port
+   (the SSH link to an engine computer lands on a different local port).
+   Anything else is 421 `host_not_allowed`, on GET too.
+2. **Origin.** Absent (a program) or equal to Host. A page on another origin
+   is 403 `origin_not_allowed`, on GET too. A CORS preflight is never
+   answered with permission; it gets the bare 404.
+3. **Token on every write.** A `POST`, `PUT`, `PATCH` or `DELETE` must carry
+   `x-maipai-home-token`, the same credential the full view uses (below).
+   Missing is 401 `home_token_required`, wrong is 401 `home_token_refused`,
+   and a `text/plain` or form-encoded body is 415 `content_type_not_allowed`
+   (the bodies a page can send without a preflight). Reads (`GET`, health)
+   stay open on loopback after checks 1 and 2.
+
+The token file `data/keys/home-view-token` is made when the Stack starts, so
+an install from before this change gets one on its first start with no data
+touched. Home reads it from that file (or `STACK_HOME_VIEW_TOKEN`, or the
+copy an admin stored for an engine computer) and sends it on every call.
+Anything a person or a package should reach passes through Home, which owns
+identity and permissions, and Home never proxies the Stack raw.
+
+**The model servers.** Each llama-server the Stack starts (chat, judge,
+router, embed, vision, coding) gets a key of its own at every launch, in
+`LLAMA_API_KEY` (not on the command line), and every request the Stack sends
+it carries that key, so a page that finds one of the random loopback ports
+gets 401 (its `/health` stays open and carries nothing). oMLX already had its
+launch key. Splash, the speech worker, the picture, video and music workers
+and the search sidecar do not take a key yet (follow-up ISOLATION-04b): each
+has its own flags and several direct callers, and was not changed here. They
+sit on random loopback ports, so until 04b a page could only reach one by
+guessing its port.
 
 ## The role contract (`/v1/*`)
 

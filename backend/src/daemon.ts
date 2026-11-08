@@ -4,6 +4,8 @@
 // restart policy is the outer watchdog. index.ts dispatches here; the
 // speech worker never imports this file, so it never opens the database.
 import { app, websocket } from "@/app";
+import { guardedFetch } from "@/lib/requestGuard";
+import { homeViewToken } from "@/lib/adultView";
 import { logger } from "@/lib/log";
 import { installLaunchdService, launchdStatus, startLaunchdService, stopLaunchdService, uninstallLaunchdService } from "@/service/launchd";
 import { installSystemdService, startSystemdService, stopSystemdService, systemdStatus, uninstallSystemdService } from "@/service/systemd";
@@ -39,7 +41,7 @@ export const MAX_REQUEST_BODY_BYTES = 2 * 1024 * 1024 * 1024 + 64 * 1024 * 1024;
 
 export function serveOptions(): { port: number; hostname: "127.0.0.1"; fetch: (request: Request, server: unknown) => Response | Promise<Response>; websocket: typeof websocket; idleTimeout: number; maxRequestBodySize: number } {
   const port = Number(process.env.PORT ?? settingValues()["stack.runtime.port"] ?? 8770);
-  return { port, hostname: "127.0.0.1", fetch: app.fetch as (request: Request, server: unknown) => Response | Promise<Response>, websocket, idleTimeout: 255, maxRequestBodySize: MAX_REQUEST_BODY_BYTES };
+  return { port, hostname: "127.0.0.1", fetch: guardedFetch(app.fetch as (request: Request, server: unknown) => Response | Promise<Response>), websocket, idleTimeout: 255, maxRequestBodySize: MAX_REQUEST_BODY_BYTES };
 }
 
 function onBattery(): boolean {
@@ -64,6 +66,8 @@ async function serve(): Promise<void> {
     logger.appendLine(JSON.stringify({ event: "governor.metal-cap", bytes, loweredCap: bytes !== null && bytes < previousCapBytes }));
   }).catch(() => {});
   console.log(`Machine tier ${tier ?? "unknown (the p16 margin applies)"}.`);
+  // ISOLATION-04: Home's token exists before the first request (an install made before this gets one here, with no data touched).
+  homeViewToken();
   const options = serveOptions();
   const server = Bun.serve(options);
   // Under systemd (Type=notify) the unit is "started" only now, and the
