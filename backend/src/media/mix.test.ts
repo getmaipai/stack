@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { runMix } from "./mix";
+import { precheck } from "./jobs";
 import { jobDir, releaseJobDir } from "./paths";
 
 const configuredFfmpeg = process.env.STACK_MEDIA_FFMPEG ?? "ffmpeg";
@@ -23,5 +24,12 @@ describe("media.mix", () => {
       expect(m4a.path.endsWith("show.m4a")).toBe(true); expect(m4a.duration_s).toBeGreaterThan(1.1); expect(m4a.duration_s).toBeLessThan(1.5); expect(m4a.sha256).toHaveLength(64);
       const chapters = spawnSync(configuredFfmpeg, ["-i", m4a.path, "-f", "null", "-"], { encoding: "utf8" }).stderr; expect(chapters).toContain("Weather");
     } finally { for (const id of ["mix-test-inputs", "mix-plain", "mix-duck", "mix-m4a"]) releaseJobDir(id); }
+  });
+});
+
+describe("media.mix admission", () => {
+  it("checks a mix job's own fields, not a link to fetch", () => {
+    expect(precheck("media.mix")({ tracks: [] })?.reason).toContain("tracks");
+    expect(precheck("media.mix")({ tracks: [] })?.reason).not.toContain("url");
   });
 });

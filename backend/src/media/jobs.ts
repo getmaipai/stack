@@ -22,7 +22,7 @@ import { log } from "@/lib/log";
 import { COLOUR_MATCH_STRENGTH, COMPANION_CLIP_FPS, COMPANION_CLIP_SIZE, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionCrop, companionMetrics, companionReasons, crossfadeLoop, downscaleRgba4, frameDifference, keyOutRgba, selectCompanionWindow } from "./companionClip";
 import { upscaleClip, upscaleProblem, UPSCALE_DEADLINE_MS, UpscaleFailure } from "./upscale";
 import { runTtsBatch } from "./tts";
-import { runMix } from "./mix";
+import { MixInput, runMix } from "./mix";
 import { RECORDED_SPEECH_PEAK_BYTES } from "@/recordedSpeech/recordedSpeech";
 
 export const MEDIA_KINDS = ["media.probe", "media.fetch", "media.transcode", "media.preview", "media.companion_clip", "media.edit", "media.tts", "media.mix", "media.setup"] as const;
@@ -69,7 +69,7 @@ function pathFailure(error: unknown): JobFailure | null {
 }
 
 /** Validates what can be validated before a job takes a place in the queue: the shape of the input, every path, and a background fetch against a resting host. */
-function precheck(kind: MediaKind): (input: Record<string, unknown>) => JobRefusal | null {
+export function precheck(kind: MediaKind): (input: Record<string, unknown>) => JobRefusal | null {
   return (input) => {
     try {
       if (kind === "media.probe") resolveReadable(ProbeInput.parse(input).path);
@@ -85,6 +85,7 @@ function precheck(kind: MediaKind): (input: Record<string, unknown>) => JobRefus
         safeName(parsed.output.name, "");
       }
       else if (kind === "media.setup") SetupInput.parse(input);
+      else if (kind === "media.mix") { const parsed = MixInput.parse(input); for (const track of parsed.tracks) resolveReadable(track.path); if (parsed.output.dir) resolveWritableDir(parsed.output.dir); safeName(parsed.output.name, "mix.wav"); }
       else {
         const parsed = FetchInput.parse(input);
         if (parsed.cookies_path) resolveReadable(parsed.cookies_path, "The cookies file");
