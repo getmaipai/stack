@@ -5,7 +5,7 @@ const wav = () => { const bytes = new Uint8Array(44 + 8000); const v = new DataV
 describe("media.tts", () => it("writes three WAVs in input order", async () => {
   const mod = await import("@/lib/supervisor"); const original = mod.speakRole;
   mock.module("@/lib/supervisor", () => ({ ...mod, speakRole: async () => ({ status: 200, body: new ReadableStream({ start(c) { c.enqueue(wav()); c.close(); } }) }) }));
-  try { const result = await runTtsBatch({ id: "test-tts", input: { lines: [{ id: "one", text: "one" }, { id: "two", text: "two" }, { id: "three", text: "three" }] } } as never, new AbortController().signal, () => {}); expect(result.lines.map((x) => x.id)).toEqual(["one", "two", "three"]); expect(result.lines.every((x) => x.duration_s > 0)).toBe(true); expect(result.lines.every((x) => Bun.file(x.path).size > 0)).toBe(true); } finally { void original; }
+  try { const result = await runTtsBatch({ id: "test-tts", input: { lines: [{ id: "one", text: "one" }, { id: "two", text: "two" }, { id: "three", text: "three" }] } } as never, new AbortController().signal, () => {}); expect(result.lines.map((x) => x.id)).toEqual(["one", "two", "three"]); expect(result.lines.every((x) => x.duration_s > 0)).toBe(true); expect(result.lines.every((x) => Bun.file(x.path).size > 0)).toBe(true); } finally { mock.module("@/lib/supervisor", () => ({ ...mod, speakRole: original })); /* a module mock outlives its test: put the real speakRole back so later voice tests do not see the fake */ }
 }));
 describe("finalizeWav", () => it("cuts a placeholder data size down to the bytes that arrived", () => {
   const bytes = wav(); const v = new DataView(bytes.buffer);
