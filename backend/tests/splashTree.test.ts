@@ -232,7 +232,9 @@ macTest("the first coding request starts Splash through the real start path: lau
     "--language-only", "--served-model-name", "qwen3.8-27b-ud-q4-k-m", "--announce-served-name", "--default-reasoning-effort", "medium", "--thinking-token-budget", "2000",
     "--max-context", "131072", "--max-cache-disk", "0", "--idle-release", "off", "--no-webui",
   ]);
-  expect(seen.env).toMatchObject({ HOME: splashHomeDir(), TMPDIR: splashTmpDir(), HF_HOME: splashHomeDir(), HF_HUB_CACHE: splashHubDir(), HF_HUB_OFFLINE: "1", TRANSFORMERS_OFFLINE: "1", DO_NOT_TRACK: "1", HF_HUB_DISABLE_TELEMETRY: "1", HF_TOKEN: null, HUGGING_FACE_HUB_TOKEN: null, STACK_SECRETS_KEY: null, PYTHONPATH: null, SPLASH_API_KEY: null });
+  expect(seen.env).toMatchObject({ HOME: splashHomeDir(), TMPDIR: splashTmpDir(), HF_HOME: splashHomeDir(), HF_HUB_CACHE: splashHubDir(), HF_HUB_OFFLINE: "1", TRANSFORMERS_OFFLINE: "1", DO_NOT_TRACK: "1", HF_HUB_DISABLE_TELEMETRY: "1", HF_TOKEN: null, HUGGING_FACE_HUB_TOKEN: null, STACK_SECRETS_KEY: null, PYTHONPATH: null });
+  // ISOLATION-04b: an ambient SPLASH_API_KEY is scrubbed from the Splash environment, and the spawn sets the Stack's own per-launch one.
+  expect(String((seen.env as Record<string, unknown>).SPLASH_API_KEY).length).toBeGreaterThanOrEqual(16);
   // The Stack's files were laid out first, by hardlink.
   expect(existsSync(join(splashHubDir(), "models--incoai--Qwen3.8-27B-DFlash2", "refs", "main"))).toBe(true);
   // The tree is the server and the engine under it, and the Stack has the server's pid.
