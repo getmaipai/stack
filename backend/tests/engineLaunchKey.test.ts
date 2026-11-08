@@ -3,7 +3,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { OpenAIEngineClient } from "@/lib/supervisor";
 import { readEngineIdentity } from "@/lib/identity";
 
-const KEY = "launch-key-0123456789";
+const KEY = `launch-${crypto.randomUUID()}`;
 let server: ReturnType<typeof Bun.serve>;
 let url = "";
 beforeAll(() => {
