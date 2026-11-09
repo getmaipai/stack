@@ -15,6 +15,8 @@ const { upgradeWebSocket, websocket } = createBunWebSocket<ServerWebSocket>();
 export { websocket };
 
 export const speechRoutes = new Hono();
+let liveSessions = 0;
+export const isLiveSpeechSessionActive = () => liveSessions > 0;
 
 speechRoutes.get("/", upgradeWebSocket(() => {
   let upstream: WebSocket | null = null;
@@ -23,9 +25,11 @@ speechRoutes.get("/", upgradeWebSocket(() => {
   // Frames that arrive before the upstream socket is open are held, so
   // the first words of an utterance are never dropped.
   const held: Array<string | ArrayBuffer | Uint8Array> = [];
-  const end = () => { closed = true; session?.release(); session = null; if (upstream && upstream.readyState <= 1) upstream.close(); upstream = null; };
+  let counted = false;
+  const end = () => { closed = true; if (counted) { liveSessions--; counted = false; } session?.release(); session = null; if (upstream && upstream.readyState <= 1) upstream.close(); upstream = null; };
   return {
     async onOpen(_event, client) {
+      liveSessions++; counted = true;
       let opened: RoleSession;
       try {
         // The process retiring under this session (a stop, a restart)

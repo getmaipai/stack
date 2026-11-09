@@ -2732,3 +2732,10 @@ export async function openRoleSession(requested: RoleId, onRetire: () => void = 
   processRecord.sessions.add(close);
   return session;
 }
+
+/** Whether a caller currently holds a live role session. */
+export function roleSessionActive(requested: RoleId): boolean {
+  const processRecord = runtime(processRoleFor(requested)).process;
+  return !!processRecord && (processRecord.sessions?.size ?? 0) > 0;
+}
+

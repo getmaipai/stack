@@ -121,7 +121,7 @@ export const ROLES = {
     wire: "transcription",
     residency: "resident",
     memoryClass: "reserved",
-    endpoints: ["/v1/audio/transcriptions"],
+    endpoints: ["/v1/audio/transcriptions", "/v1/audio/mouth-timings"],
     quality: [],
   },
   tts: {

@@ -7369,6 +7369,197 @@
         }
       }
     },
+    "/v1/audio/mouth-timings": {
+      "post": {
+        "tags": [
+          "Speech"
+        ],
+        "summary": "Return word timings for a sentence of speech",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "audio": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "audio",
+                  "text"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Recognizer word timings in seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "words": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string"
+                          },
+                          "start": {
+                            "type": "number"
+                          },
+                          "end": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "text",
+                          "start",
+                          "end"
+                        ]
+                      }
+                    },
+                    "recognizer": {
+                      "type": "string"
+                    },
+                    "duration_s": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "words",
+                    "recognizer",
+                    "duration_s"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unreadable WAV or audio longer than 30 seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "bad_audio",
+                        "busy",
+                        "no_timestamps",
+                        "not_ready"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The speech recognizer is busy with live or other speech.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "bad_audio",
+                        "busy",
+                        "no_timestamps",
+                        "not_ready"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "The recognizer does not provide token timestamps.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "bad_audio",
+                        "busy",
+                        "no_timestamps",
+                        "not_ready"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The stt recognizer is not ready.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "bad_audio",
+                        "busy",
+                        "no_timestamps",
+                        "not_ready"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/audio/beats": {
       "post": {
         "tags": [
