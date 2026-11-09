@@ -2777,6 +2777,357 @@
         }
       }
     },
+    "/v1/images/talk-frames": {
+      "post": {
+        "tags": [
+          "Roles"
+        ],
+        "summary": "Mouth and eye still frames for a portrait (the job API with a wait)",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "A portrait (PNG, JPEG or WebP), at most 16 megapixels. Home screens it before sending."
+                  },
+                  "lip": {
+                    "type": "string",
+                    "example": "0,0.3,0.7",
+                    "description": "Mouth-openness ratios, comma separated, each 0 (closed) to 1, at most 12."
+                  },
+                  "eye": {
+                    "type": "string",
+                    "example": "0",
+                    "description": "Eye-openness ratios, comma separated, each 0 (closed) to 1, at most 12."
+                  },
+                  "timeout_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true
+                  }
+                },
+                "required": [
+                  "image"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "One entry per requested ratio: every lip ratio first (with the picture's own eye openness), then every eye ratio (with its own lip openness), in the order sent. `sourceEye` and `sourceLip` are the picture's own measured ratios. Fetch each PNG from `url`; frames are the input picture's size.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "sourceEye": {
+                      "type": "number"
+                    },
+                    "sourceLip": {
+                      "type": "number"
+                    },
+                    "frames": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "lip",
+                              "eye"
+                            ]
+                          },
+                          "ratio": {
+                            "type": "number"
+                          },
+                          "width": {
+                            "type": "number"
+                          },
+                          "height": {
+                            "type": "number"
+                          },
+                          "content_type": {
+                            "type": "string",
+                            "enum": [
+                              "image/png"
+                            ]
+                          },
+                          "ms": {
+                            "type": "number"
+                          },
+                          "url": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "ratio",
+                          "width",
+                          "height",
+                          "content_type",
+                          "ms",
+                          "url"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "frames"
+                  ]
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Still running past timeout_ms; poll /stack/v1/jobs/{job} (its result holds `frameCount`, `width`, `height`, `sourceEye`, `sourceLip`), then fetch frame 0 to frameCount-1 from GET /v1/images/talk-frames/{job}/{index}, in the order the ratios were sent: every lip ratio, then every eye ratio.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "sourceEye": {
+                      "type": "number"
+                    },
+                    "sourceLip": {
+                      "type": "number"
+                    },
+                    "frames": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "lip",
+                              "eye"
+                            ]
+                          },
+                          "ratio": {
+                            "type": "number"
+                          },
+                          "width": {
+                            "type": "number"
+                          },
+                          "height": {
+                            "type": "number"
+                          },
+                          "content_type": {
+                            "type": "string",
+                            "enum": [
+                              "image/png"
+                            ]
+                          },
+                          "ms": {
+                            "type": "number"
+                          },
+                          "url": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "ratio",
+                          "width",
+                          "height",
+                          "content_type",
+                          "ms",
+                          "url"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "frames"
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The upload is too big, or the picture is over 16 megapixels.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Bad ratios, an unreadable picture, or no face found (`no_face`); `error` says what to change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The engine failed on this picture.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The engine or its model files are not installed, or there is no free memory; `error` says what to do.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/images/talk-frames/{job}/{index}": {
+      "get": {
+        "tags": [
+          "Roles"
+        ],
+        "summary": "One finished frame as a PNG (kept in memory for ten minutes)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0
+            },
+            "required": false,
+            "name": "index",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One frame, the input picture's size, no metadata.",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such frame (it expired after ten minutes or was never made).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/images/looks": {
       "post": {
         "tags": [
@@ -16134,6 +16485,72 @@
                         "models",
                         "limits",
                         "operations",
+                        "reason"
+                      ]
+                    },
+                    "talk_frames": {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "unsupported",
+                            "needs-setup",
+                            "building",
+                            "idle",
+                            "running"
+                          ]
+                        },
+                        "phase": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "installed": {
+                          "type": "boolean",
+                          "description": "The pinned LivePortrait source is installed and patched."
+                        },
+                        "environmentReady": {
+                          "type": "boolean"
+                        },
+                        "models": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "boolean"
+                          },
+                          "description": "landmark, appearance, motion, generator, warping, stitching: whether each pinned weight is installed and verified."
+                        },
+                        "modelsVerified": {
+                          "type": "boolean"
+                        },
+                        "helperCompiled": {
+                          "type": "boolean",
+                          "description": "Apple's on-device face-rectangle helper is built; without it MediaPipe finds the face."
+                        },
+                        "lastSuccessfulRun": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "limits": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "number"
+                          }
+                        },
+                        "reason": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "phase",
+                        "installed",
+                        "environmentReady",
+                        "models",
+                        "modelsVerified",
+                        "helperCompiled",
+                        "lastSuccessfulRun",
+                        "limits",
                         "reason"
                       ]
                     }
