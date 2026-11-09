@@ -470,6 +470,31 @@ happened, what to do) and `code`: 413 `too_large`, 422 `mask_required` `mask_emp
 The worker is one Python process that starts on the first edit and exits after about two minutes idle; it holds a pinned 4 GB governor admission
 while it lives. Pictures, masks and results are never logged or written beyond the request. Design: Home `docs/design/image-tools-2026-10-17.md`.
 
+## Talk frames (TALK-06)
+
+`POST /v1/images/talk-frames` makes still mouth and eye pictures from one portrait, for a talking companion to play back in time with speech. Multipart:
+`image` (PNG, JPEG or WebP, at most 16 megapixels and 40 MB), `lip` and `eye` (comma-separated openness ratios, each 0 closed to 1 wide, at most 12 values
+per list and at least one in all; for example `lip=0,0.3,0.7&eye=0`), optional `timeout_ms` (default 120000). It is a job like `/v1/images/edits`: 200
+`{ created, job, sourceEye, sourceLip, frames: [{ kind, ratio, width, height, content_type, ms, url }] }`, or 202 with the job id when it runs past
+`timeout_ms` (poll `GET /stack/v1/jobs/{id}`: its result holds `frameCount`, `width`, `height`, `sourceEye`, `sourceLip`). Frames are in the order sent:
+every lip ratio first (the picture's own eye openness), then every eye ratio (its own lip openness). `sourceEye` and `sourceLip` are the picture's own
+measured ratios (a ratio equal to the picture's own changes nothing). Fetch each PNG from `GET /v1/images/talk-frames/{job}/{index}`: the input
+picture's size, no metadata, kept in memory for ten minutes, then dropped (404 `expired`). Refusals carry `error` (what happened, what to do) and `code`:
+413 `too_large` ("This picture is over 16 megapixels. Choose a smaller picture."), 422 `no_face` ("No face was found in this picture. Choose a picture
+where the face is clear."), `bad_ratio`, `too_many_ratios`, `bad_image`, 503 `model_missing` `no_memory` `setup_failed` `unsupported`
+`engine_unavailable`, 500 `engine_failed` `failed`.
+
+The engine is LivePortrait (KwaiVGI, MIT) at one pinned commit, patched when the environment is built (`backend/src/liveportrait/liveportrait.patch.txt`),
+and six MIT weights pinned by revision and sha256 (about 607 MB). The research-only face finder LivePortrait normally downloads is never installed:
+faces are found by Apple Vision through a small helper the Stack compiles once (`facefind.swift`, a system API with no model file), then by MediaPipe
+(Apache-2.0) when Vision finds nothing, and the 203-point `landmark.onnx` runs on the crop. It runs on the Mac's GPU (PyTorch MPS); there is no CPU
+fallback, and a machine without it reports the engine as not ready. The worker is one Python process that starts on the first request, keeps its models
+for about two minutes idle (`LIVEPORTRAIT_IDLE_MS`), then exits; it holds a pinned 5 GiB governor admission while it lives (measured peak footprint 4.06 GB
+with a 1024-pixel picture, 4.99 GB with a 16-megapixel one) and is stopped for memory like the other image workers. Home decides who may call and screens
+every picture: the Stack makes no identity, face-matching, age or sexual-content decision, and no picture, ratio list or frame is logged.
+`GET /stack/v1/image-tools` also returns `talk_frames: { state, phase, installed, environmentReady, models, modelsVerified, helperCompiled,
+lastSuccessfulRun, limits, reason }`, and the `liveportrait` component (Engines page) carries the six pins.
+
 ## Look (LOOK-01)
 
 `POST /v1/images/looks` takes multipart `image` (one JPEG, at most 2 MB), `source` (the caller's source id) and `detail` (`fast` or `detailed`, default `fast`). Fast returns one `LookResult`: household object labels with counts, scores and fractional boxes; light, a majority upper-wall colour when available, object and scene tags; `cost: { ms, tier: "fast" }` and `expires_in_s: 90`. Cached live tracks may appear with `stale: true` for up to 90 seconds. `detailed` returns 422 `detail_unavailable` until that tier is built. Refusals are `{ error, code }`: 413 `too_large`, 415 `not_jpeg`, 422 `detail_unavailable`, 429 `too_fast` (12 per source per minute), 503 `model_missing` or `no_memory`, 500 `failed`.

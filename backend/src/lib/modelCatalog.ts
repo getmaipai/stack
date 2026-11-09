@@ -818,6 +818,23 @@ export const STACK_IMAGE_TOOL_MODELS: CatalogModelLike[] = [
   imageToolPin("image-tool-realesrgan-general-x4v3", "tool-realesrgan", "Heliosoph/realesrgan-onnx", "488e5dda07333179f229a6205d92135eea4c25e9", "realesr-general-x4v3.onnx", "BSD-3-Clause", "09b757accd747d7e423c1d352b3e8f23e77cc5742d04bae958d4eb8082b76fa4", 4_871_181, 1_500_000_000),
 ];
 
+// TALK-06: exact upstream files at the supplied model revision. The model
+// card identifies the code and all weights, including landmark.onnx, as MIT.
+// The whole worker's peak memory footprint (macOS `footprint`, which counts the GPU buffers), measured 2026-11-09 on the Mac Studio:
+// 4.06 GB on a 1024 x 1024 picture, 4.99 GB on a 4000 x 4000 (16 megapixel) picture, four frames each.
+const LIVEPORTRAIT_MEASURED_PEAK_BYTES = 4_986_000_000;
+const LIVEPORTRAIT_REPO = "KwaiVGI/LivePortrait";
+const LIVEPORTRAIT_REV = "82a4fa6735ca58432b6ce39301b4b9ee066dea47";
+const liveportraitPin = (id: string, file: string, sha256: string, bytes: number): CatalogModelLike => ({ id, role: "image", component: "liveportrait", repo: LIVEPORTRAIT_REPO, license: "MIT", revision: LIVEPORTRAIT_REV, engine: "liveportrait", sizing: { profile: "p16", quantization: "fp32" }, download: { url: hfUrl(`${LIVEPORTRAIT_REPO}/resolve/${LIVEPORTRAIT_REV}/${file}`), sha256, approx_bytes: bytes, hub_file: file }, measured: { footprintBytes: LIVEPORTRAIT_MEASURED_PEAK_BYTES, contextLength: 0, hardware: "Apple M5 Max, 128 GB unified memory" } });
+export const STACK_LIVEPORTRAIT_MODELS: CatalogModelLike[] = [
+  liveportraitPin("liveportrait-landmark", "liveportrait/landmark.onnx", "31d22a5041326c31f19b78886939a634a5aedcaa5ab8b9b951a1167595d147db", 114_666_491),
+  liveportraitPin("liveportrait-appearance", "liveportrait/base_models/appearance_feature_extractor.pth", "5279bb8654293dbdf327030b397f107237dd9212fb11dd75b83dfb635211ceb5", 3_387_959),
+  liveportraitPin("liveportrait-motion", "liveportrait/base_models/motion_extractor.pth", "251e6a94ad667a1d0c69526d292677165110ef7f0cf0f6d199f0e414e8aa0ca5", 112_545_506),
+  liveportraitPin("liveportrait-generator", "liveportrait/base_models/spade_generator.pth", "4780afc7909a9f84e24c01d73b31a555ef651521a1fe3b2429bd04534d992aee", 221_813_590),
+  liveportraitPin("liveportrait-warping", "liveportrait/base_models/warping_module.pth", "2f61a6f265fe344f14132364859a78bdbbc2068577170693da57fb96d636e282", 182_180_086),
+  liveportraitPin("liveportrait-stitching", "liveportrait/retargeting_models/stitching_retargeting_module.pth", "3652d5a3f95099141a56986aaddec92fadf0a73c87a20fac9a2c07c32b28b611", 2_393_098),
+];
+
 // VIDEO-GEN-01: the `video` role's pin. Wan2.2 TI2V-5B with the FastWan
 // 3-step DMD distillation, converted to MLX (bf16), at one revision of
 // the community conversion, every file by sha256 and size (the three
@@ -1484,7 +1501,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_DIARIZATION_SEGMENTATION_MODEL, STACK_DIARIZATION_EMBEDDING_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_RECORDED_SPEECH_MODEL, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_MASK_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, ...STACK_MUSIC_XL_MODELS, ...STACK_MUSIC_MAX_MODELS, ...STACK_STEMS_MODELS, ...STACK_ALIGN_MODELS, ...STACK_VOICE_CONVERT_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_DIARIZATION_SEGMENTATION_MODEL, STACK_DIARIZATION_EMBEDDING_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_RECORDED_SPEECH_MODEL, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_LIVEPORTRAIT_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_MASK_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, ...STACK_MUSIC_XL_MODELS, ...STACK_MUSIC_MAX_MODELS, ...STACK_STEMS_MODELS, ...STACK_ALIGN_MODELS, ...STACK_VOICE_CONVERT_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

@@ -1,0 +1,102 @@
+# TALK-06: patch for LivePortrait commit 9b294b3d0536135442ea73cb01e6cb3ca7029dd3, applied at environment build (patch -p1).
+# Swaps the non-commercial face finder for src/utils/face_finder.py (rectangle from the Stack's detector, then landmark.onnx).
+--- a/src/config/crop_config.py
++++ b/src/config/crop_config.py
+@@ -11,7 +11,6 @@
+ 
+ @dataclass(repr=False)  # use repr from PrintableConfig
+ class CropConfig(PrintableConfig):
+-    insightface_root: str = make_abs_path("../../pretrained_weights/insightface")
+     landmark_ckpt_path: str = make_abs_path("../../pretrained_weights/liveportrait/landmark.onnx")
+     xpose_config_file_path: str = make_abs_path("../utils/dependencies/XPose/config_model/UniPose_SwinT.py")
+     xpose_embedding_cache_path: str = make_abs_path('../utils/resources/clip_embedding')
+--- a/src/utils/cropper.py
++++ b/src/utils/cropper.py
+@@ -18,7 +18,7 @@
+ )
+ from .io import contiguous
+ from .rprint import rlog as log
+-from .face_analysis_diy import FaceAnalysisDIY
++from .face_finder import FaceFinder
+ from .human_landmark_runner import LandmarkRunner as HumanLandmark
+ 
+ def make_abs_path(fn):
+@@ -60,20 +60,13 @@
+             except:
+                     device = "cuda"
+                     face_analysis_wrapper_provider = ["CUDAExecutionProvider"]
+-        self.face_analysis_wrapper = FaceAnalysisDIY(
+-                    name="buffalo_l",
+-                    root=self.crop_cfg.insightface_root,
+-                    providers=face_analysis_wrapper_provider,
+-                )
+-        self.face_analysis_wrapper.prepare(ctx_id=device_id, det_size=(512, 512), det_thresh=self.crop_cfg.det_thresh)
+-        self.face_analysis_wrapper.warmup()
+-
+         self.human_landmark_runner = HumanLandmark(
+             ckpt_path=self.crop_cfg.landmark_ckpt_path,
+             onnx_provider=device,
+             device_id=device_id,
+         )
+         self.human_landmark_runner.warmup()
++        self.face_analysis_wrapper = FaceFinder(self.human_landmark_runner)
+ 
+         if self.image_type == "animal_face":
+             from .animal_landmark_runner import XPoseRunner as AnimalLandmarkRunner
+@@ -111,7 +104,7 @@
+ 
+             # NOTE: temporarily only pick the first face, to support multiple face in the future
+             src_face = src_face[0]
+-            lmk = src_face.landmark_2d_106  # this is the 106 landmarks from insightface
++            lmk = src_face.landmark_2d_106  # 203 landmarks from the Stack's face finder (see face_finder.py)
+         else:
+             tmp_dct = {
+                 'animal_face_9': 'animal_face',
+--- a/src/utils/face_finder.py
++++ b/src/utils/face_finder.py
+@@ -0,0 +1,45 @@
++# coding: utf-8
++"""Stack patch (TALK-06): the licence-clean face finder.
++
++LivePortrait ships a face finder whose model files are non-commercial research
++only. The Stack never installs them. This finder takes a face rectangle from a
++detector the Stack supplies (Apple Vision through a small compiled helper, then
++MediaPipe, both permissive) and turns it into the 203 landmarks that
++`landmark.onnx` (MIT) predicts on a crop around the rectangle. The cropper then
++refines them exactly as it refines landmarks from any other source.
++"""
++from types import SimpleNamespace
++
++import cv2
++import numpy as np
++
++from .crop import _transform_pts, crop_image_by_bbox
++
++# Set by the Stack's worker: a callable taking an RGB array and returning (x, y, w, h) in pixels, or None.
++detect_face = None
++# The landmark model sees a crop this many times the rectangle's longer side.
++CROP_SCALE = 1.5
++
++
++class FaceFinder(object):
++    def __init__(self, landmark_runner):
++        self.landmark_runner = landmark_runner
++
++    def get(self, img_bgr, flag_do_landmark_2d_106=True, direction="large-small", max_face_num=0):
++        """Same shape of answer as the finder it replaces: a list of faces, each with `landmark_2d_106`.
++        The array holds 203 points (the cropper accepts either count)."""
++        if detect_face is None:
++            return []
++        img_rgb = np.ascontiguousarray(img_bgr[..., ::-1])
++        box = detect_face(img_rgb)
++        if box is None:
++            return []
++        x, y, w, h = box
++        side = max(w, h) * CROP_SCALE
++        cx, cy = x + w / 2.0, y + h / 2.0
++        dsize = self.landmark_runner.dsize
++        crop = crop_image_by_bbox(img_rgb, [cx - side / 2, cy - side / 2, cx + side / 2, cy + side / 2], dsize=dsize, borderMode=cv2.BORDER_CONSTANT)
++        inp = (crop["img_crop"].astype(np.float32) / 255.0).transpose(2, 0, 1)[None, ...]
++        out = self.landmark_runner._run(inp)
++        lmk = np.asarray(out[2][0]).reshape(-1, 2) * dsize
++        return [SimpleNamespace(landmark_2d_106=_transform_pts(lmk, crop["M_c2o"]))]

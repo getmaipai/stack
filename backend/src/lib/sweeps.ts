@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { dataDir } from "@/lib/paths";
 import { logger } from "@/lib/log";
 import { imageToolsTmpDir, sweepImageToolsTmp } from "@/imagetools/imageTools";
+import { livePortraitTmpDir, sweepLivePortraitTmp } from "@/liveportrait/liveportrait";
 import { jobsDir, sweepJobDirs } from "@/media/paths";
 import { sweepVideoTmp, sweepResults as sweepVideoResults } from "@/video/results";
 import { sweepMusicTmp, sweepResults as sweepMusicResults } from "@/music/results";
@@ -49,6 +50,7 @@ export async function runSweeps(reason: string): Promise<SweepSummary> {
   const atStart = reason === "start";
   const tasks: Array<[string, () => number | void, string]> = [
     ...(atStart ? [["image-tools-tmp", sweepImageToolsTmp, imageToolsTmpDir()] as [string, () => number | void, string]] : []),
+    ...(atStart ? [["talk-frames-tmp", sweepLivePortraitTmp, livePortraitTmpDir()] as [string, () => number | void, string]] : []),
     ["media-job-dirs", sweepJobDirs, jobsDir()],
     ...(atStart ? [["video-tmp", sweepVideoTmp, join(dataDir, "tmp", "video")] as [string, () => number | void, string]] : []),
     ["video-results", sweepVideoResults, join(dataDir, "video", "results")],

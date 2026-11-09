@@ -209,11 +209,12 @@ export interface WatchdogActions {
 
 async function defaultUnloadIdleWorkers(): Promise<string[]> {
   const stopped: string[] = [];
-  const [{ imageGen }, { videoGen }, { musicGen }, { imageTools }, { lookService }, supervisor] = await Promise.all([import("@/images/imageEngine"), import("@/video/videoGen"), import("@/music/musicGen"), import("@/imagetools/imageTools"), import("@/look/look"), import("@/lib/supervisor")]);
+  const [{ imageGen }, { videoGen }, { musicGen }, { imageTools }, { livePortrait }, { lookService }, supervisor] = await Promise.all([import("@/images/imageEngine"), import("@/video/videoGen"), import("@/music/musicGen"), import("@/imagetools/imageTools"), import("@/liveportrait/liveportrait"), import("@/look/look"), import("@/lib/supervisor")]);
   if (imageGen.stopIfIdle()) stopped.push("pictures");
   if (videoGen.stopIfIdle()) stopped.push("video");
   if (musicGen.stopIfIdle()) stopped.push("music");
   if (imageTools.stopIfIdle()) stopped.push("image tools");
+  if (livePortrait.stopIfIdle()) stopped.push("talking pictures");
   if (lookService.stopIfIdle()) stopped.push("look");
   const last = supervisor.lastInteractiveAt();
   const state = supervisor.getRoleStatus("tts").state;

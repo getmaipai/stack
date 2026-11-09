@@ -31,8 +31,10 @@ import { fitPlanRoutes } from "@/routes/fitPlan";
 import { warmupRoutes } from "@/routes/warmup";
 import { searchRoutes } from "@/routes/search";
 import { imageToolsRoutes } from "@/routes/imageTools";
+import { talkFramesRoutes } from "@/routes/talkFrames";
 import { componentsRoutes } from "@/routes/components";
 import { registerImageToolJobs } from "@/imagetools/jobs";
+import { registerTalkFrameJobs } from "@/liveportrait/jobs";
 import { mediaRoutes } from "@/routes/media";
 import { registerMediaJobs } from "@/media/jobs";
 import { videoRoutes } from "@/routes/video";
@@ -81,6 +83,7 @@ export const app = apiRouter<AppEnv>();
 // engine still answers the honest 503 through the route's bound check.
 registerGenerators();
 registerImageToolJobs();
+registerTalkFrameJobs();
 registerMediaJobs();
 registerVideoJobs();
 registerMusicJobs();
@@ -125,6 +128,7 @@ app.get("/api/docs", apiReference({ url: "/api/openapi.json" }));
 // upgrade is never read as a POST body.
 app.route(SESSION_PATH, speechRoutes);
 app.route("/v1", v1Routes);
+app.route("/v1", talkFramesRoutes);
 app.route("/v1", lookRoutes);
 app.route("/v1/videos", videoV1Routes);
 app.route("/v1/audio/music", musicV1Routes);

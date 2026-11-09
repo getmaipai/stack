@@ -250,6 +250,30 @@
       "download_bytes": 35858002,
       "installed_bytes": 35858002
     },
+    "liveportrait-landmark": {
+      "download_bytes": 114666491,
+      "installed_bytes": 114666491
+    },
+    "liveportrait-appearance": {
+      "download_bytes": 3387959,
+      "installed_bytes": 3387959
+    },
+    "liveportrait-motion": {
+      "download_bytes": 112545506,
+      "installed_bytes": 112545506
+    },
+    "liveportrait-generator": {
+      "download_bytes": 221813590,
+      "installed_bytes": 221813590
+    },
+    "liveportrait-warping": {
+      "download_bytes": 182180086,
+      "installed_bytes": 182180086
+    },
+    "liveportrait-stitching": {
+      "download_bytes": 2393098,
+      "installed_bytes": 2393098
+    },
     "flux2-klein-4b": {
       "download_bytes": 7751109744,
       "installed_bytes": 7751109744

@@ -15,7 +15,7 @@ import { createJob, finishJob, getJob, jobSignal, listJobs, updateJob } from "@/
 import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { getModel, installCatalogModel, removeModel, removeModelsAtomically, type CatalogModelLike, type DownloadModelOptions } from "@/lib/modelStore";
-import { STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, LTX_LICENCE_NOTICE, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_SFT_ID, STACK_MUSIC_XL_ID, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_STEMS_MODELS, STACK_RECORDED_SPEECH_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MODEL_ID, STACK_VIDEO_MASK_MODELS, STACK_VIDEO_MASK_MODEL_ID, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
+import { STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS, LTX_LICENCE_NOTICE, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_SFT_ID, STACK_MUSIC_XL_ID, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_STEMS_MODELS, STACK_RECORDED_SPEECH_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MODEL_ID, STACK_VIDEO_MASK_MODELS, STACK_VIDEO_MASK_MODEL_ID, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
 import { licenceAcceptance, recordLicenceAcceptance, type LicenceNotice } from "@/lib/licenceAcceptance";
 import { buildInstallPlan } from "@/lib/installPlan";
 import { diskPlanForTier, diskTotalsFor, engineDownloadBytes, type DiskPlan } from "@/lib/diskPlan";
@@ -40,6 +40,7 @@ import { stems, STEMS_NAME, ensureStemsEnvironment, stemsRoot, stemsEnvironmentR
 import { voiceConvert, VOICE_CONVERT_NAME, ensureVoiceConvertEnvironment, voiceConvertRoot, voiceConvertEnvironmentReady } from "@/voiceConvert/voiceConvert";
 import { listLoras as listVideoLoras, removeLora as removeVideoLora } from "@/video/loras";
 import { imageTools, imageToolsProof, imageToolsRoot } from "@/imagetools/imageTools";
+import { livePortrait, livePortraitEnvironmentReady, livePortraitRoot } from "@/liveportrait/liveportrait";
 import { ensurePocketTtsEnvironment, pocketTtsInstalled, pocketTtsRoot } from "@/speech/pocketTts";
 import { ensureMlxAudioEnvironment, mlxAudioInstalled, mlxAudioRoot } from "@/speech/mlxAudio";
 import { RECORDED_SPEECH_NAME, ensureRecordedSpeechEnvironment, recordedSpeech, recordedSpeechEnvironmentReady, recordedSpeechRoot } from "@/recordedSpeech/recordedSpeech";
@@ -149,6 +150,7 @@ const envBeats: EnvDef = { name: BEATS_NAME, approxBytes: ENV_BYTES.beats, root:
 const envStems: EnvDef = { name: STEMS_NAME, approxBytes: ENV_BYTES.stems, root: stemsRoot, ready: stemsEnvironmentReady, build: (onPhase, signal) => ensureStemsEnvironment(onPhase, signal), stop: () => stems.stop() };
 const envVoiceConvert: EnvDef = { name: VOICE_CONVERT_NAME, approxBytes: ENV_BYTES.voiceConvert, root: voiceConvertRoot, ready: voiceConvertEnvironmentReady, build: (onPhase, signal) => ensureVoiceConvertEnvironment(onPhase, signal), stop: () => voiceConvert.stop() };
 const envTools: EnvDef = { name: "image-tools", approxBytes: ENV_BYTES.tools, root: imageToolsRoot, ready: () => uvEnvironmentReady({ root: imageToolsRoot(), proof: imageToolsProof() }), lazy: true, build: async () => {}, stop: () => imageTools.stop() };
+const envLivePortrait: EnvDef = { name: "liveportrait", approxBytes: 1_500_000_000, root: livePortraitRoot, ready: () => livePortrait.status().installed && livePortraitEnvironmentReady(), lazy: true, build: async () => {}, stop: () => livePortrait.stop() };
 const envPocket: EnvDef = { name: "pocket-tts", approxBytes: ENV_BYTES.pocket, root: pocketTtsRoot, ready: pocketTtsInstalled, build: (onPhase, signal) => ensurePocketTtsEnvironment(onPhase, { signal }) };
 const envMlxAudio: EnvDef = { name: "mlx-audio", approxBytes: ENV_BYTES.mlxAudio, root: mlxAudioRoot, ready: mlxAudioInstalled, build: (onPhase, signal) => ensureMlxAudioEnvironment(onPhase, { signal }) };
 const envRecordedSpeech: EnvDef = { name: RECORDED_SPEECH_NAME, approxBytes: ENV_BYTES.recordedSpeech, root: recordedSpeechRoot, ready: recordedSpeechEnvironmentReady, build: (onPhase, signal) => ensureRecordedSpeechEnvironment(onPhase, signal), stop: () => recordedSpeech.stop() };
@@ -170,6 +172,7 @@ const LABELS: Record<string, { label: string; summary: string }> = {
   "chatterbox-turbo-fp16": { label: "Voice: Chatterbox Turbo", summary: "A more expressive speaking voice for larger computers." },
   wakeword: { label: "Wake word (Hey MaiPai)", summary: "Lets a speaker or robot wake up when someone says the wake word." },
   "image-tools": { label: "Picture tools", summary: "Remove a background, erase an object, upscale or resize a picture." },
+  liveportrait: { label: "Talking pictures", summary: "Makes the mouth and blink pictures a talking companion plays back while it speaks." },
   "tool-look": { label: "Look", summary: "Names household objects, wall colour and light in a picture." },
   "flux2-klein-4b": { label: "Pictures: FLUX.2 Klein 4B", summary: "The everyday picture model. Makes and edits pictures in a few seconds." },
   "z-image-turbo": { label: "Pictures: Z-Image-Turbo", summary: "A higher-detail picture model for the largest computers. A big download." },
@@ -242,6 +245,12 @@ export function componentDefs(): UnitDef[] {
     platformBlock: () => { const status = imageTools.status(); return status.state === "unsupported" ? status.reason ?? "Picture tools are not available on this computer yet." : null; },
     usedBy: () => ["The picture editor"],
     busy: () => { const state = imageTools.status().state; return state === "running" || state === "building" ? "A picture edit is running right now." : null; },
+  });
+  units.push({
+    id: "liveportrait", ...LABELS.liveportrait!, group: "tools", role: "image", pins: STACK_LIVEPORTRAIT_MODELS, envs: [envLivePortrait],
+    platformBlock: () => { const status = livePortrait.status(); return status.state === "unsupported" ? status.reason ?? "Talking pictures are not available on this computer yet." : null; },
+    usedBy: () => ["Talking companions"],
+    busy: () => { const state = livePortrait.status().state; return state === "running" || state === "building" ? "Talking frames are being made right now." : null; },
   });
   const lookPins = STACK_IMAGE_TOOL_MODELS.filter((pin) => pin.component === "tool-look");
   if (lookPins.length) units.push({ id: "tool-look", ...LABELS["tool-look"]!, group: "tools", role: "image", pins: lookPins, envs: [envTools], usedBy: () => ["Look at a picture"], busy: () => null });

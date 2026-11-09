@@ -40,6 +40,11 @@ export const ENGINE_BINARIES: EngineBinaryPin[] = [
     archive: { label: "SAM 2.1 source", url: "https://codeload.github.com/facebookresearch/sam2/tar.gz/2b90b9f5ceec907a1c18123530e92e794ad901a4", sha256: "1f2fbfad3ffa38110368abac76c6ef9df9c282a66d5c2807bc94abf4d2fb30f8", approxBytes: 55645345 }, verified: true,
   },
   {
+    id: "liveportrait-1.0.0-macos-arm64", name: "liveportrait", tag: "1.0.0", platform: "darwin", arch: "arm64", tool: "LICENSE", requiresNvidia: false,
+    label: "LivePortrait source (MIT), commit 9b294b3, patched at build", docsUrl: "https://github.com/KwaiVGI/LivePortrait/tree/9b294b3d0536135442ea73cb01e6cb3ca7029dd3",
+    archive: { label: "LivePortrait source", url: "https://codeload.github.com/KwaiVGI/LivePortrait/tar.gz/9b294b3d0536135442ea73cb01e6cb3ca7029dd3", sha256: "14db8304a3eb98461ec5c19f95a1b46b996ea7daa9cbbcf113b9139d60e0f3be", approxBytes: 38382251 }, verified: true,
+  },
+  {
     id: "gguf-parser-v0.26.4-macos-arm64",
     name: "gguf-parser",
     tag: "v0.26.4",
@@ -350,7 +355,7 @@ export type ChatEngine = typeof CHAT_ENGINES[number];
 /** The role each engine name serves, for the routes that act on "the
  * engine's role" (start, stop, restart, the swap's drain). */
 export type EngineRole = "chat" | "coding" | "tts" | "image" | "video" | "music";
-export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", splash: "coding", "splash-chat": "chat", "mlx-serve": "chat", omlx: "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", "recorded-speech": "tts", comfyui: "image", "video-gen": "video", "ltx25-gen": "video", "ltx25-max-gen": "video", "mask-gen": "video", "music-gen": "music", "stems": "music", align: "music", beats: "music", "voice-convert": "music", "image-gen": "image" };
+export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", splash: "coding", "splash-chat": "chat", "mlx-serve": "chat", omlx: "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", "recorded-speech": "tts", comfyui: "image", "video-gen": "video", "ltx25-gen": "video", "ltx25-max-gen": "video", "mask-gen": "video", liveportrait: "image", "music-gen": "music", "stems": "music", align: "music", beats: "music", "voice-convert": "music", "image-gen": "image" };
 export function engineRole(name: string): EngineRole { return ENGINE_ROLE[name] ?? "chat"; }
 
 /** Runtimes the Stack assembles from pinned wheels through uv, in an
@@ -373,6 +378,7 @@ export const MANAGED_RUNTIMES: ManagedRuntime[] = [
   { name: "music-gen", version: "ca1e85f", roles: ["music"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the ACE-Step 1.5 source archive plus a hashed requirements file; songs with sung lyrics, remakes, covers, repaints and extensions; needs 64 GB or more; no Linux file)" },
   { name: "image-gen", version: "0.23.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; mflux 0.23.0 and a hashed requirements file; FLUX.2 Klein 4B and Z-Image-Turbo, text to picture, image to picture, LoRAs and reference edits; needs 32 GB of memory or more)" },
   { name: "image-tools", version: "1.0.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (onnxruntime, numpy, pillow, opencv; no torch; remove background, erase, upscale and resize on a picture the person has, and sharpen clips through the media.edit upscale op; the Linux file lands with the robot's first image run)" },
+  { name: "liveportrait", version: "1.0.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (Apple MPS only; MIT LivePortrait pinned source and weights; still mouth and eye retargeting)" },
 ];
 
 export const ENGINE_READY_MARKER = ".engine-ready";
