@@ -524,3 +524,32 @@ export function lightReasons(metrics: { light_step_after?: number; rest_frame_di
   if (rest && (rest.first > REST_FRAME_DIFF_MAX || rest.last > REST_FRAME_DIFF_MAX)) reasons.push("The first or last frame does not match the rest picture. Make the clip again so it starts and ends in the rest pose with the same lighting and colour.");
   return reasons;
 }
+
+// ---- MAKER-A2: pin the loop ends to the rest picture ----
+export const PIN_FRAMES_DEFAULT = 8;
+/** Frames pinned at each end: the requested count, kept to half the clip so the two ends never overlap. */
+export function pinFrameCount(requested: number, clipFrames: number): number { return Math.max(0, Math.min(requested, Math.floor(clipFrames / 2))); }
+/** Weight of the pin at distance d frames from the end (0 is the end frame): 1 at the end, 0 at d = n, smoothstep between. */
+export function pinWeight(d: number, n: number): number { if (d >= n) return 0; const t = Math.max(0, 1 - d / n); return t * t * (3 - 2 * t); }
+/** Add weight * (rest - anchor) to frame, in premultiplied RGBA, so colour and alpha move together and the motion in `frame` stays. All three are tile-sized straight RGBA; frame changes in place. */
+export function pinFrameToward(frame: Uint8Array, rest: Uint8Array, anchor: Uint8Array, weight: number): void {
+  if (weight <= 0) return;
+  for (let i = 0; i < frame.length; i += 4) {
+    const fa = frame[i + 3]! / 255, ra = rest[i + 3]! / 255, aa = anchor[i + 3]! / 255;
+    const alpha = Math.min(1, Math.max(0, fa + weight * (ra - aa)));
+    for (let c = 0; c < 3; c++) {
+      const p = frame[i + c]! * fa + weight * (rest[i + c]! * ra - anchor[i + c]! * aa);
+      const v = alpha > 0 ? Math.min(255, Math.max(0, (p / alpha))) : 0;
+      frame[i + c] = Math.round(Math.min(v, 255));
+    }
+    frame[i + 3] = Math.round(alpha * 255);
+  }
+}
+/** Pin an in-memory clip (tile-sized frames) in place; returns the frame count used. */
+export function pinRestEnds(frames: Uint8Array[], rest: Uint8Array, requested = PIN_FRAMES_DEFAULT): number {
+  const n = pinFrameCount(requested, frames.length);
+  if (!n) return 0;
+  const first = frames[0]!.slice(), last = frames[frames.length - 1]!.slice();
+  for (let d = 0; d < n; d++) { pinFrameToward(frames[d]!, rest, first, pinWeight(d, n)); pinFrameToward(frames[frames.length - 1 - d]!, rest, last, pinWeight(d, n)); }
+  return n;
+}

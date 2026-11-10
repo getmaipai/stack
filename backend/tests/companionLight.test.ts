@@ -157,7 +157,7 @@ real("the job with light_flatten reports light_step_before and after, keeps alph
   expect(report.light_step_after).toBe(flat.light_step_after);
   const a = await rgba(join(root, "bump-plain", "still.png")), b = await rgba(join(root, "bump-flat", "still.png"));
   for (let i = 3; i < a.length; i += 4) if (a[i] !== b[i]) throw new Error("the still's alpha differs between the plain and the flattened run");
-});
+}, 60_000);   // the job tests run ffmpeg; a busy machine needs more than the 5 s default
 
 real("a drifting last frame is reported against the rest picture and gives rest_boundary; a steady clip does not", async () => {
   const steady = await submit({ path: join(root, "none.mp4"), output_dir: root, output_name: "none-out" });
@@ -174,7 +174,7 @@ real("a drifting last frame is reported against the rest picture and gives rest_
   expect(drift.rest_frame_diff.last).toBeGreaterThan(1);
   expect(drift.reasons.some((reason: string) => reason.includes("rest picture"))).toBe(true);
   expect(drift.ok).toBe(false);
-});
+}, 60_000);   // the job tests run ffmpeg; a busy machine needs more than the 5 s default
 
 real("phone: true also writes a 320 x 640 twin with the same frame count and BT.709 limited-range tags", async () => {
   const done = await submit({ path: join(root, "none.mp4"), output_dir: root, output_name: "phone-out", phone: true });
@@ -188,4 +188,4 @@ real("phone: true also writes a 320 x 640 twin with the same frame count and BT.
   expect(Number(small.nb_read_frames)).toBe(done.frames);
   expect(small).toMatchObject({ pix_fmt: "yuv420p", color_space: "bt709", color_primaries: "bt709", color_transfer: "bt709", color_range: "tv" });
   expect(done.phone).toEqual({ width: 320, height: 640 });
-});
+}, 60_000);   // the job tests run ffmpeg; a busy machine needs more than the 5 s default

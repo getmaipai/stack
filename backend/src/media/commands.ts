@@ -89,9 +89,12 @@ export const CompanionClipInput = z.object({
   light_regions: z.object({ hair_left: LightBoxInput, hair_right: LightBoxInput, clothes_left: LightBoxInput, clothes_right: LightBoxInput }).partial().strict().optional(),
   /** The rest picture (base64 image) to compare the loop's first and last frame against, or the word "palette_reference" to use the palette reference as the rest picture. */
   rest_reference: z.union([z.literal("palette_reference"), z.string().max(28_000_000).regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/)]).optional(),
+  /** MAKER-A2: blend the first and last frames onto the rest picture, fading over pin_frames frames. Needs rest_reference. */
+  pin_rest: z.boolean().default(false),
+  pin_frames: z.number().int().min(2).max(16).default(8),
   /** Also write the 320 x 640 phone twin, clip.phone.h264.mp4. */
   phone: z.boolean().default(false),
-}).strict().refine((input) => input.min_seconds <= input.max_seconds, { path: ["min_seconds"], message: "must be at most max_seconds" }).refine((input) => input.rest_reference !== "palette_reference" || !!input.palette_reference, { path: ["rest_reference"], message: "names palette_reference, but no palette_reference was sent" });
+}).strict().refine((input) => input.min_seconds <= input.max_seconds, { path: ["min_seconds"], message: "must be at most max_seconds" }).refine((input) => !input.pin_rest || !!input.rest_reference, { path: ["pin_rest"], message: "needs rest_reference: send the rest picture to pin the first and last frames to" }).refine((input) => !input.pin_rest || input.rest_reference !== "palette_reference", { path: ["pin_rest"], message: "needs the rest picture itself as rest_reference, not the word palette_reference, because it is cut to the clip's own crop" }).refine((input) => input.rest_reference !== "palette_reference" || !!input.palette_reference, { path: ["rest_reference"], message: "names palette_reference, but no palette_reference was sent" });
 export type CompanionClipInput = z.infer<typeof CompanionClipInput>;
 
 export const SetupInput = z.object({ person_initiated: z.boolean().default(true) }).strict();

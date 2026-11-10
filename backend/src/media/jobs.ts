@@ -19,7 +19,7 @@ import { SPATIAL_LINES } from "./spatialRender";
 import { spatialFailure, spatialSoundClip, type SpatialOutcome } from "./spatialSound";
 import { cutoutClip, CUTOUT_FAILED, CUTOUT_MODEL_MISSING, CUTOUT_NO_MEMORY, CUTOUT_NO_SUBJECT } from "./cutout";
 import { log } from "@/lib/log";
-import { applyLightOffsets, defaultLightRegions, lightReasons, lightStep, reduceForLight, restFrameDifference, solveLightOffsets, type LightRegions, COLOUR_MATCH_STRENGTH, COMPANION_CLIP_FPS, COMPANION_CLIP_SIZE, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionCrop, companionMetrics, companionReasons, crossfadeLoop, downscaleRgba4, frameDifference, keyOutRgba, selectCompanionWindow } from "./companionClip";
+import { pinFrameCount, pinFrameToward, pinWeight, applyLightOffsets, defaultLightRegions, lightReasons, lightStep, reduceForLight, restFrameDifference, solveLightOffsets, type LightRegions, COLOUR_MATCH_STRENGTH, COMPANION_CLIP_FPS, COMPANION_CLIP_SIZE, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionCrop, companionMetrics, companionReasons, crossfadeLoop, downscaleRgba4, frameDifference, keyOutRgba, selectCompanionWindow } from "./companionClip";
 import { upscaleClip, upscaleProblem, UPSCALE_DEADLINE_MS, UpscaleFailure } from "./upscale";
 import { runTtsBatch } from "./tts";
 import { MixInput, runMix } from "./mix";
@@ -433,6 +433,27 @@ function flattenTileLight(rawPath: string, count: number, regions: LightRegions,
   } finally { closeSync(fd); }
 }
 
+/** MAKER-A2: decode the rest picture at the clip's frame geometry (width x 480), cut the clip's crop from it and scale to the 480 px tile. */
+async function frameRestForPin(encoded: string, width: number, crop: { x: number; y: number; size: number }, workDir: string, ffmpeg: string, signal: AbortSignal, partials: string[]): Promise<Uint8Array | undefined> {
+  if (encoded === "palette_reference") return undefined;
+  const png = join(workDir, ".companion-pin-rest.png"), full = join(workDir, ".companion-pin-rest-full.rgba"), cropped = join(workDir, ".companion-pin-rest-crop.rgba"), tile = join(workDir, ".companion-pin-rest-tile.rgba");
+  partials.push(png, full, cropped, tile);
+  try {
+    writeFileSync(png, Buffer.from(encoded, "base64"), { mode: 0o600 });
+    const decode = await mediaDeps.run([ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-i", png, "-frames:v", "1", "-vf", `scale=${width}:${COMPANION_CLIP_SIZE}:flags=lanczos,format=rgba`, "-f", "rawvideo", "-pix_fmt", "rgba", full], { signal });
+    if (decode.aborted || signal.aborted) throw new Error("Cancelled.");
+    if (decode.code !== 0 || sizeOf(full) !== width * COMPANION_CLIP_SIZE * 4) throw fail({ code: "bad_input", message: "The rest reference could not be read as an image." });
+    const fd = openSync(full, "r"); let frame: Uint8Array;
+    try { frame = readRawFrame(fd, 0, width * COMPANION_CLIP_SIZE * 4); } finally { closeSync(fd); }
+    await writeCrop([frame], width, COMPANION_CLIP_SIZE, crop, cropped, signal);
+    const scale = await mediaDeps.run([ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-f", "rawvideo", "-pixel_format", "rgba", "-video_size", `${crop.size}x${crop.size}`, "-framerate", "24", "-i", cropped, "-frames:v", "1", "-vf", "scale=480:480:flags=lanczos,format=rgba", "-f", "rawvideo", "-pix_fmt", "rgba", tile], { signal });
+    if (scale.aborted || signal.aborted) throw new Error("Cancelled.");
+    if (scale.code !== 0 || sizeOf(tile) !== 480 * 480 * 4) throw fail({ code: "bad_input", message: "The rest reference could not be fitted to the clip. Send the rest picture as a normal image." });
+    const tfd = openSync(tile, "r");
+    try { return readRawFrame(tfd, 0, 480 * 480 * 4); } finally { closeSync(tfd); }
+  } finally { for (const path of [png, full, cropped, tile]) rmSync(path, { force: true }); }
+}
+
 async function runCompanionClip(job: Job, signal: AbortSignal, progress: JobProgress): Promise<Record<string, unknown>> {
   const input = CompanionClipInput.parse(job.input ?? {}); let src: string, dir: string;
   try { src = resolveReadable(input.path); dir = input.output_dir ? resolveWritableDir(input.output_dir) : jobDir(job.id); if (input.output_name) dir = resolveWritableDir(join(dir, safeName(input.output_name, ""))); }
@@ -532,6 +553,23 @@ async function runCompanionClip(job: Job, signal: AbortSignal, progress: JobProg
       progress({ status: "evening out the light", percent: 62 });
       lightSteps = flattenTileLight(rawScaled, keptFrameCount, { ...defaultLightRegions(), ...(input.light_regions ?? {}) } as LightRegions, signal);
     }
+    let pinned: { frames: number; first_before: number; last_before: number; first_after: number; last_after: number } | undefined;
+    if (restTile && input.pin_rest) {
+      // The rest picture must sit in the clip's own tile: the same frame geometry and the same crop as the clip, not a squashed copy.
+      const framedRest = await frameRestForPin(input.rest_reference!, width, crop, workDir, tools.ffmpeg!, signal, partials);
+      if (framedRest) restTile = framedRest;
+      const bytes = 480 * 480 * 4, n = pinFrameCount(input.pin_frames, keptFrameCount), fd = openSync(rawScaled, "r+");
+      try {
+        const first = readRawFrame(fd, 0, bytes), last = readRawFrame(fd, keptFrameCount - 1, bytes);
+        const firstBefore = restFrameDifference(first, restTile), lastBefore = restFrameDifference(last, restTile);
+        for (let d = 0; d < n; d++) {
+          cancelled(signal);
+          const head = d === 0 ? first.slice() : readRawFrame(fd, d, bytes); pinFrameToward(head, restTile, first, pinWeight(d, n)); writeRawFrame(fd, d, head);
+          const tailIndex = keptFrameCount - 1 - d, tail = d === 0 ? last.slice() : readRawFrame(fd, tailIndex, bytes); pinFrameToward(tail, restTile, last, pinWeight(d, n)); writeRawFrame(fd, tailIndex, tail);
+        }
+        pinned = { frames: n, first_before: firstBefore, last_before: lastBefore, first_after: restFrameDifference(readRawFrame(fd, 0, bytes), restTile), last_after: restFrameDifference(readRawFrame(fd, keptFrameCount - 1, bytes), restTile) };
+      } finally { closeSync(fd); }
+    }
     if (restTile) {
       const tileFd = openSync(rawScaled, "r");
       try { restDiff = { first: restFrameDifference(readRawFrame(tileFd, 0, 480 * 480 * 4), restTile), last: restFrameDifference(readRawFrame(tileFd, keptFrameCount - 1, 480 * 480 * 4), restTile) }; } finally { closeSync(tileFd); }
@@ -566,7 +604,7 @@ async function runCompanionClip(job: Job, signal: AbortSignal, progress: JobProg
     if (hasAv1) files.push(await encode("libsvtav1", 24, "clip.av1.mp4", 80, 20));
     if (input.phone) files.push(await encode("libx264", 24, "clip.phone.h264.mp4", 95, 4, COMPANION_PHONE_FILTER));
     const seconds = keptFrameCount / COMPANION_CLIP_FPS;
-    const lightFields = { ...(lightSteps ? { light_step_before: lightSteps.before, light_step_after: lightSteps.after } : {}), ...(restDiff ? { rest_frame_diff: restDiff } : {}) };
+    const lightFields = { ...(lightSteps ? { light_step_before: lightSteps.before, light_step_after: lightSteps.after } : {}), ...(restDiff ? { rest_frame_diff: restDiff } : {}), ...(pinned ? { pinned } : {}) };
     const reasons = [...companionReasons({ ...metrics, loop_gap: loopGap }, seconds, input.min_seconds, input.max_seconds), ...lightReasons({ ...(lightSteps ? { light_step_after: lightSteps.after } : {}), ...(restDiff ? { rest_frame_diff: restDiff } : {}) })];
     const report = { seconds, frames: keptFrameCount, fps: COMPANION_CLIP_FPS, width: 480, height: 960, files, av1: hasAv1, loop_gap: loopGap, settle_skipped_frames: input.kind === "oneshot" ? Math.min(ONESHOT_SETTLE_FRAMES, Math.max(0, frameCount - 24)) : 0, colour_match: { applied: colourMatchApplied, strength: COLOUR_MATCH_STRENGTH }, ...metrics, ...lightFields, ...(input.phone ? { phone: { width: 320, height: 640 } } : {}), ok: reasons.length === 0, reasons };
     writeFileSync(reportPath, JSON.stringify(report, null, 2), { mode: 0o600 });
