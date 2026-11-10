@@ -1478,6 +1478,273 @@ def shapes_set(name, rest_bgr, alpha, rest_lm, frames, lms, geo, params, out_dir
             "meta": meta, "atlas": {"width": int(atlas.shape[1]), "height": int(atlas.shape[0]), "tiles": slots}, "flow_bytes": int(flows.size * 2)}
 
 
+# ---- shapes_bake, stylised path (MAKER-F): cartoon mouth sets baked from a mouth box, no landmarks ----
+# The cartoon builder of the demo (clay, pixar): whole-lower-face tiles with alpha, the in-betweens baked INTO the atlas, no flow file.
+# Opening validators for cartoons, percent of the face height (eye line to chin, as on photos). Measured on the real demo sets with face heights
+# clay 225 px and pixar 205 px: clay calm 13.8, pixar calm 11.7, clay shout 14.7, pixar shout 32.2 (widest letter of each set). Ranges include them.
+STYLISED_OPENING_RANGE = {"calm": (2.0, 16.0), "shout": (12.0, 40.0)}
+STYLISED_MARGIN = 6
+STYLISED_DEFAULT_FACE_PER_BOX = 1.1  # face height (eye line to chin) when face_height_px is not sent: 1.1 mouth-box heights (clay: box 198, face 225)
+STYLISED_BORDER_ALPHA = 0.01
+STYLISED_MAX_STEP = 30.0  # mean grey change between two consecutive in-between tiles, in 0..255 (a pop is above this)
+
+
+def _stylised_box(params, width, height):
+    box = params.get("mouth_box")
+    try:
+        x, y, w, h = [float(v) for v in box]
+    except (TypeError, ValueError):
+        raise Refused("bad_params", "The stylised path needs mouth_box as [x, y, width, height] in picture pixels: the tall lower-face box around the mouth. Send it and try again.")
+    x, y, w, h = int(round(x)), int(round(y)), int(round(w)), int(round(h))
+    if w < 32 or h < 32 or x < 0 or y < 0 or x + w > width or y + h > height:
+        raise Refused("bad_params", f"The mouth_box [{x}, {y}, {w}, {h}] is not inside the {width}x{height} picture or is under 32 pixels. Give a box that lies wholly inside the rest picture.")
+    return x, y, w, h
+
+
+def _stylised_foreground(rest_rgba, box, params):
+    """1 where the character is: the rest picture's alpha when it has one, else the green-keyed picture when it has a green screen, else everywhere."""
+    x, y, w, h = box
+    alpha = rest_rgba[..., 3]
+    if int(alpha.min()) < 250:
+        return (alpha[y:y + h, x:x + w] > 127).astype(np.float32), False
+    rgb = rest_rgba[..., :3].astype(np.float32)
+    excess = rgb[..., 1] - np.maximum(rgb[..., 0], rgb[..., 2])
+    keyed = (excess > 14)
+    green = params.get("key_green")
+    if green is None:
+        edge = np.concatenate([keyed[0], keyed[-1], keyed[:, 0], keyed[:, -1]])
+        green = bool(edge.mean() > 0.5)
+    if not green:
+        return np.ones((h, w), np.float32), False
+    return np.clip(1.0 - (excess - 8.0) / 150.0, 0, 1)[y:y + h, x:x + w], True
+
+
+def _stylised_degreen(img):
+    """Tile borders must carry no green-screen colour: green-dominant pixels take the nearest non-green colour."""
+    f = img.astype(np.float32)
+    bad = (f[..., 1] - np.maximum(f[..., 0], f[..., 2])) > 14
+    bad = cv2.dilate(bad.astype(np.uint8), np.ones((5, 5), np.uint8)) > 0
+    if not bad.any() or bad.mean() > 0.5:
+        return img
+    _, labels = cv2.distanceTransformWithLabels((~bad).astype(np.uint8), cv2.DIST_L2, 3, labelType=cv2.DIST_LABEL_PIXEL)
+    ys, xs = np.nonzero(~bad)
+    lab_ids = labels[ys, xs]
+    lut = np.zeros((int(labels.max()) + 1, 3), np.uint8)
+    lut[lab_ids] = img[ys, xs]
+    return np.where(bad[..., None], lut[labels], img)
+
+
+def _stylised_register(crop, rest_crop, ellipse_mask, name):
+    """Translation-only registration on the part of the tile outside the mouth (the nose or cheek anchor): the shape's own drift is removed, sub-pixel.
+    Returns the registered crop and the (dx, dy) it removed."""
+    h, w = crop.shape[:2]
+    outside = (~ellipse_mask).astype(np.float32)
+    if outside.sum() < 0.1 * h * w:
+        return crop, (0.0, 0.0)
+    ga = cv2.cvtColor(rest_crop, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    gb = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    fill_a, fill_b = float(ga[outside > 0].mean()), float(gb[outside > 0].mean())
+    ga, gb = np.where(outside > 0, ga, fill_a), np.where(outside > 0, gb, fill_b)
+    win = cv2.createHanningWindow((w, h), cv2.CV_32F)
+    (dx, dy), response = cv2.phaseCorrelate(ga - fill_a, gb - fill_b, win)
+    if response < 0.05 or max(abs(dx), abs(dy)) < 0.25 or max(abs(dx), abs(dy)) > 0.1 * min(w, h):
+        return crop, (0.0, 0.0)
+    matrix = np.float32([[1, 0, dx], [0, 1, dy]])  # the shape sits at +d from the rest: sample it at x + d
+    moved = cv2.warpAffine(crop, matrix, (w, h), flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP, borderMode=cv2.BORDER_REPLICATE)
+    return moved, (float(dx), float(dy))
+
+
+def _stylised_opening(crop, ellipse_mask, dark_limit):
+    """The mouth opening in pixels: the tallest unbroken vertical run of dark cavity pixels (grey below dark_limit) in the dark blob that covers the
+    middle of the tile, looking only at the middle half of the tile's width (so dark marks on a cheek are not the mouth). A closed cartoon mouth is a
+    thin line or none, an open one a dark hole, so the run length is the gap whatever the lip drawing."""
+    h, w = crop.shape[:2]
+    grey = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+    dark = ((grey < dark_limit) & ellipse_mask).astype(np.uint8)
+    cx0, cx1, cy0, cy1 = int(w * 0.38), int(w * 0.62), int(h * 0.38), int(h * 0.62)
+    count, labels = cv2.connectedComponents(dark, connectivity=8)
+    centre = labels[cy0:cy1, cx0:cx1]
+    ids = np.bincount(centre[centre > 0].ravel(), minlength=count) if (centre > 0).any() else np.zeros(count, int)
+    if ids.max() < max(4, 0.0002 * w * h):
+        return 0.0
+    blob = (labels == int(ids.argmax()))[:, int(w * 0.25):int(w * 0.75)]
+    best_run = 0
+    for column in blob.T:
+        if not column.any():
+            continue
+        padded = np.concatenate([[0], column.view(np.uint8), [0]])
+        edges = np.flatnonzero(np.diff(padded))
+        best_run = max(best_run, int((edges[1::2] - edges[0::2]).max()))
+    return float(best_run)
+
+
+def shapes_stylised_set(name, rest_bgr, fg, keyed, box, frames, params, out_dir, face_height, rest_name_lms=None):
+    x0, y0, w, h = box
+    u = h / 198.0  # every pixel constant below was tuned on the demo clay tile (198 px tall)
+    dis = _shapes_dis()
+    flow_sigma = float(params.get("flow_sigma", 1.0 * u))
+    amp = float(params.get("amp", 1.0))
+    margin = max(2, int(round(STYLISED_MARGIN * u)))
+
+    def flow(a, b):  # a(x) ~ b(x + F(x)); smoothed so it cannot tear the lips on big openings
+        field = _shapes_flow(dis, a, b)
+        return cv2.GaussianBlur(field, (0, 0), flow_sigma) if flow_sigma > 0 else field
+
+    # the soft ellipse alpha, wholly inside the box: centred on the tile, radii as the demo's 0.46 * axis + 14 on the clay tile
+    feather = float(params.get("feather", 6.0 * u))
+    rx_frac, ry_frac = (params.get("alpha_radii") or [0.353, 0.378])
+    rx = min(float(rx_frac) * w, w / 2.0 - margin - 3.5 * feather)
+    ry = min(float(ry_frac) * h, h / 2.0 - margin - 3.5 * feather)
+    if rx < 4 or ry < 4:
+        raise Refused("bad_params", "The mouth_box is too small for the mouth tile's soft edge. Give a larger box around the mouth.")
+    centre = (int(round(w / 2.0)), int(round(h / 2.0)))
+    alpha = np.zeros((h, w), np.float32)
+    cv2.ellipse(alpha, centre, (int(round(rx)), int(round(ry))), 0, 0, 360, 1.0, -1)
+    alpha = cv2.GaussianBlur(alpha, (0, 0), feather)
+    yy, xx = np.mgrid[0:h, 0:w]
+    ring = np.sqrt(((xx - centre[0]) / rx) ** 2 + ((yy - centre[1]) / ry) ** 2)
+    inside = ring < 1.0
+    rest_crop = rest_bgr[y0:y0 + h, x0:x0 + w].copy()
+    rest_crop = _stylised_degreen(rest_crop)
+    crops, drift = [rest_crop], {}
+    for i in range(1, 8):
+        letter = SHAPES_LETTERS[i]
+        crop = frames[letter][y0:y0 + h, x0:x0 + w].copy()
+        crop = _stylised_degreen(crop)
+        crop, shift = _stylised_register(crop, rest_crop, ring < 1.15, letter)
+        drift[letter] = {"dx_px": round(shift[0], 2), "dy_px": round(shift[1], 2)}
+        crops.append(crop)
+    # tone: each shape matched to the rest on the band between the mouth and the tile's soft edge, per channel mean and contrast
+    band = (ring > 0.72) & (ring < 0.97) & (fg > 0.5)
+    if band.sum() >= 50:
+        r0 = crops[0].astype(np.float32)
+        for i in range(1, 8):
+            f = crops[i].astype(np.float32)
+            mr, ms, sr, ss = r0[band].mean(axis=0), f[band].mean(axis=0), r0[band].std(axis=0), f[band].std(axis=0)
+            gain = np.clip(sr / np.maximum(ss, 1e-3), 0.8, 1.25)
+            crops[i] = np.clip((f - ms) * gain + mr, 0, 255).astype(np.uint8)
+    # PREPULL: a shape pulled part way back to the rest geometry so a huge opening cannot reach the tile's edge ({letter: 0 to 1})
+    for letter, pull in (params.get("prepull") or {}).items():
+        if letter in SHAPES_LETTERS[1:]:
+            i = SHAPES_LETTERS.index(letter)
+            crops[i] = _shapes_warp(crops[i], flow(crops[0], crops[i]), 1 - float(pull))
+    # the amp pull-back (1.0 leaves the shapes as they are)
+    if amp != 1.0:
+        for i in range(1, 8):
+            a = _shapes_warp(crops[0], flow(crops[i], crops[0]), amp)
+            b = _shapes_warp(crops[i], flow(crops[0], crops[i]), 1 - amp)
+            crops[i] = np.clip((1 - amp) * a.astype(np.float32) + amp * b.astype(np.float32), 0, 255).astype(np.uint8)
+    # alpha: never show pixels outside the character's silhouette (FGERODE / FGSIG keep the tile off the silhouette fringe)
+    erode = _odd(float(params.get("fg_erode", 5)) * u) if params.get("fg_erode", 5) else 1
+    fgm = cv2.erode((fg > 0.5).astype(np.float32), np.ones((erode, erode), np.uint8))
+    fgm = cv2.GaussianBlur(fgm, (0, 0), float(params.get("fg_sigma", 1.5)) * u)
+    alpha = alpha * fgm
+    fade = params.get("chin_fade")
+    if fade:
+        a0, a1 = [float(v) for v in fade]
+        ramp = np.clip((np.arange(h, dtype=np.float32) - a0) / max(1.0, a1 - a0), 0, 1)
+        alpha = alpha * (1 - ramp * ramp * (3 - 2 * ramp))[:, None]
+    # the atlas: the 8 letters, then for each ordered pair the four in-between tiles with the flow baked in (no flow file)
+    nt = len(SHAPES_TS)
+    slots = 8 + 64 * nt
+    rows_n = (slots + SHAPES_COLS - 1) // SHAPES_COLS
+    atlas = np.zeros((rows_n * h, SHAPES_COLS * w, 3), np.uint8)
+
+    def put(slot, img):
+        r, c = divmod(slot, SHAPES_COLS)
+        atlas[r * h:(r + 1) * h, c * w:(c + 1) * w] = img
+
+    for i, crop in enumerate(crops):
+        put(i, crop)
+    flows = {(i, j): flow(crops[i], crops[j]) for i in range(8) for j in range(8) if i != j}
+    max_step = 0.0
+    for i in range(8):
+        for j in range(8):
+            if i == j:
+                continue
+            previous = crops[i].astype(np.float32)
+            for ti, t in enumerate(SHAPES_TS):
+                a = _shapes_warp(crops[i], flows[(j, i)], t)
+                b = _shapes_warp(crops[j], flows[(i, j)], 1 - t)
+                wj = float(_smooth01((t - 0.35) / 0.3))
+                tile = np.clip((1 - wj) * a.astype(np.float32) + wj * b.astype(np.float32), 0, 255).astype(np.uint8)
+                put(8 + (i * 8 + j) * nt + ti, tile)
+                max_step = max(max_step, float(np.abs(tile.astype(np.float32) - previous).mean()))
+                previous = tile.astype(np.float32)
+            max_step = max(max_step, float(np.abs(crops[j].astype(np.float32) - previous).mean()))
+    os.makedirs(out_dir, exist_ok=True)
+    alpha_u8 = np.clip(alpha * 255, 0, 255).astype(np.uint8)
+    cv2.imwrite(os.path.join(out_dir, "atlas.png"), atlas)
+    cv2.imwrite(os.path.join(out_dir, "alpha.png"), alpha_u8)
+    cv2.imwrite(os.path.join(out_dir, "rest.png"), crops[0])
+    meta = {"tw": w, "th": h, "cols": SHAPES_COLS, "box": [x0, y0, w, h], "letters": SHAPES_LETTERS, "ts": list(SHAPES_TS), "base": 8}
+    with open(os.path.join(out_dir, "meta.json"), "w") as handle:
+        json.dump(meta, handle, separators=(",", ":"))
+    # ---- measured report ----
+    # opening: the tallest unbroken vertical run of dark cavity pixels (grey under 45 percent of the rest's median grey inside the mouth ellipse) at the
+    # shape, in percent of face_height_px; the closed rest mouth's own line is reported as "rest_line_pct" and is not subtracted
+    grey_rest = cv2.cvtColor(crops[0], cv2.COLOR_BGR2GRAY)
+    dark_limit = float(params.get("dark_fraction", 0.45)) * float(np.median(grey_rest[inside & (fgm > 0.5)] if (inside & (fgm > 0.5)).any() else grey_rest[inside]))
+    rest_line = _stylised_opening(crops[0], inside, dark_limit)
+    letters = {}
+    for i in range(1, 8):
+        letter = SHAPES_LETTERS[i]
+        px = _stylised_opening(crops[i], inside, dark_limit)
+        letters[letter] = {"opening_px": round(px, 1), "opening_pct": round(px / face_height * 100, 2), "drift": drift[letter]}
+    made = [k for k in SHAPES_LETTERS[1:] if k in params["_made"][name]]
+    peak = max(letters[k]["opening_pct"] for k in made)
+    low, high = STYLISED_OPENING_RANGE[name]
+    edge_alpha = float(max(alpha[:margin].max(), alpha[-margin:].max(), alpha[:, :margin].max(), alpha[:, -margin:].max()))
+    reasons = []
+    if not low <= peak <= high:
+        reasons.append(f"The {name} set's widest mouth opening is {peak:.1f} percent of the face height; it should be {low:g} to {high:g}. Make {'smaller' if peak > high else 'wider'} mouth pictures, or check face_height_px, and bake again.")
+    if edge_alpha > STYLISED_BORDER_ALPHA:
+        reasons.append(f"The {name} mouth tile's soft edge reaches the box border (alpha {edge_alpha:.2f}, it should be under {STYLISED_BORDER_ALPHA}), so a seam would show. Give a larger mouth_box, or a smaller alpha_radii.")
+    if max_step > STYLISED_MAX_STEP:
+        reasons.append(f"The {name} in-between tiles jump by {max_step:.1f} grey levels between two steps (limit {STYLISED_MAX_STEP:g}). Make mouth pictures that differ less in the character's drawing, or set flow_sigma higher.")
+    return {"set": name, "ok": not reasons, "reasons": reasons, "letters": letters, "made": made, "opening_peak_pct": round(peak, 2), "opening_range_pct": [low, high], "rest_line_pct": round(rest_line / face_height * 100, 2),
+            "face_height_px": round(face_height, 2), "dark_limit": round(dark_limit, 1), "edge_alpha_max": round(edge_alpha, 4), "max_inbetween_step": round(max_step, 2),
+            "meta": meta, "atlas": {"width": int(atlas.shape[1]), "height": int(atlas.shape[0]), "tiles": slots}}
+
+
+def shapes_bake_stylised(request, params, rest_rgba, width, height, frames_dir, out_dir, names):
+    box = _stylised_box(params, width, height)
+    face_height = params.get("face_height_px")
+    try:
+        face_height = float(face_height) if face_height is not None else float(box[3]) * STYLISED_DEFAULT_FACE_PER_BOX
+    except (TypeError, ValueError):
+        raise Refused("bad_params", "face_height_px must be a number of picture pixels (the character's face from the top of the head to the chin).")
+    if face_height < 40:
+        raise Refused("bad_params", f"face_height_px is {face_height:.0f}; the mouth shapes need a face of at least 40 pixels.")
+    fg, keyed = _stylised_foreground(rest_rgba, box, params)
+    rest_bgr = cv2.cvtColor(rest_rgba[..., :3], cv2.COLOR_RGB2BGR)
+    made, sets = {}, {}
+    for name in names:
+        folder = os.path.join(frames_dir, name)
+        if not os.path.isdir(folder):
+            raise Refused("frames_required", f"The frames folder has no '{name}' subfolder. Make the {name} mouth pictures (B.png to H.png) and try again.")
+        frames, made[name] = {}, []
+        for letter in SHAPES_LETTERS[1:]:
+            frame = shapes_read_frame(folder, letter, (width, height))
+            if frame is None:
+                if letter in "BCDEF":
+                    raise Refused("frames_required", f"The {name} set has no picture for letter {letter} ({letter}.png). Make the letter pictures B to F (G and H are optional) and try again.")
+                continue
+            frames[letter] = frame
+            made[name].append(letter)
+        for letter, source in (("G", "B"), ("H", "C")):
+            if letter not in frames:
+                frames[letter] = frames[source]
+        sets[name] = frames
+    params = {**params, "_made": made}
+    reports = {name: shapes_stylised_set(name, rest_bgr, fg, keyed, box, sets[name], params, os.path.join(out_dir, name), face_height) for name in names}
+    report = {"ok": all(r["ok"] for r in reports.values()), "reasons": [reason for r in reports.values() for reason in r["reasons"]], "path": "stylised", "picture": [width, height], "mouth_box": list(box), "face_height_px": round(face_height, 2), "sets": reports}
+    os.makedirs(out_dir, exist_ok=True)
+    with open(os.path.join(out_dir, "report.json"), "w") as handle:
+        json.dump(report, handle, indent=1)
+    return {"report": report, "width": width, "height": height, "engine": "dis", "model": "none"}
+
+
 def shapes_read_frame(folder, letter, size):
     for name in (f"{letter}.png", f"full-{letter}.png"):
         path = os.path.join(folder, name)
@@ -1508,6 +1775,10 @@ def shapes_bake(request, params):
     names = params.get("sets") or [s for s in SHAPES_SETS if os.path.isdir(os.path.join(frames_dir, s))]
     if not names or any(n not in SHAPES_SETS for n in names):
         raise Refused("frames_required", "The frames folder needs a calm and/or a shout subfolder (set names calm and shout), each with the letter frames B.png to H.png.")
+    if params.get("path", "photo") not in ("photo", "stylised"):
+        raise Refused("bad_params", "path must be 'photo' (the face-landmark path) or 'stylised' (the cartoon path with a mouth_box).")
+    if params.get("path") == "stylised":
+        return shapes_bake_stylised(request, params, rest_rgba, width, height, frames_dir, out_dir, names)
     landmarks = params.get("landmarks") or {}
     rest_lm = _shapes_landmarks(landmarks.get("rest"), "The rest picture", rest=True)
     geo = shapes_geometry(rest_lm, width, height, params)

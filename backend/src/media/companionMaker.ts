@@ -28,10 +28,18 @@ export const CompanionTrackInput = z.object({
   scale_clamp: z.number().min(0).max(0.5).optional(), confidence: z.number().min(-1).max(1).optional(), box: Box.optional(), hole: Box.optional(),
 }).strict().refine((v) => !!v.frames_dir !== !!v.clip, "send either frames_dir (a folder of PNG frames) or clip (an mp4, mov or webm), not both and not neither");
 export const CompanionShapesInput = z.object({
-  rest: Path, frames_dir: Path, landmarks: Landmarks, ...Out,
+  rest: Path, frames_dir: Path, landmarks: Landmarks.optional(), ...Out,
+  path: z.enum(["photo", "stylised"]).optional(), mouth_box: Box.optional(), face_height_px: z.number().min(40).max(8000).optional(),
   sets: z.array(z.enum(["calm", "shout"])).min(1).max(2).optional(), region: z.unknown().optional(), tile: z.unknown().optional(),
   flow_scale: z.number().optional(), sharp_amt: z.number().optional(), grain: z.number().optional(), taper: z.number().optional(), chin_limit_px: z.number().optional(),
-}).strict();
+  // stylised path only
+  flow_sigma: z.number().min(0).max(30).optional(), amp: z.number().min(0).max(1).optional(), prepull: z.record(z.string(), z.number().min(0).max(1)).optional(),
+  fg_erode: z.number().min(0).max(31).optional(), fg_sigma: z.number().min(0).max(20).optional(), feather: z.number().min(0.5).max(60).optional(), chin_fade: z.tuple([z.number(), z.number()]).optional(),
+  alpha_radii: z.tuple([z.number().min(0.1).max(0.5), z.number().min(0.1).max(0.5)]).optional(), key_green: z.boolean().optional(), dark_fraction: z.number().min(0.1).max(0.9).optional(),
+}).strict().superRefine((v, ctx) => {
+  if (v.path === "stylised") { if (!v.mouth_box) ctx.addIssue({ code: "custom", message: "the stylised path needs mouth_box [x, y, width, height] in picture pixels: the tall lower-face box around the mouth" }); }
+  else if (!v.landmarks) ctx.addIssue({ code: "custom", message: "the photo path needs landmarks (or send path: \"stylised\" with a mouth_box for a cartoon)" });
+});
 export const CompanionEmotionInput = z.object({
   rest: Path, landmarks: Landmarks, poses: z.record(z.string(), z.array(Path).min(1).max(2)).refine((value) => Object.keys(value).every((key) => ["angry", "excited", "alarmed", "sad"].includes(key)), "poses may name only angry, excited, alarmed and sad"), ...Out,
   kinds: z.array(z.enum(["angry", "excited", "alarmed", "sad"])).min(1).max(4).optional(), strength: z.number().min(0.2).max(1).optional(), calibrate: z.boolean().optional(),
@@ -141,8 +149,9 @@ export function companionMakerRunner(kind: CompanionMakerKind, extractFrames?: (
         return { output_dir: dir, track_path: trackPath, report_path: reportPath, ...body, ms: result.ms };
       }
       if (kind === "media.companion_shapes") {
-        const params: Record<string, unknown> = { frames_dir: r.frames, output_dir: sub, landmarks: input.landmarks };
-        for (const key of ["sets", "region", "tile", "flow_scale", "sharp_amt", "grain", "taper", "chin_limit_px"]) if (input[key] !== undefined) params[key] = input[key];
+        const params: Record<string, unknown> = { frames_dir: r.frames, output_dir: sub };
+        if (input.landmarks !== undefined) params.landmarks = input.landmarks;
+        for (const key of ["sets", "region", "tile", "flow_scale", "sharp_amt", "grain", "taper", "chin_limit_px", "path", "mouth_box", "face_height_px", "flow_sigma", "amp", "prepull", "fg_erode", "fg_sigma", "feather", "chin_fade", "alpha_radii", "key_green", "dark_fraction"]) if (input[key] !== undefined) params[key] = input[key];
         result = await makerDeps.run({ operation: "shapes_bake", image: restBytes, params }, { signal, onStatus });
         const shapes = result.shapes;
         const body = { ok: !!shapes?.ok, reasons: shapes?.reasons ?? ["The mouth baker returned no report."], shapes_dir: sub, elapsed_ms: Date.now() - started };

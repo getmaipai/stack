@@ -132,8 +132,18 @@ export interface ShapesBakeSet {
   atlas: { width: number; height: number; tiles: number }; flow_bytes: number;
 }
 /** The answer of `shapes_bake` (the same JSON is written as `<output_dir>/report.json`): ok only when every set passed its validators, reasons say what failed and what to do. */
+/** One letter's measurements on the stylised (cartoon) path: the cavity height in px and in percent of the face height (eye line to chin). */
+export interface ShapesBakeStylisedLetter { opening_px: number; opening_pct: number; drift: { dx_px: number; dy_px: number } }
+/** A set of the stylised path: the baked in-betweens live in the atlas, so there is no flow, chin or jacobian measure. */
+export interface ShapesBakeStylisedSet {
+  set: "calm" | "shout"; ok: boolean; reasons: string[]; letters: Record<string, ShapesBakeStylisedLetter>; made: string[]; opening_peak_pct: number; opening_range_pct: [number, number]; rest_line_pct: number;
+  face_height_px: number; dark_limit: number; edge_alpha_max: number; max_inbetween_step: number;
+  meta: { tw: number; th: number; cols: number; box: number[]; letters: string; ts: number[]; base: number }; atlas: { width: number; height: number; tiles: number };
+}
 export interface ShapesBakeReport { ok: boolean; reasons: string[]; picture: [number, number]; face_height_px: number; region: number[]; tile: number[]; sets: Partial<Record<"calm" | "shout", ShapesBakeSet>> }
-export interface WorkerReply { id: string | null; ok: boolean; code?: string; error?: string; width?: number; height?: number; engine?: string; model?: string; ms?: number; crop_px?: number; people?: PersonBox[]; subjects?: SubjectBox[]; m?: number[][]; res?: number[]; cc?: number[]; low?: number[]; frames?: number; data?: Record<string, unknown>; report?: ShapesBakeReport; }
+/** The report of `shapes_bake` with `path: "stylised"` (written the same way as `<output_dir>/report.json`). */
+export interface ShapesBakeStylisedReport { ok: boolean; reasons: string[]; path: "stylised"; picture: [number, number]; mouth_box: number[]; face_height_px: number; sets: Partial<Record<"calm" | "shout", ShapesBakeStylisedSet>> }
+export interface WorkerReply { id: string | null; ok: boolean; code?: string; error?: string; width?: number; height?: number; engine?: string; model?: string; ms?: number; crop_px?: number; people?: PersonBox[]; subjects?: SubjectBox[]; m?: number[][]; res?: number[]; cc?: number[]; low?: number[]; frames?: number; data?: Record<string, unknown>; report?: ShapesBakeReport | ShapesBakeStylisedReport; }
 export interface WorkerHandle { send(request: WorkerRequest, deadlineMs: number): Promise<WorkerReply>; kill(graceMs?: number): void; exited: Promise<number>; /** ISOLATION-01: the process, for the gate that stops it while chat is working (absent on a scripted worker). */ pausable?: PausableWorker; }
 
 export interface ImageToolsDeps {
@@ -223,7 +233,7 @@ export function workerHandle(child: { pid?: number; stdin: { write(data: string)
 }
 
 export interface ImageToolInput { operation: ImageToolOperation; image: Uint8Array; mask?: Uint8Array; params?: Record<string, unknown>; }
-export interface ImageToolResult { track?: ClipTrack; shapes?: ShapesBakeReport; /** emotion_bake and pack_assemble: the report the worker wrote next to its files; no picture comes back. */ data?: Record<string, unknown>; png: Uint8Array; width: number; height: number; engine: string; model: string; ms: number; operation: ImageToolOperation; people?: PersonBox[]; subjects?: SubjectBox[]; status?: string }
+export interface ImageToolResult { track?: ClipTrack; shapes?: ShapesBakeReport | ShapesBakeStylisedReport; /** emotion_bake and pack_assemble: the report the worker wrote next to its files; no picture comes back. */ data?: Record<string, unknown>; png: Uint8Array; width: number; height: number; engine: string; model: string; ms: number; operation: ImageToolOperation; people?: PersonBox[]; subjects?: SubjectBox[]; status?: string }
 export type ImageToolsState = "unsupported" | "needs-setup" | "building" | "idle" | "running";
 
 export class ImageToolsService {

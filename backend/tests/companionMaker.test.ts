@@ -137,6 +137,20 @@ test("media.companion_track from a clip: ffmpeg writes the frames and the tracke
   expect(unreadable.state).toBe("failed"); expect(JSON.stringify(unreadable)).toContain("could not be read");
 });
 
+test("media.companion_shapes stylised path: needs a mouth_box and no landmarks, passes the stylised params through, and the photo path still needs landmarks", async () => {
+  const seenHere: any[] = [];
+  scripted = (input) => { seenHere.push(input); return { shapes: { ok: true, reasons: [], path: "stylised", sets: {} } as never }; };
+  const base = { rest: png("rest.png"), frames_dir: folder("frames") };
+  const ok = await run("media.companion_shapes", { ...base, path: "stylised", mouth_box: [10, 20, 100, 80], face_height_px: 200, flow_sigma: 1, prepull: { D: 0.2 } });
+  expect(ok.state).toBe("done"); expect(ok.result).toMatchObject({ ok: true });
+  expect(seenHere[0].params).toMatchObject({ path: "stylised", mouth_box: [10, 20, 100, 80], face_height_px: 200, flow_sigma: 1, prepull: { D: 0.2 } });
+  expect("landmarks" in seenHere[0].params).toBe(false);
+  const { body, status } = await post("media.companion_shapes", { ...base, path: "stylised" });
+  expect(status).toBeGreaterThanOrEqual(400); expect(JSON.stringify(body)).toContain("mouth_box");
+  const photo = await post("media.companion_shapes", base);
+  expect(photo.status).toBeGreaterThanOrEqual(400); expect(JSON.stringify(photo.body)).toContain("landmarks");
+});
+
 test("a worker refusal the maker can act on is a finished job with ok false and the plain reason; cancel stops a running job", async () => {
   const { ImageToolError } = await import("@/imagetools/imageTools");
   scripted = () => { throw new ImageToolError("pose_missing", "There is no pose picture for sad. Make one.", 422); };
