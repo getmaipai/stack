@@ -23,14 +23,15 @@ import { pinFrameCount, pinFrameToward, pinWeight, applyLightOffsets, defaultLig
 import { upscaleClip, upscaleProblem, UPSCALE_DEADLINE_MS, UpscaleFailure } from "./upscale";
 import { runTtsBatch } from "./tts";
 import { MixInput, runMix } from "./mix";
+import { COMPANION_MAKER_DEADLINES_MS, COMPANION_MAKER_KINDS, companionMakerPrecheck, companionMakerRunner, type CompanionMakerKind } from "./companionMaker";
 import { RECORDED_SPEECH_PEAK_BYTES } from "@/recordedSpeech/recordedSpeech";
 
-export const MEDIA_KINDS = ["media.probe", "media.fetch", "media.transcode", "media.preview", "media.companion_clip", "media.edit", "media.tts", "media.mix", "media.setup"] as const;
+export const MEDIA_KINDS = ["media.probe", "media.fetch", "media.transcode", "media.preview", "media.companion_clip", "media.edit", "media.tts", "media.mix", "media.setup", ...COMPANION_MAKER_KINDS] as const;
 export type MediaKind = typeof MEDIA_KINDS[number];
 export const MEDIA_LANE = "idle";
 export const MEDIA_QUEUE_CAP = 64;
 const MINUTE = 60_000;
-export const MEDIA_DEADLINES_MS: Record<MediaKind, number> = { "media.probe": 3 * MINUTE, "media.preview": 20 * MINUTE, "media.fetch": 3 * 60 * MINUTE, "media.transcode": 12 * 60 * MINUTE, "media.companion_clip": 20 * MINUTE, "media.edit": 30 * MINUTE, "media.tts": 30 * MINUTE, "media.mix": 30 * MINUTE, "media.setup": 30 * MINUTE };
+export const MEDIA_DEADLINES_MS: Record<MediaKind, number> = { "media.probe": 3 * MINUTE, "media.preview": 20 * MINUTE, "media.fetch": 3 * 60 * MINUTE, "media.transcode": 12 * 60 * MINUTE, "media.companion_clip": 20 * MINUTE, "media.edit": 30 * MINUTE, "media.tts": 30 * MINUTE, "media.mix": 30 * MINUTE, "media.setup": 30 * MINUTE, ...COMPANION_MAKER_DEADLINES_MS };
 
 type RawInputRunner = (argv: string[], inputPath: string, signal: AbortSignal) => Promise<RunResult>;
 async function spawnRawInputRunner(argv: string[], inputPath: string, signal: AbortSignal): Promise<RunResult> {
@@ -85,6 +86,7 @@ export function precheck(kind: MediaKind): (input: Record<string, unknown>) => J
         safeName(parsed.output.name, "");
       }
       else if (kind === "media.setup") SetupInput.parse(input);
+      else if ((COMPANION_MAKER_KINDS as readonly string[]).includes(kind)) return companionMakerPrecheck(kind as CompanionMakerKind)(input);
       else if (kind === "media.mix") { const parsed = MixInput.parse(input); for (const track of parsed.tracks) resolveReadable(track.path); if (parsed.output.dir) resolveWritableDir(parsed.output.dir); safeName(parsed.output.name, "mix.wav"); }
       else {
         const parsed = FetchInput.parse(input);
@@ -898,6 +900,14 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
   return { ...(files ? { files, spatial: spatial! } : {}), path: final, size_bytes: sizeOf(final), container: isPicture ? "png" : extension.toLowerCase() === ".webm" ? "webm" : extension.toLowerCase() === ".mov" ? "mov" : "mp4", duration_s: isPicture ? null : done.duration_s, width: done.width, height: done.height, video_codec: done.video_codec, audio_codec: done.audio_codec, streams: done.streams, steps, elapsed_ms: mediaDeps.now() - started };
 }
 
+// ---- media.companion_track from a clip: the frames as PNG files for the tracker (at most 301, so the tracker's own cap refuses a longer clip in words) ----
+async function extractClipFrames(clip: string, into: string, signal: AbortSignal): Promise<void> {
+  const ffmpeg = await mediaDeps.toolbox.path("ffmpeg", () => {}, signal).catch((error) => { throw pathFailure(error) ?? error; });
+  const result = await mediaDeps.run([ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-i", clip, "-frames:v", "301", join(into, "%05d.png")], { signal });
+  if (result.aborted || signal.aborted) throw new Error("Cancelled.");
+  if (result.code !== 0 || !readdirSync(into).length) throw fail({ code: "unreadable", message: "The clip could not be read. Use a readable mp4, mov or webm clip." });
+}
+
 // ---- media.setup ----
 async function runSetup(_job: Job, signal: AbortSignal, progress: JobProgress): Promise<{ tools: Record<string, string>; elapsed_ms: number }> {
   const started = mediaDeps.now();
@@ -915,4 +925,5 @@ export function registerMediaJobs(): void {
   registerJobRunner("media.tts", runTtsBatch, { generator: { role: "tts", queueBehind: ["image", "video", "music"], memory: () => ({ requestedBytes: RECORDED_SPEECH_PEAK_BYTES, measuredPeakBytes: RECORDED_SPEECH_PEAK_BYTES, engine: "recorded-speech" }) } });
   registerJobRunner("media.mix", runMix, { lane: laneFor("media.mix") });
   registerJobRunner("media.setup", runSetup, { lane: laneFor("media.setup") });
+  for (const kind of COMPANION_MAKER_KINDS) registerJobRunner(kind, companionMakerRunner(kind, extractClipFrames), { lane: laneFor(kind) });
 }
