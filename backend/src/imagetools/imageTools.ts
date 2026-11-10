@@ -40,8 +40,8 @@ import subjectsHelperSource from "./subjectmask.swift" with { type: "file" };
 export const IMAGE_TOOLS_NAME = "image-tools";
 export const IMAGE_TOOLS_VERSION = MANAGED_RUNTIMES.find((runtime) => runtime.name === IMAGE_TOOLS_NAME)?.version ?? "1.0.0";
 export const IMAGE_TOOLS_OPERATIONS = ["remove_background", "erase", "upscale", "resize", "find_people", "people_mask", "erase_people", "find_subjects", "erase_subjects"] as const;
-/** MAKER-A and MAKER-C: the Stack's own jobs call these (clip_track with a folder of clip frames, emotion_bake with the pose pictures the orchestrator made, pack_assemble with a staging folder); it is not on the picture-upload route, so it stays out of IMAGE_TOOLS_OPERATIONS (which that route and the status list publish). */
-export const IMAGE_TOOLS_INTERNAL_OPERATIONS = ["clip_track", "emotion_bake", "pack_assemble"] as const;
+/** MAKER-A, MAKER-B and MAKER-C: the Stack's own jobs call these (clip_track with a folder of clip frames, emotion_bake with the pose pictures the orchestrator made, pack_assemble with a staging folder); it is not on the picture-upload route, so it stays out of IMAGE_TOOLS_OPERATIONS (which that route and the status list publish). */
+export const IMAGE_TOOLS_INTERNAL_OPERATIONS = ["clip_track", "emotion_bake", "pack_assemble", "shapes_bake"] as const;
 export type ImageToolOperation = typeof IMAGE_TOOLS_OPERATIONS[number] | typeof IMAGE_TOOLS_INTERNAL_OPERATIONS[number];
 
 /** The pinned model records the worker loads, by the name the worker uses. */
@@ -53,7 +53,7 @@ export const IMAGE_TOOLS_ESTIMATED_BYTES = 4 * 1_073_741_824;
 /** Megapixels each tool accepts; the worker enforces them and says them in words. Mirrored here so the status route and the docs state them once. */
 export const IMAGE_TOOL_LIMITS = { remove_background_in: 25, erase_in: 25, upscale_in: 6, upscale_out: 36, resize_out: 36 } as const;
 const idleMs = (): number => Number(process.env.IMAGE_TOOLS_IDLE_MS ?? 120_000);
-const DEADLINE_MS: Record<ImageToolOperation, number> = { remove_background: 120_000, erase: 120_000, upscale: 300_000, resize: 60_000, find_people: 60_000, people_mask: 60_000, erase_people: 120_000, find_subjects: 120_000, erase_subjects: 180_000, clip_track: 300_000, emotion_bake: 300_000, pack_assemble: 600_000 };
+const DEADLINE_MS: Record<ImageToolOperation, number> = { remove_background: 120_000, erase: 120_000, upscale: 300_000, resize: 60_000, find_people: 60_000, people_mask: 60_000, erase_people: 120_000, find_subjects: 120_000, erase_subjects: 180_000, clip_track: 300_000, emotion_bake: 300_000, pack_assemble: 600_000, shapes_bake: 300_000 };
 const RESULT_KEEP = 6;
 const RESULT_TTL_MS = 10 * 60_000;
 
@@ -122,7 +122,18 @@ export interface SubjectBox extends PersonBox { kind?: "person" | "animal" | "ob
 export interface LookDetection { label: string; score: number; box: number[] }
 /** The answer of `clip_track`: m is one [a, b, tx, c, d, ty] per frame (rest-picture pixels to frame pixels), res the grey residual left, cc the correlation, low the frame numbers under the confidence. */
 export interface ClipTrack { m: number[][]; res: number[]; cc: number[]; low: number[]; frames: number }
-export interface WorkerReply { id: string | null; ok: boolean; code?: string; error?: string; width?: number; height?: number; engine?: string; model?: string; ms?: number; crop_px?: number; people?: PersonBox[]; subjects?: SubjectBox[]; m?: number[][]; res?: number[]; cc?: number[]; low?: number[]; frames?: number; data?: Record<string, unknown>; }
+/** One letter's measurements in a `shapes_bake` set report (percent of face height unless named px). */
+export interface ShapesBakeLetter { opening_pct: number; teeth_pct: number; upper_lip_error_pct: number; raw: { nose_drift_px: number; upper_lip_drift_px: number }; chin_px: number; neck_px: number; min_jacobian: number; target_pct?: number; delta_pct?: number }
+export interface ShapesBakeSet {
+  set: "calm" | "shout"; ok: boolean; reasons: string[]; letters: Record<string, ShapesBakeLetter>; made: string[]; opening_peak_pct: number; opening_range_pct: [number, number];
+  upper_lip_error_peak_pct: number; chin_peak_px_480: number; neck_peak_px_480: number; displacement_limit_px_480: number; min_jacobian: number; chin_hold: boolean;
+  without_chin_hold: { chin_peak_px_480: number; neck_peak_px_480: number; min_jacobian: number };
+  meta: { tx: number; ty: number; tw: number; th: number; cols: number; base: number; ts: number[]; nt: number; region: number[]; flowHalf: number[]; flowScale: number; letters: string };
+  atlas: { width: number; height: number; tiles: number }; flow_bytes: number;
+}
+/** The answer of `shapes_bake` (the same JSON is written as `<output_dir>/report.json`): ok only when every set passed its validators, reasons say what failed and what to do. */
+export interface ShapesBakeReport { ok: boolean; reasons: string[]; picture: [number, number]; face_height_px: number; region: number[]; tile: number[]; sets: Partial<Record<"calm" | "shout", ShapesBakeSet>> }
+export interface WorkerReply { id: string | null; ok: boolean; code?: string; error?: string; width?: number; height?: number; engine?: string; model?: string; ms?: number; crop_px?: number; people?: PersonBox[]; subjects?: SubjectBox[]; m?: number[][]; res?: number[]; cc?: number[]; low?: number[]; frames?: number; data?: Record<string, unknown>; report?: ShapesBakeReport; }
 export interface WorkerHandle { send(request: WorkerRequest, deadlineMs: number): Promise<WorkerReply>; kill(graceMs?: number): void; exited: Promise<number>; /** ISOLATION-01: the process, for the gate that stops it while chat is working (absent on a scripted worker). */ pausable?: PausableWorker; }
 
 export interface ImageToolsDeps {
@@ -212,7 +223,7 @@ export function workerHandle(child: { pid?: number; stdin: { write(data: string)
 }
 
 export interface ImageToolInput { operation: ImageToolOperation; image: Uint8Array; mask?: Uint8Array; params?: Record<string, unknown>; }
-export interface ImageToolResult { track?: ClipTrack; /** emotion_bake and pack_assemble: the report the worker wrote next to its files; no picture comes back. */ data?: Record<string, unknown>; png: Uint8Array; width: number; height: number; engine: string; model: string; ms: number; operation: ImageToolOperation; people?: PersonBox[]; subjects?: SubjectBox[]; status?: string }
+export interface ImageToolResult { track?: ClipTrack; shapes?: ShapesBakeReport; /** emotion_bake and pack_assemble: the report the worker wrote next to its files; no picture comes back. */ data?: Record<string, unknown>; png: Uint8Array; width: number; height: number; engine: string; model: string; ms: number; operation: ImageToolOperation; people?: PersonBox[]; subjects?: SubjectBox[]; status?: string }
 export type ImageToolsState = "unsupported" | "needs-setup" | "building" | "idle" | "running";
 
 export class ImageToolsService {
@@ -330,6 +341,10 @@ export class ImageToolsService {
       }
       if (input.operation === "emotion_bake" || input.operation === "pack_assemble") {
         return { png: new Uint8Array(0), data: reply.data ?? {}, width: reply.width ?? 0, height: reply.height ?? 0, engine: reply.engine ?? "opencv", model: reply.model ?? "none", ms: reply.ms ?? 0, operation: input.operation };
+      }
+      if (input.operation === "shapes_bake") {
+        if (!reply.report) throw new ImageToolError("failed", "The mouth baker returned no report. Try again.", 500);
+        return { png: new Uint8Array(0), shapes: reply.report, width: reply.width ?? 0, height: reply.height ?? 0, engine: reply.engine ?? "dis", model: reply.model ?? "none", ms: reply.ms ?? 0, operation: input.operation };
       }
       const png = new Uint8Array(readFileSync(files[2]!));
       return { png, width: reply.width ?? 0, height: reply.height ?? 0, engine: reply.engine ?? "unknown", model: reply.model ?? "unknown", ms: reply.ms ?? 0, operation: input.operation, ...(reply.people ? { people: reply.people } : {}), ...(reply.subjects ? { subjects: reply.subjects.map((subject) => classifySubject(subject, (params.look_detections as LookDetection[] | undefined) ?? [])) } : {}), ...(lookStatus ? { status: lookStatus } : {}) } as ImageToolResult;

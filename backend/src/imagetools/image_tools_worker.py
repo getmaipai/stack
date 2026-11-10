@@ -1143,7 +1143,402 @@ def pack_assemble(request, params):
     return {"data": result, "engine": "pillow", "model": "none"}
 
 
-OPS = {"remove_background": remove_background, "erase": erase, "upscale": upscale, "resize": resize, "find_people": find_people, "people_mask": people_mask, "erase_people": erase_people, "find_subjects": find_subjects, "erase_subjects": erase_subjects, "clip_track": clip_track, "emotion_bake": emotion_bake, "pack_assemble": pack_assemble}
+
+# ---- shapes_bake (MAKER-B): the photo mouth shapes, baked for the companion pack player ----
+SHAPES_LETTERS = "ABCDEFGH"
+SHAPES_TS = (0.2, 0.4, 0.6, 0.8)
+SHAPES_COLS = 10
+SHAPES_SETS = ("calm", "shout")
+SHAPES_MAX_PIXELS = 4 * MEGAPIXEL
+# Every pixel constant below was tuned on the demo man, whose face (Vision contour, eye line to chin) is 179.875 px tall; each is
+# scaled by (this face's height / 179.875), so the geometry follows the landmarks of whichever face is baked.
+SHAPES_DEMO_FH = 179.875
+# Flow strength per letter: small shapes barely move the mid-face (B C D E F G H).
+SHAPES_FLOW_SCALE = {"B": 0.45, "C": 0.8, "D": 1.0, "E": 0.7, "F": 0.5, "G": 0.45, "H": 1.0}
+# Reference openings (inner-lip gap, percent of face height) for the calm set, from the demo's measured talking-head reference.
+SHAPES_CALM_TARGETS = {"B": 2.1, "C": 3.7, "D": 6.2, "E": 3.7, "F": 0.9}
+# The validators: calm 2 to 6.5 percent of face height (the reference D is 6.2). Shout 12 to 36 percent by the inner-lip gap on a photo (the proven real man's shout H is 32 percent; the 12 to 19 figure in the design was measured on the cartoons).
+SHAPES_OPENING_RANGE = {"calm": (2.0, 6.5), "shout": (12.0, 36.0)}
+
+
+def _shapes_points(landmarks, key, where, minimum):
+    points = landmarks.get(key) if isinstance(landmarks, dict) else None
+    try:
+        array = np.asarray(points, np.float64)
+    except (TypeError, ValueError):
+        array = None
+    if array is None or array.ndim != 2 or array.shape[1] != 2 or len(array) < minimum or not np.isfinite(array).all():
+        raise Refused("landmarks_required", f"{where} has no usable '{key}' landmarks (at least {minimum} [x, y] points in picture pixels). Find the face landmarks for that picture and send them.")
+    return array
+
+
+def _shapes_landmarks(landmarks, where, rest=False):
+    out = {"outer": _shapes_points(landmarks, "outerLips", where, 6), "inner": _shapes_points(landmarks, "innerLips", where, 3), "nose": _shapes_points(landmarks, "nose", where, 1)}
+    if rest:
+        out["contour"] = _shapes_points(landmarks, "contour", where, 5)
+    return out
+
+
+def _smooth01(t):
+    t = np.clip(t, 0.0, 1.0)
+    return t * t * (3 - 2 * t)
+
+
+def _odd(value):
+    return max(3, int(round(value)) // 2 * 2 + 1)
+
+
+def _shapes_flow(dis, a, b):
+    """Flow F with a(x) ~ b(x + F(x)); the DIS settings the demo proved."""
+    return dis.calc(cv2.cvtColor(a, cv2.COLOR_BGR2GRAY), cv2.cvtColor(b, cv2.COLOR_BGR2GRAY), None)
+
+
+def _shapes_warp(img, flow, t):
+    h, w = img.shape[:2]
+    gx, gy = np.meshgrid(np.arange(w, dtype=np.float32), np.arange(h, dtype=np.float32))
+    return cv2.remap(img, gx + t * flow[..., 0], gy + t * flow[..., 1], cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+
+
+def _shapes_dis():
+    dis = cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_MEDIUM)
+    dis.setVariationalRefinementIterations(12)
+    dis.setFinestScale(0)
+    dis.setPatchSize(10)
+    dis.setPatchStride(4)
+    return dis
+
+
+def shapes_geometry(rest_lm, width, height, params):
+    """Everything placed from the rest picture's landmarks: face height, region, mouth tile, anchor rows."""
+    contour = rest_lm["contour"]
+    top, chin = float(contour[:, 1].min()), float(contour[:, 1].max())
+    fh = chin - top
+    if fh < 40:
+        raise Refused("bad_params", f"The face is only {fh:.0f} pixels tall in the landmarks; the mouth shapes need a face of at least 40 pixels. Send the full-size picture's landmarks.")
+    u = fh / SHAPES_DEMO_FH
+    cx = float(contour[:, 0].mean())
+    outer = rest_lm["outer"]
+    ocy = (float(outer[:, 1].min()) + float(outer[:, 1].max())) / 2
+    region = params.get("region")
+    if region:
+        x0, y0, rw, rh = [int(v) for v in region]
+    else:
+        rw, rh = int(round(330 * u)), int(round(242 * u))
+        x0, y0 = int(round(cx - 165 * u)), int(round(top + 9.15 * u))
+    x1, y1 = min(width, x0 + rw), min(height, y0 + rh)
+    x0, y0 = max(0, x0), max(0, y0)
+    rw, rh = x1 - x0, y1 - y0
+    if rw < 32 or rh < 32:
+        raise Refused("bad_params", "The face sits too close to the picture's edge for the mouth region to fit inside it. Use a picture with more room around the face.")
+    tile = params.get("tile")
+    if tile:
+        tx, ty, tw, th = [int(v) for v in tile]
+    else:
+        tw, th = int(round(168 * u)), int(round(108 * u))
+        tx, ty = int(round(cx)) - tw // 2, int(round(ocy + 24.44 * u)) - th // 2
+    tw, th = min(tw, rw), min(th, rh)
+    tx, ty = min(max(tx, x0), x0 + rw - tw), min(max(ty, y0), y0 + rh - th)
+    return {"fh": fh, "u": u, "cx": cx, "top": top, "chin": chin, "region": [x0, y0, rw, rh], "tile": [tx, ty, tw, th],
+            "nose_base": float(rest_lm["nose"][:, 1].max()), "upper_lip": float(outer[:, 1].min())}
+
+
+def shapes_register(crop, lm, geo, name):
+    """Undo the nose drift rigidly, then fix the upper lip line (a vertical shift that is 0 at the nose base and full from the upper lip down),
+    so the jaw opens downward from the rest picture's own lip line. Returns the registered crop, the landmarks moved the same way, and the raw drift."""
+    x0, y0, w, h = geo["region"]
+    n0, u0 = geo["nose_base"], geo["upper_lip"]
+    dn = float(lm["nose"][:, 1].max()) - n0
+    dup = (float(lm["outer"][:, 1].min()) - u0) - dn
+    rows = np.arange(h, dtype=np.float32)[:, None] * np.ones((1, w), np.float32)
+    cols = np.tile(np.arange(w, dtype=np.float32), (h, 1))
+    a0, a1 = n0 - y0, u0 - y0
+    ramp = lambda y: _smooth01((y - a0) / max(1.0, a1 - a0))
+    crop = cv2.remap(crop, cols, rows + dn, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    crop = cv2.remap(crop, cols, rows + dup * ramp(rows), cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+
+    def move(points):
+        moved = points.copy()
+        y_in = points[:, 1] - y0
+        y = y_in.copy()
+        for _ in range(8):  # the output row y shows the input row y + dn + dup * ramp(y); invert that
+            y = y_in - dn - dup * ramp(y)
+        moved[:, 1] = y + y0
+        return moved
+
+    moved = {key: move(value) for key, value in lm.items()}
+    return crop, moved, dn, dup
+
+
+def shapes_set(name, rest_bgr, alpha, rest_lm, frames, lms, geo, params, out_dir):
+    """One set (calm or shout): the registered shapes, flows, weight, tiles and the baked in-betweens, written to out_dir; returns its report."""
+    x0, y0, w, h = geo["region"]
+    tx, ty, tw, th = geo["tile"]
+    fh, u, cx, chin = geo["fh"], geo["u"], geo["cx"], geo["chin"]
+    width = rest_bgr.shape[1]
+    dis = _shapes_dis()
+    cxr, cyr = (tx + tw / 2.0) - x0, (ty + th / 2.0) - y0   # tile centre inside the region
+    xq, yq = np.meshgrid(np.arange(w, dtype=np.float32), np.arange(h, dtype=np.float32))
+    crops = [rest_bgr[y0:y0 + h, x0:x0 + w].copy()]
+    lms_reg = [rest_lm]
+    drift = {}
+    for i in range(1, 8):
+        letter = SHAPES_LETTERS[i]
+        crop, moved, dn, dup = shapes_register(frames[letter][y0:y0 + h, x0:x0 + w].copy(), lms[letter], geo, letter)
+        crops.append(crop)
+        lms_reg.append(moved)
+        drift[letter] = {"nose_drift_px": round(dn, 2), "upper_lip_drift_px": round(dup + dn, 2)}
+    # Lab mean and std match to the rest on the lower-face skin band (mouth excluded): undoes the engine's grey, flat render.
+    band = ((((xq - cxr) / (120 * u)) ** 2 + ((yq - cyr - 40 * u) / (70 * u)) ** 2) < 1.0) & ((((xq - cxr) / (62 * u)) ** 2 + ((yq - cyr) / (42 * u)) ** 2) > 1.0) & (yq > cyr + 20 * u)
+    lab0 = cv2.cvtColor(crops[0].astype(np.float32) / 255.0, cv2.COLOR_BGR2LAB)
+    skin = band & (cv2.cvtColor(crops[0], cv2.COLOR_BGR2HSV)[..., 1] > 20)
+    if skin.sum() < 50:
+        skin = band
+    m0, s0 = lab0[skin].mean(0), lab0[skin].std(0) + 1e-3
+    for i in range(1, 8):
+        lab = cv2.cvtColor(crops[i].astype(np.float32) / 255.0, cv2.COLOR_BGR2LAB)
+        mi, si = lab[skin].mean(0), lab[skin].std(0) + 1e-3
+        lab = (lab - mi) * np.clip(s0 / si, 0.8, 1.6) + m0
+        crops[i] = np.clip(cv2.cvtColor(lab, cv2.COLOR_LAB2BGR) * 255.0, 0, 255).astype(np.uint8)
+    # lip and inner-mouth masks from the registered landmarks
+    lipmask, inner = [], []
+    for i in range(8):
+        lm = lms_reg[i]
+        mo = np.zeros((h, w), np.uint8)
+        cv2.fillPoly(mo, [np.round(lm["outer"] - [x0, y0]).astype(np.int32)], 255)
+        mo = cv2.dilate(mo, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (_odd(7 * u),) * 2))
+        lipmask.append(cv2.GaussianBlur(mo.astype(np.float32) / 255, (0, 0), 2.0 * u))
+        mi_ = np.zeros((h, w), np.uint8)
+        cv2.fillPoly(mi_, [np.round(lm["inner"] - [x0, y0]).astype(np.int32)], 1)
+        inner.append(cv2.dilate(mi_, np.ones((_odd(5 * u),) * 2, np.uint8)).astype(bool))
+    # teeth ivory and cavity brown toned in Lab inside the inner-lip polygon only; mild unsharp and grain (the engine renders 256 px)
+    sharp, grain = float(params.get("sharp_amt", 1.6)), float(params.get("grain", 5.0))
+    teeth_pct = {}
+    for i in range(1, 8):
+        f = crops[i].astype(np.float32)
+        hv = cv2.cvtColor(crops[i], cv2.COLOR_BGR2HSV)
+        teeth = (hv[..., 2] > 165) & (hv[..., 1] < 80) & inner[i]
+        cav = (hv[..., 2] < 80) & inner[i]
+        tf = cv2.GaussianBlur(teeth.astype(np.float32), (0, 0), 1.0 * u)
+        cf = cv2.GaussianBlur(cav.astype(np.float32), (0, 0), 1.0 * u)
+        lab = cv2.cvtColor(np.clip(f, 0, 255).astype(np.uint8).astype(np.float32) / 255.0, cv2.COLOR_BGR2LAB)
+        lab[..., 0] = lab[..., 0] * (1 - tf) + np.minimum(lab[..., 0] * 0.93, 82.0) * tf
+        lab[..., 1] = lab[..., 1] * (1 - tf) + (lab[..., 1] * 0.2 + 1.6) * tf
+        lab[..., 2] = lab[..., 2] * (1 - tf) + (lab[..., 2] * 0.2 + 12.0 * 0.8) * tf
+        lab[..., 1] = lab[..., 1] * (1 - cf * 0.6) + 5.0 * cf * 0.6
+        lab[..., 2] = lab[..., 2] * (1 - cf * 0.6) + 8.0 * cf * 0.6
+        f = np.clip(cv2.cvtColor(lab, cv2.COLOR_LAB2BGR) * 255.0, 0, 255)
+        blurred = cv2.GaussianBlur(f, (0, 0), 1.3 * u)
+        f = np.clip(f + sharp * (f - blurred), 0, 255)
+        noise = cv2.GaussianBlur(np.random.default_rng(7 + i).normal(0, 1, f.shape[:2]).astype(np.float32), (0, 0), 0.7) * grain
+        crops[i] = np.clip(f + noise[..., None], 0, 255).astype(np.uint8)
+        rows = np.where(teeth.any(axis=1))[0]
+        teeth_pct[SHAPES_LETTERS[i]] = round(float((rows.max() - rows.min() + 1) / fh * 100), 2) if len(rows) else 0.0
+    union_full = np.max(np.stack(lipmask), axis=0)
+    # displacement fields rest -> shape over the whole region: smoothed hard away from the lips, clamped
+    dist = cv2.distanceTransform((lipmask[0] < 0.01).astype(np.uint8), cv2.DIST_L2, 3)
+    scales = {**SHAPES_FLOW_SCALE, **{k: float(v) for k, v in (params.get("flow_scale") or {}).items()}}
+    half = (w // 2, h // 2)
+    flows = np.zeros((8, half[1], half[0], 2), np.int16)
+    for i in range(1, 8):
+        g = np.clip(_shapes_flow(dis, crops[i], crops[0]), -28 * u, 28 * u)
+        soft = cv2.GaussianBlur(g, (0, 0), 7.0 * u)
+        far = np.clip((dist - 10 * u) / (40 * u), 0, 1)[..., None]
+        g = cv2.GaussianBlur(g * (1 - far) + soft * far, (0, 0), 2.0 * u) * scales[SHAPES_LETTERS[i]]
+        flows[i] = np.round(cv2.resize(g, half, interpolation=cv2.INTER_AREA) * 64).astype(np.int16)
+    # weight: 0 toward the eyes, in over the cheeks; the nose tip mostly fixed; out toward the ears; 1 to the jaw line, 0.15 just below it, 0 at the collar
+    yw = _smooth01((yq - 18.0 * u) / (74.0 * u))
+    yb = np.interp(yq + y0, [-1e6, chin + 4.27 * u, chin + 16.27 * u, chin + 26.27 * u, 1e6], [1, 1, 0.15, 0, 0]).astype(np.float32)
+    xw = _smooth01((w / 2.0 - 8 * u - np.abs(xq - (cx - x0))) / (60.0 * u))
+    tip = 1 - 0.75 * np.exp(-(((xq - cxr) / (22 * u)) ** 2 + ((yq - (geo["nose_base"] - y0 - 22 * u)) / (22 * u)) ** 2) / 2)
+    solid = (alpha[y0:y0 + h, x0:x0 + w] > 200)
+    if solid.all():
+        sil = np.ones((h, w), np.float32)
+    else:
+        sil = _smooth01((cv2.distanceTransform(solid.astype(np.uint8), cv2.DIST_L2, 3) - 6 * u) / (22 * u))  # displacement is zero at the silhouette
+    weight = np.clip(yw * yb * xw * tip * sil, 0, 1)
+    unheld = weight
+    if params.get("chin_hold", True):  # the jaw stays where the live video has it: the weight fades to 0 over the last chin_hold_ramp of the face height above the chin line
+        weight = weight * _smooth01((chin - y0 - yq) / (float(params.get("chin_hold_ramp", 0.25)) * fh))
+    if params.get("taper", True):  # no straight edge where the region ends
+        edge = lambda t: _smooth01(t)
+        taper = edge(xq / (70 * u)) * edge((w - 1 - xq) / (70 * u)) * edge((h - 1 - yq) / (70 * u))
+        weight, unheld = weight * taper, unheld * taper
+    weight_u8 = (np.clip(weight, 0, 1) * 255).astype(np.uint8)
+    # mouth tiles (RGBA) and the baked in-betweens by flow between the tile crops
+    sx, sy = tx - x0, ty - y0
+    tiles = [c[sy:sy + th, sx:sx + tw].copy() for c in crops]
+    alphas = [(lipmask[i][sy:sy + th, sx:sx + tw] if i else np.zeros((th, tw), np.float32)) for i in range(8)]
+    nt = len(SHAPES_TS)
+    slots = 8 + 64 * nt
+    rows_n = (slots + SHAPES_COLS - 1) // SHAPES_COLS
+    atlas = np.zeros((rows_n * th, SHAPES_COLS * tw, 4), np.uint8)
+
+    def put(slot, img, a):
+        r, c = divmod(slot, SHAPES_COLS)
+        atlas[r * th:(r + 1) * th, c * tw:(c + 1) * tw, :3] = img
+        atlas[r * th:(r + 1) * th, c * tw:(c + 1) * tw, 3] = np.clip(a * 255, 0, 255).astype(np.uint8)
+
+    for i in range(8):
+        put(i, tiles[i], alphas[i])
+    tile_flow = {(i, j): _shapes_flow(dis, tiles[i], tiles[j]) for i in range(8) for j in range(8) if i != j}
+    for i in range(8):
+        for j in range(8):
+            if i == j:
+                continue
+            for ti, t in enumerate(SHAPES_TS):
+                a = _shapes_warp(tiles[i], tile_flow[(j, i)], t)
+                b = _shapes_warp(tiles[j], tile_flow[(i, j)], 1 - t)
+                wj = float(_smooth01((t - 0.35) / 0.3))
+                aa = _shapes_warp(alphas[i], tile_flow[(j, i)], t)
+                ab = _shapes_warp(alphas[j], tile_flow[(i, j)], 1 - t)
+                put(8 + (i * 8 + j) * nt + ti, np.clip((1 - wj) * a.astype(np.float32) + wj * b.astype(np.float32), 0, 255).astype(np.uint8), (1 - wj) * aa + wj * ab)
+    # harmonisation samples: core = inside the rest lips (the video's own closed lips), ring = skin annulus outside every shape's lip mask
+    union = np.max(np.stack(alphas), axis=0)
+    ring = (cv2.dilate((union > 0.02).astype(np.uint8), np.ones((_odd(9 * u),) * 2, np.uint8)) == 0) & (cv2.dilate((union > 0.02).astype(np.uint8), np.ones((_odd(41 * u),) * 2, np.uint8)) > 0)
+    core_poly = np.zeros((th, tw), np.uint8)
+    cv2.fillPoly(core_poly, [np.round(rest_lm["outer"] - [tx, ty]).astype(np.int32)], 1)
+    core = cv2.erode(core_poly, np.ones((_odd(5 * u),) * 2, np.uint8)) > 0
+    samples = np.zeros((th, tw, 3), np.uint8)
+    samples[..., 2] = core * 255
+    samples[..., 1] = ring * 255
+    os.makedirs(out_dir, exist_ok=True)
+    cv2.imwrite(os.path.join(out_dir, "atlas.png"), atlas)
+    cv2.imwrite(os.path.join(out_dir, "rest.png"), tiles[0])
+    cv2.imwrite(os.path.join(out_dir, "samples.png"), samples)
+    cv2.imwrite(os.path.join(out_dir, "weight.png"), weight_u8)
+    flows.tofile(os.path.join(out_dir, "flow.bin"))
+    meta = {"tx": tx, "ty": ty, "tw": tw, "th": th, "cols": SHAPES_COLS, "base": 8, "ts": list(SHAPES_TS), "nt": nt, "region": [x0, y0, w, h], "flowHalf": list(half), "flowScale": 64, "letters": SHAPES_LETTERS}
+    with open(os.path.join(out_dir, "meta.json"), "w") as handle:
+        json.dump(meta, handle, separators=(",", ":"))
+    # ---- measured report ----
+    limit = float(params.get("chin_limit_px", 1.5))
+    to480 = 480.0 / width   # the pack plays at 480 px wide
+    chin_y, chin_x = int(round(chin - y0)), int(round(cx - x0))
+    r = max(2, int(round(3 * u)))
+    neck_y0, neck_y1 = int(round(chin - y0 + 0.02 * fh)), min(h, int(round(chin - y0 + 0.2 * fh)))
+    neck_x0, neck_x1 = max(0, int(round(chin_x - 0.3 * fh))), min(w, int(round(chin_x + 0.3 * fh)))
+    # the lips themselves are drawn by the tile, so the fold check looks at the live face around them
+    outside = (cv2.dilate((union_full > 0.02).astype(np.uint8), np.ones((_odd(21 * u),) * 2, np.uint8)) == 0) & (weight > 0.02)
+
+    def measure(wmap, field):
+        shift = field * wmap[..., None]
+        mag = np.hypot(shift[..., 0], shift[..., 1])
+        chin_d = float(mag[max(0, chin_y - r):min(h, chin_y + r + 1), max(0, chin_x - r):min(w, chin_x + r + 1)].max()) * to480 if 0 <= chin_y < h else 0.0
+        neck_d = float(mag[neck_y0:neck_y1, neck_x0:neck_x1].max()) * to480 if neck_y1 > neck_y0 and neck_x1 > neck_x0 else 0.0
+        # the mapping x + shift(x) must not fold over itself: its smallest local area ratio stays well above 0
+        dxy, dxx = np.gradient(shift[..., 0])
+        dyy, dyx = np.gradient(shift[..., 1])
+        jacobian = float((((1 + dxx) * (1 + dyy) - dxy * dyx)[outside]).min()) if outside.any() else 1.0
+        return chin_d, neck_d, jacobian
+
+    letters, chin_peak, neck_peak, lip_err_peak, jac_min = {}, 0.0, 0.0, 0.0, 9.0
+    free = {"chin_peak_px_480": 0.0, "neck_peak_px_480": 0.0, "min_jacobian": 9.0}
+    for i in range(1, 8):
+        letter = SHAPES_LETTERS[i]
+        field = cv2.resize(flows[i].astype(np.float32) / 64.0, (w, h), interpolation=cv2.INTER_LINEAR)
+        chin_d, neck_d, jac = measure(weight, field)
+        free_chin, free_neck, free_jac = measure(unheld, field)
+        free = {"chin_peak_px_480": max(free["chin_peak_px_480"], round(free_chin, 2)), "neck_peak_px_480": max(free["neck_peak_px_480"], round(free_neck, 2)), "min_jacobian": min(free["min_jacobian"], round(free_jac, 3))}
+        jac_min = min(jac_min, jac)
+        inner_pts, outer_pts = lms_reg[i]["inner"], lms_reg[i]["outer"]
+        opening = float((inner_pts[:, 1].max() - inner_pts[:, 1].min()) / fh * 100)
+        lip_err = abs(float(outer_pts[:, 1].min()) - geo["upper_lip"]) / fh * 100
+        chin_peak, neck_peak, lip_err_peak = max(chin_peak, chin_d), max(neck_peak, neck_d), max(lip_err_peak, lip_err)
+        entry = {"opening_pct": round(opening, 2), "teeth_pct": teeth_pct[letter], "upper_lip_error_pct": round(lip_err, 3), "raw": drift[letter], "chin_px": round(chin_d, 2), "neck_px": round(neck_d, 2), "min_jacobian": round(jac, 3)}
+        if name == "calm" and letter in SHAPES_CALM_TARGETS:
+            entry["target_pct"] = SHAPES_CALM_TARGETS[letter]
+            entry["delta_pct"] = round(opening - SHAPES_CALM_TARGETS[letter], 2)
+        letters[letter] = entry
+    # G and H are optional (they repeat B and C when the set does not make them); the validators use the letters the set really made
+    made = [k for k in SHAPES_LETTERS[1:] if k in params["_made"][name]]
+    peak = max(letters[k]["opening_pct"] for k in made)
+    low, high = SHAPES_OPENING_RANGE[name]
+    reasons = []
+    if not low <= peak <= high:
+        reasons.append(f"The {name} set's widest mouth opening is {peak:.1f} percent of the face height; it should be {low:g} to {high:g}. Ask the engine for {'smaller' if peak > high else 'wider'} mouth shapes and bake again.")
+    if lip_err_peak > 1.0:
+        reasons.append(f"The upper lip moved {lip_err_peak:.2f} percent of the face height from the rest picture; it should stay within 1. Check the landmarks of the {name} frames.")
+    if chin_peak > limit:
+        reasons.append(f"The chin moves {chin_peak:.2f} px (in a 480 px wide picture) at the widest {name} shape; it should stay under {limit:g}. Use shapes that open the mouth without dropping the jaw.")
+    if neck_peak > limit:
+        reasons.append(f"The neck moves {neck_peak:.2f} px (in a 480 px wide picture) at the widest {name} shape; it should stay under {limit:g}. Use shapes that open the mouth without dropping the jaw.")
+    if jac_min < 0.05:
+        reasons.append(f"The {name} set's face warp folds over itself (smallest local area ratio {jac_min:.2f}, it should stay above 0.05). Use shapes with a smaller jaw drop or a longer chin_hold_ramp and bake again.")
+    return {"set": name, "ok": not reasons, "reasons": reasons, "letters": letters, "made": made, "opening_peak_pct": round(peak, 2), "opening_range_pct": [low, high],
+            "upper_lip_error_peak_pct": round(lip_err_peak, 3), "chin_peak_px_480": round(chin_peak, 2), "neck_peak_px_480": round(neck_peak, 2), "displacement_limit_px_480": limit,
+            "min_jacobian": round(jac_min, 3), "chin_hold": bool(params.get("chin_hold", True)), "without_chin_hold": free,
+            "meta": meta, "atlas": {"width": int(atlas.shape[1]), "height": int(atlas.shape[0]), "tiles": slots}, "flow_bytes": int(flows.size * 2)}
+
+
+def shapes_read_frame(folder, letter, size):
+    for name in (f"{letter}.png", f"full-{letter}.png"):
+        path = os.path.join(folder, name)
+        if os.path.isfile(path):
+            frame = np.asarray(load(path, "erase_in").convert("RGB"))
+            if (frame.shape[1], frame.shape[0]) != size:
+                raise Refused("size_mismatch", f"Frame {name} is {frame.shape[1]}x{frame.shape[0]} but the rest picture is {size[0]}x{size[1]}. Make every letter frame at the rest picture's size.")
+            return cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+    return None
+
+
+def shapes_bake(request, params):
+    """MAKER-B: bakes the photo mouth shapes of a companion from the engine's whole-face letter frames.
+    request.input is the rest picture (PNG; its alpha, when it has any, is the silhouette the displacement stays inside).
+    params: frames_dir (folder with one subfolder per set, calm and/or shout, each holding B.png to H.png; B to F are required, G defaults to B and H to C),
+    landmarks ({rest: {...}, calm: {B: {...}, ...}, shout: {...}}, each {outerLips, innerLips, nose, contour (rest only)} as [x, y] picture pixels),
+    output_dir (written as <output_dir>/<set>/{atlas.png, weight.png, samples.png, rest.png, flow.bin, meta.json} plus report.json), and optional
+    sets, region, tile, flow_scale, sharp_amt, grain, taper, chin_limit_px (px in a 480 px wide picture, default 1.5)."""
+    rest_rgba = np.asarray(load(request["input"], "erase_in").convert("RGBA"))
+    height, width = rest_rgba.shape[:2]
+    if width * height > SHAPES_MAX_PIXELS:
+        raise Refused("too_large", f"The rest picture is {width * height / MEGAPIXEL:.1f} megapixels; the mouth baker takes up to {SHAPES_MAX_PIXELS // MEGAPIXEL}. Resize the picture and its frames first.")
+    frames_dir, out_dir = params.get("frames_dir"), params.get("output_dir")
+    if not frames_dir or not os.path.isdir(frames_dir):
+        raise Refused("frames_required", "Say where the letter frames are (frames_dir): a folder with a calm and a shout subfolder of PNG files named B.png to H.png.")
+    if not out_dir:
+        raise Refused("bad_params", "Say where to write the baked mouth (output_dir).")
+    names = params.get("sets") or [s for s in SHAPES_SETS if os.path.isdir(os.path.join(frames_dir, s))]
+    if not names or any(n not in SHAPES_SETS for n in names):
+        raise Refused("frames_required", "The frames folder needs a calm and/or a shout subfolder (set names calm and shout), each with the letter frames B.png to H.png.")
+    landmarks = params.get("landmarks") or {}
+    rest_lm = _shapes_landmarks(landmarks.get("rest"), "The rest picture", rest=True)
+    geo = shapes_geometry(rest_lm, width, height, params)
+    rest_bgr = cv2.cvtColor(rest_rgba[..., :3], cv2.COLOR_RGB2BGR)
+    alpha = rest_rgba[..., 3]
+    made = {}
+    sets = {}
+    for name in names:
+        folder = os.path.join(frames_dir, name)
+        if not os.path.isdir(folder):
+            raise Refused("frames_required", f"The frames folder has no '{name}' subfolder. Make the {name} letter frames (B.png to H.png) and try again.")
+        frames, lms, made[name] = {}, {}, []
+        set_lms = landmarks.get(name) or {}
+        for letter in SHAPES_LETTERS[1:]:
+            frame = shapes_read_frame(folder, letter, (width, height))
+            if frame is None:
+                if letter in "BCDEF":
+                    raise Refused("frames_required", f"The {name} set has no frame for letter {letter} ({letter}.png). Make the letter frames B to F (G and H are optional) and try again.")
+                continue
+            frames[letter] = frame
+            lms[letter] = _shapes_landmarks(set_lms.get(letter), f"The {name} frame {letter}")
+            made[name].append(letter)
+        for letter, source in (("G", "B"), ("H", "C")):
+            if letter not in frames:
+                frames[letter], lms[letter] = frames[source], lms[source]
+        sets[name] = (frames, lms)
+    params = {**params, "_made": made}
+    reports = {}
+    for name in names:
+        frames, lms = sets[name]
+        reports[name] = shapes_set(name, rest_bgr, alpha, rest_lm, frames, lms, geo, params, os.path.join(out_dir, name))
+    report = {"ok": all(r["ok"] for r in reports.values()), "reasons": [reason for r in reports.values() for reason in r["reasons"]], "picture": [width, height], "face_height_px": round(geo["fh"], 2), "region": geo["region"], "tile": geo["tile"], "sets": reports}
+    os.makedirs(out_dir, exist_ok=True)
+    with open(os.path.join(out_dir, "report.json"), "w") as handle:
+        json.dump(report, handle, indent=1)
+    return {"report": report, "width": width, "height": height, "engine": "dis", "model": "none"}
+
+
+OPS = {"remove_background": remove_background, "erase": erase, "upscale": upscale, "resize": resize, "find_people": find_people, "people_mask": people_mask, "erase_people": erase_people, "find_subjects": find_subjects, "erase_subjects": erase_subjects, "clip_track": clip_track, "shapes_bake": shapes_bake, "emotion_bake": emotion_bake, "pack_assemble": pack_assemble}
 
 
 def main():
@@ -1159,7 +1554,7 @@ def main():
             reply["id"] = request.get("id")
             op = OPS.get(request.get("op"))
             if op is None:
-                raise Refused("bad_operation", "That operation is not one of remove_background, erase, upscale, resize, find_people, erase_people, find_subjects, erase_subjects, clip_track, emotion_bake or pack_assemble.")
+                raise Refused("bad_operation", "That operation is not one of remove_background, erase, upscale, resize, find_people, erase_people, find_subjects, erase_subjects, clip_track, emotion_bake, pack_assemble or shapes_bake.")
             reply.update(op(request, request.get("params") or {}))
             reply["ok"] = True
         except Refused as refused:
