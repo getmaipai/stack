@@ -182,3 +182,45 @@ test.skipIf(!python)("pack_assemble refuses an over-budget pack by naming the la
   expect(none.code).toBe("frames_required");
   w.kill();
 });
+
+test.skipIf(!python)("pack_assemble: head and eyes are optional (neither, head only), and missing clips still refuse naming the file", async () => {
+  const w = worker();
+  const run = async (drop: string[]) => {
+    const dir = fixtures("staging");
+    for (const name of ["idle1", "idle2", "listen", "think"]) Bun.spawnSync(["cp", join(dir, "clips", `${name}.mp4`), join(dir, "clips", `${name}.phone.mp4`)]);
+    for (const d of drop) Bun.spawnSync(["rm", "-rf", join(dir, d)]);
+    const out = join(dir, "pack");
+    return { dir, out, reply: await w.send(request("1", "pack_assemble", join(dir, "rest.png"), { staging: dir, out_dir: out, descriptor }), 120_000) };
+  };
+  const neither = await run(["head", "eyes"]);
+  expect(neither.reply.ok, neither.reply.error).toBe(true);
+  const pack = JSON.parse(readFileSync(join(neither.out, "pack.json"), "utf8"));
+  expect("head" in pack || "eyes" in pack).toBe(false);
+  expect(existsSync(join(neither.out, "head")) || existsSync(join(neither.out, "eyes"))).toBe(false);
+  const files = Object.fromEntries(walk(neither.out).filter((f) => f !== "build-report.json").map((f) => [f, statSync(join(neither.out, f)).size]));
+  expect(Object.keys(files).length).toBeGreaterThan(5);
+  expect((neither.reply.data as { pack: { desktopBytes: number } }).pack.desktopBytes).toBe(Object.entries(files).filter(([k]) => !k.endsWith(".phone.mp4")).reduce((a, [, v]) => a + v, 0));
+  const validator = specValidator();
+  if (validator) {
+    const { validateCompanionPack } = await import(validator);
+    // The pinned spec may predate optional head/eyes (commons spec change is a dependency): then validate with stand-in keys and files.
+    let problems: string[];
+    try { problems = validateCompanionPack(pack, files); } catch {
+      const withStandIns = { ...pack, head: { dir: "head", flowEncoding: "int16-deflate" }, eyes: { dir: "eyes" } };
+      problems = validateCompanionPack(withStandIns, { ...files, "head/meta.json": 1, "eyes/meta.json": 1 });
+    }
+    expect(problems).toEqual([]);
+  }
+  const headOnly = await run(["eyes"]);
+  expect(headOnly.reply.ok, headOnly.reply.error).toBe(true);
+  const hp = JSON.parse(readFileSync(join(headOnly.out, "pack.json"), "utf8"));
+  expect(hp.head.dir).toBe("head");
+  expect("eyes" in hp).toBe(false);
+  const noClips = await run(["clips"]);
+  expect(noClips.reply.code).toBe("staging_incomplete");
+  expect(noClips.reply.error).toContain("clips/");
+  const noEmotion = await run(["head", "eyes", "emotion"]);
+  expect(noEmotion.reply.code).toBe("staging_incomplete");
+  expect(noEmotion.reply.error).toContain("emotion");
+  w.kill();
+});

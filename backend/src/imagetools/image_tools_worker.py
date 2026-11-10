@@ -1038,9 +1038,13 @@ class PackBuilder:
                 self.need(f"mouth/{name}/meta.json")
                 self.folder(f"mouth/{name}", lossy_stems=("atlas",))
         self.need("mouth/calm/meta.json")
-        self.need("head/meta.json")
-        self.folder("head")
-        self.folder("eyes")
+        has_head, has_eyes = os.path.isdir(os.path.join(self.staging, "head")), os.path.isdir(os.path.join(self.staging, "eyes"))  # both optional: a pack without them omits the keys
+        if has_head:
+            self.need("head/meta.json")
+            self.folder("head")
+        if has_eyes:
+            self.need("eyes/meta.json")
+            self.folder("eyes")
         emo_meta = json.load(open(self.need("emotion/meta.json")))
         kinds = list(emo_meta["kinds"])
         self.folder("emotion", lossy_stems=tuple(kinds))
@@ -1054,8 +1058,12 @@ class PackBuilder:
         life = {k: float((d.get("life") or {}).get(k, 1.0)) for k in PACK_LIFE_KEYS}
         provenance = {"maker": "MaiPai", "makerVersion": "stack", "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), **d["provenance"]}
         pack = {"version": 1, "id": d["id"], "name": d["name"], "tile": d.get("tile") or {"desktop": 480, "phone": 320}, "states": states, "mouth": mouth,
-                "head": {"dir": "head", "flowEncoding": "int16-deflate"}, "eyes": {"dir": "eyes"}, "emotion": {"dir": "emotion", "kinds": kinds, "flowEncoding": "int16-deflate"},
+                "emotion": {"dir": "emotion", "kinds": kinds, "flowEncoding": "int16-deflate"},
                 "rest": self.rel(rest), "life": life, "budget": {"bytes": 0}, "provenance": provenance}
+        if has_head:
+            pack["head"] = {"dir": "head", "flowEncoding": "int16-deflate"}
+        if has_eyes:
+            pack["eyes"] = {"dir": "eyes"}
         pack_json = os.path.join(self.out, "pack.json")
         with open(pack_json, "w") as handle:
             json.dump(pack, handle, indent=1)
@@ -1097,7 +1105,7 @@ class PackBuilder:
                         exists(clip[key])
                 if len(clip["track"]) != clip["frames"]:
                     raise Refused("loader_check", f"Clip {clip['id']} has {clip['frames']} frames but a track of {len(clip['track'])} values. Track the clip again.")
-        for folder in [pack["mouth"]["calm"]["dir"], *( [pack["mouth"]["shout"]["dir"]] if "shout" in pack["mouth"] else []), pack["head"]["dir"], pack["eyes"]["dir"], pack["emotion"]["dir"]]:
+        for folder in [pack["mouth"]["calm"]["dir"], *( [pack["mouth"]["shout"]["dir"]] if "shout" in pack["mouth"] else []), *([pack["head"]["dir"]] if "head" in pack else []), *([pack["eyes"]["dir"]] if "eyes" in pack else []), pack["emotion"]["dir"]]:
             exists(f"{folder}/meta.json")
         for root, _, names in os.walk(self.out):
             for name in names:
@@ -1122,7 +1130,7 @@ class PackBuilder:
 
 def pack_assemble(request, params):
     """Turn a staging folder into a companion pack. request.input is the rest picture (used when staging has no rest.png).
-    params: staging (folder with clips/, mouth/calm, mouth/shout, head/, eyes/, emotion/ as emotion_bake writes it), out_dir (the pack folder, replaced),
+    params: staging (folder with clips/, mouth/calm, mouth/shout, optional head/ and eyes/, emotion/ as emotion_bake writes it), out_dir (the pack folder, replaced),
     descriptor {id, name, provenance {source, maker?, makerVersion?, created?}, tile?, life?, mouth {anchor {x, y, w, h}}, states? {state: [clip names]}}.
     PNG becomes lossy WebP (atlases and emotion pictures, q92 and steps up when under 38 dB) or lossless WebP, flows become zlib level 9 .z, pack.json is written
     for the CompanionPack schema, the desktop budget (12,582,912 bytes) is enforced with a refusal that names the largest files, and a loader check runs."""
