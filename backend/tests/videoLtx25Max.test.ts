@@ -81,6 +81,16 @@ test("VIDEO-INPUTS-01: a Max clip takes a start picture and an end picture, as p
   expect(requests[0]!.image).not.toBe(requests[0]!.end_image);
 });
 
+test("a tall Max clip (576x1024) is accepted and reaches the worker tall; 1024x576 stays the only wide Max size", async () => {
+  videoGen.useDeps(scripted());
+  const response = await post({ prompt: "x", model: "ltx25-max", size: "576x1024", seconds: 10, seed: 7, timeout_ms: 5000 });
+  expect(response.status).toBe(200);
+  expect(((await response.json()) as { data: Entry[] }).data[0]).toMatchObject({ width: 576, height: 1024, frames: 241, quality: "ltx25max" });
+  expect(requests[requests.length - 1]).toMatchObject({ profile: "max", width: 576, height: 1024, num_frames: 241 });
+  expect(ltx25MaxRefusal(576, 1024, 241)).toBeNull();
+  expect((await post({ prompt: "x", model: "ltx25-max", size: "448x768", seconds: 5 })).status).toBe(422);
+});
+
 test("only 1024x576 is a Max size; anything else and a style file are refused with a plain sentence", async () => {
   videoGen.useDeps(scripted());
   for (const size of ["768x448", "512x256", "1024x544", "1280x704"]) {

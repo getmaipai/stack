@@ -134,7 +134,8 @@ def classify(error):
 def refusal(width, height, frames, profile=None):
     width, height = true_size(width, height)
     table = MEASURED_MAX if profile == "max" else MEASURED
-    seconds = table.get((width, height))
+    # A tall clip is the same pixels as its wide one (448x768 is 768x448).
+    seconds = table.get((max(width, height), min(width, height)))
     if seconds is None:
         return "size must be one of " + ", ".join("%dx%d" % size for size in table)
     if frames < 9 or (frames - 1) % 8:

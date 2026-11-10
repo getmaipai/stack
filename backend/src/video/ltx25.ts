@@ -71,12 +71,14 @@ export function ltx25TrueSize(width: number, height: number): { width: number; h
 /** The row of a size (nominal or true), or null when its true size was not measured. */
 export function ltx25Row(width: number, height: number): Ltx25Row | null {
   const true_ = ltx25TrueSize(width, height);
-  return LTX25_MEASURED.find((row) => row.width === true_.width && row.height === true_.height) ?? null;
+  // A tall clip (448x768) is the same pixels as its wide one (768x448): same row, same footprint.
+  const wide = { width: Math.max(true_.width, true_.height), height: Math.min(true_.width, true_.height) };
+  return LTX25_MEASURED.find((row) => row.width === wide.width && row.height === wide.height) ?? null;
 }
 /** A plain refusal for a size and a frame count outside the measured table, or null when the clip is allowed. Frames must be 8n+1. */
 export function ltx25Refusal(width: number, height: number, frames: number): string | null {
   const row = ltx25Row(width, height);
-  if (!row) return `This video model makes ${LTX25_MEASURED.map((item) => item.size).join(", ")} (a height between is rounded down to a multiple of 64, so 512x288 gives 512x256). Pick one of those sizes.`;
+  if (!row) return `This video model makes ${LTX25_MEASURED.map((item) => item.size).join(", ")} (a height between is rounded down to a multiple of 64, so 512x288 gives 512x256). Pick one of those sizes (or the same size turned tall, such as 256x512).`;
   if (!Number.isInteger(frames) || frames < 9 || (frames - 1) % 8 !== 0) return "The length must be a whole number of frames that is one more than a multiple of 8 (for example 121 frames, 5 seconds at 24 a second).";
   if (frames > row.maxSeconds * LTX25_FPS + 1) return `At ${row.size} a clip is at most ${row.maxSeconds} seconds on this computer. A longer clip needs the ${LTX25_MEASURED.filter((item) => item.maxSeconds > row.maxSeconds).map((item) => item.size).join(" or ") || "512x256"} size.`;
   return null;
@@ -161,12 +163,13 @@ export const LTX25_MAX_PEAK_BYTES = Math.round(Math.max(...LTX25_MAX_MEASURED.ma
 export const LTX25_CLIP_CAP_BYTES = 64 * GB;
 export function ltx25MaxRow(width: number, height: number): Ltx25MaxRow | null {
   const true_ = ltx25TrueSize(width, height);
-  return LTX25_MAX_MEASURED.find((row) => row.width === true_.width && row.height === true_.height) ?? null;
+  const wide = { width: Math.max(true_.width, true_.height), height: Math.min(true_.width, true_.height) };
+  return LTX25_MAX_MEASURED.find((row) => row.width === wide.width && row.height === wide.height) ?? null;
 }
 /** A plain refusal for a size or frame count outside the Max table, or null when the clip is allowed. */
 export function ltx25MaxRefusal(width: number, height: number, frames: number): string | null {
   const row = ltx25MaxRow(width, height);
-  if (!row) return `The Max video model makes ${LTX25_MAX_MEASURED.map((item) => item.size).join(", ")} only. Pick that size.`;
+  if (!row) return `The Max video model makes ${LTX25_MAX_MEASURED.map((item) => item.size).join(", ")} only (or tall, 576x1024). Pick that size.`;
   if (!Number.isInteger(frames) || frames < 9 || (frames - 1) % 8 !== 0) return "The length must be a whole number of frames that is one more than a multiple of 8 (for example 241 frames, 10 seconds at 24 a second).";
   if (frames > row.maxSeconds * LTX25_FPS + 1) return `A Max clip is at most ${row.maxSeconds} seconds on this computer.`;
   return null;

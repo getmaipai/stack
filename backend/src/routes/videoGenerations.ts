@@ -148,13 +148,13 @@ export function parseVideoSize(size: string | undefined, quality: VideoQuality =
   if (quality === "ltx25max") {
     // Max: the one measured size (video/ltx25.ts, LTX25_MAX_MEASURED).
     const found = /^(\d{3,4})x(\d{3,4})$/.exec(size ?? spec.defaultSize);
-    if (!found || !ltx25MaxRow(Number(found[1]), Number(found[2])) || Number(found[1]) % 64 || Number(found[2]) % 64) return `The Max video model makes ${LTX25_MAX_MEASURED.map((row) => row.size).join(", ")} only. Pick that size.`;
+    if (!found || !ltx25MaxRow(Number(found[1]), Number(found[2])) || Number(found[1]) % 64 || Number(found[2]) % 64) return `The Max video model makes ${LTX25_MAX_MEASURED.map((row) => row.size).join(", ")} only (or tall, 576x1024). Pick that size.`;
     return { width: Number(found[1]), height: Number(found[2]) };
   }
   if (quality === "ltx25") {
     // Only the measured sizes (video/ltx25.ts); anything else is refused with the list.
     const found = /^(\d{3,4})x(\d{3,4})$/.exec(size ?? spec.defaultSize);
-    if (!found || Number(found[1]) % 32 || Number(found[2]) % 32 || !ltx25Row(Number(found[1]), Number(found[2]))) return `This video model makes ${LTX25_MEASURED.map((row) => row.size).join(", ")}; a height between is rounded down to a multiple of 64 (512x288 gives 512x256). Pick one of those sizes.`;
+    if (!found || Number(found[1]) % 32 || Number(found[2]) % 32 || !ltx25Row(Number(found[1]), Number(found[2]))) return `This video model makes ${LTX25_MEASURED.map((row) => row.size).join(", ")}; a height between is rounded down to a multiple of 64 (512x288 gives 512x256). Pick one of those sizes (or the same size turned tall, such as 256x512).`;
     // The clip is made, kept and reported at its true size.
     return ltx25TrueSize(Number(found[1]), Number(found[2]));
   }

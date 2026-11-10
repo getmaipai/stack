@@ -128,9 +128,22 @@ test("the nominal sizes 512x288 and 640x352 are accepted, made at the true size,
   for (const size of ["1024x576", "512x320", "480x288"]) expect((await post({ prompt: "x", model: "ltx25-q8", size })).status).toBe(422);
 });
 
+test("tall sizes (the wide sizes turned on their side) are accepted at the wide size's limits and reach the worker tall; a tall size outside the table is still refused", async () => {
+  videoGen.useDeps(scripted());
+  for (const [size, w, h, seconds] of [["256x512", 256, 512, 10], ["448x768", 448, 768, 5], ["320x640", 320, 640, 5]] as const) {
+    const response = await post({ prompt: "x", model: "ltx25-q8", size, seconds, timeout_ms: 5000 });
+    expect(response.status, size).toBe(200);
+    expect(((await response.json()) as { data: Entry[] }).data[0]).toMatchObject({ width: w, height: h });
+  }
+  expect(requests.map((request) => `${request.width}x${request.height}`)).toEqual(["256x512", "448x768", "320x640"]);
+  // A tall clip keeps the wide size's length limit: 448x768 is 5 s at most, as 768x448 is.
+  expect((await post({ prompt: "x", model: "ltx25-q8", size: "448x768", seconds: 10 })).status).toBe(422);
+  for (const size of ["576x1024", "320x512"]) expect((await post({ prompt: "x", model: "ltx25-q8", size })).status, size).toBe(422);
+});
+
 test("a size or a length outside the measured table is refused with a plain sentence, and nothing starts", async () => {
   videoGen.useDeps(scripted());
-  for (const size of ["1024x576", "832x480", "512x320", "288x512"]) {
+  for (const size of ["1024x576", "832x480", "512x320", "320x512"]) {
     const response = await post({ prompt: "x", model: "ltx25-q8", size });
     expect(response.status).toBe(422);
     const body = await response.json() as { code: string; error: string };
