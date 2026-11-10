@@ -458,7 +458,123 @@ def resize(request, params):
     return {"width": new_w, "height": new_h, "engine": "lanczos", "model": "none"}
 
 
-OPS = {"remove_background": remove_background, "erase": erase, "upscale": upscale, "resize": resize, "find_people": find_people, "people_mask": people_mask, "erase_people": erase_people, "find_subjects": find_subjects, "erase_subjects": erase_subjects}
+# ---- clip_track (MAKER-A): where the head went in every frame of a clip ----
+CLIP_TRACK_MAX_FRAMES = 300
+CLIP_TRACK_MAX_PIXELS = 4 * MEGAPIXEL
+
+
+def track_grey(rgba, hole=None):
+    """The picture the tracker compares: grey, with everything transparent (and the mouth hole, which moves on its own) set to mid grey and a soft blur."""
+    rgb = rgba[..., :3]
+    grey = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY).astype(np.float32)
+    grey = np.where(rgba[..., 3] > 128, grey, 128.0).astype(np.float32)
+    if hole:
+        x0, y0, x1, y1 = [int(v) for v in hole]
+        grey[max(0, y0):max(0, y1), max(0, x0):max(0, x1)] = 128.0
+    return cv2.GaussianBlur(grey, (0, 0), 1.5)
+
+
+def ecc_multiscale(template, image, start, motion):
+    """Coarse to fine ECC (scales 4, 2, 1). Returns (correlation, 2x3 warp mapping template coordinates to image coordinates), or (-1, start) when it does not converge."""
+    warp = start.copy().astype(np.float32)
+    cc = -1.0
+    for scale in (4, 2, 1):
+        t = cv2.resize(template, None, fx=1 / scale, fy=1 / scale, interpolation=cv2.INTER_AREA) if scale > 1 else template
+        i = cv2.resize(image, None, fx=1 / scale, fy=1 / scale, interpolation=cv2.INTER_AREA) if scale > 1 else image
+        scaled = warp.copy()
+        scaled[:, 2] /= scale
+        try:
+            cc, scaled = cv2.findTransformECC(t, i, scaled, motion, (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100, 1e-6), None, 5)
+        except cv2.error:
+            return -1.0, start.astype(np.float32)
+        warp = scaled.copy()
+        warp[:, 2] *= scale
+    return float(cc), warp
+
+
+def clip_track(request, params):
+    """Per-frame head transform of a clip against its rest picture, the way the demo's track.json is made: multi-scale ECC
+    (rigid first, then an affine refinement whose scale is clamped), started from the previous frame, the one before it and
+    the identity, keeping the best correlation so one diverged start cannot poison later frames.
+    request.input is the rest picture (PNG with alpha); params.frames_dir holds the frames as PNG files (sorted by name).
+    Optional params: scale_clamp (default 0.02), confidence (default 0.5), box [x0,y0,x1,y1] to track inside, hole [x0,y0,x1,y1] to ignore.
+    Replies m (one [a, b, tx, c, d, ty] per frame, mapping rest-picture pixels to frame pixels), res (mean absolute grey
+    difference left after the warp, brightness-centred, inside the rest picture's opaque area), cc (the correlation) and low (frame numbers under the confidence)."""
+    rest = np.asarray(load(request["input"], "erase_in").convert("RGBA"))
+    height, width = rest.shape[:2]
+    if width * height > CLIP_TRACK_MAX_PIXELS:
+        raise Refused("too_large", f"The rest picture is {width * height / MEGAPIXEL:.1f} megapixels; the tracker takes up to {CLIP_TRACK_MAX_PIXELS // MEGAPIXEL}. Resize the clip first.")
+    folder = params.get("frames_dir")
+    if not folder or not os.path.isdir(folder):
+        raise Refused("frames_required", "Say where the clip frames are (frames_dir), as a folder of PNG files.")
+    names = sorted(name for name in os.listdir(folder) if name.lower().endswith(".png"))
+    if not names:
+        raise Refused("frames_required", "The frames folder has no PNG files. Write the clip frames as PNG files and try again.")
+    if len(names) > CLIP_TRACK_MAX_FRAMES:
+        raise Refused("too_large", f"The clip has {len(names)} frames; the tracker takes up to {CLIP_TRACK_MAX_FRAMES}. Use a shorter clip.")
+    try:
+        clamp = float(params.get("scale_clamp", 0.02))
+        confidence = float(params.get("confidence", 0.5))
+    except (TypeError, ValueError):
+        raise Refused("bad_params", "scale_clamp and confidence must be numbers.")
+    if not 0 <= clamp <= 0.5 or not -1 <= confidence <= 1:
+        raise Refused("bad_params", "scale_clamp must be between 0 and 0.5, and confidence between -1 and 1.")
+    box = params.get("box") or [0, 0, width, height]
+    x0, y0, x1, y1 = [int(v) for v in box]
+    if not (0 <= x0 < x1 <= width and 0 <= y0 < y1 <= height):
+        raise Refused("bad_params", "The tracking box must sit inside the rest picture: [x0, y0, x1, y1] in pixels.")
+    hole = params.get("hole")
+    template = track_grey(rest, hole)[y0:y1, x0:x1]
+    solid = (rest[..., 3] > 250)[y0:y1, x0:x1]
+    offset = np.array([x0, y0], np.float32)
+    identity = np.eye(2, 3, dtype=np.float32)
+    previous = [identity, identity]
+    out, residuals, correlations, low = [], [], [], []
+    for index, name in enumerate(names):
+        frame = np.asarray(load(os.path.join(folder, name), "erase_in").convert("RGBA"))
+        if frame.shape[:2] != (height, width):
+            raise Refused("size_mismatch", f"Frame {name} is {frame.shape[1]}x{frame.shape[0]} but the rest picture is {width}x{height}. Write every frame at the rest picture's size.")
+        grey = track_grey(frame, hole)[y0:y1, x0:x1]
+        best = (-2.0, previous[0])
+        for start in (previous[0], previous[1], identity):
+            cc, warp = ecc_multiscale(template, grey, start, cv2.MOTION_EUCLIDEAN)
+            if cc > best[0]:
+                best = (cc, warp)
+        cc, warp = best
+        if clamp > 0 and cc > -1.0:
+            # A small isotropic scale change (the head moving toward or away from the camera), clamped.
+            cc2, affine = ecc_multiscale(template, grey, warp, cv2.MOTION_AFFINE)
+            if cc2 > cc:
+                det = float(np.linalg.det(affine[:, :2]))
+                scale = float(np.sqrt(abs(det))) if det > 0 else 0.0
+                if scale > 0:
+                    limited = min(max(scale, 1 - clamp), 1 + clamp)
+                    affine = affine.copy()
+                    affine[:, :2] *= limited / scale
+                    # the clamped linear part drifts slightly; keep it only if it still correlates at least as well
+                    warped = cv2.warpAffine(grey, affine, (grey.shape[1], grey.shape[0]), flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP)
+                    if float(np.corrcoef(warped.ravel(), template.ravel())[0, 1]) >= cc - 1e-4:
+                        warp, cc = affine, cc2
+        previous = [warp, previous[0]]
+        linear = warp[:, :2]
+        shift = warp[:, 2] + offset - linear @ offset  # the warp was found inside the box; express it in picture coordinates
+        matrix = [float(linear[0, 0]), float(linear[0, 1]), float(shift[0]), float(linear[1, 0]), float(linear[1, 1]), float(shift[1])]
+        aligned = cv2.warpAffine(grey, warp, (grey.shape[1], grey.shape[0]), flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP)
+        inside = cv2.warpAffine((frame[..., 3] > 250)[y0:y1, x0:x1].astype(np.float32), warp, (grey.shape[1], grey.shape[0]), flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP) > 0.99
+        selected = inside & solid
+        if selected.sum() >= 50:
+            difference = (aligned - template)[selected]
+            residuals.append(round(float(np.abs(difference - np.median(difference)).mean()), 3))
+        else:
+            residuals.append(0.0)
+        correlations.append(round(float(cc), 4))
+        if cc < confidence:
+            low.append(index)
+        out.append([round(value, 5) for value in matrix])
+    return {"m": out, "res": residuals, "cc": correlations, "low": low, "frames": len(out), "width": width, "height": height, "engine": "ecc", "model": "none"}
+
+
+OPS = {"remove_background": remove_background, "erase": erase, "upscale": upscale, "resize": resize, "find_people": find_people, "people_mask": people_mask, "erase_people": erase_people, "find_subjects": find_subjects, "erase_subjects": erase_subjects, "clip_track": clip_track}
 
 
 def main():
@@ -474,7 +590,7 @@ def main():
             reply["id"] = request.get("id")
             op = OPS.get(request.get("op"))
             if op is None:
-                raise Refused("bad_operation", "That operation is not one of remove_background, erase, upscale, resize, find_people, erase_people, find_subjects or erase_subjects.")
+                raise Refused("bad_operation", "That operation is not one of remove_background, erase, upscale, resize, find_people, erase_people, find_subjects, erase_subjects or clip_track.")
             reply.update(op(request, request.get("params") or {}))
             reply["ok"] = True
         except Refused as refused:

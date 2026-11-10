@@ -303,3 +303,224 @@ export function companionCrop(frames: Uint8Array[], width: number, height: numbe
   return { x: Math.round(cx - size / 2), y: Math.round(cy - size / 2), size };
 }
 
+
+// ---- MAKER-A: light flattening, rest-boundary check ----------------------------------------------------------------------------------
+// Ported from the demo's tools/light_fix.py (flatten_light): each generated clip drifts in exposure and colour mid-clip and differs from the
+// next clip. The mean Lab of four regions away from the lower face and eyes (hair/forehead and clothes, left and right) is measured per
+// frame against the rest frame (frame 0), smoothed over time, and subtracted as a smooth bilinear offset field; three closed-loop passes.
+// Alpha and geometry are never touched. The measurement runs on a 4x box-reduced copy (the demo blurs by sigma 3 before measuring, so
+// nothing the demo measures is lost); the correction is applied at full resolution.
+
+/** Lab distance a clip's four-region lighting may stray from its rest frame after flattening (the demo's flattened clips measure well under it). */
+export const LIGHT_STEP_MAX = 0.9;
+/** Mean Lab difference of the loop's first and last frame against the rest picture. The demo's published clips are within 0.7 of idle1's rest frame; 1.0 leaves room for rounding in the encoder. */
+export const REST_FRAME_DIFF_MAX = 1.0;
+export const LIGHT_PASSES = 3;
+export const LIGHT_TEMPORAL_SIGMA = 1.5;
+/** Edge length, in tile pixels, of the square the light measurement is reduced by. */
+export const LIGHT_REDUCE = 4;
+export type LightBox = [number, number, number, number];
+export type LightRegionName = "hair_left" | "hair_right" | "clothes_left" | "clothes_right";
+export type LightRegions = Record<LightRegionName, LightBox>;
+export const LIGHT_REGION_NAMES: LightRegionName[] = ["hair_left", "hair_right", "clothes_left", "clothes_right"];
+
+/**
+ * Where the four regions sit on the 480 px tile when a request names none, as fractions of the tile from the demo's per-character
+ * settings (light_fix.py CFG: hair rows end at 135, 110 and 115 of 480 and clothes rows start at 440, 410 and 450; the means, 0.25 and 0.90,
+ * are used so one default fits every character). Each box is further limited to the rest frame's solid, eroded silhouette.
+ */
+export function defaultLightRegions(size = COMPANION_CLIP_SIZE): LightRegions {
+  const top = Math.round(size * 0.25), bottom = Math.round(size * 0.90), mid = size / 2;
+  return { hair_left: [0, 0, mid, top], hair_right: [mid, 0, size, top], clothes_left: [0, bottom, mid, size], clothes_right: [mid, bottom, size, size] };
+}
+
+const SRGB_TO_LINEAR = (() => { const lut = new Float32Array(256); for (let i = 0; i < 256; i++) { const v = i / 255; lut[i] = v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; } return lut; })();
+const WHITE = [0.950456, 1, 1.088754] as const;
+const labF = (t: number) => t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116;
+const labFInverse = (t: number) => t > 6 / 29 ? t * t * t : (t - 16 / 116) / 7.787;
+
+/** sRGB bytes to CIE Lab (D65, the same maths as OpenCV's float RGB2LAB). */
+export function rgbToLab(r: number, g: number, b: number, out: Float32Array | number[], at = 0): void {
+  const lr = SRGB_TO_LINEAR[r]!, lg = SRGB_TO_LINEAR[g]!, lb = SRGB_TO_LINEAR[b]!;
+  const x = (0.412453 * lr + 0.357580 * lg + 0.180423 * lb) / WHITE[0], y = 0.212671 * lr + 0.715160 * lg + 0.072169 * lb, z = (0.019334 * lr + 0.119193 * lg + 0.950227 * lb) / WHITE[2];
+  const fy = labF(y);
+  out[at] = y > 0.008856 ? 116 * fy - 16 : 903.3 * y; out[at + 1] = 500 * (labF(x) - fy); out[at + 2] = 200 * (fy - labF(z));
+}
+function labToRgb(l: number, a: number, b: number): [number, number, number] {
+  const fy = (Math.max(0, Math.min(100, l)) + 16) / 116, fx = fy + a / 500, fz = fy - b / 200;
+  const x = labFInverse(fx) * WHITE[0], y = labFInverse(fy), z = labFInverse(fz) * WHITE[2];
+  const lr = 3.240479 * x - 1.537150 * y - 0.498535 * z, lg = -0.969256 * x + 1.875992 * y + 0.041556 * z, lb = 0.055648 * x - 0.204043 * y + 1.057311 * z;
+  const gamma = (v: number) => { const c = Math.max(0, Math.min(1, v)); return Math.round(255 * (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055)); };
+  return [gamma(lr), gamma(lg), gamma(lb)];
+}
+
+/** A frame reduced by LIGHT_REDUCE: mean Lab per block over its opaque pixels and the share of the block that is fully opaque. */
+export interface LightSmall { w: number; h: number; lab: Float32Array; solid: Uint8Array }
+export function reduceForLight(frame: Uint8Array, width: number, height: number, factor = LIGHT_REDUCE): LightSmall {
+  const w = Math.floor(width / factor), h = Math.floor(height / factor), lab = new Float32Array(w * h * 3), solid = new Uint8Array(w * h), tmp = new Float32Array(3);
+  for (let by = 0; by < h; by++) for (let bx = 0; bx < w; bx++) {
+    let r = 0, g = 0, b = 0, n = 0, all = 1;
+    for (let y = by * factor; y < by * factor + factor; y++) for (let x = bx * factor; x < bx * factor + factor; x++) {
+      const i = (y * width + x) * 4;
+      if (frame[i + 3]! >= 250) { r += frame[i]!; g += frame[i + 1]!; b += frame[i + 2]!; n++; } else all = 0;
+    }
+    const at = by * w + bx;
+    if (n) { rgbToLab(Math.round(r / n), Math.round(g / n), Math.round(b / n), tmp); lab[at * 3] = tmp[0]!; lab[at * 3 + 1] = tmp[1]!; lab[at * 3 + 2] = tmp[2]!; }
+    solid[at] = all;
+  }
+  return { w, h, lab, solid };
+}
+
+function erode(mask: Uint8Array, w: number, h: number, radius: number): Uint8Array {
+  const pass = (src: Uint8Array, horizontal: boolean) => {
+    const out = new Uint8Array(src.length);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let keep = 1;
+      for (let k = -radius; k <= radius && keep; k++) { const xx = horizontal ? x + k : x, yy = horizontal ? y : y + k; if (xx < 0 || yy < 0 || xx >= w || yy >= h || !src[yy * w + xx]) keep = 0; }
+      out[y * w + x] = keep;
+    }
+    return out;
+  };
+  return pass(pass(mask, true), false);
+}
+function blurLab(lab: Float32Array, w: number, h: number, sigma: number): Float32Array {
+  const radius = Math.max(1, Math.ceil(sigma * 3)), kernel: number[] = []; let total = 0;
+  for (let k = -radius; k <= radius; k++) { const v = Math.exp(-(k * k) / (2 * sigma * sigma)); kernel.push(v); total += v; }
+  const pass = (src: Float32Array, horizontal: boolean) => {
+    const out = new Float32Array(src.length);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) for (let c = 0; c < 3; c++) {
+      let sum = 0;
+      for (let k = -radius; k <= radius; k++) { const xx = Math.min(w - 1, Math.max(0, horizontal ? x + k : x)), yy = Math.min(h - 1, Math.max(0, horizontal ? y : y + k)); sum += src[(yy * w + xx) * 3 + c]! * kernel[k + radius]!; }
+      out[(y * w + x) * 3 + c] = sum / total;
+    }
+    return out;
+  };
+  return pass(pass(lab, true), false);
+}
+
+interface LightGeometry { masks: Uint8Array[]; reference: Float32Array; w: number; h: number; top: number; bottom: number; centre: number; fade: number; factor: number }
+/** The measurement state built from the rest frame: one mask per region, the blurred rest Lab, and the field's control rows and columns. */
+function lightFieldGeometry(regions: LightRegions, size: number): { top: number; bottom: number; centre: number; fade: number } {
+  const hair = [regions.hair_left, regions.hair_right], clothes = [regions.clothes_left, regions.clothes_right];
+  const top = (hair[0]![3] + hair[1]![3]) / 2, bottom = (clothes[0]![1] + clothes[1]![1]) / 2;
+  const centre = (regions.hair_left[2] + regions.hair_right[0] + regions.clothes_left[2] + regions.clothes_right[0]) / 4;
+  return { top, bottom: Math.max(bottom, top + 1), centre, fade: size * 50 / 480 };
+}
+function lightGeometry(rest: LightSmall, regions: LightRegions, size: number): LightGeometry {
+  const factor = size / rest.w, solid = erode(rest.solid, rest.w, rest.h, erosionRadius(size, 3));
+  const masks = LIGHT_REGION_NAMES.map((name) => {
+    const [x0, y0, x1, y1] = regions[name], mask = new Uint8Array(rest.w * rest.h);
+    for (let y = 0; y < rest.h; y++) for (let x = 0; x < rest.w; x++) { const px = (x + 0.5) * factor, py = (y + 0.5) * factor; if (solid[y * rest.w + x] && px >= x0 && px < x1 && py >= y0 && py < y1) mask[y * rest.w + x] = 1; }
+    return mask;
+  });
+  return { masks, reference: blurLab(rest.lab, rest.w, rest.h, 3 / factor), w: rest.w, h: rest.h, ...lightFieldGeometry(regions, size), factor };
+}
+
+/** The demo erodes the silhouette by 13 px (rest) and 7 px (frame) on the 480 px tile; on the reduced copy that is `base` blocks there and proportionally fewer on a smaller tile. */
+function erosionRadius(size: number, base: number): number { return Math.max(1, Math.round(base * size / COMPANION_CLIP_SIZE)); }
+const smoothstep = (x: number, a: number, b: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+/** The offset field's value (Lab triple) at one tile pixel: bilinear between the four region offsets, constant outside the control rows. */
+function fieldAt(offsets: number[][], x: number, y: number, g: { top: number; bottom: number; centre: number; fade: number }, out: number[]): void {
+  const gx = smoothstep(x, g.centre - g.fade, g.centre + g.fade), gy = Math.max(0, Math.min(1, (y - g.top) / (g.bottom - g.top)));
+  for (let c = 0; c < 3; c++) {
+    const upper = offsets[0]![c]! * (1 - gx) + offsets[1]![c]! * gx, lower = offsets[2]![c]! * (1 - gx) + offsets[3]![c]! * gx;
+    out[c] = upper * (1 - gy) + lower * gy;
+  }
+}
+
+/** Per frame, per region: the trimmed (10 to 90 percent) mean Lab offset of the blurred frame from the rest frame. `lab` is the frame's reduced Lab, already blurred. */
+function measureRegions(small: LightSmall, lab: Float32Array, g: LightGeometry): number[][] {
+  const frameSolid = erode(small.solid, small.w, small.h, erosionRadius(g.w * g.factor, 2)), rows: number[][] = [];
+  for (const mask of g.masks) {
+    const d: number[][] = [[], [], []];
+    for (let p = 0; p < mask.length; p++) if (mask[p] && frameSolid[p]) for (let c = 0; c < 3; c++) d[c]!.push(lab[p * 3 + c]! - g.reference[p * 3 + c]!);
+    if (d[0]!.length < 8) { rows.push([0, 0, 0]); continue; }
+    const bounds = d.map((values) => { const sorted = [...values].sort((a, b) => a - b); return [sorted[Math.floor((sorted.length - 1) * 0.1)]!, sorted[Math.ceil((sorted.length - 1) * 0.9)]!]; });
+    const sums = [0, 0, 0]; let n = 0;
+    for (let k = 0; k < d[0]!.length; k++) if ([0, 1, 2].every((c) => d[c]![k]! >= bounds[c]![0]! && d[c]![k]! <= bounds[c]![1]!)) { for (let c = 0; c < 3; c++) sums[c]! += d[c]![k]!; n++; }
+    rows.push(n ? sums.map((v) => v / n) : [0, 1, 2].map((c) => d[c]!.reduce((a, b) => a + b, 0) / d[c]!.length));
+  }
+  return rows;
+}
+
+/** Temporal Gaussian smoothing over frames (OpenCV-free port of scipy's gaussian_filter1d, mode nearest, truncate 4); the ends are pinned to zero with a short ramp. */
+export function smoothLightOffsets(series: number[][][], sigma = LIGHT_TEMPORAL_SIGMA): number[][][] {
+  const n = series.length, radius = Math.ceil(4 * sigma), kernel: number[] = []; let total = 0;
+  for (let k = -radius; k <= radius; k++) { const v = Math.exp(-(k * k) / (2 * sigma * sigma)); kernel.push(v); total += v; }
+  const out = series.map((rows, f) => rows.map((triple, r) => triple.map((_, c) => {
+    let sum = 0; for (let k = -radius; k <= radius; k++) sum += series[Math.min(n - 1, Math.max(0, f + k))]![r]![c]! * kernel[k + radius]!;
+    return sum / total;
+  })));
+  if (!n) return out;
+  const zero = () => [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  out[0] = zero(); out[n - 1] = zero();
+  const ramp = Math.min(3, Math.floor(n / 2));
+  for (let i = 1; i <= ramp; i++) { const t = i / (ramp + 1); out[i] = out[i]!.map((row) => row.map((v) => v * t)); out[n - 1 - i] = out[n - 1 - i]!.map((row) => row.map((v) => v * t)); }
+  return out;
+}
+
+function blurredLab(small: LightSmall, factor: number): Float32Array { return blurLab(small.lab, small.w, small.h, 3 / factor); }
+
+/** The largest absolute Lab offset, over frames, regions and channels, of the frames' four-region lighting from the first frame's. */
+export function lightStep(frames: LightSmall[], regions: LightRegions = defaultLightRegions(), size = COMPANION_CLIP_SIZE): number {
+  if (!frames.length) return 0;
+  const g = lightGeometry(frames[0]!, regions, size); let worst = 0;
+  for (const small of frames) for (const row of measureRegions(small, blurredLab(small, g.factor), g)) for (const v of row) worst = Math.max(worst, Math.abs(v));
+  return worst;
+}
+
+/** The per-frame offsets (frames x 4 regions x Lab) that bring every frame's lighting back to the first frame's: three closed-loop passes of measure, smooth, accumulate. */
+export function solveLightOffsets(frames: LightSmall[], regions: LightRegions = defaultLightRegions(), size = COMPANION_CLIP_SIZE, signal?: AbortSignal): number[][][] {
+  const g = lightGeometry(frames[0]!, regions, size), n = frames.length;
+  let total: number[][][] = frames.map(() => [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]]);
+  const scratch = [0, 0, 0];
+  for (let pass = 0; pass < LIGHT_PASSES; pass++) {
+    const measured: number[][][] = [];
+    for (let f = 0; f < n; f++) {
+      if (signal?.aborted) throw new Error("Cancelled.");
+      const small = frames[f]!, lab = new Float32Array(small.lab.length);
+      for (let y = 0; y < small.h; y++) for (let x = 0; x < small.w; x++) {
+        fieldAt(total[f]!, (x + 0.5) * g.factor, (y + 0.5) * g.factor, g, scratch);
+        const p = (y * small.w + x) * 3; lab[p] = small.lab[p]! - scratch[0]!; lab[p + 1] = small.lab[p + 1]! - scratch[1]!; lab[p + 2] = small.lab[p + 2]! - scratch[2]!;
+      }
+      measured.push(measureRegions(small, blurLab(lab, small.w, small.h, 3 / g.factor), g));
+    }
+    const step = smoothLightOffsets(measured);
+    total = total.map((rows, f) => rows.map((triple, r) => triple.map((v, c) => v + step[f]![r]![c]!)));
+  }
+  return total;
+}
+
+/** Subtracts the smooth offset field from one full-resolution frame in place (Lab, lightness clamped to 0..100). Alpha is never read as a mask and never written; fully transparent pixels are left alone. */
+export function applyLightOffsets(frame: Uint8Array, width: number, height: number, offsets: number[][], regions: LightRegions = defaultLightRegions(), size = COMPANION_CLIP_SIZE): void {
+  const g = lightFieldGeometry(regions, size), lab = [0, 0, 0], field = [0, 0, 0], tmp = new Float32Array(3);
+  if (offsets.every((row) => row.every((v) => v === 0))) return;
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const i = (y * width + x) * 4;
+    if (!frame[i + 3]) continue;
+    fieldAt(offsets, x + 0.5, y + 0.5, g, field);
+    rgbToLab(frame[i]!, frame[i + 1]!, frame[i + 2]!, tmp);
+    lab[0] = tmp[0]! - field[0]!; lab[1] = tmp[1]! - field[1]!; lab[2] = tmp[2]! - field[2]!;
+    const [r, gr, b] = labToRgb(lab[0]!, lab[1]!, lab[2]!);
+    frame[i] = r; frame[i + 1] = gr; frame[i + 2] = b;
+  }
+}
+
+/** Mean Lab difference of a frame from the rest picture over the pixels opaque in both: the length of the mean Lab offset vector. Both are tile-sized RGBA. */
+export function restFrameDifference(frame: Uint8Array, rest: Uint8Array): number {
+  const a = new Float32Array(3), b = new Float32Array(3), sum = [0, 0, 0]; let n = 0;
+  for (let i = 0; i < frame.length; i += 4) if (frame[i + 3]! >= 250 && rest[i + 3]! >= 250) {
+    rgbToLab(frame[i]!, frame[i + 1]!, frame[i + 2]!, a); rgbToLab(rest[i]!, rest[i + 1]!, rest[i + 2]!, b);
+    for (let c = 0; c < 3; c++) sum[c]! += a[c]! - b[c]!;
+    n++;
+  }
+  return n ? Math.hypot(sum[0]! / n, sum[1]! / n, sum[2]! / n) : 0;
+}
+
+export function lightReasons(metrics: { light_step_after?: number; rest_frame_diff?: { first: number; last: number } }): string[] {
+  const reasons: string[] = [];
+  if (metrics.light_step_after !== undefined && metrics.light_step_after > LIGHT_STEP_MAX) reasons.push("The lighting still drifts during the clip after the light fix. Make the clip again with steadier, even lighting.");
+  const rest = metrics.rest_frame_diff;
+  if (rest && (rest.first > REST_FRAME_DIFF_MAX || rest.last > REST_FRAME_DIFF_MAX)) reasons.push("The first or last frame does not match the rest picture. Make the clip again so it starts and ends in the rest pose with the same lighting and colour.");
+  return reasons;
+}

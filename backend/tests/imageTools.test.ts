@@ -270,3 +270,61 @@ test.skipIf(!python)("IMGEDIT-01: person labels keep each person's main blob and
   // 60x20 main blob + the 10x9 piece that touches it; the 20x40 blob far away is dropped.
   expect(String(run.stdout).trim()).toBe(`${60 * 20 + 10 * 9} 1 0.1 0.15`);
 });
+
+// MAKER-A: clip_track. The service hands a folder of frames and the rest picture to the worker and gives back the per-frame transforms.
+test("clip_track: the service sends the frames folder and the rest picture, needs no model, and returns the tracks without a picture", async () => {
+  const service = new ImageToolsService(deps({ modelPath: () => null }, (request) => ({ id: request.id, ok: true, m: [[1, 0, 0, 0, 1, 0], [1, 0, 3, 0, 1, 0]], res: [0.1, 0.2], cc: [0.99, 0.98], low: [], frames: 2, width: 96, height: 96, engine: "ecc", model: "none", ms: 4 })));
+  const result = await service.run({ operation: "clip_track", image: PNG, params: { frames_dir: "/frames", scale_clamp: 0.02, confidence: 0.5 } });
+  expect(requests[0]!.op).toBe("clip_track");
+  expect(requests[0]!.params).toEqual({ frames_dir: "/frames", scale_clamp: 0.02, confidence: 0.5 });
+  expect(result.track).toEqual({ m: [[1, 0, 0, 0, 1, 0], [1, 0, 3, 0, 1, 0]], res: [0.1, 0.2], cc: [0.99, 0.98], low: [], frames: 2 });
+  expect(result.png.length).toBe(0);
+  service.stop();
+});
+
+test("clip_track is not an operation the picture upload route accepts", async () => {
+  const { IMAGE_TOOLS_OPERATIONS } = await import("@/imagetools/imageTools");
+  expect((IMAGE_TOOLS_OPERATIONS as readonly string[]).includes("clip_track")).toBe(false);
+});
+
+test.skipIf(!python)("clip_track: 24 affines near identity for a static clip, and an injected 3 px shift is recovered", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "imagetools-track-"));
+  const script = join(import.meta.dir, "../src/imagetools/image_tools_worker.py");
+  const make = Bun.spawnSync([python!, "-I", "-c", `
+import numpy as np, cv2, os
+from PIL import Image
+rng = np.random.default_rng(7)
+H = W = 160
+tex = cv2.GaussianBlur(rng.random((H, W)).astype(np.float32), (0, 0), 3.0)
+tex = (255 * (tex - tex.min()) / (tex.max() - tex.min())).astype(np.uint8)
+rest = np.zeros((H, W, 4), np.uint8)
+yy, xx = np.mgrid[0:H, 0:W]
+inside = ((xx - 80) / 55.0) ** 2 + ((yy - 80) / 62.0) ** 2 < 1.0
+for c in range(3): rest[..., c] = np.where(inside, 60 + tex // 2 + c * 20, 0)
+rest[..., 3] = np.where(inside, 255, 0)
+Image.fromarray(rest, "RGBA").save("${dir}/rest.png")
+os.makedirs("${dir}/static"); os.makedirs("${dir}/shift")
+for i in range(24):
+    Image.fromarray(rest, "RGBA").save("${dir}/static/f%02d.png" % i)
+    shifted = np.roll(rest, 3, axis=1)
+    Image.fromarray(shifted, "RGBA").save("${dir}/shift/f%02d.png" % i)
+`]);
+  expect(String(make.stderr)).toBe("");
+  expect(make.exitCode).toBe(0);
+  const child = Bun.spawn([python!, "-I", script], { stdin: "pipe", stdout: "pipe", stderr: "pipe" });
+  const worker = workerHandle(child as never);
+  const still = await worker.send({ id: "1", op: "clip_track", input: `${dir}/rest.png`, output: `${dir}/none.png`, params: { frames_dir: `${dir}/static`, scale_clamp: 0.02, confidence: 0.5 }, models: {}, helper: null }, 120_000);
+  expect(still.ok).toBe(true);
+  expect(still.m).toHaveLength(24);
+  expect(still.low).toEqual([]);
+  for (const m of still.m!) { expect(Math.abs(m[0]! - 1)).toBeLessThan(0.005); expect(Math.abs(m[1]!)).toBeLessThan(0.005); expect(Math.abs(m[2]!)).toBeLessThan(0.2); expect(Math.abs(m[5]!)).toBeLessThan(0.2); }
+  const moved = await worker.send({ id: "2", op: "clip_track", input: `${dir}/rest.png`, output: `${dir}/none.png`, params: { frames_dir: `${dir}/shift`, scale_clamp: 0.02, confidence: 0.5 }, models: {}, helper: null }, 120_000);
+  expect(moved.ok).toBe(true);
+  for (const m of moved.m!) { expect(Math.abs(m[2]! - 3)).toBeLessThan(0.3); expect(Math.abs(m[5]!)).toBeLessThan(0.3); expect(Math.abs(m[0]! - 1)).toBeLessThan(0.01); }
+  expect(moved.cc!.every((cc) => cc > 0.9)).toBe(true);
+  // refusals say what to do
+  const missing = await worker.send({ id: "3", op: "clip_track", input: `${dir}/rest.png`, output: `${dir}/none.png`, params: {}, models: {}, helper: null }, 30_000);
+  expect(missing.code).toBe("frames_required");
+  expect(missing.error).toContain("frames_dir");
+  worker.kill();
+});

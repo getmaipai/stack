@@ -71,6 +71,7 @@ export const PreviewInput = z.object({
 }).strict();
 export type PreviewInput = z.infer<typeof PreviewInput>;
 
+const LightBoxInput = z.tuple([z.number().min(0).max(480), z.number().min(0).max(480), z.number().min(0).max(480), z.number().min(0).max(480)]).refine(([x0, y0, x1, y1]) => x0 < x1 && y0 < y1, { message: "must be [x0, y0, x1, y1] with x0 < x1 and y0 < y1" });
 export const CompanionClipInput = z.object({
   path: Path,
   output_dir: Path.optional(),
@@ -82,7 +83,15 @@ export const CompanionClipInput = z.object({
   colours: z.array(z.string().regex(/^#[0-9A-F]{6}$/)).max(8).default([]),
   palette_reference: z.string().max(28_000_000).regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/).optional(),
   max_bytes: z.number().int().min(1).max(20_000_000).default(614400),
-}).strict().refine((input) => input.min_seconds <= input.max_seconds, { path: ["min_seconds"], message: "must be at most max_seconds" });
+  /** MAKER-A: subtract the drift of the lighting from the rest frame (four regions, three closed-loop passes). Off by default. */
+  light_flatten: z.boolean().default(false),
+  /** Boxes [x0, y0, x1, y1] on the 480 px tile that the light is measured in; any left out use the defaults. */
+  light_regions: z.object({ hair_left: LightBoxInput, hair_right: LightBoxInput, clothes_left: LightBoxInput, clothes_right: LightBoxInput }).partial().strict().optional(),
+  /** The rest picture (base64 image) to compare the loop's first and last frame against, or the word "palette_reference" to use the palette reference as the rest picture. */
+  rest_reference: z.union([z.literal("palette_reference"), z.string().max(28_000_000).regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/)]).optional(),
+  /** Also write the 320 x 640 phone twin, clip.phone.h264.mp4. */
+  phone: z.boolean().default(false),
+}).strict().refine((input) => input.min_seconds <= input.max_seconds, { path: ["min_seconds"], message: "must be at most max_seconds" }).refine((input) => input.rest_reference !== "palette_reference" || !!input.palette_reference, { path: ["rest_reference"], message: "names palette_reference, but no palette_reference was sent" });
 export type CompanionClipInput = z.infer<typeof CompanionClipInput>;
 
 export const SetupInput = z.object({ person_initiated: z.boolean().default(true) }).strict();

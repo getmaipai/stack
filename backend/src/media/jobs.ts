@@ -19,7 +19,7 @@ import { SPATIAL_LINES } from "./spatialRender";
 import { spatialFailure, spatialSoundClip, type SpatialOutcome } from "./spatialSound";
 import { cutoutClip, CUTOUT_FAILED, CUTOUT_MODEL_MISSING, CUTOUT_NO_MEMORY, CUTOUT_NO_SUBJECT } from "./cutout";
 import { log } from "@/lib/log";
-import { COLOUR_MATCH_STRENGTH, COMPANION_CLIP_FPS, COMPANION_CLIP_SIZE, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionCrop, companionMetrics, companionReasons, crossfadeLoop, downscaleRgba4, frameDifference, keyOutRgba, selectCompanionWindow } from "./companionClip";
+import { applyLightOffsets, defaultLightRegions, lightReasons, lightStep, reduceForLight, restFrameDifference, solveLightOffsets, type LightRegions, COLOUR_MATCH_STRENGTH, COMPANION_CLIP_FPS, COMPANION_CLIP_SIZE, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionCrop, companionMetrics, companionReasons, crossfadeLoop, downscaleRgba4, frameDifference, keyOutRgba, selectCompanionWindow } from "./companionClip";
 import { upscaleClip, upscaleProblem, UPSCALE_DEADLINE_MS, UpscaleFailure } from "./upscale";
 import { runTtsBatch } from "./tts";
 import { MixInput, runMix } from "./mix";
@@ -294,7 +294,10 @@ async function runPreview(job: Job, signal: AbortSignal, progress: JobProgress):
 
 // Home's player un-premultiplies in a shader: colour on top is premultiplied by alpha, with the matte repeated below.
 // `premultiply=inplace=1` multiplies by the frame's own alpha; the two-input form left the key colour in the colour half (green fringes, 2026-10-29).
-export const COMPANION_STACK_FILTER = "[0:v]format=gbrap,split=2[c][m0];[m0]alphaextract,format=gray,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p[myuv];[c]premultiply=inplace=1,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p,unsharp=5:5:0.9:5:5:0.0[cpm];[cpm][myuv]vstack=inputs=2[out]";
+// setparams: the filter graph's output frames carry no colour properties and ffmpeg 8 lets those win over -color_primaries and -color_trc, so without it the files were tagged matrix and range only (checked with ffprobe, 2026-11-10).
+export const COMPANION_STACK_FILTER = "[0:v]format=gbrap,split=2[c][m0];[m0]alphaextract,format=gray,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p[myuv];[c]premultiply=inplace=1,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p,unsharp=5:5:0.9:5:5:0.0[cpm];[cpm][myuv]vstack=inputs=2,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv[out]";
+/** The phone twin (MAKER-A): the same two halves, each scaled to 320 x 320 on its own in the YUV domain (format already yuv420p, BT.709 limited), so the seam between them cannot bleed, then stacked to 320 x 640. */
+export const COMPANION_PHONE_FILTER = "[0:v]format=gbrap,split=2[c][m0];[m0]alphaextract,format=gray,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p,scale=320:320:flags=lanczos:in_range=tv:out_range=tv[myuv];[c]premultiply=inplace=1,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p,unsharp=5:5:0.9:5:5:0.0,scale=320:320:flags=lanczos:in_range=tv:out_range=tv[cpm];[cpm][myuv]vstack=inputs=2,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv[out]";
 const COMPANION_MAX_SOURCE_BYTES = 64 * 1024 * 1024;
 const COMPANION_MAX_SOURCE_SECONDS = 12;
 const extOkay = (path: string) => [".mp4", ".mov", ".webm"].includes(extname(path).toLowerCase());
@@ -409,12 +412,33 @@ async function writeCrop(frames: Uint8Array[], width: number, height: number, cr
   } catch (error) { out.destroy(); throw error; }
 }
 
+/** Flattens the lighting of the 480 px tile frames in a raw RGBA file back to the first frame's, in place; returns the light step before and after, measured on the frames as read from the file. */
+function flattenTileLight(rawPath: string, count: number, regions: LightRegions, signal: AbortSignal): { before: number; after: number } {
+  const bytes = COMPANION_CLIP_SIZE * COMPANION_CLIP_SIZE * 4, fd = openSync(rawPath, "r+");
+  try {
+    const before = [] as ReturnType<typeof reduceForLight>[];
+    for (let i = 0; i < count; i++) { cancelled(signal); before.push(reduceForLight(readRawFrame(fd, i, bytes), COMPANION_CLIP_SIZE, COMPANION_CLIP_SIZE)); }
+    const stepBefore = lightStep(before, regions);
+    const offsets = solveLightOffsets(before, regions, COMPANION_CLIP_SIZE, signal);
+    before.length = 0;
+    const after = [] as ReturnType<typeof reduceForLight>[];
+    for (let i = 0; i < count; i++) {
+      cancelled(signal);
+      const frame = readRawFrame(fd, i, bytes);
+      applyLightOffsets(frame, COMPANION_CLIP_SIZE, COMPANION_CLIP_SIZE, offsets[i]!, regions);
+      writeRawFrame(fd, i, frame);
+      after.push(reduceForLight(frame, COMPANION_CLIP_SIZE, COMPANION_CLIP_SIZE));
+    }
+    return { before: stepBefore, after: lightStep(after, regions) };
+  } finally { closeSync(fd); }
+}
+
 async function runCompanionClip(job: Job, signal: AbortSignal, progress: JobProgress): Promise<Record<string, unknown>> {
   const input = CompanionClipInput.parse(job.input ?? {}); let src: string, dir: string;
   try { src = resolveReadable(input.path); dir = input.output_dir ? resolveWritableDir(input.output_dir) : jobDir(job.id); if (input.output_name) dir = resolveWritableDir(join(dir, safeName(input.output_name, ""))); }
   catch (error) { throw pathFailure(error) ?? error; }
   const workDir = jobDir(job.id);
-  for (const output of ["clip.h264.mp4", "clip.av1.mp4", "still.png", "report.json"]) if (existsSync(join(dir, output))) throw fail({ code: "bad_input", message: "The output folder already has a companion clip file. Choose an empty output folder or another output name." });
+  for (const output of ["clip.h264.mp4", "clip.av1.mp4", ...(input.phone ? ["clip.phone.h264.mp4"] : []), "still.png", "report.json"]) if (existsSync(join(dir, output))) throw fail({ code: "bad_input", message: "The output folder already has a companion clip file. Choose an empty output folder or another output name." });
   const started = mediaDeps.now();
   const tools = await toolPaths(["ffmpeg", "ffprobe"], progress, signal);
   if (!extOkay(src)) throw fail({ code: "bad_input", message: "Use an mp4, mov or webm clip. Rename or export the clip in one of those formats." });
@@ -453,19 +477,25 @@ async function runCompanionClip(job: Job, signal: AbortSignal, progress: JobProg
     catch (error) { if (error instanceof Error && error.message.includes("shorter")) throw fail({ code: "too_short", message: "The clip is shorter than this state needs. Make it again." }); throw error; }
     const keptFrames = readKeptFrames(rawDecoded, window.start, window.length, frameBytes);
     let referenceFrames: Uint8Array[] | undefined, colourMatchApplied = false;
-    if (input.palette_reference) {
-      const referencePath = join(workDir, ".companion-palette-reference.png"), referenceRaw = join(workDir, ".companion-palette-reference.rgba");
+    // The palette reference and the rest reference are decoded the same way: one 480 x 480 straight-alpha tile.
+    const readReference = async (encoded: string, label: string): Promise<Uint8Array> => {
+      const referencePath = join(workDir, `.companion-${label}-reference.png`), referenceRaw = join(workDir, `.companion-${label}-reference.rgba`);
       partials.push(referencePath, referenceRaw);
-      writeFileSync(referencePath, Buffer.from(input.palette_reference, "base64"), { mode: 0o600 });
+      writeFileSync(referencePath, Buffer.from(encoded, "base64"), { mode: 0o600 });
       const referenceResult = await mediaDeps.run([tools.ffmpeg!, "-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-i", referencePath, "-frames:v", "1", "-vf", "scale=480:480:flags=lanczos,format=rgba", "-f", "rawvideo", "-pix_fmt", "rgba", referenceRaw], { signal });
       if (referenceResult.aborted || signal.aborted) throw new Error("Cancelled.");
-      if (referenceResult.code !== 0 || sizeOf(referenceRaw) !== 480 * 480 * 4) throw fail({ code: "bad_input", message: "The palette reference could not be read as an image." });
+      if (referenceResult.code !== 0 || sizeOf(referenceRaw) !== 480 * 480 * 4) throw fail({ code: "bad_input", message: `The ${label} reference could not be read as an image.` });
       const referenceFd = openSync(referenceRaw, "r");
-      try { referenceFrames = [readRawFrame(referenceFd, 0, 480 * 480 * 4)]; } finally { closeSync(referenceFd); }
+      try { return readRawFrame(referenceFd, 0, 480 * 480 * 4); } finally { closeSync(referenceFd); rmSync(referencePath, { force: true }); rmSync(referenceRaw, { force: true }); partials = partials.filter((path) => path !== referencePath && path !== referenceRaw); }
+    };
+    let paletteTile: Uint8Array | undefined;
+    if (input.palette_reference) {
+      paletteTile = await readReference(input.palette_reference, "palette");
+      referenceFrames = [paletteTile];
       colourMatchApplied = applyColourMatch(keptFrames, referenceFrames, COLOUR_MATCH_STRENGTH);
-      rmSync(referencePath, { force: true }); rmSync(referenceRaw, { force: true });
-      partials = partials.filter((path) => path !== referencePath && path !== referenceRaw);
     }
+    let restTile: Uint8Array | undefined;
+    if (input.rest_reference) restTile = input.rest_reference === "palette_reference" ? paletteTile : await readReference(input.rest_reference, "rest");
     let loopGap = 0;
     const blendFrame = (frame: Uint8Array, toward: Uint8Array, weight: number) => { for (let i = 0; i < frame.length; i++) frame[i] = Math.round(frame[i]! * (1 - weight) + toward[i]! * weight); };
     if (input.kind === "oneshot") {
@@ -497,6 +527,15 @@ async function runCompanionClip(job: Job, signal: AbortSignal, progress: JobProg
     const scaleResult = await mediaDeps.run([tools.ffmpeg!, "-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-f", "rawvideo", "-pixel_format", "rgba", "-video_size", `${crop.size}x${crop.size}`, "-framerate", "24", "-i", rawCrop, "-frames:v", String(keptFrameCount), "-vf", "scale=480:480:flags=lanczos,format=rgba", "-f", "rawvideo", "-pix_fmt", "rgba", rawScaled], { signal });
     if (scaleResult.aborted || signal.aborted) throw new Error("Cancelled.");
     if (scaleResult.code !== 0 || !existsSync(rawScaled)) throw fail({ code: "unreadable", message: "The clip frames could not be resized. Use a smaller, standard video clip." });
+    let lightSteps: { before: number; after: number } | undefined, restDiff: { first: number; last: number } | undefined;
+    if (input.light_flatten) {
+      progress({ status: "evening out the light", percent: 62 });
+      lightSteps = flattenTileLight(rawScaled, keptFrameCount, { ...defaultLightRegions(), ...(input.light_regions ?? {}) } as LightRegions, signal);
+    }
+    if (restTile) {
+      const tileFd = openSync(rawScaled, "r");
+      try { restDiff = { first: restFrameDifference(readRawFrame(tileFd, 0, 480 * 480 * 4), restTile), last: restFrameDifference(readRawFrame(tileFd, keptFrameCount - 1, 480 * 480 * 4), restTile) }; } finally { closeSync(tileFd); }
+    }
     const outputPath = (file: string) => join(dir, file), stagePath = (file: string) => join(workDir, `.companion-${file}`), still = outputPath("still.png"), reportPath = outputPath("report.json");
     created.push(still, reportPath);
     const stillStage = stagePath("still.png"), stillPart = `${stillStage}.part`; partials.push(stillStage, stillPart);
@@ -509,13 +548,13 @@ async function runCompanionClip(job: Job, signal: AbortSignal, progress: JobProg
     const encoders = check.stdout + check.stderr, hasAv1 = /\blibsvtav1\b/.test(encoders);
     progress({ status: "encoding", percent: 60 });
     const files: Array<{ name: string; path: string; bytes: number }> = [{ name: "still.png", path: still, bytes: sizeOf(still) }];
-    const encode = async (encoder: "libx264" | "libsvtav1", crfStart: number, targetName: string, progressBase: number, progressSpan: number) => {
+    const encode = async (encoder: "libx264" | "libsvtav1", crfStart: number, targetName: string, progressBase: number, progressSpan: number, filter = COMPANION_STACK_FILTER) => {
       const final = outputPath(targetName), partial = `${stagePath(targetName)}.part`; partials.push(partial);
       for (let crf = crfStart; crf <= 38; crf += 2) {
         cancelled(signal);
         progress({ status: "encoding", percent: Math.min(progressBase + progressSpan - 1, progressBase + Math.round(((crf - crfStart) / 16) * progressSpan)) });
         rmSync(partial, { force: true });
-        const args = [tools.ffmpeg!, "-hide_banner", "-loglevel", "error", "-y", "-f", "rawvideo", "-pixel_format", "rgba", "-video_size", "480x480", "-framerate", "24", "-i", "pipe:0", "-filter_complex", COMPANION_STACK_FILTER, "-map", "[out]", "-an", "-c:v", encoder, ...(encoder === "libx264" ? ["-preset", "slow", "-tune", "animation"] : ["-preset", "6"]), "-crf", String(crf), "-pix_fmt", "yuv420p", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv", "-movflags", "+faststart", "-r", "24", "-f", "mp4", partial];
+        const args = [tools.ffmpeg!, "-hide_banner", "-loglevel", "error", "-y", "-f", "rawvideo", "-pixel_format", "rgba", "-video_size", "480x480", "-framerate", "24", "-i", "pipe:0", "-filter_complex", filter, "-map", "[out]", "-an", "-c:v", encoder, ...(encoder === "libx264" ? ["-preset", "slow", "-tune", "animation"] : ["-preset", "6"]), "-crf", String(crf), "-pix_fmt", "yuv420p", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv", "-movflags", "+faststart", "-r", "24", "-f", "mp4", partial];
         const result = await mediaDeps.runRaw(args, rawScaled, signal);
         if (result.aborted || signal.aborted) throw new Error("Cancelled.");
         if (result.code !== 0 || !existsSync(partial)) { rmSync(partial, { force: true }); throw fail({ code: "unreadable", message: "The clip could not be encoded. Try a shorter or simpler source clip.", detail: result.stderr.trim().split("\n").slice(-6).join("\n").slice(-1200) }); }
@@ -525,9 +564,11 @@ async function runCompanionClip(job: Job, signal: AbortSignal, progress: JobProg
     };
     files.push(await encode("libx264", 24, "clip.h264.mp4", 60, hasAv1 ? 20 : 40));
     if (hasAv1) files.push(await encode("libsvtav1", 24, "clip.av1.mp4", 80, 20));
+    if (input.phone) files.push(await encode("libx264", 24, "clip.phone.h264.mp4", 95, 4, COMPANION_PHONE_FILTER));
     const seconds = keptFrameCount / COMPANION_CLIP_FPS;
-    const reasons = companionReasons({ ...metrics, loop_gap: loopGap }, seconds, input.min_seconds, input.max_seconds);
-    const report = { seconds, frames: keptFrameCount, fps: COMPANION_CLIP_FPS, width: 480, height: 960, files, av1: hasAv1, loop_gap: loopGap, settle_skipped_frames: input.kind === "oneshot" ? Math.min(ONESHOT_SETTLE_FRAMES, Math.max(0, frameCount - 24)) : 0, colour_match: { applied: colourMatchApplied, strength: COLOUR_MATCH_STRENGTH }, ...metrics, ok: reasons.length === 0, reasons };
+    const lightFields = { ...(lightSteps ? { light_step_before: lightSteps.before, light_step_after: lightSteps.after } : {}), ...(restDiff ? { rest_frame_diff: restDiff } : {}) };
+    const reasons = [...companionReasons({ ...metrics, loop_gap: loopGap }, seconds, input.min_seconds, input.max_seconds), ...lightReasons({ ...(lightSteps ? { light_step_after: lightSteps.after } : {}), ...(restDiff ? { rest_frame_diff: restDiff } : {}) })];
+    const report = { seconds, frames: keptFrameCount, fps: COMPANION_CLIP_FPS, width: 480, height: 960, files, av1: hasAv1, loop_gap: loopGap, settle_skipped_frames: input.kind === "oneshot" ? Math.min(ONESHOT_SETTLE_FRAMES, Math.max(0, frameCount - 24)) : 0, colour_match: { applied: colourMatchApplied, strength: COLOUR_MATCH_STRENGTH }, ...metrics, ...lightFields, ...(input.phone ? { phone: { width: 320, height: 640 } } : {}), ok: reasons.length === 0, reasons };
     writeFileSync(reportPath, JSON.stringify(report, null, 2), { mode: 0o600 });
     rmSync(rawCrop, { force: true }); rmSync(rawScaled, { force: true });
     progress({ status: "encoding", percent: 100 });

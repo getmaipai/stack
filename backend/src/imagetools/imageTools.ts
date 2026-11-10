@@ -40,7 +40,9 @@ import subjectsHelperSource from "./subjectmask.swift" with { type: "file" };
 export const IMAGE_TOOLS_NAME = "image-tools";
 export const IMAGE_TOOLS_VERSION = MANAGED_RUNTIMES.find((runtime) => runtime.name === IMAGE_TOOLS_NAME)?.version ?? "1.0.0";
 export const IMAGE_TOOLS_OPERATIONS = ["remove_background", "erase", "upscale", "resize", "find_people", "people_mask", "erase_people", "find_subjects", "erase_subjects"] as const;
-export type ImageToolOperation = typeof IMAGE_TOOLS_OPERATIONS[number];
+/** MAKER-A: the Stack's own jobs call this one with a folder of clip frames; it is not on the picture-upload route, so it stays out of IMAGE_TOOLS_OPERATIONS (which that route and the status list publish). */
+export const IMAGE_TOOLS_INTERNAL_OPERATIONS = ["clip_track"] as const;
+export type ImageToolOperation = typeof IMAGE_TOOLS_OPERATIONS[number] | typeof IMAGE_TOOLS_INTERNAL_OPERATIONS[number];
 
 /** The pinned model records the worker loads, by the name the worker uses. */
 export const IMAGE_TOOL_MODEL_IDS = { isnet: "image-tool-isnet-general", lama: "image-tool-lama-big", esrgan: "image-tool-realesrgan-general-x4v3" } as const;
@@ -51,7 +53,7 @@ export const IMAGE_TOOLS_ESTIMATED_BYTES = 4 * 1_073_741_824;
 /** Megapixels each tool accepts; the worker enforces them and says them in words. Mirrored here so the status route and the docs state them once. */
 export const IMAGE_TOOL_LIMITS = { remove_background_in: 25, erase_in: 25, upscale_in: 6, upscale_out: 36, resize_out: 36 } as const;
 const idleMs = (): number => Number(process.env.IMAGE_TOOLS_IDLE_MS ?? 120_000);
-const DEADLINE_MS: Record<ImageToolOperation, number> = { remove_background: 120_000, erase: 120_000, upscale: 300_000, resize: 60_000, find_people: 60_000, people_mask: 60_000, erase_people: 120_000, find_subjects: 120_000, erase_subjects: 180_000 };
+const DEADLINE_MS: Record<ImageToolOperation, number> = { remove_background: 120_000, erase: 120_000, upscale: 300_000, resize: 60_000, find_people: 60_000, people_mask: 60_000, erase_people: 120_000, find_subjects: 120_000, erase_subjects: 180_000, clip_track: 300_000 };
 const RESULT_KEEP = 6;
 const RESULT_TTL_MS = 10 * 60_000;
 
@@ -59,7 +61,7 @@ const RESULT_TTL_MS = 10 * 60_000;
 export class ImageToolError extends Error {
   constructor(readonly code: string, message: string, readonly status: number) { super(message); }
 }
-const STATUS_BY_CODE: Record<string, number> = { too_large: 413, bad_scale: 422, bad_operation: 422, mask_required: 422, mask_empty: 422, mask_too_big: 422, size_required: 422, no_subject: 422, no_subjects: 422, no_people: 422, people_unavailable: 422, people_required: 422, subjects_unavailable: 422, subjects_required: 422, model_missing: 503, engine_unavailable: 422, engine_failed: 500, out_of_memory: 507, failed: 500 };
+const STATUS_BY_CODE: Record<string, number> = { too_large: 413, bad_scale: 422, bad_operation: 422, mask_required: 422, frames_required: 422, size_mismatch: 422, bad_params: 422, mask_empty: 422, mask_too_big: 422, size_required: 422, no_subject: 422, no_subjects: 422, no_people: 422, people_unavailable: 422, people_required: 422, subjects_unavailable: 422, subjects_required: 422, model_missing: 503, engine_unavailable: 422, engine_failed: 500, out_of_memory: 507, failed: 500 };
 
 export function imageToolsRequirementsFileFor(platform = process.platform, arch = process.arch): string | null {
   if (platform === "darwin" && arch === "arm64") return darwinArm64Requirements;
@@ -118,7 +120,9 @@ export interface WorkerRequest { id: string; op: ImageToolOperation; input: stri
 export interface PersonBox { id: number; x: number; y: number; w: number; h: number; area: number }
 export interface SubjectBox extends PersonBox { kind?: "person" | "animal" | "object"; label?: string }
 export interface LookDetection { label: string; score: number; box: number[] }
-export interface WorkerReply { id: string | null; ok: boolean; code?: string; error?: string; width?: number; height?: number; engine?: string; model?: string; ms?: number; crop_px?: number; people?: PersonBox[]; subjects?: SubjectBox[]; }
+/** The answer of `clip_track`: m is one [a, b, tx, c, d, ty] per frame (rest-picture pixels to frame pixels), res the grey residual left, cc the correlation, low the frame numbers under the confidence. */
+export interface ClipTrack { m: number[][]; res: number[]; cc: number[]; low: number[]; frames: number }
+export interface WorkerReply { id: string | null; ok: boolean; code?: string; error?: string; width?: number; height?: number; engine?: string; model?: string; ms?: number; crop_px?: number; people?: PersonBox[]; subjects?: SubjectBox[]; m?: number[][]; res?: number[]; cc?: number[]; low?: number[]; frames?: number; }
 export interface WorkerHandle { send(request: WorkerRequest, deadlineMs: number): Promise<WorkerReply>; kill(graceMs?: number): void; exited: Promise<number>; /** ISOLATION-01: the process, for the gate that stops it while chat is working (absent on a scripted worker). */ pausable?: PausableWorker; }
 
 export interface ImageToolsDeps {
@@ -208,7 +212,7 @@ export function workerHandle(child: { pid?: number; stdin: { write(data: string)
 }
 
 export interface ImageToolInput { operation: ImageToolOperation; image: Uint8Array; mask?: Uint8Array; params?: Record<string, unknown>; }
-export interface ImageToolResult { png: Uint8Array; width: number; height: number; engine: string; model: string; ms: number; operation: ImageToolOperation; people?: PersonBox[]; subjects?: SubjectBox[]; status?: string }
+export interface ImageToolResult { track?: ClipTrack; png: Uint8Array; width: number; height: number; engine: string; model: string; ms: number; operation: ImageToolOperation; people?: PersonBox[]; subjects?: SubjectBox[]; status?: string }
 export type ImageToolsState = "unsupported" | "needs-setup" | "building" | "idle" | "running";
 
 export class ImageToolsService {
@@ -283,7 +287,7 @@ export class ImageToolsService {
   private async execute(input: ImageToolInput, options: { signal?: AbortSignal; onStatus?: (status: string) => void }): Promise<ImageToolResult> {
     const onStatus = options.onStatus ?? (() => {});
     if (options.signal?.aborted) throw new ImageToolError("cancelled", "Cancelled.", 499);
-    if (!IMAGE_TOOLS_OPERATIONS.includes(input.operation)) throw new ImageToolError("bad_operation", `The operation must be one of ${IMAGE_TOOLS_OPERATIONS.join(", ")}.`, 422);
+    if (!(IMAGE_TOOLS_OPERATIONS as readonly string[]).includes(input.operation) && !(IMAGE_TOOLS_INTERNAL_OPERATIONS as readonly string[]).includes(input.operation)) throw new ImageToolError("bad_operation", `The operation must be one of ${[...IMAGE_TOOLS_OPERATIONS, ...IMAGE_TOOLS_INTERNAL_OPERATIONS].join(", ")}.`, 422);
     this.busy += 1;
     if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
     const dir = this.deps.tmpDir();
@@ -320,6 +324,10 @@ export class ImageToolsService {
       }
       const reply = await Promise.race([worker.send({ id: crypto.randomUUID(), op: input.operation, input: files[0]!, output: files[2]!, ...(input.mask ? { mask: files[1]! } : {}), params, models, helper: this.helper ?? null, people_helper: this.peopleHelper ?? null, subjects_helper: this.subjectsHelper ?? null } as WorkerRequest, DEADLINE_MS[input.operation]), aborted]);
       if (!reply.ok) throw new ImageToolError(reply.code ?? "failed", reply.error ?? "The picture could not be processed.", STATUS_BY_CODE[reply.code ?? "failed"] ?? 500);
+      if (input.operation === "clip_track") {
+        const track: ClipTrack = { m: reply.m ?? [], res: reply.res ?? [], cc: reply.cc ?? [], low: reply.low ?? [], frames: reply.frames ?? (reply.m?.length ?? 0) };
+        return { png: new Uint8Array(0), track, width: reply.width ?? 0, height: reply.height ?? 0, engine: reply.engine ?? "ecc", model: reply.model ?? "none", ms: reply.ms ?? 0, operation: input.operation };
+      }
       const png = new Uint8Array(readFileSync(files[2]!));
       return { png, width: reply.width ?? 0, height: reply.height ?? 0, engine: reply.engine ?? "unknown", model: reply.model ?? "unknown", ms: reply.ms ?? 0, operation: input.operation, ...(reply.people ? { people: reply.people } : {}), ...(reply.subjects ? { subjects: reply.subjects.map((subject) => classifySubject(subject, (params.look_detections as LookDetection[] | undefined) ?? [])) } : {}), ...(lookStatus ? { status: lookStatus } : {}) } as ImageToolResult;
     } finally {
