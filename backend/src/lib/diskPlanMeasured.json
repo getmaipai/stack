@@ -23,6 +23,12 @@
       "peak_temp_bytes": 807690041,
       "basis": "measured"
     },
+    "liveportrait": {
+      "installed_bytes": 1500000000,
+      "download_bytes": 1500000000,
+      "peak_temp_bytes": 500000000,
+      "basis": "estimate"
+    },
     "image-tools": {
       "installed_bytes": 418123776,
       "download_bytes": 287554083,

@@ -10,7 +10,7 @@
 import measured from "@/lib/diskPlanMeasured.json";
 import { PROFILE_TIERS, type ProfileTier } from "@/profiles";
 import {
-  CHATTERBOX_ENGINE, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS,
+  CHATTERBOX_ENGINE, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS,
   STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_STEMS_MODELS, STACK_RECORDED_SPEECH_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_MASK_MODELS,
 } from "@/lib/modelCatalog";
 import { OMLX_OPTIONAL_TIERS } from "@/lib/chatEngines";
@@ -18,6 +18,7 @@ import { plannedPinsFor } from "@/lib/installPlan";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import { IMAGE_FAMILIES } from "@/images/models";
 
+export const TALKING_PICTURES_ROW = "talking-pictures";
 export type DiskNeed = "required" | "recommended" | "optional";
 export type DiskRowKind = "home" | "model" | "engine";
 export type DiskBasis = "pins" | "measured" | "estimate";
@@ -124,6 +125,7 @@ const ENGINE_ROWS: Record<string, () => DiskRow> = {
   "engine:voice-better": () => engineRow("engine:voice-better", "mlx-audio", "Better voice engine tools", "What the expressive voice runs on."),
   "engine:pictures": () => engineRow("engine:pictures", "image-gen", "Picture engine tools", "What making pictures runs on."),
   "engine:image-tools": () => engineRow("engine:image-tools", "image-tools", "Picture editing engine tools", "What removing a background, erasing and enlarging run on."),
+  "engine:liveportrait": () => engineRow("engine:liveportrait", "liveportrait", "Talking pictures engine tools", "What making a companion's mouth and blink pictures runs on (about 1.5 GB, built on first use from pinned sources)."),
   "engine:video": () => engineRow("engine:video", "video-gen", "Video engine tools", "What making videos runs on."),
   "engine:video-ltx25": () => engineRow("engine:video-ltx25", "ltx25-gen", "LTX-2.5 video engine tools", "What the LTX-2.5 videos run on."),
   "engine:video-ltx25-max": () => engineRow("engine:video-ltx25-max", "ltx25-max-gen", "LTX-2.5 Max video engine tools", "What the LTX-2.5 Max videos run on."),
@@ -136,7 +138,7 @@ const ENGINE_ROWS: Record<string, () => DiskRow> = {
   "engine:recorded-speech": () => engineRow("engine:recorded-speech", "recorded-speech", "Recorded speech tools", "What recorded speech rendering runs on."),
   "engine:chat-mlx": () => engineRow("engine:chat-mlx", "omlx", "Faster chat engine tools (oMLX)", "What the faster chat engine runs on. llama.cpp stays as the fallback."),
 };
-const PYTHON_ENGINES = ["engine:chat-mlx", "engine:voice", "engine:voice-better", "engine:pictures", "engine:image-tools", "engine:video", "engine:video-ltx25", "engine:video-ltx25-max", "engine:video-mask", "engine:music", "engine:stems", "engine:align", "engine:beats", "engine:voice-convert", "engine:recorded-speech"];
+const PYTHON_ENGINES = ["engine:chat-mlx", "engine:voice", "engine:voice-better", "engine:pictures", "engine:image-tools", "engine:liveportrait", "engine:video", "engine:video-ltx25", "engine:video-ltx25-max", "engine:video-mask", "engine:music", "engine:stems", "engine:align", "engine:beats", "engine:voice-convert", "engine:recorded-speech"];
 
 function totals(rows: DiskRow[], selected: Set<string>, only?: "home" | "ai"): DiskTotals {
   const chosen = rows.filter((row) => selected.has(row.id));
@@ -193,6 +195,7 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   if (tools.length) rows.push(modelRow({ id: "image-tools", label: "Edit pictures tools", note: "Remove a background, erase something, make a picture bigger.", need: "recommended", engines: ["engine:image-tools", "engine:python"] }, tools));
   const look = STACK_IMAGE_TOOL_MODELS.filter((pin) => pin.component === "tool-look");
   if (look.length) rows.push(modelRow({ id: "tool-look", label: "Look at pictures", note: "Name household objects, wall colour and light. Runs only when Home sends a picture.", need: "optional", engines: ["engine:image-tools", "engine:python"] }, look));
+  if (!tier.notAvailable.includes("image")) rows.push(modelRow({ id: TALKING_PICTURES_ROW, label: "Talking pictures (LivePortrait)", note: "Makes the mouth and blink pictures a talking companion plays while it speaks, and what Make needs to build a companion. MIT licence; about 0.6 GB of model files plus a 1.5 GB engine, built on this computer. Mac with Apple silicon only.", need: "recommended", engines: ["engine:liveportrait", "engine:python"] }, STACK_LIVEPORTRAIT_MODELS));
   if (!tier.notAvailable.includes("image")) {
     rows.push(modelRow({ id: "pictures", label: "Change pictures (FLUX.2 Klein)", note: "Needed. Edits the pictures you already have, and makes new ones when ERNIE is not installed.", need: "required", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_KLEIN_MODELS));
     if (IMAGE_FAMILIES["ernie-image-turbo"].tiers.some((supportedTier) => supportedTier === tier.id)) rows.push(modelRow({ id: "pictures-ernie", label: "Make pictures (ERNIE)", note: "Recommended. Draws words in pictures correctly. Makes new pictures from a sentence.", need: "recommended", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_ERNIE_MODELS));

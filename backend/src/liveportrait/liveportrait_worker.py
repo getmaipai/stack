@@ -33,6 +33,19 @@ MEGAPIXEL = 1_000_000
 MAX_MEGAPIXELS = 16
 NO_FACE = "No face was found in this picture. Choose a picture where the face is clear."
 TOO_LARGE = f"This picture is over {MAX_MEGAPIXELS} megapixels. Choose a smaller picture."
+# The 203-point landmark model's layout (landmark.onnx, MIT). The lip groups follow the indices LivePortrait's own retargeting reads: the outer lip loop
+# is 48..83 (corners 48 and 66), the inner lip loop is 84..107 (corners 84 and 96, top 90, bottom 102), the same 24-point loop shape as each eye.
+# Read off the model's own output on a real face (a plotted run of landmark.onnx on a portrait, 2026-11-10): eyes 0..47, outer lips 48..83 (36),
+# inner lips 84..107 (24; 90 and 102 are the inner top and bottom the engine's retargeting uses), face contour 108..144 (jaw and cheeks, left eye
+# level round the chin to right eye level), brows 145..184, nose 185..202 (186..195 the sides, 200 to 202 the centre line down to under the tip;
+# 185 and 196..199 sit between the eyes and are left out so a caller registering on the nose is not moved by the eyes). `points` (all 203) is
+# always returned so a caller can pick any point itself.
+LANDMARK_GROUPS = {
+    "outerLips": range(48, 84),
+    "innerLips": range(84, 108),
+    "nose": [*range(186, 196), 200, 201, 202],
+    "contour": range(108, 145),
+}
 MODEL_KEYS = ("landmark", "appearance", "motion", "generator", "warping", "stitching")
 
 
@@ -135,6 +148,19 @@ class Engine:
             return box or mediapipe_box(rgb)
         return detect
 
+    def landmarks_of(self, rgb, crop_cfg=None):
+        """The 203 landmarks of the largest face in `rgb`, in that picture's own pixels (grouped), or None when no face is found."""
+        crop = self.cropper.crop_source_image(rgb, self.crop_cfg)
+        return None if crop is None else self.landmarks_from_crop(crop)
+
+    def landmarks_from_crop(self, crop):
+        m = self.np.asarray(crop["M_c2o"], dtype=float)
+        pts = self.np.asarray(crop["lmk_crop"], dtype=float) @ m[:2, :2].T + m[:2, 2]
+        round2 = lambda rows: [[round(float(x), 2), round(float(y), 2)] for x, y in rows]
+        groups = {name: round2(pts[list(idx)]) if idx is not None else [] for name, idx in LANDMARK_GROUPS.items()}
+        groups["points"] = round2(pts)
+        return groups
+
     @property
     def device(self):
         return self.wrapper.device
@@ -163,6 +189,8 @@ class Engine:
             x_c_s, delta, scale_new, t_new = info["kp"].to(device), info["exp"].to(device), info["scale"].to(device), info["t"].to(device)
             source_eye = round(float(self.calc_eye(lmk[None]).mean()), 2)
             source_lip = round(float(self.calc_lip(lmk[None])[0][0]), 2)
+            want_landmarks = request.get("landmarks", True)
+            source_landmarks = self.landmarks_from_crop(crop) if want_landmarks else None
             # Pose is not changed (pitch, yaw, roll, mov_x, mov_y all 0), so the driving rotation equals the source's. Zoom stays 1: 0 collapses the face.
             mov_z = torch.tensor(1.0).to(device)
             base = mov_z * scale_new * (x_c_s @ R_s + delta) + t_new
@@ -182,9 +210,12 @@ class Engine:
                     full = self.paste_back(out, crop["M_c2o"], img_rgb, mask_ori)
                     path = os.path.join(request["outdir"], f"frame-{len(frames)}.png")
                     self.cv2.imwrite(path, self.cv2.cvtColor(full, self.cv2.COLOR_RGB2BGR))  # a fresh PNG: no EXIF, no profile
-                    frames.append({"kind": kind, "ratio": float(ratio), "file": path, "ms": int((time.monotonic() - t0) * 1000)})
+                    entry = {"kind": kind, "ratio": float(ratio), "file": path, "ms": int((time.monotonic() - t0) * 1000)}
+                    if want_landmarks:
+                        entry["landmarks"] = self.landmarks_of(full)  # None when the face finder sees no face in this frame
+                    frames.append(entry)
         peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss  # bytes on macOS
-        return {"width": width, "height": height, "sourceEye": source_eye, "sourceLip": source_lip, "frames": frames, "ms": int((time.monotonic() - started) * 1000), "peakBytes": int(peak)}
+        return {"width": width, "height": height, "sourceEye": source_eye, "sourceLip": source_lip, **({"sourceLandmarks": source_landmarks} if want_landmarks else {}), "frames": frames, "ms": int((time.monotonic() - started) * 1000), "peakBytes": int(peak)}
 
 
 def main():

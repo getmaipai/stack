@@ -16,18 +16,18 @@
     "p32.needed_bytes": 30650592899,
     "p32.home_required_free_bytes": 3176323277,
     "p32.ai_required_free_bytes": 33020007694,
-    "p64.required_free_bytes": 119582252957,
+    "p64.required_free_bytes": 122646637033,
     "p64.minimum_required_free_bytes": 56636960034,
-    "p64.everything_required_free_bytes": 214701625448,
-    "p64.needed_bytes": 100392115150,
+    "p64.everything_required_free_bytes": 217766009524,
+    "p64.needed_bytes": 103029101880,
     "p64.home_required_free_bytes": 3176323277,
-    "p64.ai_required_free_bytes": 116405929680,
-    "p128.required_free_bytes": 154248571506,
+    "p64.ai_required_free_bytes": 119470313756,
+    "p128.required_free_bytes": 157312955582,
     "p128.minimum_required_free_bytes": 56636960034,
-    "p128.everything_required_free_bytes": 500078441202,
-    "p128.needed_bytes": 129407177718,
+    "p128.everything_required_free_bytes": 503142825278,
+    "p128.needed_bytes": 132044164448,
     "p128.home_required_free_bytes": 3176323277,
-    "p128.ai_required_free_bytes": 151072248229
+    "p128.ai_required_free_bytes": 154136632305
   },
   "tiers": {
     "p16": {
@@ -1144,6 +1144,31 @@
           "basis": "pins"
         },
         {
+          "id": "talking-pictures",
+          "label": "Talking pictures (LivePortrait)",
+          "note": "Makes the mouth and blink pictures a talking companion plays while it speaks, and what Make needs to build a companion. MIT licence; about 0.6 GB of model files plus a 1.5 GB engine, built on this computer. Mac with Apple silicon only.",
+          "kind": "model",
+          "need": "recommended",
+          "selectable": true,
+          "download_bytes": 636986730,
+          "installed_bytes": 636986730,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "liveportrait-landmark",
+            "liveportrait-appearance",
+            "liveportrait-motion",
+            "liveportrait-generator",
+            "liveportrait-warping",
+            "liveportrait-stitching"
+          ],
+          "engines": [
+            "engine:liveportrait",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "pictures",
           "label": "Change pictures (FLUX.2 Klein)",
           "note": "Needed. Edits the pictures you already have, and makes new ones when ERNIE is not installed.",
@@ -1478,6 +1503,21 @@
           "basis": "measured"
         },
         {
+          "id": "engine:liveportrait",
+          "label": "Talking pictures engine tools",
+          "note": "What making a companion's mouth and blink pictures runs on (about 1.5 GB, built on first use from pinned sources).",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 1500000000,
+          "installed_bytes": 1500000000,
+          "peak_temp_bytes": 500000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
+        },
+        {
           "id": "engine:music",
           "label": "Music engine tools",
           "note": "What making songs runs on.",
@@ -1554,11 +1594,11 @@
         }
       ],
       "default": {
-        "download_bytes": 93332158900,
-        "installed_bytes": 95950689031,
-        "peak_temp_bytes": 4441426119,
-        "needed_bytes": 100392115150,
-        "required_free_bytes": 119582252957
+        "download_bytes": 95469145630,
+        "installed_bytes": 98087675761,
+        "peak_temp_bytes": 4941426119,
+        "needed_bytes": 103029101880,
+        "required_free_bytes": 122646637033
       },
       "minimum": {
         "download_bytes": 42748423657,
@@ -1568,11 +1608,11 @@
         "required_free_bytes": 56636960034
       },
       "everything": {
-        "download_bytes": 162417146331,
-        "installed_bytes": 168697041213,
-        "peak_temp_bytes": 12265175992,
-        "needed_bytes": 180962217205,
-        "required_free_bytes": 214701625448
+        "download_bytes": 164554133061,
+        "installed_bytes": 170834027943,
+        "peak_temp_bytes": 12765175992,
+        "needed_bytes": 183599203935,
+        "required_free_bytes": 217766009524
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -1586,6 +1626,7 @@
         "voice",
         "voice-better",
         "image-tools",
+        "talking-pictures",
         "pictures",
         "pictures-ernie",
         "stems",
@@ -1846,6 +1887,31 @@
           ],
           "engines": [
             "engine:image-tools",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "talking-pictures",
+          "label": "Talking pictures (LivePortrait)",
+          "note": "Makes the mouth and blink pictures a talking companion plays while it speaks, and what Make needs to build a companion. MIT licence; about 0.6 GB of model files plus a 1.5 GB engine, built on this computer. Mac with Apple silicon only.",
+          "kind": "model",
+          "need": "recommended",
+          "selectable": true,
+          "download_bytes": 636986730,
+          "installed_bytes": 636986730,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "liveportrait-landmark",
+            "liveportrait-appearance",
+            "liveportrait-motion",
+            "liveportrait-generator",
+            "liveportrait-warping",
+            "liveportrait-stitching"
+          ],
+          "engines": [
+            "engine:liveportrait",
             "engine:python"
           ],
           "installed": false,
@@ -2390,6 +2456,21 @@
           "basis": "measured"
         },
         {
+          "id": "engine:liveportrait",
+          "label": "Talking pictures engine tools",
+          "note": "What making a companion's mouth and blink pictures runs on (about 1.5 GB, built on first use from pinned sources).",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 1500000000,
+          "installed_bytes": 1500000000,
+          "peak_temp_bytes": 500000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
+        },
+        {
           "id": "engine:video",
           "label": "Video engine tools",
           "note": "What making videos runs on.",
@@ -2526,11 +2607,11 @@
         }
       ],
       "default": {
-        "download_bytes": 121243898332,
-        "installed_bytes": 124206968936,
-        "peak_temp_bytes": 5200208782,
-        "needed_bytes": 129407177718,
-        "required_free_bytes": 154248571506
+        "download_bytes": 123380885062,
+        "installed_bytes": 126343955666,
+        "peak_temp_bytes": 5700208782,
+        "needed_bytes": 132044164448,
+        "required_free_bytes": 157312955582
       },
       "minimum": {
         "download_bytes": 42748423657,
@@ -2540,11 +2621,11 @@
         "required_free_bytes": 56636960034
       },
       "everything": {
-        "download_bytes": 397346907658,
-        "installed_bytes": 405415697668,
-        "peak_temp_bytes": 13579604000,
-        "needed_bytes": 418995301668,
-        "required_free_bytes": 500078441202
+        "download_bytes": 399483894388,
+        "installed_bytes": 407552684398,
+        "peak_temp_bytes": 14079604000,
+        "needed_bytes": 421632288398,
+        "required_free_bytes": 503142825278
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -2559,6 +2640,7 @@
         "voice",
         "voice-better",
         "image-tools",
+        "talking-pictures",
         "pictures",
         "pictures-ernie",
         "video",

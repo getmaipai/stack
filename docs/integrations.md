@@ -484,6 +484,17 @@ picture's size, no metadata, kept in memory for ten minutes, then dropped (404 `
 where the face is clear."), `bad_ratio`, `too_many_ratios`, `bad_image`, 503 `model_missing` `no_memory` `setup_failed` `unsupported`
 `engine_unavailable`, 500 `engine_failed` `failed`.
 
+MAKER-B2 additions (additive; every field above is unchanged). The 200 body (and the finished job's frames) also carry face landmarks from the 203-point
+`landmark.onnx` (MIT; the licence table lists it as one of the six pinned MIT weights; Apple Vision only finds the face rectangle, never the landmarks):
+`sourceLandmarks` for the input picture and `landmarks` on every frame, each `{ outerLips, innerLips, nose, contour, points }` with `[x, y]` pairs in the
+returned frame's own pixels (the input picture's size). `outerLips` is 36 points (model indices 48 to 83), `innerLips` 24 (84 to 107), `points` all 203.
+`nose` is 13 points (the sides 186 to 195 and the centre line 200 to 202 of the model's 203-point layout) and `contour` is 37 points round the jaw and cheeks (108 to 144), both read off a real run; the lip ranges (outer 48 to 83, inner 84 to 107) were confirmed on it too. `points` still returns all 203. A
+frame whose face the finder does not find carries `landmarks: null`; an older worker leaves both fields `null`.
+
+Install plan: Talking pictures is listed in `GET /stack/v1/install-plan` (`disk.rows`, id `talking-pictures`, "Talking pictures (LivePortrait)", recommended, MIT
+licence in its note, with its engine row `engine:liveportrait`, about 1.5 GB, built on first use) and its six weights are in `optional_models` as pull bodies.
+Nothing downloads until Home posts them. Readiness for the talking-pictures work is reported on `GET /stack/v1/image-tools` as `talk_frames`; the `image` role itself is unchanged (a missing optional engine must not disable every other picture feature), and Home's companion maker checks `talk_frames` before it offers Make.
+
 The engine is LivePortrait (KwaiVGI, MIT) at one pinned commit, patched when the environment is built (`backend/src/liveportrait/liveportrait.patch.txt`),
 and six MIT weights pinned by revision and sha256 (about 607 MB). The research-only face finder LivePortrait normally downloads is never installed:
 faces are found by Apple Vision through a small helper the Stack compiles once (`facefind.swift`, a system API with no model file), then by MediaPipe

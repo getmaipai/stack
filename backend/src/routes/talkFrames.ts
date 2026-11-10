@@ -34,8 +34,10 @@ const FormSchema = z.object({
   eye: z.string().optional().openapi({ example: "0", description: "Eye-openness ratios, comma separated, each 0 (closed) to 1, at most 12." }),
   timeout_ms: z.coerce.number().int().positive().optional(),
 });
-const FrameSchema = z.object({ kind: z.enum(["lip", "eye"]), ratio: z.number(), width: z.number(), height: z.number(), content_type: z.literal("image/png"), ms: z.number(), url: z.string() });
-const ResponseSchema = z.object({ created: z.number().int().optional(), job: z.string(), sourceEye: z.number().optional(), sourceLip: z.number().optional(), frames: z.array(FrameSchema) });
+const PointsSchema = z.array(z.tuple([z.number(), z.number()]));
+const LandmarksSchema = z.object({ outerLips: PointsSchema, innerLips: PointsSchema, nose: PointsSchema, contour: PointsSchema, points: PointsSchema }).openapi({ description: "Face landmarks from the 203-point landmark model (MIT, the model the engine already runs; not Apple Vision), `[x, y]` in the picture's pixels, the same space as the returned frames. `outerLips` is 36 points, `innerLips` 24, `points` all 203. `nose` and `contour` are empty until the model's index layout for them is confirmed; take them from `points` meanwhile." });
+const FrameSchema = z.object({ kind: z.enum(["lip", "eye"]), ratio: z.number(), width: z.number(), height: z.number(), content_type: z.literal("image/png"), ms: z.number(), url: z.string(), landmarks: LandmarksSchema.nullable().optional().openapi({ description: "This frame's landmarks; null when the face finder sees no face in the frame." }) });
+const ResponseSchema = z.object({ created: z.number().int().optional(), job: z.string(), sourceEye: z.number().optional(), sourceLip: z.number().optional(), sourceLandmarks: LandmarksSchema.nullable().optional().openapi({ description: "The input picture's own landmarks." }), frames: z.array(FrameSchema) });
 const ErrorSchema = z.object({ error: z.string(), code: z.string().optional(), job: z.string().optional() });
 
 const postRoute = createRoute({
@@ -82,7 +84,7 @@ talkFramesRoutes.openapi(postRoute, async (c) => {
   if (settled.state !== "done") return reply(c, { error: settled.reason ?? "The talking frames could not be made. Try again.", code: "failed", job: settled.id }, 500) as never;
   const kept = takeTalkResult(settled.id);
   if (!kept) return reply(c, { error: "The result is no longer held; send the picture again.", code: "expired", job: settled.id }, 500) as never;
-  return reply(c, { created, job: settled.id, sourceEye: kept.sourceEye, sourceLip: kept.sourceLip, frames: kept.frames.map((frame, index) => ({ kind: frame.kind, ratio: frame.ratio, width: kept.width, height: kept.height, content_type: "image/png" as const, ms: frame.ms, url: `/v1/images/talk-frames/${settled.id}/${index}` })) }, 200) as never;
+  return reply(c, { created, job: settled.id, sourceEye: kept.sourceEye, sourceLip: kept.sourceLip, ...(kept.sourceLandmarks !== undefined ? { sourceLandmarks: kept.sourceLandmarks } : {}), frames: kept.frames.map((frame, index) => ({ kind: frame.kind, ratio: frame.ratio, width: kept.width, height: kept.height, content_type: "image/png" as const, ms: frame.ms, url: `/v1/images/talk-frames/${settled.id}/${index}`, ...(frame.landmarks !== undefined ? { landmarks: frame.landmarks } : {}) })) }, 200) as never;
 });
 talkFramesRoutes.openapi(frameRoute, (c) => {
   const { job, index } = c.req.valid("param");

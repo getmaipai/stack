@@ -140,13 +140,15 @@ export async function ensureFaceHelper(): Promise<string | null> {
   return target;
 }
 
-export interface TalkFrame { kind: "lip" | "eye"; ratio: number; png: Uint8Array; ms: number }
+/** Face landmarks from the 203-point model (landmark.onnx, MIT), `[x, y]` in the returned frame's own pixels. `points` holds all 203; a group the model layout does not name yet is empty. */
+export interface TalkLandmarks { outerLips: number[][]; innerLips: number[][]; nose: number[][]; contour: number[][]; points: number[][] }
+export interface TalkFrame { kind: "lip" | "eye"; ratio: number; png: Uint8Array; ms: number; landmarks?: TalkLandmarks | null }
 export interface TalkInput { image: Uint8Array; lip: number[]; eye: number[]; sourceScale?: number }
-export interface TalkResult { width: number; height: number; sourceEye: number; sourceLip: number; frames: TalkFrame[]; ms: number; peakBytes?: number }
+export interface TalkResult { width: number; height: number; sourceEye: number; sourceLip: number; sourceLandmarks?: TalkLandmarks | null; frames: TalkFrame[]; ms: number; peakBytes?: number }
 export type LivePortraitState = "unsupported" | "needs-setup" | "building" | "idle" | "running";
 /** One request as the worker reads it (picture and frames travel as files under the Stack's own data directory). */
 export interface TalkWorkerRequest { id: string; input: string; outdir: string; lip: number[]; eye: number[]; sourceScale: number; helper: string | null; source: string; models: Record<LivePortraitModelKey, string> }
-export interface TalkWorkerReply { id: string | null; ok: boolean; code?: string; error?: string; width?: number; height?: number; sourceEye?: number; sourceLip?: number; ms?: number; peakBytes?: number; frames?: Array<{ kind: "lip" | "eye"; ratio: number; file: string; ms: number }> }
+export interface TalkWorkerReply { id: string | null; ok: boolean; code?: string; error?: string; width?: number; height?: number; sourceEye?: number; sourceLip?: number; sourceLandmarks?: TalkLandmarks | null; ms?: number; peakBytes?: number; frames?: Array<{ kind: "lip" | "eye"; ratio: number; landmarks?: TalkLandmarks | null; file: string; ms: number }> }
 
 export interface LivePortraitDeps {
   requirements: () => string | null;
@@ -311,9 +313,9 @@ export class LivePortraitService {
       const aborted = new Promise<never>((_, reject) => options.signal?.addEventListener("abort", () => { this.stopWorker(2_000); reject(new LivePortraitError("cancelled", "Cancelled.")); }, { once: true }));
       const reply = await Promise.race([worker.send(request as unknown as WorkerRequest, DEADLINE_MS) as Promise<WorkerReply & TalkWorkerReply>, aborted]);
       if (!reply.ok) throw new LivePortraitError(reply.code ?? "failed", reply.error ?? "The picture could not be processed.");
-      const frames: TalkFrame[] = (reply.frames ?? []).map((frame) => ({ kind: frame.kind, ratio: frame.ratio, png: new Uint8Array(readFileSync(frame.file)), ms: frame.ms }));
+      const frames: TalkFrame[] = (reply.frames ?? []).map((frame) => ({ kind: frame.kind, ratio: frame.ratio, png: new Uint8Array(readFileSync(frame.file)), ms: frame.ms, landmarks: frame.landmarks ?? null }));
       this.deps.recordRun(new Date().toISOString());
-      return { width: reply.width ?? 0, height: reply.height ?? 0, sourceEye: reply.sourceEye ?? 0, sourceLip: reply.sourceLip ?? 0, frames, ms: reply.ms ?? 0, ...(reply.peakBytes ? { peakBytes: reply.peakBytes } : {}) };
+      return { width: reply.width ?? 0, height: reply.height ?? 0, sourceEye: reply.sourceEye ?? 0, sourceLip: reply.sourceLip ?? 0, sourceLandmarks: reply.sourceLandmarks ?? null, frames, ms: reply.ms ?? 0, ...(reply.peakBytes ? { peakBytes: reply.peakBytes } : {}) };
     } finally {
       rmSync(dir, { recursive: true, force: true });
       lease?.detach();

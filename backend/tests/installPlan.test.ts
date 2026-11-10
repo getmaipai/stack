@@ -172,3 +172,11 @@ test("plan: stt is Parakeet alone on p64 and p128, Moonshine alone on p16 and p3
   for (const gb of [16, 32, 64, 128]) expect(buildInstallPlan(hw({ unifiedMemoryGb: gb, totalRamGb: gb })).models.filter((model) => model.id === "smart-turn-v3.2")).toHaveLength(1);
   expect(Object.entries(PROFILE_MODEL_BINDINGS).map(([tier, bound]) => [tier, bound?.stt])).toEqual([["p16", "moonshine-tiny-en-int8"], ["p32", "moonshine-tiny-en-int8"], ["p64", "parakeet-tdt-0.6b-v2-int8"], ["p128", "parakeet-tdt-0.6b-v2-int8"]]);
 });
+
+test("the install plan route lists the Talking pictures weights as pull bodies beside the disk row, with size and MIT licence", async () => {
+  const body = await (await app.request("/stack/v1/install-plan?vram_gb=64")).json() as { disk: { rows: Array<{ id: string }> } | null; optional_models: Array<{ id: string; licence: string; approx_bytes: number; installed: boolean }> };
+  expect(body.disk?.rows.map((row) => row.id)).toContain("talking-pictures");
+  const lp = body.optional_models.filter((model) => model.id.startsWith("liveportrait-"));
+  expect(lp).toHaveLength(6);
+  expect(lp.every((model) => model.licence === "MIT" && model.approx_bytes > 0)).toBe(true);
+});

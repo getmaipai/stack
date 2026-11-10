@@ -205,3 +205,18 @@ test("AIMODELS-VISION-01: p128 has a recommended picture-reader row (model plus 
     expect(plan.rows.find((candidate) => candidate.id === "reads-pictures")?.model_ids ?? []).not.toContain("qwen3-vl-4b-instruct-mmproj-q8-0");
   }
 });
+
+test("Talking pictures (LivePortrait) is a plain, sized, licensed row with its engine, on every tier that has pictures", () => {
+  for (const tier of PROFILE_TIERS.filter((candidate) => !candidate.notAvailable.includes("image"))) {
+    const plan = buildDiskPlan(tier);
+    const row = plan.rows.find((candidate) => candidate.id === "talking-pictures")!;
+    expect(row.label).toBe("Talking pictures (LivePortrait)");
+    expect(row.note).toContain("MIT licence");
+    expect(row.model_ids).toHaveLength(6);
+    expect(row.engines).toEqual(["engine:liveportrait", "engine:python"]);
+    expect(row.download_bytes).toBeGreaterThan(600_000_000);
+    expect(plan.rows.find((candidate) => candidate.id === "engine:liveportrait")!.installed_bytes).toBe(1_500_000_000);
+    expect(row.installed).toBe(false);
+    expect(buildDiskPlan(tier, row.model_ids).rows.find((candidate) => candidate.id === "talking-pictures")!.installed).toBe(true);
+  }
+});

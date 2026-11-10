@@ -411,3 +411,45 @@ test("route: the picture and ratios never ride on the job record or the event fe
 test("the documented limits are the enforced ones", () => {
   expect(LIVEPORTRAIT_LIMITS).toEqual({ max_megapixels: 16, max_ratios_per_list: 12 });
 });
+
+// ---- MAKER-B2: landmarks for the source and every frame; the engine in the install plan and the image role ----
+const ring = (n: number, cx: number, cy: number) => Array.from({ length: n }, (_, i) => [cx + i, cy]);
+const lm = (shift: number) => ({ outerLips: ring(36, 100 + shift, 200), innerLips: ring(24, 110 + shift, 205), nose: [], contour: [], points: ring(203, shift, 0) });
+const landmarkReply: Behaviour = (request) => {
+  const base = okReply(request) as TalkWorkerReply;
+  return { ...base, sourceLandmarks: lm(0), frames: base.frames!.map((frame, index) => ({ ...frame, landmarks: index === 3 ? null : lm(index + 1) })) };
+};
+
+test("landmarks: the source and every frame carry them, in the frame's own pixels, and a frame with no face carries null", async () => {
+  const service = new LivePortraitService(deps({}, landmarkReply));
+  const result = await service.run({ image: PORTRAIT, lip: [0, 0.3, 0.7], eye: [0] });
+  expect(result.sourceLandmarks!.outerLips).toHaveLength(36);
+  expect(result.sourceLandmarks!.innerLips).toHaveLength(24);
+  expect(result.sourceLandmarks!.points).toHaveLength(203);
+  expect(result.frames.map((f) => f.landmarks === null ? null : f.landmarks!.outerLips[0]![0])).toEqual([101, 102, 103, null]);
+  for (const frame of result.frames) for (const [x, y] of frame.landmarks?.points ?? []) { expect(x).toBeGreaterThanOrEqual(0); expect(y).toBeLessThan(result.height); }
+  service.stop();
+});
+
+test("route: landmarks are additive; every field the route returned before is unchanged", async () => {
+  livePortrait.useDeps(deps({}, landmarkReply));
+  const body = await (await post({ lip: "0,0.3,0.7", eye: "0", timeout_ms: "5000" })).json() as Record<string, any>;
+  expect(body.sourceLandmarks.innerLips).toHaveLength(24);
+  expect(body.frames[1].landmarks.outerLips).toHaveLength(36);
+  expect(body.frames[3].landmarks).toBeNull();
+  expect(Object.keys(body.frames[0]).sort()).toEqual(["content_type", "height", "kind", "landmarks", "ms", "ratio", "url", "width"]);
+  expect([body.sourceEye, body.sourceLip, body.frames[2].url]).toEqual([0.23, 0.19, `/v1/images/talk-frames/${body.job}/2`]);
+  // A worker that sends no landmarks (an older one) gives null, and every old field is as before.
+  livePortrait.useDeps(deps());
+  const plain = await (await post({ lip: "0", timeout_ms: "5000" })).json() as Record<string, any>;
+  expect([plain.sourceLandmarks, plain.frames[0].landmarks]).toEqual([null, null]);
+  expect(Object.keys(plain.frames[0]).filter((key) => key !== "landmarks").sort()).toEqual(["content_type", "height", "kind", "ms", "ratio", "url", "width"]);
+});
+
+test("the worker reads landmarks from the 203-point model's crop, never from Apple Vision, and groups the lips by the model's own indices", () => {
+  const worker = read("liveportrait_worker.py");
+  expect(worker).toContain("lmk_crop");
+  expect(worker).toContain('"outerLips": range(48, 84)');
+  expect(worker).toContain('"innerLips": range(84, 108)');
+  expect(worker.match(/vision_box/g)!.length).toBe(2); // the definition and the one use that finds the face rectangle
+});

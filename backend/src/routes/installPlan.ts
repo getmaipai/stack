@@ -5,7 +5,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { detectHardware } from "@/lib/hardware";
-import { buildInstallPlan, imageInstallModels, videoInstallModels } from "@/lib/installPlan";
+import { buildInstallPlan, imageInstallModels, talkingPicturesInstallModels, videoInstallModels } from "@/lib/installPlan";
 import { diskPlanForTier } from "@/lib/diskPlan";
 import { listModels } from "@/lib/modelStore";
 import { modelView } from "@/routes/models";
@@ -53,6 +53,7 @@ installPlanRoutes.openapi(planRoute, async (c) => {
     ...(rows.has("pictures-ernie") ? imageInstallModels("ernie-image-turbo", installedIds) : []),
     ...(rows.has("pictures-zimage") ? imageInstallModels("z-image-turbo", installedIds) : []),
     ...(rows.has("pictures-qwen") ? imageInstallModels("qwen-image-2512-q8", installedIds) : []),
+    ...(rows.has("talking-pictures") ? talkingPicturesInstallModels(installedIds) : []),
     ...(rows.has("video") ? videoInstallModels(installedIds) : []),
   ];
   return c.json({ ...plan, disk, optional_models: optional }, 200);
