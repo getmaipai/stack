@@ -293,6 +293,30 @@ export function companionReasons(metrics: { colour_distance?: number; area_ratio
   return reasons;
 }
 
+/** A square region of the source clip, in the source clip's own pixels. */
+export interface CompanionCropBox { x: number; y: number; size: number }
+export const COMPANION_CROP_MIN = 64;
+/**
+ * The shared pack frame (MAKER-A3): Home gives one square in SOURCE clip pixels and every clip of a character is cut with it. The decoded
+ * frames are the source scaled to 480 high (width follows), so the square is scaled by 480 / source height for the cut itself.
+ * Returns the cut in decoded-frame pixels, or a refusal in words.
+ */
+export function resolveCompanionCrop(given: CompanionCropBox, sourceWidth: number, sourceHeight: number, frameWidth: number, frameHeight: number): { ok: true; frame: CompanionCropBox } | { ok: false; message: string } {
+  const { x, y, size } = given;
+  if (![x, y, size].every(Number.isInteger)) return { ok: false, message: "The crop must be whole numbers: x, y and size in the clip's own pixels." };
+  if (size < COMPANION_CROP_MIN) return { ok: false, message: `The crop is ${size} pixels wide; it must be at least ${COMPANION_CROP_MIN}. Send a larger square.` };
+  if (x < 0 || y < 0 || x + size > sourceWidth || y + size > sourceHeight) return { ok: false, message: `The crop (x ${x}, y ${y}, size ${size}) is not inside the ${sourceWidth}x${sourceHeight} clip. Send a square that fits in the clip's frame.` };
+  const f = frameHeight / sourceHeight;
+  const fs = Math.max(1, Math.min(Math.round(size * f), frameWidth, frameHeight));
+  const fx = Math.max(0, Math.min(Math.round(x * f), frameWidth - fs)), fy = Math.max(0, Math.min(Math.round(y * f), frameHeight - fs));
+  return { ok: true, frame: { x: fx, y: fy, size: fs } };
+}
+/** A crop found in decoded-frame pixels, put back in the source clip's pixels for the report. */
+export function cropInSourcePixels(frame: CompanionCropBox, sourceHeight: number, frameHeight: number): CompanionCropBox {
+  const f = sourceHeight / frameHeight;
+  return { x: Math.round(frame.x * f), y: Math.round(frame.y * f), size: Math.round(frame.size * f) };
+}
+
 /** Bounds the union matte box and applies six percent padding, clamped to the frame. */
 export function companionCrop(frames: Uint8Array[], width: number, height: number): { x: number; y: number; size: number } {
   let minX = width, minY = height, maxX = -1, maxY = -1;

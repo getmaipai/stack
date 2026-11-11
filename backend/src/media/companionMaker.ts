@@ -26,7 +26,9 @@ const Landmarks = z.record(z.string(), z.unknown()).refine((value) => JSON.strin
 export const CompanionTrackInput = z.object({
   rest: Path, frames_dir: Path.optional(), clip: Path.optional(), ...Out,
   scale_clamp: z.number().min(0).max(0.5).optional(), confidence: z.number().min(-1).max(1).optional(), box: Box.optional(), hole: Box.optional(),
-}).strict().refine((v) => !!v.frames_dir !== !!v.clip, "send either frames_dir (a folder of PNG frames) or clip (an mp4, mov or webm), not both and not neither");
+  /** MAKER-A3: the clip is a finished stacked-alpha clip (colour on top, matte below); only the top, colour square is tracked. Needs clip. */
+  clip_stacked: z.boolean().optional(),
+}).strict().refine((v) => !v.clip_stacked || !!v.clip, "clip_stacked needs clip (a stacked clip); frames_dir frames are used as they are").refine((v) => !!v.frames_dir !== !!v.clip, "send either frames_dir (a folder of PNG frames) or clip (an mp4, mov or webm), not both and not neither");
 export const CompanionShapesInput = z.object({
   rest: Path, frames_dir: Path, landmarks: Landmarks.optional(), ...Out,
   path: z.enum(["photo", "stylised"]).optional(), mouth_box: Box.optional(), face_height_px: z.number().min(40).max(8000).optional(),
@@ -108,7 +110,7 @@ function workerFailure(error: unknown): never {
 }
 
 /** Runs one maker op; `signal` cancels it (the image-tools worker is stopped), `progress` goes 0, 5 while it works, 100 when it is written. */
-export function companionMakerRunner(kind: CompanionMakerKind, extractFrames?: (clip: string, into: string, signal: AbortSignal) => Promise<void>) {
+export function companionMakerRunner(kind: CompanionMakerKind, extractFrames?: (clip: string, into: string, signal: AbortSignal, stacked?: boolean) => Promise<void>) {
   return async (job: Job, signal: AbortSignal, progress: JobProgress): Promise<Record<string, unknown>> => {
     progress({ status: "checking the files", percent: 0 });
     let r: Record<string, any>;
@@ -133,7 +135,7 @@ export function companionMakerRunner(kind: CompanionMakerKind, extractFrames?: (
           if (!extractFrames) throw bad("Clip input is not available here. Send frames_dir instead.");
           rmSync(workDir, { recursive: true, force: true }); mkdirSync(workDir, { recursive: true });
           progress({ status: "reading the clip", percent: 8 });
-          await extractFrames(r.clip, workDir, signal); frames = workDir;
+          await extractFrames(r.clip, workDir, signal, input.clip_stacked === true); frames = workDir;
           progress({ status: "working", percent: 20 });
         }
         const params: Record<string, unknown> = { frames_dir: frames };

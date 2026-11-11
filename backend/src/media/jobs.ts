@@ -19,7 +19,8 @@ import { SPATIAL_LINES } from "./spatialRender";
 import { spatialFailure, spatialSoundClip, type SpatialOutcome } from "./spatialSound";
 import { cutoutClip, CUTOUT_FAILED, CUTOUT_MODEL_MISSING, CUTOUT_NO_MEMORY, CUTOUT_NO_SUBJECT } from "./cutout";
 import { log } from "@/lib/log";
-import { pinFrameCount, pinFrameToward, pinWeight, applyLightOffsets, defaultLightRegions, lightReasons, lightStep, reduceForLight, restFrameDifference, solveLightOffsets, type LightRegions, COLOUR_MATCH_STRENGTH, COMPANION_CLIP_FPS, COMPANION_CLIP_SIZE, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionCrop, companionMetrics, companionReasons, crossfadeLoop, downscaleRgba4, frameDifference, keyOutRgba, selectCompanionWindow } from "./companionClip";
+import { pinFrameCount, pinFrameToward, pinWeight, applyLightOffsets, defaultLightRegions, lightReasons, lightStep, reduceForLight, restFrameDifference, solveLightOffsets, type LightRegions, COLOUR_MATCH_STRENGTH, COMPANION_CLIP_FPS, COMPANION_CLIP_SIZE, ONESHOT_SETTLE_FRAMES, applyColourMatch, companionCrop, cropInSourcePixels, resolveCompanionCrop, companionMetrics, companionReasons, crossfadeLoop, downscaleRgba4, frameDifference, keyOutRgba, selectCompanionWindow } from "./companionClip";
+import type { CompanionCropBox } from "./companionClip";
 import { upscaleClip, upscaleProblem, UPSCALE_DEADLINE_MS, UpscaleFailure } from "./upscale";
 import { runTtsBatch } from "./tts";
 import { MixInput, runMix } from "./mix";
@@ -479,6 +480,12 @@ async function runCompanionClip(job: Job, signal: AbortSignal, progress: JobProg
   const alpha = formatAlpha || taggedAlpha;
   if (input.key === "none" && !alpha) throw fail({ code: "no_alpha", message: "This clip has no transparent background. Use a clip on a plain green or magenta background and tell Home which one." });
   const width = Math.max(2, Math.round(((source.width ?? 480) * COMPANION_CLIP_SIZE / Math.max(1, source.height ?? 480)) / 2) * 2);
+  let givenCrop: CompanionCropBox | undefined;
+  if (input.crop) {
+    const resolved = resolveCompanionCrop(input.crop, source.width ?? 480, source.height ?? 480, width, COMPANION_CLIP_SIZE);
+    if (!resolved.ok) throw fail({ code: "bad_input", message: resolved.message });
+    givenCrop = resolved.frame;
+  }
   let partials: string[] = [], created: string[] = [];
   try {
     const forceVp9Alpha = input.key === "none" && taggedAlpha && !formatAlpha && extname(src).toLowerCase() === ".webm" && stream?.codec === "vp9";
@@ -541,7 +548,7 @@ async function runCompanionClip(job: Job, signal: AbortSignal, progress: JobProg
     }
     const metrics = companionMetrics(keptFrames, width, COMPANION_CLIP_SIZE, input.colours, referenceFrames);
     const keptFrameCount = keptFrames.length;
-    const crop = companionCrop(keptFrames, width, COMPANION_CLIP_SIZE);
+    const crop = givenCrop ?? companionCrop(keptFrames, width, COMPANION_CLIP_SIZE);
     const rawCrop = join(workDir, ".companion-crop.rgba"), rawScaled = join(workDir, ".companion-scaled.rgba"); partials.push(rawCrop, rawScaled);
     await writeCrop(keptFrames, width, COMPANION_CLIP_SIZE, crop, rawCrop, signal);
     keptFrames.length = 0;
@@ -608,7 +615,7 @@ async function runCompanionClip(job: Job, signal: AbortSignal, progress: JobProg
     const seconds = keptFrameCount / COMPANION_CLIP_FPS;
     const lightFields = { ...(lightSteps ? { light_step_before: lightSteps.before, light_step_after: lightSteps.after } : {}), ...(restDiff ? { rest_frame_diff: restDiff } : {}), ...(pinned ? { pinned } : {}) };
     const reasons = [...companionReasons({ ...metrics, loop_gap: loopGap }, seconds, input.min_seconds, input.max_seconds), ...lightReasons({ ...(lightSteps ? { light_step_after: lightSteps.after } : {}), ...(restDiff ? { rest_frame_diff: restDiff } : {}) })];
-    const report = { seconds, frames: keptFrameCount, fps: COMPANION_CLIP_FPS, width: 480, height: 960, files, av1: hasAv1, loop_gap: loopGap, settle_skipped_frames: input.kind === "oneshot" ? Math.min(ONESHOT_SETTLE_FRAMES, Math.max(0, frameCount - 24)) : 0, colour_match: { applied: colourMatchApplied, strength: COLOUR_MATCH_STRENGTH }, ...metrics, ...lightFields, ...(input.phone ? { phone: { width: 320, height: 640 } } : {}), ok: reasons.length === 0, reasons };
+    const report = { seconds, frames: keptFrameCount, fps: COMPANION_CLIP_FPS, width: 480, height: 960, files, av1: hasAv1, loop_gap: loopGap, settle_skipped_frames: input.kind === "oneshot" ? Math.min(ONESHOT_SETTLE_FRAMES, Math.max(0, frameCount - 24)) : 0, colour_match: { applied: colourMatchApplied, strength: COLOUR_MATCH_STRENGTH }, ...metrics, ...lightFields, ...(input.phone ? { phone: { width: 320, height: 640 } } : {}), crop: input.crop ?? cropInSourcePixels(crop, source.height ?? COMPANION_CLIP_SIZE, COMPANION_CLIP_SIZE), crop_frame: crop, crop_given: !!input.crop, ok: reasons.length === 0, reasons };
     writeFileSync(reportPath, JSON.stringify(report, null, 2), { mode: 0o600 });
     rmSync(rawCrop, { force: true }); rmSync(rawScaled, { force: true });
     progress({ status: "encoding", percent: 100 });
@@ -900,10 +907,13 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
   return { ...(files ? { files, spatial: spatial! } : {}), path: final, size_bytes: sizeOf(final), container: isPicture ? "png" : extension.toLowerCase() === ".webm" ? "webm" : extension.toLowerCase() === ".mov" ? "mov" : "mp4", duration_s: isPicture ? null : done.duration_s, width: done.width, height: done.height, video_codec: done.video_codec, audio_codec: done.audio_codec, streams: done.streams, steps, elapsed_ms: mediaDeps.now() - started };
 }
 
+/** MAKER-A3: a stacked-alpha clip is colour on top, matte below; the tracker wants the colour half, a square as wide as the clip. */
+export const STACKED_TOP_FILTER = "crop=iw:iw:0:0";
+
 // ---- media.companion_track from a clip: the frames as PNG files for the tracker (at most 301, so the tracker's own cap refuses a longer clip in words) ----
-async function extractClipFrames(clip: string, into: string, signal: AbortSignal): Promise<void> {
+async function extractClipFrames(clip: string, into: string, signal: AbortSignal, stacked = false): Promise<void> {
   const ffmpeg = await mediaDeps.toolbox.path("ffmpeg", () => {}, signal).catch((error) => { throw pathFailure(error) ?? error; });
-  const result = await mediaDeps.run([ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-i", clip, "-frames:v", "301", join(into, "%05d.png")], { signal });
+  const result = await mediaDeps.run([ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-i", clip, ...(stacked ? ["-vf", STACKED_TOP_FILTER] : []), "-frames:v", "301", join(into, "%05d.png")], { signal });
   if (result.aborted || signal.aborted) throw new Error("Cancelled.");
   if (result.code !== 0 || !readdirSync(into).length) throw fail({ code: "unreadable", message: "The clip could not be read. Use a readable mp4, mov or webm clip." });
 }

@@ -94,6 +94,8 @@ export const CompanionClipInput = z.object({
   pin_frames: z.number().int().min(2).max(16).default(8),
   /** Also write the 320 x 640 phone twin, clip.phone.h264.mp4. */
   phone: z.boolean().default(false),
+  /** MAKER-A3: the shared pack frame. A square {x, y, size} in the SOURCE clip's pixels that every clip of one character is cut with, instead of the clip's own bounding box. */
+  crop: z.object({ x: z.number().int().min(0), y: z.number().int().min(0), size: z.number().int().min(64) }).strict().optional(),
 }).strict().refine((input) => input.min_seconds <= input.max_seconds, { path: ["min_seconds"], message: "must be at most max_seconds" }).refine((input) => !input.pin_rest || !!input.rest_reference, { path: ["pin_rest"], message: "needs rest_reference: send the rest picture to pin the first and last frames to" }).refine((input) => !input.pin_rest || input.rest_reference !== "palette_reference", { path: ["pin_rest"], message: "needs the rest picture itself as rest_reference, not the word palette_reference, because it is cut to the clip's own crop" }).refine((input) => input.rest_reference !== "palette_reference" || !!input.palette_reference, { path: ["rest_reference"], message: "names palette_reference, but no palette_reference was sent" });
 export type CompanionClipInput = z.infer<typeof CompanionClipInput>;
 
