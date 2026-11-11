@@ -251,5 +251,22 @@ class ClipFormatTests(unittest.TestCase):
             self.assertIsNone(server.clip_extension(data))
 
 
+
+class StreamIntervalTest(unittest.TestCase):
+    def test_default_is_point_six(self):
+        self.assertEqual(server.DEFAULT_STREAM_INTERVAL_SECONDS, 0.6)
+        self.assertEqual(server.stream_interval_from_env({}), 0.6)
+
+    def test_env_override_and_clamp(self):
+        f = lambda v: server.stream_interval_from_env({"MAIPAI_TTS_STREAM_INTERVAL_SECONDS": v})
+        self.assertEqual(f("1.0"), 1.0)
+        self.assertEqual(f("0.1"), 0.4)
+        self.assertEqual(f("9"), 2.0)
+
+    def test_invalid_falls_back(self):
+        f = lambda v: server.stream_interval_from_env({"MAIPAI_TTS_STREAM_INTERVAL_SECONDS": v})
+        for bad in ("", "fast", "nan", "inf", "-inf"):
+            self.assertEqual(f(bad), 0.6, bad)
+
 if __name__ == "__main__":
     unittest.main()

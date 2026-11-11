@@ -40,7 +40,28 @@ import numpy as np
 import engine_guard
 
 SAMPLE_RATE = 24000
-STREAM_INTERVAL_SECONDS = 1.0
+DEFAULT_STREAM_INTERVAL_SECONDS = 0.6
+STREAM_INTERVAL_MIN = 0.4
+STREAM_INTERVAL_MAX = 2.0
+
+
+def stream_interval_from_env(env=None) -> float:
+    """Seconds of audio per streamed chunk (mlx-audio turns it into max(10, int(interval * 25)) tokens). 0.6 s (15 tokens)
+    measured 0.22 s to first audio byte for a short sentence against 0.52 s at 1.0 s. MAIPAI_TTS_STREAM_INTERVAL_SECONDS
+    overrides it (clamped to 0.4..2.0; anything that is not a finite number keeps the default), so rollback is one variable."""
+    raw = (os.environ if env is None else env).get("MAIPAI_TTS_STREAM_INTERVAL_SECONDS")
+    if raw is None:
+        return DEFAULT_STREAM_INTERVAL_SECONDS
+    try:
+        value = float(raw)
+    except ValueError:
+        return DEFAULT_STREAM_INTERVAL_SECONDS
+    if value != value or value in (float("inf"), float("-inf")):
+        return DEFAULT_STREAM_INTERVAL_SECONDS
+    return min(STREAM_INTERVAL_MAX, max(STREAM_INTERVAL_MIN, value))
+
+
+STREAM_INTERVAL_SECONDS = stream_interval_from_env()
 PRIME_TEXT = "Hello there. This is the voice, warming up."
 MAX_CLIP_BYTES = 20 * 1024 * 1024
 
