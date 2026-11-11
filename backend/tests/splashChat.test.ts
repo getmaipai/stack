@@ -53,9 +53,9 @@ test("chat engine selection accepts Splash, keeps auto on llama-server and falls
   expect(chatEngineFailure("splash")?.count).toBe(2);
 });
 
-test("the 1.6.0 chat pin is separate from the coding pin (same vendor archive) and version tags stage cleanly", () => {
-  expect(SPLASH_CHAT_PIN).toMatchObject({ id: "splash-1.6.0-macos-arm64", name: "splash-chat", tag: "1.6.0", tool: "engine/splash", archive: { url: "https://github.com/incoai/splash/releases/download/1.6.0/splash-1.6.0-arm64-macos26.tar.gz", sha256: "da3aef0a581491b0eb4c1168bda07f520e5ca8368764abff426d95ac1c77e5c4", approxBytes: 79_846_781 } });
-  expect(SPLASH_PIN.tag).toBe("1.6.0"); expect(engineNameTag("splash-chat-1.6.0")).toEqual({ name: "splash-chat", tag: "1.6.0" });
+test("the 1.6.1 chat pin is separate from the coding pin (same vendor archive) and version tags stage cleanly", () => {
+  expect(SPLASH_CHAT_PIN).toMatchObject({ id: "splash-1.6.1-macos-arm64", name: "splash-chat", tag: "1.6.1", tool: "engine/splash", archive: { url: "https://github.com/incoai/splash/releases/download/1.6.1/splash-1.6.1-arm64-macos26.tar.gz", sha256: "0ed408a781f951a13ff58bed95c9e8c1d1dc67ab9d649fcaf365972b6720ce6c", approxBytes: 78_670_846 } });
+  expect(SPLASH_PIN.tag).toBe("1.6.1"); expect(engineNameTag("splash-chat-1.6.1")).toEqual({ name: "splash-chat", tag: "1.6.1" });
 });
 
 test("Splash chat launch uses pinned target and draft, offline args, the disk cache off and empties the cache", () => {
@@ -64,7 +64,7 @@ test("Splash chat launch uses pinned target and draft, offline args, the disk ca
   updateSettings({ "stack.engines.chat.thinking_budget_ceiling": 1500 }); applyPendingSettings();
   const model = getModel(STACK_CHAT_QWEN38_UNCENSORED_MODEL.id)!;
   const plan = splashLaunchPlan(model, 8812, 65_536, "splash-chat");
-  expect(plan.engine).toBe("splash-chat"); expect(mapsModelWeights(plan.engine)).toBe(true); expect(plan.build).toBe("1.6.0"); expect(plan.identity?.build).toBe("splash-1.6.0"); expect(plan.identity?.model).toBe(modelPath.split("/").pop());
+  expect(plan.engine).toBe("splash-chat"); expect(mapsModelWeights(plan.engine)).toBe(true); expect(plan.build).toBe("1.6.1"); expect(plan.identity?.build).toBe("splash-1.6.1"); expect(plan.identity?.model).toBe(modelPath.split("/").pop());
   expect(plan.command).toContain("--offline"); expect(plan.command).toContain("--max-context"); expect(plan.command).toContain("65536"); expect(plan.command).toContain("--thinking-token-budget"); expect(plan.command).toContain("1500"); expect(plan.command).toContain("--max-cache-disk"); expect(plan.command[plan.command.indexOf("--max-cache-disk") + 1]).toBe("0");
   expect(plan.env).toMatchObject({ HF_HUB_OFFLINE: "1", DO_NOT_TRACK: "1", HF_HUB_CACHE: splashHubDir(), HOME: splashHomeDir(), TMPDIR: splashTmpDir() });
   expect(existsSync(join(cache, "old-prefix"))).toBe(false);

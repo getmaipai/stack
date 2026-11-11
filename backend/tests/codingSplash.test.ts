@@ -217,8 +217,8 @@ test("Ornith heavy pins are fully hashed multi-file p128 coding records and stay
 });
 
 test("Splash is a pinned engine build for macOS on Apple silicon, found by name, serving the coding role", () => {
-  expect(SPLASH_PIN).toMatchObject({ id: "splash-coding-1.6.0-macos-arm64", name: "splash", tag: "1.6.0", platform: "darwin", arch: "arm64", tool: "engine/splash", requiresNvidia: false, verified: true });
-  expect(SPLASH_PIN.archive).toEqual({ label: "Splash 1.6.0 (macOS arm64)", url: "https://github.com/incoai/splash/releases/download/1.6.0/splash-1.6.0-arm64-macos26.tar.gz", sha256: "da3aef0a581491b0eb4c1168bda07f520e5ca8368764abff426d95ac1c77e5c4", approxBytes: 79_846_781 });
+  expect(SPLASH_PIN).toMatchObject({ id: "splash-coding-1.6.1-macos-arm64", name: "splash", tag: "1.6.1", platform: "darwin", arch: "arm64", tool: "engine/splash", requiresNvidia: false, verified: true });
+  expect(SPLASH_PIN.archive).toEqual({ label: "Splash 1.6.1 (macOS arm64)", url: "https://github.com/incoai/splash/releases/download/1.6.1/splash-1.6.1-arm64-macos26.tar.gz", sha256: "0ed408a781f951a13ff58bed95c9e8c1d1dc67ab9d649fcaf365972b6720ce6c", approxBytes: 78_670_846 });
   expect(ENGINE_BINARIES).toContain(SPLASH_PIN);
   expect(ENGINE_ROLE.splash).toBe("coding");
   expect(engineRole("splash")).toBe("coding");
@@ -235,11 +235,11 @@ test("the suffixed Splash tag resolves to its installed directory and launch pla
   const dir = installSplashEngine();
   symlinkSync(SPLASH_PIN.tag, join(engineDir(SPLASH_PIN), "..", "current"));
   expect(currentEngineBinary("splash", "engine/splash")).toMatchObject({ state: "ready", path: join(dir, "engine/splash") });
-  expect(SPLASH_PIN.tag).toBe("1.6.0");
+  expect(SPLASH_PIN.tag).toBe("1.6.1");
 });
 
 test("the engine index's Splash entry (a version tag, not a build number) parses, and a malformed tag is still refused", () => {
-  const entry = { name: "splash", tag: "1.6.0", platform: "darwin", arch: "arm64", url: SPLASH_PIN.archive.url, sha256: SPLASH_PIN.archive.sha256, size: SPLASH_PIN.archive.approxBytes, licence: "Apache-2.0" };
+  const entry = { name: "splash", tag: "1.6.1", platform: "darwin", arch: "arm64", url: SPLASH_PIN.archive.url, sha256: SPLASH_PIN.archive.sha256, size: SPLASH_PIN.archive.approxBytes, licence: "Apache-2.0" };
   const llama = { name: "llama-server", tag: "b10797", platform: "darwin", arch: "arm64", url: "https://github.com/ggml-org/llama.cpp/releases/download/b10797/x.tar.gz", sha256: "a".repeat(64), size: 1 };
   expect(EngineIndexSchema.safeParse({ version: "2026-10-18", engines: [llama, entry] }).success).toBe(true);
   // uv and ComfyUI were already in the Catalog's index with version tags.
@@ -589,7 +589,7 @@ macTest("the launch plan runs the bundled Python with the launcher, lays the cac
     updateSettings({ "stack.engines.coding.thinking_budget_ceiling": 1500 }); applyPendingSettings();
     const model = selectedModel("coding")!;
     const plan = splashLaunchPlan(model, 8812, 131_072);
-    expect(plan).toMatchObject({ engine: "splash", build: "1.6.0", kind: "spawned", stdin: "ignore", contextLength: 131_072, slots: 2, contextScope: "total across slots", healthPath: "/ready", tree: true, imageInput: false, identity: { build: "splash-1.6.0", model: STACK_CODING_MODEL.download!.sha256 } });
+    expect(plan).toMatchObject({ engine: "splash", build: "1.6.1", kind: "spawned", stdin: "ignore", contextLength: 131_072, slots: 2, contextScope: "total across slots", healthPath: "/ready", tree: true, imageInput: false, identity: { build: "splash-1.6.1", model: STACK_CODING_MODEL.download!.sha256 } });
     expect(plan.command).toEqual([
       join(root, "python", "bin", "python3"), "-u", join(root, "install", "launcher.py"),
       "serve", "--model", "unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M", "--revision", "4ca720788d1e01f1bff70c033e0d0028fd02e502", "--offline", "--host", "127.0.0.1", "--port", "8812",

@@ -258,6 +258,15 @@ test("regression 2026-10-17: a role offline with no process and no request comin
   expect(crashItem("chat")).toBeUndefined();
 });
 
+test("Splash 1.6.1 exits with status 69 when its engine stops for good: that is a crash the Stack restarts, not an unhandled exit", async () => {
+  expect(classifyCrash({ exitCode: 69, signal: null, stderrTail: ["Done · request 12 · engine stopped"] })).toMatchObject({ kind: "unknown", retryHelps: true, cause: expect.stringContaining("exit code 69") });
+  await crash("chat", { exitCode: 69, stderrTail: ["engine stopped"] });
+  expect(getRoleStatus("chat").state).toBe("offline");
+  expect(await fire()).toBe(2_000);
+  expect(getRoleStatus("chat").state).toBe("ready");
+  expect(crashItem("chat")).toBeUndefined();
+});
+
 test("crash causes read in plain words", () => {
   const v = (over: Parameters<typeof classifyCrash>[0]) => classifyCrash(over);
   expect(v({ exitCode: 1, signal: null, stderrTail: ["ggml_metal: failed to allocate buffer, out of memory"] }).kind).toBe("out_of_memory");
