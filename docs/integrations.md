@@ -487,7 +487,7 @@ where the face is clear."), `bad_ratio`, `too_many_ratios`, `bad_image`, 503 `mo
 MAKER-B2 additions (additive; every field above is unchanged). The 200 body (and the finished job's frames) also carry face landmarks from the 203-point
 `landmark.onnx` (MIT; the licence table lists it as one of the six pinned MIT weights; Apple Vision only finds the face rectangle, never the landmarks):
 `sourceLandmarks` for the input picture and `landmarks` on every frame, each `{ outerLips, innerLips, nose, contour, points }` with `[x, y]` pairs in the
-returned frame's own pixels (the input picture's size). `outerLips` is 36 points (model indices 48 to 83), `innerLips` 24 (84 to 107), `points` all 203.
+returned frame's own pixels (the input picture's size). `outerLips` is 36 points (model indices 48 to 83), `innerLips` 24 (84 to 107), `points` all 203. (Until 2026-11-11 the coordinates were mapped through the crop transform twice and sat about 1.32 x + 180 off the picture; they are now in the input picture's own pixels, measured on a 1024 px portrait: eye centres within 2 px of the real ones.)
 `nose` is 13 points (the sides 186 to 195 and the centre line 200 to 202 of the model's 203-point layout) and `contour` is 37 points round the jaw and cheeks (108 to 144), both read off a real run; the lip ranges (outer 48 to 83, inner 84 to 107) were confirmed on it too. `points` still returns all 203. A
 frame whose face the finder does not find carries `landmarks: null`; an older worker leaves both fields `null`.
 

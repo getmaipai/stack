@@ -453,3 +453,26 @@ test("the worker reads landmarks from the 203-point model's crop, never from App
   expect(worker).toContain('"innerLips": range(84, 108)');
   expect(worker.match(/vision_box/g)!.length).toBe(2); // the definition and the one use that finds the face rectangle
 });
+
+// Regression (2026-11-11): the worker mapped `lmk_crop` through `M_c2o` a second time, but LivePortrait's LandmarkRunner already returns it in the
+// input picture's own pixels, so every returned landmark was off (about 1.32 x + 180 on a 1024 px picture). `landmark_groups` must pass the points through unchanged.
+test("the worker returns lmk_crop as it is (already in the picture's own pixels), never mapped through M_c2o again", () => {
+  const script = [
+    "import importlib.util, json, sys",
+    `spec = importlib.util.spec_from_file_location("lp_worker", ${JSON.stringify(join(SRC, "liveportrait_worker.py"))})`,
+    "mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)",
+    "pts = [[100.0 + i, 200.0 + 2 * i] for i in range(203)]",
+    "crop = {'lmk_crop': pts, 'M_c2o': [[1.32, 0, 180], [0, 1.32, 54], [0, 0, 1]]}",
+    "groups = mod.landmark_groups(crop['lmk_crop'])",
+    "mod.PROTOCOL.write(json.dumps({'points': groups['points'], 'outer': groups['outerLips'], 'inner': groups['innerLips']}) + '\\n')", // the worker moves stdout to stderr; PROTOCOL is its real stdout
+  ].join("\n");
+  const run = Bun.spawnSync(["python3", "-B", "-c", script], { stdout: "pipe", stderr: "pipe" });
+  if (run.exitCode !== 0) { console.warn("python3 unavailable, skipping:", run.stderr.toString().slice(0, 200)); return; }
+  const out = JSON.parse(run.stdout.toString().trim().split("\n").pop()!);
+  expect(out.points).toHaveLength(203);
+  expect(out.points[0]).toEqual([100, 200]);
+  expect(out.points[202]).toEqual([302, 604]);
+  expect(out.outer).toHaveLength(36);
+  expect(out.outer[0]).toEqual([148, 296]); // index 48
+  expect(out.inner[0]).toEqual([184, 368]); // index 84
+});

@@ -49,6 +49,17 @@ LANDMARK_GROUPS = {
 MODEL_KEYS = ("landmark", "appearance", "motion", "generator", "warping", "stitching")
 
 
+def landmark_groups(points):
+    """The grouped landmarks as `[x, y]` pairs. `points` is the cropper's `lmk_crop`: the 203 points ALREADY in the input picture's own pixels
+    (LivePortrait's LandmarkRunner.run maps its 224 px crop output back through the crop's `M_c2o` before it returns, so `lmk_crop` is a misnomer).
+    They must not be mapped through `M_c2o` again: that applied the crop to original transform twice (about 1.32 x + 180 on a 1024 px picture)."""
+    pts = [(float(x), float(y)) for x, y in points]
+    round2 = lambda rows: [[round(x, 2), round(y, 2)] for x, y in rows]
+    groups = {name: round2([pts[i] for i in idx]) if idx is not None else [] for name, idx in LANDMARK_GROUPS.items()}
+    groups["points"] = round2(pts)
+    return groups
+
+
 class Refused(Exception):
     def __init__(self, code, message):
         super().__init__(message)
@@ -154,12 +165,7 @@ class Engine:
         return None if crop is None else self.landmarks_from_crop(crop)
 
     def landmarks_from_crop(self, crop):
-        m = self.np.asarray(crop["M_c2o"], dtype=float)
-        pts = self.np.asarray(crop["lmk_crop"], dtype=float) @ m[:2, :2].T + m[:2, 2]
-        round2 = lambda rows: [[round(float(x), 2), round(float(y), 2)] for x, y in rows]
-        groups = {name: round2(pts[list(idx)]) if idx is not None else [] for name, idx in LANDMARK_GROUPS.items()}
-        groups["points"] = round2(pts)
-        return groups
+        return landmark_groups(crop["lmk_crop"])
 
     @property
     def device(self):
