@@ -564,7 +564,7 @@ test("GET /stack/v1/music says what is installed, what a song may be and what to
   expect(status.music.transcribe).toEqual({ available: false });
   expect(status.music.worker.idle_exit_seconds).toBe(300);
   expect(status.music.memory).toMatchObject({ peak_gb: 33 });
-  const whisperPath = join(process.env.STACK_DATA_DIR!, "models", "hub", `models--${STACK_MUSIC_WHISPER.repo!.replaceAll("/", "--")}`, "snapshots", STACK_MUSIC_WHISPER.revision!);
+  const whisperPath = join(dataDir, "models", "hub", `models--${STACK_MUSIC_WHISPER.repo!.replaceAll("/", "--")}`, "snapshots", STACK_MUSIC_WHISPER.revision!);
   mkdirSync(whisperPath, { recursive: true });
   writeFileSync(join(whisperPath, "weights.npz"), "weights");
   writeFileSync(join(whisperPath, "config.json"), "{}");
