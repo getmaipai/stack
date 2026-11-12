@@ -270,7 +270,7 @@ class StreamIntervalTest(unittest.TestCase):
 
 class StagedChunkTest(unittest.TestCase):
     def test_defaults(self):
-        self.assertEqual(server.chunk_plan_from_env({}), (15, 40))
+        self.assertEqual(server.chunk_plan_from_env({}), (25, 50))
 
     def test_env_overrides_and_clamp(self):
         f = lambda a, b: server.chunk_plan_from_env({"MAIPAI_TTS_FIRST_CHUNK_TOKENS": a, "MAIPAI_TTS_LATER_CHUNK_TOKENS": b})
@@ -280,8 +280,8 @@ class StagedChunkTest(unittest.TestCase):
 
     def test_invalid_falls_back(self):
         f = lambda a, b: server.chunk_plan_from_env({"MAIPAI_TTS_FIRST_CHUNK_TOKENS": a, "MAIPAI_TTS_LATER_CHUNK_TOKENS": b})
-        self.assertEqual(f("fast", ""), (15, 40))
-        self.assertEqual(f("1.5", "nan"), (15, 40))
+        self.assertEqual(f("fast", ""), (25, 50))
+        self.assertEqual(f("1.5", "nan"), (25, 50))
 
     def test_staged_size_ends_first_chunk_small_then_large(self):
         size = server.StagedChunkSize(12, 40)

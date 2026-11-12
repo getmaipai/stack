@@ -63,8 +63,8 @@ def stream_interval_from_env(env=None) -> float:
 
 STREAM_INTERVAL_SECONDS = stream_interval_from_env()
 
-DEFAULT_FIRST_CHUNK_TOKENS = 15
-DEFAULT_LATER_CHUNK_TOKENS = 40
+DEFAULT_FIRST_CHUNK_TOKENS = 25
+DEFAULT_LATER_CHUNK_TOKENS = 50
 FIRST_CHUNK_TOKENS_RANGE = (10, 25)
 LATER_CHUNK_TOKENS_RANGE = (15, 100)
 
@@ -82,7 +82,7 @@ def chunk_tokens_from_env(name: str, default: int, bounds: tuple[int, int], env=
 
 
 def chunk_plan_from_env(env=None) -> tuple[int, int]:
-    """(first, later) speech tokens per streamed chunk, 25 tokens per second of audio. The first chunk is small so the first
+    """(first, later) speech tokens per streamed chunk, 25 tokens per second of audio. The first chunk is the original 1.0 s size (a 15-token first chunk sounded choppy), so the first
     audio byte comes fast; later ones are larger so there are fewer audible joins (each chunk re-converts every token so far).
     MAIPAI_TTS_FIRST_CHUNK_TOKENS (10..25) and MAIPAI_TTS_LATER_CHUNK_TOKENS (15..100) override; later is never below first."""
     first = chunk_tokens_from_env("MAIPAI_TTS_FIRST_CHUNK_TOKENS", DEFAULT_FIRST_CHUNK_TOKENS, FIRST_CHUNK_TOKENS_RANGE, env)
