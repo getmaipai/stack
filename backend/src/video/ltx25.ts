@@ -29,6 +29,9 @@ const GB = 1_000_000_000;
 /** IC-LoRA Colorizer OS footprint on Max, M5 Max, 2026-11-07; admit at the measured footprint plus 5% headroom. */
 export const LTX25_ICLORA_PEAK_MEASURED_BYTES = 81.4 * GB;
 export const LTX25_ICLORA_PEAK_BYTES = Math.round(LTX25_ICLORA_PEAK_MEASURED_BYTES * 1.05);
+/** INGREDIENTS-01: a measured Ingredients clip (two sheets, 193 frames, 768x448, bf16 Max pack, adapter at 1.0) peaked at 50.7 GB on the 128 GB Mac Studio (mx peak memory, 2026-11-12); admit at that plus 10% headroom. The colorizer figure above is for 1024x576 video-to-video and over-reserves this lane by about 30 GB. */
+export const LTX25_INGREDIENTS_PEAK_MEASURED_BYTES = 50.7 * GB;
+export const LTX25_INGREDIENTS_PEAK_BYTES = Math.round(LTX25_INGREDIENTS_PEAK_MEASURED_BYTES * 1.1);
 /** INGREDIENTS-01: the Ingredients adapter was trained at 768x448; other sizes are out of distribution. Clips run 4 to 8 seconds (frames 1 + 24 * seconds, at most 193). */
 export const LTX25_INGREDIENTS_WIDTH = 768;
 export const LTX25_INGREDIENTS_HEIGHT = 448;

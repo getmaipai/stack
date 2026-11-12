@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { MediaToolbox } from "@/media/tools";
 import type { Runner } from "@/media/run";
-import { LTX25_ICLORA_PEAK_BYTES, ltx25IngredientsFrames } from "@/video/ltx25";
+import { LTX25_ICLORA_PEAK_BYTES, LTX25_INGREDIENTS_PEAK_BYTES, ltx25IngredientsFrames } from "@/video/ltx25";
 
 const GB = 1_073_741_824;
 let root = ""; let loraId = "";
@@ -106,6 +106,8 @@ test("ingredients answers 202 with the job when it outlasts the wait", async () 
   expect(await response.json()).toMatchObject({ job: expect.any(String), data: [] });
 });
 
-test("ingredients admission reserves the IC-LoRA footprint", () => {
-  expect(videoAdmission({ quality: "ltx25max", mode: "ic_lora", size: "768x448", seconds: 8 })).toEqual({ requestedBytes: LTX25_ICLORA_PEAK_BYTES, measuredPeakBytes: LTX25_ICLORA_PEAK_BYTES, engine: "video-gen" });
+test("ingredients admission reserves its own measured footprint, not the colorizer's", () => {
+  expect(LTX25_INGREDIENTS_PEAK_BYTES).toBeLessThan(LTX25_ICLORA_PEAK_BYTES);
+  expect(LTX25_INGREDIENTS_PEAK_BYTES).toBeGreaterThanOrEqual(50_700_000_000);
+  expect(videoAdmission({ quality: "ltx25max", mode: "ic_lora", size: "768x448", seconds: 8 })).toEqual({ requestedBytes: LTX25_INGREDIENTS_PEAK_BYTES, measuredPeakBytes: LTX25_INGREDIENTS_PEAK_BYTES, engine: "video-gen" });
 });

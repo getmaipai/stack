@@ -15,14 +15,14 @@ import { workDir, commitResult, type VideoResultMeta } from "./results";
 import { recordGeneratedImage } from "./provenance";
 import { GenTracker, historyKey, previewExists, previewFile, recordRun } from "@/lib/genProgress";
 import { overallPercent, VideoError, videoGen, VIDEO_SPECS, type VideoQuality, type VideoRunInput } from "./videoGen";
-import { ltx25MaxPeakBytes, ltx25PeakBytes, LTX25_ICLORA_PEAK_BYTES } from "./ltx25";
+import { ltx25MaxPeakBytes, ltx25PeakBytes, LTX25_ICLORA_PEAK_BYTES, LTX25_INGREDIENTS_PEAK_BYTES } from "./ltx25";
 import { checkEdit, EditSourceError, editRuntime, extendLatentFrames, extendPixelFrames, fitArgs, ltx25EditAdmitBytes, planSource, probeSource, retakeStartLatent, type Ltx25EditKind } from "./ltx25Edit";
 import { resolveReadable } from "@/media/paths";
 
 export const VIDEO_JOB_KIND = "video_generation";
 export function videoAdmission(input: { quality?: VideoQuality; size?: string; seconds?: number; mode?: string; edit?: Ltx25EditKind; lora_admit_bytes?: number }): { requestedBytes: number; measuredPeakBytes: number; engine: string } {
   const withPicture = input.mode === "image-to-video"; const quality = input.quality ?? "quick"; const size = /^(\d+)x(\d+)$/.exec(input.size ?? "");
-  const peak = input.mode === "ic_lora" ? LTX25_ICLORA_PEAK_BYTES : (input.lora_admit_bytes ?? 0) + (input.edit && quality === "ltx25max" ? ltx25EditAdmitBytes(input.edit, size ? `${size[1]}x${size[2]}` : null) : quality === "ltx25max" ? ltx25MaxPeakBytes(withPicture) : quality === "ltx25" && size && input.seconds ? ltx25PeakBytes(Number(size[1]), Number(size[2]), input.seconds * 24 + 1, withPicture) : VIDEO_SPECS[quality].peakBytes);
+  const peak = input.mode === "ic_lora" ? (input.size === "768x448" ? LTX25_INGREDIENTS_PEAK_BYTES : LTX25_ICLORA_PEAK_BYTES) : (input.lora_admit_bytes ?? 0) + (input.edit && quality === "ltx25max" ? ltx25EditAdmitBytes(input.edit, size ? `${size[1]}x${size[2]}` : null) : quality === "ltx25max" ? ltx25MaxPeakBytes(withPicture) : quality === "ltx25" && size && input.seconds ? ltx25PeakBytes(Number(size[1]), Number(size[2]), input.seconds * 24 + 1, withPicture) : VIDEO_SPECS[quality].peakBytes);
   return { requestedBytes: peak, measuredPeakBytes: peak, engine: "video-gen" };
 }
 
