@@ -268,5 +268,53 @@ class StreamIntervalTest(unittest.TestCase):
         for bad in ("", "fast", "nan", "inf", "-inf"):
             self.assertEqual(f(bad), 0.6, bad)
 
+class StagedChunkTest(unittest.TestCase):
+    def test_defaults(self):
+        self.assertEqual(server.chunk_plan_from_env({}), (15, 40))
+
+    def test_env_overrides_and_clamp(self):
+        f = lambda a, b: server.chunk_plan_from_env({"MAIPAI_TTS_FIRST_CHUNK_TOKENS": a, "MAIPAI_TTS_LATER_CHUNK_TOKENS": b})
+        self.assertEqual(f("12", "50"), (12, 50))
+        self.assertEqual(f("1", "1000"), (10, 100))
+        self.assertEqual(f("99", "20"), (25, 25))  # later is never below first
+
+    def test_invalid_falls_back(self):
+        f = lambda a, b: server.chunk_plan_from_env({"MAIPAI_TTS_FIRST_CHUNK_TOKENS": a, "MAIPAI_TTS_LATER_CHUNK_TOKENS": b})
+        self.assertEqual(f("fast", ""), (15, 40))
+        self.assertEqual(f("1.5", "nan"), (15, 40))
+
+    def test_staged_size_ends_first_chunk_small_then_large(self):
+        size = server.StagedChunkSize(12, 40)
+        ends = []
+        pending = 0
+        for _ in range(130):
+            pending += 1
+            if pending >= size:
+                ends.append(pending)
+                pending = 0
+        self.assertEqual(ends, [12, 40, 40])
+
+    def test_wrapper_gives_every_call_a_fresh_stage(self):
+        class Fake:
+            def inference_turbo_stream(self, chunk_size=40, **kwargs):
+                "if len(chunk_tokens) >= chunk_size:"
+                return chunk_size
+        t3 = Fake()
+        self.assertTrue(server.install_staged_chunks(t3, 12, 40))
+        a, b = t3.inference_turbo_stream(), t3.inference_turbo_stream()
+        self.assertIsNot(a, b)
+        self.assertFalse(11 >= a)
+        self.assertTrue(12 >= a)
+
+    def test_library_mismatch_falls_back(self):
+        class Other:
+            def inference_turbo_stream(self, chunk_size=40):
+                return chunk_size
+        t3 = Other()
+        original = t3.inference_turbo_stream
+        self.assertFalse(server.install_staged_chunks(t3, 12, 40))
+        self.assertEqual(t3.inference_turbo_stream(), 40)
+        self.assertEqual(t3.inference_turbo_stream.__func__, original.__func__)
+
 if __name__ == "__main__":
     unittest.main()

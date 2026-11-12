@@ -62,6 +62,74 @@ def stream_interval_from_env(env=None) -> float:
 
 
 STREAM_INTERVAL_SECONDS = stream_interval_from_env()
+
+DEFAULT_FIRST_CHUNK_TOKENS = 15
+DEFAULT_LATER_CHUNK_TOKENS = 40
+FIRST_CHUNK_TOKENS_RANGE = (10, 25)
+LATER_CHUNK_TOKENS_RANGE = (15, 100)
+
+
+def chunk_tokens_from_env(name: str, default: int, bounds: tuple[int, int], env=None) -> int:
+    """A token count from the environment, clamped to bounds; anything that is not a whole number keeps the default."""
+    raw = (os.environ if env is None else env).get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        return default
+    return min(bounds[1], max(bounds[0], value))
+
+
+def chunk_plan_from_env(env=None) -> tuple[int, int]:
+    """(first, later) speech tokens per streamed chunk, 25 tokens per second of audio. The first chunk is small so the first
+    audio byte comes fast; later ones are larger so there are fewer audible joins (each chunk re-converts every token so far).
+    MAIPAI_TTS_FIRST_CHUNK_TOKENS (10..25) and MAIPAI_TTS_LATER_CHUNK_TOKENS (15..100) override; later is never below first."""
+    first = chunk_tokens_from_env("MAIPAI_TTS_FIRST_CHUNK_TOKENS", DEFAULT_FIRST_CHUNK_TOKENS, FIRST_CHUNK_TOKENS_RANGE, env)
+    later = chunk_tokens_from_env("MAIPAI_TTS_LATER_CHUNK_TOKENS", DEFAULT_LATER_CHUNK_TOKENS, LATER_CHUNK_TOKENS_RANGE, env)
+    return first, max(first, later)
+
+
+class StagedChunkSize:
+    """Stands in for the integer chunk_size of mlx-audio's inference_turbo_stream, whose loop ends each chunk with
+    `len(chunk_tokens) >= chunk_size`. The first test that passes uses the first size, every later one the later size.
+    One instance per call, so every text segment starts small."""
+
+    def __init__(self, first: int, later: int):
+        self.first, self.later, self.needed = first, later, first
+
+    def __le__(self, length):  # `length >= self` falls through to this reflected comparison
+        if length >= self.needed:
+            self.needed = self.later
+            return True
+        return False
+
+
+def staging_supported(t3) -> bool:
+    """True only when the installed library's streaming loop has exactly the comparison StagedChunkSize replaces."""
+    import inspect
+    try:
+        source = inspect.getsource(t3.inference_turbo_stream)
+    except (OSError, TypeError, AttributeError):
+        return False
+    return "len(chunk_tokens) >= chunk_size" in source and source.count("chunk_size") <= 4
+
+
+def install_staged_chunks(t3, first: int, later: int) -> bool:
+    """Wrap t3.inference_turbo_stream so each call gets a StagedChunkSize. Returns False (and logs one line) when the library
+    does not look like the version this was written for, leaving the fixed streaming_interval in force."""
+    if not staging_supported(t3):
+        print("mlx-tts: staged chunk sizes unavailable (mlx-audio streaming loop differs); using the fixed streaming interval", file=sys.stderr, flush=True)
+        return False
+    original = t3.inference_turbo_stream
+
+    def staged(*args, **kwargs):
+        kwargs["chunk_size"] = StagedChunkSize(first, later)
+        return original(*args, **kwargs)
+
+    t3.inference_turbo_stream = staged
+    print(f"mlx-tts: streaming chunks of {first} tokens first, then {later}", file=sys.stderr, flush=True)
+    return True
 PRIME_TEXT = "Hello there. This is the voice, warming up."
 MAX_CLIP_BYTES = 20 * 1024 * 1024
 
@@ -176,6 +244,11 @@ class ChatterboxTurbo:
         self.model = load_model(repo)
         self.sample_rate = int(getattr(self.model, "sample_rate", SAMPLE_RATE))
         self.default_conds = getattr(self.model, "_conds", None)
+        if os.environ.get("MAIPAI_TTS_FIXED_INTERVAL") != "1" and getattr(self.model, "t3", None) is not None:
+            try:
+                install_staged_chunks(self.model.t3, *chunk_plan_from_env())
+            except Exception as error:  # never let the speed-up stop the voice from loading
+                print(f"mlx-tts: staged chunk sizes not installed ({error}); using the fixed streaming interval", file=sys.stderr, flush=True)
         self.clips = collections.OrderedDict()
         configured_clip_dir = os.environ.get("MLX_TTS_CLIP_DIR")
         if configured_clip_dir:
