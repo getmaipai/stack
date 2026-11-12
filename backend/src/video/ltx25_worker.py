@@ -356,6 +356,14 @@ def prepare_ic_reference(ffmpeg, source, target, conditioning, width=1024, heigh
     return target
 
 
+def prepare_sheet_reference(ffmpeg, sheet, target, frames):
+    """Loop one reference sheet picture (768x448) as a static video with at least as many frames as the output."""
+    done = subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-loop", "1", "-i", sheet, "-vf", "format=yuv420p", "-r", "24", "-frames:v", str(frames), "-c:v", "libx264", "-crf", "12", "-map_metadata", "-1", target], capture_output=True)
+    if done.returncode or not os.path.isfile(target) or os.path.getsize(target) == 0:
+        raise ValueError("a reference sheet could not be read; send a 768x448 PNG")
+    return target
+
+
 def _ffmpeg_on_path(ffmpeg):
     if ffmpeg and os.path.isfile(ffmpeg):
         folder = os.path.dirname(ffmpeg)
@@ -591,10 +599,16 @@ def ic_lora(request):
     """Render with the fork's ICLoraPipeline and restore the source audio after generation."""
     if request.get("profile") != "max":
         raise ValueError("IC-LoRA video runs on the Max video model only")
-    if (request.get("width"), request.get("height")) != (1024, 576):
-        raise ValueError("IC-LoRA video makes 1024x576 only")
+    sheets = request.get("reference_sheets")
+    # INGREDIENTS-01: reference sheet pictures instead of a source clip, at the 768x448 the adapter was trained at.
+    size = (768, 448) if sheets else (1024, 576)
+    if (request.get("width"), request.get("height")) != size:
+        raise ValueError("IC-LoRA video makes %dx%d only" % size)
     source, lora = request.get("source_video"), request.get("ic_lora_path")
-    if not source or not os.path.isfile(source):
+    if sheets:
+        if not 1 <= len(sheets) <= 2 or not all(os.path.isfile(sheet) for sheet in sheets):
+            raise ValueError("send one or two readable reference sheet pictures")
+    elif not source or not os.path.isfile(source):
         raise ValueError("the source clip is missing")
     if not lora or not os.path.isfile(lora):
         raise ValueError("the IC-LoRA file is missing; install or choose a readable IC-LoRA file")
@@ -608,11 +622,17 @@ def ic_lora(request):
     started = time.time()
     try:
         ffmpeg = tools_on_path(request.get("ffmpeg"), request.get("ffprobe"), work)
-        from ltx_core_mlx.utils.ffmpeg import probe_video_info
-        info = probe_video_info(source)
-        source_frames = min(241, max(9, int(info.num_frames)))
-        frames = 1 + ((source_frames - 1) // 8) * 8
-        reference = prepare_ic_reference(ffmpeg, source, os.path.join(work, "reference.mp4"), request.get("conditioning", "source"), frames=frames)
+        if sheets:
+            frames = int(request["num_frames"])
+            if frames < 9 or frames > 193 or (frames - 1) % 8:
+                raise ValueError("an Ingredients clip is 8n+1 frames, at most 193")
+            references = [prepare_sheet_reference(ffmpeg, sheet, os.path.join(work, "reference-%d.mp4" % (i + 1)), frames) for i, sheet in enumerate(sheets)]
+        else:
+            from ltx_core_mlx.utils.ffmpeg import probe_video_info
+            info = probe_video_info(source)
+            source_frames = min(241, max(9, int(info.num_frames)))
+            frames = 1 + ((source_frames - 1) // 8) * 8
+            references = [prepare_ic_reference(ffmpeg, source, os.path.join(work, "reference.mp4"), request.get("conditioning", "source"), frames=frames)]
         _state["steps"] = 0
         _state["steps_total"] = 11
         stage("source")
@@ -620,14 +640,18 @@ def ic_lora(request):
         pipe = _pipeline(model_dir, gemma_dir, "ic_lora", ((lora, strength),))
         mx.reset_peak_memory()
         engine_out = os.path.join(work, "engine.mp4")
-        pipe.generate_and_save(prompt=request["prompt"], output_path=engine_out, video_conditioning=[(reference, 1.0)], height=576, width=1024, num_frames=frames, frame_rate=24.0, seed=int(request["seed"]))
+        pipe.generate_and_save(prompt=request["prompt"], output_path=engine_out, video_conditioning=[(reference, 1.0) for reference in references], height=size[1], width=size[0], num_frames=frames, frame_rate=24.0, seed=int(request["seed"]))
         phase("encoding", 0)
         stage("save")
         # Keep source audio and metadata. No -shortest: source duration is the audio authority.
         muxed = os.path.join(work, "with-audio.mp4")
-        mux = subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", engine_out, "-i", source, "-map", "0:v:0", "-map", "1:a?", "-c:v", "copy", "-c:a", "aac", "-map_metadata", "0", muxed], capture_output=True)
-        if mux.returncode or not os.path.isfile(muxed):
-            raise RuntimeError("the generated clip could not keep the source sound")
+        if sheets:
+            # No source sound: the clip keeps the sound the model made.
+            os.replace(engine_out, muxed)
+        else:
+            mux = subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", engine_out, "-i", source, "-map", "0:v:0", "-map", "1:a?", "-c:v", "copy", "-c:a", "aac", "-map_metadata", "0", muxed], capture_output=True)
+            if mux.returncode or not os.path.isfile(muxed):
+                raise RuntimeError("the generated clip could not keep the source sound")
         poster = subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", muxed, "-frames:v", "1", "-q:v", "3", "-map_metadata", "-1", request["poster"]], capture_output=True)
         if poster.returncode or not os.path.isfile(request["poster"]):
             raise RuntimeError("no poster")
@@ -639,7 +663,7 @@ def ic_lora(request):
         shutil.rmtree(work, ignore_errors=True)
         gc.collect()
         mx.clear_cache()
-    return {"width": real_width or 1024, "height": real_height or 576, "frames": out_frames, "fps": FPS, "seed": int(request["seed"]), "ms": int((time.time() - started) * 1000), "peak_bytes": int(mx.get_peak_memory()), "audio": bool(has_sound)}
+    return {"width": real_width or size[0], "height": real_height or size[1], "frames": out_frames, "fps": FPS, "seed": int(request["seed"]), "ms": int((time.time() - started) * 1000), "peak_bytes": int(mx.get_peak_memory()), "audio": bool(has_sound)}
 
 
 def _count_frames(ffmpeg, path):

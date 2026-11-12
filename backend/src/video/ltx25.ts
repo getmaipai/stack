@@ -29,6 +29,13 @@ const GB = 1_000_000_000;
 /** IC-LoRA Colorizer OS footprint on Max, M5 Max, 2026-11-07; admit at the measured footprint plus 5% headroom. */
 export const LTX25_ICLORA_PEAK_MEASURED_BYTES = 81.4 * GB;
 export const LTX25_ICLORA_PEAK_BYTES = Math.round(LTX25_ICLORA_PEAK_MEASURED_BYTES * 1.05);
+/** INGREDIENTS-01: the Ingredients adapter was trained at 768x448; other sizes are out of distribution. Clips run 4 to 8 seconds (frames 1 + 24 * seconds, at most 193). */
+export const LTX25_INGREDIENTS_WIDTH = 768;
+export const LTX25_INGREDIENTS_HEIGHT = 448;
+export const LTX25_INGREDIENTS_MIN_SECONDS = 4;
+export const LTX25_INGREDIENTS_MAX_SECONDS = 8;
+export const LTX25_INGREDIENTS_MAX_SHEETS = 2;
+export const ltx25IngredientsFrames = (seconds: number): number => Math.min(193, 1 + 24 * seconds);
 export function ltx25IcLoraRefusal(profile: "ltx25" | "ltx25max", width: number, height: number, frames: number): string | null {
   if (profile !== "ltx25max") return "IC-LoRA video runs on the Max profile only. Choose ltx25-max.";
   if (width !== 1024 || height !== 576) return "IC-LoRA video makes 1024x576 only. Choose that size.";

@@ -42,6 +42,8 @@ export interface StashedClip {
   /** LTX25-EDIT-01 (Max only): extend or retake the clip at `sourcePath` (already resolved inside a declared media folder). `seconds` is `extend_seconds` or `retake_from_seconds`. */
   edit?: { kind: Ltx25EditKind; sourcePath: string; seconds: number };
   icLora?: { sourcePath: string; sourceIsResult: boolean; loraPath: string; loraId: string; strength: number; conditioning: "source" | "edges"; audio: boolean };
+  /** INGREDIENTS-01 (Max only): one or two reference sheet PNGs (768x448) and the installed Ingredients adapter. */
+  ingredients?: { sheets: Uint8Array[]; loraPath: string; loraId: string };
 }
 const pending = new Map<string, StashedClip & { at: number }>();
 const STASH_TTL_MS = 30 * 60_000;
@@ -141,9 +143,13 @@ export function registerVideoJobs(): void {
         copyFileSync(source, sourcePath);
         icLoraInput = { sourcePath, path: clip.icLora.loraPath, strength: clip.icLora.strength, conditioning: clip.icLora.conditioning };
       }
+      if (clip.ingredients) {
+        const sheets = clip.ingredients.sheets.map((bytes, i) => { const file = join(work, `sheet-${i + 1}.png`); writeFileSync(file, bytes, { mode: 0o600 }); return file; });
+        icLoraInput = { sourcePath: "", path: clip.ingredients.loraPath, strength: 1, conditioning: "source", sheets };
+      }
       const pacing = heavyGate.pacing(job.id);
-      const tracker = clip.icLora
-        ? new GenTracker("video_edit", historyKey("video_edit", 1024, 576, `ic_lora-${clip.frames}`), pacing.now, Math.max(0.25, (clip.frames - 1) / 120), pacing.paused)
+      const tracker = clip.icLora || clip.ingredients
+        ? new GenTracker("video_edit", historyKey("video_edit", clip.width, clip.height, `ic_lora-${clip.frames}`), pacing.now, Math.max(0.25, (clip.frames - 1) / 120), pacing.paused)
         : clip.edit
         ? new GenTracker("video_edit", historyKey("video_edit", clip.width, clip.height, `${clip.edit.kind}-${clip.frames}`), pacing.now, Math.max(0.25, ((clip.frames - 1) / 240) * (clip.edit.kind === "retake" ? 1.4 : 0.93)), pacing.paused)
         : quality === "quick"
@@ -163,7 +169,7 @@ export function registerVideoJobs(): void {
       const poster = join(outputDir, "poster.jpg");
       const meta: VideoResultMeta = {
         job: job.id, created: Math.floor(new Date(job.createdAt).getTime() / 1000), width: result.width, height: result.height, frames: result.frames, fps: result.fps, seconds: Math.round((result.frames - 1) / result.fps),
-        seed: result.seed, model: VIDEO_SPECS[quality].modelId, quality, audio: result.audio, mode: clip.icLora ? "ic_lora" : clip.edit ? clip.edit.kind : clip.image ? "image-to-video" : "text-to-video", lora_ids: clip.loraIds, ...((job.input as { audience?: unknown } | null)?.audience === "adult" ? { audience: "adult" as const } : {}), ms: Date.now() - started,
+        seed: result.seed, model: VIDEO_SPECS[quality].modelId, quality, audio: result.audio, mode: clip.icLora || clip.ingredients ? "ic_lora" : clip.edit ? clip.edit.kind : clip.image ? "image-to-video" : "text-to-video", lora_ids: clip.loraIds, ...((job.input as { audience?: unknown } | null)?.audience === "adult" ? { audience: "adult" as const } : {}), ms: Date.now() - started,
         bytes: Bun.file(video).size, poster_bytes: Bun.file(poster).size, mlx_peak_gb: result.peakBytes === null ? null : Math.round(result.peakBytes / 1e8) / 10,
       };
       update({ status: "ready", percent: 100 });

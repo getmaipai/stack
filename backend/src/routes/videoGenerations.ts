@@ -22,14 +22,14 @@ import { RoleReplyHeaders } from "@maipai/spec/stack/ts/role-reply-headers.js";
 import { MAX_DRAIN_STATUS, MAX_WAIT_STATUS, cancelJob, getJob, hasJobRunner, isJobPaused, listJobs, submitJob, waitForJob, type Job } from "@/lib/jobs";
 import { TierFieldSchema, TierStatusSchema, governorDecides, tierInput, tierOf } from "@/routes/tierField";
 import { PAUSED_LABEL } from "@/lib/genProgress";
-import { getLora, loraPath, LoraError, matchLtxLoraToPack, resolveLoras, type LoraBase } from "@/video/loras";
+import { getLora, listLoras, loraPath, LoraError, matchLtxLoraToPack, resolveLoras, type LoraBase } from "@/video/loras";
 import { deleteResult, isJobId, messagesPath, posterPath, readResult, videoPath, type VideoResultMeta } from "@/video/results";
 import { memoryVerdict, qualityOfModelName, tierAvailability, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, VIDEO_SPECS, videoGen, videoGenRoot, type VideoQuality } from "@/video/videoGen";
 import { ltx25LoraAdmitBytes, ltx25LoraMode, ltx25LoraProfile, ltx25PackTransformer, LTX25_CLIP_CAP_BYTES, LTX25_LORAS_PER_CLIP, ltx25MaxPeakBytes, ltx25MaxRefusal, ltx25MaxRow, ltx25PeakBytes, ltx25Refusal, ltx25Row, ltx25TrueSize, LTX25_MAX_MEASURED, LTX25_MEASURED } from "@/video/ltx25";
 import { checkEdit, EditSourceError, editRuntime, ltx25EditAdmitBytes, ltx25MaxEditSupported, LTX25_EDIT_EXTEND_MAX_SECONDS, LTX25_EDIT_EXTEND_MIN_SECONDS, LTX25_EDIT_RETAKE_MAX_SECONDS, LTX25_EDIT_RETAKE_MIN_SECONDS, LTX25_MAX_EDIT_MEASURED, planSource, probeSource, type Ltx25EditKind } from "@/video/ltx25Edit";
 import { MediaPathError, resolveReadable } from "@/media/paths";
 import { stashClip, unstashClip, videoFailure, videoPreviewPath, videoProgress, videoTracker, VIDEO_JOB_KIND, type StashedClip } from "@/video/jobs";
-import { LTX25_ICLORA_PEAK_BYTES } from "@/video/ltx25";
+import { LTX25_ICLORA_PEAK_BYTES, LTX25_INGREDIENTS_HEIGHT, LTX25_INGREDIENTS_MAX_SECONDS, LTX25_INGREDIENTS_MAX_SHEETS, LTX25_INGREDIENTS_MIN_SECONDS, LTX25_INGREDIENTS_WIDTH, ltx25IngredientsFrames } from "@/video/ltx25";
 import { sha256OfFile } from "@/lib/fileHash";
 
 const DEFAULT_WAIT_MS = 30_000;
@@ -97,6 +97,16 @@ const postRoute = createRoute({ method: "post", path: "/generations", tags: ["Vi
 } });
 const RestyleRequest = z.object({ model: z.string().optional(), source: z.string().min(1).max(4096), lora: z.string().min(1).max(40), strength: z.number().default(1), prompt: z.string(), seed: z.number().int().min(0).max(4_294_967_295).optional(), conditioning: z.enum(["source", "edges"]).default("source"), timeout_ms: z.number().int().positive().max(MAX_WAIT_MS).optional(), tier: TierFieldSchema, quiet_seconds: z.number().int().min(20).max(3600).optional(), quiet_max_wait_seconds: z.number().int().min(0).max(86400).nullable().optional() });
 const restyleRoute = createRoute({ method: "post", path: "/restyle", tags: ["Video"], summary: "Restyle a video with an installed IC-LoRA", request: { body: { content: { "application/json": { schema: RestyleRequest } } } }, responses: { 200: { content: { "application/json": { schema: VideoResponseSchema } }, description: "The finished restyled clip." }, 202: { content: { "application/json": { schema: VideoResponseSchema } }, description: "The job is still running." }, 422: { content: { "application/json": { schema: ErrorBody } }, description: "The source, profile, LoRA, strength or prompt is not allowed." }, 503: { content: { "application/json": { schema: ErrorBody } }, description: "The model is not installed or memory is unavailable." } } });
+/** INGREDIENTS-01: the installed adapter is found by its published file name, kept in the library record's name or source address. */
+export const INGREDIENTS_ADAPTER_FILE = "ltx-2.5-22b-ic-lora-ingredients-0.9.safetensors";
+const INGREDIENTS_MAX_PROMPT_CHARS = 2000;
+const IngredientsForm = z.object({
+  sheet: z.any().openapi({ type: "array", items: { type: "string", format: "binary" }, description: "One or two reference sheet PNGs, 768x448 each. Repeat the field for the second." }),
+  prompt: z.string().openapi({ description: "The full 'Reference sheet: ... Generated video: ...' text, up to 2000 characters." }),
+  seconds: z.string().optional().openapi({ description: "Integer 4 to 8, default 8 (frames = 1 + 24 * seconds, at most 193)." }),
+  seed: z.string().optional(), audience: z.enum(["all-ages", "adult"]).optional(), timeout_ms: z.string().optional(),
+});
+const ingredientsRoute = createRoute({ method: "post", path: "/ingredients", tags: ["Video"], summary: "Make a video from one or two reference sheets with the installed Ingredients IC-LoRA (Max only)", request: { body: { content: { "multipart/form-data": { schema: IngredientsForm } } } }, responses: { 200: { content: { "application/json": { schema: VideoResponseSchema } }, description: "The finished clip (mode ic_lora, 768x448, with the sound the model made)." }, 202: { content: { "application/json": { schema: VideoResponseSchema } }, description: "The job is still running." }, 400: { content: { "application/json": { schema: ErrorBody } }, description: "The sheets, prompt, seconds, seed or timeout are not allowed (bad_sheets, bad_prompt, bad_seconds, bad_request)." }, 409: { content: { "application/json": { schema: ErrorBody } }, description: "The Ingredients adapter is not installed (ic_lora_missing) or its file changed (ic_lora_changed)." }, 413: { content: { "application/json": { schema: ErrorBody } }, description: "A sheet is larger than the picture limit." }, 429: { content: { "application/json": { schema: ErrorBody } }, description: "The video queue is full." }, 503: { content: { "application/json": { schema: ErrorBody } }, description: "The Max model is not installed (not_installed), there is no free memory (no_memory) or video is not available here." } } });
 const getRoute = createRoute({ method: "get", path: "/generations/{job}", tags: ["Video"], summary: "A clip's state, progress and files", request: { params: z.object({ job: z.string() }) }, responses: {
   200: { content: { "application/json": { schema: JobStatusSchema } }, description: "Poll this every second or two while state is queued or running." },
   404: { content: { "application/json": { schema: ErrorBody } }, description: "No such job (it expired or never existed)." },
@@ -324,6 +334,57 @@ videoV1Routes.openapi(restyleRoute, async (c) => {
   const seed = body.seed ?? Math.floor(Math.random() * 2 ** 32);
   const runBody = { prompt: body.prompt, timeout_ms: body.timeout_ms, tier: body.tier, quiet_seconds: body.quiet_seconds, quiet_max_wait_seconds: body.quiet_max_wait_seconds } as z.infer<typeof VideoRequestSchema>;
   return await runClip(c, runBody, "ltx25max", { prompt: body.prompt, negativePrompt: null, image: null, endImage: null, width: 1024, height: 576, frames: 121, seed, loras: [], loraIds: [body.lora], quality: "ltx25max", icLora: { sourcePath, sourceIsResult, loraPath: loraFile, loraId: body.lora, strength, conditioning: body.conditioning, audio: true } }, { size: "1024x576", seconds: 5, mode: "ic_lora" }, LTX25_ICLORA_PEAK_BYTES);
+});
+
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+function pngSize(bytes: Uint8Array): { width: number; height: number } | null {
+  if (bytes.length < 24 || PNG_SIGNATURE.some((b, i) => bytes[i] !== b) || String.fromCharCode(...bytes.slice(12, 16)) !== "IHDR") return null;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return { width: view.getUint32(16), height: view.getUint32(20) };
+}
+/** The installed Ingredients adapter, or null. */
+function findIngredientsLora() {
+  return listLoras().find((record) => `${record.name} ${record.source_url ?? ""}`.toLowerCase().includes("ic-lora-ingredients")) ?? null;
+}
+
+videoV1Routes.openapi(ingredientsRoute, async (c) => {
+  const form = c.req.valid("form");
+  const bad = (error: string, code = "bad_request") => fail(c, 400, code, error);
+  const raw = form.sheet === undefined ? [] : Array.isArray(form.sheet) ? form.sheet : [form.sheet];
+  const sheets = raw.filter((value): value is File => value instanceof File);
+  if (sheets.length !== raw.length || sheets.length < 1 || sheets.length > LTX25_INGREDIENTS_MAX_SHEETS) return bad(`Send one or two reference sheets as PNG files in the sheet field (you sent ${raw.length}). Send one or two and try again.`, "bad_sheets");
+  const prompt = form.prompt.trim();
+  if (!prompt || prompt.length > INGREDIENTS_MAX_PROMPT_CHARS) return bad(`The prompt must be 1 to ${INGREDIENTS_MAX_PROMPT_CHARS} characters. Shorten it or write one, then try again.`, "bad_prompt");
+  const seconds = form.seconds === undefined || form.seconds === "" ? LTX25_INGREDIENTS_MAX_SECONDS : Number(form.seconds);
+  if (!Number.isInteger(seconds) || seconds < LTX25_INGREDIENTS_MIN_SECONDS || seconds > LTX25_INGREDIENTS_MAX_SECONDS) return bad(`The length must be a whole number of seconds from ${LTX25_INGREDIENTS_MIN_SECONDS} to ${LTX25_INGREDIENTS_MAX_SECONDS}. Choose one in that range.`, "bad_seconds");
+  const seedGiven = form.seed !== undefined && form.seed !== "";
+  const seed = seedGiven ? Number(form.seed) : Math.floor(Math.random() * 2 ** 32);
+  if (!Number.isInteger(seed) || seed < 0 || seed > 4_294_967_295) return bad("The seed must be a whole number from 0 to 4294967295. Send one in that range or leave it out.");
+  const timeoutGiven = form.timeout_ms !== undefined && form.timeout_ms !== "";
+  const timeout = timeoutGiven ? Number(form.timeout_ms) : undefined;
+  if (timeout !== undefined && (!Number.isInteger(timeout) || timeout <= 0 || timeout > MAX_WAIT_MS)) return bad(`timeout_ms must be a whole number of milliseconds up to ${MAX_WAIT_MS}. Send one in that range or leave it out.`);
+  const bytes: Uint8Array[] = [];
+  for (const [i, file] of sheets.entries()) {
+    if (file.size > VIDEO_MAX_REFERENCE_BYTES) return fail(c, 413, "too_large", `Sheet ${i + 1} is larger than ${VIDEO_MAX_REFERENCE_BYTES / 1024 / 1024} MB. Send a smaller PNG.`);
+    const data = new Uint8Array(await file.arrayBuffer());
+    const size = pngSize(data);
+    if (!size) return bad(`Sheet ${i + 1} is not a PNG file. Send each reference sheet as a ${LTX25_INGREDIENTS_WIDTH}x${LTX25_INGREDIENTS_HEIGHT} PNG.`, "bad_sheets");
+    if (size.width !== LTX25_INGREDIENTS_WIDTH || size.height !== LTX25_INGREDIENTS_HEIGHT) return bad(`Sheet ${i + 1} is ${size.width}x${size.height}. Each reference sheet must be exactly ${LTX25_INGREDIENTS_WIDTH}x${LTX25_INGREDIENTS_HEIGHT}; resize it and try again.`, "bad_sheets");
+    bytes.push(data);
+  }
+  const availability = tierAvailability();
+  if (!availability.available) return fail(c, 503, availability.code ?? "unsupported", availability.reason ?? "Video is not available on this computer.");
+  if (!hasJobRunner(VIDEO_JOB_KIND)) return fail(c, 503, "unsupported", "Video is not available on this machine.");
+  const record = findIngredientsLora();
+  const missing = `The Ingredients adapter ${INGREDIENTS_ADAPTER_FILE} is not installed. An admin can install it into the video style library (POST /v1/videos/loras/install, base ltx-2.5, with a name that contains ${INGREDIENTS_ADAPTER_FILE}), then try again.`;
+  if (!record) return fail(c, 409, "ic_lora_missing", missing);
+  const loraFile = loraPath(record.id);
+  if (!existsSync(loraFile)) return fail(c, 409, "ic_lora_missing", missing);
+  const stat = statSync(loraFile);
+  if (stat.size !== record.bytes || (Math.floor(stat.mtimeMs) !== record.mtime_ms && await sha256OfFile(loraFile) !== record.sha256)) return fail(c, 409, "ic_lora_changed", `The installed Ingredients adapter ${INGREDIENTS_ADAPTER_FILE} changed or is incomplete. Install it again, then retry.`);
+  const frames = ltx25IngredientsFrames(seconds);
+  const runBody = { prompt, timeout_ms: timeout, audience: form.audience } as z.infer<typeof VideoRequestSchema>;
+  return await runClip(c, runBody, "ltx25max", { prompt, negativePrompt: null, image: null, endImage: null, width: LTX25_INGREDIENTS_WIDTH, height: LTX25_INGREDIENTS_HEIGHT, frames, seed, loras: [], loraIds: [record.id], quality: "ltx25max", ingredients: { sheets: bytes, loraPath: loraFile, loraId: record.id } }, { size: `${LTX25_INGREDIENTS_WIDTH}x${LTX25_INGREDIENTS_HEIGHT}`, seconds, mode: "ic_lora" }, LTX25_ICLORA_PEAK_BYTES);
 });
 
 /** The queue check, the memory verdict, the stash, the job and the wait: one definition for a made clip and for an edit of one. */
