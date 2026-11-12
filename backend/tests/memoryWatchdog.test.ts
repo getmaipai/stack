@@ -968,7 +968,7 @@ test("dev_load names the big programs by name and bytes only, and is empty when 
   const sampler = fakeSampler();
   const { dog } = watchdogWith(sampler);
   await dog.tick();
-  expect(dog.report().dev_load).toMatchObject({ others_bytes: 0, processes: [], budget_bytes: 0, used_bytes: 0 });
+  expect(dog.report().dev_load).toMatchObject({ others_bytes: 0, processes: [] });
   sampler.rows = [row({ pid: 900, name: "rustc", rssBytes: 45 * GB, command: "/work/private/rustc" })];
   for (let i = 0; i < 6; i++) await dog.tick();
   const load = dog.report().dev_load;

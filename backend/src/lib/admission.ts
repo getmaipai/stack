@@ -7,8 +7,7 @@
 // `withdraw`, which removes the request from the governor's queue and
 // settles the `admitted` promise refused, so no late admission ever
 // happens and nothing is loaded that nobody holds.
-import { readDevBudget } from "@/lib/devBudget";
-import { admit, getGovernorDecisions, getGovernorStatus, getRunState, jobClassOf, peakFor, withdraw, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
+import { admit, getGovernorDecisions, getGovernorStatus, getRunState, peakFor, withdraw, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
 
 /** The peak the governor will compute for a request, mirrored from its
  * `peakFor` so a refusal here agrees with an admission there. */
@@ -31,17 +30,16 @@ export function governorReasonFor(id: string, since: string): string {
 export function waitingReason(id: string, request: GovernorRequest): string {
   const why = getGovernorDecisions().find((decision) => decision.model === id)?.reason ?? "The current memory budget cannot admit the request.";
   const status = getGovernorStatus();
-  return `${why} It needs about ${gb(governorPeak(request))} GB with ${gb(status.freeMemoryBytes)} GB available (free memory plus cache the system can reclaim), and the machine's tier keeps ${gb(status.marginBytes)} GB of that back${status.devReserveBytes > 0 && jobClassOf(request) === "heavy" ? `, and development work on this computer keeps another ${gb(status.devReserveBytes)} GB (it frees as soon as development stops)` : ""}; memory pressure is ${status.pressure}. ${waitingSummary(id, status)}`;
+  return `${why} It needs about ${gb(governorPeak(request))} GB with ${gb(status.freeMemoryBytes)} GB available (free memory plus cache the system can reclaim), and the machine's tier keeps ${gb(status.marginBytes)} GB of that back; memory pressure is ${status.pressure}. ${waitingSummary(id, status)}`;
 }
 
-/** DEV-BUDGET-03: what is waiting, for how long, what holds memory now, and that no one has to do anything (never a question). */
+/** DEV-CHECKOUT-01: what is waiting, for how long, what holds memory now, and that no one has to do anything (never a question). */
 export function waitingSummary(id: string, status: ReturnType<typeof getGovernorStatus>, now = Date.now()): string {
   const first = getGovernorDecisions().filter((decision) => decision.model === id).at(-1)?.at;
   const seconds = first ? Math.max(0, Math.round((now - new Date(first).getTime()) / 1000)) : 0;
   const waited = seconds >= 90 ? `${Math.round(seconds / 60)} minutes` : `${seconds} seconds`;
   const holders = status.loaded.filter((item) => item.id !== id).sort((a, b) => b.peakBytes - a.peakBytes).slice(0, 4).map((item) => `${item.id} ${gb(item.peakBytes)} GB`);
-  const dev = readDevBudget().usedBytes;
-  const holding = [...holders, ...(dev > 0 ? [`development tools ${gb(dev)} GB`] : [])];
+  const holding = holders;
   return `${id} has been waiting ${waited}.${holding.length ? ` Holding memory now: ${holding.join(", ")}.` : ""} It starts by itself as soon as there is room; nothing needs to be stopped or confirmed.`;
 }
 

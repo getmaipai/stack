@@ -3,7 +3,6 @@ import { getMemoryReader, type MemoryPressure, type MemoryReader } from "@/lib/m
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { ROLES, ROLE_JOB_CLASS, type JobClass } from "@/roles";
 import { tierCapBytes } from "@/lib/tiers";
-import { devReserveBytes } from "@/lib/devBudget";
 
 const GB = 1_073_741_824;
 let pollChain: Promise<void> = Promise.resolve();
@@ -106,7 +105,6 @@ export interface GovernorStatus {
   tier: GovernorTier;
   marginBytes: number;
   /** DEV-BUDGET-01: bytes development work keeps back right now (0 when no dev launcher runs). */
-  devReserveBytes: number;
   loaded: GovernorLoadedModel[];
   queue: Array<{ id: string; position: number; kind: GovernorKind; class: GovernorClass; tier?: JobTier }>;
 }
@@ -199,7 +197,7 @@ export function reducedNeedFor(request: GovernorRequest): ReducedNeed {
     return { basis: "static", needed, requiredBytes, roomBytes: 0, shortfallBytes: 0, availableBytes: 0, giveBackBytes: 0 };
   }
   const giveBackBytes = [...loaded.values()].filter((item) => item.class !== "reserved" && !item.pinned && item.measured && item.id !== request.id).reduce((sum, item) => sum + item.peakBytes, 0);
-  const real = freeMemoryBytes + giveBackBytes - admissionMargin(request, requiredBytes);
+  const real = freeMemoryBytes + giveBackBytes - workingMargin();
   const budget = effectiveCapBytes() - (loadedBytes() - giveBackBytes);
   const roomBytes = Math.max(0, Math.min(real, budget));
   return { basis: "live", needed: roomBytes < requiredBytes, requiredBytes, roomBytes, shortfallBytes: Math.max(0, requiredBytes - roomBytes), availableBytes: freeMemoryBytes, giveBackBytes };
@@ -312,7 +310,7 @@ export function setIdleTtlSeconds(id: string, seconds: number | null): void {
 
 /** What a new admission could use right now without evicting anything: the model budget less what is loaded, and the free memory less the tier's working margin; whichever is smaller. */
 export function admissionRoomBytes(): number {
-  return Math.max(0, Math.min(effectiveCapBytes() - loadedBytes(), freeMemoryBytes - admissionMargin()));
+  return Math.max(0, Math.min(effectiveCapBytes() - loadedBytes(), freeMemoryBytes - workingMargin()));
 }
 
 /** Whether a request fits with every non-reserved item removed. */
@@ -475,10 +473,7 @@ function workingMargin(): number {
   return GovernorRules.tiers[activeTier].workingMarginBytes;
 }
 
-/** DEV-BUDGET-01: the live margin an admission must leave free: the tier's working margin (never lowered) plus the budget development
- * work on this computer owns (lib/devBudget.ts). Static "could it ever fit" figures keep the tier margin alone: a dev hub that stops
- * frees the reserve at once, so a job waits for it instead of being refused for good. */
-/** DEV-BUDGET-02: a job at or above this size is heavy whatever its role (a big picture, a long clip). */
+/** DEV-CHECKOUT-01: a job at or above this size is heavy whatever its role (a big picture, a long clip). */
 export const HEAVY_JOB_BYTES = 16 * GB;
 /** The one place a request gets its job class (essential, interactive or heavy). An explicit `jobClass` wins, then size, then the role. */
 export function jobClassOf(request: GovernorRequest, peakBytes: number = request.measuredPeakBytes ?? request.requestedBytes): JobClass {
@@ -489,11 +484,6 @@ export function jobClassOf(request: GovernorRequest, peakBytes: number = request
   const memory = requestClass(request);
   return memory === "reserved" ? "essential" : memory === "warm" ? "interactive" : "heavy";
 }
-/** The dev reserve applies only to heavy jobs. With no request (a room figure for the status page) the heavy view is shown. */
-function admissionMargin(request?: GovernorRequest, peakBytes?: number): number {
-  return workingMargin() + (request && jobClassOf(request, peakBytes) !== "heavy" ? 0 : devReserveBytes());
-}
-
 function usesFlexBand(request: GovernorRequest, peakBytes: number): boolean {
   const freeAfterAdmission = freeMemoryBytes - peakBytes;
   return request.role === "image"
@@ -528,14 +518,14 @@ function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
   const cap = effectiveCapBytes();
   const growth = Math.max(0, peakBytes - (existing?.peakBytes ?? 0));
   if (loadedBytes() + growth > cap) return false;
-  return freeMemoryBytes - growth >= admissionMargin(request, peakBytes) || usesFlexBand(request, growth);
+  return freeMemoryBytes - growth >= workingMargin() || usesFlexBand(request, growth);
 }
 
 /** Whether the request would be admitted if `freedBytes` of loaded jit memory were gone. The memory watchdog's gate is not asked: it reads real memory, which the item to be evicted still holds. */
 function wouldAdmitAfterFreeing(request: GovernorRequest, peakBytes: number, freedBytes: number): boolean {
   if (memoryReadingDegraded || pressure !== "normal") return false;
   if (request.kind === "generator" && [...loaded.values()].some((item) => item.kind === "generator")) return false;
-  return loadedBytes() - freedBytes + peakBytes <= effectiveCapBytes() && freeMemoryBytes + freedBytes - peakBytes >= admissionMargin(request, peakBytes);
+  return loadedBytes() - freedBytes + peakBytes <= effectiveCapBytes() && freeMemoryBytes + freedBytes - peakBytes >= workingMargin();
 }
 
 export async function admit(request: GovernorRequest): Promise<GovernorHandle | { queued: true; position: number; class: GovernorClass; admitted: Promise<GovernorHandle | { refused: true; reason: string }> } | { refused: true; reason: string }> {
@@ -745,7 +735,6 @@ export function getGovernorStatus(): GovernorStatus {
     memoryReadingDegraded,
     tier: activeTier,
     marginBytes: workingMargin(),
-    devReserveBytes: devReserveBytes(),
     loaded: [...loaded.values()].map(({ peakBaselineBytes: _baseline, runPeakBytes: _runPeak, recordedPeakBytes: _recorded, processBreaches: _breaches, keepAliveSeconds: _keepAlive, token: _token, evicting: _evicting, ...item }) => item),
     queue: queue.map((entry, index) => ({ id: entry.request.id, position: index + 1, kind: entry.request.kind, class: requestClass(entry.request), ...(entry.request.tier ? { tier: entry.request.tier } : {}) })),
   };

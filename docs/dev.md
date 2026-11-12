@@ -2910,31 +2910,19 @@ reports the bytes under the Splash tmp folder over a window (bench lane, not the
 
 Run `cd backend && MAIPAI_TEST_NO_PORTS=1 bun test tests/resourceRecapture.test.ts` for the scripted worker regression check. Run `bun run scripts/resource-recapture-bench.ts --stack http://127.0.0.1:8770 --kind all` by hand against a live Stack. After the worker's real idle time plus 10 seconds (picture and video 10 minutes, music 5) the bench allows 256 MB of warm and burst memory left on the governor's ledger, no new unregistered process below the Stack, 512 MB of unaccounted memory and 16 MB of temporary files. Total Stack memory is printed for information only, because the chat engine and the other residents grow with ordinary use. The test covers picture generation, video generation and music generation with scripted workers; picture editing, stems and transcode are outside this check.
 
-## The development budget (DEV-BUDGET-01, 2026-11-12)
+## Development and the Stack: no reserve (DEV-CHECKOUT-01, 2026-11-12)
 
-Development work shares this computer with the Stack (Home's dev launcher runs the dev hubs, tests and builds). On 2026-11-12 the
-kernel's "available" figure counted idle development pages as reclaimable, so the governor admitted a 61.5 GB video job beside four dev
-hubs (8.4 GB, two of them orphans), swap reached 14.9 of 16 GB, memory pressure hit level 2 twice and the chat judge was evicted 12 times.
+Development on this computer is governed by one dev checkout in Home (`docs/dev/dev-jobs.md`): one session holds the dev machine, the
+rest queue. The Stack keeps nothing back for development. History: DEV-BUDGET-01 to -03 added a dev reserve the governor subtracted
+(read from the launcher's `dev-load.json`); on 2026-11-12 it kept 24 GB back while dev tooling held 1.3 GB and a video clip waited for
+room that was free. It is removed: `lib/devBudget.ts`, `GovernorStatus.devReserveBytes` and `dev_load.budget_bytes` / `used_bytes` are
+gone. A heavy job is admitted on real free memory less the tier's working margin (20 GB on 128 GB), nothing else.
 
-- **In plain words.** The dev budget is only a reserve for ordinary development tooling (dev hubs, tests, builds). It never caps a big job: picture and video jobs a development session asks for (the 61.5 GB LTX admission included) go through Home's lease broker and the Stack's own admission. The one effect of the budget is that the governor subtracts it when it admits work. In direct mode (nobody on the hub) a heavy dev lease makes the launcher write `reserve_gb: 0`, so the Stack may take that room (idle dev hubs are stopped cold first); the reserve returns when the lease ends. In gated mode (the family is on the hub) it is never released.
-- **Reserve.** Home's launcher (`scripts/jobs/job.ts`, `MAIPAI_DEV_BUDGET_GB`, default 24) writes `jobs/dev-load.json`
-  (`{version: 1, ts, budget_gb, reserve_gb, used_gb}`; `reserve_gb` is the budget, or 0 during a heavy direct-mode lease) about every 2 seconds while it runs a dev server. `lib/devBudget.ts` reads it (path:
-  `MAIPAI_DEV_LOAD_FILE`, else `$MAIPAI_JOBS_DIR/dev-load.json`, else `~/.local/state/maipai/jobs/dev-load.json`). A file older than 60 s,
-  missing or malformed means no dev server runs and no reserve; the reserve never exceeds 48 GB; `MAIPAI_STACK_DEV_BUDGET=off` ignores it.
-- **Governor.** The live admission margin is the tier's working margin (20 GB on 128 GB, not lowered) plus that reserve
-  (`admissionMargin()` in `governor.ts`): `admissionRoomBytes()`, `canAdmit`, `wouldAdmitAfterFreeing` and the Reduced-chat need all use it.
-  "Could it ever fit" figures keep the tier margin alone, so a job waits for the reserve (it frees the moment dev hubs stop) instead of
-  being refused for good. A waiting reason names the reserve. `GovernorStatus.devReserveBytes` and `/stack/v1/memory`
-  `dev_load.budget_bytes` and `.used_bytes` report it (bytes only).
-- **Job classes (DEV-BUDGET-02, 2026-11-12).** Every job has one class, defined once (`ROLE_JOB_CLASS` in `roles.ts`, resolved by
-  `jobClassOf()` in `governor.ts`): **essential** (small always-on helpers: chat, judge, router, picture reader, speech, search; never held
-  back by the dev reserve), **interactive** (a family member is waiting: coding, one picture; held back only when it truly does not fit)
-  and **heavy** (video, music, any job of 16 GB or more, long jobs). The dev reserve applies to heavy jobs only. There are no one-off
-  exemptions: a new role gets its class in that one table (an unlisted role falls back from its memory class). A request may carry `jobClass`
-  to override its role.
-- **Reserve value and waiting words (DEV-BUDGET-03, 2026-11-12).** The launcher's `reserve_gb` is what development really holds plus
-  2 GB in direct mode (never above the budget), the full budget in gated mode, 0 during a heavy lease. A waiting reason ends with what
-  is waiting, for how long, what holds memory now (loaded items, development tools) and that nothing needs to be stopped or confirmed;
-  it never asks a question (`waitingSummary` in `lib/admission.ts`).
+- **Job classes.** Every job has one class, defined once (`ROLE_JOB_CLASS` in `roles.ts`, resolved by `jobClassOf()` in `governor.ts`):
+  **essential** (small always-on helpers: chat, judge, router, picture reader, speech, search), **interactive** (a family member is
+  waiting: coding, one picture) and **heavy** (video, music, any job of 16 GB or more, long jobs). A request may carry `jobClass` to
+  override its role. There are no one-off exemptions: a new role gets its class in that one table.
+- **Waiting words.** A waiting reason ends with what is waiting, for how long, what holds memory now (the loaded items) and that nothing
+  needs to be stopped or confirmed; it never asks a question (`waitingSummary` in `lib/admission.ts`).
 - **Video worker entry.** The warm `video-worker` entry has no pid. At its idle limit it expires even when no worker is left to unload,
   so it cannot keep counting its 60 GB peak.

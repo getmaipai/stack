@@ -166,10 +166,10 @@ export const ROLES = {
   },
 } satisfies Record<RoleId, RoleDefinition>;
 
-/** DEV-BUDGET-02 (2026-11-12): every Stack job has one of three classes, defined here and nowhere else.
- *  essential:   small always-on helpers (chat, judge, router, picture reader, speech, search): never held back by the dev reserve.
+/** DEV-CHECKOUT-01 (2026-11-12): every Stack job has one of three classes, defined here and nowhere else.
+ *  essential:   small always-on helpers (chat, judge, router, picture reader, speech, search): always admitted on real free memory.
  *  interactive: a family member is waiting (coding, one picture): held back only when it truly does not fit.
- *  heavy:       video, music, big pictures, long jobs: respects the dev reserve and, for development, goes through the lease broker.
+ *  heavy:       video, music, big pictures, long jobs: admitted on real free memory; from a dev session it goes through the dev checkout (Home's lease broker).
  *  A request that needs HEAVY_JOB_BYTES or more is heavy whatever its role (see jobClassOf in lib/governor.ts). */
 export type JobClass = "essential" | "interactive" | "heavy";
 export const ROLE_JOB_CLASS: Record<RoleId, JobClass> = {

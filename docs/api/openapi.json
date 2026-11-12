@@ -15347,21 +15347,11 @@
                               "bytes"
                             ]
                           }
-                        },
-                        "budget_bytes": {
-                          "type": "number",
-                          "description": "DEV-BUDGET-01: the development budget: a reserve for ordinary dev tooling, never a cap on jobs; 0 when no dev launcher runs. The governor subtracts it when admitting, except while a heavy dev lease holds the machine in direct mode."
-                        },
-                        "used_bytes": {
-                          "type": "number",
-                          "description": "DEV-BUDGET-01: what the dev launcher says development servers hold now."
                         }
                       },
                       "required": [
                         "others_bytes",
-                        "processes",
-                        "budget_bytes",
-                        "used_bytes"
+                        "processes"
                       ],
                       "description": "MEM-SPACE-05: what other programs hold beside the Stack. Process byte values use measured process memory, including macOS physical footprint and graphics memory, with ps RSS as fallback. `processes` names the big ones (name and bytes only) and is empty when nothing is flagged."
                     },

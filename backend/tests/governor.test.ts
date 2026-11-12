@@ -24,6 +24,7 @@ import {
   __isEvictingForTests,
   type GovernorHandle,
   jobClassOf,
+  admissionRoomBytes,
   reducedNeedFor,
 } from "@/lib/governor";
 import { scriptedMemoryReader } from "@/lib/memory/scripted";
@@ -31,7 +32,6 @@ import { availableBytesFromVmStatistics } from "@/lib/memory/darwin";
 import type { MemoryPressure } from "@/lib/memory";
 import { EVENT_2026_10_06, PAGE_BYTES, vmStatistics } from "./fixtures/vmStatistics";
 import { __resetHealthForTests, list as listHealth } from "@/lib/health";
-import { __setDevBudgetForTestsOnly, parseDevLoad } from "@/lib/devBudget";
 
 const GB = 1_073_741_824;
 const stops: Array<() => void> = [];
@@ -40,11 +40,9 @@ beforeEach(() => {
   __resetGovernorForTests();
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 64 * GB, freeMemoryBytes: 32 * GB });
   __resetHealthForTests();
-  __setDevBudgetForTestsOnly(null);
 });
 
 afterEach(async () => {
-  __setDevBudgetForTestsOnly(undefined);
   for (const stop of stops.splice(0)) stop();
   // stop() only cancels the poller's NEXT scheduled tick; a tick already
   // in flight when stop() runs (pollMs: 1 below means there often is one)
@@ -1017,51 +1015,25 @@ test("an idle video worker stays warm on the ledger and unloads for a waiting pi
   } finally { setWarmWorkerUnload("video-worker", null); }
 });
 
-// DEV-BUDGET-01 (2026-11-12): the kernel's "available" counts idle development pages as reclaimable, so the governor admitted a
-// 61.5 GB video job beside four dev hubs. It now keeps the dev launcher's budget back on top of the working margin.
-test("the dev budget is kept back from admissions on top of the 20 GB margin, and frees at once when the launcher stops", async () => {
-  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 90 * GB, tier: "p128" });
-  expect(roomAfterEviction({ id: "video-worker", kind: "generator", class: "warm", requestedBytes: 61 * GB, measuredPeakBytes: 61.5 * GB }).roomBytes).toBeGreaterThanOrEqual(61.5 * GB - 1);
-  __setDevBudgetForTestsOnly({ budgetBytes: 24 * GB, usedBytes: 8 * GB, reserveBytes: 24 * GB });
-  expect(getGovernorStatus()).toMatchObject({ marginBytes: 20 * GB, devReserveBytes: 24 * GB });
-  const room = roomAfterEviction({ id: "video-worker", kind: "generator", class: "warm", requestedBytes: 61 * GB, measuredPeakBytes: 61.5 * GB }).roomBytes;
-  expect(room).toBe(46 * GB);
-  const refused = admit({ id: "video-worker", kind: "generator", class: "warm", requestedBytes: 61 * GB, measuredPeakBytes: 61.5 * GB, retainWarm: true });
-  await Bun.sleep(20);
-  expect(getGovernorStatus().loaded.map((i) => i.id)).not.toContain("video-worker");
-  expect(getGovernorStatus().queue.map((q) => q.id)).toContain("video-worker");
-  __setDevBudgetForTestsOnly(null);
-  expect(getGovernorStatus().devReserveBytes).toBe(0);
-  void refused;
-});
-
 // DEV-BUDGET-02 (2026-11-12): no one-off exemptions. Every job has one class (roles.ts ROLE_JOB_CLASS, jobClassOf in governor.ts); the dev
 // reserve applies only to heavy jobs. The 4.2 GB picture reader was refused beside dev hubs; it is essential now.
-test("the dev reserve holds back only heavy jobs: essential and interactive ones are blocked only when they truly do not fit", () => {
-  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 30 * GB, tier: "p128" });
-  __setDevBudgetForTestsOnly({ budgetBytes: 24 * GB, usedBytes: 8 * GB, reserveBytes: 24 * GB });
-  // 30 GB free less the 20 GB margin leaves 10 GB; the 24 GB reserve would take it far below zero.
+test("every job has one class: roles decide, size makes a job heavy, and an explicit class wins", () => {
   expect(jobClassOf({ id: "vision", role: "vision", kind: "jit", requestedBytes: 4.2 * GB })).toBe("essential");
-  expect(reducedNeedFor({ id: "vision", role: "vision", kind: "jit", requestedBytes: 4.2 * GB }).needed).toBe(false);
+  expect(jobClassOf({ id: "chat", role: "chat", kind: "resident", requestedBytes: 8 * GB })).toBe("essential");
   expect(jobClassOf({ id: "image-pool", role: "image", kind: "generator", requestedBytes: 8 * GB })).toBe("interactive");
-  expect(reducedNeedFor({ id: "image-pool", role: "image", kind: "generator", requestedBytes: 8 * GB }).needed).toBe(false);
   expect(jobClassOf({ id: "image-pool", role: "image", kind: "generator", requestedBytes: 20 * GB })).toBe("heavy");
   expect(jobClassOf({ id: "video-worker", role: "video", kind: "generator", requestedBytes: 1 * GB })).toBe("heavy");
-  expect(reducedNeedFor({ id: "video-worker", role: "video", kind: "generator", requestedBytes: 9 * GB }).needed).toBe(true);
-  expect(reducedNeedFor({ id: "vision", role: "vision", kind: "jit", requestedBytes: 12 * GB, jobClass: "essential" }).needed).toBe(true);
-  __setDevBudgetForTestsOnly(null);
+  expect(jobClassOf({ id: "x", role: "vision", kind: "jit", requestedBytes: 1 * GB, jobClass: "heavy" })).toBe("heavy");
 });
 
-test("a dev-load file counts only while it is fresh, well formed and sane", () => {
-  const now = 1_800_000_000_000; const ok = { version: 1, ts: now / 1000 - 5, budget_gb: 24, used_gb: 2.5 };
-  expect(parseDevLoad(JSON.stringify(ok), now)).toEqual({ budgetBytes: 24 * GB, usedBytes: Math.round(2.5 * GB), reserveBytes: 24 * GB });
-  expect(parseDevLoad(JSON.stringify({ ...ok, reserve_gb: 0 }), now)).toEqual({ budgetBytes: 24 * GB, usedBytes: Math.round(2.5 * GB), reserveBytes: 0 });
-  expect(parseDevLoad(JSON.stringify({ ...ok, ts: now / 1000 - 120 }), now).budgetBytes).toBe(0);
-  expect(parseDevLoad(JSON.stringify({ ...ok, version: 2 }), now).budgetBytes).toBe(0);
-  expect(parseDevLoad(JSON.stringify({ ...ok, budget_gb: -1 }), now).budgetBytes).toBe(0);
-  expect(parseDevLoad("not json", now).budgetBytes).toBe(0);
-  expect(parseDevLoad(null, now).budgetBytes).toBe(0);
-  expect(parseDevLoad(JSON.stringify({ ...ok, budget_gb: 500 }), now).budgetBytes).toBe(48 * GB);
+// DEV-CHECKOUT-01 (2026-11-12): no dev reserve. A 61.5 GB heavy job is admitted on real free memory beside whatever else runs.
+test("a 61.5 GB job is admitted on real free memory, with no development reserve anywhere in the numbers", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 90 * GB, tier: "p128" });
+  expect(getGovernorStatus()).not.toHaveProperty("devReserveBytes");
+  expect(admissionRoomBytes()).toBe(70 * GB); // 90 GB free less the 20 GB working margin
+  const handle = await admit({ id: "video-worker", kind: "generator", class: "warm", requestedBytes: 61 * GB, measuredPeakBytes: 61.5 * GB, retainWarm: true }) as GovernorHandle;
+  expect(getGovernorStatus().loaded.map((i) => i.id)).toContain("video-worker");
+  release(handle);
 });
 
 test("the video worker's warm entry with no pid expires at its idle limit even when no worker is left to unload", async () => {
@@ -1089,25 +1061,4 @@ test("another warm entry whose owner declines to unload is not dropped by the vi
   now += 11 * 60_000;
   await Bun.sleep(15);
   expect(getGovernorStatus().loaded.map((i) => i.id)).toContain("image-pool");
-});
-
-test("direct mode: a 61.5 GB video job is admitted when only dev hubs hold the memory (the launcher says reserve_gb 0); with the reserve held it waits", async () => {
-  // 128 GB computer; chat 19 GB loaded; four dev hubs hold 8 GB, so about 90 GB reads as available.
-  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 90 * GB, tier: "p128" });
-  const request = { id: "video-worker", kind: "generator" as const, class: "warm" as const, requestedBytes: 61.5 * GB, measuredPeakBytes: 61.5 * GB, retainWarm: true };
-  const now = 1_800_000_000_000;
-  // Heavy lease held in direct mode: the budget stays 24 GB, the reserve is 0, so the Stack's own admission decides and says yes.
-  __setDevBudgetForTestsOnly(parseDevLoad(JSON.stringify({ version: 1, ts: now / 1000, budget_gb: 24, reserve_gb: 0, used_gb: 8 }), now));
-  expect(getGovernorStatus().devReserveBytes).toBe(0);
-  const granted = await admit(request) as GovernorHandle;
-  expect(granted.id).toBe("video-worker");
-  expect(getGovernorStatus().loaded.map((i) => i.id)).toContain("video-worker");
-  release(granted); forgetLoadedItem("video-worker");
-  __setGovernorTuningForTestsOnly({ freeMemoryBytes: 90 * GB });
-  // Ordinary dev work (no heavy lease, or gated mode): the same job is held back by the 24 GB reserve.
-  __setDevBudgetForTestsOnly(parseDevLoad(JSON.stringify({ version: 1, ts: now / 1000, budget_gb: 24, reserve_gb: 24, used_gb: 8 }), now));
-  expect(roomAfterEviction(request).roomBytes).toBe(46 * GB);
-  void admit(request);
-  await Bun.sleep(20);
-  expect(getGovernorStatus().loaded.map((i) => i.id)).not.toContain("video-worker");
 });
