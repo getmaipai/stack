@@ -2932,5 +2932,9 @@ hubs (8.4 GB, two of them orphans), swap reached 14.9 of 16 GB, memory pressure 
   and **heavy** (video, music, any job of 16 GB or more, long jobs). The dev reserve applies to heavy jobs only. There are no one-off
   exemptions: a new role gets its class in that one table (an unlisted role falls back from its memory class). A request may carry `jobClass`
   to override its role.
+- **Reserve value and waiting words (DEV-BUDGET-03, 2026-11-12).** The launcher's `reserve_gb` is what development really holds plus
+  2 GB in direct mode (never above the budget), the full budget in gated mode, 0 during a heavy lease. A waiting reason ends with what
+  is waiting, for how long, what holds memory now (loaded items, development tools) and that nothing needs to be stopped or confirmed;
+  it never asks a question (`waitingSummary` in `lib/admission.ts`).
 - **Video worker entry.** The warm `video-worker` entry has no pid. At its idle limit it expires even when no worker is left to unload,
   so it cannot keep counting its 60 GB peak.
