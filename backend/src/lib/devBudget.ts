@@ -41,7 +41,8 @@ export function parseDevLoad(text: string | null, nowMs = Date.now()): DevBudget
 let cache: { at: number; value: DevBudget } | null = null;
 export function readDevBudget(nowMs = Date.now()): DevBudget {
   if (override !== undefined) return override ?? { budgetBytes: 0, usedBytes: 0, reserveBytes: 0 };
-  if (process.env.MAIPAI_STACK_DEV_BUDGET === "off") return { budgetBytes: 0, usedBytes: 0, reserveBytes: 0 };
+  // Under `bun test` the machine's real dev-load.json is ignored (a running dev launcher made 20 unrelated tests fail on 2026-11-12) unless a test names its own file.
+  if (process.env.MAIPAI_STACK_DEV_BUDGET === "off" || (process.env.NODE_ENV === "test" && !process.env.MAIPAI_DEV_LOAD_FILE)) return { budgetBytes: 0, usedBytes: 0, reserveBytes: 0 };
   if (cache && nowMs - cache.at < 2_000) return cache.value;
   let text: string | null = null;
   try { text = readFileSync(devLoadFile(), "utf8"); } catch { /* no launcher running */ }
