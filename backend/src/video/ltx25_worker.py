@@ -303,10 +303,12 @@ def _pipeline(model_dir, gemma_dir=None, mode="generate", loras=(), lora_mode="f
         os.environ[LORA_MODE_ENV] = lora_mode
     else:
         os.environ.pop(LORA_MODE_ENV, None)
-    if mode == "ic_lora":
+    if mode in ("ic_lora", "ic_lora_stream"):
         from ltx_pipelines_mlx.ic_lora import ICLoraPipeline
 
-        pipe = ICLoraPipeline(model_dir=model_dir, lora_paths=list(loras), gemma_model_id=gemma_dir, low_memory=True)
+        # INGREDIENTS-01: an Ingredients clip streams the transformer's blocks from disk (low_ram_streaming): measured on the Max pack, 2026-11-12,
+        # 32.3 GB peak in 142 s against 76 GB in about the same time with the whole model resident.
+        pipe = ICLoraPipeline(model_dir=model_dir, lora_paths=list(loras), gemma_model_id=gemma_dir, low_memory=True, low_ram_streaming=(mode == "ic_lora_stream"))
     elif mode == "extend":
         from ltx_pipelines_mlx.extend_distilled import ExtendDistilledPipeline
 
@@ -637,7 +639,7 @@ def ic_lora(request):
         _state["steps_total"] = 11
         stage("source")
         phase("loading", 0)
-        pipe = _pipeline(model_dir, gemma_dir, "ic_lora", ((lora, strength),))
+        pipe = _pipeline(model_dir, gemma_dir, "ic_lora_stream" if sheets else "ic_lora", ((lora, strength),))
         mx.reset_peak_memory()
         engine_out = os.path.join(work, "engine.mp4")
         pipe.generate_and_save(prompt=request["prompt"], output_path=engine_out, video_conditioning=[(reference, 1.0) for reference in references], height=size[1], width=size[0], num_frames=frames, frame_rate=24.0, seed=int(request["seed"]))

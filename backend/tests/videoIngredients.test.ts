@@ -108,7 +108,7 @@ test("ingredients answers 202 with the job when it outlasts the wait", async () 
 
 test("ingredients admission reserves its own measured footprint, not the colorizer's", () => {
   expect(LTX25_INGREDIENTS_PEAK_BYTES).toBeLessThan(LTX25_ICLORA_PEAK_BYTES);
-  expect(LTX25_INGREDIENTS_PEAK_BYTES).toBeGreaterThanOrEqual(50_700_000_000);
+  expect(LTX25_INGREDIENTS_PEAK_BYTES).toBeGreaterThanOrEqual(32_300_000_000);
   expect(videoAdmission({ quality: "ltx25max", mode: "ic_lora", size: "768x448", seconds: 8 })).toEqual({ requestedBytes: LTX25_INGREDIENTS_PEAK_BYTES, measuredPeakBytes: LTX25_INGREDIENTS_PEAK_BYTES, engine: "video-gen" });
 });
 
