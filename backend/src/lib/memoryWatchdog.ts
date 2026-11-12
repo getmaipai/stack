@@ -48,6 +48,10 @@ import { ownedPids, finishedSurvivors } from "@/lib/ownedProcesses";
 import { getMemoryReader } from "@/lib/memory";
 import { settingValues } from "@/settings";
 import { metalHostFault } from "@/lib/hostProbe";
+import { readDevBudget } from "@/lib/devBudget";
+
+/** DEV-BUDGET-01: the dev budget the governor keeps back and what the launcher says development holds (both 0 when no dev launcher runs). */
+const budgetFields = (): { budget_bytes: number; used_bytes: number } => { const b = readDevBudget(); return { budget_bytes: b.budgetBytes, used_bytes: b.usedBytes }; };
 
 const GB = 1_073_741_824;
 const VOICE_KEEP_MS = 300_000;
@@ -279,7 +283,7 @@ export interface MemoryReport {
   memory: { total_bytes: number; available_bytes: number; free_bytes: number; wired_bytes: number; compressor_bytes: number; swap_used_bytes: number; swap_total_bytes: number; swap_growth_bytes_30s: number; pressure_level: number; pressure: string; sampled_at: string } | null;
   stack: { bytes: number; tmp_bytes: number; unaccounted_bytes: number; unregistered: { count: number; bytes: number }; processes: Array<{ pid: number; name: string; bytes: number }> };
   /** MEM-SPACE-05: what other programs hold beside the Stack, with the big ones named (name and bytes only, never a pid or folder). Empty list when nothing is flagged. */
-  dev_load: { others_bytes: number; processes: Array<{ name: string; bytes: number }> };
+  dev_load: { others_bytes: number; processes: Array<{ name: string; bytes: number }>; budget_bytes: number; used_bytes: number };
   top_consumers: TopConsumer[];
   non_stack_bytes: number;
   recent_actions: Array<{ at: string; level: WatchdogLevel; action: string; detail: string }>;
@@ -289,7 +293,7 @@ export interface MemoryReport {
 function reducedStateNow(): ReducedState { return getReducedChatState(); }
 
 export class MemoryWatchdog {
-  private devLoad: MemoryReport["dev_load"] = { others_bytes: 0, processes: [] };
+  private devLoad: Omit<MemoryReport["dev_load"], "budget_bytes" | "used_bytes"> = { others_bytes: 0, processes: [] };
   private sampler: SystemSampler;
   private actions: WatchdogActions;
   private now: () => number;
@@ -784,7 +788,7 @@ export class MemoryWatchdog {
       memory: sample ? { total_bytes: sample.totalBytes, available_bytes: sample.availableBytes, free_bytes: sample.freeBytes, wired_bytes: sample.wiredBytes, compressor_bytes: sample.compressorBytes, swap_used_bytes: sample.swapUsedBytes, swap_total_bytes: sample.swapTotalBytes, swap_growth_bytes_30s: growth, pressure_level: sample.pressureLevel, pressure: sample.pressure, sampled_at: new Date(sample.at).toISOString() } : null,
       // 20 GB fresh and 101–103 GB after hours vs 2.6 GB `ps` RSS for the same pid: use the shared process-memory definition.
       stack: { bytes: own.reduce((total, row) => total + row.rssBytes, 0), tmp_bytes: folderBytes(join(dataDir, "tmp")), unaccounted_bytes: Math.max(0, own.reduce((total, row) => total + row.rssBytes, 0) - governor.loaded.reduce((total, item) => total + item.peakBytes, 0)), unregistered: (() => { const registered = ownedPids(); const old = own.filter((row) => row.pid !== this.ownPid && row.ageSeconds > 60 && !registered.has(row.pid)); return { count: old.length, bytes: old.reduce((total, row) => total + row.rssBytes, 0) }; })(), processes: own.sort((a, b) => b.rssBytes - a.rssBytes).slice(0, 10).map((row) => ({ pid: row.pid, name: row.name, bytes: row.rssBytes })) },
-      dev_load: this.devLoad,
+      dev_load: { ...this.devLoad, ...budgetFields() },
       top_consumers: this.consumers(),
       non_stack_bytes: this.rows.filter((row) => !tree.has(row.pid)).reduce((total, row) => total + row.rssBytes, 0),
       recent_actions: recentActions(),

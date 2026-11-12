@@ -3,6 +3,7 @@ import { getMemoryReader, type MemoryPressure, type MemoryReader } from "@/lib/m
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { ROLES } from "@/roles";
 import { tierCapBytes } from "@/lib/tiers";
+import { devReserveBytes } from "@/lib/devBudget";
 
 const GB = 1_073_741_824;
 let pollChain: Promise<void> = Promise.resolve();
@@ -102,6 +103,8 @@ export interface GovernorStatus {
   memoryReadingDegraded: boolean;
   tier: GovernorTier;
   marginBytes: number;
+  /** DEV-BUDGET-01: bytes development work keeps back right now (0 when no dev launcher runs). */
+  devReserveBytes: number;
   loaded: GovernorLoadedModel[];
   queue: Array<{ id: string; position: number; kind: GovernorKind; class: GovernorClass; tier?: JobTier }>;
 }
@@ -194,7 +197,7 @@ export function reducedNeedFor(request: GovernorRequest): ReducedNeed {
     return { basis: "static", needed, requiredBytes, roomBytes: 0, shortfallBytes: 0, availableBytes: 0, giveBackBytes: 0 };
   }
   const giveBackBytes = [...loaded.values()].filter((item) => item.class !== "reserved" && !item.pinned && item.measured && item.id !== request.id).reduce((sum, item) => sum + item.peakBytes, 0);
-  const real = freeMemoryBytes + giveBackBytes - workingMargin();
+  const real = freeMemoryBytes + giveBackBytes - admissionMargin();
   const budget = effectiveCapBytes() - (loadedBytes() - giveBackBytes);
   const roomBytes = Math.max(0, Math.min(real, budget));
   return { basis: "live", needed: roomBytes < requiredBytes, requiredBytes, roomBytes, shortfallBytes: Math.max(0, requiredBytes - roomBytes), availableBytes: freeMemoryBytes, giveBackBytes };
@@ -307,7 +310,7 @@ export function setIdleTtlSeconds(id: string, seconds: number | null): void {
 
 /** What a new admission could use right now without evicting anything: the model budget less what is loaded, and the free memory less the tier's working margin; whichever is smaller. */
 export function admissionRoomBytes(): number {
-  return Math.max(0, Math.min(effectiveCapBytes() - loadedBytes(), freeMemoryBytes - workingMargin()));
+  return Math.max(0, Math.min(effectiveCapBytes() - loadedBytes(), freeMemoryBytes - admissionMargin()));
 }
 
 /** Whether a request fits with every non-reserved item removed. */
@@ -470,6 +473,13 @@ function workingMargin(): number {
   return GovernorRules.tiers[activeTier].workingMarginBytes;
 }
 
+/** DEV-BUDGET-01: the live margin an admission must leave free: the tier's working margin (never lowered) plus the budget development
+ * work on this computer owns (lib/devBudget.ts). Static "could it ever fit" figures keep the tier margin alone: a dev hub that stops
+ * frees the reserve at once, so a job waits for it instead of being refused for good. */
+function admissionMargin(): number {
+  return workingMargin() + devReserveBytes();
+}
+
 function usesFlexBand(request: GovernorRequest, peakBytes: number): boolean {
   const freeAfterAdmission = freeMemoryBytes - peakBytes;
   return request.role === "image"
@@ -504,14 +514,14 @@ function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
   const cap = effectiveCapBytes();
   const growth = Math.max(0, peakBytes - (existing?.peakBytes ?? 0));
   if (loadedBytes() + growth > cap) return false;
-  return freeMemoryBytes - growth >= workingMargin() || usesFlexBand(request, growth);
+  return freeMemoryBytes - growth >= admissionMargin() || usesFlexBand(request, growth);
 }
 
 /** Whether the request would be admitted if `freedBytes` of loaded jit memory were gone. The memory watchdog's gate is not asked: it reads real memory, which the item to be evicted still holds. */
 function wouldAdmitAfterFreeing(request: GovernorRequest, peakBytes: number, freedBytes: number): boolean {
   if (memoryReadingDegraded || pressure !== "normal") return false;
   if (request.kind === "generator" && [...loaded.values()].some((item) => item.kind === "generator")) return false;
-  return loadedBytes() - freedBytes + peakBytes <= effectiveCapBytes() && freeMemoryBytes + freedBytes - peakBytes >= workingMargin();
+  return loadedBytes() - freedBytes + peakBytes <= effectiveCapBytes() && freeMemoryBytes + freedBytes - peakBytes >= admissionMargin();
 }
 
 export async function admit(request: GovernorRequest): Promise<GovernorHandle | { queued: true; position: number; class: GovernorClass; admitted: Promise<GovernorHandle | { refused: true; reason: string }> } | { refused: true; reason: string }> {
@@ -721,6 +731,7 @@ export function getGovernorStatus(): GovernorStatus {
     memoryReadingDegraded,
     tier: activeTier,
     marginBytes: workingMargin(),
+    devReserveBytes: devReserveBytes(),
     loaded: [...loaded.values()].map(({ peakBaselineBytes: _baseline, runPeakBytes: _runPeak, recordedPeakBytes: _recorded, processBreaches: _breaches, keepAliveSeconds: _keepAlive, token: _token, evicting: _evicting, ...item }) => item),
     queue: queue.map((entry, index) => ({ id: entry.request.id, position: index + 1, kind: entry.request.kind, class: requestClass(entry.request), ...(entry.request.tier ? { tier: entry.request.tier } : {}) })),
   };
@@ -893,7 +904,13 @@ export function startGovernor(options: StartGovernorOptions): () => void {
         void (async () => {
           let unloaded: boolean | void = undefined;
           try { unloaded = await unload(item.id); } catch { unloaded = false; }
-          if (unloaded === false) { item.evicting = false; return; }
+          if (unloaded === false) {
+            // DEV-BUDGET-01: the video worker's warm entry has no pid, so nothing can prove a process still holds it. When its owner
+            // declined to unload (no worker left to stop) the entry still expires at its idle limit, so it cannot keep counting 60 GB.
+            const expired = item.id === "video-worker" && item.pid === null && item.kind === "jit" && idle && !(options.busy?.(item.id) ?? false);
+            if (expired && loaded.get(item.id) === item && item.token === token) { decide("Unloaded", "The video worker's idle time ran out and no process holds it.", item.id); loaded.delete(item.id); freeMemoryBytes += item.peakBytes; return; }
+            item.evicting = false; return;
+          }
           if (loaded.get(item.id) === item && item.token === token) { if (item.grewRaised) resolveHealth(`resident-memory-grew.${item.id}`); loaded.delete(item.id); freeMemoryBytes += item.peakBytes; }
         })();
       }

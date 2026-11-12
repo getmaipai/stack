@@ -2909,3 +2909,21 @@ reports the bytes under the Splash tmp folder over a window (bench lane, not the
 # Resource recapture
 
 Run `cd backend && MAIPAI_TEST_NO_PORTS=1 bun test tests/resourceRecapture.test.ts` for the scripted worker regression check. Run `bun run scripts/resource-recapture-bench.ts --stack http://127.0.0.1:8770 --kind all` by hand against a live Stack. After the worker's real idle time plus 10 seconds (picture and video 10 minutes, music 5) the bench allows 256 MB of warm and burst memory left on the governor's ledger, no new unregistered process below the Stack, 512 MB of unaccounted memory and 16 MB of temporary files. Total Stack memory is printed for information only, because the chat engine and the other residents grow with ordinary use. The test covers picture generation, video generation and music generation with scripted workers; picture editing, stems and transcode are outside this check.
+
+## The development budget (DEV-BUDGET-01, 2026-11-12)
+
+Development work shares this computer with the Stack (Home's dev launcher runs the dev hubs, tests and builds). On 2026-11-12 the
+kernel's "available" figure counted idle development pages as reclaimable, so the governor admitted a 61.5 GB video job beside four dev
+hubs (8.4 GB, two of them orphans), swap reached 14.9 of 16 GB, memory pressure hit level 2 twice and the chat judge was evicted 12 times.
+
+- **Reserve.** Home's launcher (`scripts/jobs/job.ts`, `MAIPAI_DEV_BUDGET_GB`, default 24) writes `jobs/dev-load.json`
+  (`{version: 1, ts, budget_gb, used_gb}`) about every 2 seconds while it runs a dev server. `lib/devBudget.ts` reads it (path:
+  `MAIPAI_DEV_LOAD_FILE`, else `$MAIPAI_JOBS_DIR/dev-load.json`, else `~/.local/state/maipai/jobs/dev-load.json`). A file older than 60 s,
+  missing or malformed means no dev server runs and no reserve; the reserve never exceeds 48 GB; `MAIPAI_STACK_DEV_BUDGET=off` ignores it.
+- **Governor.** The live admission margin is the tier's working margin (20 GB on 128 GB, not lowered) plus that reserve
+  (`admissionMargin()` in `governor.ts`): `admissionRoomBytes()`, `canAdmit`, `wouldAdmitAfterFreeing` and the Reduced-chat need all use it.
+  "Could it ever fit" figures keep the tier margin alone, so a job waits for the reserve (it frees the moment dev hubs stop) instead of
+  being refused for good. A waiting reason names the reserve. `GovernorStatus.devReserveBytes` and `/stack/v1/memory`
+  `dev_load.budget_bytes` and `.used_bytes` report it (bytes only).
+- **Video worker entry.** The warm `video-worker` entry has no pid. At its idle limit it expires even when no worker is left to unload,
+  so it cannot keep counting its 60 GB peak.

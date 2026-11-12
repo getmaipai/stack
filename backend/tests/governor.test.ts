@@ -29,6 +29,7 @@ import { availableBytesFromVmStatistics } from "@/lib/memory/darwin";
 import type { MemoryPressure } from "@/lib/memory";
 import { EVENT_2026_10_06, PAGE_BYTES, vmStatistics } from "./fixtures/vmStatistics";
 import { __resetHealthForTests, list as listHealth } from "@/lib/health";
+import { __setDevBudgetForTestsOnly, parseDevLoad } from "@/lib/devBudget";
 
 const GB = 1_073_741_824;
 const stops: Array<() => void> = [];
@@ -40,6 +41,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  __setDevBudgetForTestsOnly(undefined);
   for (const stop of stops.splice(0)) stop();
   // stop() only cancels the poller's NEXT scheduled tick; a tick already
   // in flight when stop() runs (pollMs: 1 below means there often is one)
@@ -1010,4 +1012,60 @@ test("an idle video worker stays warm on the ledger and unloads for a waiting pi
     expect(called).toBe(true);
     expect(admitted).toMatchObject({ id: "picture-after-video" });
   } finally { setWarmWorkerUnload("video-worker", null); }
+});
+
+// DEV-BUDGET-01 (2026-11-12): the kernel's "available" counts idle development pages as reclaimable, so the governor admitted a
+// 61.5 GB video job beside four dev hubs. It now keeps the dev launcher's budget back on top of the working margin.
+test("the dev budget is kept back from admissions on top of the 20 GB margin, and frees at once when the launcher stops", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 90 * GB, tier: "p128" });
+  expect(roomAfterEviction({ id: "video-worker", kind: "generator", class: "warm", requestedBytes: 61 * GB, measuredPeakBytes: 61.5 * GB }).roomBytes).toBeGreaterThanOrEqual(61.5 * GB - 1);
+  __setDevBudgetForTestsOnly({ budgetBytes: 24 * GB, usedBytes: 8 * GB });
+  expect(getGovernorStatus()).toMatchObject({ marginBytes: 20 * GB, devReserveBytes: 24 * GB });
+  const room = roomAfterEviction({ id: "video-worker", kind: "generator", class: "warm", requestedBytes: 61 * GB, measuredPeakBytes: 61.5 * GB }).roomBytes;
+  expect(room).toBe(46 * GB);
+  const refused = admit({ id: "video-worker", kind: "generator", class: "warm", requestedBytes: 61 * GB, measuredPeakBytes: 61.5 * GB, retainWarm: true });
+  await Bun.sleep(20);
+  expect(getGovernorStatus().loaded.map((i) => i.id)).not.toContain("video-worker");
+  expect(getGovernorStatus().queue.map((q) => q.id)).toContain("video-worker");
+  __setDevBudgetForTestsOnly(null);
+  expect(getGovernorStatus().devReserveBytes).toBe(0);
+  void refused;
+});
+
+test("a dev-load file counts only while it is fresh, well formed and sane", () => {
+  const now = 1_800_000_000_000; const ok = { version: 1, ts: now / 1000 - 5, budget_gb: 24, used_gb: 2.5 };
+  expect(parseDevLoad(JSON.stringify(ok), now)).toEqual({ budgetBytes: 24 * GB, usedBytes: Math.round(2.5 * GB) });
+  expect(parseDevLoad(JSON.stringify({ ...ok, ts: now / 1000 - 120 }), now).budgetBytes).toBe(0);
+  expect(parseDevLoad(JSON.stringify({ ...ok, version: 2 }), now).budgetBytes).toBe(0);
+  expect(parseDevLoad(JSON.stringify({ ...ok, budget_gb: -1 }), now).budgetBytes).toBe(0);
+  expect(parseDevLoad("not json", now).budgetBytes).toBe(0);
+  expect(parseDevLoad(null, now).budgetBytes).toBe(0);
+  expect(parseDevLoad(JSON.stringify({ ...ok, budget_gb: 500 }), now).budgetBytes).toBe(48 * GB);
+});
+
+test("the video worker's warm entry with no pid expires at its idle limit even when no worker is left to unload", async () => {
+  let now = Date.now();
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 100 * GB, tier: "p128" });
+  const handle = await admit({ id: "video-worker", kind: "generator", class: "warm", requestedBytes: 40 * GB, retainWarm: true }) as GovernorHandle;
+  release(handle);
+  setIdleTtlSeconds("video-worker", 600);
+  const stop = startGovernor({ pid: 1, pollMs: 1, now: () => now, unload: () => false });
+  stops.push(stop);
+  await Bun.sleep(10);
+  expect(getGovernorStatus().loaded.map((i) => i.id)).toContain("video-worker");
+  now += 11 * 60_000;
+  await Bun.sleep(15);
+  expect(getGovernorStatus().loaded).toEqual([]);
+});
+
+test("another warm entry whose owner declines to unload is not dropped by the video rule", async () => {
+  let now = Date.now();
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 100 * GB, tier: "p128" });
+  const handle = await admit({ id: "image-pool", kind: "generator", class: "warm", requestedBytes: 15 * GB, retainWarm: true }) as GovernorHandle;
+  release(handle);
+  const stop = startGovernor({ pid: 1, pollMs: 1, now: () => now, unload: () => false });
+  stops.push(stop);
+  now += 11 * 60_000;
+  await Bun.sleep(15);
+  expect(getGovernorStatus().loaded.map((i) => i.id)).toContain("image-pool");
 });
