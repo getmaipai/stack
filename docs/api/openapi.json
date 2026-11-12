@@ -15350,7 +15350,7 @@
                         },
                         "budget_bytes": {
                           "type": "number",
-                          "description": "DEV-BUDGET-01: the development budget the governor keeps back from admissions on top of its working margin; 0 when no dev launcher runs."
+                          "description": "DEV-BUDGET-01: the development budget: a reserve for ordinary dev tooling, never a cap on jobs; 0 when no dev launcher runs. The governor subtracts it when admitting, except while a heavy dev lease holds the machine in direct mode."
                         },
                         "used_bytes": {
                           "type": "number",

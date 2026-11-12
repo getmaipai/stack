@@ -2916,8 +2916,9 @@ Development work shares this computer with the Stack (Home's dev launcher runs t
 kernel's "available" figure counted idle development pages as reclaimable, so the governor admitted a 61.5 GB video job beside four dev
 hubs (8.4 GB, two of them orphans), swap reached 14.9 of 16 GB, memory pressure hit level 2 twice and the chat judge was evicted 12 times.
 
+- **In plain words.** The dev budget is only a reserve for ordinary development tooling (dev hubs, tests, builds). It never caps a big job: picture and video jobs a development session asks for (the 61.5 GB LTX admission included) go through Home's lease broker and the Stack's own admission. The one effect of the budget is that the governor subtracts it when it admits work. In direct mode (nobody on the hub) a heavy dev lease makes the launcher write `reserve_gb: 0`, so the Stack may take that room (idle dev hubs are stopped cold first); the reserve returns when the lease ends. In gated mode (the family is on the hub) it is never released.
 - **Reserve.** Home's launcher (`scripts/jobs/job.ts`, `MAIPAI_DEV_BUDGET_GB`, default 24) writes `jobs/dev-load.json`
-  (`{version: 1, ts, budget_gb, used_gb}`) about every 2 seconds while it runs a dev server. `lib/devBudget.ts` reads it (path:
+  (`{version: 1, ts, budget_gb, reserve_gb, used_gb}`; `reserve_gb` is the budget, or 0 during a heavy direct-mode lease) about every 2 seconds while it runs a dev server. `lib/devBudget.ts` reads it (path:
   `MAIPAI_DEV_LOAD_FILE`, else `$MAIPAI_JOBS_DIR/dev-load.json`, else `~/.local/state/maipai/jobs/dev-load.json`). A file older than 60 s,
   missing or malformed means no dev server runs and no reserve; the reserve never exceeds 48 GB; `MAIPAI_STACK_DEV_BUDGET=off` ignores it.
 - **Governor.** The live admission margin is the tier's working margin (20 GB on 128 GB, not lowered) plus that reserve

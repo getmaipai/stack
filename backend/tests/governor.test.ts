@@ -1019,7 +1019,7 @@ test("an idle video worker stays warm on the ledger and unloads for a waiting pi
 test("the dev budget is kept back from admissions on top of the 20 GB margin, and frees at once when the launcher stops", async () => {
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 90 * GB, tier: "p128" });
   expect(roomAfterEviction({ id: "video-worker", kind: "generator", class: "warm", requestedBytes: 61 * GB, measuredPeakBytes: 61.5 * GB }).roomBytes).toBeGreaterThanOrEqual(61.5 * GB - 1);
-  __setDevBudgetForTestsOnly({ budgetBytes: 24 * GB, usedBytes: 8 * GB });
+  __setDevBudgetForTestsOnly({ budgetBytes: 24 * GB, usedBytes: 8 * GB, reserveBytes: 24 * GB });
   expect(getGovernorStatus()).toMatchObject({ marginBytes: 20 * GB, devReserveBytes: 24 * GB });
   const room = roomAfterEviction({ id: "video-worker", kind: "generator", class: "warm", requestedBytes: 61 * GB, measuredPeakBytes: 61.5 * GB }).roomBytes;
   expect(room).toBe(46 * GB);
@@ -1034,7 +1034,8 @@ test("the dev budget is kept back from admissions on top of the 20 GB margin, an
 
 test("a dev-load file counts only while it is fresh, well formed and sane", () => {
   const now = 1_800_000_000_000; const ok = { version: 1, ts: now / 1000 - 5, budget_gb: 24, used_gb: 2.5 };
-  expect(parseDevLoad(JSON.stringify(ok), now)).toEqual({ budgetBytes: 24 * GB, usedBytes: Math.round(2.5 * GB) });
+  expect(parseDevLoad(JSON.stringify(ok), now)).toEqual({ budgetBytes: 24 * GB, usedBytes: Math.round(2.5 * GB), reserveBytes: 24 * GB });
+  expect(parseDevLoad(JSON.stringify({ ...ok, reserve_gb: 0 }), now)).toEqual({ budgetBytes: 24 * GB, usedBytes: Math.round(2.5 * GB), reserveBytes: 0 });
   expect(parseDevLoad(JSON.stringify({ ...ok, ts: now / 1000 - 120 }), now).budgetBytes).toBe(0);
   expect(parseDevLoad(JSON.stringify({ ...ok, version: 2 }), now).budgetBytes).toBe(0);
   expect(parseDevLoad(JSON.stringify({ ...ok, budget_gb: -1 }), now).budgetBytes).toBe(0);
@@ -1068,4 +1069,25 @@ test("another warm entry whose owner declines to unload is not dropped by the vi
   now += 11 * 60_000;
   await Bun.sleep(15);
   expect(getGovernorStatus().loaded.map((i) => i.id)).toContain("image-pool");
+});
+
+test("direct mode: a 61.5 GB video job is admitted when only dev hubs hold the memory (the launcher says reserve_gb 0); with the reserve held it waits", async () => {
+  // 128 GB computer; chat 19 GB loaded; four dev hubs hold 8 GB, so about 90 GB reads as available.
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 90 * GB, tier: "p128" });
+  const request = { id: "video-worker", kind: "generator" as const, class: "warm" as const, requestedBytes: 61.5 * GB, measuredPeakBytes: 61.5 * GB, retainWarm: true };
+  const now = 1_800_000_000_000;
+  // Heavy lease held in direct mode: the budget stays 24 GB, the reserve is 0, so the Stack's own admission decides and says yes.
+  __setDevBudgetForTestsOnly(parseDevLoad(JSON.stringify({ version: 1, ts: now / 1000, budget_gb: 24, reserve_gb: 0, used_gb: 8 }), now));
+  expect(getGovernorStatus().devReserveBytes).toBe(0);
+  const granted = await admit(request) as GovernorHandle;
+  expect(granted.id).toBe("video-worker");
+  expect(getGovernorStatus().loaded.map((i) => i.id)).toContain("video-worker");
+  release(granted); forgetLoadedItem("video-worker");
+  __setGovernorTuningForTestsOnly({ freeMemoryBytes: 90 * GB });
+  // Ordinary dev work (no heavy lease, or gated mode): the same job is held back by the 24 GB reserve.
+  __setDevBudgetForTestsOnly(parseDevLoad(JSON.stringify({ version: 1, ts: now / 1000, budget_gb: 24, reserve_gb: 24, used_gb: 8 }), now));
+  expect(roomAfterEviction(request).roomBytes).toBe(46 * GB);
+  void admit(request);
+  await Bun.sleep(20);
+  expect(getGovernorStatus().loaded.map((i) => i.id)).not.toContain("video-worker");
 });
