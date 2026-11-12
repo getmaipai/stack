@@ -7,7 +7,7 @@
 // `withdraw`, which removes the request from the governor's queue and
 // settles the `admitted` promise refused, so no late admission ever
 // happens and nothing is loaded that nobody holds.
-import { admit, getGovernorDecisions, getGovernorStatus, getRunState, peakFor, withdraw, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
+import { admit, getGovernorDecisions, getGovernorStatus, getRunState, jobClassOf, peakFor, withdraw, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
 
 /** The peak the governor will compute for a request, mirrored from its
  * `peakFor` so a refusal here agrees with an admission there. */
@@ -30,7 +30,7 @@ export function governorReasonFor(id: string, since: string): string {
 export function waitingReason(id: string, request: GovernorRequest): string {
   const why = getGovernorDecisions().find((decision) => decision.model === id)?.reason ?? "The current memory budget cannot admit the request.";
   const status = getGovernorStatus();
-  return `${why} It needs about ${gb(governorPeak(request))} GB with ${gb(status.freeMemoryBytes)} GB available (free memory plus cache the system can reclaim), and the machine's tier keeps ${gb(status.marginBytes)} GB of that back${status.devReserveBytes > 0 ? `, and development work on this computer keeps another ${gb(status.devReserveBytes)} GB (it frees as soon as development stops)` : ""}; memory pressure is ${status.pressure}.`;
+  return `${why} It needs about ${gb(governorPeak(request))} GB with ${gb(status.freeMemoryBytes)} GB available (free memory plus cache the system can reclaim), and the machine's tier keeps ${gb(status.marginBytes)} GB of that back${status.devReserveBytes > 0 && jobClassOf(request) === "heavy" ? `, and development work on this computer keeps another ${gb(status.devReserveBytes)} GB (it frees as soon as development stops)` : ""}; memory pressure is ${status.pressure}.`;
 }
 
 /** `waitingReason` and the refusals in `governor.ts` are the source of these temporary memory waits. */

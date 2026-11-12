@@ -23,6 +23,8 @@ import {
   cancelEvicting,
   __isEvictingForTests,
   type GovernorHandle,
+  jobClassOf,
+  reducedNeedFor,
 } from "@/lib/governor";
 import { scriptedMemoryReader } from "@/lib/memory/scripted";
 import { availableBytesFromVmStatistics } from "@/lib/memory/darwin";
@@ -38,6 +40,7 @@ beforeEach(() => {
   __resetGovernorForTests();
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 64 * GB, freeMemoryBytes: 32 * GB });
   __resetHealthForTests();
+  __setDevBudgetForTestsOnly(null);
 });
 
 afterEach(async () => {
@@ -1032,16 +1035,21 @@ test("the dev budget is kept back from admissions on top of the 20 GB margin, an
   void refused;
 });
 
-test("the dev reserve never keeps the small picture reader out, while any other role still honours it", async () => {
-  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 28 * GB, tier: "p128" });
-  __setDevBudgetForTestsOnly({ budgetBytes: 24 * GB, usedBytes: 2 * GB, reserveBytes: 24 * GB });
-  // 28 GB free: the 20 GB working margin leaves 8 GB, the dev reserve takes it all for any role but the picture reader.
-  await admit({ id: "vision", role: "vision", kind: "resident", class: "reserved", requestedBytes: 4.2 * GB, measuredPeakBytes: 4.2 * GB }) as GovernorHandle;
-  expect(getGovernorStatus().loaded.map((i) => i.id)).toContain("vision");
-  const other = admit({ id: "judge-like", role: "judge", kind: "resident", class: "warm", requestedBytes: 4.2 * GB, measuredPeakBytes: 4.2 * GB });
-  await Bun.sleep(20);
-  expect(getGovernorStatus().loaded.map((i) => i.id)).not.toContain("judge-like");
-  void other;
+// DEV-BUDGET-02 (2026-11-12): no one-off exemptions. Every job has one class (roles.ts ROLE_JOB_CLASS, jobClassOf in governor.ts); the dev
+// reserve applies only to heavy jobs. The 4.2 GB picture reader was refused beside dev hubs; it is essential now.
+test("the dev reserve holds back only heavy jobs: essential and interactive ones are blocked only when they truly do not fit", () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 30 * GB, tier: "p128" });
+  __setDevBudgetForTestsOnly({ budgetBytes: 24 * GB, usedBytes: 8 * GB, reserveBytes: 24 * GB });
+  // 30 GB free less the 20 GB margin leaves 10 GB; the 24 GB reserve would take it far below zero.
+  expect(jobClassOf({ id: "vision", role: "vision", kind: "jit", requestedBytes: 4.2 * GB })).toBe("essential");
+  expect(reducedNeedFor({ id: "vision", role: "vision", kind: "jit", requestedBytes: 4.2 * GB }).needed).toBe(false);
+  expect(jobClassOf({ id: "image-pool", role: "image", kind: "generator", requestedBytes: 8 * GB })).toBe("interactive");
+  expect(reducedNeedFor({ id: "image-pool", role: "image", kind: "generator", requestedBytes: 8 * GB }).needed).toBe(false);
+  expect(jobClassOf({ id: "image-pool", role: "image", kind: "generator", requestedBytes: 20 * GB })).toBe("heavy");
+  expect(jobClassOf({ id: "video-worker", role: "video", kind: "generator", requestedBytes: 1 * GB })).toBe("heavy");
+  expect(reducedNeedFor({ id: "video-worker", role: "video", kind: "generator", requestedBytes: 9 * GB }).needed).toBe(true);
+  expect(reducedNeedFor({ id: "vision", role: "vision", kind: "jit", requestedBytes: 12 * GB, jobClass: "essential" }).needed).toBe(true);
+  __setDevBudgetForTestsOnly(null);
 });
 
 test("a dev-load file counts only while it is fresh, well formed and sane", () => {

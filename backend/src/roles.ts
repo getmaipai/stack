@@ -166,6 +166,17 @@ export const ROLES = {
   },
 } satisfies Record<RoleId, RoleDefinition>;
 
+/** DEV-BUDGET-02 (2026-11-12): every Stack job has one of three classes, defined here and nowhere else.
+ *  essential:   small always-on helpers (chat, judge, router, picture reader, speech, search): never held back by the dev reserve.
+ *  interactive: a family member is waiting (coding, one picture): held back only when it truly does not fit.
+ *  heavy:       video, music, big pictures, long jobs: respects the dev reserve and, for development, goes through the lease broker.
+ *  A request that needs HEAVY_JOB_BYTES or more is heavy whatever its role (see jobClassOf in lib/governor.ts). */
+export type JobClass = "essential" | "interactive" | "heavy";
+export const ROLE_JOB_CLASS: Record<RoleId, JobClass> = {
+  chat: "essential", judge: "essential", router: "essential", embed: "essential", rerank: "essential", vision: "essential",
+  stt: "essential", tts: "essential", wakeword: "essential", coding: "interactive", image: "interactive", video: "heavy", music: "heavy",
+};
+
 export const RoleDefinitionSchema = z.object({
   label: z.string(),
   wire: WireSchema,

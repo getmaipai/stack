@@ -2926,5 +2926,11 @@ hubs (8.4 GB, two of them orphans), swap reached 14.9 of 16 GB, memory pressure 
   "Could it ever fit" figures keep the tier margin alone, so a job waits for the reserve (it frees the moment dev hubs stop) instead of
   being refused for good. A waiting reason names the reserve. `GovernorStatus.devReserveBytes` and `/stack/v1/memory`
   `dev_load.budget_bytes` and `.used_bytes` report it (bytes only).
+- **Job classes (DEV-BUDGET-02, 2026-11-12).** Every job has one class, defined once (`ROLE_JOB_CLASS` in `roles.ts`, resolved by
+  `jobClassOf()` in `governor.ts`): **essential** (small always-on helpers: chat, judge, router, picture reader, speech, search; never held
+  back by the dev reserve), **interactive** (a family member is waiting: coding, one picture; held back only when it truly does not fit)
+  and **heavy** (video, music, any job of 16 GB or more, long jobs). The dev reserve applies to heavy jobs only. There are no one-off
+  exemptions: a new role gets its class in that one table (an unlisted role falls back from its memory class). A request may carry `jobClass`
+  to override its role.
 - **Video worker entry.** The warm `video-worker` entry has no pid. At its idle limit it expires even when no worker is left to unload,
   so it cannot keep counting its 60 GB peak.
