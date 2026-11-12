@@ -1032,6 +1032,18 @@ test("the dev budget is kept back from admissions on top of the 20 GB margin, an
   void refused;
 });
 
+test("the dev reserve never keeps the small picture reader out, while any other role still honours it", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 28 * GB, tier: "p128" });
+  __setDevBudgetForTestsOnly({ budgetBytes: 24 * GB, usedBytes: 2 * GB, reserveBytes: 24 * GB });
+  // 28 GB free: the 20 GB working margin leaves 8 GB, the dev reserve takes it all for any role but the picture reader.
+  await admit({ id: "vision", role: "vision", kind: "resident", class: "reserved", requestedBytes: 4.2 * GB, measuredPeakBytes: 4.2 * GB }) as GovernorHandle;
+  expect(getGovernorStatus().loaded.map((i) => i.id)).toContain("vision");
+  const other = admit({ id: "judge-like", role: "judge", kind: "resident", class: "warm", requestedBytes: 4.2 * GB, measuredPeakBytes: 4.2 * GB });
+  await Bun.sleep(20);
+  expect(getGovernorStatus().loaded.map((i) => i.id)).not.toContain("judge-like");
+  void other;
+});
+
 test("a dev-load file counts only while it is fresh, well formed and sane", () => {
   const now = 1_800_000_000_000; const ok = { version: 1, ts: now / 1000 - 5, budget_gb: 24, used_gb: 2.5 };
   expect(parseDevLoad(JSON.stringify(ok), now)).toEqual({ budgetBytes: 24 * GB, usedBytes: Math.round(2.5 * GB), reserveBytes: 24 * GB });

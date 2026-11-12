@@ -476,9 +476,12 @@ function workingMargin(): number {
 /** DEV-BUDGET-01: the live margin an admission must leave free: the tier's working margin (never lowered) plus the budget development
  * work on this computer owns (lib/devBudget.ts). Static "could it ever fit" figures keep the tier margin alone: a dev hub that stops
  * frees the reserve at once, so a job waits for it instead of being refused for good. */
-function admissionMargin(): number {
-  return workingMargin() + devReserveBytes();
+function admissionMargin(request?: { role?: string | null }): number {
+  return workingMargin() + (request?.role && DEV_RESERVE_EXEMPT_ROLES.has(request.role) ? 0 : devReserveBytes());
 }
+/** Roles the dev reserve never keeps out: the small picture reader (about 4 GB) is how a chat turn with attached pictures works at all, and a dev server must not switch it
+ * off (2026-11-12: six idle dev servers held the 24 GB reserve and the family's picture-reading chat answered "I can't read your pictures"). The tier's 20 GB working margin still applies. */
+export const DEV_RESERVE_EXEMPT_ROLES: ReadonlySet<string> = new Set(["vision"]);
 
 function usesFlexBand(request: GovernorRequest, peakBytes: number): boolean {
   const freeAfterAdmission = freeMemoryBytes - peakBytes;
@@ -514,14 +517,14 @@ function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
   const cap = effectiveCapBytes();
   const growth = Math.max(0, peakBytes - (existing?.peakBytes ?? 0));
   if (loadedBytes() + growth > cap) return false;
-  return freeMemoryBytes - growth >= admissionMargin() || usesFlexBand(request, growth);
+  return freeMemoryBytes - growth >= admissionMargin(request) || usesFlexBand(request, growth);
 }
 
 /** Whether the request would be admitted if `freedBytes` of loaded jit memory were gone. The memory watchdog's gate is not asked: it reads real memory, which the item to be evicted still holds. */
 function wouldAdmitAfterFreeing(request: GovernorRequest, peakBytes: number, freedBytes: number): boolean {
   if (memoryReadingDegraded || pressure !== "normal") return false;
   if (request.kind === "generator" && [...loaded.values()].some((item) => item.kind === "generator")) return false;
-  return loadedBytes() - freedBytes + peakBytes <= effectiveCapBytes() && freeMemoryBytes + freedBytes - peakBytes >= admissionMargin();
+  return loadedBytes() - freedBytes + peakBytes <= effectiveCapBytes() && freeMemoryBytes + freedBytes - peakBytes >= admissionMargin(request);
 }
 
 export async function admit(request: GovernorRequest): Promise<GovernorHandle | { queued: true; position: number; class: GovernorClass; admitted: Promise<GovernorHandle | { refused: true; reason: string }> } | { refused: true; reason: string }> {
