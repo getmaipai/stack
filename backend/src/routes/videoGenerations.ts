@@ -29,7 +29,7 @@ import { ltx25LoraAdmitBytes, ltx25LoraMode, ltx25LoraProfile, ltx25PackTransfor
 import { checkEdit, EditSourceError, editRuntime, ltx25EditAdmitBytes, ltx25MaxEditSupported, LTX25_EDIT_EXTEND_MAX_SECONDS, LTX25_EDIT_EXTEND_MIN_SECONDS, LTX25_EDIT_RETAKE_MAX_SECONDS, LTX25_EDIT_RETAKE_MIN_SECONDS, LTX25_MAX_EDIT_MEASURED, planSource, probeSource, type Ltx25EditKind } from "@/video/ltx25Edit";
 import { MediaPathError, resolveReadable } from "@/media/paths";
 import { stashClip, unstashClip, videoFailure, videoPreviewPath, videoProgress, videoTracker, VIDEO_JOB_KIND, type StashedClip } from "@/video/jobs";
-import { LTX25_ICLORA_PEAK_BYTES, LTX25_INGREDIENTS_HEIGHT, LTX25_INGREDIENTS_MAX_SECONDS, LTX25_INGREDIENTS_MAX_SHEETS, LTX25_INGREDIENTS_MIN_SECONDS, LTX25_INGREDIENTS_WIDTH, ltx25IngredientsFrames } from "@/video/ltx25";
+import { LTX25_ICLORA_PEAK_BYTES, LTX25_INGREDIENTS_PEAK_BYTES, LTX25_INGREDIENTS_HEIGHT, LTX25_INGREDIENTS_MAX_SECONDS, LTX25_INGREDIENTS_MAX_SHEETS, LTX25_INGREDIENTS_MIN_SECONDS, LTX25_INGREDIENTS_WIDTH, ltx25IngredientsFrames } from "@/video/ltx25";
 import { sha256OfFile } from "@/lib/fileHash";
 
 const DEFAULT_WAIT_MS = 30_000;
@@ -384,7 +384,7 @@ videoV1Routes.openapi(ingredientsRoute, async (c) => {
   if (stat.size !== record.bytes || (Math.floor(stat.mtimeMs) !== record.mtime_ms && await sha256OfFile(loraFile) !== record.sha256)) return fail(c, 409, "ic_lora_changed", `The installed Ingredients adapter ${INGREDIENTS_ADAPTER_FILE} changed or is incomplete. Install it again, then retry.`);
   const frames = ltx25IngredientsFrames(seconds);
   const runBody = { prompt, timeout_ms: timeout, audience: form.audience } as z.infer<typeof VideoRequestSchema>;
-  return await runClip(c, runBody, "ltx25max", { prompt, negativePrompt: null, image: null, endImage: null, width: LTX25_INGREDIENTS_WIDTH, height: LTX25_INGREDIENTS_HEIGHT, frames, seed, loras: [], loraIds: [record.id], quality: "ltx25max", ingredients: { sheets: bytes, loraPath: loraFile, loraId: record.id } }, { size: `${LTX25_INGREDIENTS_WIDTH}x${LTX25_INGREDIENTS_HEIGHT}`, seconds, mode: "ic_lora" }, LTX25_ICLORA_PEAK_BYTES);
+  return await runClip(c, runBody, "ltx25max", { prompt, negativePrompt: null, image: null, endImage: null, width: LTX25_INGREDIENTS_WIDTH, height: LTX25_INGREDIENTS_HEIGHT, frames, seed, loras: [], loraIds: [record.id], quality: "ltx25max", ingredients: { sheets: bytes, loraPath: loraFile, loraId: record.id } }, { size: `${LTX25_INGREDIENTS_WIDTH}x${LTX25_INGREDIENTS_HEIGHT}`, seconds, mode: "ic_lora" }, LTX25_INGREDIENTS_PEAK_BYTES);
 });
 
 /** The queue check, the memory verdict, the stash, the job and the wait: one definition for a made clip and for an edit of one. */

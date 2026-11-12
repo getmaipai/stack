@@ -9,7 +9,7 @@ import { __resetProvenanceForTests } from "@/video/provenance";
 import { registerVideoJobs } from "@/video/jobs";
 import { videoAdmission } from "@/video/jobs";
 import { __setEditRuntimeForTests } from "@/video/ltx25Edit";
-import { videoGen, type VideoGenDeps, type WorkerHandle, type WorkerRequest, type WorkerReply } from "@/video/videoGen";
+import { memoryVerdict, videoGen, type VideoGenDeps, type WorkerHandle, type WorkerRequest, type WorkerReply } from "@/video/videoGen";
 import { importLora } from "@/video/loras";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -110,4 +110,14 @@ test("ingredients admission reserves its own measured footprint, not the coloriz
   expect(LTX25_INGREDIENTS_PEAK_BYTES).toBeLessThan(LTX25_ICLORA_PEAK_BYTES);
   expect(LTX25_INGREDIENTS_PEAK_BYTES).toBeGreaterThanOrEqual(50_700_000_000);
   expect(videoAdmission({ quality: "ltx25max", mode: "ic_lora", size: "768x448", seconds: 8 })).toEqual({ requestedBytes: LTX25_INGREDIENTS_PEAK_BYTES, measuredPeakBytes: LTX25_INGREDIENTS_PEAK_BYTES, engine: "video-gen" });
+});
+
+test("on a computer with room for the measured Ingredients peak but not the colorizer's, an Ingredients clip is accepted", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 72 * GB, freeMemoryBytes: 72 * GB, tier: "p128" });
+  expect(memoryVerdict("ltx25max", LTX25_ICLORA_PEAK_BYTES).ok).toBe(false);
+  expect(memoryVerdict("ltx25max", LTX25_INGREDIENTS_PEAK_BYTES).ok).toBe(true);
+  await install("ltx-2.5-22b-ic-lora-ingredients-0.9");
+  const response = await post({ timeout_ms: "50" });
+  expect(response.status).not.toBe(503); // 200 (finished in the fake worker) or 202; never no_memory
+  expect([200, 202]).toContain(response.status);
 });
