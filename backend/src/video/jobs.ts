@@ -141,11 +141,12 @@ export function registerVideoJobs(): void {
         clip.frames = 1 + Math.floor((Math.min(facts.frames, 241) - 1) / 8) * 8;
         const sourcePath = join(work, "source.mp4");
         copyFileSync(source, sourcePath);
-        icLoraInput = { sourcePath, path: clip.icLora.loraPath, strength: clip.icLora.strength, conditioning: clip.icLora.conditioning };
+        icLoraInput = { sourcePath, path: clip.icLora.loraPath, strength: clip.icLora.strength, conditioning: clip.icLora.conditioning, ffprobe, ffmpeg: await editRuntime.toolbox.path("ffmpeg", (status) => update({ status }), signal) };
       }
       if (clip.ingredients) {
         const sheets = clip.ingredients.sheets.map((bytes, i) => { const file = join(work, `sheet-${i + 1}.png`); writeFileSync(file, bytes, { mode: 0o600 }); return file; });
-        icLoraInput = { sourcePath: "", path: clip.ingredients.loraPath, strength: 1, conditioning: "source", sheets };
+        const status = (value: string) => update({ status: value });
+        icLoraInput = { sourcePath: "", path: clip.ingredients.loraPath, strength: 1, conditioning: "source", sheets, ffprobe: await editRuntime.toolbox.path("ffprobe", status, signal), ffmpeg: await editRuntime.toolbox.path("ffmpeg", status, signal) };
       }
       const pacing = heavyGate.pacing(job.id);
       const tracker = clip.icLora || clip.ingredients

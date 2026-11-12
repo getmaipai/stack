@@ -98,6 +98,13 @@ test("ingredients defaults to 8 seconds (193 frames) and one sheet", async () =>
   expect(requests[0]!.reference_sheets).toHaveLength(1);
 });
 
+test("the worker is handed both ffmpeg and ffprobe (it refuses to run without them, which answered model_missing for every real clip)", async () => {
+  loraId = await install("ltx-2.5-22b-ic-lora-ingredients-0.9");
+  const response = await post();
+  expect(response.status).toBe(200);
+  expect(requests[0]).toMatchObject({ ffmpeg: "/fake/ffmpeg", ffprobe: "/fake/ffprobe" });
+});
+
 test("ingredients answers 202 with the job when it outlasts the wait", async () => {
   loraId = await install("ltx-2.5-22b-ic-lora-ingredients-0.9");
   videoGen.useDeps({ ...stubWorker(), spawn: async (): Promise<WorkerHandle> => { let done!: (n: number) => void; const exited = new Promise<number>((r) => done = r); return { exited, kill: () => done(143), send: () => new Promise<WorkerReply>(() => {}) }; } });
