@@ -100,3 +100,14 @@ export const QWEN_IMAGE_FILES: ImagePinFile[] = [
   { file: "vae/0.safetensors", sha256: "e7e48c5dc3091e79bdbfb2950071378ea1e7ac5eb6d33ef8ff79c684d9ba77a6", bytes: 253586133 },
   { file: "vae/model.safetensors.index.json", sha256: "a88f5c9bdee8fee206b7c0577bae817de5d9da18ec5a64352dcaa1f78dbdb58e", bytes: 13512 },
 ];
+
+// MAKE-CLEARER-2026-11-13 (CREATOR-52): SeedVR2 3B, the "Best" level of Make clearer for pictures. Two files, both read by mflux 0.23.0
+// (the version already pinned in image-gen) from one folder. Hashes are the repository's git-lfs sha256 (the blob names) and were
+// recomputed from the downloaded files on 2026-11-13. Licence: the model card metadata says Apache-2.0 (base ByteDance-Seed/SeedVR2-3B).
+export const SEEDVR2_REPO = "numz/SeedVR2_comfyUI";
+export const SEEDVR2_REVISION = "09ced71023636e9bc8cdf9cdecfb2625d1e691e8";
+export const SEEDVR2_PRIMARY = "seedvr2_ema_3b_fp16.safetensors";
+export const SEEDVR2_FILES: ImagePinFile[] = [
+  { file: "seedvr2_ema_3b_fp16.safetensors", sha256: "2fd0e03a3dad24e07086750360727ca437de4ecd456f769856e960ae93e2b304", bytes: 6783018808 },
+  { file: "ema_vae_fp16.safetensors", sha256: "20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1", bytes: 501324814 },
+];

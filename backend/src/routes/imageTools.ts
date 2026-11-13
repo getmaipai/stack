@@ -8,6 +8,8 @@ import type { AppEnv } from "@/types";
 import { imageTools } from "@/imagetools/imageTools";
 import { lookService } from "@/look/look";
 import { livePortrait } from "@/liveportrait/liveportrait";
+import { imageGen } from "@/images/imageEngine";
+import { restoreInstalled } from "@/images/restore";
 
 const StatusSchema = z.object({
   state: z.enum(["unsupported", "needs-setup", "building", "idle", "running"]).openapi({ description: "needs-setup: nothing is running; the first edit builds the environment (first time only) and starts the worker, which stops by itself when idle." }),
@@ -17,7 +19,7 @@ const StatusSchema = z.object({
   subjects: z.boolean().openapi({ description: "True once Apple's foreground instance and person/animal labeling helper is built (macOS 14+)." }),
   models: z.record(z.string(), z.boolean()).openapi({ description: "isnet, lama and esrgan: whether each pinned model file is installed and verified." }),
   limits: z.record(z.string(), z.number()).openapi({ description: "Megapixels each tool accepts." }),
-  operations: z.array(z.string()),
+  operations: z.array(z.string()).openapi({ description: "The operations this Stack can run now. `restore` (SeedVR2 3B, the Best level of Make clearer) is listed only when its two weight files are installed and verified and the picture engine can run on this computer." }),
   reason: z.string().nullable(),
 });
 const TalkFramesStatusSchema = z.object({
@@ -35,4 +37,9 @@ const TalkFramesStatusSchema = z.object({
 const getRoute = createRoute({ method: "get", path: "/", tags: ["Image tools"], summary: "The image tools' state, models and limits", responses: { 200: { content: { "application/json": { schema: z.object({ image_tools: StatusSchema, talk_frames: TalkFramesStatusSchema.optional() }) } }, description: "Additive. Home enables Remove background, Erase and Upscale from this." } } });
 
 export const imageToolsRoutes = apiRouter<AppEnv>();
-imageToolsRoutes.openapi(getRoute, (c) => c.json({ image_tools: imageTools.status(), talk_frames: livePortrait.status(), look: lookService.status() }, 200));
+imageToolsRoutes.openapi(getRoute, (c) => c.json({ image_tools: withRestore(imageTools.status()), talk_frames: livePortrait.status(), look: lookService.status() }, 200));
+
+/** MAKE-CLEARER-2026-11-13: `restore` runs on the picture engine, not the ONNX tools, so it joins the list here, only when the engine runs here and both weight files are verified. */
+function withRestore<T extends { operations: string[] }>(status: T): T {
+  return imageGen.supported() && restoreInstalled() ? { ...status, operations: [...status.operations, "restore"] } : status;
+}

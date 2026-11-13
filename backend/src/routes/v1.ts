@@ -17,7 +17,7 @@ import { prepareChatterboxVoice, voiceSettingsRefusal } from "@/speech/chatterbo
 import { ensureCloningWeights, prepareVoice, voiceNeedsCloning, VoiceRefusedError } from "@/speech/voices";
 import { hasJobRunner, submitJob, waitForJob } from "@/lib/jobs";
 import { endWithStream, heavyGate } from "@/lib/heavyGate";
-import { editImages, generateImages, ImageGenerationBodySchema, type ImageGenerationBody } from "@/routes/imageGenerations";
+import { editImages, generateImages, restoreImages, ImageGenerationBodySchema, type ImageGenerationBody } from "@/routes/imageGenerations";
 import { imageEngineActive } from "@/images/imageEngine";
 import { IMAGE_TOOLS_OPERATIONS, stashInput, takeResult } from "@/imagetools/imageTools";
 import { imageDimensions, pngDimensions, segmentStill, STILL_MASK_BAD_PROMPT, STILL_MASK_MAX_PIXELS, STILL_MASK_MAX_SIDE, STILL_MASK_TOO_LARGE, validateStillMaskPrompt } from "@/media/maskStill";
@@ -350,7 +350,7 @@ const MAX_UPLOAD_BYTES = 40 * 1024 * 1024;
 const ImageEditFormSchema = z.object({
   image: z.custom<File>((value) => value instanceof File, "The picture in the `image` field.").openapi({ type: "string", format: "binary" }),
   mask: z.custom<File>((value) => value instanceof File, "The mask in the `mask` field.").openapi({ type: "string", format: "binary" }).optional(),
-  operation: z.enum([...IMAGE_TOOLS_OPERATIONS, "edit", "edit_masked", "segment"]).openapi({ description: "depth: grayscale Depth Anything V2 Small map (near is white, far is black); segment: SAM 2.1 still-picture mask; prompt is JSON {box?: [x0,y0,x1,y1], points?: [{x,y,label:1|0}]} in picture pixels. Other operations include background removal, erase, upscale, resize, people masks and edits." }),
+  operation: z.enum([...IMAGE_TOOLS_OPERATIONS, "edit", "edit_masked", "segment", "restore"]).openapi({ description: "restore: SeedVR2 3B repair at the picture's own size (`scale` 1) or doubled (`scale` 2), the Best level of Make clearer; a generative model, so it can change faces and hands. depth: grayscale Depth Anything V2 Small map (near is white, far is black); segment: SAM 2.1 still-picture mask; prompt is JSON {box?: [x0,y0,x1,y1], points?: [{x,y,label:1|0}]} in picture pixels. Other operations include background removal, erase, upscale, resize, people masks and edits." }),
   instruction: z.string().optional().openapi({ description: "edit and edit_masked: what to change, in words (`prompt` is accepted too)." }),
   prompt: z.string().optional().openapi({ description: "segment: JSON prompt with an optional pixel box and up to 16 positive (label 1) or negative (label 0) points; at least a box or positive point is required. Picture limit: 12 megapixels and 4096 pixels on the long side." }),
   region: z.string().optional().openapi({ description: "edit_masked: x,y,width,height as fractions of the picture, like 0.4,0.5,0.2,0.2; the area to change when no mask is sent." }),
@@ -407,6 +407,10 @@ v1Routes.openapi(imageEditsRoute, async (c) => {
       const status = code === "too_large" ? 413 : code === "bad_prompt" ? 422 : code === "failed" ? 500 : code === "cancelled" ? 499 : 503;
       return jsonReply(c, { error: message, code }, status, identityHeaders(null)) as never;
     }
+  }
+  if (form.operation === "restore") {
+    if (form.image.size === 0 || form.image.size > MAX_UPLOAD_BYTES) return jsonReply(c, { error: `The picture must be between 1 byte and ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.`, code: "too_large" }, 413, identityHeaders(null)) as never;
+    return restoreImages(c, { image: form.image, scale: form.scale, seed: form.seed, timeout_ms: form.timeout_ms, image_source: form.image_source, audience: form.audience }) as never;
   }
   if (form.operation === "edit" || form.operation === "edit_masked") {
     if (form.image.size === 0 || form.image.size > MAX_UPLOAD_BYTES) return jsonReply(c, { error: `The picture must be between 1 byte and ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.`, code: "too_large" }, 413, identityHeaders(null)) as never;

@@ -25,6 +25,8 @@ import { wasGeneratedHere } from "@/video/provenance";
 import { imageLoras, MAX_LORAS_PER_IMAGE } from "@/images/loras";
 import { deleteResult, isJobId, pngPath, readResult, thumbPath, type ImageResultMeta } from "@/images/results";
 import { imageGen, memoryVerdict } from "@/images/imageEngine";
+import { RESTORE_FAMILY, RESTORE_LABEL, RESTORE_PEAK_BYTES, RESTORE_SCALES, restoreInstalled, restoreOutputSize } from "@/images/restore";
+import { imageDimensions } from "@/media/maskStill";
 import {
   DEFAULT_FAMILY, familyInstalled, IMAGE_DEFAULT_SIZE, IMAGE_FAMILIES, IMAGE_FEATHER_DEFAULT, IMAGE_FEATHER_MAX, IMAGE_REFERENCES_MAX, IMAGE_MAX_COUNT, IMAGE_MAX_INPUT_BYTES, IMAGE_MAX_PROMPT_CHARS, IMAGE_QUEUE_MAX, imageAvailability, installedFamilies,
   isFamilyId, parseSize, peakBytes, quantizeFor, type ImageFamilyId,
@@ -66,7 +68,7 @@ const PicSchema = z.object({
   b64_json: z.string().optional().openapi({ description: "The PNG, base64, on the reply that waited for it." }),
   content_type: z.literal("image/png"),
   seed: z.number().int(), width: z.number().int(), height: z.number().int(), model: z.string(), steps: z.number().int(), ms: z.number().int(), lora_ids: z.array(z.string()),
-  mode: z.enum(["generate", "image-to-image", "edit", "edit-masked"]),
+  mode: z.enum(["generate", "image-to-image", "edit", "edit-masked", "restore"]),
 });
 export const ImageResponseSchema = z.object({ created: z.number().int(), job: z.string(), data: z.array(PicSchema) });
 export const ImageErrorBody = z.object({ error: z.string(), code: z.string(), job: z.string().optional() });
@@ -313,6 +315,31 @@ export async function editImages<T extends Context>(c: T, form: EditForm) {
   const token = crypto.randomUUID();
   stashImage(token, { op: "edit", prompt: instruction, negativePrompt: null, family, quantize: null, width: 0, height: 0, steps, seed, count: 1, loras: [], loraIds: [], initImage: null, strength: 0, image, mask, region: region ?? null, feather, references: refs, derived });
   const submitted = submitJob({ kind: IMAGE_EDIT_JOB_KIND, role: "image", input: { token, family, mode: "edit", quantize: null, steps, seed, count: 1, ...adultInput(form.audience), lora_ids: [], masked: mask !== null || region !== null, references: refs.length } });
+  if ("refused" in submitted) return fail(c, 503, submitted.code ?? "unsupported", submitted.reason);
+  return waitAndReply(c, submitted.job.id, submitted.job.createdAt, form.timeout_ms ?? DEFAULT_WAIT_MS);
+}
+
+export interface RestoreForm { image: File; scale?: number; seed?: number; timeout_ms?: number; image_source?: Source; audience?: "all-ages" | "adult"; }
+
+/** MAKE-CLEARER-2026-11-13: `restore` of POST /v1/images/edits, the Best level of Make clearer. SeedVR2 3B repairs a picture at its own size (scale 1) or doubles it (scale 2); it redraws fine detail, so Home guards faces and locks it like any engine edit. */
+export async function restoreImages<T extends Context>(c: T, form: RestoreForm) {
+  const blocked = precheck(c, IMAGE_EDIT_JOB_KIND);
+  if (blocked) return blocked;
+  const image = new Uint8Array(await form.image.arrayBuffer());
+  if (!looksLikePicture(image)) return fail(c, 422, "bad_image", "The picture could not be read. Send a PNG, JPEG or WebP.");
+  if (!restoreInstalled()) return fail(c, 503, "not_installed", `${RESTORE_LABEL} is not installed yet. An admin can add it in Settings, AI & models.`);
+  const size = imageDimensions(image);
+  if (!size) return fail(c, 422, "bad_image", "The picture could not be read. Send a PNG, JPEG or WebP.");
+  const scale = form.scale ?? 1;
+  const out = restoreOutputSize(size.width, size.height, scale);
+  if (typeof out === "string") return fail(c, (RESTORE_SCALES as readonly number[]).includes(scale) ? 413 : 422, (RESTORE_SCALES as readonly number[]).includes(scale) ? "too_large" : "bad_scale", out);
+  if (activeJobs() >= IMAGE_QUEUE_MAX) return fail(c, 429, "queue_full", `${IMAGE_QUEUE_MAX} pictures are already waiting. Try again when one finishes.`);
+  const verdict = memoryVerdict(RESTORE_PEAK_BYTES);
+  if (!verdict.ok) return fail(c, 503, "no_memory", verdict.reason);
+  const seed = form.seed ?? Math.floor(Math.random() * 2 ** 32);
+  const token = crypto.randomUUID();
+  stashImage(token, { op: "restore", prompt: "", negativePrompt: null, family: RESTORE_FAMILY, quantize: null, width: 0, height: 0, steps: 1, seed, count: 1, loras: [], loraIds: [], initImage: null, strength: 0, image, mask: null, region: null, feather: 0, resolution: Math.min(out.width, out.height), derived: form.image_source !== "generated" });
+  const submitted = submitJob({ kind: IMAGE_EDIT_JOB_KIND, role: "image", input: { token, family: RESTORE_FAMILY, mode: "restore", quantize: null, steps: 1, seed, count: 1, ...adultInput(form.audience), lora_ids: [], masked: false, references: 0 } });
   if ("refused" in submitted) return fail(c, 503, submitted.code ?? "unsupported", submitted.reason);
   return waitAndReply(c, submitted.job.id, submitted.job.createdAt, form.timeout_ms ?? DEFAULT_WAIT_MS);
 }

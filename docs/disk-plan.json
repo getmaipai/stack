@@ -18,13 +18,13 @@
     "p32.ai_required_free_bytes": 66546386392,
     "p64.required_free_bytes": 156173015731,
     "p64.minimum_required_free_bytes": 56807128855,
-    "p64.everything_required_free_bytes": 223139226389,
+    "p64.everything_required_free_bytes": 231880438735,
     "p64.needed_bytes": 131256567829,
     "p64.home_required_free_bytes": 3176323277,
     "p64.ai_required_free_bytes": 152996692454,
     "p128.required_free_bytes": 190839334280,
     "p128.minimum_required_free_bytes": 56807128855,
-    "p128.everything_required_free_bytes": 508516042143,
+    "p128.everything_required_free_bytes": 517257254489,
     "p128.needed_bytes": 160271630397,
     "p128.home_required_free_bytes": 3176323277,
     "p128.ai_required_free_bytes": 187663011003
@@ -1307,6 +1307,27 @@
           "basis": "pins"
         },
         {
+          "id": "pictures-clearer",
+          "label": "Clearer pictures, best quality (SeedVR2)",
+          "note": "The most careful repair for old or soft pictures, used by Make clearer at its Best level. It redraws fine detail, so Home checks faces and keeps the original if one changes. Optional, about 7.3 GB, Apache-2.0.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 7284343622,
+          "installed_bytes": 7284343622,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "seedvr2-3b",
+            "seedvr2-3b-ema-vae-fp16"
+          ],
+          "engines": [
+            "engine:pictures",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "music",
           "label": "Make music (ACE-Step 1.5)",
           "note": "Makes and changes songs in chat. Optional.",
@@ -1730,11 +1751,11 @@
         "required_free_bytes": 56807128855
       },
       "everything": {
-        "download_bytes": 168343994711,
-        "installed_bytes": 175146119938,
+        "download_bytes": 175628338333,
+        "installed_bytes": 182430463560,
         "peak_temp_bytes": 12963882463,
-        "needed_bytes": 188110002401,
-        "required_free_bytes": 223139226389
+        "needed_bytes": 195394346023,
+        "required_free_bytes": 231880438735
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -2180,6 +2201,27 @@
             "qwen-image-2512-q8-transformer-model-safetensors-index",
             "qwen-image-2512-q8-vae-0",
             "qwen-image-2512-q8-vae-model-safetensors-index"
+          ],
+          "engines": [
+            "engine:pictures",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "pictures-clearer",
+          "label": "Clearer pictures, best quality (SeedVR2)",
+          "note": "The most careful repair for old or soft pictures, used by Make clearer at its Best level. It redraws fine detail, so Home checks faces and keeps the original if one changes. Optional, about 7.3 GB, Apache-2.0.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 7284343622,
+          "installed_bytes": 7284343622,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "seedvr2-3b",
+            "seedvr2-3b-ema-vae-fp16"
           ],
           "engines": [
             "engine:pictures",
@@ -2796,11 +2838,11 @@
         "required_free_bytes": 56807128855
       },
       "everything": {
-        "download_bytes": 403273756038,
-        "installed_bytes": 411864776393,
+        "download_bytes": 410558099660,
+        "installed_bytes": 419149120015,
         "peak_temp_bytes": 14278310471,
-        "needed_bytes": 426143086864,
-        "required_free_bytes": 508516042143
+        "needed_bytes": 433427430486,
+        "required_free_bytes": 517257254489
       },
       "measured_on": "2026-10-17",
       "default_selected": [

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """IMGGEN-STACK-01: the image worker. One process, one request at a time, JSON lines.
 
-stdin  : {"id", "op": "generate" | "edit", ...} one per line, or {"op": "cancel", "id"} at any time.
+stdin  : {"id", "op": "generate" | "edit" | "restore", ...} one per line, or {"op": "cancel", "id"} at any time.
 stdout : {"ready": true}; then per request {"id", "event": "phase", "phase", "percent"} and
          {"id", "event": "image", "index", ...}; then one {"id", "ok": true | false, ...}.
 stderr : never read for content by the Stack (prompts are never logged).
@@ -364,6 +364,60 @@ def edit(request):
     return {"seeds": [seed], "ms": int((time.time() - started) * 1000), "peak_bytes": int(mx.get_peak_memory()), "width": width, "height": height}
 
 
+def restore(request):
+    """MAKE-CLEARER-2026-11-13: SeedVR2 3B restores one picture (mflux 0.23.0, one diffusion step), in mflux's low-RAM mode: a 1 GB MLX cache, and
+    the transformer dropped before the VAE decodes (9.8 GB peak at 512 px against 36.7 GB in the default mode, identical result). The weights are
+    two files in one folder (`model_dir`). The model is not kept: a restore is occasional, and the next one reloads in a few seconds from the page
+    cache. `resolution` is the short side of the finished picture; the output is cut back to the exact proportions asked."""
+    from mflux.callbacks.instances.memory_saver import MemorySaver
+    from mflux.models.seedvr2.variants.upscale.seedvr2 import SeedVR2
+    from PIL import ImageOps
+
+    rid = request["id"]
+    seed = int(request["seed"])
+    phase(rid, "loading", 0)
+    stage(rid, "load")
+    free_model()  # one large model at a time: the pooled picture models give their memory back first
+    source = ImageOps.exif_transpose(Image.open(request["image"])).convert("RGB")
+    width, height = source.size
+    resolution = int(request.get("resolution") or min(width, height))
+    scale = resolution / float(min(width, height))
+    target = (max(2, int(round(width * scale))), max(2, int(round(height * scale))))
+    model = SeedVR2(quantize=None, model_path=request["model_dir"], model_config=ModelConfig.seedvr2_3b())
+    model.callbacks.register(Progress())
+    if request.get("low_ram", True):
+        model.callbacks.register(MemorySaver(model=model, keep_transformer=False, cache_limit_bytes=1000**3, num_seeds=1))
+    phase(rid, "loading", 100)
+    mx.reset_peak_memory()
+    started = time.time()
+
+    def on_step(done, total):
+        phase(rid, "decoding" if done >= total else "rendering", done / total * 95)
+        stage(rid, "decode" if done >= total else "steps", *(() if done >= total else (done, total)))
+
+    state["on_step"] = on_step
+    state["on_start"] = lambda total: stage(rid, "steps", 0, total)
+    state["preview"] = None
+    work = request["out_dir"]
+    os.makedirs(work, exist_ok=True)
+    input_path = os.path.join(work, "restore-input.png")
+    source.save(input_path, "PNG")  # EXIF turn applied once, here
+    try:
+        result = model.generate_image(seed=seed, image_path=input_path, resolution=resolution, softness=0.0)
+    finally:
+        os.remove(input_path)
+    restored = result.image.convert("RGB")
+    if restored.size != target:
+        restored = restored.resize(target, Image.LANCZOS)
+    peak = int(mx.get_peak_memory())
+    save_pair(restored, work, 0)
+    del result, model
+    free_model()
+    mx.set_cache_limit(MLX_CACHE_LIMIT_BYTES)
+    send({"id": rid, "event": "image", "index": 0, "seed": seed})
+    return {"seeds": [seed], "ms": int((time.time() - started) * 1000), "peak_bytes": peak, "width": target[0], "height": target[1]}
+
+
 # Exception types whose message names a missing module, file or attribute, never a value the person typed.
 SAFE_MESSAGE_TYPES = ("ImportError", "ModuleNotFoundError", "AttributeError", "FileNotFoundError", "NotADirectoryError", "PermissionError")
 
@@ -390,7 +444,7 @@ def handle(request):
     rid = request["id"]
     running["id"] = rid
     try:
-        body = edit(request) if request["op"] == "edit" else generate(request)
+        body = restore(request) if request["op"] == "restore" else edit(request) if request["op"] == "edit" else generate(request)
         send({"id": rid, "ok": True, **body})
     except (KeyboardInterrupt, StopImageGenerationException):
         state["on_step"] = None
@@ -412,6 +466,8 @@ def handle(request):
     finally:
         running["id"] = None
         state.update(on_step=None, on_start=None, preview=None, prev=None)
+        if request["op"] == "restore":
+            mx.set_cache_limit(MLX_CACHE_LIMIT_BYTES)  # low-RAM mode lowered it; a cancel or failure must not leave it there
         gc.collect()
         mx.clear_cache()
 
@@ -426,7 +482,7 @@ def main():
             continue
         if request.get("op") == "exit":
             return
-        if request.get("op") in ("generate", "edit"):
+        if request.get("op") in ("generate", "edit", "restore"):
             try:
                 handle(request)
             except KeyboardInterrupt:

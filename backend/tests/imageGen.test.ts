@@ -17,6 +17,9 @@ import { registerImageJobs, pngSize } from "@/images/jobs";
 import { commitResult, readResult, resultsRoot, sweepResults, workDir } from "@/images/results";
 import { ImageGenService, imageEngineActive, imageGen, imagePoolGrowthFits, imageRoleState, imageRequirementsFileFor, overallPercent, workerHandle, type ImageGenDeps, type WorkerEvent, type WorkerHandle, type WorkerReply, type WorkerRequest } from "@/images/imageEngine";
 import { __setInstalledFamiliesForTests, IMAGE_FAMILIES, parseSize, peakBytes, quantizeFor } from "@/images/models";
+import { __setRestoreInstalledForTests, RESTORE_PEAK_BYTES, restoreOutputSize } from "@/images/restore";
+import { STACK_IMAGE_RESTORE_MODELS } from "@/lib/modelCatalog";
+import { componentDefs } from "@/lib/components";
 import { __resetProvenanceForTests, wasGeneratedHere } from "@/video/provenance";
 import { LoraError, scanWords } from "@/lib/media/loraLibrary";
 import { parseRegion } from "@/routes/imageGenerations";
@@ -79,7 +82,7 @@ function scripted(script: Script = okReply, over: Partial<ImageGenDeps> = {}): I
 function clean(): void {
   imageGen.useDeps(null);
   __resetJobsForTests(); __resetGovernorForTests(); __resetProvenanceForTests();
-  __setInstalledFamiliesForTests(null);
+  __setInstalledFamiliesForTests(null); __setRestoreInstalledForTests(null);
   for (const path of ["images", "tmp/images", "tmp/image-lora"]) rmSync(join(dataDir, path), { recursive: true, force: true });
 }
 beforeEach(() => {
@@ -851,4 +854,141 @@ test("a picture job named Boost carries tier in its input and status; an unnamed
   expect((getJob(plain.job)!.input as { tier?: string }).tier).toBeUndefined();
   expect((await (await get(`/v1/images/generations/${plain.job}`)).json() as { tier: string }).tier).toBe("standard");
   expect((await post({ prompt: "x", tier: "turbo" })).status).toBe(400);
+});
+
+// ---- MAKE-CLEARER-2026-11-13: the Best level of Make clearer (operation restore, SeedVR2 3B) ----
+
+function restoreForm(width = 800, height = 600, extra: Record<string, string> = {}): FormData {
+  const form = new FormData();
+  form.set("operation", "restore");
+  form.set("image_source", "uploaded");
+  form.set("image", new File([pngBytes(width, height)], "in.png", { type: "image/png" }));
+  for (const [key, value] of Object.entries(extra)) form.set(key, value);
+  return form;
+}
+const restorePost = (form: FormData) => app.request("/v1/images/edits", { method: "POST", body: form });
+
+test("restore refuses when the weights are missing, with the line that says where to add them, and never starts a worker", async () => {
+  imageGen.useDeps(scripted());
+  __setRestoreInstalledForTests(false);
+  const response = await restorePost(restoreForm());
+  expect(response.status).toBe(503);
+  const body = await response.json() as { code: string; error: string };
+  expect(body.code).toBe("not_installed");
+  expect(body.error).toContain("Settings, AI & models");
+  expect(spawned).toBe(0);
+});
+
+test("restore sends the picture to the worker in low-RAM mode at its own size and answers like an edit; a photo someone brought is not recorded as ours", async () => {
+  imageGen.useDeps(scripted());
+  __setRestoreInstalledForTests(true);
+  const response = await restorePost(restoreForm(800, 600, { seed: "7", timeout_ms: "5000" }));
+  expect(response.status).toBe(200);
+  const body = await response.json() as { job: string; data: Pic[] };
+  expect(body.data[0]).toMatchObject({ mode: "restore", model: "seedvr2-3b", seed: 7 });
+  expect(requests[0]).toMatchObject({ op: "restore", family: "seedvr2-3b", model_dir: "/models/seedvr2-3b", resolution: 600, low_ram: true, seed: 7, quantize: null });
+  expect(requests[0]!.image).toContain(".image.bin");
+  expect(existsSync(requests[0]!.image!)).toBe(false);
+  // The governor held the measured figure for it, not a picture family's.
+  expect(JSON.stringify(listJobs())).not.toContain("in.png");
+  const doubled = await restorePost(restoreForm(800, 600, { scale: "2", timeout_ms: "5000" }));
+  expect(doubled.status).toBe(200);
+  expect(requests[1]!.resolution).toBe(1200);
+});
+
+test("restore is checked: a picture over the measured ceiling and an odd scale are refused with a plain sentence", async () => {
+  imageGen.useDeps(scripted());
+  __setRestoreInstalledForTests(true);
+  const big = await restorePost(restoreForm(2400, 1800));
+  expect(big.status).toBe(413);
+  expect((await big.json() as { error: string; code: string })).toMatchObject({ code: "too_large", error: expect.stringContaining("megapixels") });
+  const doubledBig = await restorePost(restoreForm(1200, 1000, { scale: "2" }));
+  expect(doubledBig.status).toBe(413);
+  const odd = await restorePost(restoreForm(800, 600, { scale: "3" }));
+  expect(odd.status).toBe(422);
+  expect((await odd.json() as { code: string }).code).toBe("bad_scale");
+  expect((await restorePost(restoreForm(800, 600, { image: "nope" }))).status).toBeLessThan(500);
+  expect(restoreOutputSize(1400, 1400, 1)).toEqual({ width: 1400, height: 1400 });
+  expect(typeof restoreOutputSize(1500, 1500, 1)).toBe("string");
+  expect(spawned).toBe(0);
+});
+
+test("a restore waits in line behind a picture and does not fail under load; it is cancelled between steps and the work folder goes", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  imageGen.useDeps(scripted(async (request) => { await gate; return okReply(request); }));
+  __setRestoreInstalledForTests(true);
+  const first = await post({ prompt: "one", timeout_ms: 1 });
+  expect(first.status).toBe(202);
+  const second = await restorePost(restoreForm(800, 600, { timeout_ms: "1" }));
+  expect(second.status).toBe(202);
+  const job = ((await second.json()) as { job: string }).job;
+  const queued = await (await get(`/v1/images/generations/${job}`)).json() as Record<string, unknown>;
+  expect(queued).toMatchObject({ state: "queued", position: 1 });
+  expect((await app.request(`/v1/images/generations/${job}`, { method: "DELETE" })).status).toBe(200);
+  expect(getJob(job)!.state).toBe("cancelled");
+  release();
+  await Bun.sleep(100);
+  expect(requests.filter((request) => request.op === "restore")).toHaveLength(0);
+});
+
+test("a restore cancelled while the worker runs it stops the worker and clears the work folder", async () => {
+  imageGen.useDeps(scripted(async (request, emit) => { emit({ id: request.id, event: "phase", phase: "rendering", percent: 40 }); await new Promise(() => {}); return okReply(request); }));
+  __setRestoreInstalledForTests(true);
+  const response = await restorePost(restoreForm(800, 600, { timeout_ms: "30" }));
+  expect(response.status).toBe(202);
+  const job = ((await response.json()) as { job: string }).job;
+  await Bun.sleep(80);
+  expect(requests[0]!.op).toBe("restore");
+  expect((await app.request(`/v1/images/generations/${job}`, { method: "DELETE" })).status).toBe(200);
+  await Bun.sleep(50);
+  expect(cancelled).toEqual([job]);
+  expect(existsSync(workDir(job))).toBe(false);
+});
+
+test("a restore that runs out of memory says so in a plain sentence and the next one starts a fresh worker", async () => {
+  imageGen.useDeps(scripted((request) => ({ id: request.id, ok: false, code: "out_of_memory", error: "There was not enough memory for that picture. Try a smaller size." })));
+  __setRestoreInstalledForTests(true);
+  const response = await restorePost(restoreForm(800, 600, { timeout_ms: "5000" }));
+  expect(response.status).toBe(507);
+  expect(JSON.stringify(await response.json())).not.toContain("Traceback");
+  expect(killed).toBe(1);
+});
+
+test("restore is listed as an operation only when both weight files are installed and verified", async () => {
+  imageGen.useDeps(scripted());
+  __setRestoreInstalledForTests(false);
+  const off = await (await get("/stack/v1/image-tools")).json() as { image_tools: { operations: string[] } };
+  expect(off.image_tools.operations).not.toContain("restore");
+  __setRestoreInstalledForTests(true);
+  const on = await (await get("/stack/v1/image-tools")).json() as { image_tools: { operations: string[] } };
+  expect(on.image_tools.operations).toContain("restore");
+  expect(on.image_tools.operations).toContain("upscale");
+});
+
+test("SeedVR2 3B is two pinned files at one revision with sha256 and size, Apache-2.0, listed as an optional component on the 64 GB tier and up with its size and readiness", () => {
+  expect(STACK_IMAGE_RESTORE_MODELS.map((pin) => pin.download?.hub_file).sort()).toEqual(["ema_vae_fp16.safetensors", "seedvr2_ema_3b_fp16.safetensors"]);
+  for (const pin of STACK_IMAGE_RESTORE_MODELS) {
+    expect(pin.license).toBe("Apache-2.0");
+    expect(pin.revision).toBe("09ced71023636e9bc8cdf9cdecfb2625d1e691e8");
+    expect(pin.download!.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(pin.download!.url).toContain(`/resolve/${pin.revision}/`);
+    expect(pin.engine).toBe("mflux");
+  }
+  expect(STACK_IMAGE_RESTORE_MODELS.reduce((sum, pin) => sum + pin.download!.approx_bytes, 0)).toBe(7_284_343_622);
+  expect(STACK_MODELS.filter((pin) => pin.id.startsWith("seedvr2-3b"))).toHaveLength(2);
+  expect(STACK_IMAGE_ENGINE_MODELS.some((pin) => pin.id.startsWith("seedvr2"))).toBe(false);
+  const unit = componentDefs().find((def) => def.id === "seedvr2-3b")!;
+  expect(unit).toMatchObject({ group: "tools", role: "image", tiers: ["p64", "p128"] });
+  expect(unit.label).toContain("Make clearer");
+  expect(unit.pins).toHaveLength(2);
+  expect(RESTORE_PEAK_BYTES).toBeGreaterThanOrEqual(9_840_000_000);
+});
+
+test("the worker runs restore from mflux 0.23.0's own SeedVR2 in low-RAM mode and puts the cache limit back", () => {
+  const worker = readFileSync(join(import.meta.dir, "../src/images/mflux_worker.py"), "utf8");
+  expect(worker).toContain("mflux.models.seedvr2.variants.upscale.seedvr2 import SeedVR2");
+  expect(worker).toContain("ModelConfig.seedvr2_3b()");
+  expect(worker).toContain("MemorySaver(model=model, keep_transformer=False, cache_limit_bytes=1000**3");
+  expect(worker).toContain("mx.set_cache_limit(MLX_CACHE_LIMIT_BYTES)");
 });

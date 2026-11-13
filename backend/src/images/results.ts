@@ -14,7 +14,7 @@ export interface ImageResultItem { index: number; seed: number; width: number; h
 export interface ImageResultMeta {
   job: string;
   created: number;
-  mode: "generate" | "image-to-image" | "edit" | "edit-masked";
+  mode: "generate" | "image-to-image" | "edit" | "edit-masked" | "restore";
   model: string;
   steps: number;
   quantize: number | null;

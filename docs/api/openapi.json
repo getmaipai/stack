@@ -2350,9 +2350,10 @@
                       "erase_subjects",
                       "edit",
                       "edit_masked",
-                      "segment"
+                      "segment",
+                      "restore"
                     ],
-                    "description": "depth: grayscale Depth Anything V2 Small map (near is white, far is black); segment: SAM 2.1 still-picture mask; prompt is JSON {box?: [x0,y0,x1,y1], points?: [{x,y,label:1|0}]} in picture pixels. Other operations include background removal, erase, upscale, resize, people masks and edits."
+                    "description": "restore: SeedVR2 3B repair at the picture's own size (`scale` 1) or doubled (`scale` 2), the Best level of Make clearer; a generative model, so it can change faces and hands. depth: grayscale Depth Anything V2 Small map (near is white, far is black); segment: SAM 2.1 still-picture mask; prompt is JSON {box?: [x0,y0,x1,y1], points?: [{x,y,label:1|0}]} in picture pixels. Other operations include background removal, erase, upscale, resize, people masks and edits."
                   },
                   "instruction": {
                     "type": "string",
@@ -11111,7 +11112,8 @@
                               "generate",
                               "image-to-image",
                               "edit",
-                              "edit-masked"
+                              "edit-masked",
+                              "restore"
                             ]
                           }
                         },
@@ -18139,7 +18141,8 @@
                           "type": "array",
                           "items": {
                             "type": "string"
-                          }
+                          },
+                          "description": "The operations this Stack can run now. `restore` (SeedVR2 3B, the Best level of Make clearer) is listed only when its two weight files are installed and verified and the picture engine can run on this computer."
                         },
                         "reason": {
                           "type": "string",

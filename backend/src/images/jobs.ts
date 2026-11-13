@@ -16,13 +16,14 @@ import { recordGeneratedImage } from "@/video/provenance";
 import { commitResult, workDir, type ImageResultMeta } from "@/images/results";
 import { ImageError, imageGen, overallPercent } from "@/images/imageEngine";
 import { IMAGE_FAMILIES, isFamilyId, peakBytes } from "@/images/models";
+import { RESTORE_FAMILY, RESTORE_PEAK_BYTES } from "@/images/restore";
 import { GenTracker, historyKey, previewExists, previewFile, recordRun } from "@/lib/genProgress";
 
 export const IMAGE_JOB_KIND = "image_generation";
 export const IMAGE_EDIT_JOB_KIND = "image_edit_generative";
 
 export interface StashedImage {
-  op: "generate" | "edit";
+  op: "generate" | "edit" | "restore";
   prompt: string;
   negativePrompt: string | null;
   family: string;
@@ -38,6 +39,8 @@ export interface StashedImage {
   references?: Uint8Array[];
   region: [number, number, number, number] | null;
   feather: number;
+  /** restore: the short side of the finished picture in pixels. */
+  resolution?: number;
   /** The starting picture was a photo someone brought, not one this Stack made: the output is not recorded as a free starting picture. */
   derived?: boolean;
   /** GENPREVIEW-01: draw a small preview after each step (default on). */
@@ -88,6 +91,7 @@ export interface ImageJobResult { job: string; model: string; mode: string; ms: 
 
 function memoryFor(job: Job) {
   const input = (job.input ?? {}) as { family?: string; mode?: string; quantize?: number | null; lora_ids?: string[]; count?: number };
+  if (input.mode === "restore") return { requestedBytes: RESTORE_PEAK_BYTES, measuredPeakBytes: RESTORE_PEAK_BYTES, engine: "image-gen" };
   const family = isFamilyId(input.family ?? "") ? input.family as keyof typeof IMAGE_FAMILIES : "flux2-klein-4b";
   const peak = peakBytes(family, input.mode === "edit" ? "edit" : "generate", input.quantize ?? null, input.lora_ids?.length ?? 0);
   return { requestedBytes: peak, measuredPeakBytes: peak, engine: "image-gen" };
@@ -115,8 +119,9 @@ export function registerImageJobs(): void {
       const mask = keep(write("mask.bin", item.mask));
       const references = (item.references ?? []).map((bytes, index) => keep(write(`ref${index}.bin`, bytes))!);
       const family = item.family as keyof typeof IMAGE_FAMILIES;
+      const single = item.op !== "generate";
       const pacing = heavyGate.pacing(job.id);
-      const tracker = new GenTracker("image", historyKey("image", item.op === "edit" ? 0 : item.width, item.op === "edit" ? 0 : item.height, item.family), pacing.now, (item.op === "edit" ? 1 : Math.max(0.25, (item.width * item.height) / (1024 * 1024))) * (item.family === "z-image-turbo" ? 3.2 : 1), pacing.paused);
+      const tracker = new GenTracker("image", historyKey("image", single ? 0 : item.width, single ? 0 : item.height, item.family), pacing.now, (single ? 1 : Math.max(0.25, (item.width * item.height) / (1024 * 1024))) * (item.family === "z-image-turbo" ? 3.2 : 1), pacing.paused);
       tracker.nextUnit(0, item.op === "generate" ? item.count : 1);
       remember(trackers, job.id, tracker);
       const tick = () => { if (tracker.started) update({ percent: Math.round(tracker.snapshot().fraction * 100) }); };
@@ -125,7 +130,7 @@ export function registerImageJobs(): void {
           preview: item.op === "generate" && item.preview !== false,
           op: item.op, family, quantize: item.quantize, prompt: item.prompt, steps: item.steps, seed: item.seed, loras: item.loras, outDir: work,
           ...(item.op === "generate" ? { width: item.width, height: item.height, count: item.count } : {}),
-          ...(initImage ? { initImage, strength: item.strength } : {}), ...(image ? { image } : {}), ...(mask ? { mask } : {}), ...(references.length > 0 ? { references } : {}), ...(item.region ? { region: item.region } : {}), ...(item.op === "edit" ? { feather: item.feather } : {}),
+          ...(initImage ? { initImage, strength: item.strength } : {}), ...(image ? { image } : {}), ...(mask ? { mask } : {}), ...(references.length > 0 ? { references } : {}), ...(item.region ? { region: item.region } : {}), ...(item.op === "edit" ? { feather: item.feather } : {}), ...(item.op === "restore" ? { resolution: item.resolution } : {}),
         }, {
           jobId: job.id, signal,
           onPhase: (phase, phasePercent) => { remember(progress, job.id, { phase, phasePercent }); update({ status: phase, percent: tracker.started ? Math.round(tracker.snapshot().fraction * 100) : overallPercent(phase, phasePercent) }); },
@@ -134,7 +139,7 @@ export function registerImageJobs(): void {
           onImage: (index) => { if (item.op === "generate") tracker.nextUnit(index + 1, item.count); },
         });
         if (item.op === "generate" && item.count === 1) recordRun(tracker.key, tracker.finish());
-        const count = item.op === "edit" ? 1 : item.count;
+        const count = single ? 1 : item.count;
         const images = [] as ImageResultMeta["images"];
         for (let index = 0; index < count; index += 1) {
           const bytes = new Uint8Array(readFileSync(join(work, `${index}.png`)));
@@ -145,8 +150,8 @@ export function registerImageJobs(): void {
           if (!item.derived) recordGeneratedImage(bytes);
         }
         const meta: ImageResultMeta = {
-          job: job.id, created: Math.floor(new Date(job.createdAt).getTime() / 1000), mode: item.op === "edit" ? (item.mask || item.region ? "edit-masked" : "edit") : item.initImage ? "image-to-image" : "generate",
-          model: IMAGE_FAMILIES[family].catalogId, steps: item.steps, quantize: item.quantize, lora_ids: item.loraIds, ...((job.input as { audience?: unknown } | null)?.audience === "adult" ? { audience: "adult" as const } : {}), ms: result.ms, mlx_peak_gb: result.peakBytes === null ? null : Math.round(result.peakBytes / 1e8) / 10, images,
+          job: job.id, created: Math.floor(new Date(job.createdAt).getTime() / 1000), mode: item.op === "restore" ? "restore" : item.op === "edit" ? (item.mask || item.region ? "edit-masked" : "edit") : item.initImage ? "image-to-image" : "generate",
+          model: item.op === "restore" ? RESTORE_FAMILY : IMAGE_FAMILIES[family].catalogId, steps: item.steps, quantize: item.quantize, lora_ids: item.loraIds, ...((job.input as { audience?: unknown } | null)?.audience === "adult" ? { audience: "adult" as const } : {}), ms: result.ms, mlx_peak_gb: result.peakBytes === null ? null : Math.round(result.peakBytes / 1e8) / 10, images,
         };
         update({ status: "ready", percent: 100 });
         commitResult(meta, work);

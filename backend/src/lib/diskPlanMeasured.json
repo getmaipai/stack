@@ -716,6 +716,14 @@
     "whisper-large-v3-turbo": {
       "download_bytes": 1614089644,
       "installed_bytes": 1614089644
+    },
+    "seedvr2-3b": {
+      "download_bytes": 6783018808,
+      "installed_bytes": 6783018808
+    },
+    "seedvr2-3b-ema-vae-fp16": {
+      "download_bytes": 501324814,
+      "installed_bytes": 501324814
     }
   }
 }

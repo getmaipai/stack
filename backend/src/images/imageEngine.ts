@@ -33,13 +33,14 @@ import { engineTagRoot } from "@/lib/store/layout";
 import { ensureUvEnvironment, managedEnv, uvEnvironmentReady, uvVenvPath, uvVenvPython, type UvEnvironmentSpec } from "@/lib/uvEnvironment";
 import { READY_TTL_MS, type RoleStateRecord } from "@/roles";
 import { familyInstalled, familySnapshot, IMAGE_FAMILIES, imageAvailability, installedFamilies, peakBytes, type ImageFamilyId } from "@/images/models";
+import { RESTORE_FAMILY, RESTORE_LABEL, RESTORE_PEAK_BYTES, restoreSnapshot, type RestoreFamilyId } from "@/images/restore";
 import darwinArm64Requirements from "./image-gen.darwin-arm64.requirements.txt" with { type: "file" };
 import workerScript from "./mflux_worker.py" with { type: "file" };
 
 export const IMAGE_GEN_NAME = "image-gen";
 export const IMAGE_GEN_VERSION = MANAGED_RUNTIMES.find((runtime) => runtime.name === IMAGE_GEN_NAME)?.version ?? "0.23.0";
 const idleMs = (): number => engineIdleMs("image");
-const deadlineMs = (family: ImageFamilyId, count: number): number => Number(process.env.IMAGE_DEADLINE_MS ?? (family === "qwen-image-2512-q8" ? 8 : family === "z-image-turbo" ? 4 : 2) * 60_000 * Math.max(1, count));
+const deadlineMs = (family: ImageFamilyId | RestoreFamilyId, count: number): number => Number(process.env.IMAGE_DEADLINE_MS ?? (family === "qwen-image-2512-q8" ? 8 : family === "z-image-turbo" ? 4 : 2) * 60_000 * Math.max(1, count));
 
 export class ImageError extends Error {
   constructor(readonly code: string, message: string, readonly status: number) { super(message); }
@@ -68,10 +69,12 @@ export function ensureImageGenEnvironment(onProgress: (phase: string) => void = 
 // ---- the worker protocol ----
 
 export interface WorkerRequest {
-  id: string; op: "generate" | "edit"; family: ImageFamilyId; quantize: number | null; model_dir: string; loras: Array<[string, number]>;
+  id: string; op: "generate" | "edit" | "restore"; family: ImageFamilyId | RestoreFamilyId; quantize: number | null; model_dir: string; loras: Array<[string, number]>;
   create_family?: ImageFamilyId; edit_family?: ImageFamilyId; pool_strategy?: "pool" | "single";
   prompt: string; width?: number; height?: number; steps: number; seed: number; count?: number; out_dir: string;
   init_image?: string; strength?: number; image?: string; mask?: string; references?: string[]; region?: [number, number, number, number]; feather?: number;
+  /** restore: the short side of the finished picture in pixels (the worker keeps the picture's proportions), and mflux's low-RAM mode. */
+  resolution?: number; low_ram?: boolean;
   /** GENPREVIEW-01: write a small preview picture (`<out_dir>/preview.jpg`) after each denoising step. */
   preview?: boolean;
 }
@@ -95,7 +98,7 @@ export interface ImageGenDeps {
   ensureEnvironment: (onProgress: (phase: string) => void, signal?: AbortSignal) => Promise<void>;
   spawn: () => Promise<WorkerHandle>;
   /** The snapshot folder of an installed family, or null. */
-  snapshot: (family: ImageFamilyId) => string | null;
+  snapshot: (family: ImageFamilyId | RestoreFamilyId) => string | null;
   /** Test seam for the governor's incremental pool-growth verdict. */
   poolGrowthFits?: (activeRequestPeakBytes: number) => boolean;
 }
@@ -103,7 +106,7 @@ export interface ImageGenDeps {
 export const defaultImageGenDeps: ImageGenDeps = {
   supported: () => !!imageRequirementsFileFor(),
   ensureEnvironment: (onProgress, signal) => ensureImageGenEnvironment(onProgress, { signal }),
-  snapshot: familySnapshot,
+  snapshot: (family) => family === RESTORE_FAMILY ? restoreSnapshot() : familySnapshot(family),
   spawn: async () => {
     const root = imageGenRoot();
     const script = join(root, "mflux_worker.py");
@@ -174,7 +177,9 @@ export function workerHandle(child: { pid?: number; stdin: { write(data: string)
 export type ImageState = "unsupported" | "off" | "not-installed" | "needs-setup" | "building" | "idle" | "running";
 
 export interface ImageRunInput {
-  op: "generate" | "edit"; family: ImageFamilyId; quantize: number | null; prompt: string; width?: number; height?: number; steps: number; seed: number; count?: number;
+  op: "generate" | "edit" | "restore"; family: ImageFamilyId | RestoreFamilyId; quantize: number | null; prompt: string; width?: number; height?: number; steps: number; seed: number; count?: number;
+  /** restore: the short side of the finished picture in pixels. */
+  resolution?: number;
   loras: Array<[string, number]>; outDir: string;
   initImage?: string; strength?: number; image?: string; mask?: string; references?: string[]; region?: [number, number, number, number]; feather?: number;
   /** Ask the worker for per-step previews (generate only). */
@@ -276,7 +281,7 @@ export class ImageGenService {
     const onPhase = (phase: string, percent: number) => { this.lastPhase = phase; options.onPhase?.(phase, percent); };
     if (options.signal?.aborted) throw new ImageError("cancelled", "Cancelled.", 499);
     const modelDir = this.deps.snapshot(input.family);
-    if (!modelDir) throw new ImageError("model_missing", `${IMAGE_FAMILIES[input.family].label} is not installed yet. Install it from Home's Engines page, then try again.`, 503);
+    if (!modelDir) throw new ImageError("model_missing", input.family === RESTORE_FAMILY ? `${RESTORE_LABEL} is not installed yet. An admin can add it in Settings, AI & models.` : `${IMAGE_FAMILIES[input.family as ImageFamilyId].label} is not installed yet. Install it from Home's Engines page, then try again.`, 503);
     this.busy += 1;
     if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
     let killTimer: ReturnType<typeof setTimeout> | null = null;
@@ -287,9 +292,10 @@ export class ImageGenService {
       mkdirSync(input.outDir, { recursive: true, mode: 0o700 });
       const request: WorkerRequest = {
         id: options.jobId, op: input.op, family: input.family, quantize: input.quantize, model_dir: modelDir, loras: input.loras, prompt: input.prompt, steps: input.steps, seed: input.seed, out_dir: input.outDir,
-        create_family: input.family, edit_family: "flux2-klein-4b", pool_strategy: (this.deps.poolGrowthFits?.(peakBytes(input.family, input.op, input.quantize, input.loras.length)) ?? getGovernorStatus().loaded.some((item) => item.id === "image-pool" && item.peakBytes >= IMAGE_POOL_PEAK_BYTES)) ? "pool" : "single",
+        create_family: input.family as ImageFamilyId, edit_family: "flux2-klein-4b", pool_strategy: (this.deps.poolGrowthFits?.(input.op === "restore" ? RESTORE_PEAK_BYTES : peakBytes(input.family as ImageFamilyId, input.op, input.quantize, input.loras.length)) ?? getGovernorStatus().loaded.some((item) => item.id === "image-pool" && item.peakBytes >= IMAGE_POOL_PEAK_BYTES)) ? "pool" : "single",
         ...(input.width !== undefined ? { width: input.width, height: input.height } : {}), ...(input.count !== undefined ? { count: input.count } : {}),
         ...(input.preview && input.op === "generate" ? { preview: true } : {}), ...(input.initImage ? { init_image: input.initImage, strength: input.strength } : {}), ...(input.image ? { image: input.image } : {}), ...(input.mask ? { mask: input.mask } : {}), ...(input.references && input.references.length > 0 ? { references: input.references } : {}), ...(input.region ? { region: input.region } : {}), ...(input.feather !== undefined ? { feather: input.feather } : {}),
+        ...(input.op === "restore" ? { resolution: input.resolution, low_ram: true } : {}),
       };
       const aborted = new Promise<never>((_, reject) => {
         const stop = () => {

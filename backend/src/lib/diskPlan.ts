@@ -10,7 +10,7 @@
 import measured from "@/lib/diskPlanMeasured.json";
 import { PROFILE_TIERS, type ProfileTier } from "@/profiles";
 import {
-  CHATTERBOX_ENGINE, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS,
+  CHATTERBOX_ENGINE, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_RESTORE_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS,
   STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_SFX_MODELS, STACK_STEMS_MODELS, STACK_RECORDED_SPEECH_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_MASK_MODELS,
 } from "@/lib/modelCatalog";
 import { OMLX_OPTIONAL_TIERS } from "@/lib/chatEngines";
@@ -203,6 +203,8 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
     if (TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "pictures-zimage", label: "More picture styles (Z-Image Turbo)", note: "A second picture maker with a different look. Optional.", need: "optional", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_ZIMAGE_MODELS));
     if (TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "pictures-qwen", label: "Best pictures (Qwen-Image)", note: "The best picture maker, used for Max pictures. Clear words and fine detail. A large download. Optional.", need: "optional", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_QWEN_MODELS));
   }
+  // MAKE-CLEARER-2026-11-13: the Best level of Make clearer for pictures. Optional; its 12 GB peak is recommended only from the 64 GB tier up.
+  if (!tier.notAvailable.includes("image") && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p64")) rows.push(modelRow({ id: "pictures-clearer", label: "Clearer pictures, best quality (SeedVR2)", note: "The most careful repair for old or soft pictures, used by Make clearer at its Best level. It redraws fine detail, so Home checks faces and keeps the original if one changes. Optional, about 7.3 GB, Apache-2.0.", need: "optional", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_RESTORE_MODELS));
   if (!tier.notAvailable.includes("video")) rows.push(modelRow({ id: "video", label: "Make videos (Wan2.2)", note: "Recommended. Makes a short clip from a sentence or a picture.", need: "recommended", engines: ["engine:video", "engine:python"] }, STACK_VIDEO_MODELS));
   if (!tier.notAvailable.includes("music")) rows.push(modelRow({ id: "music", label: "Make music (ACE-Step 1.5)", note: "Makes and changes songs in chat. Optional.", need: "optional", engines: ["engine:music", "engine:python"] }, STACK_MUSIC_MODELS));
   if (!tier.notAvailable.includes("music")) rows.push(modelRow({ id: "music-transcribe", label: "Check sung words (Whisper)", note: "Transcribes finished songs for Home to check. Optional, about 1.6 GB.", need: "optional", engines: ["engine:music", "engine:python"] }, [STACK_MUSIC_WHISPER]));
