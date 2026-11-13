@@ -10,7 +10,7 @@ import { registerVideoJobs } from "@/video/jobs";
 import { videoAdmission } from "@/video/jobs";
 import { __setEditRuntimeForTests } from "@/video/ltx25Edit";
 import { videoGen, type VideoGenDeps, type WorkerHandle, type WorkerRequest, type WorkerReply } from "@/video/videoGen";
-import { importLora } from "@/video/loras";
+import { importLora, listLoras, removeLora } from "@/video/loras";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -50,7 +50,8 @@ beforeEach(async () => {
   loraId = added.id;
   chmodSync(source, 0o600);
 });
-afterEach(() => { videoGen.useDeps(null); __resetJobsForTests(); __resetGovernorForTests(); __resetProvenanceForTests(); __setEditRuntimeForTests(null); __resetRootsForTests(); rmSync(root, { recursive: true, force: true }); rmSync(jobsDir(), { recursive: true, force: true }); });
+// The imported style is removed again: a LoRA left in the library made videoLoraInstall.test.ts count two (2026-11-13).
+afterEach(async () => { for (const lora of listLoras()) await removeLora(lora.id); videoGen.useDeps(null); __resetJobsForTests(); __resetGovernorForTests(); __resetProvenanceForTests(); __setEditRuntimeForTests(null); __resetRootsForTests(); rmSync(root, { recursive: true, force: true }); rmSync(jobsDir(), { recursive: true, force: true }); });
 
 test("restyle refusal matrix gives plain corrective 422s", async () => {
   expect((await request({ model: "ltx25-q8" })).status).toBe(422);
