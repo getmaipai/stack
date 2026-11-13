@@ -27,6 +27,7 @@ import { heavyGate, recoverPausedWorkers } from "@/lib/heavyGate";
 import { hostLimiter } from "@/media/hosts";
 import { videoGen } from "@/video/videoGen";
 import { musicGen } from "@/music/musicGen";
+import { sfxGen } from "@/sound/sfxGen";
 import { imageGen } from "@/images/imageEngine";
 import { runSweeps } from "@/lib/sweeps";
 import { beginStopping } from "@/lib/lifecycle";
@@ -125,6 +126,7 @@ async function serve(): Promise<void> {
     lookService.stop();
     videoGen.stop();
     musicGen.stop();
+    sfxGen.stop();
     imageGen.stop();
     await stopAllRoles("The Stack is stopping.", "stack-stopping");
     stopTierWatch();

@@ -1230,6 +1230,53 @@ export const STACK_ALIGN_MODEL: CatalogModelLike = {
 };
 export const STACK_ALIGN_MODELS: CatalogModelLike[] = [STACK_ALIGN_MODEL];
 
+// MP-07: sound effects, Stable Audio 3 Small-SFX (433M DiT, 44.1 kHz stereo, 8 steps) with its T5Gemma text encoder, run by the
+// `sfx-gen` engine (Stability AI's stable-audio-3 source, MIT, pinned in engineCatalog). Stability's own repository is gated, so
+// the pin is the ungated, unmodified mirror ddalcu/Stable-Audio-3-Small-SFX-MLX-Serve at one revision; every file is pinned by
+// sha256 and size, and the pin, not the host, is the integrity check (the four large files match the hashes of Stability's
+// release). Licence: the Stability AI Community License (free for a person or business under US$1M a year; commercial use needs
+// registration with Stability; outputs may not train a foundation model) for the model, and Google's Gemma Terms of Use for the
+// text encoder; LICENSE.md, LICENSE_GEMMA.md and NOTICE ship in the folder, and an admin accepts SFX_LICENCE_NOTICE once before
+// the install (components.ts). Optional: never bundled, never in the first-run plan.
+export const STACK_SFX_MODEL_ID = "stable-audio-3-small-sfx";
+export const SFX_REPO = "ddalcu/Stable-Audio-3-Small-SFX-MLX-Serve";
+export const SFX_REVISION = "977fd4791852ba56657a8c814cfd3b0049b2ebae";
+export const SFX_ENGINE = "sfx-gen";
+export const SFX_LICENCE = "Stability AI Community License; Gemma Terms of Use (T5Gemma text encoder)";
+const SFX_FILES = [
+  { path: "model.safetensors", sha256: "ed9cf1b6172f1a8c2921a9560c21109ff3239524563ced9dce6dcdef41e2f515", bytes: 2_270_384_940 },
+  { path: "model_config.json", sha256: "a8aa5d45ae3d6524d3cd4e85e0d6e7d8d401267e7c6f28214bca8aae7b77bdeb", bytes: 10_454 },
+  { path: "LICENSE.md", sha256: "d6f6b1a4dce5c852bd6d7d9482d002baf0ccdb71e662250b73be9eec8764ee8d", bytes: 11_852 },
+  { path: "LICENSE_GEMMA.md", sha256: "e77acc0d3163bb7534675045c584b4d04b387b529239fc4b3647da0a01ba4745", bytes: 10_541 },
+  { path: "NOTICE", sha256: "0722d2570f4acc19188f1b49cc1ab9d62c0790d0a8a4cf3453062aa948978482", bytes: 408 },
+  { path: "t5gemma-b-b-ul2/model.safetensors", sha256: "9b05ea5a4f211d023832f706fb2c0e83e4fc721b6da35ab69ceb0b55eb7800d3", bytes: 1_183_022_944 },
+  { path: "t5gemma-b-b-ul2/config.json", sha256: "575334409716886ac2952f5a275ed92868deef8a0ea560258d9970a431c6fb3a", bytes: 2_540 },
+  { path: "t5gemma-b-b-ul2/generation_config.json", sha256: "1068b94599a94ceea097dd3936819f108c2e70806d7c6cc5ec425610af347625", bytes: 156 },
+  { path: "t5gemma-b-b-ul2/special_tokens_map.json", sha256: "baec30ea10906f16adb8c18af7a34023002c1746542612b8b41c9f09e1351351", bytes: 636 },
+  { path: "t5gemma-b-b-ul2/tokenizer.json", sha256: "7794135caa3ea73918949c902a781cc61dab674a4b59c17d85931c77c1114cbd", bytes: 34_362_429 },
+  { path: "t5gemma-b-b-ul2/tokenizer.model", sha256: "61a7b147390c64585d6c3543dd6fc636906c9af3865a5548f27f31aee1d4c8e2", bytes: 4_241_003 },
+  { path: "t5gemma-b-b-ul2/tokenizer_config.json", sha256: "9546baec0dfefec0e29873edea9488ecde153f846e18c06ea48cb44587bf408f", bytes: 46_437 },
+];
+export const STACK_SFX_MODEL: CatalogModelLike = {
+  id: STACK_SFX_MODEL_ID, role: "music", component: "sound-effects", repo: SFX_REPO, license: SFX_LICENCE, revision: SFX_REVISION, engine: SFX_ENGINE,
+  sizing: { profile: "p32", quantization: "fp32" },
+  download: { url: hfUrl(`${SFX_REPO}/resolve/${SFX_REVISION}/model.safetensors`), sha256: SFX_FILES[0]!.sha256, approx_bytes: SFX_FILES.reduce((sum, file) => sum + file.bytes, 0), directory: "stable-audio-3-small-sfx", files: SFX_FILES },
+};
+export const STACK_SFX_MODELS: CatalogModelLike[] = [STACK_SFX_MODEL];
+/** What an admin reads and accepts once before the sound effects model installs (Home shows it; the Stack records the acceptance). */
+export const SFX_LICENCE_NOTICE = {
+  id: "stability-community-gemma-2026-11-13",
+  name: SFX_LICENCE,
+  /** The licence text at the pinned revision (the same LICENSE.md the install puts beside the model); Stability's own page is stability.ai/community-license. */
+  url: hfUrl(`${SFX_REPO}/blob/${SFX_REVISION}/LICENSE.md`),
+  summary: [
+    "The Stable Audio 3 Small-SFX model is not part of MaiPai: this computer downloads it from its published files, for your household's use.",
+    "It is free for a person, or a business that earns under US$1 million a year. Using it for a business needs a free registration with Stability AI (stability.ai/community-license); a business over US$1 million a year needs Stability's paid licence.",
+    "Sounds it makes may not be used to build or improve another foundation AI model, and its use must follow Stability AI's acceptable use policy and the law. Home says \"Powered by Stability AI\" where sounds are made.",
+    "Its text encoder (T5Gemma) is Google's, under the Gemma Terms of Use (ai.google.dev/gemma/terms). MaiPai's own rules for who may make what still apply on top.",
+  ],
+};
+
 // REC-VOICE-01: non-realtime recorded speech (the live tts role remains
 // Chatterbox Turbo). This MLX conversion is pinned file-by-file so the
 // household installs and verifies the weights through the ordinary store.
@@ -1501,7 +1548,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_DIARIZATION_SEGMENTATION_MODEL, STACK_DIARIZATION_EMBEDDING_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_RECORDED_SPEECH_MODEL, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_LIVEPORTRAIT_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_MASK_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, ...STACK_MUSIC_XL_MODELS, ...STACK_MUSIC_MAX_MODELS, ...STACK_STEMS_MODELS, ...STACK_ALIGN_MODELS, ...STACK_VOICE_CONVERT_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_DIARIZATION_SEGMENTATION_MODEL, STACK_DIARIZATION_EMBEDDING_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_RECORDED_SPEECH_MODEL, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_LIVEPORTRAIT_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_MASK_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, ...STACK_MUSIC_XL_MODELS, ...STACK_MUSIC_MAX_MODELS, ...STACK_STEMS_MODELS, ...STACK_ALIGN_MODELS, ...STACK_SFX_MODELS, ...STACK_VOICE_CONVERT_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a
@@ -1522,6 +1569,6 @@ export const ROLE_CANDIDATES: Partial<Record<string, RoleCandidate[]>> = {
   ],
   music: [
     { name: "ACE-Step 1.5 XL turbo (4B DiT, MIT), a later quality profile for p128", kind: "model", source: "docs/design/music-generation-2026-10-17.md in Home, MUSIC-GEN-10" },
-    { name: "Stable Audio 3.0 for beds and effects (Stability Community licence, behind a licence gate)", kind: "model", source: "docs/design/music-generation-2026-10-17.md in Home, MUSIC-GEN-11" },
+    { name: "Stable Audio 3 Medium for music beds (Stability Community licence, behind a licence gate); Small-SFX is pinned for sound effects (MP-07)", kind: "model", source: "docs/design/music-port-2026-11-13.md in Home, MP-07" },
   ],
 };

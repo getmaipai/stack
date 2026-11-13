@@ -12,19 +12,19 @@
     "p16.ai_required_free_bytes": 47675701865,
     "p32.required_free_bytes": 69603836662,
     "p32.minimum_required_free_bytes": 31047800378,
-    "p32.everything_required_free_bytes": 87821718906,
+    "p32.everything_required_free_bytes": 92905893942,
     "p32.needed_bytes": 58778998009,
     "p32.home_required_free_bytes": 3176323277,
     "p32.ai_required_free_bytes": 66427513385,
     "p64.required_free_bytes": 156054142724,
     "p64.minimum_required_free_bytes": 56807128855,
-    "p64.everything_required_free_bytes": 217936178346,
+    "p64.everything_required_free_bytes": 223020353382,
     "p64.needed_bytes": 131157506990,
     "p64.home_required_free_bytes": 3176323277,
     "p64.ai_required_free_bytes": 152877819447,
     "p128.required_free_bytes": 190720461273,
     "p128.minimum_required_free_bytes": 56807128855,
-    "p128.everything_required_free_bytes": 503312994100,
+    "p128.everything_required_free_bytes": 508397169136,
     "p128.needed_bytes": 160172569558,
     "p128.home_required_free_bytes": 3176323277,
     "p128.ai_required_free_bytes": 187544137996
@@ -642,6 +642,26 @@
           "basis": "pins"
         },
         {
+          "id": "sound-effects",
+          "label": "Make sound effects (Stable Audio 3 Small-SFX)",
+          "note": "Makes short sound effects and ambience from a sentence. Optional, about 3.5 GB. Stability AI Community License and Gemma Terms of Use, accepted once when it installs.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 3492094340,
+          "installed_bytes": 3492094340,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "stable-audio-3-small-sfx"
+          ],
+          "engines": [
+            "engine:sound-effects",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "stems",
           "label": "Split songs into stems (HTDemucs)",
           "note": "Separates songs made in Home into vocals, drums, bass and other. Recommended, about 0.3 GB.",
@@ -839,6 +859,21 @@
           "basis": "measured"
         },
         {
+          "id": "engine:sound-effects",
+          "label": "Sound effects engine tools",
+          "note": "What making sound effects runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 165804267,
+          "installed_bytes": 606547968,
+          "peak_temp_bytes": 165804267,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
           "id": "engine:stems",
           "label": "Stem splitting tools",
           "note": "What separating song stems runs on.",
@@ -914,11 +949,11 @@
         "required_free_bytes": 31047800378
       },
       "everything": {
-        "download_bytes": 60605964899,
-        "installed_bytes": 65597428466,
-        "peak_temp_bytes": 9104804746,
-        "needed_bytes": 74702233212,
-        "required_free_bytes": 87821718906
+        "download_bytes": 64263863506,
+        "installed_bytes": 69696070774,
+        "peak_temp_bytes": 9270609013,
+        "needed_bytes": 78966679787,
+        "required_free_bytes": 92905893942
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -1310,6 +1345,26 @@
           "basis": "pins"
         },
         {
+          "id": "sound-effects",
+          "label": "Make sound effects (Stable Audio 3 Small-SFX)",
+          "note": "Makes short sound effects and ambience from a sentence. Optional, about 3.5 GB. Stability AI Community License and Gemma Terms of Use, accepted once when it installs.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 3492094340,
+          "installed_bytes": 3492094340,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "stable-audio-3-small-sfx"
+          ],
+          "engines": [
+            "engine:sound-effects",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "stems",
           "label": "Split songs into stems (HTDemucs)",
           "note": "Separates songs made in Home into vocals, drums, bass and other. Recommended, about 0.3 GB.",
@@ -1582,6 +1637,21 @@
           "basis": "estimate"
         },
         {
+          "id": "engine:sound-effects",
+          "label": "Sound effects engine tools",
+          "note": "What making sound effects runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 165804267,
+          "installed_bytes": 606547968,
+          "peak_temp_bytes": 165804267,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
           "id": "engine:stems",
           "label": "Stem splitting tools",
           "note": "What separating song stems runs on.",
@@ -1657,11 +1727,11 @@
         "required_free_bytes": 56807128855
       },
       "everything": {
-        "download_bytes": 164587035265,
-        "installed_bytes": 170948416791,
-        "peak_temp_bytes": 12798078196,
-        "needed_bytes": 183746494987,
-        "required_free_bytes": 217936178346
+        "download_bytes": 168244933872,
+        "installed_bytes": 175047059099,
+        "peak_temp_bytes": 12963882463,
+        "needed_bytes": 188010941562,
+        "required_free_bytes": 223020353382
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -2280,6 +2350,26 @@
           "basis": "pins"
         },
         {
+          "id": "sound-effects",
+          "label": "Make sound effects (Stable Audio 3 Small-SFX)",
+          "note": "Makes short sound effects and ambience from a sentence. Optional, about 3.5 GB. Stability AI Community License and Gemma Terms of Use, accepted once when it installs.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 3492094340,
+          "installed_bytes": 3492094340,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "stable-audio-3-small-sfx"
+          ],
+          "engines": [
+            "engine:sound-effects",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "stems",
           "label": "Split songs into stems (HTDemucs)",
           "note": "Separates songs made in Home into vocals, drums, bass and other. Recommended, about 0.3 GB.",
@@ -2612,6 +2702,21 @@
           "basis": "estimate"
         },
         {
+          "id": "engine:sound-effects",
+          "label": "Sound effects engine tools",
+          "note": "What making sound effects runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 165804267,
+          "installed_bytes": 606547968,
+          "peak_temp_bytes": 165804267,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
           "id": "engine:stems",
           "label": "Stem splitting tools",
           "note": "What separating song stems runs on.",
@@ -2687,11 +2792,11 @@
         "required_free_bytes": 56807128855
       },
       "everything": {
-        "download_bytes": 399516796592,
-        "installed_bytes": 407667073246,
-        "peak_temp_bytes": 14112506204,
-        "needed_bytes": 421779579450,
-        "required_free_bytes": 503312994100
+        "download_bytes": 403174695199,
+        "installed_bytes": 411765715554,
+        "peak_temp_bytes": 14278310471,
+        "needed_bytes": 426044026025,
+        "required_free_bytes": 508397169136
       },
       "measured_on": "2026-10-17",
       "default_selected": [

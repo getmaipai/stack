@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const stdlib = new Set([
-  "abc", "argparse", "array", "ast", "asyncio", "atexit", "base64", "builtins", "collections", "contextlib", "copy", "csv", "dataclasses", "datetime", "decimal", "enum", "errno", "fcntl", "fnmatch", "functools", "gc", "getopt", "glob", "hashlib", "heapq", "hmac", "html", "http", "importlib", "inspect", "io", "itertools", "json", "logging", "math", "operator", "os", "pathlib", "pickle", "platform", "queue", "random", "re", "select", "shutil", "signal", "socket", "sqlite3", "statistics", "string", "subprocess", "sys", "tempfile", "textwrap", "threading", "time", "traceback", "types", "typing", "unicodedata", "unittest", "urllib", "uuid", "wave", "weakref", "xml", "zipfile",
+  "abc", "argparse", "array", "resource", "ast", "asyncio", "atexit", "base64", "builtins", "collections", "contextlib", "copy", "csv", "dataclasses", "datetime", "decimal", "enum", "errno", "fcntl", "fnmatch", "functools", "gc", "getopt", "glob", "hashlib", "heapq", "hmac", "html", "http", "importlib", "inspect", "io", "itertools", "json", "logging", "math", "operator", "os", "pathlib", "pickle", "platform", "queue", "random", "re", "select", "shutil", "signal", "socket", "sqlite3", "statistics", "string", "subprocess", "sys", "tempfile", "textwrap", "threading", "time", "traceback", "types", "typing", "unicodedata", "unittest", "urllib", "uuid", "wave", "weakref", "xml", "zipfile",
 ]);
 
 const workers = [
@@ -27,6 +27,13 @@ const workers = [
     requirements: "../src/stems/stems.darwin-arm64.requirements.txt",
     // yaml is provided by pyyaml==.
     provided: ["yaml"],
+  },
+  {
+    name: "sound effects",
+    source: "../src/sound/sfx_worker.py",
+    requirements: "../src/sound/sfx-gen.darwin-arm64.requirements.txt",
+    // stable_audio_3 is bundled by the pinned stable-audio-3 source archive (the worker's PYTHONPATH).
+    provided: ["stable_audio_3"],
   },
   {
     name: "beats",

@@ -5,7 +5,7 @@
 import { PROFILE_MODEL_BINDINGS, sizeMachine, type ProfileTier } from "@/profiles";
 import { knownAppleChip, type HardwareInfo, type MemorySource } from "@/lib/hardware";
 import { splashDraftWanted } from "@/lib/splash";
-import { STACK_CHAT_MODEL, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_XL_MODELS, STACK_STEMS_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_MASK_MODELS, STACK_VIDEO_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
+import { STACK_CHAT_MODEL, STACK_SFX_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_XL_MODELS, STACK_STEMS_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_MASK_MODELS, STACK_VIDEO_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
 import { tierDefaultTtsEngine } from "@/speech/ttsEngines";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import type { RoleId } from "@/roles";
@@ -104,6 +104,12 @@ export function musicMaxInstallModels(installedIds: Iterable<string> = []): Plan
 export function stemsInstallModels(installedIds: Iterable<string> = []): PlanModel[] {
   const installed = new Set(installedIds);
   return STACK_STEMS_MODELS.flatMap((pin) => view(pin, installed, false) ?? []);
+}
+
+/** MP-07: the sound effects model's pins (one folder: the DiT, its config, the T5Gemma text encoder, the licence files), in the shape of a pull. */
+export function sfxInstallModels(installedIds: Iterable<string> = []): PlanModel[] {
+  const installed = new Set(installedIds);
+  return STACK_SFX_MODELS.flatMap((pin) => view(pin, installed, false) ?? []);
 }
 
 export function beatsInstallModels(installedIds: Iterable<string> = []): PlanModel[] { return []; }

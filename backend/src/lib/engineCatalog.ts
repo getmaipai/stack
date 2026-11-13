@@ -289,6 +289,21 @@ export const ENGINE_BINARIES: EngineBinaryPin[] = [
     archive: { label: "ACE-Step 1.5 ca1e85f source", url: "https://github.com/ACE-Step/ACE-Step-1.5/archive/ca1e85fe9430179831e6bc6be790c332190a3866.tar.gz", sha256: "b464c11f00af00e1e089a09f58a03962f803c080f116fd0517dbe5ec839706b3", approxBytes: 8_439_408 },
     verified: true,
   },
+  {
+    // MP-07: Stability AI's stable-audio-3 code (MIT), the latest commit on main on 2026-11-13 (a docs fix on top of the 2026-10-30
+    // inference code). Downloaded twice and hashed the same; run on the Studio with the Small-SFX weights, offline, 2026-11-13.
+    id: "sfx-gen-790793b-macos-arm64",
+    name: "sfx-gen",
+    tag: "790793b",
+    platform: "darwin",
+    arch: "arm64",
+    tool: "pyproject.toml",
+    requiresNvidia: false,
+    label: "stable-audio-3 source, commit 790793b (MIT; the sound effects path the sfx worker runs on Apple silicon)",
+    docsUrl: "https://github.com/Stability-AI/stable-audio-3/tree/790793b89ddceea612be9ce42ff6830d18f6fa57",
+    archive: { label: "stable-audio-3 790793b source", url: "https://codeload.github.com/Stability-AI/stable-audio-3/tar.gz/790793b89ddceea612be9ce42ff6830d18f6fa57", sha256: "8ff51d41f60e947c749cec7d4103e6e8add83c303ef288193812d6248d431454", approxBytes: 52_028_026 },
+    verified: true,
+  },
 ];
 
 /** The second chat engine (STACK-93): one archive with the binary and
@@ -355,7 +370,7 @@ export type ChatEngine = typeof CHAT_ENGINES[number];
 /** The role each engine name serves, for the routes that act on "the
  * engine's role" (start, stop, restart, the swap's drain). */
 export type EngineRole = "chat" | "coding" | "tts" | "image" | "video" | "music";
-export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", splash: "coding", "splash-chat": "chat", "mlx-serve": "chat", omlx: "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", "recorded-speech": "tts", comfyui: "image", "video-gen": "video", "ltx25-gen": "video", "ltx25-max-gen": "video", "mask-gen": "video", liveportrait: "image", "music-gen": "music", "stems": "music", align: "music", beats: "music", "voice-convert": "music", "image-gen": "image" };
+export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", splash: "coding", "splash-chat": "chat", "mlx-serve": "chat", omlx: "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", "recorded-speech": "tts", comfyui: "image", "video-gen": "video", "ltx25-gen": "video", "ltx25-max-gen": "video", "mask-gen": "video", liveportrait: "image", "music-gen": "music", "sfx-gen": "music", "stems": "music", align: "music", beats: "music", "voice-convert": "music", "image-gen": "image" };
 export function engineRole(name: string): EngineRole { return ENGINE_ROLE[name] ?? "chat"; }
 
 /** Runtimes the Stack assembles from pinned wheels through uv, in an
@@ -376,6 +391,7 @@ export const MANAGED_RUNTIMES: ManagedRuntime[] = [
   { name: "mask-gen", version: "2b90b9f", roles: ["video"], platforms: "macOS 14 or later on arm64 (SAM 2.1 source archive and hashed Python 3.12 requirements; MPS tracking; no Linux file yet)" },
   { name: "ltx25-max-gen", version: "b82b97e", roles: ["video"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the dgrauet ltx-2-mlx 0.18.0 source archive plus a hashed requirements file; the Max LTX-2.5 slot, 1024x576 with a sound track; needs 128 GB; no Linux file)" },
   { name: "music-gen", version: "ca1e85f", roles: ["music"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the ACE-Step 1.5 source archive plus a hashed requirements file; songs with sung lyrics, remakes, covers, repaints and extensions; needs 64 GB or more; no Linux file)" },
+  { name: "sfx-gen", version: "790793b", roles: ["music"], platforms: "macOS 14 or later on arm64 (torch 2.7.1 MPS; the stable-audio-3 source archive plus a hashed requirements file; Stable Audio 3 Small-SFX sound effects, 1 to 47 seconds, about 5.3 GB while it runs; no Linux file)" },
   { name: "image-gen", version: "0.23.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; mflux 0.23.0 and a hashed requirements file; FLUX.2 Klein 4B and Z-Image-Turbo, text to picture, image to picture, LoRAs and reference edits; needs 32 GB of memory or more)" },
   { name: "image-tools", version: "1.0.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (onnxruntime, numpy, pillow, opencv; no torch; remove background, erase, upscale and resize on a picture the person has, and sharpen clips through the media.edit upscale op; the Linux file lands with the robot's first image run)" },
   { name: "liveportrait", version: "1.0.0", roles: ["image"], platforms: "macOS 14 or later on arm64 (Apple MPS only; MIT LivePortrait pinned source and weights; still mouth and eye retargeting)" },

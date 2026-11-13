@@ -221,6 +221,16 @@ are never copied. Nothing migrates Home until STACK-16.
   words cannot be read. Its optional pin and 2 GB admission increment
   are documented in `integrations.md`.
 
+- [x] **MP-07 (M): sound effects on Stable Audio 3 Small-SFX (Stack half).** Built 2026-11-13 (Home
+  `docs/design/music-port-2026-11-13.md`, MP-07): the `sfx-gen` engine (stable-audio-3 source at `790793b`, MIT, uv
+  environment from a hashed torch 2.7.1 file) with a JSON-lines worker that runs offline on torch MPS, cuts the silent tail
+  and sets the loudness with the managed ffmpeg; the pin `stable-audio-3-small-sfx` (ungated mirror at one revision, every
+  file by sha256); the component with the Stability Community and Gemma licence accepted once; the optional `sound-effects`
+  disk-plan rows; `POST /v1/audio/sound` with job polling and the file; `GET /stack/v1/sound`. Measured on the Studio: 5.27 GB
+  peak, 2 to 12 s warm for 2 to 47 s sounds; admission 6.5 GB. Exit: `bash scripts/check.sh`, `tests/sound.test.ts`, and the
+  real-worker test run once against the weights in a scratch folder. Not done: seamless loops (`loop: true` is refused),
+  lengths past 47 s, a listening check of the cut and the loudness.
+
 ## Governor and sizing
 
 - [x] **SPLASH-MEM-01: the chat engine's Metal budget is what the ledger counts** (S). Incident 2026-11-12: Splash chat held 61.2 GB (its `--max-memory`, the model's need plus 12 GB headroom plus the governor's 20 GB margin) while the ledger reserved 35 GB, so a 33 GB song waited on memory that was never free. Built: `splashChatMemoryPlan` is the one definition (need plus the headroom setting, whole GiB, no margin) for the launch, chat's admission headroom and the watchdog ceiling; the governor reads every owned process's live bytes, counts growth past the admitted peak as overage on the budget side of admission, restarts chat between turns when a held generator job would fit after that overage (owner's ruling 2026-11-12), and the memory report names per-item peak, live and overage bytes; the waiting lines carry no memory words. `docs/dev.md` "SPLASH-MEM-01".

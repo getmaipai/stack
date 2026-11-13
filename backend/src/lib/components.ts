@@ -15,7 +15,7 @@ import { createJob, finishJob, getJob, jobSignal, listJobs, updateJob } from "@/
 import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { getModel, installCatalogModel, removeModel, removeModelsAtomically, type CatalogModelLike, type DownloadModelOptions } from "@/lib/modelStore";
-import { STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS, LTX_LICENCE_NOTICE, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_SFT_ID, STACK_MUSIC_XL_ID, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_STEMS_MODELS, STACK_RECORDED_SPEECH_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MODEL_ID, STACK_VIDEO_MASK_MODELS, STACK_VIDEO_MASK_MODEL_ID, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
+import { STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS, LTX_LICENCE_NOTICE, SFX_LICENCE_NOTICE, STACK_SFX_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_SFT_ID, STACK_MUSIC_XL_ID, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_STEMS_MODELS, STACK_RECORDED_SPEECH_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MODEL_ID, STACK_VIDEO_MASK_MODELS, STACK_VIDEO_MASK_MODEL_ID, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
 import { licenceAcceptance, recordLicenceAcceptance, type LicenceNotice } from "@/lib/licenceAcceptance";
 import { buildInstallPlan } from "@/lib/installPlan";
 import { diskPlanForTier, diskTotalsFor, engineDownloadBytes, type DiskPlan } from "@/lib/diskPlan";
@@ -35,6 +35,8 @@ import { imageLoras } from "@/images/loras";
 import { ensureLtx25Environment, ensureLtx25MaxEnvironment, ltx25EnvironmentReady, ltx25GenRoot, ltx25MaxEnvironmentReady, ltx25MaxGenRoot, LTX25_GEN_NAME, LTX25_MAX_GEN_NAME } from "@/video/ltx25";
 import { ensureVideoGenEnvironment, tierAvailability as videoAvailability, videoGen, videoGenEnvironmentReady, videoGenRoot, VIDEO_GEN_NAME } from "@/video/videoGen";
 import { ensureMusicGenEnvironment, tierAvailability as musicAvailability, musicGen, musicGenEnvironmentReady, musicGenRoot, MUSIC_GEN_NAME } from "@/music/musicGen";
+import { ensureSfxGenEnvironment, sfxGen, sfxGenEnvironmentReady, sfxGenRoot, sfxTierAvailability, SFX_GEN_NAME } from "@/sound/sfxGen";
+import { SOUND_JOB_KIND } from "@/sound/jobs";
 import { align, ALIGN_NAME, ensureAlignEnvironment, alignRoot, alignEnvironmentReady } from "@/align/align";
 import { BEATS_JOB_KIND } from "@/beats/jobs";
 import { beats, BEATS_NAME, ensureBeatsEnvironment, beatsRoot, beatsEnvironmentReady } from "@/beats/beats";
@@ -107,7 +109,7 @@ const GB = 1_000_000_000;
 const ENV_BYTES = { align: engineDownloadBytes("align") ?? 0.3 * GB, beats: engineDownloadBytes("beats") ?? 0.5 * GB, stems: engineDownloadBytes("stems") ?? 0.25 * GB, voiceConvert: engineDownloadBytes("voice-convert") ?? 4 * GB, recordedSpeech: engineDownloadBytes("recorded-speech") ?? 1.7 * GB, image: engineDownloadBytes("image-gen") ?? 1.1 * GB, video: engineDownloadBytes("video-gen") ?? 1.0 * GB, ltx25: engineDownloadBytes("ltx25-gen") ?? 0.25 * GB, ltx25max: engineDownloadBytes("ltx25-max-gen") ?? 0.25 * GB, mask: engineDownloadBytes("mask-gen") ?? 0.6 * GB, music: engineDownloadBytes("music-gen") ?? 0.8 * GB, tools: engineDownloadBytes("image-tools") ?? 0.4 * GB, pocket: engineDownloadBytes("pocket-tts") ?? 0.72 * GB, mlxAudio: engineDownloadBytes("mlx-audio") ?? 0.47 * GB };
 /** The disk plan's row for a component, where the plan has one (its optional rows are the wizard's unchecked extras). */
 /** The install-plan row each component stands for (the size and need shown beside it). A test keeps every plan row covered. */
-export const DISK_ROW: Record<string, string> = { "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "ernie-image-turbo": "pictures-ernie", "qwen-image-2512-q8": "pictures-qwen", "image-tools": "image-tools", ffmpeg: "ffmpeg", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fish-audio-drama-3-4bit": "recorded-speech", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "sam2.1-hiera-small": "video-mask", "ace-step-1-5-turbo": "music", "ace-step-1-5-xl-turbo-bf16": "music-boost", "ace-step-1-5-xl-sft-bf16": "music-max", "htdemucs": "stems", "htdemucs_ft": "stems-ft", "htdemucs_6s": "stems-6s", "mms-fa-align": "align", "soulx-singer-svc": "voice-convert", "soulx-singer-rmvpe": "voice-convert", "soulx-singer-whisper-base": "voice-convert", "ltx-2-5-q8-distilled-mlx": "video-ltx25", "ltx-2-5-bf16-distilled-mlx-max": "video-ltx25-max" };
+export const DISK_ROW: Record<string, string> = { "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "ernie-image-turbo": "pictures-ernie", "qwen-image-2512-q8": "pictures-qwen", "image-tools": "image-tools", ffmpeg: "ffmpeg", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fish-audio-drama-3-4bit": "recorded-speech", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "sam2.1-hiera-small": "video-mask", "ace-step-1-5-turbo": "music", "ace-step-1-5-xl-turbo-bf16": "music-boost", "ace-step-1-5-xl-sft-bf16": "music-max", "htdemucs": "stems", "htdemucs_ft": "stems-ft", "htdemucs_6s": "stems-6s", "mms-fa-align": "align", "soulx-singer-svc": "voice-convert", "soulx-singer-rmvpe": "voice-convert", "soulx-singer-whisper-base": "voice-convert", "ltx-2-5-q8-distilled-mlx": "video-ltx25", "ltx-2-5-bf16-distilled-mlx-max": "video-ltx25-max", "stable-audio-3-small-sfx": "sound-effects" };
 
 const envImage: EnvDef = { name: "image-gen", approxBytes: ENV_BYTES.image, root: imageGenRoot, ready: imageGenEnvironmentReady, build: (onPhase, signal) => ensureImageGenEnvironment(onPhase, { signal }), stop: () => imageGen.stop() };
 const envVideo: EnvDef = {
@@ -149,6 +151,16 @@ const envMusic: EnvDef = {
     onPhase("the music engine");
     await ensureEngine(pin, () => {}, { signal });
     await ensureMusicGenEnvironment(onPhase, { signal });
+  },
+};
+const envSfx: EnvDef = {
+  name: SFX_GEN_NAME, approxBytes: engineDownloadBytes(SFX_GEN_NAME) ?? 0.6 * GB, root: sfxGenRoot, ready: sfxGenEnvironmentReady, link: engineCurrentPath(SFX_GEN_NAME), stop: () => sfxGen.stop(),
+  build: async (onPhase, signal) => {
+    const pin = selectEngineBinary(await detectHardware(), SFX_GEN_NAME);
+    if (!pin) throw new Error("No pinned sound effects engine build exists for this computer.");
+    onPhase("the sound effects engine");
+    await ensureEngine(pin, () => {}, { signal });
+    await ensureSfxGenEnvironment(onPhase, { signal });
   },
 };
 const envAlign: EnvDef = { name: ALIGN_NAME, approxBytes: ENV_BYTES.align, root: alignRoot, ready: alignEnvironmentReady, build: (onPhase, signal) => ensureAlignEnvironment(onPhase, signal), stop: () => align.stop() };
@@ -198,6 +210,7 @@ const LABELS: Record<string, { label: string; summary: string }> = {
   "qwen-image-2512-q8": { label: "Pictures: Qwen-Image 20B (best quality)", summary: "The best picture model, used for Max pictures. Draws clear words and fine detail. A very large download (about 36 GB); a picture takes about three minutes." },
   "ernie-image-turbo": { label: "Pictures: ERNIE-Image-Turbo", summary: "Draws words inside pictures correctly. Makes new pictures from a sentence; FLUX.2 Klein stays for edits." },
   "ace-step-1-5-turbo": { label: "Music: ACE-Step 1.5", summary: "Makes and changes songs in chat" },
+  "stable-audio-3-small-sfx": { label: "Make sound effects (Stable Audio 3 Small-SFX)", summary: "Makes short sound effects and ambience from a sentence, up to 47 seconds. About 3.5 GB, and the maker's licence applies." },
   "ace-step-1-5-xl-turbo-bf16": { label: "Music: Boost (ACE-Step XL Turbo)", summary: "A larger song model with clearer voices, used for Boost songs. About 10 GB; a Boost song takes about a minute." },
   "ace-step-1-5-xl-sft-bf16": { label: "Music: Max (ACE-Step XL SFT)", summary: "The best song model, with its larger planning model, used for Max songs. About 18 GB; a Max song takes about three minutes." },
   "fastwan2-2-ti2v-5b-mlx-bf16": { label: "Video: Quick (Wan 2.2 FastWan 5B)", summary: "Makes short silent video clips from words or a picture." },
@@ -327,6 +340,16 @@ export function componentDefs(): UnitDef[] {
       const state = musicGen.status().state;
       if (state === "running" || state === "building") return "A song is being made right now.";
       return activeJobFor((kind) => kind.startsWith("music")) ? "A song is waiting or being made right now." : null;
+    },
+  });
+  units.push({
+    id: STACK_SFX_MODELS[0]!.id, ...LABELS[STACK_SFX_MODELS[0]!.id]!, group: "music", role: "music", pins: STACK_SFX_MODELS, envs: [envSfx], tiers: ["p32", "p64", "p128"], licenceNotice: SFX_LICENCE_NOTICE,
+    platformBlock: () => sfxTierAvailability().code === "unsupported" ? sfxTierAvailability().reason : null,
+    usedBy: () => ["Sound effects in the Music app and chat"],
+    busy: () => {
+      const state = sfxGen.status().state;
+      if (state === "running" || state === "building") return "A sound is being made right now.";
+      return activeJobFor((kind) => kind === SOUND_JOB_KIND) ? "A sound is waiting or being made right now." : null;
     },
   });
   units.push({ id: STACK_MUSIC_WHISPER.id, label: "Music: sung words check", summary: "Transcribes finished songs so Home can check the words.", group: "music", role: "music", pins: [STACK_MUSIC_WHISPER], envs: [envMusic], tiers: ["p64", "p128"], usedBy: () => ["Checking words in finished songs"], busy: () => activeJobFor((kind) => kind === "music_generation") ? "A song is being made right now." : null });

@@ -667,7 +667,7 @@ test("the component is listed in the group music for p64 and p128, optional, wit
   expect(whisper).toMatchObject({ label: "Music: sung words check", group: "music", role: "music", tiers: ["p64", "p128"] });
   expect(whisper.pins.map((pin) => pin.id)).toEqual([STACK_MUSIC_WHISPER.id]);
   const catalog = collectComponentsCatalog();
-  expect(catalog.models.filter((pin) => pin.role === "music").map((pin) => pin.id)).toEqual([STACK_MUSIC_MODEL.id, STACK_MUSIC_LM_06.id, STACK_MUSIC_WHISPER.id, STACK_MUSIC_XL.id, STACK_MUSIC_XL_CONFIG.id, STACK_MUSIC_SFT.id, STACK_MUSIC_SFT_CONFIG.id, STACK_MUSIC_LM_4.id, "htdemucs", "htdemucs_ft", "htdemucs_6s", "mms-fa-align", "soulx-singer-svc", "soulx-singer-rmvpe", "soulx-singer-whisper-base"]);
+  expect(catalog.models.filter((pin) => pin.role === "music").map((pin) => pin.id)).toEqual([STACK_MUSIC_MODEL.id, STACK_MUSIC_LM_06.id, STACK_MUSIC_WHISPER.id, STACK_MUSIC_XL.id, STACK_MUSIC_XL_CONFIG.id, STACK_MUSIC_SFT.id, STACK_MUSIC_SFT_CONFIG.id, STACK_MUSIC_LM_4.id, "htdemucs", "htdemucs_ft", "htdemucs_6s", "mms-fa-align", "stable-audio-3-small-sfx", "soulx-singer-svc", "soulx-singer-rmvpe", "soulx-singer-whisper-base"]);
   const stemsPins = STACK_MODELS.filter((pin) => ["htdemucs", "htdemucs_ft", "htdemucs_6s"].includes(pin.id));
   expect(stemsPins.map((pin) => pin.download?.files?.map((file) => file.sha256))).toEqual([
     ["d9fa14133cfcc034a6758923bb3a8ca9f8dfd0b582134643bbf83f72c17576dd", "239c445d0b14454d541ad8bd9bb271c9e536d267e8a4625208744cbb2e7bb66c"],

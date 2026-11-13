@@ -7487,6 +7487,698 @@
         }
       }
     },
+    "/v1/audio/sound": {
+      "post": {
+        "tags": [
+          "Sound"
+        ],
+        "summary": "Make a sound effect (the job API with a wait)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "prompt": {
+                    "type": "string",
+                    "description": "The sound in words (\"a heavy wooden door slamming shut\", \"rain on a tin roof\"). At most 1000 characters."
+                  },
+                  "seconds": {
+                    "type": "number",
+                    "description": "How long, 1 to 47 seconds, default 5. A one-shot that ends sooner comes back shorter: the silent tail is cut."
+                  },
+                  "seed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295,
+                    "description": "The same seed, words, length and steps make the same sound. Left out: a random one, returned in the result."
+                  },
+                  "steps": {
+                    "type": "integer",
+                    "description": "Diffusion steps, 4 to 16, default 8 (the model is distilled for 8)."
+                  },
+                  "loop": {
+                    "type": "boolean",
+                    "description": "A seamless loop. Not made yet: only false (the default) is accepted; true answers 422 unsupported_option."
+                  },
+                  "tier": {
+                    "type": "string",
+                    "enum": [
+                      "standard",
+                      "boost",
+                      "max"
+                    ],
+                    "description": "Which level the job runs at: `standard` (the default), `boost` or `max`. Boost and Max may use more of the computer's memory than Standard; a Max job opens the Max window (other jobs wait, chat may run on its smaller model until the job ends). A job too big for its level is refused with the reason. Home decides who may ask for Boost or Max; the Stack takes the word as given. The status and GET /stack/v1/jobs/{id} report it."
+                  },
+                  "timeout_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true,
+                    "maximum": 1800000,
+                    "description": "How long this request waits for the sound before answering 202 with the job id. Default 60000. A warm sound takes 2 to 12 seconds; the first one after a while also loads the model (about 20 seconds)."
+                  }
+                },
+                "required": [
+                  "prompt"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The sound is ready; `data[0].url` is where to fetch it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "description": "GET this for the audio (audio/mp4, AAC, 44.1 kHz stereo). Supports Range requests."
+                          },
+                          "content_type": {
+                            "type": "string",
+                            "enum": [
+                              "audio/mp4"
+                            ]
+                          },
+                          "duration_s": {
+                            "type": "number",
+                            "description": "The length of the file: the asked seconds, or less when the sound ended sooner."
+                          },
+                          "seed": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "model": {
+                            "type": "string",
+                            "description": "The pinned model id."
+                          },
+                          "ms": {
+                            "type": "integer"
+                          },
+                          "bytes": {
+                            "type": "integer"
+                          },
+                          "licence": {
+                            "type": "string",
+                            "description": "The model's licence, for Home's provenance stamp."
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "content_type",
+                          "duration_s",
+                          "seed",
+                          "model",
+                          "ms",
+                          "bytes",
+                          "licence"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "job",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Still going past timeout_ms (`data` is empty); poll GET /v1/audio/sound/{job}.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "job": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "description": "GET this for the audio (audio/mp4, AAC, 44.1 kHz stereo). Supports Range requests."
+                          },
+                          "content_type": {
+                            "type": "string",
+                            "enum": [
+                              "audio/mp4"
+                            ]
+                          },
+                          "duration_s": {
+                            "type": "number",
+                            "description": "The length of the file: the asked seconds, or less when the sound ended sooner."
+                          },
+                          "seed": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "model": {
+                            "type": "string",
+                            "description": "The pinned model id."
+                          },
+                          "ms": {
+                            "type": "integer"
+                          },
+                          "bytes": {
+                            "type": "integer"
+                          },
+                          "licence": {
+                            "type": "string",
+                            "description": "The model's licence, for Home's provenance stamp."
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "content_type",
+                          "duration_s",
+                          "seed",
+                          "model",
+                          "ms",
+                          "bytes",
+                          "licence"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "job",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "bad_request, bad_range, too_long, unsupported_option, or silent (the model made silence); `error` says what to change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Four sounds are already waiting (queue_full).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "The job was cancelled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The sound failed (failed, worker_stopped).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sounds are off on this computer (not_available_on_this_computer, unsupported), not installed (not_installed), or there is no free memory for one (no_memory).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The sound took longer than three minutes and was stopped (timeout).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "507": {
+            "description": "The computer ran out of memory while making the sound (out_of_memory).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audio/sound/{job}": {
+      "get": {
+        "tags": [
+          "Sound"
+        ],
+        "summary": "A sound's state, stage and file",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Poll this every second or two while state is queued or running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "done",
+                        "failed",
+                        "cancelled"
+                      ]
+                    },
+                    "phase": {
+                      "type": "string",
+                      "description": "queued, waiting for memory, starting, then the stage while running, ready; failed or cancelled when it ended so."
+                    },
+                    "progress": {
+                      "type": "integer"
+                    },
+                    "progress_fraction": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "stage": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "load, sound or save while running; paused while chat works; null otherwise."
+                    },
+                    "stage_label": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "The stage in plain words: Getting ready, Making the sound, Saving."
+                    },
+                    "eta_seconds": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "position": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Place in line while queued (1 is next). Sounds share the music queue."
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "code": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "description": "GET this for the audio (audio/mp4, AAC, 44.1 kHz stereo). Supports Range requests."
+                          },
+                          "content_type": {
+                            "type": "string",
+                            "enum": [
+                              "audio/mp4"
+                            ]
+                          },
+                          "duration_s": {
+                            "type": "number",
+                            "description": "The length of the file: the asked seconds, or less when the sound ended sooner."
+                          },
+                          "seed": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "model": {
+                            "type": "string",
+                            "description": "The pinned model id."
+                          },
+                          "ms": {
+                            "type": "integer"
+                          },
+                          "bytes": {
+                            "type": "integer"
+                          },
+                          "licence": {
+                            "type": "string",
+                            "description": "The model's licence, for Home's provenance stamp."
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "content_type",
+                          "duration_s",
+                          "seed",
+                          "model",
+                          "ms",
+                          "bytes",
+                          "licence"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "state",
+                    "phase",
+                    "progress",
+                    "progress_fraction",
+                    "stage",
+                    "stage_label",
+                    "eta_seconds",
+                    "position",
+                    "error",
+                    "code",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such job (it expired, was deleted, or never existed).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Sound"
+        ],
+        "summary": "Cancel a sound, or free a finished one's file",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A queued or running sound is cancelled (the worker is stopped and its memory returns); a finished sound's file is freed (Home calls this once it has stored the file).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "cancelled",
+                        "deleted",
+                        "failed"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "state"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such job.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audio/sound/{job}/file": {
+      "get": {
+        "tags": [
+          "Sound"
+        ],
+        "summary": "The finished sound (Range requests supported)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The audio/mp4 bytes.",
+            "content": {
+              "audio/mp4": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "A byte range.",
+            "content": {
+              "audio/mp4": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The sound is gone: results are held about ten minutes, the six newest (shared with songs), or Home deleted it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/audio/align": {
       "post": {
         "tags": [
@@ -21941,6 +22633,307 @@
                   },
                   "required": [
                     "stems"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/sound": {
+      "get": {
+        "tags": [
+          "Sound"
+        ],
+        "summary": "The sound effects role's state, limits, and what to install",
+        "responses": {
+          "200": {
+            "description": "Additive. Home enables its sound control from `available` and `state`, the same envelope as GET /stack/v1/music.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sound": {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "unsupported",
+                            "off",
+                            "not-installed",
+                            "needs-setup",
+                            "building",
+                            "idle",
+                            "running"
+                          ],
+                          "description": "off: this computer's tier makes no sounds. not-installed: the model files are missing. needs-setup: installed; the first sound builds the environment (first time only) and starts the worker. idle: the worker is up and waits for the next sound, then exits. running: a sound is in progress."
+                        },
+                        "available": {
+                          "type": "boolean"
+                        },
+                        "code": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "reason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "tier": {
+                          "type": "string"
+                        },
+                        "memory": {
+                          "type": "object",
+                          "properties": {
+                            "fits": {
+                              "type": "boolean"
+                            },
+                            "reason": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "peak_gb": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "fits",
+                            "reason",
+                            "peak_gb"
+                          ]
+                        },
+                        "model": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "installed": {
+                              "type": "boolean"
+                            },
+                            "licence": {
+                              "type": "string"
+                            },
+                            "licence_accepted_at": {
+                              "type": "string",
+                              "nullable": true
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "installed",
+                            "licence",
+                            "licence_accepted_at"
+                          ],
+                          "description": "The pinned model. Its licence is accepted once by an admin through the component install (POST /stack/v1/components/{id}/install with accepted_licence); licence_accepted_at says when."
+                        },
+                        "limits": {
+                          "type": "object",
+                          "properties": {
+                            "min_seconds": {
+                              "type": "number"
+                            },
+                            "max_seconds": {
+                              "type": "number"
+                            },
+                            "default_seconds": {
+                              "type": "number"
+                            },
+                            "min_steps": {
+                              "type": "integer"
+                            },
+                            "max_steps": {
+                              "type": "integer"
+                            },
+                            "default_steps": {
+                              "type": "integer"
+                            },
+                            "max_prompt_chars": {
+                              "type": "integer"
+                            },
+                            "queue_max": {
+                              "type": "integer"
+                            },
+                            "target_lufs": {
+                              "type": "number"
+                            },
+                            "loop": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "min_seconds",
+                            "max_seconds",
+                            "default_seconds",
+                            "min_steps",
+                            "max_steps",
+                            "default_steps",
+                            "max_prompt_chars",
+                            "queue_max",
+                            "target_lufs",
+                            "loop"
+                          ]
+                        },
+                        "output": {
+                          "type": "object",
+                          "properties": {
+                            "content_type": {
+                              "type": "string",
+                              "enum": [
+                                "audio/mp4"
+                              ]
+                            },
+                            "sample_rate": {
+                              "type": "integer"
+                            },
+                            "channels": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "content_type",
+                            "sample_rate",
+                            "channels"
+                          ]
+                        },
+                        "worker": {
+                          "type": "object",
+                          "properties": {
+                            "alive": {
+                              "type": "boolean"
+                            },
+                            "idle_exit_seconds": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "alive",
+                            "idle_exit_seconds"
+                          ]
+                        },
+                        "environment": {
+                          "type": "object",
+                          "properties": {
+                            "engine": {
+                              "type": "string"
+                            },
+                            "version": {
+                              "type": "string"
+                            },
+                            "source": {
+                              "type": "boolean"
+                            },
+                            "ready": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "engine",
+                            "version",
+                            "source",
+                            "ready"
+                          ]
+                        },
+                        "install": {
+                          "type": "object",
+                          "properties": {
+                            "component": {
+                              "type": "string"
+                            },
+                            "models": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "role": {
+                                    "type": "string"
+                                  },
+                                  "repo": {
+                                    "type": "string"
+                                  },
+                                  "url": {
+                                    "type": "string"
+                                  },
+                                  "sha256": {
+                                    "type": "string"
+                                  },
+                                  "approx_bytes": {
+                                    "type": "integer"
+                                  },
+                                  "licence": {
+                                    "type": "string"
+                                  },
+                                  "revision": {
+                                    "type": "string"
+                                  },
+                                  "engine": {
+                                    "type": "string"
+                                  },
+                                  "archive": {
+                                    "type": "boolean"
+                                  },
+                                  "hub_file": {
+                                    "type": "string"
+                                  },
+                                  "component": {
+                                    "type": "string"
+                                  },
+                                  "starter": {
+                                    "type": "boolean"
+                                  },
+                                  "installed": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "role",
+                                  "url",
+                                  "sha256",
+                                  "approx_bytes",
+                                  "licence",
+                                  "revision",
+                                  "starter",
+                                  "installed"
+                                ]
+                              }
+                            },
+                            "remaining_bytes": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "component",
+                            "models",
+                            "remaining_bytes"
+                          ],
+                          "description": "The component to install (POST /stack/v1/components/{component}/install, which also builds the engine) and its pinned models with the bytes still to come."
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "available",
+                        "code",
+                        "reason",
+                        "tier",
+                        "memory",
+                        "model",
+                        "limits",
+                        "output",
+                        "worker",
+                        "environment",
+                        "install"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "sound"
                   ]
                 }
               }

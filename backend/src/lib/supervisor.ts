@@ -1325,7 +1325,7 @@ export function codingCannotFitReason(): string | null {
  * serves a request (the lease), so a generator job waits for it and a
  * long answer is never cut off by the idle clock. */
 export async function unloadJitForGovernor(id: string): Promise<boolean> {
-  if (["image-pool", "video-worker", "music-worker", "stems-worker", "align-worker", "beats-worker"].includes(id)) { const { unloadWarmWorker } = await import("@/lib/governor"); return unloadWarmWorker(id); }
+  if (["image-pool", "video-worker", "music-worker", "sfx-worker", "stems-worker", "align-worker", "beats-worker"].includes(id)) { const { unloadWarmWorker } = await import("@/lib/governor"); return unloadWarmWorker(id); }
   const role = id as RoleId;
   if (!JIT_ROLES.includes(role)) return false;
   const current = runtimes.get(role);

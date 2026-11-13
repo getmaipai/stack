@@ -106,6 +106,7 @@ OpenAI-shaped, so an existing client library works unchanged.
 | `POST /v1/videos/generations` | `video` | the job API with a wait; progress by phase, cancel, the clip fetched by URL (see Video generation below) |
 | `POST /v1/audio/music` | `music` | the job API with a wait; progress by stage, cancel, the song fetched by URL (see Music generation below) |
 | `POST /v1/audio/stems` | `music` | the job API with a wait; splits a song made here into vocals, drums, bass and other; each result can seed later music edits |
+| `POST /v1/audio/sound` | `music` | the job API with a wait; a sound effect or ambience from a sentence (Stable Audio 3 Small-SFX), 1 to 47 s, its silent tail cut and its loudness set; see Sound effects below |
 | `POST /v1/audio/voice-convert` | `music` | the job API with a wait; converts a vocal toward a reference voice |
 | `POST /v1/audio/align` | `music` | the job API with a wait; known lyrics plus a song in, one `{ t, end, text }` per word out (MMS forced aligner); see "Lyric timing" below |
 | `GET /v1/models` | all | role ids plus installed model ids in OpenAI's list shape; `?role=coding` lists only the coding role's served model with `context_length` and `thinking_budget_ceiling` (an empty list when none is installed; never starts the engine) |
@@ -770,6 +771,38 @@ runs with `HF_HUB_OFFLINE=1`, and makes no network request. Tiers: `p128` (songs
 Design and the measurements: Home `docs/design/music-generation-2026-10-17.md`, sections 3, 4 and 12.
 
 `POST /v1/audio/stems` accepts `{ source, source_sha256, model: "htdemucs", timeout_ms? }`. `source` is base64 of an unchanged m4a this Stack made; both the hash and made-here ledger entry must match. A successful response's `data` lists the present stems as AAC `audio/mp4` files at 44.1 kHz stereo; stems below RMS `1e-4` are omitted. The queued job reports `loading`, `splitting` and `encoding`, supports `DELETE /v1/audio/stems/{job}`, and returns 202 with an empty `data` array when it outlasts the wait. Results share music's ten-minute, newest-six retention. `GET /stack/v1/stems` reports model installation and the 2 GB governor admission. Demucs 4.1.0 loads the pinned safetensors model through its own `demucs.hf.load_safetensors_model` loader; the YAML manifest, checkpoint revision and checksums are pinned in the Stack catalog.
+
+### Sound effects (MP-07)
+
+`POST /v1/audio/sound` accepts `{ prompt, seconds?, seed?, steps?, loop?, tier?, timeout_ms? }`: `prompt` the sound in words (at most 1,000 characters), `seconds`
+1 to 47 (default 5), `seed` 0 to 2^32-1 (random when left out, returned in the result), `steps` 4 to 16 (default 8, the count the model is distilled for), `loop`
+only `false` for now (`true` is 422 `unsupported_option`). It answers like the music route: 200 `{ created, job, data: [{ url, content_type: "audio/mp4",
+duration_s, seed, model, ms, bytes, licence }] }`, or 202 `{ created, job, data: [] }` past `timeout_ms` (60 s unsaid); then poll `GET /v1/audio/sound/{job}`
+(`{ job, state, phase, progress, progress_fraction, stage, stage_label, eta_seconds, position, error, code, data }`; stages `load`, `sound`, `save`, labelled
+Getting ready, Making the sound, Saving) and fetch `GET /v1/audio/sound/{job}/file` (AAC-LC in m4a, 44.1 kHz stereo, 192 kbps, moov first, no tags; Range
+supported). `DELETE /v1/audio/sound/{job}` cancels or frees, as for songs. Errors: 422 `bad_request`, `too_long`, `bad_range`, `unsupported_option`, `silent`;
+429 `queue_full` (four sounds waiting); 503 `not_available_on_this_computer` (p16), `unsupported`, `not_installed`, `no_memory`; 504 `timeout` (3 minutes);
+507 `out_of_memory`. The worker makes the clip one second longer than asked, cuts the model's silent tail (after the last 50 ms block above -60 dBFS, or 45 dB
+under the loudest block for a quiet sound) and the extra second, fades the last 20 ms, and sets the loudness to -16 LUFS integrated (ffmpeg loudnorm, two
+passes, linear gain capped at +24 dB, a limiter at -2 dBFS) with the Stack's managed ffmpeg: `duration_s` is the asked length or less when a one-shot ends
+sooner, and Home needs no tool of its own. A sound is held in the music result store (ten minutes, newest six, shared with songs) and recorded as made here,
+so a later `POST /v1/audio/music` `edit` (trim, fade, loudness) may start from it. The description is held in memory under a token and never written to a
+job record, a log or the result folder. Sounds share the music generator queue and hold one governor admission of 6.5 GB (measured 5.27 GB peak footprint for
+the whole worker on the Studio, 2026-11-13, the same for 2 s and 47 s); a warm sound takes 2 to 12 s, a cold one about 20 s more. The worker exits after the
+music keep-warm window (`stack.engines.music.keep_warm_minutes`, 5 minutes by default) and runs offline: `HF_HUB_OFFLINE=1`, no token, no proxy, the T5Gemma
+text encoder read from the pinned folder (`model_path`; `repo_id` and `subfolder` dropped), the stable-audio-3 hub loader never called.
+
+`GET /stack/v1/sound` returns `{ sound: { state, available, code, reason, tier, memory: { fits, reason, peak_gb }, model: { id, installed, licence,
+licence_accepted_at }, limits: { min_seconds, max_seconds, default_seconds, min_steps, max_steps, default_steps, max_prompt_chars, queue_max, target_lufs, loop },
+output: { content_type, sample_rate, channels }, worker: { alive, idle_exit_seconds }, environment: { engine, version, source, ready }, install: { component,
+models, remaining_bytes } } }`, the same envelope as `GET /stack/v1/music`; `state` is `unsupported`, `off` (p16), `not-installed`, `needs-setup`, `building`,
+`idle` or `running`. Home installs it as the component `stable-audio-3-small-sfx` (group `music`, optional on p32 and up, disk-plan row `sound-effects` with its
+engine row `engine:sound-effects`) through `POST /stack/v1/components/stable-audio-3-small-sfx/install` with `accepted_licence:
+"stability-community-gemma-2026-11-13"`: the component's `licence` object names the Stability AI Community License and the Gemma Terms of Use, and the install
+answers 409 `licence_required` until an admin has accepted it once (the LTX-2.5 mechanism). The pin is the ungated, unmodified mirror
+`ddalcu/Stable-Audio-3-Small-SFX-MLX-Serve` at `977fd479`, every file by sha256 and size (3.49 GB, LICENSE.md, LICENSE_GEMMA.md and NOTICE included); the engine
+`sfx-gen` is Stability AI's `stable-audio-3` source at commit `790793b` (MIT) with a hashed torch 2.7.1 requirements file. Home shows "Powered by Stability AI"
+where sounds are made and stamps the licence from `data[0].licence`.
 
 `POST /v1/audio/beats` accepts `{ source, source_sha256, timeout_ms? }`, where `source` is base64 audio up to 40 MB and 12 minutes. It returns `{ tempo_bpm, meter, beats[], downbeats[], sections[{start_s,end_s,label}], confidence, downbeat_confidence, duration_s, engine: "librosa" }` in `data`; poll or cancel at `/v1/audio/beats/{job}` and `GET /stack/v1/beats` reports readiness. Results contain numbers only and are held in memory. The worker runs offline with librosa and has no model file.
 

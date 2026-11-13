@@ -11,7 +11,7 @@ import measured from "@/lib/diskPlanMeasured.json";
 import { PROFILE_TIERS, type ProfileTier } from "@/profiles";
 import {
   CHATTERBOX_ENGINE, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS,
-  STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_STEMS_MODELS, STACK_RECORDED_SPEECH_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_MASK_MODELS,
+  STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_SFX_MODELS, STACK_STEMS_MODELS, STACK_RECORDED_SPEECH_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_MASK_MODELS,
 } from "@/lib/modelCatalog";
 import { OMLX_OPTIONAL_TIERS } from "@/lib/chatEngines";
 import { plannedPinsFor } from "@/lib/installPlan";
@@ -131,6 +131,7 @@ const ENGINE_ROWS: Record<string, () => DiskRow> = {
   "engine:video-ltx25-max": () => engineRow("engine:video-ltx25-max", "ltx25-max-gen", "LTX-2.5 Max video engine tools", "What the LTX-2.5 Max videos run on."),
   "engine:video-mask": () => engineRow("engine:video-mask", "mask-gen", "SAM 2.1 mask tools", "What tracking a subject through a clip runs on."),
   "engine:music": () => engineRow("engine:music", "music-gen", "Music engine tools", "What making songs runs on."),
+  "engine:sound-effects": () => engineRow("engine:sound-effects", "sfx-gen", "Sound effects engine tools", "What making sound effects runs on."),
   "engine:stems": () => engineRow("engine:stems", "stems", "Stem splitting tools", "What separating song stems runs on."),
   "engine:align": () => engineRow("engine:align", "align", "Lyric timing tools", "What timing a song's words runs on."),
   "engine:beats": () => engineRow("engine:beats", "beats", "Beat analysis tools", "What detecting beats and sections runs on."),
@@ -138,7 +139,7 @@ const ENGINE_ROWS: Record<string, () => DiskRow> = {
   "engine:recorded-speech": () => engineRow("engine:recorded-speech", "recorded-speech", "Recorded speech tools", "What recorded speech rendering runs on."),
   "engine:chat-mlx": () => engineRow("engine:chat-mlx", "omlx", "Faster chat engine tools (oMLX)", "What the faster chat engine runs on. llama.cpp stays as the fallback."),
 };
-const PYTHON_ENGINES = ["engine:chat-mlx", "engine:voice", "engine:voice-better", "engine:pictures", "engine:image-tools", "engine:liveportrait", "engine:video", "engine:video-ltx25", "engine:video-ltx25-max", "engine:video-mask", "engine:music", "engine:stems", "engine:align", "engine:beats", "engine:voice-convert", "engine:recorded-speech"];
+const PYTHON_ENGINES = ["engine:chat-mlx", "engine:voice", "engine:voice-better", "engine:pictures", "engine:image-tools", "engine:liveportrait", "engine:video", "engine:video-ltx25", "engine:video-ltx25-max", "engine:video-mask", "engine:music", "engine:sound-effects", "engine:stems", "engine:align", "engine:beats", "engine:voice-convert", "engine:recorded-speech"];
 
 function totals(rows: DiskRow[], selected: Set<string>, only?: "home" | "ai"): DiskTotals {
   const chosen = rows.filter((row) => selected.has(row.id));
@@ -210,6 +211,8 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   if (!tier.notAvailable.includes("video") && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "video-ltx25", label: "Videos with sound (LTX-2.5)", note: "Clips with a sound track and spoken words, up to 10 seconds. Optional, about 38 GB; it needs the maker's licence accepted once during setup.", need: "optional", engines: ["engine:video-ltx25", "engine:python"] }, STACK_VIDEO_LTX25_MODELS));
   if (!tier.notAvailable.includes("video") && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "video-ltx25-max", label: "Best videos with sound (LTX-2.5 Max)", note: "Larger 1024 by 576 clips with a sound track and spoken words, up to 10 seconds. Optional, about 71 GB; it needs the maker's licence accepted once during setup.", need: "optional", engines: ["engine:video-ltx25-max", "engine:python"] }, STACK_VIDEO_LTX25_MAX_MODELS));
   if (!tier.notAvailable.includes("video") && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p64")) rows.push(modelRow({ id: "video-mask", label: "Subject masks on clips (SAM 2.1)", note: "Optional background removal and cutouts for clips. Apache-2.0; 4.9 GB measured running peak.", need: "optional", engines: ["engine:video-mask", "engine:python"] }, STACK_VIDEO_MASK_MODELS));
+  // MP-07: sound effects, optional, on every tier with 32 GB or more (about 6.5 GB while a sound is made); the maker's licence is accepted at install.
+  if (TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p32")) rows.push(modelRow({ id: "sound-effects", label: "Make sound effects (Stable Audio 3 Small-SFX)", note: "Makes short sound effects and ambience from a sentence. Optional, about 3.5 GB. Stability AI Community License and Gemma Terms of Use, accepted once when it installs.", need: "optional", engines: ["engine:sound-effects", "engine:python"] }, STACK_SFX_MODELS));
   rows.push(modelRow({ id: "stems", label: "Split songs into stems (HTDemucs)", note: "Separates songs made in Home into vocals, drums, bass and other. Recommended, about 0.3 GB.", need: "recommended", engines: ["engine:stems", "engine:python"] }, [STACK_STEMS_MODELS[0]!]));
   rows.push(modelRow({ id: "stems-ft", label: "Finer stem splitter (HTDemucs fine-tuned)", note: "An optional four model package for finer stem separation.", need: "optional", engines: ["engine:stems", "engine:python"] }, [STACK_STEMS_MODELS[1]!]));
   rows.push(modelRow({ id: "stems-6s", label: "Six-part stem splitter (guitar and piano)", note: "An optional model that separates guitar and piano too.", need: "optional", engines: ["engine:stems", "engine:python"] }, [STACK_STEMS_MODELS[2]!]));

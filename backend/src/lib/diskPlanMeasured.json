@@ -89,6 +89,12 @@
       "peak_temp_bytes": 873749873,
       "basis": "measured"
     },
+    "sfx-gen": {
+      "installed_bytes": 606547968,
+      "download_bytes": 165804267,
+      "peak_temp_bytes": 165804267,
+      "basis": "measured"
+    },
     "stems": {
       "installed_bytes": 1200000000,
       "download_bytes": 800000000,
@@ -550,6 +556,10 @@
     "htdemucs": {
       "download_bytes": 84025440,
       "installed_bytes": 84025440
+    },
+    "stable-audio-3-small-sfx": {
+      "download_bytes": 3492094340,
+      "installed_bytes": 3492094340
     },
     "htdemucs_ft": {
       "download_bytes": 336101909,
