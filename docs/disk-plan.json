@@ -4,30 +4,30 @@
   "headroom_warn_bytes": 5368709120,
   "gib_bytes": 1073741824,
   "installer": {
-    "p16.required_free_bytes": 17444519451,
+    "p16.required_free_bytes": 50681856320,
     "p16.minimum_required_free_bytes": 13806214750,
     "p16.everything_required_free_bytes": 68899738564,
-    "p16.needed_bytes": 15024083299,
+    "p16.needed_bytes": 43005197357,
     "p16.home_required_free_bytes": 3176323277,
-    "p16.ai_required_free_bytes": 14268196174,
-    "p32.required_free_bytes": 36196330971,
+    "p16.ai_required_free_bytes": 47505533044,
+    "p32.required_free_bytes": 69433667840,
     "p32.minimum_required_free_bytes": 30877631556,
     "p32.everything_required_free_bytes": 87651550084,
-    "p32.needed_bytes": 30650592899,
+    "p32.needed_bytes": 58631706957,
     "p32.home_required_free_bytes": 3176323277,
-    "p32.ai_required_free_bytes": 33020007694,
-    "p64.required_free_bytes": 122646637033,
+    "p32.ai_required_free_bytes": 66257344564,
+    "p64.required_free_bytes": 155883973902,
     "p64.minimum_required_free_bytes": 56636960034,
     "p64.everything_required_free_bytes": 217766009524,
-    "p64.needed_bytes": 103029101880,
+    "p64.needed_bytes": 131010215938,
     "p64.home_required_free_bytes": 3176323277,
-    "p64.ai_required_free_bytes": 119470313756,
-    "p128.required_free_bytes": 157312955582,
+    "p64.ai_required_free_bytes": 152707650625,
+    "p128.required_free_bytes": 190550292451,
     "p128.minimum_required_free_bytes": 56636960034,
     "p128.everything_required_free_bytes": 503142825278,
-    "p128.needed_bytes": 132044164448,
+    "p128.needed_bytes": 160025278506,
     "p128.home_required_free_bytes": 3176323277,
-    "p128.ai_required_free_bytes": 154136632305
+    "p128.ai_required_free_bytes": 187373969174
   },
   "tiers": {
     "p16": {
@@ -277,9 +277,9 @@
         {
           "id": "recorded-speech",
           "label": "Recorded speech (Fish Audio Drama 3)",
-          "note": "Makes a finished voice recording from typed words, including dialogue. Optional, about 24 GB; needs a 64 GB or larger computer.",
+          "note": "Makes a finished voice recording from typed words, including dialogue. It also lets the Chatterbox voice whisper. Recommended with Chatterbox, about 24 GB; needs a 64 GB or larger computer. Skip it and the voice speaks normally when asked to whisper.",
           "kind": "model",
-          "need": "optional",
+          "need": "recommended",
           "selectable": true,
           "download_bytes": 23781114058,
           "installed_bytes": 23781114058,
@@ -416,11 +416,11 @@
         }
       ],
       "default": {
-        "download_bytes": 10057333178,
-        "installed_bytes": 12102180757,
-        "peak_temp_bytes": 2921902542,
-        "needed_bytes": 15024083299,
-        "required_free_bytes": 17444519451
+        "download_bytes": 35538447236,
+        "installed_bytes": 38383294815,
+        "peak_temp_bytes": 4621902542,
+        "needed_bytes": 43005197357,
+        "required_free_bytes": 50681856320
       },
       "minimum": {
         "download_bytes": 8462277356,
@@ -445,6 +445,7 @@
         "voice",
         "image-tools",
         "stems",
+        "recorded-speech",
         "search"
       ]
     },
@@ -729,9 +730,9 @@
         {
           "id": "recorded-speech",
           "label": "Recorded speech (Fish Audio Drama 3)",
-          "note": "Makes a finished voice recording from typed words, including dialogue. Optional, about 24 GB; needs a 64 GB or larger computer.",
+          "note": "Makes a finished voice recording from typed words, including dialogue. It also lets the Chatterbox voice whisper. Recommended with Chatterbox, about 24 GB; needs a 64 GB or larger computer. Skip it and the voice speaks normally when asked to whisper.",
           "kind": "model",
-          "need": "optional",
+          "need": "recommended",
           "selectable": true,
           "download_bytes": 23781114058,
           "installed_bytes": 23781114058,
@@ -868,11 +869,11 @@
         }
       ],
       "default": {
-        "download_bytes": 25683842778,
-        "installed_bytes": 27728690357,
-        "peak_temp_bytes": 2921902542,
-        "needed_bytes": 30650592899,
-        "required_free_bytes": 36196330971
+        "download_bytes": 51164956836,
+        "installed_bytes": 54009804415,
+        "peak_temp_bytes": 4621902542,
+        "needed_bytes": 58631706957,
+        "required_free_bytes": 69433667840
       },
       "minimum": {
         "download_bytes": 22688458028,
@@ -899,6 +900,7 @@
         "voice",
         "image-tools",
         "stems",
+        "recorded-speech",
         "search"
       ]
     },
@@ -1380,9 +1382,9 @@
         {
           "id": "recorded-speech",
           "label": "Recorded speech (Fish Audio Drama 3)",
-          "note": "Makes a finished voice recording from typed words, including dialogue. Optional, about 24 GB; needs a 64 GB or larger computer.",
+          "note": "Makes a finished voice recording from typed words, including dialogue. It also lets the Chatterbox voice whisper. Recommended with Chatterbox, about 24 GB; needs a 64 GB or larger computer. Skip it and the voice speaks normally when asked to whisper.",
           "kind": "model",
-          "need": "optional",
+          "need": "recommended",
           "selectable": true,
           "download_bytes": 23781114058,
           "installed_bytes": 23781114058,
@@ -1594,11 +1596,11 @@
         }
       ],
       "default": {
-        "download_bytes": 95469145630,
-        "installed_bytes": 98087675761,
-        "peak_temp_bytes": 4941426119,
-        "needed_bytes": 103029101880,
-        "required_free_bytes": 122646637033
+        "download_bytes": 120950259688,
+        "installed_bytes": 124368789819,
+        "peak_temp_bytes": 6641426119,
+        "needed_bytes": 131010215938,
+        "required_free_bytes": 155883973902
       },
       "minimum": {
         "download_bytes": 42748423657,
@@ -1630,6 +1632,7 @@
         "pictures",
         "pictures-ernie",
         "stems",
+        "recorded-speech",
         "search"
       ]
     },
@@ -2333,9 +2336,9 @@
         {
           "id": "recorded-speech",
           "label": "Recorded speech (Fish Audio Drama 3)",
-          "note": "Makes a finished voice recording from typed words, including dialogue. Optional, about 24 GB; needs a 64 GB or larger computer.",
+          "note": "Makes a finished voice recording from typed words, including dialogue. It also lets the Chatterbox voice whisper. Recommended with Chatterbox, about 24 GB; needs a 64 GB or larger computer. Skip it and the voice speaks normally when asked to whisper.",
           "kind": "model",
-          "need": "optional",
+          "need": "recommended",
           "selectable": true,
           "download_bytes": 23781114058,
           "installed_bytes": 23781114058,
@@ -2607,11 +2610,11 @@
         }
       ],
       "default": {
-        "download_bytes": 123380885062,
-        "installed_bytes": 126343955666,
-        "peak_temp_bytes": 5700208782,
-        "needed_bytes": 132044164448,
-        "required_free_bytes": 157312955582
+        "download_bytes": 148861999120,
+        "installed_bytes": 152625069724,
+        "peak_temp_bytes": 7400208782,
+        "needed_bytes": 160025278506,
+        "required_free_bytes": 190550292451
       },
       "minimum": {
         "download_bytes": 42748423657,
@@ -2645,6 +2648,7 @@
         "pictures-ernie",
         "video",
         "stems",
+        "recorded-speech",
         "search"
       ]
     }
