@@ -457,6 +457,8 @@ export function cancelGeneratorsForMemory(scope: "queued" | "running", reason: s
 export function runningGeneratorKinds(): string[] { return [...inFlight.values()].map((id) => jobs.get(id)?.kind ?? "").filter(Boolean); }
 /** Queued work includes generators held by coding mode or a Max window; maintenance and memory restarts wait until all generator work is gone. */
 export function generatorWorkPending(): boolean { return [...queues.values()].some((queue) => queue.length > 0) || inFlight.size > 0 || admitting.size > 0; }
+/** A generator job is running now (not one waiting for admission or in a queue). */
+export function generatorWorkRunning(): boolean { return inFlight.size > 0; }
 
 /** An idle lane's depth, for the status route. */
 export function laneStatus(name: string): { queued: number; running: string | null } { return { queued: laneQueues.get(name)?.length ?? 0, running: laneRunning.get(name) ?? null }; }

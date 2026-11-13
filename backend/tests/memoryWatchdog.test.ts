@@ -150,7 +150,7 @@ test("admission uses the real free memory: the governor's own model says yes, th
   expect("queued" in video).toBe(true);
   const verdict = admissionVerdict({ id: "video-job", kind: "generator" }, 44 * GB);
   expect(verdict.ok).toBe(false);
-  expect(verdict.ok ? "" : verdict.reason).toContain("not enough free memory"); expect(verdict.ok ? "" : verdict.reason).not.toMatch(/\d GB/); /* a person never reads a figure */
+  expect(verdict.ok ? "" : verdict.reason).toContain("waits its turn"); expect(verdict.ok ? "" : verdict.reason).not.toMatch(/memory|RAM/i); expect(verdict.ok ? "" : verdict.reason).not.toMatch(/\d GB/); /* a person never reads a figure */
   // A 13.5 GB picture fits: 30 - 13.5 = 16.5 GB left, above the 10.2 GB reserve.
   expect(admissionVerdict({ id: "pic", kind: "generator" }, 13.5 * GB).ok).toBe(true);
   // Residents (chat, judge) are not gated by the watchdog.
@@ -189,7 +189,7 @@ test("a fitting job stays queued past the old window and runs when memory frees"
     if ("refused" in submitted) throw new Error(submitted.reason);
     await new Promise((resolve) => setTimeout(resolve, 80));
     expect(ran).toBe(false);
-    expect(getJob(submitted.job.id)).toMatchObject({ state: "running", status: expect.stringContaining("Waiting for memory") });
+    expect(getJob(submitted.job.id)).toMatchObject({ state: "running", status: expect.stringContaining("Waiting for its turn") });
     expect(getGovernorStatus().queue.map((entry) => entry.id)).toEqual([submitted.job.id]);
     setLatestSample(sample({ availableBytes: 40 * GB }));
     reading = sample({ availableBytes: 40 * GB, freeBytes: 100 * GB });

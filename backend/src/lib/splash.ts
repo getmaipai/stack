@@ -108,6 +108,22 @@ export function splashFootprintEstimateBytes(input: { weightsBytes: number; draf
   return Math.ceil((input.weightsBytes + input.draftBytes) * SPLASH_OVERHEAD_FACTOR) + Math.max(0, input.contextTokens) * SPLASH_KV_BYTES_PER_TOKEN;
 }
 
+const GIB = 1_073_741_824;
+
+/** SPLASH-MEM-01 (2026-11-12): the one definition of the chat engine's Metal budget. Splash keeps the state of every earlier
+ * request (a conversation warm, a bench turn, a discarded speculative run) until its `--max-memory` budget is full, so the
+ * budget IS the footprint it grows to: on the live hub the chat process reached 61.2 GB, byte for byte the budget it was given,
+ * while the ledger held 35 GB for it and a 33 GB song could not start. The budget is therefore the model's own need (the larger
+ * of the estimate and the measured footprint) plus the headroom setting, rounded up to a whole GiB, and nothing of the
+ * governor's working margin (that margin is the room every other job plans on). The ledger admits chat for exactly this
+ * number (`ledgerHeadroomBytes` on top of the estimate), so admission sees what the process will hold, and the memory
+ * watchdog's ceiling is the same number times its factor. */
+export function splashChatMemoryPlan(input: { estimateBytes: number; measuredBytes: number | null; headroomBytes: number }): { capBytes: number; ledgerHeadroomBytes: number } {
+  const need = Math.max(input.estimateBytes, input.measuredBytes ?? 0) + Math.max(0, input.headroomBytes);
+  const capBytes = Math.max(1, Math.ceil(need / GIB)) * GIB;
+  return { capBytes, ledgerHeadroomBytes: Math.max(0, capBytes - input.estimateBytes) };
+}
+
 // ---- the process environment ----------------------------------------------------------
 
 /** The environment Splash starts with: the Stack's own folders for everything it writes, nothing that could send it online, nothing of the Stack's secrets. `HF_HUB_OFFLINE=1` is what the launcher's own `--offline` sets too; it is set here as well so the installer step cannot ask the Hub even if a flag were dropped. */

@@ -7,7 +7,7 @@ import { CHAT_ENGINE_CHOICES, chatEngineFailure, clearChatEngineFailures, markCh
 import { STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CODING_DRAFT_MODEL } from "@/lib/modelCatalog";
 import { clearModelsForTests, getModel, upsertModel } from "@/lib/modelStore";
 import { engineDir } from "@/lib/engineInstall";
-import { applyPendingSettings, __resetSettingsForTests, updateSettings } from "@/settings";
+import { applyPendingSettings, __resetSettingsForTests, settingValues, updateSettings } from "@/settings";
 import { SplashChatClient, chatEngine, mapsModelWeights, selectableModels, selectedModel, resetSupervisorForTests, setCodingMachineFacts, setMachineTier, splashLaunchPlan, type EngineClient } from "@/lib/supervisor";
 import { splashHubDir, splashHomeDir, splashRoot, splashTmpDir } from "@/lib/splashStore";
 import { __setAppleChipForTests } from "@/lib/hardware";
@@ -75,16 +75,46 @@ test("Splash chat launch uses pinned target and draft, offline args, the disk ca
   expect((plan.client!("http://127.0.0.1:1") as unknown as { inner: { authHeaders(): Record<string, string> } }).inner.authHeaders()).toEqual({ authorization: `Bearer ${plan.apiKey}` });
 });
 
-test("Splash chat gets a full-context memory cap in normal mode with headroom and governor margin", () => {
+// SPLASH-MEM-01: Splash fills whatever `--max-memory` it is given with cached request states (live hub 2026-11-12: 61.2 GB, the
+// budget to the byte, while the ledger held 35 GB), so the budget is the model's need plus the headroom setting and never the
+// governor's working margin.
+test("Splash chat gets a full-context memory cap in normal mode: its need plus the headroom setting, without the governor margin", async () => {
   installModel(STACK_CHAT_QWEN38_UNCENSORED_MODEL); installModel(STACK_CODING_DRAFT_MODEL); installChatEngine();
+  const { getGovernorStatus } = await import("@/lib/governor");
+  const { splashFootprintEstimateBytes } = await import("@/lib/splash");
   const model = getModel(STACK_CHAT_QWEN38_UNCENSORED_MODEL.id)!;
+  const GIB = 1_073_741_824;
   for (const context of [40_960, 131_072, 262_144]) {
     const plan = splashLaunchPlan(model, 8812, context, "splash-chat");
     const args = plan.command;
     const cap = Number(args[args.indexOf("--max-memory") + 1]!.replace(/G$/, ""));
+    const estimate = splashFootprintEstimateBytes({ weightsBytes: model.sizeBytes ?? 0, draftBytes: STACK_CODING_DRAFT_MODEL.download!.approx_bytes, contextTokens: context });
     expect(args).toContain("--max-memory");
-    expect(cap).toBeGreaterThanOrEqual(Math.ceil((model.sizeBytes! + STACK_CODING_DRAFT_MODEL.download!.approx_bytes) / 1_073_741_824));
+    expect(cap).toBe(Math.ceil((Math.max(estimate, model.measuredFootprintBytes ?? 0) + 12 * GIB) / GIB));
+    expect(cap * GIB).toBeLessThan(estimate + 12 * GIB + getGovernorStatus().marginBytes);
   }
+});
+
+test("the chat memory plan is one number for the launch, the ledger and the watchdog", async () => {
+  const { splashChatMemoryPlan } = await import("@/lib/splash");
+  const GIB = 1_073_741_824;
+  // The live case: estimate 17 GB, llama-server's measured 26.7 GB for the same model, 12 GB headroom: 39 GB, not 57.
+  const live = splashChatMemoryPlan({ estimateBytes: 17 * GIB, measuredBytes: 26.7 * GIB, headroomBytes: 12 * GIB });
+  expect(live.capBytes).toBe(39 * GIB);
+  expect(17 * GIB + live.ledgerHeadroomBytes).toBe(live.capBytes);
+  // No measured footprint yet: the estimate plus the headroom, whole GiB.
+  expect(splashChatMemoryPlan({ estimateBytes: 17.2 * GIB, measuredBytes: null, headroomBytes: 12 * GIB })).toEqual({ capBytes: 30 * GIB, ledgerHeadroomBytes: 30 * GIB - 17.2 * GIB });
+});
+
+test("the watchdog's chat ceiling is the launch cap, not the cap plus the governor margin", async () => {
+  installModel(STACK_CHAT_QWEN38_UNCENSORED_MODEL); installModel(STACK_CODING_DRAFT_MODEL); installChatEngine();
+  updateSettings({ "stack.engines.chat.engine": "splash" }); applyPendingSettings();
+  const { chatSplashMemoryCapBytes } = await import("@/lib/supervisor");
+  const model = getModel(STACK_CHAT_QWEN38_UNCENSORED_MODEL.id)!;
+  const context = Number(settingValues()["stack.engines.chat.context_length"] ?? 131_072);
+  const plan = splashLaunchPlan(model, 8812, context, "splash-chat");
+  const launched = Number(plan.command[plan.command.indexOf("--max-memory") + 1]!.replace(/G$/, "")) * 1_073_741_824;
+  expect(chatSplashMemoryCapBytes()).toBe(launched);
 });
 
 test("coding mode keeps Splash chat's existing governor max-memory formula", async () => {

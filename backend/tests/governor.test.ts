@@ -800,6 +800,51 @@ test("a stale 3.38 GB stored figure never restarts a chat engine holding 7.9 GB"
   expect(restarts).toBe(0);
 });
 
+// SPLASH-MEM-01 drill (live hub 2026-11-12): chat admitted for 20 GB grew to 57 GB with cached states while a 33 GB song
+// waited; kernel pressure stayed normal, so no ladder step fired. The governor now reads chat's live bytes, counts the
+// growth as overage, restarts chat between turns when that overage would let the job in, and admits the job once chat is
+// back at its admitted size.
+test("a reserved chat grown past its admitted size is restarted between turns so a held generator job can start", async () => {
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 80 * GB, pollMs: 1, processSustainedPolls: 2 });
+  await admit({ id: "chat", kind: "resident", requestedBytes: 20 * GB, measuredPeakBytes: 20 * GB, pid: 42, role: "chat" });
+  const readings = [20, 28, 36, 44, 50, 57].map((gb) => gb * GB);
+  let chatBytes = readings[0]!;
+  let polls = 0;
+  let restarts = 0;
+  let chatBusy = false;
+  const stop = startGovernor({
+    pid: 42, tier: "p128", totalMemory: () => 128 * GB,
+    // The kernel's free figure is what is really left: 100 GB less whatever chat holds.
+    freeMemory: () => 100 * GB - chatBytes,
+    processMemory: async () => { if (polls < readings.length) chatBytes = readings[polls]!; polls++; return chatBytes; },
+    busy: (id) => id === "chat" && chatBusy,
+    lastInteractiveAt: () => null,
+    restartChat: async () => { restarts++; chatBytes = 20 * GB; return true; },
+  });
+  stops.push(stop);
+  await Bun.sleep(20);
+  expect(polls).toBeGreaterThanOrEqual(readings.length);
+  const chat = getGovernorStatus().loaded.find((item) => item.id === "chat")!;
+  expect(chat.liveBytes).toBe(57 * GB);
+  expect(chat.peakBytes).toBe(20 * GB);
+  expect(admissionRoomBytes()).toBe(100 * GB - 57 * GB - 20 * GB);
+  // A 33 GB song: 43 GB free less the 20 GB margin is 23 GB, so it waits, and nothing lighter is loaded to free.
+  chatBusy = true;
+  const song = await admit({ id: "song-1", kind: "generator", requestedBytes: 33 * GB, measuredPeakBytes: 33 * GB, role: "music", quietSeconds: 0 });
+  expect("queued" in song).toBe(true);
+  await Bun.sleep(20);
+  expect(restarts).toBe(0);
+  expect(getGovernorStatus().queue.some((entry) => entry.id === "song-1")).toBe(true);
+  // Between turns the governor restarts chat; the fresh process is back at 20 GB and the song is admitted.
+  chatBusy = false;
+  const handle = await (song as { admitted: Promise<GovernorHandle> }).admitted;
+  expect(restarts).toBe(1);
+  expect("id" in handle).toBe(true);
+  expect(getGovernorStatus().loaded.find((item) => item.id === "chat")!.liveBytes).toBe(20 * GB);
+  expect(getGovernorDecisions().some((decision) => decision.decision === "Restarted" && decision.model === "chat")).toBe(true);
+  release(handle);
+});
+
 test("after its post-load reading of 7.9 GB, chat is kept even when it grows past 1.3 x plus 0.5 GB", async () => {
   const admission = await admit({ id: "chat", kind: "resident", requestedBytes: 5_027_783_488, measuredPeakBytes: RECORDED_FOOTPRINT, pid: 42 }) as GovernorHandle;
   refreshMeasuredPeak(admission, RESIDENT_WITH_WEIGHTS);

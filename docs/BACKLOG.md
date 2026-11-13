@@ -223,6 +223,8 @@ are never copied. Nothing migrates Home until STACK-16.
 
 ## Governor and sizing
 
+- [x] **SPLASH-MEM-01: the chat engine's Metal budget is what the ledger counts** (S). Incident 2026-11-12: Splash chat held 61.2 GB (its `--max-memory`, the model's need plus 12 GB headroom plus the governor's 20 GB margin) while the ledger reserved 35 GB, so a 33 GB song waited on memory that was never free. Built: `splashChatMemoryPlan` is the one definition (need plus the headroom setting, whole GiB, no margin) for the launch, chat's admission headroom and the watchdog ceiling; the governor reads every owned process's live bytes, counts growth past the admitted peak as overage on the budget side of admission, restarts chat between turns when a held generator job would fit after that overage (owner's ruling 2026-11-12), and the memory report names per-item peak, live and overage bytes; the waiting lines carry no memory words. `docs/dev.md` "SPLASH-MEM-01".
+
 - [x] **STACK-06e (S): the governor's tier follows the machine.**
   `startGovernor` took a `tier` and nothing passed one, so every
   machine ran the `p16` margin. The daemon now sets the tier from

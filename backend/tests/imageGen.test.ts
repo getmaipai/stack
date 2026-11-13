@@ -223,7 +223,7 @@ test("a video clip holding the generator admission makes a picture wait, never r
   expect(response.status).toBe(202);
   const job = ((await response.json()) as { job: string }).job;
   await Bun.sleep(40);
-  expect((await (await get(`/v1/images/generations/${job}`)).json() as { phase: string }).phase).toBe("Waiting for memory to free up");
+  expect((await (await get(`/v1/images/generations/${job}`)).json() as { phase: string }).phase).toBe("Waiting for its turn");
   expect(requests).toHaveLength(0);
 });
 
@@ -325,8 +325,8 @@ test("the create and edit requests share the Klein pool; fallback growth is chec
     { op: "generate", pool_strategy: "single", create_family: "flux2-klein-4b", edit_family: "flux2-klein-4b" },
   ]);
   const status = getGovernorStatus();
-  expect(imagePoolGrowthFits(18_000_000_000, { ...status, capBytes: 20_000_000_000, freeMemoryBytes: 90 * GB, loaded: [{ id: "image-job", kind: "generator", class: "burst", peakBytes: 18_000_000_000, measured: true, lastUsedAt: new Date().toISOString(), idleTtlSeconds: 600, pinned: false, pid: null }] })).toBe(false);
-  expect(imagePoolGrowthFits(18_000_000_000, { ...status, capBytes: 80 * GB, freeMemoryBytes: 90 * GB, loaded: [{ id: "image-job", kind: "generator", class: "burst", peakBytes: 18_000_000_000, measured: true, lastUsedAt: new Date().toISOString(), idleTtlSeconds: 600, pinned: false, pid: null }] })).toBe(true);
+  expect(imagePoolGrowthFits(18_000_000_000, { ...status, capBytes: 20_000_000_000, freeMemoryBytes: 90 * GB, loaded: [{ id: "image-job", kind: "generator", class: "burst", peakBytes: 18_000_000_000, measured: true, lastUsedAt: new Date().toISOString(), idleTtlSeconds: 600, pinned: false, pid: null, liveBytes: null }] })).toBe(false);
+  expect(imagePoolGrowthFits(18_000_000_000, { ...status, capBytes: 80 * GB, freeMemoryBytes: 90 * GB, loaded: [{ id: "image-job", kind: "generator", class: "burst", peakBytes: 18_000_000_000, measured: true, lastUsedAt: new Date().toISOString(), idleTtlSeconds: 600, pinned: false, pid: null, liveBytes: null }] })).toBe(true);
 });
 
 test("a create followed by two edits requests both pool models and keeps the same edit slot warm", async () => {

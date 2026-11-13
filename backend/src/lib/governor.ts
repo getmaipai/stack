@@ -13,6 +13,8 @@ export const GovernorRules = {
   queueMax: 4,
   idleTtlSeconds: 600,
   warmEvictionGraceMs: 2 * 60_000,
+  /** SPLASH-MEM-01: the least time between two chat restarts for overage while a generator job is held. */
+  chatOverageRetryMs: 10 * 60_000,
   systemLowWaterPct: 0.1,
   systemLowWaterFloorBytes: GB,
   systemSustainedPolls: 2,
@@ -89,6 +91,8 @@ export interface GovernorLoadedModel {
   class: GovernorClass;
   peakBytes: number;
   measured: boolean;
+  /** SPLASH-MEM-01: the process's latest live reading (its whole tree), null until its watch read it; growth past `peakBytes` is overage the admission counts. */
+  liveBytes: number | null;
   lastUsedAt: string;
   idleTtlSeconds: number;
   pinned: boolean;
@@ -165,7 +169,7 @@ type QueuedEntry = { request: GovernorRequest; settled: boolean; headSince: numb
 const queue: QueuedEntry[] = [];
 const refusalCounts = new Map<string, number>();
 const decisions: GovernorDecision[] = [];
-type ReclaimStep = { at: number; step: "pool_idle_wait" | "evict_pool" | "evict_idle" | "window_drain" | "window_wait"; itemId: string; bytes: number };
+type ReclaimStep = { at: number; step: "pool_idle_wait" | "evict_pool" | "evict_idle" | "window_drain" | "window_wait" | "restart_chat"; itemId: string; bytes: number };
 const reclaimSteps = new Map<string, ReclaimStep[]>();
 let maxWindow: { state: "none" | "draining" | "open"; ownerId: string | null; since: number | null } = { state: "none", ownerId: null, since: null };
 export function getMaxWindow(): typeof maxWindow { return { ...maxWindow }; }
@@ -198,7 +202,7 @@ export function reducedNeedFor(request: GovernorRequest): ReducedNeed {
   }
   const giveBackBytes = [...loaded.values()].filter((item) => item.class !== "reserved" && !item.pinned && item.measured && item.id !== request.id).reduce((sum, item) => sum + item.peakBytes, 0);
   const real = freeMemoryBytes + giveBackBytes - workingMargin();
-  const budget = effectiveCapBytes() - (loadedBytes() - giveBackBytes);
+  const budget = effectiveCapBytes() - (loadedBytes() + overageBytes() - giveBackBytes);
   const roomBytes = Math.max(0, Math.min(real, budget));
   return { basis: "live", needed: roomBytes < requiredBytes, requiredBytes, roomBytes, shortfallBytes: Math.max(0, requiredBytes - roomBytes), availableBytes: freeMemoryBytes, giveBackBytes };
 }
@@ -285,6 +289,7 @@ function loadedItemFor(request: GovernorRequest): LoadedInternal {
     class: requestClass(request),
     peakBytes: peak.bytes,
     measured: peak.measured,
+    liveBytes: null,
     lastUsedAt: nowIso(),
     idleTtlSeconds: idleTtlOverrides.get(request.id) ?? tuning.idleTtlSeconds,
     pinned: request.pinned ?? false,
@@ -308,9 +313,20 @@ export function setIdleTtlSeconds(id: string, seconds: number | null): void {
   if (item) item.idleTtlSeconds = idleTtlOverrides.get(id) ?? tuning.idleTtlSeconds;
 }
 
-/** What a new admission could use right now without evicting anything: the model budget less what is loaded, and the free memory less the tier's working margin; whichever is smaller. */
+/** SPLASH-MEM-01: bytes loaded items hold beyond what they were admitted for (each item's live reading less its peak, never
+ * below zero). The free-memory side of every admission already sees this growth through the kernel; the budget side did not, and
+ * nothing named which item had grown, so a chat engine that had doubled sat behind "reserved" while a song waited. */
+export function overageBytes(): number {
+  return [...loaded.values()].reduce((sum, item) => sum + Math.max(0, (item.liveBytes ?? 0) - item.peakBytes), 0);
+}
+function overageOf(id: string): number {
+  const item = loaded.get(id);
+  return item ? Math.max(0, (item.liveBytes ?? 0) - item.peakBytes) : 0;
+}
+
+/** What a new admission could use right now without evicting anything: the model budget less what is loaded (and the overage loaded items have grown by), and the free memory less the tier's working margin; whichever is smaller. */
 export function admissionRoomBytes(): number {
-  return Math.max(0, Math.min(effectiveCapBytes() - loadedBytes(), freeMemoryBytes - workingMargin()));
+  return Math.max(0, Math.min(effectiveCapBytes() - loadedBytes() - overageBytes(), freeMemoryBytes - workingMargin()));
 }
 
 /** Whether a request fits with every non-reserved item removed. */
@@ -517,7 +533,7 @@ function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
   if ((request.tier === "boost" || request.tier === "max") && [...loaded.values()].some((item) => item !== existing && (item.tier === "boost" || item.tier === "max"))) return false;
   const cap = effectiveCapBytes();
   const growth = Math.max(0, peakBytes - (existing?.peakBytes ?? 0));
-  if (loadedBytes() + growth > cap) return false;
+  if (loadedBytes() + overageBytes() + growth > cap) return false;
   return freeMemoryBytes - growth >= workingMargin() || usesFlexBand(request, growth);
 }
 
@@ -525,7 +541,7 @@ function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
 function wouldAdmitAfterFreeing(request: GovernorRequest, peakBytes: number, freedBytes: number): boolean {
   if (memoryReadingDegraded || pressure !== "normal") return false;
   if (request.kind === "generator" && [...loaded.values()].some((item) => item.kind === "generator")) return false;
-  return loadedBytes() - freedBytes + peakBytes <= effectiveCapBytes() && freeMemoryBytes + freedBytes - peakBytes >= workingMargin();
+  return loadedBytes() + overageBytes() - freedBytes + peakBytes <= effectiveCapBytes() && freeMemoryBytes + freedBytes - peakBytes >= workingMargin();
 }
 
 export async function admit(request: GovernorRequest): Promise<GovernorHandle | { queued: true; position: number; class: GovernorClass; admitted: Promise<GovernorHandle | { refused: true; reason: string }> } | { refused: true; reason: string }> {
@@ -770,6 +786,10 @@ export interface StartGovernorOptions {
   /** No video job is waiting or running: put chat's full window back. */
   restoreChat?: () => Promise<boolean>;
   chatWindowShrunk?: () => boolean;
+  /** SPLASH-MEM-01: a generator job is held and chat has grown past its admitted peak by enough to let it in: the caller
+   * restarts chat between turns (owner's ruling 2026-11-12: allowed while idle, never mid-turn). Resolves false when chat
+   * was busy or could not be restarted (asked again after `GovernorRules.chatOverageRetryMs`). */
+  restartChat?: () => Promise<boolean>;
   /** Epoch milliseconds for the latest chat, STT, or TTS request. */
   lastInteractiveAt?: () => number | null;
   now?: () => number;
@@ -777,6 +797,9 @@ export interface StartGovernorOptions {
 }
 
 let chatYieldBusy = false;
+let lastChatOverageRestartAt = Number.NEGATIVE_INFINITY;
+let chatOverageRestartCount = 0;
+export function chatOverageRestarts(): number { return chatOverageRestartCount; }
 let videoShrinkCount = 0;
 let videoRestoreCount = 0;
 let videoShrunkSince: string | null = null;
@@ -845,10 +868,15 @@ export function startGovernor(options: StartGovernorOptions): () => void {
     const now = options.now?.() ?? Date.now();
     const unloadItem = options.unload ?? ((id: string) => unloadWarmWorker(id));
     for (const item of [...loaded.values()]) {
+      // SPLASH-MEM-01: every poll reads the live bytes of the process this watch owns, baseline or not (Splash maps its
+      // weights, so its baseline is never set), so the ledger shows what each item holds now and `overageBytes()` counts
+      // growth past the admitted peak against the budget side of every admission.
+      const live = item.pid === options.pid ? await processReader(options.pid) : null;
+      if (item.pid === options.pid) item.liveBytes = live;
       // The watch compares this run's own reading; a reserved role is
       // never restarted, it is reported; a warm resident is restarted once idle.
       if (item.pid === options.pid && item.peakBaselineBytes !== null) {
-        const measured = await processReader(options.pid);
+        const measured = live;
         const limit = item.peakBaselineBytes * tuning.processSafetyMultiplier + tuning.processMinOverageBytes;
         if (measured !== null && measured > limit) {
           item.processBreaches++;
@@ -982,6 +1010,24 @@ export function startGovernor(options: StartGovernorOptions): () => void {
         }
       }
     }
+    // SPLASH-MEM-01: a picture, video or song job is held, nothing lighter can be freed, and chat has grown past what it
+    // was admitted for by enough to let the job in: chat is restarted between turns (its cache is the growth; the fresh
+    // process starts at its admitted size). Owner's ruling 2026-11-12: allowed while idle, never mid-turn.
+    if (options.restartChat && !chatYieldBusy && head && head.request.kind === "generator" && !codingModeActive && !canAdmit(head.request, peakFor(head.request).bytes)) {
+      const chatOverage = overageOf("chat");
+      const interactiveAt = options.lastInteractiveAt?.() ?? null;
+      const quietSeconds = head.request.quietSeconds ?? 60;
+      const quiet = interactiveAt === null || now - interactiveAt >= quietSeconds * 1000;
+      const evictionPending = [...loaded.values()].some((item) => item.evicting);
+      const reclaimable = reclaimableItems(options.busy ?? (() => false), now);
+      const retryDue = now - lastChatOverageRestartAt >= GovernorRules.chatOverageRetryMs;
+      if (chatOverage > 0 && quiet && retryDue && !evictionPending && reclaimable.items.length === 0 && reclaimable.heldForGraceBytes === 0 && !(options.busy?.("chat") ?? false) && wouldAdmitAfterFreeing(head.request, peakFor(head.request).bytes, chatOverage)) {
+        chatYieldBusy = true;
+        lastChatOverageRestartAt = now;
+        const waiting = head.request.id;
+        void options.restartChat().then((done) => { if (done) { chatOverageRestartCount++; decide("Restarted", `A ${head.request.role ?? "generator"} job was waiting and chat had grown ${(chatOverage / GB).toFixed(1)} GB past its admitted size, so chat was restarted between turns.`, "chat"); reclaim(waiting, "restart_chat", "chat", chatOverage, now); } }).catch(() => {}).finally(() => { chatYieldBusy = false; });
+      }
+    }
     // Every poll tries the queue head, not only on a pressure or floor edge:
     // a request can be queued by the working margin alone (free dipped under
     // peak + margin while an engine loaded) with neither edge ever firing.
@@ -1060,6 +1106,7 @@ export function __resetGovernorForTests(): void {
   pollChain = Promise.resolve();
   pollsInFlight = 0;
   chatYieldBusy = false;
+  lastChatOverageRestartAt = Number.NEGATIVE_INFINITY; chatOverageRestartCount = 0;
   videoShrinkCount = 0; videoRestoreCount = 0; videoShrunkSince = null; videoShrinkMaxWaitSeconds = 600; videoQuietSeconds = 60; videoGoneSince = null;
   codingModeActive = false;
   metalCapBytes = null;

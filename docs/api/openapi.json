@@ -15197,6 +15197,47 @@
                         },
                         "chat_paged_out": {
                           "type": "boolean"
+                        },
+                        "overage_bytes": {
+                          "type": "number",
+                          "description": "SPLASH-MEM-01: bytes loaded items hold beyond what they were admitted for, summed; the budget side of admission subtracts it."
+                        },
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "class": {
+                                "type": "string",
+                                "enum": [
+                                  "reserved",
+                                  "warm",
+                                  "burst"
+                                ]
+                              },
+                              "peak_bytes": {
+                                "type": "number"
+                              },
+                              "live_bytes": {
+                                "type": "number",
+                                "nullable": true
+                              },
+                              "overage_bytes": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "class",
+                              "peak_bytes",
+                              "live_bytes",
+                              "overage_bytes"
+                            ]
+                          },
+                          "description": "Each loaded item: its admitted peak, its latest live reading (null until its watch read it) and the growth past its peak, so an admin sees which engine grew, never one aggregate."
                         }
                       },
                       "required": [
@@ -15207,7 +15248,9 @@
                         "working_margin_bytes",
                         "free_bytes",
                         "queue_depth",
-                        "chat_paged_out"
+                        "chat_paged_out",
+                        "overage_bytes",
+                        "items"
                       ]
                     },
                     "memory": {

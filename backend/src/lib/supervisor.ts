@@ -33,7 +33,7 @@ import { OmlxEngineClient } from "@/chat/omlxClient";
 import { CHAT_ENGINE_SETTING, clearChatEngineFailures, FALLBACK_AFTER_FAILURES, markChatEngineFailed, resolveChatEngine, type ChatEngineChoice, type ChatEngineId } from "@/lib/chatEngines";
 import { clearTtsEngineFailures, markTtsEngineFailed, resolveTtsEngine, TTS_ENGINE_SETTING, TTS_ENGINES, type TtsEngineChoice, type TtsEngineId } from "@/speech/ttsEngines";
 import { STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
-import { clearCodingEngineFailures, codingEngineFailure, CODING_ENGINE_SETTING, markCodingEngineFailed, resolveCodingEngine, splashEnv, splashFootprintEstimateBytes, type CodingEngineChoice, type SplashFacts } from "@/lib/splash";
+import { clearCodingEngineFailures, codingEngineFailure, CODING_ENGINE_SETTING, markCodingEngineFailed, resolveCodingEngine, splashChatMemoryPlan, splashEnv, splashFootprintEstimateBytes, type CodingEngineChoice, type SplashFacts } from "@/lib/splash";
 import { layOutSplashCache, SplashLayoutError, splashPairFor } from "@/lib/splashStore";
 import { TreeSnapshot, treeMemoryBytes } from "@/lib/processTree";
 import { registerOwned, type OwnedHandle } from "@/lib/ownedProcesses";
@@ -1495,10 +1495,9 @@ export function splashLaunchPlan(model: ModelRecord, port: number, contextLength
   const estimate = splashFootprintEstimateBytes({ weightsBytes: model.sizeBytes ?? 0, draftBytes: draftRecord?.sizeBytes ?? pair.draftPin.download!.approx_bytes, contextTokens: contextLength });
   const chatRole = pinName === "splash-chat";
   // Owner ruling 2026-11-04 lifts resource-management R1 for chat only: Splash gets a full-context Metal cap, and the watchdog may restart this process at its ceiling.
-  const headroomBytes = Math.floor(Number(values["stack.engines.chat.max_memory_headroom_gb"] ?? 12)) * 1_073_741_824;
-  const measuredBytes = model.measuredFootprintBytes ?? 0;
-  const fullContextNeed = Math.max(estimate, measuredBytes) + headroomBytes;
-  const maxMemoryBytes = modeCoding ? Math.max(1, Math.min(governor.capBytes - stayingBytes, estimate + governor.marginBytes)) : chatRole ? Math.max(fullContextNeed + governor.marginBytes, estimate + governor.marginBytes) : null;
+  // SPLASH-MEM-01: that cap is the model's need plus the headroom setting and nothing more (`splashChatMemoryPlan`); Splash fills
+  // whatever budget it is given with cached request states, so the governor's working margin is never part of it.
+  const maxMemoryBytes = modeCoding ? Math.max(1, Math.min(governor.capBytes - stayingBytes, estimate + governor.marginBytes)) : chatRole ? splashChatMemoryPlan({ estimateBytes: estimate, measuredBytes: model.measuredFootprintBytes ?? null, headroomBytes: chatHeadroomBytes(values) }).capBytes : null;
   const thinkingBudget = Math.max(0, Math.floor(Number(values["stack.engines.chat.thinking_budget_ceiling"] ?? 2000)));
   const args = splashArgs({ model: layout.model, revision: layout.revision, port, servedModelName: model.id, thinkingBudgetTokens: chatRole ? thinkingBudget : coding.thinkingBudgetTokens, contextLength, languageOnly: !declaredReadsPictures(model), ...(modeCoding ? { defaultReasoningEffort: "none" as const, maxMemory: `${Math.max(1, Math.floor(maxMemoryBytes! / 1_073_741_824))}G`, decodeShare: 1.0 } : chatRole ? { maxMemory: `${Math.ceil(maxMemoryBytes! / 1_073_741_824)}G` } : {}) });
   const env = splashEnv(layout);
@@ -1692,7 +1691,10 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     // and the larger of that and the store's own reading is the peak.
     measuredPeakBytes: onSplash ? null : JIT_ROLES.includes(role) && pinMeasured !== null ? Math.max(pinMeasured, model.measuredFootprintBytes ?? 0) : model.measuredFootprintBytes,
     dryRunPeakBytes: onSplash ? splashEstimate : dryRunPeakBytes === null ? null : dryRunPeakBytes + projectorBytes,
-    headroomBytes: engineForRole(role) === "mlx-serve" && !managed && !generator && !SPEECH_ROLES.includes(role) ? mlxHeadroomBytes({ modelDir: model.modelPath!, contextTokens: contextLength }) : null,
+    // Chat on Splash is admitted for its whole Metal budget (SPLASH-MEM-01): the process grows to that budget with cached
+    // request states, and a ledger that held only the estimate let a song job wait on memory that was never free.
+    headroomBytes: onChatSplash ? splashChatMemoryPlan({ estimateBytes: splashEstimate!, measuredBytes: model.measuredFootprintBytes ?? null, headroomBytes: chatHeadroomBytes(settingValues()) }).ledgerHeadroomBytes
+      : engineForRole(role) === "mlx-serve" && !managed && !generator && !SPEECH_ROLES.includes(role) ? mlxHeadroomBytes({ modelDir: model.modelPath!, contextTokens: contextLength }) : null,
     engine: generator ? "comfyui" : managed ? TTS_ENGINES[activeTtsChoice().engine].catalogEngine : SPEECH_ROLES.includes(role) ? "sherpa-onnx-node" : engineForRole(role) === "mlx-serve" ? "mlx-serve" : engineForRole(role) === "omlx" ? "oMLX" : onChatSplash ? "splash-chat" : onSplash ? "splash" : "llama-server",
     pinned: pinnedModels.has(model.id),
     // The coding engine gives way to a generator job while it is idle (CODE-STACK-01 S2).
@@ -2103,7 +2105,7 @@ export function watchProcessMemory(role: RoleId, pid: number, measured?: { model
   return startGovernor({ pid, tier: machineTier, ...(processMemory ? { processMemory } : {}), restart: async () => { await restartRole(role, "governor-runaway"); }, busy: () => {
     const current = runtimes.get(role)?.process;
     return current?.pid === pid && current.activeRequests > 0;
-  }, onPeak: measured ? (_id, bytes) => { recordMeasuredFootprint(measured.modelId, bytes, measured.contextLength); } : undefined, shrinkChat: shrinkChatForVideo, restoreChat: restoreChatWindow, chatWindowShrunk, lastInteractiveAt, unload: async (id) => {
+  }, onPeak: measured ? (_id, bytes) => { recordMeasuredFootprint(measured.modelId, bytes, measured.contextLength); } : undefined, shrinkChat: shrinkChatForVideo, restoreChat: restoreChatWindow, chatWindowShrunk, lastInteractiveAt, restartChat: restartChatForOverage, unload: async (id) => {
     // Only a running jit process is evicted here; one still starting is
     // left to its own start, so its admission stays counted. The coding
     // engine also declines while it serves a request.
@@ -2231,9 +2233,23 @@ export async function restartRole(requested: RoleId, cause: RetireCause): Promis
   await recycleRole(requested, cause);
 }
 
+/** SPLASH-MEM-01: the governor found chat grown past its admitted size while a generator job waits. Chat is restarted only
+ * between turns (no request in flight) and only when its Metal engine passes the host check; otherwise the governor asks
+ * again later. Owner's ruling 2026-11-12. */
+export async function restartChatForOverage(): Promise<boolean> {
+  const current = runtime("chat").process;
+  if (!current || current.kind !== "spawned" || current.activeRequests > 0) return false;
+  const fault = await metalHostFault(current.engine ?? "splash");
+  if (fault) { logger.appendLine(JSON.stringify({ event: "chat.overage-restart-skipped", reason: fault })); return false; }
+  await restartChatForHostGuard("memory-ceiling");
+  return true;
+}
+
 /** HOST-GUARD-05: recycle chat for a guarded memory-ceiling or maintenance restart. R1 remains in force for every other reserved role. */
 export async function restartChatForHostGuard(cause: Extract<RetireCause, "memory-ceiling" | "maintenance-restart">): Promise<void> {
   await recycleRole("chat", cause);
+  // The reason rides on the existing loading row (Home's chat "starting" line, RULES S6): plain words, nothing about memory.
+  runtime("chat").status.reason = cause === "memory-ceiling" ? "Chat is restarting to keep room for other work." : "Chat is restarting for its scheduled refresh.";
   void getProcess("chat").catch((error: unknown) => logger.appendLine(JSON.stringify({ event: "chat.host-guard-restart-failed", cause, message: error instanceof Error ? error.message : String(error) })));
 }
 
@@ -2252,10 +2268,13 @@ export function chatSplashMemoryCapBytes(): number | null {
   const draft = getModel(pair.draftPin.id);
   const contextLength = runtime("chat").process?.contextLength ?? Number(settingValues()["stack.engines.chat.context_length"] ?? 131072);
   const estimate = splashFootprintEstimateBytes({ weightsBytes: model.sizeBytes ?? 0, draftBytes: draft?.sizeBytes ?? pair.draftPin.download!.approx_bytes, contextTokens: contextLength });
-  // Match splashLaunchPlan: cap never falls below full-context demand plus governor margin.
-  const governor = getGovernorStatus();
-  const headroom = Number(settingValues()["stack.engines.chat.max_memory_headroom_gb"] ?? 12) * 1_073_741_824;
-  return Math.max(Math.max(estimate, model.measuredFootprintBytes ?? 0) + headroom + governor.marginBytes, estimate + governor.marginBytes);
+  // The same definition splashLaunchPlan passed as `--max-memory` (SPLASH-MEM-01).
+  return splashChatMemoryPlan({ estimateBytes: estimate, measuredBytes: model.measuredFootprintBytes ?? null, headroomBytes: chatHeadroomBytes(settingValues()) }).capBytes;
+}
+
+/** `stack.engines.chat.max_memory_headroom_gb` in bytes: the room above the model's own need that Splash may fill with its conversation cache. */
+function chatHeadroomBytes(values: Record<string, unknown>): number {
+  return Math.floor(Number(values["stack.engines.chat.max_memory_headroom_gb"] ?? 12)) * 1_073_741_824;
 }
 
 /** Retires the role's process and leaves the next start to the caller, without telling the self-heal controller a person did it (a canary's restart request counts toward the breaker). */

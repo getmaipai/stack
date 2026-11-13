@@ -33,8 +33,8 @@ import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { logger } from "@/lib/log";
 import { getSystemSampler, type ProcessRow, type SystemSample, type SystemSampler } from "@/lib/memory/system";
-import { cancelGeneratorsForMemory, generatorWorkPending, runningGeneratorKinds } from "@/lib/jobs";
-import { getGovernorStatus, setAdmissionGate, videoWindowStats } from "@/lib/governor";
+import { cancelGeneratorsForMemory, generatorWorkPending, generatorWorkRunning, runningGeneratorKinds } from "@/lib/jobs";
+import { getGovernorStatus, overageBytes, setAdmissionGate, videoWindowStats } from "@/lib/governor";
 import { admissionVerdict, chatPagedOut, latestSample, levelSince, memoryLevel, orphanReaperEnabled, recordAction, recentActions, reserveBytes, setChatPagedOut, setLatestSample, setMemoryLevel, watchdogEnabled, WatchdogRules, type WatchdogLevel } from "@/lib/memoryState";
 import { engineRoot } from "@/lib/store/layout";
 import { dirname, join } from "node:path";
@@ -276,7 +276,7 @@ export interface TopConsumer { pid: number; name: string; bytes: number; stack: 
 export interface MemoryReport {
   video_window: { shrinks: number; restores: number; shrunk_now: boolean; shrunk_since: string | null };
   watchdog: { enabled: boolean; level: WatchdogLevel; since: string; reserve_bytes: number; generation_paused: boolean; chat_paged_out: boolean; survivors_stopped: number };
-  ledger: { reserved_bytes: number; warm_bytes: number; burst_bytes: number; budget_bytes: number; working_margin_bytes: number; free_bytes: number; queue_depth: { reserved: number; warm: number; burst: number }; chat_paged_out: boolean };
+  ledger: { reserved_bytes: number; warm_bytes: number; burst_bytes: number; budget_bytes: number; working_margin_bytes: number; free_bytes: number; queue_depth: { reserved: number; warm: number; burst: number }; chat_paged_out: boolean; overage_bytes: number; items: Array<{ id: string; class: "reserved" | "warm" | "burst"; peak_bytes: number; live_bytes: number | null; overage_bytes: number }> };
   memory: { total_bytes: number; available_bytes: number; free_bytes: number; wired_bytes: number; compressor_bytes: number; swap_used_bytes: number; swap_total_bytes: number; swap_growth_bytes_30s: number; pressure_level: number; pressure: string; sampled_at: string } | null;
   stack: { bytes: number; tmp_bytes: number; unaccounted_bytes: number; unregistered: { count: number; bytes: number }; processes: Array<{ pid: number; name: string; bytes: number }> };
   /** MEM-SPACE-05: what other programs hold beside the Stack, with the big ones named (name and bytes only, never a pid or folder). Empty list when nothing is flagged. */
@@ -378,7 +378,8 @@ export class MemoryWatchdog {
     };
     this.ceilingFactor = options.ceilingFactor ?? (() => Number(settingValues()["stack.engines.chat.memory_ceiling_factor"] ?? 1.15));
     this.canary = options.canary ?? (() => metalHostFault("splash"));
-    this.jobsQuiet = options.jobsQuiet ?? (() => !generatorWorkPending());
+    // Owner's ruling 2026-11-12: a job waiting in the queue never holds the ceiling restart back (it is what the restart frees room for); only a job running right now does.
+    this.jobsQuiet = options.jobsQuiet ?? (() => !generatorWorkRunning());
     this.maintenanceHours = options.maintenanceHours ?? (() => Number(settingValues()["stack.engines.chat.maintenance_restart_hours"] ?? 12));
   }
 
@@ -781,7 +782,9 @@ export class MemoryWatchdog {
     return {
       video_window: videoWindowStats(),
       watchdog: { enabled: watchdogEnabled(), level, since: new Date(levelSince()).toISOString(), reserve_bytes: sample ? reserveBytes(sample.totalBytes) : 0, generation_paused: level !== "normal", chat_paged_out: chatPagedOut(), survivors_stopped: this.survivorsStopped },
-      ledger: { reserved_bytes: classBytes.reserved, warm_bytes: classBytes.warm, burst_bytes: classBytes.burst, budget_bytes: governor.capBytes, working_margin_bytes: governor.marginBytes, free_bytes: governor.freeMemoryBytes, queue_depth: queueDepth, chat_paged_out: chatPagedOut() },
+      // SPLASH-MEM-01: growth past each item's admitted peak is named per item, so a 33 GB burst entry never hides 38 GB of chat growth inside one aggregate.
+      ledger: { reserved_bytes: classBytes.reserved, warm_bytes: classBytes.warm, burst_bytes: classBytes.burst, budget_bytes: governor.capBytes, working_margin_bytes: governor.marginBytes, free_bytes: governor.freeMemoryBytes, queue_depth: queueDepth, chat_paged_out: chatPagedOut(),
+        overage_bytes: overageBytes(), items: governor.loaded.map((item) => ({ id: item.id, class: item.class, peak_bytes: item.peakBytes, live_bytes: item.liveBytes, overage_bytes: Math.max(0, (item.liveBytes ?? 0) - item.peakBytes) })) },
       memory: sample ? { total_bytes: sample.totalBytes, available_bytes: sample.availableBytes, free_bytes: sample.freeBytes, wired_bytes: sample.wiredBytes, compressor_bytes: sample.compressorBytes, swap_used_bytes: sample.swapUsedBytes, swap_total_bytes: sample.swapTotalBytes, swap_growth_bytes_30s: growth, pressure_level: sample.pressureLevel, pressure: sample.pressure, sampled_at: new Date(sample.at).toISOString() } : null,
       // 20 GB fresh and 101–103 GB after hours vs 2.6 GB `ps` RSS for the same pid: use the shared process-memory definition.
       stack: { bytes: own.reduce((total, row) => total + row.rssBytes, 0), tmp_bytes: folderBytes(join(dataDir, "tmp")), unaccounted_bytes: Math.max(0, own.reduce((total, row) => total + row.rssBytes, 0) - governor.loaded.reduce((total, item) => total + item.peakBytes, 0)), unregistered: (() => { const registered = ownedPids(); const old = own.filter((row) => row.pid !== this.ownPid && row.ageSeconds > 60 && !registered.has(row.pid)); return { count: old.length, bytes: old.reduce((total, row) => total + row.rssBytes, 0) }; })(), processes: own.sort((a, b) => b.rssBytes - a.rssBytes).slice(0, 10).map((row) => ({ pid: row.pid, name: row.name, bytes: row.rssBytes })) },

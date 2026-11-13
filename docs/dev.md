@@ -2906,6 +2906,50 @@ on-demand item unloaded by `keep_warm_minutes` (default 15, `unloadIdleRoles` in
 idle release is TIER-HOME-05's lease (Splash's own `--idle-release off`), which is why its footprint stayed up while idle; that stays with the
 tier work. **Fix:** `splashArgs` always passes `--max-cache-disk 0`; the `splash_cache_gb` settings are removed. `scripts/bench/splash-disk-writes.sh`
 reports the bytes under the Splash tmp folder over a window (bench lane, not the gate).
+### SPLASH-MEM-01 (2026-11-12): the chat engine's budget is what the ledger counts
+
+**Measured on the live hub.** The Splash chat process (1.6.1, `serve-native ... 32768 61203283968 --idle-release off`) held 61.2 GB, 56 GB of
+it Metal memory, 35 minutes after a restart: byte for byte the `--max-memory` it was launched with. The ledger reserved 35 GB for chat, so
+a 33 GB song job and a video job waited for memory that was never free. After one chat-engine restart (`POST /stack/v1/engines/splash-chat/restart`,
+9 s) the process held 18.2 GB and the governor's free room went from 44 to 88 GB; the song started within 15 s. Three distinct 2,627-token
+prompts then grew the process by about 0.33 GB each (about 130 KB per prompt token: the hybrid model's recurrent states in fp32 and its
+4,096-token checkpoints, kept per request), and the resume probe (`home/backend/scripts/bench/engine-resume-probe.ts`) had shown that idle
+time and other requests never evict a kept state.
+
+**Cause.** `splashLaunchPlan` handed Splash the model's need plus the 12 GB headroom setting plus the governor's 20 GB working margin
+(57 GB on this computer), and Splash treats that budget as room to keep request states in. Each Home conversation warm, each warm
+again after a fold (CONVO-PREWARM-03), each bench turn and each discarded speculative run left one more state, about a third of a
+gigabyte at a time. The watchdog's restart point was that budget times 1.15 (about 66 GB), which a process capped at 57 GB can never
+reach, so HOST-GUARD-05 never fired; and the ledger admitted chat for the estimate alone.
+
+**Fix.** `splashChatMemoryPlan` (`lib/splash.ts`) is the one definition: the larger of the estimate and the measured footprint, plus
+`stack.engines.chat.max_memory_headroom_gb`, rounded up to a whole GiB, with none of the governor margin. The launch passes it as
+`--max-memory`; chat's admission carries it as `headroomBytes`, so the ledger holds the whole budget from the first second (39 GB here,
+against 57 GB of real growth before); the watchdog's ceiling reads the same number. Splash's cache stays inside it on its own, and a
+process that still passes the ceiling while idle is restarted by HOST-GUARD-05 as before; the restart puts a plain reason on the
+chat role's loading row ("Chat is restarting to keep room for other work."), which Home's existing chat starting line shows (RULES S6).
+`splash serve-native --help` (1.6.1) has no separate cache-size flag; `--idle-release` frees the weights, not the states, and
+`POST /v1/memory/release` the same, so the budget is the only cap the engine offers. Home bounds what it warms on its side
+(CONVO-PREWARM-04 in `home/docs/design/speculative-start-2026-11-11.md`).
+
+**The degrade path keys on one engine's own growth, not only on kernel pressure** (the audit of the same day). Before, the
+watchdog ladder read pressure, available memory and swap only; the governor's runaway watch armed only on a post-load baseline
+(never set for Splash, which maps its weights); a reserved role was "Kept"; `unaccounted_bytes` was one aggregate, so a 33 GB
+burst entry hid 38 GB of chat growth; and the watchdog's ceiling restart waited for `jobsQuiet`, false while the stuck song
+itself was queued. Now: the governor watch reads the live bytes of the process it owns on every poll (`liveBytes` on the
+loaded item, baseline or not); `overageBytes()` (live less admitted peak, per item) is subtracted on the budget side of
+`admissionRoomBytes`, `canAdmit`, `wouldAdmitAfterFreeing` and `reducedNeedFor` (the free side already saw it through the
+kernel); when a generator job is held, nothing lighter can be freed and chat's overage would let it in, the governor calls
+`restartChatForOverage` (owner's ruling 2026-11-12: between turns only, never with a request in flight, after the Metal host
+check, at most once per `chatOverageRetryMs`), the job is admitted once the fresh process reads at its admitted size, and the
+decision and the reclaim step `restart_chat` record it; `/stack/v1/memory` `ledger.items` names each item's peak, live and
+overage bytes with `ledger.overage_bytes` beside them; the watchdog's ceiling restart waits only for a generator job that is
+running, not one queued. The lines a person can read ("Waiting for its turn", the paused and busy sentences in
+`memoryState.ts`, Home's song card and companion take label) carry no memory words. Tests: `tests/governor.test.ts` (the
+drill: chat admitted at 20 GB grows to 57 GB over six polls while a 33 GB song waits at normal pressure; chat is restarted
+between turns, the song is admitted, the ledger shows chat back at 20 GB), `tests/splashChat.test.ts` (the cap excludes the
+margin, the plan is one number for the launch and the watchdog).
+
 # Resource recapture
 
 Run `cd backend && MAIPAI_TEST_NO_PORTS=1 bun test tests/resourceRecapture.test.ts` for the scripted worker regression check. Run `bun run scripts/resource-recapture-bench.ts --stack http://127.0.0.1:8770 --kind all` by hand against a live Stack. After the worker's real idle time plus 10 seconds (picture and video 10 minutes, music 5) the bench allows 256 MB of warm and burst memory left on the governor's ledger, no new unregistered process below the Stack, 512 MB of unaccounted memory and 16 MB of temporary files. Total Stack memory is printed for information only, because the chat engine and the other residents grow with ordinary use. The test covers picture generation, video generation and music generation with scripted workers; picture editing, stems and transcode are outside this check.
