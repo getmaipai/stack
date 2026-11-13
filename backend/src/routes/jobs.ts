@@ -1,3 +1,4 @@
+import { admissionCaller } from "@/lib/admissionCaller";
 import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter, ErrorSchema, idParamSchema } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
@@ -12,7 +13,7 @@ const getRoute = createRoute({ method: "get", path: "/{id}", tags: ["Jobs"], sum
 const cancelRoute = createRoute({ method: "delete", path: "/{id}", tags: ["Jobs"], summary: "Cancel a job", request: { params: idParamSchema("id") }, responses: { 200: { content: { "application/json": { schema: z.object({ job: JobSchema }) } }, description: "Cancelled (or already finished)." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "Unknown job." } } });
 
 export const jobsRoutes = apiRouter<AppEnv>();
-jobsRoutes.openapi(submitRoute, (c) => { const body = c.req.valid("json"); const result = submitJob({ kind: body.kind, role: body.role ?? null, input: body.input }); return "refused" in result ? c.json({ error: result.reason, ...(result.code ? { code: result.code } : {}) }, result.status === 422 ? 422 : 503) : c.json({ job: jobView(result.job, fullViewAllowed((n) => c.req.header(n))) }, 202); });
+jobsRoutes.openapi(submitRoute, (c) => { const body = c.req.valid("json"); const caller = admissionCaller(c); const result = submitJob({ caller, kind: body.kind, role: body.role ?? null, input: body.input }); return "refused" in result ? c.json({ error: result.reason, ...(result.code ? { code: result.code } : {}) }, result.status === 422 ? 422 : 503) : c.json({ job: jobView(result.job, fullViewAllowed((n) => c.req.header(n))) }, 202); });
 jobsRoutes.openapi(listRoute, (c) => { const full = fullViewAllowed((n) => c.req.header(n)); return c.json({ jobs: listJobs().map((job) => jobView(job, full)) }, 200); });
 jobsRoutes.openapi(getRoute, (c) => { const job = getJob(c.req.valid("param").id); return job ? c.json({ job: jobView(job, fullViewAllowed((n) => c.req.header(n))) }, 200) : c.json({ error: "Unknown job" }, 404); });
 jobsRoutes.openapi(cancelRoute, (c) => { const job = cancelJob(c.req.valid("param").id); return job ? c.json({ job: jobView(job, fullViewAllowed((n) => c.req.header(n))) }, 200) : c.json({ error: "Unknown job" }, 404); });

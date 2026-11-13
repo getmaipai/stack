@@ -1,3 +1,4 @@
+import { admissionCaller } from "@/lib/admissionCaller";
 // POST /v1/images/talk-frames (TALK-06): mouth and eye still frames for one
 // portrait, as a job (202, poll /stack/v1/jobs/{id}, fetch each PNG by index),
 // the same model as POST /v1/images/edits. Results wait ten minutes in memory.
@@ -73,7 +74,7 @@ talkFramesRoutes.openapi(postRoute, async (c) => {
   if (!hasJobRunner("talk_frames")) return reply(c, { error: "Talking pictures are not available on this machine.", code: "unsupported" }, 503) as never;
   const token = crypto.randomUUID();
   stashTalkInput(token, { image: new Uint8Array(await form.image.arrayBuffer()), lip, eye });
-  const submitted = submitJob({ kind: "talk_frames", role: "image", input: { token } });
+  const submitted = submitJob({ caller: admissionCaller(c), kind: "talk_frames", role: "image", input: { token } });
   if ("refused" in submitted) return reply(c, { error: submitted.reason, code: submitted.code ?? "unsupported" }, 503) as never;
   const created = Math.floor(new Date(submitted.job.createdAt).getTime() / 1000);
   const settled = await waitForJob(submitted.job.id, form.timeout_ms ?? DEFAULT_WAIT_MS);

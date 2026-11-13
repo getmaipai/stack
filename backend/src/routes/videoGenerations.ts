@@ -1,3 +1,4 @@
+import { admissionCaller } from "@/lib/admissionCaller";
 // POST /v1/videos/generations and the job it makes (VIDEO-GEN-02). The same
 // job API as images: the clip is submitted, the reply waits up to timeout_ms,
 // and past the deadline answers 202 with the job id for Home to come back to.
@@ -226,7 +227,7 @@ function statusOf(job: Job) {
     job: job.id, tier: tierOf(job), state, phase, progress: Math.round(job.percent), phase_progress: state === "running" && detail ? Math.round(detail.phasePercent) : null, position: job.state === "queued" ? job.position : null,
     ...liveFields(job.id, state === "running"),
     error: job.state === "failed" ? (job.status === STOPPED_FOR_MEMORY_MAX ? job.reason : failure?.message ?? job.reason) ?? "The clip failed." : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? job.reason ?? "Paused: this computer is low on memory." : "The clip was cancelled.") : null,
-    code: job.state === "failed" ? (job.status === "no_memory" ? "no_memory" : job.status === STOPPED_FOR_MEMORY_MAX ? MEMORY_CANCELLED_CODE : failure?.code ?? "failed") : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? MEMORY_CANCELLED_CODE : "cancelled") : null,
+    code: job.state === "failed" ? (job.status === "never_fits" ? "never_fits" : job.status === "no_memory" ? "no_memory" : job.status === STOPPED_FOR_MEMORY_MAX ? MEMORY_CANCELLED_CODE : failure?.code ?? "failed") : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? MEMORY_CANCELLED_CODE : "cancelled") : null,
     data: result ? [entry(result)] : [],
   };
 }
@@ -404,13 +405,14 @@ async function runClip(c: Context, body: z.infer<typeof VideoRequestSchema>, qua
   const token = crypto.randomUUID();
   const warned = Array.isArray(jobFields.lora_warnings) ? { lora_warnings: jobFields.lora_warnings } : {};
   stashClip(token, clip);
-  const submitted = submitJob({ kind: VIDEO_JOB_KIND, role: "video", input: { token, ...jobFields, ...adultInput(body.audience), seed: clip.seed, quality, lora_ids: clip.loraIds, ...tierInput(body.tier), ...(body.quiet_seconds !== undefined ? { quiet_seconds: body.quiet_seconds } : {}), ...(body.quiet_max_wait_seconds !== undefined ? { quiet_max_wait_seconds: body.quiet_max_wait_seconds } : {}) } });
+  const submitted = submitJob({ caller: admissionCaller(c), kind: VIDEO_JOB_KIND, role: "video", input: { token, ...jobFields, ...adultInput(body.audience), seed: clip.seed, quality, lora_ids: clip.loraIds, ...tierInput(body.tier), ...(body.quiet_seconds !== undefined ? { quiet_seconds: body.quiet_seconds } : {}), ...(body.quiet_max_wait_seconds !== undefined ? { quiet_max_wait_seconds: body.quiet_max_wait_seconds } : {}) } });
   if ("refused" in submitted) { unstashClip(token); return fail(c, 503, submitted.code ?? "unsupported", submitted.reason); }
   const settled = await waitForJob(submitted.job.id, body.timeout_ms ?? DEFAULT_WAIT_MS);
   const created = Math.floor(new Date(submitted.job.createdAt).getTime() / 1000);
   if (!settled || settled.state === "queued" || settled.state === "running" || settled.state === "stalled") return reply(c, { created, job: submitted.job.id, data: [], ...warned }, 202);
   if ((settled.state === "cancelled" && settled.status === PAUSED_LOW_MEMORY) || (settled.state === "failed" && settled.status === STOPPED_FOR_MEMORY_MAX)) return fail(c, 503, MEMORY_CANCELLED_CODE, settled.reason ?? "Paused: this computer is low on memory.", settled.id);
   if (settled.state === "cancelled") return fail(c, 499, "cancelled", "The clip was cancelled.", settled.id);
+  if (settled.state === "failed" && settled.status === "never_fits") return fail(c, 503, "never_fits", settled.reason ?? "This is too big for this computer even with everything else paused.", settled.id);
   if (settled.state === "failed" && settled.status === "no_memory") return fail(c, 503, "no_memory", settled.reason ?? "There was not enough free memory.", settled.id);
   if (settled.state !== "done") {
     const failure = videoFailure(settled.id);

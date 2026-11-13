@@ -181,7 +181,7 @@ export function registerVideoJobs(): void {
       return { job: job.id, model: meta.model, width: meta.width, height: meta.height, frames: meta.frames, fps: meta.fps, seconds: meta.seconds, seed: meta.seed, lora_ids: meta.lora_ids, ms: meta.ms };
     } catch (error) {
       if (!signal.aborted && error instanceof VideoError) remember(failures, job.id, { code: error.code, message: error.message, status: error.status });
-      else if (!signal.aborted) remember(failures, job.id, { code: "failed", message: error instanceof Error ? error.message : String(error), status: 500 });
+      else if (!signal.aborted) { const neverFit = error instanceof Error && (error as Error & { code?: string }).code === "never_fits"; remember(failures, job.id, { code: neverFit ? "never_fits" : "failed", message: error instanceof Error ? error.message : String(error), status: neverFit ? 503 : 500 }); }
       throw error;
     } finally {
       rmSync(work, { recursive: true, force: true });

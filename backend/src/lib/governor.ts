@@ -2,7 +2,8 @@ import { emit, emitGovernorWindow } from "@/lib/events";
 import { getMemoryReader, type MemoryPressure, type MemoryReader } from "@/lib/memory";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { ROLES, ROLE_JOB_CLASS, type JobClass } from "@/roles";
-import { tierCapBytes } from "@/lib/tiers";
+import { reducedFreedBytes as tierReducedFreedBytes, tierCapBytes } from "@/lib/tiers";
+import { logger } from "@/lib/log";
 
 const GB = 1_073_741_824;
 let pollChain: Promise<void> = Promise.resolve();
@@ -15,6 +16,8 @@ export const GovernorRules = {
   warmEvictionGraceMs: 2 * 60_000,
   /** SPLASH-MEM-01: the least time between two chat restarts for overage while a generator job is held. */
   chatOverageRetryMs: 10 * 60_000,
+  /** A Max job that waited with nothing running, nothing left to give back and no pressure this long can never pass canAdmit: it fails with never_fits and the window closes. */
+  drainNeverFitMs: 3 * 60_000,
   systemLowWaterPct: 0.1,
   systemLowWaterFloorBytes: GB,
   systemSustainedPolls: 2,
@@ -43,10 +46,12 @@ export type GovernorKind = "resident" | "jit" | "generator";
 export type GovernorClass = "reserved" | "warm" | "burst";
 export type GovernorTier = keyof typeof GovernorRules.tiers;
 export type JobTier = "standard" | "boost" | "max";
+export type AdmissionCaller = "household" | "dev" | "test";
 export type RunState = "running" | "pausing" | "paused";
 
 export interface GovernorRequest {
   id: string;
+  caller?: AdmissionCaller;
   tier?: JobTier;
   kind: GovernorKind;
   class?: GovernorClass;
@@ -110,10 +115,10 @@ export interface GovernorStatus {
   marginBytes: number;
   /** DEV-BUDGET-01: bytes development work keeps back right now (0 when no dev launcher runs). */
   loaded: GovernorLoadedModel[];
-  queue: Array<{ id: string; position: number; kind: GovernorKind; class: GovernorClass; tier?: JobTier }>;
+  queue: Array<{ id: string; position: number; kind: GovernorKind; class: GovernorClass; tier?: JobTier; caller: AdmissionCaller }>;
 }
 
-export interface GovernorDecision { at: string; decision: string; reason: string; model: string; reasonCode?: "coding_mode" | "max_window"; }
+export interface GovernorDecision { at: string; decision: string; reason: string; model: string; caller?: AdmissionCaller; reasonCode?: "coding_mode" | "max_window"; }
 
 interface LoadedInternal extends GovernorLoadedModel {
   /** Which admission this entry is: a release or an eviction removes
@@ -141,6 +146,7 @@ interface GovernorTuning {
   pollMs: number;
   idleTtlSeconds: number;
   queueMax: number;
+  drainNeverFitMs: number;
   systemLowWaterPct: number;
   systemLowWaterFloorBytes: number;
   systemSustainedPolls: number;
@@ -227,7 +233,43 @@ function notifyMaxWindow(state: MaxWindowChange["state"], ownerId: string | null
   } catch { /* the window never fails because of the hook */ }
 }
 function windowEvent(data: { state: "open" | "closed"; owner: string | null; tier: "max" }, request?: GovernorRequest): void { emitGovernorWindow(data); notifyMaxWindow(data.state, data.owner, request); }
-function closeMaxWindow(): void { if (maxWindow.state === "none") return; maxWindow = { state: "none", ownerId: null, since: null }; windowEvent({ state: "closed", owner: null, tier: "max" }); }
+function closeMaxWindow(): void { if (maxWindow.state === "none") return; reducedSwapFailed = false; drainStuck = null; maxWindow = { state: "none", ownerId: null, since: null }; windowEvent({ state: "closed", owner: null, tier: "max" }); }
+
+let drainStuck: { ownerId: string; since: number } | null = null;
+function evictionPendingNow(): boolean { return [...loaded.values()].some((item) => item.evicting); }
+/** True once the Max owner has waited `drainNeverFitMs` with nothing that can still help (see drainCanStillBeHelped), normal pressure and an open gate: whatever the Reduced step, the video shrink and the warm-pool eviction could give back has been given, and canAdmit still refuses. Any other reason to wait, `draining` included, resets the clock. */
+function drainIsStuck(owner: QueuedEntry, canStillBeHelped: boolean, now: number): boolean {
+  const blockedByOther = canStillBeHelped || pressure !== "normal" || memoryReadingDegraded || codingModeActive || !gateVerdict(owner.request, peakFor(owner.request).bytes).ok;
+  if (blockedByOther) { drainStuck = null; return false; }
+  if (!drainStuck || drainStuck.ownerId !== owner.request.id) drainStuck = { ownerId: owner.request.id, since: now };
+  return now - drainStuck.since >= tuning.drainNeverFitMs;
+}
+/** Set by the Max window's Reduced step when the chat swap failed for good (a refusal, not "a chat turn is running, try again"). Cleared when the window closes or a swap succeeds. */
+let reducedSwapFailed = false;
+export function setReducedSwapFailed(failed: boolean): void { reducedSwapFailed = failed; }
+/** Whether anything can still free memory for the draining Max job, recomputed from the ledger each look: chat that can still go to Reduced (its swap retries while a chat turn runs), a video chat-window shrink not yet done, a running generator, a busy item (reserved chat included), a pinned jit item, an eviction in flight or an idle item the ladder still gives back. The never-fit clock runs only while this is false. */
+function drainCanStillBeHelped(owner: QueuedEntry, busy: (id: string) => boolean, shrinkPending: boolean, now: number): boolean {
+  if (!reducedSwapFailed && liveReducedFreedBytes() > 0) return true;
+  if (shrinkPending) return true;
+  for (const item of loaded.values()) {
+    if (item.kind === "generator" || item.evicting || busy(item.id)) return true;
+    if (item.pinned && item.class !== "reserved") return true;
+  }
+  const left = reclaimableItems(busy, now);
+  return left.items.length > 0 || left.heldForGraceBytes > 0;
+}
+/** The draining Max job can never pass canAdmit: fail it with never_fits (plain words, one ledger log), drop it from the queue and close the window so chat returns to its full model. */
+function failDrainNeverFits(owner: QueuedEntry): void {
+  drainStuck = null;
+  const at = queue.indexOf(owner);
+  if (at >= 0) queue.splice(at, 1);
+  logNeverFit(owner.request, neverFitCapacityBytes(owner.request, 0));
+  decide("Refused", NEVER_FITS_MESSAGE, owner.request.id, "max_window", owner.request.caller);
+  owner.settled = true;
+  reclaimSteps.delete(owner.request.id);
+  closeMaxWindow();
+  owner.resolve({ refused: true, reason: NEVER_FITS_MESSAGE });
+}
 const warmWorkerUnloads = new Map<string, () => boolean | Promise<boolean>>();
 
 /** The image worker is managed by its service, not the role supervisor.
@@ -249,8 +291,8 @@ export function setCodingModeActive(active: boolean): void { codingModeActive = 
 /** True while the large coding mode holds picture, video and music work back. */
 export function generatorsHeldByMode(): boolean { return codingModeActive; }
 
-function decide(decision: string, reason: string, model: string, reasonCode?: "coding_mode" | "max_window"): void {
-  decisions.unshift({ at: nowIso(), decision, reason, model, ...(reasonCode ? { reasonCode } : {}) });
+function decide(decision: string, reason: string, model: string, reasonCode?: "coding_mode" | "max_window", caller?: AdmissionCaller): void {
+  decisions.unshift({ at: nowIso(), decision, reason, model, ...(caller ? { caller } : {}), ...(reasonCode ? { reasonCode } : {}) });
   if (decisions.length > 200) decisions.length = 200;
 }
 
@@ -259,7 +301,7 @@ function requestClass(request: GovernorRequest): GovernorClass {
 }
 
 function taggedRequest(request: GovernorRequest): GovernorRequest {
-  return { ...request, class: requestClass(request) };
+  return { ...request, caller: request.caller ?? "household", class: requestClass(request) };
 }
 
 export function setMetalCapBytes(bytes: number | null): void { metalCapBytes = bytes; }
@@ -342,15 +384,44 @@ export function tierRoomBytes(): number {
   const reservedBytes = [...loaded.values()].filter((item) => item.class === "reserved").reduce((sum, item) => sum + item.peakBytes, 0);
   return Math.max(0, Math.min(effectiveCapBytes() - reservedBytes, totalMemoryBytes - reservedBytes - workingMargin()));
 }
+
+/** The live loaded chat peak is authoritative; use the tier's standard peak only before chat has been loaded. */
+export function liveReducedFreedBytes(): number {
+  const chat = [...loaded.values()].find((item) => item.role === "chat" || item.id === "chat");
+  if (!chat || chat.id.includes("reduced")) return 0;
+  const reducedChatPeak = 5_700_000_000;
+  const ledgerChatSaving = Math.max(0, chat.peakBytes - reducedChatPeak);
+  const voice = [...loaded.values()].find((item) => item.role === "voice" || item.id === "voice" || item.id.startsWith("tts"));
+  const reducedVoicePeak = activeTier === "p16" || activeTier === "p32" ? 1_600_000_000 : 2_770_000_000;
+  const voiceSaving = voice && !voice.id.includes("reduced") ? Math.max(0, voice.peakBytes - reducedVoicePeak) : 0;
+  return ledgerChatSaving + voiceSaving;
+}
+
+export function neverFitCapacityBytes(request: GovernorRequest, reducedBytes = liveReducedFreedBytes()): number {
+  const baseRoom = tierRoomBytes();
+  const capBytes = request.tier ? tierCapBytes(request.tier, baseRoom) : baseRoom;
+  const chat = [...loaded.values()].find((item) => item.role === "chat" || item.id === "chat");
+  const isHouseholdMax = request.tier === "max" && request.caller !== "dev" && request.caller !== "test";
+  // Reduced and the video context floor are the same chat memory saving. The
+  // warm pool is already included in tierRoomBytes/canAdmit's reclaimable room.
+  const windowShrinkBytes = request.role === "video" && chat ? Math.max(0, chat.peakBytes - 5_700_000_000) : 0;
+  return capBytes + (isHouseholdMax ? Math.max(reducedBytes, windowShrinkBytes) : 0);
+}
 export function fitsEverForTier(request: GovernorRequest, opts: { reducedFreedBytes?: number } = {}): { fits: boolean; capBytes: number; peakBytes: number } {
   const peakBytes = peakFor(request).bytes;
   if (!request.tier) return { fits: fitsEver(request), capBytes: tierRoomBytes(), peakBytes };
-  const capBytes = tierCapBytes(request.tier, tierRoomBytes(), opts.reducedFreedBytes);
+  const reducedFreedBytes = opts.reducedFreedBytes ?? (request.tier === "max" && request.caller !== "dev" && request.caller !== "test" ? liveReducedFreedBytes() : 0);
+  const capBytes = tierCapBytes(request.tier, tierRoomBytes(), reducedFreedBytes);
   return { fits: peakBytes <= capBytes, capBytes, peakBytes };
 }
 export function neverFitTierReason(request: GovernorRequest, capBytes: number, peakBytes = peakFor(request).bytes): string {
   const tier = request.tier![0]!.toUpperCase() + request.tier!.slice(1);
   return `This ${tier} job needs about ${(peakBytes / GB).toFixed(0)} GB and ${tier} on this computer holds ${(capBytes / GB).toFixed(0)} GB. Use Standard, or ask an admin about Max.`;
+}
+
+export const NEVER_FITS_MESSAGE = "This is too big for this computer even with everything else paused.";
+export function logNeverFit(request: GovernorRequest, capBytes: number, peakBytes = peakFor(request).bytes): void {
+  logger.appendLine(JSON.stringify({ event: "governor.never_fit", id: request.id, caller: request.caller ?? "household", role: request.role ?? null, tier: request.tier ?? null, required_bytes: peakBytes, capacity_bytes: capBytes, reduced_freed_bytes: liveReducedFreedBytes(), warm_pool_bytes: [...loaded.values()].filter((item) => item.class === "warm" && !item.pinned).reduce((sum, item) => sum + item.peakBytes, 0), loaded: [...loaded.values()].map((item) => ({ id: item.id, peak_bytes: item.peakBytes, live_bytes: item.liveBytes, class: item.class })) }));
 }
 
 export function neverFitReason(request: GovernorRequest): string {
@@ -524,7 +595,7 @@ function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
   if (maxWindow.state !== "none" && request.id !== maxWindow.ownerId && requestClass(request) !== "reserved") return false;
   if (codingModeActive && request.kind === "generator") return false;
   if (memoryReadingDegraded) return false;
-  if (request.tier && peakBytes > tierCapBytes(request.tier, tierRoomBytes())) return false;
+  if (request.tier && peakBytes > tierCapBytes(request.tier, tierRoomBytes(), request.tier === "max" && request.caller !== "dev" && request.caller !== "test" && maxWindow.ownerId === request.id ? liveReducedFreedBytes() : 0)) return false;
   if (!gateVerdict(request, peakBytes).ok) return false;
   if (pressure === "critical" || (pressure === "warn" && requestClass(request) !== "reserved")) return false;
   const existing = loaded.get(request.id);
@@ -546,7 +617,7 @@ function wouldAdmitAfterFreeing(request: GovernorRequest, peakBytes: number, fre
 
 export async function admit(request: GovernorRequest): Promise<GovernorHandle | { queued: true; position: number; class: GovernorClass; admitted: Promise<GovernorHandle | { refused: true; reason: string }> } | { refused: true; reason: string }> {
   request = taggedRequest(request);
-  if (runState !== "running") { decide("Refused", "The Stack is paused.", request.id); return { refused: true, reason: "The Stack is paused." }; }
+  if (runState !== "running") { decide("Refused", "The Stack is paused.", request.id, undefined, request.caller); return { refused: true, reason: "The Stack is paused." }; }
   if (request.poolPeakBytes && request.poolPeakBytes > request.requestedBytes) {
     const pooledRequest: GovernorRequest = { ...request, requestedBytes: request.poolPeakBytes, measuredPeakBytes: null, dryRunPeakBytes: null, modelFileBytes: null, poolPeakBytes: undefined };
     const pooledPeak = peakFor(pooledRequest).bytes;
@@ -554,14 +625,17 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
     else request = { ...request, poolPeakBytes: undefined };
   }
   const peak = peakFor(request);
-  const tierFit = fitsEverForTier(request);
-  if (!tierFit.fits) {
-    const reason = request.tier ? neverFitTierReason(request, tierFit.capBytes, tierFit.peakBytes) : neverFitReason(request);
-    decide("Refused", reason, request.id);
+  const reducedBytes = request.caller === "dev" || request.caller === "test" ? 0 : liveReducedFreedBytes();
+  const tierFit = fitsEverForTier(request, { reducedFreedBytes: reducedBytes });
+  const maxCapacity = neverFitCapacityBytes(request, reducedBytes);
+  if (tierFit.peakBytes > maxCapacity) {
+    logNeverFit(request, maxCapacity, tierFit.peakBytes);
+    const reason = request.tier ? NEVER_FITS_MESSAGE : neverFitReason(request);
+    decide("Refused", reason, request.id, undefined, request.caller);
     return { refused: true, reason };
   }
   if (memoryReadingDegraded) {
-    decide("Refused", "The memory reading is unavailable.", request.id);
+    decide("Refused", "The memory reading is unavailable.", request.id, undefined, request.caller);
     return { refused: true, reason: "The memory reading is unavailable." };
   }
   if (!canAdmit(request, peak.bytes)) {
@@ -572,18 +646,19 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
     const requestIsReserved = requestClass(request) === "reserved";
     const waitingNonReserved = queue.filter((entry) => !entry.settled && requestClass(entry.request) !== "reserved").length;
     const waitingReserved = queue.filter((entry) => !entry.settled && requestClass(entry.request) === "reserved").length;
-    if ((!requestIsReserved && waitingNonReserved >= tuning.queueMax) || (requestIsReserved && waitingReserved >= tuning.queueMax * 4)) { decide("Refused", "The governor queue is full.", request.id); return { refused: true, reason: "The governor queue is full." }; }
+    if ((!requestIsReserved && waitingNonReserved >= tuning.queueMax) || (requestIsReserved && waitingReserved >= tuning.queueMax * 4)) { decide("Refused", "The governor queue is full.", request.id, undefined, request.caller); return { refused: true, reason: "The governor queue is full." }; }
     const existing = queue.findIndex((entry) => entry.request.id === request.id);
     if (existing >= 0) return { queued: true, position: existing + 1, class: requestClass(request), admitted: queue[existing]!.admitted };
     let resolveQueued!: (result: GovernorHandle | { refused: true; reason: string }) => void;
     const admitted: Promise<GovernorHandle | { refused: true; reason: string }> = new Promise<GovernorHandle | { refused: true; reason: string }>((resolve) => { resolveQueued = resolve; });
     const entry: QueuedEntry = { request, settled: false, headSince: null, admitted, resolve: resolveQueued };
-    if (request.tier === "max" && maxWindow.state === "none") {
+    if (request.tier === "max" && request.caller !== "dev" && request.caller !== "test" && maxWindow.state === "none") {
       maxWindow = { state: "draining", ownerId: request.id, since: Date.now() };
       reclaim(request.id, "window_drain", "", 0);
       notifyMaxWindow("draining", request.id, request);
     }
-    const insertAt = requestIsReserved ? queue.findIndex((row) => !row.settled && requestClass(row.request) !== "reserved") : -1;
+    const callerRank = (caller: AdmissionCaller | undefined) => caller === "household" || caller === undefined ? 0 : 1;
+    const insertAt = requestIsReserved ? queue.findIndex((row) => !row.settled && requestClass(row.request) !== "reserved") : queue.findIndex((row) => !row.settled && callerRank(row.request.caller) > callerRank(request.caller));
     if (insertAt < 0) queue.push(entry); else queue.splice(insertAt, 0, entry);
     const unsettled = queue.filter((row) => !row.settled);
     if (unsettled.length > 0) {
@@ -594,7 +669,7 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
     const gated = gateVerdict(request, peak.bytes);
     const heldByMode = codingModeActive && request.kind === "generator";
     const heldByWindow = maxWindow.state !== "none" && request.id !== maxWindow.ownerId && requestClass(request) !== "reserved";
-    decide("Queued", heldByWindow ? "A Max job is waiting for the computer. This one starts after it." : heldByMode ? "The large coding mode is holding picture, video and music work." : !gated.ok ? gated.reason : pressure !== "normal" ? `Memory pressure is ${pressure}.` : "The current memory budget cannot admit the request.", request.id, heldByWindow ? "max_window" : heldByMode ? "coding_mode" : undefined);
+    decide("Queued", heldByWindow ? "A Max job is waiting for the computer. This one starts after it." : heldByMode ? "The large coding mode is holding picture, video and music work." : !gated.ok ? gated.reason : pressure !== "normal" ? `Memory pressure is ${pressure}.` : "The current memory budget cannot admit the request.", request.id, heldByWindow ? "max_window" : heldByMode ? "coding_mode" : undefined, request.caller);
     return { queued: true, position: queue.indexOf(entry) + 1, class: requestClass(request), admitted };
   }
   refusalCounts.delete(request.id);
@@ -613,16 +688,16 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
     existing.keepAliveSeconds = 0;
     existing.yieldsToGenerators = false;
     const handle: GovernorHandle = { id: request.id, kind: request.kind, class: requestClass(request), requestedBytes: peak.bytes, token: existing.token, retainWarm: request.retainWarm, ...(request.tier ? { tier: request.tier } : {}) };
-    decide("Admitted", "The current memory budget has room.", request.id);
-    if (request.tier === "max") { maxWindow = { state: "open", ownerId: request.id, since: Date.now() }; windowEvent({ state: "open", owner: request.id, tier: "max" }, request); }
+    decide("Admitted", "The current memory budget has room.", request.id, undefined, request.caller);
+    if (request.tier === "max" && request.caller !== "dev" && request.caller !== "test") { maxWindow = { state: "open", ownerId: request.id, since: Date.now() }; windowEvent({ state: "open", owner: request.id, tier: "max" }, request); }
     if (borrowsFlexBand) flexBandBorrowerToken = existing.token;
     return handle;
   }
   const item = loadedItemFor(request);
   loaded.set(request.id, item);
   if (borrowsFlexBand) flexBandBorrowerToken = item.token;
-  decide("Admitted", "The current memory budget has room.", request.id);
-  if (request.tier === "max") { maxWindow = { state: "open", ownerId: request.id, since: Date.now() }; windowEvent({ state: "open", owner: request.id, tier: "max" }, request); }
+  decide("Admitted", "The current memory budget has room.", request.id, undefined, request.caller);
+  if (request.tier === "max" && request.caller !== "dev" && request.caller !== "test") { maxWindow = { state: "open", ownerId: request.id, since: Date.now() }; windowEvent({ state: "open", owner: request.id, tier: "max" }, request); }
   return { id: request.id, kind: request.kind, class: requestClass(request), requestedBytes: peak.bytes, token: item.token, retainWarm: request.retainWarm, ...(request.tier ? { tier: request.tier } : {}) };
 }
 
@@ -660,7 +735,7 @@ export async function pauseAll(): Promise<void> {
 export function resumeAll(): void { setRunState("running"); }
 
 function settleAdmission(entry: QueuedEntry): void {
-  if (entry.request.tier === "max") { maxWindow = { state: "open", ownerId: entry.request.id, since: Date.now() }; windowEvent({ state: "open", owner: entry.request.id, tier: "max" }, entry.request); }
+  if (entry.request.tier === "max" && entry.request.caller !== "dev" && entry.request.caller !== "test") { maxWindow = { state: "open", ownerId: entry.request.id, since: Date.now() }; windowEvent({ state: "open", owner: entry.request.id, tier: "max" }, entry.request); }
   const borrowsFlexBand = usesFlexBand(entry.request, peakFor(entry.request).bytes);
   const existing = loaded.get(entry.request.id);
   if (existing) {
@@ -673,7 +748,7 @@ function settleAdmission(entry: QueuedEntry): void {
     existing.evicting = false;
     existing.token = nextToken++;
     const handle: GovernorHandle = { id: entry.request.id, kind: entry.request.kind, class: requestClass(entry.request), requestedBytes: existing.peakBytes, token: existing.token, retainWarm: entry.request.retainWarm, ...(entry.request.tier ? { tier: entry.request.tier } : {}) };
-    decide("Admitted", "The current memory budget has room.", entry.request.id);
+    decide("Admitted", "The current memory budget has room.", entry.request.id, undefined, entry.request.caller);
     if (borrowsFlexBand) flexBandBorrowerToken = existing.token;
     entry.settled = true;
     entry.resolve(handle);
@@ -682,7 +757,7 @@ function settleAdmission(entry: QueuedEntry): void {
   const item = loadedItemFor(entry.request);
   loaded.set(entry.request.id, item);
   if (borrowsFlexBand) flexBandBorrowerToken = item.token;
-  decide("Admitted", "The current memory budget has room.", entry.request.id);
+  decide("Admitted", "The current memory budget has room.", entry.request.id, undefined, entry.request.caller);
   entry.settled = true;
   entry.resolve({ id: entry.request.id, kind: entry.request.kind, class: requestClass(entry.request), requestedBytes: item.peakBytes, token: item.token, retainWarm: entry.request.retainWarm, ...(entry.request.tier ? { tier: entry.request.tier } : {}) });
 }
@@ -752,7 +827,7 @@ export function getGovernorStatus(): GovernorStatus {
     tier: activeTier,
     marginBytes: workingMargin(),
     loaded: [...loaded.values()].map(({ peakBaselineBytes: _baseline, runPeakBytes: _runPeak, recordedPeakBytes: _recorded, processBreaches: _breaches, keepAliveSeconds: _keepAlive, token: _token, evicting: _evicting, ...item }) => item),
-    queue: queue.map((entry, index) => ({ id: entry.request.id, position: index + 1, kind: entry.request.kind, class: requestClass(entry.request), ...(entry.request.tier ? { tier: entry.request.tier } : {}) })),
+    queue: queue.map((entry, index) => ({ id: entry.request.id, position: index + 1, kind: entry.request.kind, class: requestClass(entry.request), caller: entry.request.caller ?? "household", ...(entry.request.tier ? { tier: entry.request.tier } : {}) })),
   };
 }
 
@@ -995,7 +1070,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
       const reclaimable = reclaim.items;
       // An item inside its pool grace (MEM-SPACE-01) is about to go; the ladder is not empty yet.
       const reclaimPollBusy = (!unloadItem && reclaimable.length > 0) || reclaim.heldForGraceBytes > 0;
-      if (head && head.request.kind === "generator" && head.request.role === "video" && !codingModeActive && !canAdmit(head.request, peakFor(head.request).bytes) && !options.chatWindowShrunk?.() && !evictionPending && reclaimable.length === 0 && !reclaimPollBusy && (quiet || maxWaitPassed)) {
+      if (head && head.request.caller !== "dev" && head.request.caller !== "test" && head.request.kind === "generator" && head.request.role === "video" && !codingModeActive && !canAdmit(head.request, peakFor(head.request).bytes) && !options.chatWindowShrunk?.() && !evictionPending && reclaimable.length === 0 && !reclaimPollBusy && (quiet || maxWaitPassed)) {
         videoShrinkMaxWaitSeconds = maxWait;
         videoQuietSeconds = quietSeconds;
         chatYieldBusy = true;
@@ -1037,8 +1112,14 @@ export function startGovernor(options: StartGovernorOptions): () => void {
         const wasTripped = reducedWatch.ownerId === maxOwner.request.id && reducedWatch.tripped;
         if (!wasTripped && lookAtReducedNeed(maxOwner.request)) notifyMaxWindow("draining", maxOwner.request.id, maxOwner.request);
         const draining = [...loaded.values()].some((item) => item.kind === "generator" || (item.class !== "reserved" && (options.busy?.(item.id) ?? false)));
+        const busyNow = options.busy ?? (() => false);
+        const shrinkPending = maxOwner.request.role === "video" && Boolean(options.shrinkChat) && !options.chatWindowShrunk?.() && liveReducedFreedBytes() > 0;
+        const helpable = draining || drainCanStillBeHelped(maxOwner, busyNow, shrinkPending, now);
         if (!draining && canAdmit(maxOwner.request, peakFor(maxOwner.request).bytes)) {
+          drainStuck = null;
           const at = queue.indexOf(maxOwner); queue.splice(at, 1); settleAdmission(maxOwner);
+        } else if (drainIsStuck(maxOwner, helpable, now)) {
+          failDrainNeverFits(maxOwner);
         } else {
           // MAX-WAIT-REASON-01: the window's one latest step names what the Max job really waits for. "window_drain" stays only while a generator or a busy
           // item still runs; once none does, the job waits for the computer itself ("window_wait"), and the status must not claim running jobs.
@@ -1119,11 +1200,13 @@ export function __resetGovernorForTests(): void {
   decisions.length = 0;
   reclaimSteps.clear();
   maxWindow = { state: "none", ownerId: null, since: null };
+  drainStuck = null; reducedSwapFailed = false;
   reducedWatch = { ownerId: null, looks: 0, tripped: false, last: null };
   tuning = {
     pollMs: GovernorRules.pollMs,
     idleTtlSeconds: GovernorRules.idleTtlSeconds,
     queueMax: GovernorRules.queueMax,
+    drainNeverFitMs: GovernorRules.drainNeverFitMs,
     systemLowWaterPct: GovernorRules.systemLowWaterPct,
     systemLowWaterFloorBytes: GovernorRules.systemLowWaterFloorBytes,
     systemSustainedPolls: GovernorRules.systemSustainedPolls,

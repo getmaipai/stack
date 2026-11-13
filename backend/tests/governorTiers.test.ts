@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, fitsEverForTier, getGovernorDecisions, getGovernorStatus, getMaxWindow, getReclaimSteps, release, setMetalCapBytes, startGovernor, type GovernorHandle } from "@/lib/governor";
+import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, fitsEverForTier, getGovernorDecisions, getGovernorStatus, getMaxWindow, getReclaimSteps, liveReducedFreedBytes, NEVER_FITS_MESSAGE, neverFitCapacityBytes, refreshMeasuredPeak, release, setMaxWindowHook, setMetalCapBytes, startGovernor, type GovernorHandle, type MaxWindowChange } from "@/lib/governor";
+import { __resetMaxWindowReducedForTests, maxWindowReducedIdle, unwireMaxWindowReduced, wireMaxWindowReduced } from "@/lib/maxWindowReduced";
+import { __setReducedLeaseForTests } from "@/lib/reducedChatLease";
+import { resetReducedChatForTests, setReducedChatState } from "@/lib/reducedChat";
 
 const GB = 1_073_741_824;
 beforeEach(() => { __resetGovernorForTests(); __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 120 * GB, tier: "p128" }); });
@@ -129,4 +132,150 @@ test("a Max job behind running work keeps window_drain", async () => {
   await Bun.sleep(30);
   expect(getReclaimSteps("max-job").map((step) => step.step)).toEqual(["window_drain"]);
   release(running);
+});
+
+// CENTRAL-QUEUE S1/S2 (appended): the "can it ever fit" arithmetic reads the live ledger, counts each saving once, and a draining job that can never pass ends.
+const loadChat = async (bytes: number): Promise<GovernorHandle> => {
+  const chat = await admit({ id: "chat", role: "chat", kind: "resident", requestedBytes: bytes }) as GovernorHandle;
+  refreshMeasuredPeak(chat, bytes);
+  return chat;
+};
+const video = (id: string, extra: Record<string, unknown> = {}) => ({ id, role: "video", kind: "generator", requestedBytes: 61_500_000_000, tier: "max", ...extra }) as Parameters<typeof admit>[0];
+
+test("Reduced is counted once, from the live ledger: chat peak minus Reduced chat, and the warm pool is not added again", async () => {
+  await loadChat(39_700_000_000);
+  const reduced = liveReducedFreedBytes();
+  expect(reduced).toBeGreaterThanOrEqual(39_700_000_000 - 5_700_000_000);
+  expect(reduced).toBeLessThan(39_700_000_000 - 5_700_000_000 + 4_000_000_000);
+  const request = video("count-once");
+  const withoutPool = neverFitCapacityBytes(request);
+  await admit({ id: "image-pool", role: "image", kind: "jit", class: "warm", requestedBytes: 12 * GB });
+  expect(neverFitCapacityBytes(request)).toBe(withoutPool);
+  // The chat saving and the video window shrink are the same bytes: the cap is room plus the larger of the two, not the sum.
+  const base = neverFitCapacityBytes({ ...request, tier: "standard" } as typeof request);
+  const maxBase = fitsEverForTier({ ...request, caller: "dev" }).capBytes;
+  expect(neverFitCapacityBytes(request) - maxBase).toBe(39_700_000_000 - 5_700_000_000);
+  expect(base).toBeLessThan(maxBase);
+  // An explicit reducedFreedBytes option still adds exactly that many bytes.
+  const plain = fitsEverForTier({ id: "x", kind: "generator", requestedBytes: 1 * GB, tier: "max", caller: "dev" }).capBytes;
+  expect(fitsEverForTier({ id: "x", kind: "generator", requestedBytes: 1 * GB, tier: "max" }, { reducedFreedBytes: 7 * GB }).capBytes - plain).toBe(7 * GB);
+});
+
+test("a Max picture-to-video job that fits only with Reduced is queued draining, not refused", async () => {
+  await loadChat(39_700_000_000);
+  const busy = await admit({ id: "image-running", role: "image", kind: "generator", requestedBytes: 1 * GB }) as GovernorHandle;
+  const answer = await admit(video("max-live"));
+  expect(answer).toMatchObject({ queued: true });
+  expect(getMaxWindow()).toMatchObject({ state: "draining", ownerId: "max-live" });
+  release(busy);
+});
+
+test("a dev or test job never triggers Reduced, never opens the Max window and never passes a household job", async () => {
+  await loadChat(39_700_000_000);
+  const changes: MaxWindowChange[] = [];
+  setMaxWindowHook((change) => changes.push(change));
+  __setGovernorTuningForTestsOnly({ freeMemoryBytes: 0 });
+  const dev = await admit(video("dev-max", { caller: "dev" }));
+  const test_ = await admit({ id: "test-image", role: "image", kind: "generator", requestedBytes: 5 * GB, caller: "test" });
+  const home = await admit({ id: "home-image", role: "image", kind: "generator", requestedBytes: 5 * GB, caller: "household" });
+  expect([dev, test_, home].every((answer) => "queued" in (answer as object) || "refused" in (answer as object))).toBe(true);
+  expect(changes.filter((change) => change.needsReduced)).toEqual([]);
+  expect(getMaxWindow().state).toBe("none");
+  const order = getGovernorStatus().queue.map((entry) => [entry.id, entry.caller]);
+  if (order.some(([id]) => id === "home-image")) expect(order.findIndex(([id]) => id === "home-image")).toBeLessThan(order.findIndex(([id]) => id === "test-image"));
+  setMaxWindowHook(null);
+});
+
+// Round 5: a Max job that can still be helped waits; the never-fit clock runs only when nothing can help.
+const wireReduced = (swap: { mode: "waiting" | "refused" | "ok"; chat?: GovernorHandle; onEnter?: () => void }) => {
+  __setReducedLeaseForTests({ deps: {
+    enter: async () => {
+      if (swap.mode === "waiting") return { ok: false, waiting: true } as const;
+      if (swap.mode === "refused") return { ok: false, reason: "Chat could not change its size just now." } as const;
+      setReducedChatState("reduced"); swap.onEnter?.(); return { ok: true, swapMs: 1 } as const;
+    },
+    leave: async () => { setReducedChatState("off"); return { ok: true, swapMs: 1 } as const; },
+  } });
+  __resetMaxWindowReducedForTests({ retryMs: 5 });
+  wireMaxWindowReduced();
+};
+const unwireReduced = () => { unwireMaxWindowReduced(); __resetMaxWindowReducedForTests(); __setReducedLeaseForTests(null); resetReducedChatForTests(); };
+
+test("a waiting Max job behind steady household chat is not failed after 3 minutes and runs after the swap", async () => {
+  const swap: { mode: "waiting" | "refused" | "ok"; onEnter?: () => void } = { mode: "waiting" };
+  wireReduced(swap);
+  try {
+    const chat = await loadChat(39_700_000_000);
+    let free = 40 * GB;
+    let clock = 1_000_000;
+    swap.onEnter = () => { refreshMeasuredPeak(chat, 5_700_000_000); free = 100 * GB; };
+    __setGovernorTuningForTestsOnly({ freeMemoryBytes: 40 * GB });
+    const answer = await admit(video("steady-chat"));
+    expect(answer).toMatchObject({ queued: true });
+    stops.push(startGovernor({ pid: 1, pollMs: 2, freeMemory: () => free, totalMemory: () => 128 * GB, now: () => clock }));
+    for (let minute = 0; minute < 5; minute++) { clock += 60_000; await Bun.sleep(20); }
+    expect(await Promise.race([queued(answer).admitted, Bun.sleep(20).then(() => "waiting")])).toBe("waiting");
+    expect(getMaxWindow().state).toBe("draining");
+    swap.mode = "ok";
+    const handle = await Promise.race([queued(answer).admitted, Bun.sleep(1_500).then(() => "waiting")]) as GovernorHandle | string;
+    expect(handle).toMatchObject({ id: "steady-chat", tier: "max" });
+  } finally { unwireReduced(); }
+});
+
+test("the never-fit clock starts only when chat is Reduced or its swap failed for good, nothing is busy or pinned, and the peak still cannot pass", async () => {
+  const run = async (setup: () => Promise<() => void>, expectRefused: boolean) => {
+    __resetGovernorForTests(); __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 120 * GB, tier: "p128", drainNeverFitMs: 3 * 60_000 });
+    const cleanup = await setup();
+    let clock = 5_000_000;
+    __setGovernorTuningForTestsOnly({ freeMemoryBytes: 60 * GB });
+    const answer = await admit(video("never"));
+    expect(answer).toMatchObject({ queued: true });
+    stops.push(startGovernor({ pid: 1, pollMs: 2, freeMemory: () => 60 * GB, totalMemory: () => 128 * GB, now: () => clock, busy: (id) => busyIds.has(id) }));
+    for (let minute = 0; minute < 5; minute++) { clock += 60_000; await Bun.sleep(20); }
+    const result = await Promise.race([queued(answer).admitted, Bun.sleep(20).then(() => "waiting")]);
+    cleanup();
+    for (const stop of stops.splice(0)) stop();
+    if (expectRefused) expect(result).toMatchObject({ refused: true, reason: NEVER_FITS_MESSAGE }); else expect(result).toBe("waiting");
+  };
+  const busyIds = new Set<string>();
+  // Chat still Standard and the swap is only waiting: wait.
+  await run(async () => { await loadChat(39_700_000_000); wireReduced({ mode: "waiting" }); return unwireReduced; }, false);
+  // A busy chat turn holds memory: wait even though chat is Reduced size.
+  await run(async () => { await loadChat(5_700_000_000); busyIds.add("chat"); return () => busyIds.clear(); }, false);
+  // A pinned jit item holds memory: wait.
+  await run(async () => { await loadChat(5_700_000_000); await admit({ id: "look", role: "vision", kind: "jit", class: "warm", pinned: true, requestedBytes: 6 * GB } as Parameters<typeof admit>[0]); return () => {}; }, false);
+  // Swap refused for good: the clock runs and the job fails.
+  await run(async () => { await loadChat(39_700_000_000); wireReduced({ mode: "refused" }); return unwireReduced; }, true);
+  // Chat already Reduced, nothing busy or pinned: the clock runs and the job fails.
+  await run(async () => { await loadChat(5_700_000_000); return () => {}; }, true);
+  expect(NEVER_FITS_MESSAGE).not.toMatch(/\d/);
+  expect(getMaxWindow().state).toBe("none");
+});
+
+test("Reduced is restored after a Max job ends: the window close sends chat back to its full model", async () => {
+  const calls: string[] = [];
+  __setReducedLeaseForTests({ deps: {
+    enter: async () => { calls.push("enter"); setReducedChatState("reduced"); return { ok: true, swapMs: 1 }; },
+    leave: async () => { calls.push("leave"); setReducedChatState("off"); return { ok: true, swapMs: 1 }; },
+  } });
+  __resetMaxWindowReducedForTests();
+  wireMaxWindowReduced();
+  try {
+    await loadChat(39_700_000_000);
+    __setGovernorTuningForTestsOnly({ freeMemoryBytes: 5 * GB });
+    const answer = await admit(video("restore-max"));
+    expect(answer).toMatchObject({ queued: true });
+    stops.push(startGovernor({ pid: 1, pollMs: 5, freeMemory: () => 5 * GB, totalMemory: () => 128 * GB }));
+    await Bun.sleep(100);
+    await maxWindowReducedIdle();
+    expect(calls).toContain("enter");
+    // The owner ends (withdrawn): the window closes and chat leaves Reduced.
+    const { withdraw } = await import("@/lib/governor");
+    withdraw("restore-max");
+    expect(getMaxWindow().state).toBe("none");
+    await maxWindowReducedIdle();
+    expect(calls.at(-1)).toBe("leave");
+  } finally {
+    unwireMaxWindowReduced(); __resetMaxWindowReducedForTests(); __setReducedLeaseForTests(null); resetReducedChatForTests();
+  }
 });

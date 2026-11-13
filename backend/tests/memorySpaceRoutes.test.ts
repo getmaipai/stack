@@ -89,7 +89,7 @@ test("capabilities gives one row per category and level from the catalog and the
   expect(body.rows).toHaveLength(15);
   const row = (category: string, tier: string) => body.rows.find((item) => item.category === category && item.tier === tier)!;
   expect(row("image", "max")).toMatchObject({ model: "qwen-image-2512-q8", needs_bytes: 37_400_000_000 });
-  expect(row("video", "max")).toMatchObject({ model: null, needs_bytes: null, fits_ever: false });
+  expect(row("video", "max")).toMatchObject({ model: "ltx-2-5-bf16-distilled-mlx-max", needs_bytes: 61_500_000_000, fits_ever: true });
   expect(row("music", "max")).toMatchObject({ model: null, fits_ever: false });
   expect(row("voice", "standard")).toMatchObject({ model: "chatterbox-turbo-fp16" });
   for (const item of body.rows) { expect(item.cap_bytes).toBeGreaterThan(0); if (item.model) expect(item.fits_ever).toBe(true); }
@@ -99,4 +99,36 @@ test("capabilities on a computer too small for any profile reports unknown and n
   const body = await (await app.request("/stack/v1/capabilities")).json() as { machine_class: string; rows: Array<{ fits_ever: boolean; model: string | null }> };
   expect(body.machine_class).toBe("unknown");
   expect(body.rows.every((item) => !item.fits_ever && item.model === null)).toBe(true);
+});
+
+// Round 5: a script lease queued without wait is admitted later; release and expiry must give that admission back.
+test("a lease queued behind a running job, admitted later, is released when it expires (the generator slot is not held forever)", async () => {
+  const { __setLeaseTtlForTests } = await import("@/routes/memory");
+  const { release } = await import("@/lib/governor");
+  __setLeaseTtlForTests(60);
+  try {
+    const holder = await admit({ id: "running-household", kind: "generator", class: "burst", role: "image", requestedBytes: 5 * GB }) as Parameters<typeof release>[0];
+    const response = await app.request("/stack/v1/memory/admission-leases", { method: "POST", headers: { "content-type": "application/json", "x-stack-caller": "dev" }, body: JSON.stringify({ id: "bench", role: "image", bytes: 5 * GB }) });
+    expect(response.status).toBe(202);
+    const { lease } = await response.json() as { lease: string };
+    expect(getGovernorStatus().queue.map((entry) => entry.id)).toEqual([`script-lease:${lease}`]);
+    release(holder);
+    await Bun.sleep(5);
+    expect(getGovernorStatus().loaded.map((item) => item.id)).toEqual([`script-lease:${lease}`]);
+    await Bun.sleep(150);
+    expect(getGovernorStatus().loaded).toEqual([]);
+    // A household generator can now start.
+    expect(await admit({ id: "household-next", kind: "generator", class: "burst", role: "image", requestedBytes: 5 * GB })).toMatchObject({ id: "household-next" });
+  } finally { __setLeaseTtlForTests(null); }
+});
+
+test("a lease released while queued never holds a slot when its turn comes", async () => {
+  const { release } = await import("@/lib/governor");
+  const holder = await admit({ id: "running-household", kind: "generator", class: "burst", role: "image", requestedBytes: 5 * GB }) as Parameters<typeof release>[0];
+  const response = await app.request("/stack/v1/memory/admission-leases", { method: "POST", headers: { "content-type": "application/json", "x-stack-caller": "test" }, body: JSON.stringify({ id: "bench", role: "image", bytes: 5 * GB }) });
+  const { lease } = await response.json() as { lease: string };
+  expect((await (await app.request(`/stack/v1/memory/admission-leases/${lease}`, { method: "DELETE" })).json())).toEqual({ released: true });
+  release(holder);
+  await Bun.sleep(5);
+  expect(getGovernorStatus().loaded).toEqual([]);
 });

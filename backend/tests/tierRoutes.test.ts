@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { app } from "@/app";
+import { HOME_TOKEN_HEADER, homeViewToken } from "@/lib/adultView";
 import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, getGovernorStatus, getMaxWindow, getReducedNeed, reducedNeedFor, release, startGovernor, type GovernorRequest } from "@/lib/governor";
 import type { MemoryReader, MemorySnapshot } from "@/lib/memory/types";
 import { __resetJobsForTests, getJob } from "@/lib/jobs";
@@ -52,7 +53,7 @@ beforeEach(() => {
 });
 afterEach(() => { stopGovernor?.(); stopGovernor = null; unwireMaxWindowReduced(); __resetMaxWindowReducedForTests(); __setReducedLeaseForTests(null); resetReducedChatForTests(); open(); clean(); });
 
-const post = (body: Record<string, unknown>) => app.request("/v1/videos/generations", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+const post = (body: Record<string, unknown>) => app.request("/v1/videos/generations", { method: "POST", headers: { "content-type": "application/json", "x-stack-caller": "live", [HOME_TOKEN_HEADER]: homeViewToken() }, body: JSON.stringify(body) });
 const until = async (check: () => boolean) => { for (let i = 0; i < 200 && !check(); i++) await new Promise((r) => setTimeout(r, 10)); expect(check()).toBe(true); };
 
 test("a Max video job opens the governor's window, shows its tier, and the Stack enters Reduced chat and leaves it when the window closes", async () => {
@@ -162,4 +163,60 @@ test("MAX-LIVE-01: when the memory sampler fails the static Standard share decid
   await until("live");
   for (let i = 0; i < 100 && reducedNeedFor(request).needed; i++) await new Promise((r) => setTimeout(r, 50));
   expect(reducedNeedFor(request)).toMatchObject({ basis: "live", needed: false });
+});
+
+// Round 5: a job the computer can never hold ends with the code never_fits and a plain message (no figures), on the POST and on the status.
+test("a Max video the computer can never hold ends with code never_fits and no digits in the message", async () => {
+  videoGen.useDeps(deps());
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 12 * GB, freeMemoryBytes: 11 * GB });
+  const response = await post({ prompt: "a paper boat", tier: "max", timeout_ms: 5000 });
+  const body = await response.json() as { job: string; code: string; error: string };
+  expect(body.code).toBe("never_fits");
+  expect(body.error).not.toMatch(/\d/);
+  const status = await (await app.request(`/v1/videos/generations/${body.job}`)).json() as { state: string; code: string; error: string };
+  expect(status).toMatchObject({ state: "failed", code: "never_fits" });
+  expect(status.error).not.toMatch(/\d/);
+});
+
+test("a household Max video whose drain gives up (nothing left to free) finishes with code never_fits, the window closes and chat is not left Reduced", async () => {
+  videoGen.useDeps(deps());
+  __setReducedLeaseForTests({ deps: { enter: async () => ({ ok: false, reason: "Chat could not change its size just now." }), leave: async () => ({ ok: true, swapMs: 1 }) } });
+  __setGovernorTuningForTestsOnly({ drainNeverFitMs: 150 });
+  const response = await post({ prompt: "a paper boat", tier: "max", timeout_ms: 5000 });
+  const body = await response.json() as { job: string; code: string; error: string };
+  expect(response.status).toBe(503);
+  expect(body.code).toBe("never_fits");
+  expect(body.error).not.toMatch(/\d/);
+  expect(getJob(body.job)).toMatchObject({ state: "failed", status: "never_fits" });
+  expect(getMaxWindow().state).toBe("none");
+  const status = await (await app.request(`/v1/videos/generations/${body.job}`)).json() as { code: string };
+  expect(status.code).toBe("never_fits");
+});
+
+test("a Max video job that fails after it was admitted still sends chat back to its standard model", async () => {
+  videoGen.useDeps({ ...deps(), spawn: async (): Promise<WorkerHandle> => ({ exited: new Promise<number>(() => {}), kill: () => {}, send: async () => { throw new Error("The worker crashed."); } }) });
+  const response = await post({ prompt: "a paper boat", tier: "max", timeout_ms: 5000 });
+  const body = await response.json() as { job: string };
+  await until(() => getJob(body.job)?.state === "failed");
+  expect(getJob(body.job)?.status).not.toBe("never_fits");
+  await until(() => getMaxWindow().state === "none");
+  await until(() => calls.includes("leave"));
+  await maxWindowReducedIdle();
+  expect(calls).toEqual(["enter", "leave"]);
+  expect((await (await app.request("/stack/v1/memory")).json() as { reduced_chat: boolean }).reduced_chat).toBe(false);
+});
+
+test("a Stack that restarts in the middle of a Max window starts with chat on its standard model and nobody holding Reduced", async () => {
+  const { resetReducedChatOnBoot, controlReducedChat, reducedHolders, isReducedChat } = await import("@/lib/reducedChatLease");
+  const answer = await admit({ id: "restart-max", role: "video", kind: "generator", requestedBytes: 41 * GB, tier: "max", caller: "household" });
+  expect(answer).toMatchObject({ queued: true });
+  await until(() => calls.includes("enter"));
+  await maxWindowReducedIdle();
+  expect(isReducedChat()).toBe(true);
+  expect(reducedHolders()).toContain("max-window");
+  // The process dies and starts again: memory-only state is gone, the model chat comes up on is the standard one.
+  resetReducedChatOnBoot();
+  expect(isReducedChat()).toBe(false);
+  expect(reducedHolders()).toEqual([]);
+  expect(await controlReducedChat(false, "max-window")).toMatchObject({ status: 200, body: { reduced: false } });
 });

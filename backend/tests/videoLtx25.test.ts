@@ -394,7 +394,7 @@ test("the tier table lists measured rows and keeps LTX-2.5 off every tier until 
   expect(candidate.vetting).toContain("VIDEO-TIERS-01");
   expect(candidate.peaks.map((peak) => peak.peakBytes)).toEqual([25_300_000_000, 39_400_000_000, 32_400_000_000, 45_800_000_000]);
   expect(candidate.peaks.every((peak) => peak.status === "measured")).toBe(true);
-  expect(TIER_CANDIDATES.filter((item) => item.category === "video" && item.tiers.length > 0).map((item) => item.id)).toEqual(["fastwan2-2-ti2v-5b-mlx-bf16"]);
+  expect(TIER_CANDIDATES.filter((item) => item.category === "video" && item.tiers.length > 0).map((item) => item.id)).toEqual(["fastwan2-2-ti2v-5b-mlx-bf16", "ltx-2-5-bf16-distilled-mlx-max"]);
 });
 
 // ---- privacy: generation makes no outbound connection ----

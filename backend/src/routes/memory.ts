@@ -8,8 +8,22 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { dataDir } from "@/lib/paths";
 import { isReducedChat } from "@/lib/reducedChatLease";
-import { getMaxWindow } from "@/lib/governor";
+import { admit, getGovernorStatus, getMaxWindow, release, withdraw, type AdmissionCaller, type GovernorHandle } from "@/lib/governor";
 import { dailyResources } from "@/lib/dailyResources";
+const leaseHandles = new Map<string, LeaseEntry>();
+let leaseTtlMs = 15 * 60_000;
+/** Tests shorten the lease lifetime; null restores 15 minutes. */
+export function __setLeaseTtlForTests(ms: number | null): void { leaseTtlMs = ms ?? 15 * 60_000; }
+type LeaseEntry = { handle?: GovernorHandle; timer: ReturnType<typeof setTimeout>; caller: AdmissionCaller; requestId: string };
+/** Gives a lease back: an admitted one is released, a queued one is withdrawn. A queued lease that is admitted later is caught in leaseCreate and released there. */
+function dropLease(lease: string): boolean {
+  const entry = leaseHandles.get(lease);
+  if (!entry) return false;
+  clearTimeout(entry.timer); leaseHandles.delete(lease);
+  if (entry.handle) release(entry.handle); else withdraw(entry.requestId);
+  return true;
+}
+function armLeaseTimer(lease: string, entry: LeaseEntry): void { entry.timer = setTimeout(() => { dropLease(lease); }, leaseTtlMs); entry.timer.unref?.(); }
 
 const Level = z.enum(["normal", "warn", "critical"]);
 const MemorySchema = z.object({
@@ -26,6 +40,7 @@ const MemorySchema = z.object({
   isolation: z.object({ enabled: z.boolean(), paused_now: z.number(), interactive_in_flight: z.number(), pauses: z.number(), resumes: z.number(), forced_resumes: z.number(), paused_seconds: z.number() }).openapi({ description: "ISOLATION-01: heavy workers (picture, video, music, image tools) are stopped while a chat or voice request is in flight and continued after it. paused_now is how many are stopped this moment; paused_seconds is the total since the Stack started." }),
   reduced_chat: z.boolean().openapi({ description: "Whether chat is on the smaller Reduced model right now (the Stack's own state, for Home's notice)." }),
   max_window: z.object({ state: z.enum(["none", "draining", "open"]), owner: z.string().nullable(), since: z.string().nullable() }).openapi({ description: "TIER-STATUS-01: the governor's own Max window. `draining`: a Max job waits for running work to finish; `open`: it holds the computer. `owner` is the job id. Home reads this for its Status line and Stop button." }),
+  admission_queue: z.array(z.object({ id: z.string(), position: z.number(), kind: z.string(), caller: z.enum(["household", "dev", "test"]) })).openapi({ description: "Requests waiting for memory, including whether each came from the household or development/testing." }),
   recent_actions: z.array(z.object({ at: z.string(), level: Level, action: z.string(), detail: z.string() })),
   history: z.array(z.object({ at: z.string(), available_bytes: z.number(), swap_used_bytes: z.number(), pressure_level: z.number() })),
 });
@@ -37,7 +52,36 @@ const route = createRoute({
 
 function maxWindowView() { const w = getMaxWindow(); return { state: w.state, owner: w.ownerId, since: w.since === null ? null : new Date(w.since).toISOString() }; }
 export const memoryRoutes = apiRouter<AppEnv>();
-memoryRoutes.openapi(route, (c) => c.json({ ...memoryWatchdog().report(), isolation: heavyGate.status(), reduced_chat: isReducedChat(), max_window: maxWindowView() }, 200));
+memoryRoutes.openapi(route, (c) => c.json({ ...memoryWatchdog().report(), isolation: heavyGate.status(), reduced_chat: isReducedChat(), max_window: maxWindowView(), admission_queue: getGovernorStatus().queue.map(({ id, position, kind, caller }) => ({ id, position, kind, caller })) }, 200));
+
+const leaseCreate = createRoute({ method: "post", path: "/admission-leases", tags: ["Memory"], summary: "Queue for a memory slot", description: "Bench and test scripts must take a lease before starting memory intensive work, then release it when done. Send x-stack-caller: dev or test. Household work always has priority; dev/test leases never trigger Reduced chat.", request: { body: { content: { "application/json": { schema: z.object({ id: z.string().min(1).max(120), role: z.string().optional(), bytes: z.number().int().positive(), tier: z.enum(["standard", "boost", "max"]).optional(), wait: z.boolean().default(false) }) } } } }, responses: { 200: { content: { "application/json": { schema: z.object({ lease: z.string(), admitted: z.boolean(), position: z.number().nullable() }) } }, description: "The lease was admitted or queued." }, 202: { content: { "application/json": { schema: z.object({ lease: z.string(), admitted: z.literal(false), position: z.number().int() }) } }, description: "The lease is queued; poll /stack/v1/memory for its queue position." }, 503: { content: { "application/json": { schema: z.object({ error: z.string() }) } }, description: "The governor refused the lease." } } });
+const leaseRelease = createRoute({ method: "delete", path: "/admission-leases/{id}", tags: ["Memory"], summary: "Release a memory slot", request: { params: z.object({ id: z.string() }) }, responses: { 200: { content: { "application/json": { schema: z.object({ released: z.boolean() }) } }, description: "The lease was released." } } });
+const leaseRenew = createRoute({ method: "post", path: "/admission-leases/{id}/renew", tags: ["Memory"], summary: "Renew a memory slot", request: { params: z.object({ id: z.string() }) }, responses: { 200: { content: { "application/json": { schema: z.object({ renewed: z.boolean() }) } }, description: "The lease was renewed." } } });
+memoryRoutes.openapi(leaseCreate, async (c) => {
+  const body = c.req.valid("json");
+  const header = c.req.header("x-stack-caller");
+  const caller: AdmissionCaller = header === "test" ? "test" : "dev";
+  const lease = crypto.randomUUID();
+  const requestId = `script-lease:${lease}`;
+  const answer = await admit({ id: requestId, role: body.role, kind: "generator", requestedBytes: body.bytes, ...(body.tier ? { tier: body.tier } : {}), caller });
+  if ("refused" in answer) return c.json({ error: answer.reason }, 503);
+  const entry: LeaseEntry = { ...( !("queued" in answer) ? { handle: answer } : {}), timer: undefined as unknown as ReturnType<typeof setTimeout>, caller, requestId };
+  leaseHandles.set(lease, entry);
+  armLeaseTimer(lease, entry);
+  if (!("queued" in answer)) return c.json({ lease, admitted: true, position: null }, 200);
+  // A queued lease is admitted later whether or not the script waits: capture that admission, and give it back at once when the lease was released or expired meanwhile (a withdraw does nothing once a request is admitted).
+  const settled = answer.admitted.then((result) => {
+    if ("refused" in result) { if (leaseHandles.get(lease) === entry) { clearTimeout(entry.timer); leaseHandles.delete(lease); } return result; }
+    if (leaseHandles.get(lease) === entry) entry.handle = result; else release(result);
+    return result;
+  });
+  if (!body.wait) return c.json({ lease, admitted: false, position: answer.position }, 202);
+  const result = await settled;
+  if ("refused" in result) return c.json({ error: result.reason }, 503);
+  return c.json({ lease, admitted: true, position: null }, 200);
+});
+memoryRoutes.openapi(leaseRelease, (c) => c.json({ released: dropLease(c.req.valid("param").id) }, 200));
+memoryRoutes.openapi(leaseRenew, (c) => { const lease = c.req.valid("param").id; const entry = leaseHandles.get(lease); if (!entry) return c.json({ renewed: false }, 200); clearTimeout(entry.timer); armLeaseTimer(lease, entry); return c.json({ renewed: true }, 200); });
 
 const DailySchema = z.object({ days: z.array(z.object({
   date: z.string().openapi({ description: "Local calendar date." }),

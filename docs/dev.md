@@ -2970,3 +2970,22 @@ gone. A heavy job is admitted on real free memory less the tier's working margin
   needs to be stopped or confirmed; it never asks a question (`waitingSummary` in `lib/admission.ts`).
 - **Video worker entry.** The warm `video-worker` entry has no pid. At its idle limit it expires even when no worker is left to unload,
   so it cannot keep counting its 60 GB peak.
+
+## Central admission callers (2026-11-13)
+
+Every generator job and every engine start uses the governor admission path. Live Home requests default to caller `household`; dev hubs
+and test/bench scripts send `x-stack-caller: dev` or `x-stack-caller: test` on job submission. Household requests are inserted ahead
+of queued development work. Development and test work can queue behind household work, but does not open the household Max window,
+trigger the Reduced chat hook, or shrink the household chat window.
+
+Scripts doing work outside a Stack job runner take a lease first with
+`POST /stack/v1/memory/admission-leases` (`{id, role?, bytes, tier?, wait}`), using the same caller header, and release it with
+`DELETE /stack/v1/memory/admission-leases/{lease}` in a `finally` block. Each lease gets its own token, even when two scripts use the
+same holder id; it expires after 15 minutes and can be renewed with `POST /stack/v1/memory/admission-leases/{lease}/renew`. Set
+`wait: true` to wait until the governor grants the slot; otherwise the response reports its queue position. `/stack/v1/memory` lists waiting callers in `admission_queue`, and
+`/stack/v1/hardware/budget/decisions` includes the caller on admission decisions.
+
+Reduced Max fit uses the loaded chat peak from the memory ledger, plus the voice saving. A request is never rejected as `never_fits`
+until Reduced, reclaimable warm memory, and the video chat-window floor have been included. The person-facing refusal has no figures;
+`governor.never_fit` in the Stack log records the request peak, capacity and ledger snapshot. Video Max is catalogued at 51.0 GB for
+words and 61.5 GB for a picture. Governor GB values are decimal.

@@ -1,3 +1,4 @@
+import { admissionCaller } from "@/lib/admissionCaller";
 import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
@@ -47,7 +48,7 @@ alignV1Routes.openapi(post, async (c) => {
   const need = windowed ? alignPeakBytesFor(body.to_s! - body.from_s!) : ALIGN_PEAK_BYTES;
   if (resident + need > governor.capBytes) return fail(c, 503, "no_memory", "Not enough free memory for lyric timing right now. Close other big jobs, or try again.");
   const token = crypto.randomUUID(); stashAlign(token, source, body.lyrics);
-  const submitted = submitJob({ kind: ALIGN_JOB_KIND, role: "music", input: { token, origin: owned ? "owned_file" : "made_here", ...(windowed ? { from_s: body.from_s, to_s: body.to_s } : {}) } });
+  const submitted = submitJob({ caller: admissionCaller(c), kind: ALIGN_JOB_KIND, role: "music", input: { token, origin: owned ? "owned_file" : "made_here", ...(windowed ? { from_s: body.from_s, to_s: body.to_s } : {}) } });
   if ("refused" in submitted) { unstashAlign(token); return fail(c, 503, submitted.code ?? "no_memory", submitted.reason); }
   const settled = await waitForJob(submitted.job.id, body.timeout_ms ?? DEFAULT_WAIT_MS);
   const created = Math.floor(Date.parse((settled ?? submitted.job).createdAt) / 1000);

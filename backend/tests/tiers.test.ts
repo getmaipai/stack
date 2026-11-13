@@ -16,7 +16,7 @@ describe("tier resolver", () => {
     }
     const reduced = resolveTier({ category: "chat", tier: "reduced", profile: "p128", roomBytes: 72 * GB });
     expect(slots.find((row) => row.category === "chat" && row.tier === "reduced")?.peak_bytes).toBe(reduced?.peakBytes);
-    expect(slots.map(({ category, tier }) => `${category}:${tier}`)).toEqual(["chat:reduced", "chat:standard", "chat:boost", "chat:max", "pictures:standard", "pictures:boost", "pictures:max", "video:standard", "music:standard"]);
+    expect(slots.map(({ category, tier }) => `${category}:${tier}`)).toEqual(["chat:reduced", "chat:standard", "chat:boost", "chat:max", "pictures:standard", "pictures:boost", "pictures:max", "video:standard", "video:max", "music:standard"]);
     expect(budgetSlots("p16", 12 * GB).every((row) => row.category === "chat")).toBe(true);
     expect(budgetSlots("p16", 12 * GB).some((row) => row.category === "pictures" || row.category === "video" || row.category === "music")).toBe(false);
     expect(budgetSlots(null)).toEqual([]);
@@ -48,13 +48,14 @@ describe("tier resolver", () => {
     expect(resolveTier({ category: "chat", tier: "max", profile: "p128", roomBytes: 60 * GB, reducedFreedBytes: 9 * GB })?.model).toBe("ornith-1-5-122b-mlx-4bit");
   });
 
-  test("video Standard needs 0.6 R to hold Wan's measured 25.4 GB, and Max video stays empty", () => {
+  test("video Standard needs 0.6 R to hold Wan's measured 25.4 GB and Max lists the LTX profile", () => {
     const tight = resolveLadder("video", "p128", 40 * GB);
     expect(tight[0]?.resolved).toBeNull();
     expect(tight[1]?.resolved).toBeNull();
     const roomy = resolveLadder("video", "p128", 72 * GB);
-    expect(roomy.map((row) => row.resolved?.model ?? null)).toEqual(["fastwan2-2-ti2v-5b-mlx-bf16", null, null]);
+    expect(roomy.map((row) => row.resolved?.model ?? null)).toEqual(["fastwan2-2-ti2v-5b-mlx-bf16", null, "ltx-2-5-bf16-distilled-mlx-max"]);
     expect(roomy[0]?.resolved?.verified).toBe(true);
+    expect(resolveTier({ category: "video", tier: "max", profile: "p128", roomBytes: 40 * GB, reducedFreedBytes: 22 * GB, slot: { model: "ltx-2-5-bf16-distilled-mlx-max", options: { input: "picture" } } })).toMatchObject({ peakBytes: 61_500_000_000 });
     expect(resolveLadder("voice", "p128", 72 * GB).map((row) => row.resolved?.model ?? null)).toEqual(["chatterbox-turbo-fp16", null, null]);
   });
 

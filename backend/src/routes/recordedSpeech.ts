@@ -1,3 +1,4 @@
+import { admissionCaller } from "@/lib/admissionCaller";
 import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
@@ -58,7 +59,7 @@ recordedSpeechV1Routes.openapi(post, async (c) => {
   const active = listJobs().filter((job) => job.kind === RECORDED_SPEECH_JOB_KIND && ["queued", "running", "stalled"].includes(job.state)).length;
   if (active >= 4) return fail(c, "queue_full", "Four recorded speech jobs are already waiting.", 429);
   const token = crypto.randomUUID(); stashRecordedSpeech(token, body.text, references, body.format);
-  const submitted = submitJob({ kind: RECORDED_SPEECH_JOB_KIND, role: "tts", input: { token } });
+  const submitted = submitJob({ caller: admissionCaller(c), kind: RECORDED_SPEECH_JOB_KIND, role: "tts", input: { token } });
   if ("refused" in submitted) { unstashRecordedSpeech(token); return fail(c, submitted.code ?? "no_memory", submitted.reason, 503); }
   const settled = await waitForJob(submitted.job.id, body.timeout_ms ?? WAIT);
   if (!settled || ["queued", "running", "stalled"].includes(settled.state)) return c.json({ created: Math.floor(Date.parse(submitted.job.createdAt) / 1000), job: submitted.job.id, data: null }, 202);

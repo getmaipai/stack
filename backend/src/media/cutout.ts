@@ -5,7 +5,7 @@ import { admit, release, withdraw, type GovernorHandle } from "@/lib/governor";
 import { imageTools } from "@/imagetools/imageTools";
 import { MASK_CONFIG_NAME, maskEnvironmentReady, maskModelPath, maskPython, maskWorkerEnv, materializeMaskWorker } from "@/video/mask";
 import { log } from "@/lib/log";
-import type { JobProgress } from "@/lib/jobs";
+import { currentJobCaller, type JobProgress } from "@/lib/jobs";
 import type { ProbeResult } from "./probe";
 import type { Runner } from "./run";
 
@@ -105,7 +105,7 @@ export async function cutoutClip(args: { run: Runner; ffmpeg: string; input: str
     queuedCancel = () => withdraw(governorId);
     signal.addEventListener("abort", queuedCancel, { once: true });
     if (signal.aborted) queuedCancel();
-    const request = await admit({ id: governorId, role: "video", kind: "generator", class: "burst", requestedBytes: 6 * GB, measuredPeakBytes: 6 * GB });
+    const request = await admit({ id: governorId, role: "video", kind: "generator", class: "burst", requestedBytes: 6 * GB, measuredPeakBytes: 6 * GB, caller: currentJobCaller() });
     if ("refused" in request) throw new Error(CUTOUT_NO_MEMORY);
     if ("queued" in request) {
       progress({ status: "waiting for room to track the subject" });

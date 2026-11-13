@@ -8,4 +8,5 @@ export function reducedChatForcesLight(): boolean { return state === "entering" 
 export function setReducedChatState(next: ReducedChatState): void { state = next; }
 export function reducedChatModels(): Map<string, string> { return new Map(roleModels); }
 export function setReducedChatModels(models: Map<string, string>): void { roleModels = new Map(models); }
-export function resetReducedChatForTests(): void { state = "off"; roleModels.clear(); }
+export function resetReducedChat(): void { state = "off"; roleModels.clear(); }
+export const resetReducedChatForTests = resetReducedChat;

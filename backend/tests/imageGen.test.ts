@@ -992,3 +992,16 @@ test("the worker runs restore from mflux 0.23.0's own SeedVR2 in low-RAM mode an
   expect(worker).toContain("MemorySaver(model=model, keep_transformer=False, cache_limit_bytes=1000**3");
   expect(worker).toContain("mx.set_cache_limit(MLX_CACHE_LIMIT_BYTES)");
 });
+
+// Round 5: a job the computer can never hold ends with the code never_fits and a plain message (no figures), on the POST and on the status.
+test("a Max picture the computer can never hold ends with code never_fits and no digits in the message", async () => {
+  imageGen.useDeps(scripted());
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 12 * GB, freeMemoryBytes: 11 * GB, tier: "p128" });
+  const response = await post({ model: "image", prompt: "a paper boat", seed: 7, size: "640x480", tier: "max", timeout_ms: 5000 });
+  const body = await response.json() as { job: string; code: string; error: string };
+  expect(body.code).toBe("never_fits");
+  expect(body.error).not.toMatch(/\d/);
+  const status = await (await get(`/v1/images/generations/${body.job}`)).json() as { state: string; code: string; error: string };
+  expect(status).toMatchObject({ state: "failed", code: "never_fits" });
+  expect(status.error).not.toMatch(/\d/);
+});

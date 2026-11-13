@@ -1,6 +1,6 @@
 // TIER-REDUCED-ROUTE: the control behind POST /stack/v1/tiers/reduced. Home puts chat in Reduced while a Max job runs and renews the
 // request while it still needs it. If Home stops renewing (it crashed), the Stack leaves Reduced by itself after the cap.
-import { getReducedChatState } from "@/lib/reducedChat";
+import { getReducedChatState, resetReducedChat } from "@/lib/reducedChat";
 import { enterReducedChat, leaveReducedChat } from "@/lib/supervisor";
 
 type Swap = { ok: true; swapMs: number } | { ok: false; waiting: true } | { ok: false; reason: string };
@@ -64,6 +64,13 @@ export async function controlReducedChat(on: boolean, holder: ReducedHolder = "h
   if (result.ok) return { status: 200, body: { ok: true, swap_ms: result.swapMs, reduced } };
   if ("waiting" in result) return { status: 202, body: { ok: false, waiting: true, reduced } };
   return { status: result.reason.startsWith("Chat could not") ? 503 : 409, body: { ok: false, reason: result.reason, reduced } };
+}
+
+/** Boot: Reduced is memory-only (the state, the holders and the lease timer all live in this process), so a Stack that starts, after a restart in the middle of a Max window or a crash, begins with chat on its standard model and nobody holding Reduced. Called once by the daemon before any chat engine starts. */
+export function resetReducedChatOnBoot(): void {
+  clearLease();
+  holders.clear();
+  resetReducedChat();
 }
 
 export function __setReducedLeaseForTests(options: { capMs?: number | null; retryMs?: number | null; deps?: Deps | null } | null): void {

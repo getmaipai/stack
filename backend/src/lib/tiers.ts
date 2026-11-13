@@ -5,6 +5,7 @@ const STACK_IMAGE_ZIMAGE_ID = "z-image-turbo";
 const STACK_MUSIC_MODEL_ID = "ace-step-1-5-turbo";
 const STACK_VIDEO_MODEL_ID = "fastwan2-2-ti2v-5b-mlx-bf16";
 const STACK_VIDEO_LTX25_MODEL_ID = "ltx-2-5-q8-distilled-mlx";
+const STACK_VIDEO_LTX25_MAX_MODEL_ID = "ltx-2-5-bf16-distilled-mlx-max";
 const STACK_VIDEO_MASK_MODEL_ID = "sam2.1-hiera-small";
 
 export type TierId = "reduced" | "standard" | "boost" | "max";
@@ -47,6 +48,7 @@ export const TIER_CANDIDATES: TierCandidate[] = [
     { options: { size: "640x320", seconds: 5 }, peakBytes: 32_400_000_000, status: "measured", note: "Boost slot." },
     { options: { size: "768x448", seconds: 5 }, peakBytes: 45_800_000_000, status: "measured", note: "Boost slot." },
   ], tiers: [], vetting: "VIDEO-TIERS-01: the Stack runs it (LTX25-ENGINE-01); Home's design step moves the Standard and Boost video slots here while the Wan Quick lane remains available for minors. The Max profile (1024x576, 10 s, 48.6 GB, LTX25-MAX-01) is the separate model ltx-2-5-bf16-distilled-mlx-max on the dgrauet runtime; its slot is Home's to enable." },
+  { id: STACK_VIDEO_LTX25_MAX_MODEL_ID, category: "video", family: "ltx", label: "LTX-2.5 Video Max", profiles: ["p128"], peaks: [{ options: { input: "words" }, peakBytes: 51_000_000_000, status: "measured", note: "LTX25 Max words peak from video/ltx25.ts." }, { options: { input: "picture" }, peakBytes: 61_500_000_000, status: "measured", note: "LTX25 Max picture peak from video/ltx25.ts." }], tiers: ["max"] },
   { id: STACK_MUSIC_MODEL_ID, category: "music", family: "ace-step", label: "ACE-Step 1.5 Turbo", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 16_400_000_000, status: "measured", note: "Tier eval 2026-10-30, MLX peak." }], tiers: ["standard"] },
   { id: "chatterbox-turbo-fp16", category: "voice", family: "chatterbox", label: "Chatterbox Turbo", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 4_580_000_000, status: "measured", note: "Tier eval 2026-10-30, MLX peak." }], tiers: ["standard"] },
   { id: "chatterbox-nano", category: "voice", family: "chatterbox", label: "Chatterbox Nano", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 2_770_000_000, status: "measured", note: "Tier eval 2026-10-30, MLX peak with cloning; needs a pinned mlx-audio or a config-reading patch before it ships." }], tiers: ["reduced"] },
@@ -143,11 +145,12 @@ export function customPickRefusal(input: ResolveInput & { model: string; options
 }
 
 /** What the Reduced swap of chat and voice frees on this profile: each category's Standard peak minus its Reduced peak (zero when either is missing). Max may use it (TIER-STACK-02). */
-export function reducedFreedBytes(profile: ProfileId, roomBytes: number): number {
+export function reducedFreedBytes(profile: ProfileId, roomBytes: number, loadedChatPeakBytes?: number | null): number {
   return (["chat", "voice"] as const).reduce((sum, category) => {
     const standard = resolveTier({ category, tier: "standard", profile, roomBytes });
     const reduced = resolveTier({ category, tier: "reduced", profile, roomBytes });
-    return sum + (standard && reduced ? Math.max(0, standard.peakBytes - reduced.peakBytes) : 0);
+    const standardPeak = category === "chat" && loadedChatPeakBytes != null ? loadedChatPeakBytes : standard?.peakBytes;
+    return sum + (standardPeak !== undefined && reduced ? Math.max(0, standardPeak - reduced.peakBytes) : 0);
   }, 0);
 }
 

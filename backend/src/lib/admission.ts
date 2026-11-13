@@ -7,7 +7,7 @@
 // `withdraw`, which removes the request from the governor's queue and
 // settles the `admitted` promise refused, so no late admission ever
 // happens and nothing is loaded that nobody holds.
-import { admit, getGovernorDecisions, getGovernorStatus, getRunState, peakFor, withdraw, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
+import { admit, fitsEver, getGovernorDecisions, getGovernorStatus, getRunState, neverFitCapacityBytes, peakFor, withdraw, type GovernorHandle, type GovernorRequest } from "@/lib/governor";
 
 /** The peak the governor will compute for a request, mirrored from its
  * `peakFor` so a refusal here agrees with an admission there. */
@@ -73,9 +73,8 @@ export interface WaitOptions {
  * the governor's reason when the request is refused or dropped, or with
  * the peak's numbers when the budget could never hold it. */
 export async function waitForAdmission(request: GovernorRequest, options: WaitOptions): Promise<GovernorHandle | null> {
-  const status = getGovernorStatus();
   const peak = governorPeak(request);
-  if (peak > status.capBytes) throw new AdmissionRefusedError(`${request.id} needs about ${gb(peak)} GB; the memory budget for models is ${gb(status.capBytes)} GB.`);
+  if (!request.tier && !fitsEver(request) && peak > neverFitCapacityBytes(request)) { const status = getGovernorStatus(); throw new AdmissionRefusedError(`${request.id} needs about ${gb(peak)} GB; the memory budget for models is ${gb(status.capBytes)} GB.`); }
   const answer = await admit(request);
   if ("refused" in answer) throw new AdmissionRefusedError(answer.reason);
   if (!("queued" in answer)) return answer;

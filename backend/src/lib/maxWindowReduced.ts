@@ -1,7 +1,7 @@
 // TIER-ROUTES-01: the Stack swaps chat itself when the Max window needs the room. The governor tells this file when a Max window starts
 // draining or opens (Reduced only when the job still would not fit the computer's real memory after idle models are given back, MAX-LIVE-01) and when it closes; chat goes to Reduced then and comes back,
 // through the same control Home's POST /stack/v1/tiers/reduced uses, so the two never fight: Home may still call the route, but is not required to.
-import { setMaxWindowHook, type MaxWindowChange } from "@/lib/governor";
+import { setMaxWindowHook, setReducedSwapFailed, type MaxWindowChange } from "@/lib/governor";
 import { controlReducedChat, isReducedChat, reducedChatCapMs } from "@/lib/reducedChatLease";
 
 const WAITING_RETRY_MS = 5_000;
@@ -26,6 +26,7 @@ function step(): void {
       const wasReduced = isReducedChat();
       const result = await controlReducedChat(true, "max-window");
       if (!wanted) return; // closed while entering: the queued close step leaves
+      setReducedSwapFailed(result.status === 409 || result.status === 503); // a refusal is final for this window; 202 means a chat turn runs and the swap retries
       if (result.status === 200) { if (!wasReduced) owned = true; if (owned) arm(renewOverrideMs ?? Math.max(1_000, Math.floor(reducedChatCapMs() / 2))); }
       else if (result.status === 202) arm(retryOverrideMs ?? WAITING_RETRY_MS); // a chat turn is running: try again between turns
     } else if (owned) {

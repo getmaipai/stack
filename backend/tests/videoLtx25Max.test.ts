@@ -6,6 +6,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { app } from "@/app";
+import { HOME_TOKEN_HEADER, homeViewToken } from "@/lib/adultView";
 import { admit, __resetGovernorForTests, __setGovernorTuningForTestsOnly, getGovernorStatus, startGovernor } from "@/lib/governor";
 import { __resetJobsForTests } from "@/lib/jobs";
 import { ENGINE_BINARIES, ENGINE_ROLE, MANAGED_RUNTIMES } from "@/lib/engineCatalog";
@@ -50,7 +51,7 @@ beforeEach(() => {
   registerVideoJobs();
 });
 afterEach(() => clean());
-const post = (body: Record<string, unknown>) => app.request("/v1/videos/generations", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+const post = (body: Record<string, unknown>) => app.request("/v1/videos/generations", { method: "POST", headers: { "content-type": "application/json", "x-stack-caller": "live", [HOME_TOKEN_HEADER]: homeViewToken() }, body: JSON.stringify(body) });
 type Entry = Record<string, unknown>;
 
 test("the Max model names map to the ltx25max quality; the Standard names keep theirs", () => {

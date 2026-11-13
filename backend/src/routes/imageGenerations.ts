@@ -1,3 +1,4 @@
+import { admissionCaller } from "@/lib/admissionCaller";
 // POST /v1/images/generations (the mflux path), the generative operations of
 // POST /v1/images/edits, and the job's files (IMGGEN-STACK-02, IMGGEN-EDIT-01).
 // The same job API as video: the picture is submitted, the reply waits up to
@@ -163,7 +164,7 @@ function statusOf(job: Job) {
     job: job.id, tier: tierOf(job), state, phase, progress: Math.round(job.percent), phase_progress: state === "running" && detail ? Math.round(detail.phasePercent) : null, position: job.state === "queued" ? job.position : null,
     ...liveFields(job.id, state === "running"),
     error: job.state === "failed" ? failure?.message ?? job.reason ?? "The picture failed." : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? job.reason ?? "Paused: this computer is low on memory." : "The picture was cancelled.") : null,
-    code: job.state === "failed" ? (job.status === "no_memory" ? "no_memory" : failure?.code ?? "failed") : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? "no_memory" : "cancelled") : null,
+    code: job.state === "failed" ? (job.status === "never_fits" ? "never_fits" : job.status === "no_memory" ? "no_memory" : failure?.code ?? "failed") : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? "no_memory" : "cancelled") : null,
     data: result ? entries(result, false) : [],
   };
 }
@@ -202,7 +203,8 @@ async function waitAndReply<T extends Context>(c: T, jobId: string, createdAt: s
   if (!settled || settled.state === "queued" || settled.state === "running" || settled.state === "stalled") return reply(c, { created, job: jobId, data: [] }, 202);
   if (settled.state === "cancelled" && settled.status === PAUSED_LOW_MEMORY) return fail(c, 503, "no_memory", settled.reason ?? "Paused: this computer is low on memory.", settled.id);
   if (settled.state === "cancelled") return fail(c, 499, "cancelled", "The picture was cancelled.", settled.id);
-  if (settled.state === "failed" && settled.status === "no_memory") return fail(c, 503, "no_memory", settled.reason ?? "There was not enough free memory.", settled.id);
+  if (settled.state === "failed" && settled.status === "never_fits") return fail(c, 503, "never_fits", settled.reason ?? "This is too big for this computer even with everything else paused.", settled.id);
+    if (settled.state === "failed" && settled.status === "no_memory") return fail(c, 503, "no_memory", settled.reason ?? "There was not enough free memory.", settled.id);
   if (settled.state !== "done") {
     const failure = imageFailure(settled.id);
     return fail(c, failure?.status ?? 500, failure?.code ?? "failed", failure?.message ?? settled.reason ?? "The picture failed.", settled.id);
@@ -259,7 +261,7 @@ export async function generateImages<T extends Context>(c: T, body: ImageGenerat
     op: "generate", prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, family, quantize, width: size.width, height: size.height, steps, seed, count,
     loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, initImage, strength: body.strength ?? 0.6, image: null, mask: null, region: null, feather: 0, derived, preview: body.preview !== false,
   });
-  const submitted = submitJob({ kind: IMAGE_JOB_KIND, role: "image", input: { token, family, mode: "generate", quantize, size: `${size.width}x${size.height}`, steps, seed, count, lora_ids: loraIds, image_to_image: initImage !== null, ...adultInput(body.audience), ...tierInput(body.tier) } });
+  const submitted = submitJob({ caller: admissionCaller(c), kind: IMAGE_JOB_KIND, role: "image", input: { token, family, mode: "generate", quantize, size: `${size.width}x${size.height}`, steps, seed, count, lora_ids: loraIds, image_to_image: initImage !== null, ...adultInput(body.audience), ...tierInput(body.tier) } });
   if ("refused" in submitted) return fail(c, 503, submitted.code ?? "unsupported", submitted.reason);
   return waitAndReply(c, submitted.job.id, submitted.job.createdAt, body.timeout_ms ?? DEFAULT_WAIT_MS);
 }
@@ -314,7 +316,7 @@ export async function editImages<T extends Context>(c: T, form: EditForm) {
   const seed = form.seed ?? Math.floor(Math.random() * 2 ** 32);
   const token = crypto.randomUUID();
   stashImage(token, { op: "edit", prompt: instruction, negativePrompt: null, family, quantize: null, width: 0, height: 0, steps, seed, count: 1, loras: [], loraIds: [], initImage: null, strength: 0, image, mask, region: region ?? null, feather, references: refs, derived });
-  const submitted = submitJob({ kind: IMAGE_EDIT_JOB_KIND, role: "image", input: { token, family, mode: "edit", quantize: null, steps, seed, count: 1, ...adultInput(form.audience), lora_ids: [], masked: mask !== null || region !== null, references: refs.length } });
+  const submitted = submitJob({ caller: admissionCaller(c), kind: IMAGE_EDIT_JOB_KIND, role: "image", input: { token, family, mode: "edit", quantize: null, steps, seed, count: 1, ...adultInput(form.audience), lora_ids: [], masked: mask !== null || region !== null, references: refs.length } });
   if ("refused" in submitted) return fail(c, 503, submitted.code ?? "unsupported", submitted.reason);
   return waitAndReply(c, submitted.job.id, submitted.job.createdAt, form.timeout_ms ?? DEFAULT_WAIT_MS);
 }
@@ -339,7 +341,7 @@ export async function restoreImages<T extends Context>(c: T, form: RestoreForm) 
   const seed = form.seed ?? Math.floor(Math.random() * 2 ** 32);
   const token = crypto.randomUUID();
   stashImage(token, { op: "restore", prompt: "", negativePrompt: null, family: RESTORE_FAMILY, quantize: null, width: 0, height: 0, steps: 1, seed, count: 1, loras: [], loraIds: [], initImage: null, strength: 0, image, mask: null, region: null, feather: 0, resolution: Math.min(out.width, out.height), derived: form.image_source !== "generated" });
-  const submitted = submitJob({ kind: IMAGE_EDIT_JOB_KIND, role: "image", input: { token, family: RESTORE_FAMILY, mode: "restore", quantize: null, steps: 1, seed, count: 1, ...adultInput(form.audience), lora_ids: [], masked: false, references: 0 } });
+  const submitted = submitJob({ caller: admissionCaller(c), kind: IMAGE_EDIT_JOB_KIND, role: "image", input: { token, family: RESTORE_FAMILY, mode: "restore", quantize: null, steps: 1, seed, count: 1, ...adultInput(form.audience), lora_ids: [], masked: false, references: 0 } });
   if ("refused" in submitted) return fail(c, 503, submitted.code ?? "unsupported", submitted.reason);
   return waitAndReply(c, submitted.job.id, submitted.job.createdAt, form.timeout_ms ?? DEFAULT_WAIT_MS);
 }

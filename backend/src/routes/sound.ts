@@ -1,3 +1,4 @@
+import { admissionCaller } from "@/lib/admissionCaller";
 // POST /v1/audio/sound and the job it makes (MP-07), and GET /stack/v1/sound,
 // the sound role's state. The same job API as songs: the sound is submitted,
 // the reply waits up to timeout_ms, and past the deadline answers 202 with the
@@ -140,7 +141,7 @@ function statusOf(job: Job) {
     job: job.id, state, phase, progress: Math.round(job.percent), position: job.state === "queued" ? job.position : null,
     ...liveFields(job.id, state === "running"),
     error: job.state === "failed" ? failure?.message ?? job.reason ?? "The sound failed." : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? job.reason ?? "Paused: this computer is low on memory." : "The sound was cancelled.") : null,
-    code: job.state === "failed" ? (job.status === "no_memory" ? "no_memory" : failure?.code ?? "failed") : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? "no_memory" : "cancelled") : null,
+    code: job.state === "failed" ? (job.status === "never_fits" ? "never_fits" : job.status === "no_memory" ? "no_memory" : failure?.code ?? "failed") : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? "no_memory" : "cancelled") : null,
     data: isSound(result) ? [entry(result)] : [],
   };
 }
@@ -162,14 +163,15 @@ soundV1Routes.openapi(postRoute, async (c) => {
   const token = crypto.randomUUID();
   stashSound(token, { prompt: checked.prompt, seconds: checked.seconds, steps: checked.steps, seed });
   // The job record holds the length, the steps and the seed, never a word of the request.
-  const submitted = submitJob({ kind: SOUND_JOB_KIND, role: "music", input: { token, seconds: checked.seconds, steps: checked.steps, seed, model: STACK_SFX_MODEL_ID, ...tierInput(body.tier) } });
+  const submitted = submitJob({ caller: admissionCaller(c), kind: SOUND_JOB_KIND, role: "music", input: { token, seconds: checked.seconds, steps: checked.steps, seed, model: STACK_SFX_MODEL_ID, ...tierInput(body.tier) } });
   if ("refused" in submitted) { unstashSound(token); return fail(c, 503, submitted.code ?? "unsupported", submitted.reason); }
   const settled = await waitForJob(submitted.job.id, body.timeout_ms ?? DEFAULT_WAIT_MS);
   const created = Math.floor(new Date(submitted.job.createdAt).getTime() / 1000);
   if (!settled || settled.state === "queued" || settled.state === "running" || settled.state === "stalled") return reply(c, { created, job: submitted.job.id, data: [] }, 202);
   if (settled.state === "cancelled" && settled.status === PAUSED_LOW_MEMORY) return fail(c, 503, "no_memory", settled.reason ?? "Paused: this computer is low on memory.", settled.id);
   if (settled.state === "cancelled") return fail(c, 499, "cancelled", "The sound was cancelled.", settled.id);
-  if (settled.state === "failed" && settled.status === "no_memory") return fail(c, 503, "no_memory", settled.reason ?? "There was not enough free memory.", settled.id);
+  if (settled.state === "failed" && settled.status === "never_fits") return fail(c, 503, "never_fits", settled.reason ?? "This is too big for this computer even with everything else paused.", settled.id);
+    if (settled.state === "failed" && settled.status === "no_memory") return fail(c, 503, "no_memory", settled.reason ?? "There was not enough free memory.", settled.id);
   if (settled.state !== "done") {
     const failure = soundFailure(settled.id);
     return fail(c, failure?.status ?? 500, failure?.code ?? "failed", failure?.message ?? settled.reason ?? "The sound failed.", settled.id);

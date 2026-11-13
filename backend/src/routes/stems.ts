@@ -1,3 +1,4 @@
+import { admissionCaller } from "@/lib/admissionCaller";
 import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@maipai/core/src/openapi";
 import { readFileSync, rmSync, statSync } from "node:fs";
@@ -51,7 +52,7 @@ stemsV1Routes.openapi(post, async (c) => {
   const peakBytes = STEMS_SPECS[body.model].peakBytes;
   if (resident + peakBytes > statusNow.capBytes) return fail(c, 503, "no_memory", "Not enough free memory for stem splitting right now. Close other big jobs, or try again.");
   const token = crypto.randomUUID(); stashSource(token, source);
-  const submitted = submitJob({ kind: STEMS_JOB_KIND, role: "music", input: { token, model: body.model, origin: owned ? "owned_file" : "made_here" } });
+  const submitted = submitJob({ caller: admissionCaller(c), kind: STEMS_JOB_KIND, role: "music", input: { token, model: body.model, origin: owned ? "owned_file" : "made_here" } });
   if ("refused" in submitted) { unstashSource(token); return fail(c, 503, submitted.code ?? "no_memory", submitted.reason); }
   const settled = await waitForJob(submitted.job.id, body.timeout_ms ?? DEFAULT_WAIT_MS);
   if (!settled || ["queued", "running", "stalled"].includes(settled.state)) return reply(c, { created: Math.floor(Date.parse(submitted.job.createdAt) / 1000), job: submitted.job.id, data: [] }, 202);

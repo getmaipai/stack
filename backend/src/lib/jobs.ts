@@ -7,10 +7,11 @@
 // stays queued until memory frees or the person cancels. A download or an
 // install created by another module runs as that module drives it. Until a runner is registered for a kind, a
 // submit for it is refused with a reason rather than left queued.
+import { AsyncLocalStorage } from "node:async_hooks";
 import { emit } from "@/lib/events";
 import { markAdultJob } from "@/lib/adultView";
 import { noteComponentUse } from "@/lib/componentUse";
-import { admit, fitsEverForTier, forgetLoadedItem, hasWarmWorkerUnload, unloadWarmWorker, generatorsHeldByMode, getGovernorStatus, getMaxWindow, getReclaimSteps, getRunState, GovernorRules, neverFitReason, neverFitTierReason, peakFor, release, withdraw, type GovernorHandle, type GovernorRequest, type JobTier } from "@/lib/governor";
+import { admit, forgetLoadedItem, hasWarmWorkerUnload, unloadWarmWorker, generatorsHeldByMode, getGovernorStatus, getMaxWindow, getReclaimSteps, getRunState, GovernorRules, NEVER_FITS_MESSAGE, neverFitCapacityBytes, logNeverFit, liveReducedFreedBytes, peakFor, release, withdraw, type AdmissionCaller, type GovernorHandle, type GovernorRequest, type JobTier } from "@/lib/governor";
 import { heavyGate, isolationRules } from "@/lib/heavyGate";
 import { memoryLevel, PAUSED_LOW_MEMORY, STOPPED_FOR_MEMORY_MAX, waitingText } from "@/lib/memoryState";
 import { ROLES } from "@/roles";
@@ -67,6 +68,8 @@ const queues = new Map<string, Job[]>();
 /** The generator job in flight per role, if any. */
 const inFlight = new Map<string, string>();
 const admitting = new Map<string, string>();
+/** For each job waiting on the governor: how to take it back out so a household job of the same role can pass it (a dev or test job never holds the role's lane). */
+const preemptors = new Map<string, () => void>();
 const pumping = new Set<string>();
 /** Queued jobs per idle lane, the job running on each lane, and the settle function that frees a running job's lane (callable once). */
 const laneQueues = new Map<string, Job[]>();
@@ -171,6 +174,7 @@ export function updateJob(id: string, patch: Partial<Pick<Job, "percent" | "comp
 
 export function finishJob(id: string, outcome: { ok: true; result?: unknown } | { ok: false; reason: string; status?: string; result?: unknown }): Job | null {
   const job = jobs.get(id);
+  jobCallers.delete(id);
   controllers.delete(id);
   pausedJobs.delete(id);
   if (!job || (job.state !== "running" && job.state !== "queued" && job.state !== "stalled")) return null;
@@ -183,7 +187,7 @@ export function finishJob(id: string, outcome: { ok: true; result?: unknown } | 
  * its role and admitted through the governor; anything else runs at
  * once. Returns the job, or a refusal with the reason when nothing on
  * this machine can run the kind. */
-export function submitJob(input: { kind: string; role?: string | null; input?: Record<string, unknown> }): { job: Job } | ({ refused: true } & JobRefusal) {
+export function submitJob(input: { kind: string; role?: string | null; caller?: AdmissionCaller; input?: Record<string, unknown> }): { job: Job } | ({ refused: true } & JobRefusal) {
   const runner = runners.get(input.kind);
   if (!runner) return { refused: true, reason: `No engine on this machine can run ${input.kind} jobs yet.` };
   if (runner.options.lane) {
@@ -194,7 +198,8 @@ export function submitJob(input: { kind: string; role?: string | null; input?: R
     laneQueues.set(lane.name, queue);
     if (queue.length >= lane.cap) return { refused: true, code: "queue_full", reason: `The ${lane.name} queue is full (${queue.length} jobs are waiting). Try again when some have finished.` };
     const job = createJob({ kind: input.kind, role: input.role ?? null, input: input.input ?? null, status: "queued", state: "queued", position: queue.length + 1 });
-    queue.push(job);
+    jobCallers.set(job.id, input.caller ?? "household");
+    insertByCaller(queue, job);
     void pumpLane(lane.name);
     return { job: jobs.get(job.id)! };
   }
@@ -204,7 +209,8 @@ export function submitJob(input: { kind: string; role?: string | null; input?: R
     const queue = queues.get(role) ?? [];
     queues.set(role, queue);
     const job = createJob({ kind: input.kind, role, input: input.input ?? null, status: "queued", state: "queued", position: queue.length + 1 });
-    queue.push(job);
+    jobCallers.set(job.id, input.caller ?? "household");
+    insertByCaller(queue, job);
     void pump(role);
     return { job: jobs.get(job.id)! };
   }
@@ -213,15 +219,27 @@ export function submitJob(input: { kind: string; role?: string | null; input?: R
   return { job };
 }
 
+/** Who submitted each queued job (kept beside the job, never inside its input, whose shape each runner validates). An in-process submit with no caller is the household's own work; the HTTP routes always pass one (admissionCaller). */
+const jobCallers = new Map<string, AdmissionCaller>();
+const callerOf = (jobId: string): AdmissionCaller => jobCallers.get(jobId) ?? "household";
+const runnerCaller = new AsyncLocalStorage<AdmissionCaller>();
+/** The caller of the job whose runner is executing now, so a governor request a runner makes itself (the cutout and mask workers) carries the same tag. Household outside any job. */
+export function currentJobCaller(): AdmissionCaller { return runnerCaller.getStore() ?? "household"; }
+function insertByCaller(queue: Job[], job: Job): void {
+  if (callerOf(job.id) !== "household") { queue.push(job); return; }
+  const firstDevelopment = queue.findIndex((waiting) => callerOf(waiting.id) !== "household");
+  if (firstDevelopment < 0) queue.push(job); else queue.splice(firstDevelopment, 0, job);
+}
+
 function run(job: Job, runner: RegisteredRunner, onSettled: () => void = () => {}): void {
   const controller = controllers.get(job.id) ?? new AbortController();
   controllers.set(job.id, controller);
   // A runner that throws before its first await fails its job like one that rejects.
   let started: Promise<unknown>;
-  try { started = Promise.resolve(runner.run(jobs.get(job.id) ?? job, controller.signal, (update) => { updateJob(job.id, update); })); } catch (error) { started = Promise.reject(error); }
+  try { started = Promise.resolve(runnerCaller.run(callerOf(job.id), () => runner.run(jobs.get(job.id) ?? job, controller.signal, (update) => { updateJob(job.id, update); }))); } catch (error) { started = Promise.reject(error); }
   void started
     .then((result) => { if (!controller.signal.aborted) finishJob(job.id, { ok: true, result }); })
-    .catch((error) => { if (!controller.signal.aborted) finishJob(job.id, { ok: false, reason: error instanceof Error ? error.message : String(error), ...(error instanceof JobFailure && error.result !== undefined ? { result: error.result } : {}) }); })
+    .catch((error) => { if (!controller.signal.aborted) finishJob(job.id, { ok: false, reason: error instanceof Error ? error.message : String(error), ...(error instanceof JobFailure && error.result !== undefined ? { result: error.result } : {}), ...(error instanceof Error && (error as Error & { code?: string }).code === "never_fits" ? { status: "never_fits", result: { code: "never_fits" } } : {}) }); })
     .finally(() => { controllers.delete(job.id); onSettled(); });
 }
 
@@ -273,6 +291,9 @@ function renumber(role: string): void {
  * governor's reason when refused or paused, and releases the admission
  * however the run ends. */
 async function pump(role: string): Promise<void> {
+  // A dev or test job waiting on memory never blocks a household job of the same role: it is taken back out of the governor's queue and put behind the household jobs.
+  const waitingId = admitting.get(role);
+  if (waitingId && callerOf(waitingId) !== "household" && queues.get(role)?.some((queued) => callerOf(queued.id) === "household")) preemptors.get(waitingId)?.();
   if (inFlight.has(role) || admitting.has(role) || pumping.has(role)) return;
   if (!(queues.get(role)?.length)) return;
   const head = queues.get(role)![0]!;
@@ -303,15 +324,22 @@ async function pump(role: string): Promise<void> {
   jobs.set(next.id, { ...jobs.get(next.id)!, position: null });
   touch(jobs.get(next.id)!, { state: "running", status: "waiting for memory" });
   let handle: GovernorHandle;
+  let preempted = false;
+  const preempt = new Promise<never>((_, reject) => { preemptors.set(next.id, () => { preempted = true; reject(new Error("Waiting job stepped aside.")); }); });
+  preempt.catch(() => {});
   try {
     const imagePool = role === "image" && (next.kind === "image_generation" || next.kind === "image_edit_generative");
     const warmWorker = imagePool ? "image-pool" : role === "video" ? "video-worker" : role === "music" ? "music-worker" : role === "stems" ? "stems-worker" : null;
     const imageEdit = imagePool && next.kind === "image_edit_generative";
     const tier = (next.input as { tier?: JobTier } | null)?.tier;
     const videoQuiet = role === "video" ? jobs.get(next.id)?.input as { quiet_seconds?: number; quiet_max_wait_seconds?: number | null } | null : null;
-    handle = await admitJob(next.id, { id: warmWorker ?? next.id, role, class: ROLES[role as keyof typeof ROLES]?.memoryClass ?? "burst", kind: "generator", ...(tier ? { tier } : {}), ...(warmWorker ? { retainWarm: true, keepAliveSeconds: 0 } : {}), ...(imageEdit ? { poolPeakBytes: GovernorRules.imagePoolPeakBytes } : {}), ...(videoQuiet?.quiet_seconds !== undefined ? { quietSeconds: videoQuiet.quiet_seconds } : {}), ...(videoQuiet?.quiet_max_wait_seconds !== undefined ? { quietMaxWaitSeconds: videoQuiet.quiet_max_wait_seconds } : {}), ...runner.options.generator.memory(jobs.get(next.id)!) });
+    handle = await admitJob(next.id, { id: warmWorker ?? next.id, role, class: ROLES[role as keyof typeof ROLES]?.memoryClass ?? "burst", kind: "generator", caller: callerOf(next.id), ...(tier ? { tier } : {}), ...(warmWorker ? { retainWarm: true, keepAliveSeconds: 0 } : {}), ...(imageEdit ? { poolPeakBytes: GovernorRules.imagePoolPeakBytes } : {}), ...(videoQuiet?.quiet_seconds !== undefined ? { quietSeconds: videoQuiet.quiet_seconds } : {}), ...(videoQuiet?.quiet_max_wait_seconds !== undefined ? { quietMaxWaitSeconds: videoQuiet.quiet_max_wait_seconds } : {}), ...runner.options.generator.memory(jobs.get(next.id)!) }, preempt);
+    preemptors.delete(next.id);
   } catch (error) {
-    finishJob(next.id, { ok: false, reason: error instanceof Error ? error.message : String(error) });
+    preemptors.delete(next.id);
+    if (preempted) { requeueAfterHousehold(role, next.id); settle(); return; }
+    const neverFit = error instanceof Error && (error as Error & { code?: string }).code === "never_fits";
+    finishJob(next.id, { ok: false, reason: error instanceof Error ? error.message : String(error), ...(neverFit ? { status: "never_fits", result: { code: "never_fits" } } : {}) });
     settle();
     return;
   }
@@ -321,6 +349,18 @@ async function pump(role: string): Promise<void> {
   inFlight.set(role, next.id);
   touch(job, { status: "starting" });
   run(job, runner, () => { release(handle!); settle(); });
+}
+
+/** A waiting dev or test job that stepped aside goes back to the front of the dev and test jobs, behind every household job. */
+function requeueAfterHousehold(role: string, jobId: string): void {
+  const job = jobs.get(jobId);
+  if (!job || job.state !== "running") return;
+  const queue = queues.get(role) ?? [];
+  queues.set(role, queue);
+  const firstDevelopment = queue.findIndex((waiting) => callerOf(waiting.id) !== "household");
+  queue.splice(firstDevelopment < 0 ? queue.length : firstDevelopment, 0, job);
+  touch(job, { state: "queued", status: "queued", position: null });
+  renumber(role);
 }
 
 /** MAX-WAIT-REASON-01: the two queued statuses of a Max job in its window. The video route turns each into its own `phase`, so Home never has to read the sentence. */
@@ -333,20 +373,25 @@ function governorPeak(request: GovernorRequest): number {
   return peakFor(request).bytes;
 }
 
+/** A governor refusal as an Error; a never-fit (at once or after the Max drain gave up) carries the code `never_fits` so the job finishes with it. */
+function refusalError(reason: string): Error {
+  const error = new Error(reason) as Error & { code?: string };
+  if (reason === NEVER_FITS_MESSAGE) error.code = "never_fits";
+  return error;
+}
+
 /** The governor's answer for one job: the handle once admitted, a
  * thrown reason when refused, or a thrown reason when the job was
  * cancelled or the Stack paused while waiting. The wait is a bare
  * await on the governor's own promise, which its poll settles when
  * memory frees; a cancel or a pause withdraws the request. */
-async function admitJob(jobId: string, request: GovernorRequest): Promise<GovernorHandle> {
+async function admitJob(jobId: string, request: GovernorRequest, preempt: Promise<never> = new Promise<never>(() => {})): Promise<GovernorHandle> {
   // A peak the budget can never hold is refused now with the numbers,
   // not queued for memory that will not come.
   const peak = governorPeak(request);
-  const fit = fitsEverForTier(request);
-  if (!fit.fits) throw new Error(request.tier ? neverFitTierReason(request, fit.capBytes, fit.peakBytes) : neverFitReason(request));
   const controller = controllers.get(jobId);
   const answer = await admit(request);
-  if ("refused" in answer) throw new Error(answer.reason);
+  if ("refused" in answer) throw refusalError(answer.reason);
   if (!("queued" in answer)) return answer;
   const refreshQueuedStatus = (): void => {
     const latest = getReclaimSteps(request.id).at(-1);
@@ -361,6 +406,7 @@ async function admitJob(jobId: string, request: GovernorRequest): Promise<Govern
   try {
     const settled = await Promise.race([
       answer.admitted,
+      preempt,
       signal
         ? new Promise<never>((_, reject) => {
             if (signal.aborted) { reject(new Error("Cancelled by Home.")); return; }
@@ -373,7 +419,7 @@ async function admitJob(jobId: string, request: GovernorRequest): Promise<Govern
         }, 100);
       }),
     ]);
-    if ("refused" in settled) throw new Error(settled.reason);
+    if ("refused" in settled) throw refusalError(settled.reason);
     return settled;
   } catch (error) {
     withdraw(request.id);
@@ -481,7 +527,7 @@ export async function waitForJob(id: string, timeoutMs: number): Promise<Job | n
 export function __resetJobsForTests(): void {
   for (const controller of controllers.values()) controller.abort();
   for (const timer of laneTimers.values()) clearTimeout(timer);
-  controllers.clear(); pausedJobs.clear(); jobs.clear(); runners.clear(); queues.clear(); inFlight.clear(); admitting.clear(); pumping.clear();
+  controllers.clear(); preemptors.clear(); pausedJobs.clear(); jobs.clear(); runners.clear(); queues.clear(); inFlight.clear(); admitting.clear(); pumping.clear();
   __setJobQueueTimingForTests(null);
-  laneQueues.clear(); laneRunning.clear(); laneSettles.clear(); laneTimers.clear();
+  jobCallers.clear(); laneQueues.clear(); laneRunning.clear(); laneSettles.clear(); laneTimers.clear();
 }

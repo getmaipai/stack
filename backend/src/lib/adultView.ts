@@ -56,6 +56,7 @@ function tokenMatches(presented: string | undefined): boolean {
 export function fullViewAsked(header: HeaderGet): boolean { return (header(VIEW_HEADER) ?? "").trim().toLowerCase() === "full"; }
 /** The caller asked for the full view and presented Home's credential. */
 export function fullViewAllowed(header: HeaderGet): boolean { return fullViewAsked(header) && tokenMatches(header(HOME_TOKEN_HEADER)); }
+export function isHomeCaller(header: HeaderGet): boolean { return tokenMatches(header(HOME_TOKEN_HEADER)); }
 
 /** Job ids made for an adult audience (marked when the job is created). */
 const adultJobs = new Set<string>();

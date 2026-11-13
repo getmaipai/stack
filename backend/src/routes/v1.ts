@@ -1,3 +1,4 @@
+import { admissionCaller } from "@/lib/admissionCaller";
 // The role routes: OpenAI-shaped, `model` is a role id or an installed
 // model id, every reply carries the identity headers. A known role with
 // no ready engine is a 503 with the reason, never a 404.
@@ -116,7 +117,7 @@ async function reply<T extends Context>(c: T, wire: Wire, body: Record<string, u
       // OpenAI's image shape; past the deadline the job goes on and the
       // reply carries its id, 202, for Home to fetch by id.
       if (!hasJobRunner(role) || !roleIsBound(role) || !roleHasEngine(role)) { const result = noEngineResponse(role, !roleHasEngine(role) ? `No ${role} engine is installed on this machine.` : undefined); return jsonReply(c, result.body, result.status, result.headers); }
-      const submitted = submitJob({ kind: role, role, input: body });
+      const submitted = submitJob({ caller: admissionCaller(c), kind: role, role, input: body });
       if ("refused" in submitted) return jsonReply(c, submitted.code === "coding_mode" ? { error: submitted.reason, code: submitted.code } : { ...noEngineResponse(role, submitted.reason).body }, 503, identityHeaders(null));
       const timeoutMs = typeof body.timeout_ms === "number" && body.timeout_ms > 0 ? body.timeout_ms : DEFAULT_RENDER_WAIT_MS;
       const settled = await waitForJob(submitted.job.id, timeoutMs);
@@ -423,7 +424,7 @@ v1Routes.openapi(imageEditsRoute, async (c) => {
   const token = crypto.randomUUID();
   const params: Record<string, unknown> = { ...(form.scale !== undefined ? { scale: form.scale } : {}), ...(form.width !== undefined ? { width: form.width } : {}), ...(form.height !== undefined ? { height: form.height } : {}), ...(form.factor !== undefined ? { factor: form.factor } : {}), ...(form.engine ? { engine: form.engine } : {}), ...(form.people ? { people: form.people === "all" ? "all" : form.people.split(",").map((value) => Number(value.trim())).filter((value) => Number.isInteger(value) && value > 0) } : {}), ...(form.subjects ? { subjects: form.subjects === "all" ? "all" : form.subjects.split(",").map((value) => Number(value.trim())).filter((value) => Number.isInteger(value) && value > 0) } : {}) };
   stashInput(token, { operation: form.operation as typeof IMAGE_TOOLS_OPERATIONS[number], image: new Uint8Array(await form.image.arrayBuffer()), ...(form.mask ? { mask: new Uint8Array(await form.mask.arrayBuffer()) } : {}), params });
-  const submitted = submitJob({ kind: "image_edit", role: "image", input: { operation: form.operation, params, token } });
+  const submitted = submitJob({ caller: admissionCaller(c), kind: "image_edit", role: "image", input: { operation: form.operation, params, token } });
   if ("refused" in submitted) return jsonReply(c, { error: submitted.reason, code: submitted.code ?? "unsupported" }, 503, identityHeaders(null)) as never;
   const timeoutMs = typeof form.timeout_ms === "number" ? form.timeout_ms : DEFAULT_RENDER_WAIT_MS;
   const settled = await waitForJob(submitted.job.id, timeoutMs);

@@ -902,3 +902,16 @@ test("MUSIC-MAX-01: a song with an XL song model asks the governor for the XL pe
   expect(musicPeakBytes(MUSIC_XL_DIT, true)).toBe(54_000_000_000);
   expect(musicAdmissionBytes(false, MUSIC_XL_DIT, true)).toBe(54_000_000_000);
 });
+
+// Round 5: a job the computer can never hold ends with the code never_fits and a plain message (no figures), on the POST and on the status.
+test("a Max song the computer can never hold ends with code never_fits and no digits in the message", async () => {
+  musicGen.useDeps(scripted());
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 12 * GB, freeMemoryBytes: 11 * GB, tier: "p128" });
+  const response = await post({ ...song, tier: "max" });
+  const body = await response.json() as { job: string; code: string; error: string };
+  expect(body.code).toBe("never_fits");
+  expect(body.error).not.toMatch(/\d/);
+  const status = await (await app.request(`/v1/audio/music/${body.job}`)).json() as { state: string; code: string; error: string };
+  expect(status).toMatchObject({ state: "failed", code: "never_fits" });
+  expect(status.error).not.toMatch(/\d/);
+});

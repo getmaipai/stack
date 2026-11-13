@@ -16373,6 +16373,38 @@
                       ],
                       "description": "TIER-STATUS-01: the governor's own Max window. `draining`: a Max job waits for running work to finish; `open`: it holds the computer. `owner` is the job id. Home reads this for its Status line and Stop button."
                     },
+                    "admission_queue": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "position": {
+                            "type": "number"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "caller": {
+                            "type": "string",
+                            "enum": [
+                              "household",
+                              "dev",
+                              "test"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "position",
+                          "kind",
+                          "caller"
+                        ]
+                      },
+                      "description": "Requests waiting for memory, including whether each came from the household or development/testing."
+                    },
                     "recent_actions": {
                       "type": "array",
                       "items": {
@@ -16443,8 +16475,210 @@
                     "isolation",
                     "reduced_chat",
                     "max_window",
+                    "admission_queue",
                     "recent_actions",
                     "history"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/memory/admission-leases": {
+      "post": {
+        "tags": [
+          "Memory"
+        ],
+        "summary": "Queue for a memory slot",
+        "description": "Bench and test scripts must take a lease before starting memory intensive work, then release it when done. Send x-stack-caller: dev or test. Household work always has priority; dev/test leases never trigger Reduced chat.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "role": {
+                    "type": "string"
+                  },
+                  "bytes": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true
+                  },
+                  "tier": {
+                    "type": "string",
+                    "enum": [
+                      "standard",
+                      "boost",
+                      "max"
+                    ]
+                  },
+                  "wait": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "bytes"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The lease was admitted or queued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "lease": {
+                      "type": "string"
+                    },
+                    "admitted": {
+                      "type": "boolean"
+                    },
+                    "position": {
+                      "type": "number",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "lease",
+                    "admitted",
+                    "position"
+                  ]
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "The lease is queued; poll /stack/v1/memory for its queue position.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "lease": {
+                      "type": "string"
+                    },
+                    "admitted": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ]
+                    },
+                    "position": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "lease",
+                    "admitted",
+                    "position"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The governor refused the lease.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/memory/admission-leases/{id}": {
+      "delete": {
+        "tags": [
+          "Memory"
+        ],
+        "summary": "Release a memory slot",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The lease was released.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "released": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "released"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/memory/admission-leases/{id}/renew": {
+      "post": {
+        "tags": [
+          "Memory"
+        ],
+        "summary": "Renew a memory slot",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The lease was renewed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "renewed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "renewed"
                   ]
                 }
               }

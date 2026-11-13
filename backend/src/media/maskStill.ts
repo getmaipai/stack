@@ -1,3 +1,4 @@
+import { currentJobCaller } from "@/lib/jobs";
 // Still-picture SAM 2.1 masks. Uses the video component and worker, while
 // keeping the single-picture request and temporary files separate from cutout.
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -86,7 +87,7 @@ export async function segmentStill(args: { image: Uint8Array; width: number; hei
     const id = `mask-${requestId}`;
     queuedCancel = () => withdraw(id);
     signal.addEventListener("abort", queuedCancel, { once: true });
-    const admission = await admit({ id, role: "video", kind: "generator", class: "burst", requestedBytes: 6 * GB, measuredPeakBytes: 6 * GB });
+    const admission = await admit({ id, role: "video", kind: "generator", class: "burst", requestedBytes: 6 * GB, measuredPeakBytes: 6 * GB, caller: currentJobCaller() });
     if ("refused" in admission) throw new Error(CUTOUT_NO_MEMORY);
     if ("queued" in admission) {
       const settled = await admission.admitted;
