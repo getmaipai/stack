@@ -7519,7 +7519,7 @@
                   },
                   "loop": {
                     "type": "boolean",
-                    "description": "A seamless loop. Not made yet: only false (the default) is accepted; true answers 422 unsupported_option."
+                    "description": "A gapless loop. Not made yet: only false (the default) is accepted; true answers 422 unsupported_option."
                   },
                   "tier": {
                     "type": "string",

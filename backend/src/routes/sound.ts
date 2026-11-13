@@ -41,7 +41,7 @@ const SoundRequestSchema = z.object({
   seconds: z.number().optional().openapi({ description: `How long, ${SFX_MIN_SECONDS} to ${SFX_MAX_SECONDS} seconds, default ${SFX_DEFAULT_SECONDS}. A one-shot that ends sooner comes back shorter: the silent tail is cut.` }),
   seed: z.number().int().min(0).max(4_294_967_295).optional().openapi({ description: "The same seed, words, length and steps make the same sound. Left out: a random one, returned in the result." }),
   steps: z.number().int().optional().openapi({ description: `Diffusion steps, ${SFX_MIN_STEPS} to ${SFX_MAX_STEPS}, default ${SFX_DEFAULT_STEPS} (the model is distilled for 8).` }),
-  loop: z.boolean().optional().openapi({ description: "A seamless loop. Not made yet: only false (the default) is accepted; true answers 422 unsupported_option." }),
+  loop: z.boolean().optional().openapi({ description: "A gapless loop. Not made yet: only false (the default) is accepted; true answers 422 unsupported_option." }),
   tier: TierFieldSchema,
   timeout_ms: z.number().int().positive().max(MAX_WAIT_MS).optional().openapi({ description: `How long this request waits for the sound before answering 202 with the job id. Default ${DEFAULT_WAIT_MS}. A warm sound takes 2 to 12 seconds; the first one after a while also loads the model (about 20 seconds).` }),
 });
@@ -112,7 +112,7 @@ export function validateSoundRequest(body: z.infer<typeof SoundRequestSchema>): 
   const prompt = body.prompt.trim();
   if (!prompt) return refuse("bad_request", "Describe the sound in words, like \"a heavy wooden door slamming shut\".");
   if (prompt.length > SFX_MAX_PROMPT_CHARS) return refuse("too_long", `The description is longer than ${SFX_MAX_PROMPT_CHARS} characters. Shorten it.`);
-  if (body.loop) return refuse("unsupported_option", "Seamless loops are not made yet. Ask for the sound without loop.");
+  if (body.loop) return refuse("unsupported_option", "Gapless loops are not made yet. Ask for the sound without loop.");
   const seconds = body.seconds ?? SFX_DEFAULT_SECONDS;
   if (!Number.isFinite(seconds) || seconds < SFX_MIN_SECONDS || seconds > SFX_MAX_SECONDS) return refuse("bad_range", `A sound here is ${SFX_MIN_SECONDS} to ${SFX_MAX_SECONDS} seconds long. Ask for a length in that range.`);
   const steps = body.steps ?? SFX_DEFAULT_STEPS;

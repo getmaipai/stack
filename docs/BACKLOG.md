@@ -228,7 +228,7 @@ are never copied. Nothing migrates Home until STACK-16.
   file by sha256); the component with the Stability Community and Gemma licence accepted once; the optional `sound-effects`
   disk-plan rows; `POST /v1/audio/sound` with job polling and the file; `GET /stack/v1/sound`. Measured on the Studio: 5.27 GB
   peak, 2 to 12 s warm for 2 to 47 s sounds; admission 6.5 GB. Exit: `bash scripts/check.sh`, `tests/sound.test.ts`, and the
-  real-worker test run once against the weights in a scratch folder. Not done: seamless loops (`loop: true` is refused),
+  real-worker test run once against the weights in a scratch folder. Not done: gapless loops (`loop: true` is refused),
   lengths past 47 s, a listening check of the cut and the loudness.
 
 ## Governor and sizing
