@@ -22,10 +22,12 @@ import { diskPlanForTier, diskTotalsFor, engineDownloadBytes, type DiskPlan } fr
 import { modelsDir } from "@/lib/paths";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
 import { releaseHfFile } from "@/lib/store/hfCache";
-import { engineCurrentPath } from "@/lib/store/layout";
+import { engineCurrentPath, engineTagRoot } from "@/lib/store/layout";
 import { selectEngineBinary } from "@/lib/engineCatalog";
 import { splashDraftPossible } from "@/lib/splash";
-import { ensureEngine } from "@/lib/engineInstall";
+import { ensureEngine, engineDir, engineToolPath } from "@/lib/engineInstall";
+import { ENGINE_READY_MARKER } from "@/lib/engineCatalog";
+import { FFMPEG_NAME, FFMPEG_TAG, MEDIA_COMPONENTS, ffmpegPinFor } from "@/media/pins";
 import { uvEnvironmentReady } from "@/lib/uvEnvironment";
 import { loadedRoleForModel, selectedModel } from "@/lib/supervisor";
 import { ensureImageGenEnvironment, imageGen, imageGenEnvironmentReady, imageGenRoot } from "@/images/imageEngine";
@@ -92,6 +94,10 @@ export interface UnitDef {
   serves?: string;
   usedBy: () => string[];
   busy: () => string | null;
+  /** The licence the part ships under, in plain words, shown beside its size (a part with no extra terms to accept). */
+  licenceName?: string;
+  /** Set when Home cannot run without the part and there is no model pin to say so: the reason shown, and removal is refused. */
+  alwaysRequired?: string;
   /** A licence with terms beyond the open ones: the install waits for an admin to accept it once (Home sends the notice id). */
   licenceNotice?: LicenceNotice;
 }
@@ -101,7 +107,7 @@ const GB = 1_000_000_000;
 const ENV_BYTES = { align: engineDownloadBytes("align") ?? 0.3 * GB, beats: engineDownloadBytes("beats") ?? 0.5 * GB, stems: engineDownloadBytes("stems") ?? 0.25 * GB, voiceConvert: engineDownloadBytes("voice-convert") ?? 4 * GB, recordedSpeech: engineDownloadBytes("recorded-speech") ?? 1.7 * GB, image: engineDownloadBytes("image-gen") ?? 1.1 * GB, video: engineDownloadBytes("video-gen") ?? 1.0 * GB, ltx25: engineDownloadBytes("ltx25-gen") ?? 0.25 * GB, ltx25max: engineDownloadBytes("ltx25-max-gen") ?? 0.25 * GB, mask: engineDownloadBytes("mask-gen") ?? 0.6 * GB, music: engineDownloadBytes("music-gen") ?? 0.8 * GB, tools: engineDownloadBytes("image-tools") ?? 0.4 * GB, pocket: engineDownloadBytes("pocket-tts") ?? 0.72 * GB, mlxAudio: engineDownloadBytes("mlx-audio") ?? 0.47 * GB };
 /** The disk plan's row for a component, where the plan has one (its optional rows are the wizard's unchecked extras). */
 /** The install-plan row each component stands for (the size and need shown beside it). A test keeps every plan row covered. */
-export const DISK_ROW: Record<string, string> = { "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "ernie-image-turbo": "pictures-ernie", "qwen-image-2512-q8": "pictures-qwen", "image-tools": "image-tools", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fish-audio-drama-3-4bit": "recorded-speech", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "sam2.1-hiera-small": "video-mask", "ace-step-1-5-turbo": "music", "ace-step-1-5-xl-turbo-bf16": "music-boost", "ace-step-1-5-xl-sft-bf16": "music-max", "htdemucs": "stems", "htdemucs_ft": "stems-ft", "htdemucs_6s": "stems-6s", "mms-fa-align": "align", "soulx-singer-svc": "voice-convert", "soulx-singer-rmvpe": "voice-convert", "soulx-singer-whisper-base": "voice-convert", "ltx-2-5-q8-distilled-mlx": "video-ltx25", "ltx-2-5-bf16-distilled-mlx-max": "video-ltx25-max" };
+export const DISK_ROW: Record<string, string> = { "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "ernie-image-turbo": "pictures-ernie", "qwen-image-2512-q8": "pictures-qwen", "image-tools": "image-tools", ffmpeg: "ffmpeg", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fish-audio-drama-3-4bit": "recorded-speech", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "sam2.1-hiera-small": "video-mask", "ace-step-1-5-turbo": "music", "ace-step-1-5-xl-turbo-bf16": "music-boost", "ace-step-1-5-xl-sft-bf16": "music-max", "htdemucs": "stems", "htdemucs_ft": "stems-ft", "htdemucs_6s": "stems-6s", "mms-fa-align": "align", "soulx-singer-svc": "voice-convert", "soulx-singer-rmvpe": "voice-convert", "soulx-singer-whisper-base": "voice-convert", "ltx-2-5-q8-distilled-mlx": "video-ltx25", "ltx-2-5-bf16-distilled-mlx-max": "video-ltx25-max" };
 
 const envImage: EnvDef = { name: "image-gen", approxBytes: ENV_BYTES.image, root: imageGenRoot, ready: imageGenEnvironmentReady, build: (onPhase, signal) => ensureImageGenEnvironment(onPhase, { signal }), stop: () => imageGen.stop() };
 const envVideo: EnvDef = {
@@ -151,6 +157,18 @@ const envStems: EnvDef = { name: STEMS_NAME, approxBytes: ENV_BYTES.stems, root:
 const envVoiceConvert: EnvDef = { name: VOICE_CONVERT_NAME, approxBytes: ENV_BYTES.voiceConvert, root: voiceConvertRoot, ready: voiceConvertEnvironmentReady, build: (onPhase, signal) => ensureVoiceConvertEnvironment(onPhase, signal), stop: () => voiceConvert.stop() };
 const envTools: EnvDef = { name: "image-tools", approxBytes: ENV_BYTES.tools, root: imageToolsRoot, ready: () => uvEnvironmentReady({ root: imageToolsRoot(), proof: imageToolsProof() }), lazy: true, build: async () => {}, stop: () => imageTools.stop() };
 const envLivePortrait: EnvDef = { name: "liveportrait", approxBytes: 1_500_000_000, root: livePortraitRoot, ready: () => livePortrait.status().installed && livePortraitEnvironmentReady(), lazy: true, build: async () => {}, stop: () => livePortrait.stop() };
+/** ffmpeg and ffprobe, one pinned archive (media/pins.ts) the media service already fetches on first use; listing it lets the wizard install it up front. */
+const ffmpegRoot = (): string => { const pin = ffmpegPinFor(); return pin ? engineDir(pin) : engineTagRoot(FFMPEG_NAME, FFMPEG_TAG); };
+const ffmpegReady = (): boolean => { const pin = ffmpegPinFor(); return !!pin && existsSync(join(engineDir(pin), ENGINE_READY_MARKER)) && existsSync(engineToolPath(pin, "ffmpeg")); };
+const envFfmpeg: EnvDef = {
+  name: FFMPEG_NAME, approxBytes: engineDownloadBytes("ffmpeg") ?? 32_902_204, root: ffmpegRoot, ready: ffmpegReady, link: engineCurrentPath(FFMPEG_NAME),
+  build: async (onPhase, signal) => {
+    const pin = ffmpegPinFor();
+    if (!pin) throw new Error(`Audio and video tools are not available on ${process.platform} ${process.arch} yet.`);
+    onPhase("the audio and video tools");
+    await ensureEngine(pin, () => {}, { signal, activate: true });
+  },
+};
 const envPocket: EnvDef = { name: "pocket-tts", approxBytes: ENV_BYTES.pocket, root: pocketTtsRoot, ready: pocketTtsInstalled, build: (onPhase, signal) => ensurePocketTtsEnvironment(onPhase, { signal }) };
 const envMlxAudio: EnvDef = { name: "mlx-audio", approxBytes: ENV_BYTES.mlxAudio, root: mlxAudioRoot, ready: mlxAudioInstalled, build: (onPhase, signal) => ensureMlxAudioEnvironment(onPhase, { signal }) };
 const envRecordedSpeech: EnvDef = { name: RECORDED_SPEECH_NAME, approxBytes: ENV_BYTES.recordedSpeech, root: recordedSpeechRoot, ready: recordedSpeechEnvironmentReady, build: (onPhase, signal) => ensureRecordedSpeechEnvironment(onPhase, signal), stop: () => recordedSpeech.stop() };
@@ -171,6 +189,7 @@ const LABELS: Record<string, { label: string; summary: string }> = {
   "pocket-tts-english": { label: "Voice: Pocket TTS", summary: "The standard speaking voice." },
   "chatterbox-turbo-fp16": { label: "Voice: Chatterbox Turbo", summary: "A more expressive speaking voice for larger computers." },
   wakeword: { label: "Wake word (Hey MaiPai)", summary: "Lets a speaker or robot wake up when someone says the wake word." },
+  ffmpeg: { label: "Audio and video tools (ffmpeg)", summary: "Cuts, mixes and changes sound and video" },
   "image-tools": { label: "Picture tools", summary: "Remove a background, erase an object, upscale or resize a picture." },
   liveportrait: { label: "Talking pictures", summary: "Makes the mouth and blink pictures a talking companion plays back while it speaks." },
   "tool-look": { label: "Look", summary: "Names household objects, wall colour and light in a picture." },
@@ -245,6 +264,14 @@ export function componentDefs(): UnitDef[] {
     platformBlock: () => { const status = imageTools.status(); return status.state === "unsupported" ? status.reason ?? "Picture tools are not available on this computer yet." : null; },
     usedBy: () => ["The picture editor"],
     busy: () => { const state = imageTools.status().state; return state === "running" || state === "building" ? "A picture edit is running right now." : null; },
+  });
+  units.push({
+    id: "ffmpeg", ...LABELS.ffmpeg!, group: "tools", role: "media", pins: [], envs: [envFfmpeg],
+    licenceName: MEDIA_COMPONENTS.find((component) => component.name === "ffmpeg")!.licence,
+    alwaysRequired: "Home uses this to mix songs, shift voices and cut clips, so it is always installed.",
+    platformBlock: () => ffmpegPinFor() ? null : `Audio and video tools are not available on ${process.platform} ${process.arch} yet.`,
+    usedBy: () => ["Songs and sound effects", "Changing a voice", "Video and picture clips"],
+    busy: () => activeJobFor((kind) => kind.startsWith("media") || kind === "music_edit") ? "A clip or a song edit is running right now." : null,
   });
   units.push({
     id: "liveportrait", ...LABELS.liveportrait!, group: "tools", role: "image", pins: STACK_LIVEPORTRAIT_MODELS, envs: [envLivePortrait],
@@ -397,6 +424,8 @@ export interface ComponentView {
   last_used_at: string | null;
   used_by: string[];
   depends_on: string[];
+  /** The licence the part ships under, when it is one a person should see before installing (ffmpeg: GPL 3 or later); null otherwise. */
+  licence_name: string | null;
   job: string | null;
   percent: number | null;
   failure: string | null;
@@ -426,6 +455,7 @@ function planOf(hardware: HardwareInfo): { tier: Tier | null; planned: Set<strin
 function requirementFor(unit: UnitDef, tier: Tier | null, planned: Set<string>): { requirement: ComponentRequirement; reason: string | null } {
   const platform = unit.platformBlock?.() ?? null;
   if (platform) return { requirement: "unsupported", reason: platform };
+  if (unit.alwaysRequired) return { requirement: "required", reason: unit.alwaysRequired };
   const primary = unit.pins[0];
   if (unit.id === "htdemucs" && tier && TIER_RANK[tier] < TIER_RANK.p64) return { requirement: "unsupported", reason: "Stem splitting needs a computer with 64 GB of memory or more." };
   const profile = (primary?.sizing as { profile?: string } | undefined)?.profile as Tier | undefined;
@@ -481,7 +511,7 @@ export async function listComponents(hw?: HardwareInfo): Promise<ComponentList> 
       id: unit.id, label: unit.label, summary: unit.summary, group: unit.group, kind: "model" as const, state,
       superseded_by: unit.pins.flatMap((pin) => pin.superseded_by ?? []),
       size_bytes: present ? unitDiskBytes(unit, defs) : null, download_bytes: remaining, full_bytes: totals ? totals.download_bytes : totalDownload(unit), required_free_bytes: requiredFree, plan_need: row ? row.need : null,
-      requirement, requirement_reason: reason, last_used_at: lastUsedOf([unit.id, ...unit.pins.map((pin) => pin.id)]), used_by: unit.usedBy(), depends_on: [],
+      requirement, requirement_reason: reason, last_used_at: lastUsedOf([unit.id, ...unit.pins.map((pin) => pin.id)]), used_by: unit.usedBy(), depends_on: [], licence_name: unit.licenceName ?? null,
       job: job?.id ?? null, percent: job ? job.percent : null, failure: state === "failed" ? failure : null,
       licence: unit.licenceNotice ? { ...unit.licenceNotice, accepted_at: licenceAcceptance(unit.licenceNotice.id)?.accepted_at ?? null } : null,
       can_install: installBlock === null, install_block: installBlock,
@@ -491,7 +521,7 @@ export async function listComponents(hw?: HardwareInfo): Promise<ComponentList> 
   // The household's LoRA files: removable items, never installable here (they are added from the Pictures and Video pages).
   const loraView = (kindLabel: "picture" | "video", id: string, name: string, bytes: number, lastBase: string, group: ComponentGroup): ComponentView => ({
     id: `lora.${kindLabel}.${id}`, label: `Style: ${name}`, summary: `A ${kindLabel} style (LoRA) the household added.`, group: "loras", kind: "lora", superseded_by: [], state: "installed",
-    size_bytes: bytes, download_bytes: 0, full_bytes: bytes, required_free_bytes: 0, plan_need: null, requirement: "optional", requirement_reason: null, last_used_at: null, used_by: [group === "pictures" ? "Pictures" : "The Video app"], depends_on: [lastBase],
+    size_bytes: bytes, download_bytes: 0, full_bytes: bytes, required_free_bytes: 0, plan_need: null, requirement: "optional", requirement_reason: null, last_used_at: null, used_by: [group === "pictures" ? "Pictures" : "The Video app"], depends_on: [lastBase], licence_name: null,
     job: null, percent: null, failure: null, licence: null, can_install: false, install_block: `Add it again from the ${kindLabel === "picture" ? "Pictures" : "Video"} page.`, can_uninstall: true, uninstall_block: null,
   });
   const loras = [

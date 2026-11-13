@@ -267,7 +267,7 @@ test("the real component ids are unique and every required one is a pin of the i
   expect(new Set(ids).size).toBe(ids.length);
   createJob({ kind: "noop" });
   const list = await listComponents(hw());
-  for (const row of list.components.filter((c) => c.requirement === "required")) expect(row.requirement_reason).toBe("Home installs this on a computer of this size.");
+  for (const row of list.components.filter((c) => c.requirement === "required" && c.id !== "ffmpeg")) expect(row.requirement_reason).toBe("Home installs this on a computer of this size.");
 });
 
 test("the Parakeet listening model shows a plain name, not its raw id", async () => {
@@ -369,4 +369,20 @@ test("the real list has a beat analysis unit with no model files that installs t
   const list = await listComponents(hw());
   const view = list.components.find((candidate) => candidate.id === "beats-analysis")!;
   expect(view).toMatchObject({ label: "Music: beat and section analysis", group: "stems", requirement: "optional", used_by: ["Cut to the beat in a video edit"] });
+});
+
+test("ffmpeg is a listed, required tool with its size, licence and a row in the wizard's disk plan", async () => {
+  __setComponentUnitsForTests(null);
+  const unit = componentDefs().find((candidate) => candidate.id === "ffmpeg")!;
+  expect(unit).toBeTruthy();
+  expect(unit.pins).toEqual([]);
+  expect(unit.envs.map((e) => e.name)).toEqual(["ffmpeg"]);
+  expect(DISK_ROW.ffmpeg).toBe("ffmpeg");
+  const row = diskPlanForTier("p128")!.rows.find((candidate) => candidate.id === "ffmpeg")!;
+  expect(row).toMatchObject({ need: "required", selectable: false, download_bytes: 32_902_204 });
+  for (const tier of ["p16", "p32", "p64", "p128"] as const) expect(diskPlanForTier(tier)!.default_selected).toContain("ffmpeg");
+  const view = (await listComponents(hw())).components.find((candidate) => candidate.id === "ffmpeg")!;
+  expect(view).toMatchObject({ label: "Audio and video tools (ffmpeg)", summary: "Cuts, mixes and changes sound and video", group: "tools", plan_need: "required", requirement: "required", can_uninstall: false });
+  expect(view.licence_name).toContain("GPL-3.0-or-later");
+  expect(view.full_bytes).toBe(32_902_204);
 });

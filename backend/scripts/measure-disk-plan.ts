@@ -46,6 +46,9 @@ for (const [key] of envNames) {
   const download = Math.round(installed[key]! * ratio);
   engines[key] = { installed_bytes: installed[key]!, download_bytes: download, peak_temp_bytes: download, basis: "measured" };
 }
+// ffmpeg and ffprobe: the pinned jellyfin archive (32902204 bytes, media/pins.ts) and the folder it unpacks to; the archive stays beside it until the unpack ends.
+const ffmpegDownload = 32_902_204;
+engines.ffmpeg = { installed_bytes: Math.max(duBytes(join(engineDir, "ffmpeg", "v8.1.3-1")), ffmpegDownload), download_bytes: ffmpegDownload, peak_temp_bytes: ffmpegDownload, basis: "measured" };
 const python = duBytes(join(engineDir, "uv", "0.12.17")) + duBytes(join(engineDir, "uv", "python"));
 engines["python-base"] = { installed_bytes: python, download_bytes: python, peak_temp_bytes: 0, basis: "measured" };
 const search = duBytes(join(engineDir, "ddgs-sidecar", "9.16.0"));

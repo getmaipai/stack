@@ -4,30 +4,30 @@
   "headroom_warn_bytes": 5368709120,
   "gib_bytes": 1073741824,
   "installer": {
-    "p16.required_free_bytes": 50681856320,
-    "p16.minimum_required_free_bytes": 13806214750,
-    "p16.everything_required_free_bytes": 68899738564,
-    "p16.needed_bytes": 43005197357,
+    "p16.required_free_bytes": 50852025142,
+    "p16.minimum_required_free_bytes": 13976383571,
+    "p16.everything_required_free_bytes": 69069907386,
+    "p16.needed_bytes": 43152488409,
     "p16.home_required_free_bytes": 3176323277,
-    "p16.ai_required_free_bytes": 47505533044,
-    "p32.required_free_bytes": 69433667840,
-    "p32.minimum_required_free_bytes": 30877631556,
-    "p32.everything_required_free_bytes": 87651550084,
-    "p32.needed_bytes": 58631706957,
+    "p16.ai_required_free_bytes": 47675701865,
+    "p32.required_free_bytes": 69603836662,
+    "p32.minimum_required_free_bytes": 31047800378,
+    "p32.everything_required_free_bytes": 87821718906,
+    "p32.needed_bytes": 58778998009,
     "p32.home_required_free_bytes": 3176323277,
-    "p32.ai_required_free_bytes": 66257344564,
-    "p64.required_free_bytes": 155883973902,
-    "p64.minimum_required_free_bytes": 56636960034,
-    "p64.everything_required_free_bytes": 217766009524,
-    "p64.needed_bytes": 131010215938,
+    "p32.ai_required_free_bytes": 66427513385,
+    "p64.required_free_bytes": 156054142724,
+    "p64.minimum_required_free_bytes": 56807128855,
+    "p64.everything_required_free_bytes": 217936178346,
+    "p64.needed_bytes": 131157506990,
     "p64.home_required_free_bytes": 3176323277,
-    "p64.ai_required_free_bytes": 152707650625,
-    "p128.required_free_bytes": 190550292451,
-    "p128.minimum_required_free_bytes": 56636960034,
-    "p128.everything_required_free_bytes": 503142825278,
-    "p128.needed_bytes": 160025278506,
+    "p64.ai_required_free_bytes": 152877819447,
+    "p128.required_free_bytes": 190720461273,
+    "p128.minimum_required_free_bytes": 56807128855,
+    "p128.everything_required_free_bytes": 503312994100,
+    "p128.needed_bytes": 160172569558,
     "p128.home_required_free_bytes": 3176323277,
-    "p128.ai_required_free_bytes": 187373969174
+    "p128.ai_required_free_bytes": 187544137996
   },
   "tiers": {
     "p16": {
@@ -295,6 +295,21 @@
           "basis": "pins"
         },
         {
+          "id": "ffmpeg",
+          "label": "Audio and video tools (ffmpeg)",
+          "note": "Cuts, mixes and changes sound and video. GPL 3 or later.",
+          "kind": "model",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 32902204,
+          "installed_bytes": 114388848,
+          "peak_temp_bytes": 32902204,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -416,25 +431,25 @@
         }
       ],
       "default": {
-        "download_bytes": 35538447236,
-        "installed_bytes": 38383294815,
-        "peak_temp_bytes": 4621902542,
-        "needed_bytes": 43005197357,
-        "required_free_bytes": 50681856320
+        "download_bytes": 35571349440,
+        "installed_bytes": 38497683663,
+        "peak_temp_bytes": 4654804746,
+        "needed_bytes": 43152488409,
+        "required_free_bytes": 50852025142
       },
       "minimum": {
-        "download_bytes": 8462277356,
-        "installed_bytes": 9976555242,
-        "peak_temp_bytes": 1834348459,
-        "needed_bytes": 11810903701,
-        "required_free_bytes": 13806214750
+        "download_bytes": 8495179560,
+        "installed_bytes": 10090944090,
+        "peak_temp_bytes": 1867250663,
+        "needed_bytes": 11958194753,
+        "required_free_bytes": 13976383571
       },
       "everything": {
-        "download_bytes": 44946553095,
-        "installed_bytes": 49856530018,
-        "peak_temp_bytes": 9071902542,
-        "needed_bytes": 58928432560,
-        "required_free_bytes": 68899738564
+        "download_bytes": 44979455299,
+        "installed_bytes": 49970918866,
+        "peak_temp_bytes": 9104804746,
+        "needed_bytes": 59075723612,
+        "required_free_bytes": 69069907386
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -446,6 +461,7 @@
         "image-tools",
         "stems",
         "recorded-speech",
+        "ffmpeg",
         "search"
       ]
     },
@@ -748,6 +764,21 @@
           "basis": "pins"
         },
         {
+          "id": "ffmpeg",
+          "label": "Audio and video tools (ffmpeg)",
+          "note": "Cuts, mixes and changes sound and video. GPL 3 or later.",
+          "kind": "model",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 32902204,
+          "installed_bytes": 114388848,
+          "peak_temp_bytes": 32902204,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -869,25 +900,25 @@
         }
       ],
       "default": {
-        "download_bytes": 51164956836,
-        "installed_bytes": 54009804415,
-        "peak_temp_bytes": 4621902542,
-        "needed_bytes": 58631706957,
-        "required_free_bytes": 69433667840
+        "download_bytes": 51197859040,
+        "installed_bytes": 54124193263,
+        "peak_temp_bytes": 4654804746,
+        "needed_bytes": 58778998009,
+        "required_free_bytes": 69603836662
       },
       "minimum": {
-        "download_bytes": 22688458028,
-        "installed_bytes": 24202735914,
-        "peak_temp_bytes": 1834348459,
-        "needed_bytes": 26037084373,
-        "required_free_bytes": 30877631556
+        "download_bytes": 22721360232,
+        "installed_bytes": 24317124762,
+        "peak_temp_bytes": 1867250663,
+        "needed_bytes": 26184375425,
+        "required_free_bytes": 31047800378
       },
       "everything": {
-        "download_bytes": 60573062695,
-        "installed_bytes": 65483039618,
-        "peak_temp_bytes": 9071902542,
-        "needed_bytes": 74554942160,
-        "required_free_bytes": 87651550084
+        "download_bytes": 60605964899,
+        "installed_bytes": 65597428466,
+        "peak_temp_bytes": 9104804746,
+        "needed_bytes": 74702233212,
+        "required_free_bytes": 87821718906
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -901,6 +932,7 @@
         "image-tools",
         "stems",
         "recorded-speech",
+        "ffmpeg",
         "search"
       ]
     },
@@ -1400,6 +1432,21 @@
           "basis": "pins"
         },
         {
+          "id": "ffmpeg",
+          "label": "Audio and video tools (ffmpeg)",
+          "note": "Cuts, mixes and changes sound and video. GPL 3 or later.",
+          "kind": "model",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 32902204,
+          "installed_bytes": 114388848,
+          "peak_temp_bytes": 32902204,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -1596,25 +1643,25 @@
         }
       ],
       "default": {
-        "download_bytes": 120950259688,
-        "installed_bytes": 124368789819,
-        "peak_temp_bytes": 6641426119,
-        "needed_bytes": 131010215938,
-        "required_free_bytes": 155883973902
+        "download_bytes": 120983161892,
+        "installed_bytes": 124483178667,
+        "peak_temp_bytes": 6674328323,
+        "needed_bytes": 131157506990,
+        "required_free_bytes": 156054142724
       },
       "minimum": {
-        "download_bytes": 42748423657,
-        "installed_bytes": 44683378072,
-        "peak_temp_bytes": 3016906347,
-        "needed_bytes": 47700284419,
-        "required_free_bytes": 56636960034
+        "download_bytes": 42781325861,
+        "installed_bytes": 44797766920,
+        "peak_temp_bytes": 3049808551,
+        "needed_bytes": 47847575471,
+        "required_free_bytes": 56807128855
       },
       "everything": {
-        "download_bytes": 164554133061,
-        "installed_bytes": 170834027943,
-        "peak_temp_bytes": 12765175992,
-        "needed_bytes": 183599203935,
-        "required_free_bytes": 217766009524
+        "download_bytes": 164587035265,
+        "installed_bytes": 170948416791,
+        "peak_temp_bytes": 12798078196,
+        "needed_bytes": 183746494987,
+        "required_free_bytes": 217936178346
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -1633,6 +1680,7 @@
         "pictures-ernie",
         "stems",
         "recorded-speech",
+        "ffmpeg",
         "search"
       ]
     },
@@ -2354,6 +2402,21 @@
           "basis": "pins"
         },
         {
+          "id": "ffmpeg",
+          "label": "Audio and video tools (ffmpeg)",
+          "note": "Cuts, mixes and changes sound and video. GPL 3 or later.",
+          "kind": "model",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 32902204,
+          "installed_bytes": 114388848,
+          "peak_temp_bytes": 32902204,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -2610,25 +2673,25 @@
         }
       ],
       "default": {
-        "download_bytes": 148861999120,
-        "installed_bytes": 152625069724,
-        "peak_temp_bytes": 7400208782,
-        "needed_bytes": 160025278506,
-        "required_free_bytes": 190550292451
+        "download_bytes": 148894901324,
+        "installed_bytes": 152739458572,
+        "peak_temp_bytes": 7433110986,
+        "needed_bytes": 160172569558,
+        "required_free_bytes": 190720461273
       },
       "minimum": {
-        "download_bytes": 42748423657,
-        "installed_bytes": 44683378072,
-        "peak_temp_bytes": 3016906347,
-        "needed_bytes": 47700284419,
-        "required_free_bytes": 56636960034
+        "download_bytes": 42781325861,
+        "installed_bytes": 44797766920,
+        "peak_temp_bytes": 3049808551,
+        "needed_bytes": 47847575471,
+        "required_free_bytes": 56807128855
       },
       "everything": {
-        "download_bytes": 399483894388,
-        "installed_bytes": 407552684398,
-        "peak_temp_bytes": 14079604000,
-        "needed_bytes": 421632288398,
-        "required_free_bytes": 503142825278
+        "download_bytes": 399516796592,
+        "installed_bytes": 407667073246,
+        "peak_temp_bytes": 14112506204,
+        "needed_bytes": 421779579450,
+        "required_free_bytes": 503312994100
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -2649,6 +2712,7 @@
         "video",
         "stems",
         "recorded-speech",
+        "ffmpeg",
         "search"
       ]
     }
