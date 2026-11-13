@@ -15,6 +15,7 @@ import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path";
 import { dataDir } from "@/lib/paths";
 import { MessagesError, makeMessagesCopy } from "@/video/messages";
+import { AnimatedError, makeAnimated } from "@/video/animated";
 import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { identityHeaders } from "@/lib/identity";
@@ -136,6 +137,13 @@ const messagesConvertRoute = createRoute({ method: "post", path: "/messages", ta
   413: { content: { "application/json": { schema: ErrorBody } }, description: "The upload is larger than 100 MB." },
   422: { content: { "application/json": { schema: ErrorBody } }, description: "Not a video (bad_clip) or still over 20 MB (too_large)." },
   503: { content: { "application/json": { schema: ErrorBody } }, description: "The video tools are not installed (no_ffmpeg)." },
+} });
+const animatedConvertRoute = createRoute({ method: "post", path: "/animated", tags: ["Video"], summary: "Make a looped GIF or animated WebP from an mp4", request: { query: z.object({ format: z.enum(["gif", "webp"]), width: z.coerce.number().int().min(160).max(720).optional(), fps: z.coerce.number().int().min(5).max(20).optional(), seconds: z.coerce.number().int().min(1).max(10).optional() }), body: { content: { "video/mp4": { schema: z.string().openapi({ format: "binary" }) } }, required: true } }, responses: {
+  200: { content: { "image/gif": { schema: z.string().openapi({ format: "binary" }) }, "image/webp": { schema: z.string().openapi({ format: "binary" }) } }, description: "A looped animation, at most 25 MB. The upload and output are deleted after the response." },
+  400: { content: { "application/json": { schema: ErrorBody } }, description: "The format or options are invalid, or the body is missing." },
+  413: { content: { "application/json": { schema: ErrorBody } }, description: "The upload exceeds 100 MB or the output exceeds 25 MB." },
+  422: { content: { "application/json": { schema: ErrorBody } }, description: "The file is not readable or WebP encoding is unavailable." },
+  503: { content: { "application/json": { schema: ErrorBody } }, description: "Video tools are not installed." },
 } });
 const deleteRoute = createRoute({ method: "delete", path: "/generations/{job}", tags: ["Video"], summary: "Cancel a clip, or delete a finished one's files", request: { params: z.object({ job: z.string() }) }, responses: {
   200: { content: { "application/json": { schema: z.object({ job: z.string(), state: z.enum(["cancelled", "deleted", "failed"]) }) } }, description: "A queued or running clip is cancelled (the worker stops and its memory returns); a finished clip's files are deleted (Home calls this once it has stored the file)." },
@@ -533,6 +541,27 @@ videoV1Routes.openapi(messagesConvertRoute, async (c) => {
     for (const [name, value] of Object.entries(RoleReplyHeaders.parse(identityHeaders(null)))) c.header(name, value);
     return c.body(out, 200, { "content-type": "video/mp4", "cache-control": "no-store" }) as never;
   } catch (error) { return messagesFailure(c, error) as never; } finally { rmSync(work, { recursive: true, force: true }); }
+});
+
+videoV1Routes.openapi(animatedConvertRoute, async (c) => {
+  const query = c.req.valid("query");
+  const declared = Number(c.req.header("content-length") ?? 0);
+  if (declared > MESSAGES_UPLOAD_MAX) return fail(c, 413, "too_large", "The clip is larger than 100 MB. Choose a smaller clip, then try again.") as never;
+  const bytes = new Uint8Array(await c.req.arrayBuffer());
+  if (bytes.length === 0) return fail(c, 400, "missing_body", "Send an mp4 file in the request body, then try again.") as never;
+  if (bytes.length > MESSAGES_UPLOAD_MAX) return fail(c, 413, "too_large", "The clip is larger than 100 MB. Choose a smaller clip, then try again.") as never;
+  const work = join(dataDir, "tmp", "video", `animated-${crypto.randomUUID()}`);
+  mkdirSync(work, { recursive: true, mode: 0o700 });
+  try {
+    writeFileSync(join(work, "in.mp4"), bytes);
+    await makeAnimated(join(work, "in.mp4"), join(work, `out.${query.format}`), query.format, query, videoGenRoot());
+    const out = new Uint8Array(await Bun.file(join(work, `out.${query.format}`)).arrayBuffer());
+    for (const [name, value] of Object.entries(RoleReplyHeaders.parse(identityHeaders(null)))) c.header(name, value);
+    return c.body(out, 200, { "content-type": query.format === "gif" ? "image/gif" : "image/webp", "cache-control": "no-store" }) as never;
+  } catch (error) {
+    if (error instanceof AnimatedError) return fail(c, error.code === "no_ffmpeg" ? 503 : error.code === "failed" ? 422 : error.code === "too_large" ? 413 : 422, error.code, error.message) as never;
+    throw error;
+  } finally { rmSync(work, { recursive: true, force: true }); }
 });
 
 videoV1Routes.openapi(deleteRoute, (c) => {

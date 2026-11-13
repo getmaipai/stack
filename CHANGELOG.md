@@ -9,6 +9,7 @@ with Home's releases, so this file tracks what a Home release picks up.
 ## [Unreleased]
 
 ### Added
+- STACK-ANIMATED-01: `POST /v1/videos/animated` makes a looped GIF or animated WebP from an mp4, statelessly, with bounded size, frame rate and duration.
 - INGREDIENTS-01: add `POST /v1/videos/ingredients` (multipart: one or two 768x448 PNG `sheet` files, `prompt`, `seconds` 4 to 8, optional `seed`, `audience`, `timeout_ms`) for the installed LTX 2.5 Ingredients IC-LoRA. Max only, 768x448, model-made sound, restyle admission; 409 `ic_lora_missing` when the adapter is not in the video style library. Worker op `ic_lora` takes `reference_sheets`.
 - IC-LORA-01: add `POST /v1/videos/restyle` for an installed IC-LoRA id, a finished video job or declared media path, a prompt, strength 0–2 and source/edge conditioning. Max only, 1024x576, at most 10 seconds; keeps source audio, admits at the measured 81.4 GB footprint plus 5% headroom, and returns the normal video and poster result shape. No GPU run included.
 - `media.tts`: a batch speech job (up to 400 lines in, one WAV per line with its duration and sha256 out) for Home's made shows (TALENT-03).
