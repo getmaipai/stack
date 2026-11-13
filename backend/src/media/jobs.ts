@@ -7,7 +7,7 @@
 import { closeSync, copyFileSync, createReadStream, createWriteStream, existsSync, openSync, readSync, readdirSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs";
 import { basename, dirname, extname, join } from "node:path";
 import { JobFailure, registerJobRunner, type Job, type JobLane, type JobProgress, type JobRefusal } from "@/lib/jobs";
-import { clipArgs, CompanionClipInput, FetchInput, fetchArgs, inputProblem, parseFetchProgress, parseFetchedItem, parseProgressSeconds, PreviewInput, ProbeInput, SetupInput, storyboardArgs, thumbnailArgs, TranscodeInput, transcodePlan, type FetchedItem } from "./commands";
+import { CheckInput, clipArgs, CompanionClipInput, FetchInput, fetchArgs, inputProblem, parseFetchProgress, parseFetchedItem, parseProgressSeconds, PreviewInput, ProbeInput, SetupInput, storyboardArgs, thumbnailArgs, TranscodeInput, transcodePlan, type FetchedItem } from "./commands";
 import { classifyFetchFailure, hostKey, hostLimiter, type HostLimiter } from "./hosts";
 import { archivesDir, jobDir, MediaPathError, resolveReadable, resolveWritableDir, safeName } from "./paths";
 import { probeFile, type ProbeResult } from "./probe";
@@ -26,13 +26,14 @@ import { runTtsBatch } from "./tts";
 import { MixInput, runMix } from "./mix";
 import { COMPANION_MAKER_DEADLINES_MS, COMPANION_MAKER_KINDS, companionMakerPrecheck, companionMakerRunner, type CompanionMakerKind } from "./companionMaker";
 import { RECORDED_SPEECH_PEAK_BYTES } from "@/recordedSpeech/recordedSpeech";
+import { seriesFromFrames } from "./clipCheck";
 
-export const MEDIA_KINDS = ["media.probe", "media.fetch", "media.transcode", "media.preview", "media.companion_clip", "media.edit", "media.tts", "media.mix", "media.setup", ...COMPANION_MAKER_KINDS] as const;
+export const MEDIA_KINDS = ["media.probe", "media.check", "media.fetch", "media.transcode", "media.preview", "media.companion_clip", "media.edit", "media.tts", "media.mix", "media.setup", ...COMPANION_MAKER_KINDS] as const;
 export type MediaKind = typeof MEDIA_KINDS[number];
 export const MEDIA_LANE = "idle";
 export const MEDIA_QUEUE_CAP = 64;
 const MINUTE = 60_000;
-export const MEDIA_DEADLINES_MS: Record<MediaKind, number> = { "media.probe": 3 * MINUTE, "media.preview": 20 * MINUTE, "media.fetch": 3 * 60 * MINUTE, "media.transcode": 12 * 60 * MINUTE, "media.companion_clip": 20 * MINUTE, "media.edit": 30 * MINUTE, "media.tts": 30 * MINUTE, "media.mix": 30 * MINUTE, "media.setup": 30 * MINUTE, ...COMPANION_MAKER_DEADLINES_MS };
+export const MEDIA_DEADLINES_MS: Record<MediaKind, number> = { "media.probe": 3 * MINUTE, "media.check": 5 * MINUTE, "media.preview": 20 * MINUTE, "media.fetch": 3 * 60 * MINUTE, "media.transcode": 12 * 60 * MINUTE, "media.companion_clip": 20 * MINUTE, "media.edit": 30 * MINUTE, "media.tts": 30 * MINUTE, "media.mix": 30 * MINUTE, "media.setup": 30 * MINUTE, ...COMPANION_MAKER_DEADLINES_MS };
 
 type RawInputRunner = (argv: string[], inputPath: string, signal: AbortSignal) => Promise<RunResult>;
 async function spawnRawInputRunner(argv: string[], inputPath: string, signal: AbortSignal): Promise<RunResult> {
@@ -75,6 +76,7 @@ export function precheck(kind: MediaKind): (input: Record<string, unknown>) => J
   return (input) => {
     try {
       if (kind === "media.probe") resolveReadable(ProbeInput.parse(input).path);
+      else if (kind === "media.check") resolveReadable(CheckInput.parse(input).path);
       else if (kind === "media.transcode") { const parsed = TranscodeInput.parse(input); resolveReadable(parsed.path); if (parsed.output_dir) resolveWritableDir(parsed.output_dir); if (parsed.output_name) safeName(parsed.output_name, ""); }
       else if (kind === "media.preview") { const parsed = PreviewInput.parse(input); resolveReadable(parsed.path); if (parsed.output_dir) resolveWritableDir(parsed.output_dir); }
       else if (kind === "media.companion_clip") { const parsed = CompanionClipInput.parse(input); resolveReadable(parsed.path); if (parsed.output_dir) resolveWritableDir(parsed.output_dir); if (parsed.output_name) safeName(parsed.output_name, ""); }
@@ -131,6 +133,50 @@ async function runProbe(job: Job, signal: AbortSignal, progress: JobProgress): P
   const tools = await toolPaths(["ffprobe"], progress, signal);
   progress({ status: "reading the file" });
   try { return { ...await probeFile(mediaDeps.run, tools.ffprobe!, path, signal), elapsed_ms: mediaDeps.now() - started }; } catch (error) { if (signal.aborted) throw error; throw fail({ code: "unreadable", message: error instanceof Error ? error.message : String(error) }); }
+}
+
+export interface CheckResult { duration_s: number; fps: number; frames: number; width: number; height: number; luma: number[]; diff: number[]; sharpness: number[]; flow?: Array<{ at_s: number; dx: number; dy: number; zoom: number }>; elapsed_ms: number; }
+async function readRawFrames(args: string[], frameSize: number, signal: AbortSignal, onFrame: (frame: Uint8Array) => void): Promise<RunResult> {
+  const child = Bun.spawn(idleArgv(args), { stdin: "ignore", stdout: "pipe", stderr: "pipe" });
+  let aborted = false; const kill = () => { aborted = true; try { child.kill("SIGTERM"); } catch { /* exited */ } };
+  if (signal.aborted) kill(); else signal.addEventListener("abort", kill, { once: true });
+  const stderrPromise = new Response(child.stderr).text().catch(() => "");
+  let carry = new Uint8Array(0);
+  const reading = (async () => {
+    for await (const part of child.stdout as unknown as AsyncIterable<Uint8Array>) {
+      const bytes = new Uint8Array(carry.length + part.length); bytes.set(carry); bytes.set(part, carry.length);
+      let offset = 0;
+      while (offset + frameSize <= bytes.length) { onFrame(bytes.slice(offset, offset + frameSize)); offset += frameSize; }
+      carry = bytes.slice(offset);
+    }
+  })();
+  const code = await child.exited; await reading; const stderr = await stderrPromise; signal.removeEventListener("abort", kill);
+  return { code, stdout: "", stderr, aborted: aborted || signal.aborted };
+}
+async function runCheck(job: Job, signal: AbortSignal, progress: JobProgress): Promise<CheckResult> {
+  const started = mediaDeps.now(); const input = CheckInput.parse(job.input ?? {});
+  let path: string;
+  try { path = resolveReadable(input.path); } catch (error) { throw pathFailure(error) ?? error; }
+  const tools = await toolPaths(["ffmpeg", "ffprobe"], progress, signal);
+  let probe: ProbeResult;
+  try { probe = await probeFile(mediaDeps.run, tools.ffprobe!, path, signal); } catch (error) { if (signal.aborted) throw error; throw fail({ code: "unreadable", message: error instanceof Error ? error.message : String(error) }); }
+  if (!probe.has_video || !probe.width || !probe.height) throw fail({ code: "bad_input", message: "This file has no video track to check. Choose a video file and try again." });
+  const width = 256; const height = Math.max(2, Math.round((probe.height * width / probe.width) / 2) * 2);
+  const args = [tools.ffmpeg!, "-v", "error", "-i", path, "-map", "0:v:0", "-an", "-vf", `fps=${input.fps},scale=${width}:-2,format=gray`, "-f", "rawvideo", "-pix_fmt", "gray", "pipe:1"];
+  progress({ status: "checking video frames", percent: 0 });
+  const frameSize = width * height; const luma: number[] = []; const diff: number[] = []; const sharpness: number[] = []; const flow: NonNullable<CheckResult["flow"]> = [];
+  let previous: Uint8Array<ArrayBufferLike> = new Uint8Array(0); let count = 0;
+  const raw = await readRawFrames(args, frameSize, signal, (frame) => {
+    const stats = seriesFromFrames([frame], width, height);
+    luma.push(stats.luma[0]!);
+    if (!count) diff.push(0); else { let total = 0; for (let i = 0; i < frame.length; i++) total += Math.abs(frame[i]! - previous[i]!); diff.push(total / frame.length); }
+    sharpness.push(stats.sharpness[0]!);
+    if (input.flow && count > 0 && count % 2 === 1) { const pair = seriesFromFrames([previous, frame], width, height, true, input.fps).flow![0]!; flow.push(pair); }
+    previous = frame; count++;
+  });
+  if (raw.aborted || signal.aborted) throw new Error("Cancelled.");
+  if (raw.code !== 0 || count === 0) throw fail({ code: "unreadable", message: "The video frames could not be decoded. Choose another video file and try again." });
+  return { duration_s: probe.duration_s ?? count / input.fps, fps: input.fps, frames: count, width, height, luma, diff, sharpness, ...(input.flow ? { flow } : {}), elapsed_ms: mediaDeps.now() - started };
 }
 
 // ---- media.fetch ----
@@ -939,6 +985,7 @@ async function runSetup(_job: Job, signal: AbortSignal, progress: JobProgress): 
 
 export function registerMediaJobs(): void {
   registerJobRunner("media.probe", runProbe, { lane: laneFor("media.probe") });
+  registerJobRunner("media.check", runCheck, { lane: laneFor("media.check") });
   registerJobRunner("media.fetch", runFetch, { lane: laneFor("media.fetch") });
   registerJobRunner("media.transcode", runTranscode, { lane: laneFor("media.transcode") });
   registerJobRunner("media.preview", runPreview, { lane: laneFor("media.preview") });

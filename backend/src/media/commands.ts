@@ -8,6 +8,8 @@ import { z } from "zod";
 const Path = z.string().min(1).max(4096);
 export const ProbeInput = z.object({ path: Path }).strict();
 export type ProbeInput = z.infer<typeof ProbeInput>;
+export const CheckInput = z.object({ path: Path, fps: z.number().min(1).max(30).default(12), flow: z.boolean().default(false) }).strict();
+export type CheckInput = z.infer<typeof CheckInput>;
 
 export const FetchInput = z.object({
   url: z.string().url().max(4096).refine((value) => /^https?:\/\//i.test(value), "Only http and https links can be fetched."),
