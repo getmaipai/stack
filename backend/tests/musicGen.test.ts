@@ -198,12 +198,13 @@ test("a missing whisper model and a worker transcription error both report trans
 
 test("the in-memory transcript is discarded when the result expires", () => {
   const job = "job-12345678-1234-1234-1234-123456789abc";
-  process.env.MUSIC_RESULT_TTL_MS = "1";
   const meta = { job, created: Date.now() / 1000, task: "text2music", duration_s: 10, seed: 1, model: "music", ms: 1, bytes: 1, mlx_peak_gb: null };
   const work = workDir(job);
   mkdirSync(work, { recursive: true });
   writeFileSync(join(work, "song.m4a"), fakeM4a(job));
   commitResult(meta, work);
+  // The 1 ms lifetime starts after the commit: set before it, commitResult's own sweep removed the folder on a loaded machine (2026-11-13).
+  process.env.MUSIC_RESULT_TTL_MS = "1";
   rememberTranscript(job, "expiry nonce");
   utimesSync(join(resultsRoot(), job), new Date(Date.now() - 5000), new Date(Date.now() - 5000));
   sweepResults();
