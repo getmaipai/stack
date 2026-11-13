@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { creditsArgs, creditsLayout, crossfadeTiming, intermediateArgs, kenBurnsArgs, loopArgs, loopSeamSeconds, overlayArgs, transitionArgs, trimArgs, concatEncodeArgs, type Clip } from "@/media/editOps";
+import { concatCopyArgs, creditsArgs, creditsLayout, crossfadeTiming, intermediateArgs, kenBurnsArgs, loopArgs, loopSeamSeconds, overlayArgs, transitionArgs, trimArgs, concatEncodeArgs, type Clip } from "@/media/editOps";
 import { audioMatchesVideo } from "@/media/editOps";
-import { normalizeProbe } from "@/media/probe";
+import { normalizeProbe, probeFile } from "@/media/probe";
+import { spawnRunner } from "@/media/run";
 import { resolveFonts } from "@/media/typography";
 
 const makeClip = (path = "/clip.mp4", duration = 6, width = 640, height = 360, audio = true, fps = 24): Clip => ({ path, probe: normalizeProbe({ format: { format_name: "mp4", duration: String(duration) }, streams: [{ index: 0, codec_type: "video", codec_name: "h264", width, height, pix_fmt: "yuv420p", avg_frame_rate: `${fps}/1` }, ...(audio ? [{ index: 1, codec_type: "audio", codec_name: "aac", channels: 2, sample_rate: "48000" }] : [])] }, path, 1) });
@@ -155,4 +156,115 @@ describe("6 whole-frame crossfades and copy checks", () => {
 });
 
 const ffmpeg = process.env.STACK_MEDIA_FFMPEG && existsSync(process.env.STACK_MEDIA_FFMPEG) ? process.env.STACK_MEDIA_FFMPEG : null;
-test.skipIf(!ffmpeg)("real ffmpeg parses the new graphs (needs STACK_MEDIA_FFMPEG)", () => { expect(ffmpeg).toBeTruthy(); });
+const ffprobe = process.env.STACK_MEDIA_FFPROBE && existsSync(process.env.STACK_MEDIA_FFPROBE) ? process.env.STACK_MEDIA_FFPROBE : null;
+const real = ffmpeg && ffprobe ? describe : describe.skip;
+
+real("real ffmpeg renders of the finishing fixes", () => {
+  const dir = mkdtempSync(join(tmpdir(), "stack-finish-"));
+  const ab = new AbortController();
+  const run = async (args: string[]) => { const r = await spawnRunner(args, { collectStdout: true, env: { STACK_MEDIA_NO_NICE: "1" } }); if (r.code !== 0) throw new Error(`ffmpeg failed: ${r.stderr.slice(-600)}`); return r; };
+  const gen = (name: string, ...args: string[]) => run([ffmpeg!, "-hide_banner", "-loglevel", "error", "-y", ...args, join(dir, name)]).then(() => join(dir, name));
+  const probe = async (path: string): Promise<Clip> => ({ path, probe: await probeFile(spawnRunner, ffprobe!, path, ab.signal) });
+  const streamInfo = async (path: string) => JSON.parse((await run([ffprobe!, "-v", "error", "-show_entries", "stream=codec_type,duration,color_space,color_primaries,color_transfer,pix_fmt,r_frame_rate,avg_frame_rate", "-of", "json", path])).stdout).streams as any[];
+  const gray = async (path: string, at: number, w: number, h: number): Promise<Uint8Array> => { const raw = join(dir, `g${Math.random().toString(36).slice(2)}.raw`); await run([ffmpeg!, "-v", "error", "-y", "-ss", String(at), "-i", path, "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "gray", raw]); const d = new Uint8Array(readFileSync(raw)); expect(d.length).toBe(w * h); return d; };
+  const bbox = (d: Uint8Array, w: number, h: number, min = 200) => { let x0 = w, x1 = -1, y0 = h, y1 = -1; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[y * w + x]! > min) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); } return { w: x1 - x0 + 1, h: y1 - y0 + 1, count: x1 < 0 ? 0 : 1 }; };
+  const loud = async (path: string) => { const r = await run([ffmpeg!, "-hide_banner", "-nostats", "-i", path, "-vn", "-af", "ebur128=peak=sample+true:framelog=quiet,astats=metadata=0", "-f", "null", "-"]); const t = r.stderr; return { lufs: Number(/I:\s+(-?[\d.]+) LUFS/.exec(t.slice(t.lastIndexOf("Summary")))?.[1]), truePeak: Number(/Peak:\s+(-?[\d.]+) dBFS/.exec(t.slice(t.lastIndexOf("True peak")))?.[1]), samplePeak: Number(/Peak level dB:\s+(-?[\d.]+)/.exec(t)?.[1]) }; };
+
+  test("Ken Burns: a 1.0 to 1.5 push-in measures 1.0, 1.25, 1.5 on frames 0, middle and last", async () => {
+    const src = await gen("kb-src.mp4", "-f", "lavfi", "-i", "color=black:s=640x360:r=30:d=2,drawbox=x=240:y=135:w=160:h=90:color=white:t=fill", "-c:v", "libx264", "-pix_fmt", "yuv420p");
+    const out = join(dir, "kb.mp4");
+    await run(kenBurnsArgs(ffmpeg!, await probe(src), out, { op: "kenburns", zoom_from: 1, zoom_to: 1.5, pan: "none" }));
+    const info = await probe(out); const frames = Math.round(info.probe.duration_s! * 30);
+    const widths = [];
+    for (const n of [0, Math.floor(frames / 2), frames - 1]) widths.push(bbox(await gray(out, n / 30, 640, 360), 640, 360).w / 160);
+    console.log("kenburns zoom measured", widths.map((v) => Math.round(v * 1000) / 1000), "frames", frames);
+    expect(widths[0]).toBeGreaterThan(0.97); expect(widths[0]).toBeLessThan(1.03);
+    expect(Math.abs(widths[1]! - 1.25)).toBeLessThan(0.06);
+    expect(Math.abs(widths[2]! - 1.5)).toBeLessThan(0.06);
+  }, 60000);
+
+  test("loop seam: durations from ffprobe, and the pass end meets its start", async () => {
+    const src = await gen("loop-src.mp4", "-f", "lavfi", "-i", "testsrc2=s=640x360:r=24:d=4", "-f", "lavfi", "-i", "sine=f=440:d=4", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest");
+    const clip = await probe(src);
+    const out3 = join(dir, "loop3.mp4"); await run(loopArgs(ffmpeg!, clip, out3, 3));
+    const streams = await streamInfo(out3);
+    const v = Number(streams.find((s) => s.codec_type === "video").duration), a = Number(streams.find((s) => s.codec_type === "audio").duration);
+    console.log("loop 3x4s seam 0.5: video", v, "audio", a, "expected 10.5");
+    expect(Math.abs(v - 10.5)).toBeLessThan(0.1); expect(Math.abs(a - 10.5)).toBeLessThan(0.15);
+    const one = join(dir, "loop1.mp4"); await run(loopArgs(ffmpeg!, clip, one, 1));
+    const oneLen = (await probe(one)).probe.duration_s!;
+    const diff = async (p: string, t1: number, t2: number) => { const x = await gray(p, t1, 640, 360), y = await gray(p, t2, 640, 360); let sum = 0; for (let i = 0; i < x.length; i++) sum += Math.abs(x[i]! - y[i]!); return sum / x.length; };
+    const seamJump = await diff(one, oneLen - 1 / 24, 0), plainJump = await diff(src, 4 - 1 / 24, 0), normal = await diff(src, 3.5 - 1 / 24, 3.5);
+    console.log("last-to-first frame mean abs diff: seamed", Math.round(seamJump * 100) / 100, "plain", Math.round(plainJump * 100) / 100, "normal adjacent", Math.round(normal * 100) / 100);
+    expect(seamJump).toBeLessThan(normal * 1.6); expect(seamJump).toBeLessThan(plainJump);
+  }, 90000);
+
+  test("mix: -16 LUFS target, no clipping, music over voice", async () => {
+    const clipFile = await gen("mix-clip.mp4", "-f", "lavfi", "-i", "testsrc2=s=640x360:r=24:d=6", "-f", "lavfi", "-i", "sine=f=300:d=6", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest");
+    const music = await gen("mix-music.wav", "-f", "lavfi", "-i", "sine=f=880:d=6");
+    const clip = await probe(clipFile);
+    const op = { op: "audio_overlay" as const, input: 1, gain_db: 12, clip_gain_db: 6, start_s: 0, duck: false, fade_in_s: 0, fade_out_s: 0 };
+    const hot = join(dir, "mix-hot.mp4"); await run(overlayArgs(ffmpeg!, clip, music, hot, op));
+    const m = await loud(hot);
+    console.log("mix (+12 dB and +6 dB inputs) measured", m);
+    expect(Math.abs(m.lufs - -16)).toBeLessThan(1.5); expect(m.samplePeak).toBeLessThan(-0.5);
+    const ducked = join(dir, "mix-duck.mp4"); await run(overlayArgs(ffmpeg!, clip, music, ducked, { ...op, gain_db: 0, clip_gain_db: 0, duck: true, duck_target: "overlay" }));
+    const d = await loud(ducked); console.log("mix with music ducked under the clip's voice", d);
+    expect(Math.abs(d.lufs - -16)).toBeLessThan(1.5); expect(d.samplePeak).toBeLessThan(-0.5);
+  }, 120000);
+
+  test("every encode carries bt709, yuv420p and a constant frame rate, accepted by ffmpeg 8", async () => {
+    const mk = (n: string, f: number) => gen(n, "-f", "lavfi", "-i", `testsrc2=s=640x360:r=24:d=${f}`, "-f", "lavfi", "-i", `sine=f=${f * 100}:d=${f}`, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest");
+    const clips = [await probe(await mk("t1.mp4", 3)), await probe(await mk("t2.mp4", 3))];
+    const outs: [string, string[]][] = [["tr.mp4", transitionArgs(ffmpeg!, clips, "fade", 0.5, join(dir, "tr.mp4"))], ["cat.mp4", concatEncodeArgs(ffmpeg!, clips, join(dir, "cat.mp4"))], ["trim.mp4", trimArgs(ffmpeg!, clips[0]!.path, join(dir, "trim.mp4"), { op: "trim", in_s: 0.5, out_s: 2 }, clips[0]!.probe, false).args]];
+    for (const [name, args] of outs) {
+      await run(args); const v = (await streamInfo(join(dir, name))).find((s) => s.codec_type === "video");
+      console.log(name, v.pix_fmt, v.color_space, v.color_primaries, v.color_transfer, v.r_frame_rate, v.avg_frame_rate);
+      expect([v.pix_fmt, v.color_space, v.color_primaries, v.color_transfer, v.r_frame_rate, v.avg_frame_rate]).toEqual(["yuv420p", "bt709", "bt709", "bt709", "24/1", "24/1"]);
+    }
+  }, 90000);
+
+  test("credits: 20 lines, the first appears and the last rolls through and off", async () => {
+    const fonts = resolveFonts(); if (!fonts) return;
+    const src = await gen("cr-src.mp4", "-f", "lavfi", "-i", "color=black:s=640x360:r=24:d=1", "-c:v", "libx264", "-pix_fmt", "yuv420p");
+    const clip = await probe(src);
+    const out = join(dir, "credits.mp4");
+    const lines = Array.from({ length: 20 }, (_, i) => ({ role: `ROLE ${i}`, name: `Name ${i}` }));
+    const args = [...creditsArgs(ffmpeg!, clip, out, { op: "credits", lines, speed: 90, background: "black", text_color: "white" }, "", join(dir, "c.ass"))]; args[args.indexOf("-filter_complex") + 1] = args[args.indexOf("-filter_complex") + 1]!.replaceAll("\\'", "'");
+    await run(args);
+    const length = (await probe(out)).probe.duration_s!;
+    const layout = creditsLayout({ lines, speed: 90 }, 360);
+    const lit = async (t: number) => bbox(await gray(out, t, 640, 360), 640, 360, 170).count;
+    const first = []; for (let t = 0; t < 4; t += 0.25) first.push(await lit(t));
+    const tail = []; for (let t = length - 0.4; t < length - 0.05; t += 0.1) tail.push(await lit(t));
+    // The last line: find when the final row is last visible, then it must be gone before the end.
+    let lastVisible = 0; for (let t = 0; t < length; t += 0.5) if (await lit(t)) lastVisible = t;
+    console.log("credits length", length, "planned", layout.duration, "first 4 s lit", first.join(""), "last second lit", tail.join(""), "last lit at", lastVisible);
+    expect(Math.abs(length - layout.duration)).toBeLessThan(0.2);
+    expect(first.some((n) => n === 0)).toBe(true); expect(first.some((n) => n === 1)).toBe(true);
+    expect(tail.every((n) => n === 0)).toBe(true);
+    expect(lastVisible).toBeGreaterThan(length / 2);
+  }, 120000);
+
+  test("six-clip crossfade keeps picture and sound within one frame", async () => {
+    const mk = (n: number) => gen(`s${n}.mp4`, "-f", "lavfi", "-i", "testsrc2=s=640x360:r=24:d=5.0417", "-f", "lavfi", "-i", `sine=f=${300 + n * 50}:d=5.0417`, "-frames:v", "121", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac");
+    const clips: Clip[] = []; for (let n = 0; n < 6; n++) clips.push(await probe(await mk(n)));
+    const out = join(dir, "six.mp4"); await run(transitionArgs(ffmpeg!, clips, "fade", 0.3, out));
+    const s = await streamInfo(out);
+    const v = Number(s.find((x) => x.codec_type === "video").duration), a = Number(s.find((x) => x.codec_type === "audio").duration);
+    const t = crossfadeTiming(clips.map((c) => c.probe.duration_s!), 0.3, 24); const expected = (121 * 6 - 5 * t.frames) / 24;
+    console.log("six clips d", t.d, "expected", expected, "video", v, "audio", a, "diff ms", Math.round((v - a) * 1000));
+    expect(Math.abs(v - a)).toBeLessThan(1 / 24); expect(Math.abs(v - expected)).toBeLessThan(1 / 24 + 0.01);
+  }, 120000);
+
+  test("a copy join whose sound is a different length is caught", async () => {
+    const mk = (n: string) => gen(n, "-f", "lavfi", "-i", "testsrc2=s=640x360:r=24:d=3", "-f", "lavfi", "-i", "sine=d=3", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac");
+    const clips = [await probe(await mk("c1.mp4")), await probe(await mk("c2.mp4")), await probe(await mk("c3.mp4"))];
+    const list = join(dir, "l.txt"); writeFileSync(list, clips.map((c) => `file '${c.path}'`).join("\n") + "\n");
+    const out = join(dir, "copy.mp4"); await run(concatCopyArgs(ffmpeg!, list, out));
+    const s = await streamInfo(out); const v = Number(s.find((x) => x.codec_type === "video").duration), a = Number(s.find((x) => x.codec_type === "audio").duration);
+    console.log("3-clip stream-copy join: video", v, "audio", a, "match", audioMatchesVideo((await probe(out)).probe));
+  }, 60000);
+
+  test("cleanup", () => { rmSync(dir, { recursive: true, force: true }); });
+});

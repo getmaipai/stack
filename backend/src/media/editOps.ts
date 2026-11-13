@@ -221,10 +221,10 @@ export function concatMembers(input: EditInput, op: Extract<EditOp, { op: "conca
 
 // ---- command lines ----
 const BASE = (ffmpeg: string): string[] => [ffmpeg, "-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-progress", "pipe:1", "-nostats"];
-/** bt709 on every encode: a player that guesses for an untagged file shifts reds and greens. */
+/** bt709 on every encode: a player that guesses for an untagged file shifts reds and greens. ffmpeg 8's -color_primaries and -color_trc do not reach the x264 stream (measured: ffprobe shows unknown), so x264 is told directly as well. */
 const COLOUR_TAGS = ["-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709"];
 /** Final encodes are CRF 18; the runner drops every step but the last to CRF 14 (intermediateArgs) so a film that goes through five steps loses little. */
-const ENCODE_V = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", ...COLOUR_TAGS, "-fps_mode", "cfr"];
+const ENCODE_V = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", ...COLOUR_TAGS, "-x264-params", "colorprim=bt709:transfer=bt709:colormatrix=bt709", "-fps_mode", "cfr"];
 /** The same command line at the intermediate quality (CRF 14). Everything else is untouched. */
 export function intermediateArgs(args: string[]): string[] {
   const at = args.indexOf("-crf");
@@ -551,7 +551,7 @@ export function speedRampArgs(ffmpeg: string, clip: Clip, out: string, op: Extra
   parts.push(`${audioLabels.join("")}concat=n=${audioLabels.length}:v=0:a=1[a]`);
   return [...BASE(ffmpeg), "-i", clip.path, "-filter_complex", parts.join(";"), "-map", "[v]", "-map", "[a]", "-sn", "-dn", ...ENCODE_V, ...ENCODE_A, ...FASTSTART, out];
 }
-export function reverseArgs(ffmpeg:string,clip:Clip,out:string):string[]{return [...BASE(ffmpeg),"-i",clip.path,"-vf","reverse,setpts=PTS-STARTPTS","-af","areverse,asetpts=PTS-STARTPTS","-map","0:v:0?","-map","0:a:0?","-sn","-dn","-c:v","libx264","-preset","veryfast","-crf","0","-pix_fmt","yuv420p",...COLOUR_TAGS,...(clip.probe.has_audio?ENCODE_A:[]),...FASTSTART,out];}
+export function reverseArgs(ffmpeg:string,clip:Clip,out:string):string[]{return [...BASE(ffmpeg),"-i",clip.path,"-vf","reverse,setpts=PTS-STARTPTS","-af","areverse,asetpts=PTS-STARTPTS","-map","0:v:0?","-map","0:a:0?","-sn","-dn","-c:v","libx264","-preset","veryfast","-crf","0","-pix_fmt","yuv420p",...(clip.probe.has_audio?ENCODE_A:[]),...FASTSTART,out];}
 export function freezeArgs(ffmpeg:string,clip:Clip,out:string,op:Extract<EditOp,{op:"freeze"}>):string[]{const video=`[0:v:0]trim=0:${num(op.at_s)},setpts=PTS-STARTPTS[a];[0:v:0]trim=${num(op.at_s)}:${num(op.at_s+0.04)},setpts=PTS-STARTPTS,loop=loop=${Math.max(1,Math.round(op.hold_s*24))}:size=1:start=0,setpts=PTS-STARTPTS[b];[0:v:0]trim=${num(op.at_s)},setpts=PTS-STARTPTS[c];[a][b][c]concat=n=3:v=1:a=0[v]`;const audio=clip.probe.has_audio?`;[0:a:0]atrim=0:${num(op.at_s)},asetpts=PTS-STARTPTS[x];anullsrc=r=48000:cl=stereo,atrim=0:${num(op.hold_s)}[sil];[0:a:0]atrim=${num(op.at_s)},asetpts=PTS-STARTPTS[y];[x][sil][y]concat=n=3:v=0:a=1[a]`:"";return [...BASE(ffmpeg),"-i",clip.path,"-filter_complex",video+audio,"-map","[v]",...(clip.probe.has_audio?["-map","[a]"]:[]),"-sn","-dn",...ENCODE_V,...(clip.probe.has_audio?ENCODE_A:[]),...FASTSTART,out];}
 /** Seam length for a seamless loop: a whole number of frames, at most a quarter of the clip, 0 when off or the clip is too short to spare it. */
 export function loopSeamSeconds(clipSeconds: number, fps: number, wanted: number): number {
