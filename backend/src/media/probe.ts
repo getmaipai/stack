@@ -4,7 +4,7 @@
 import { statSync } from "node:fs";
 import type { Runner } from "./run";
 
-export interface ProbeStream { index: number; type: "video" | "audio" | "subtitle" | "attachment" | "data"; codec: string; codec_tag: string | null; profile: string | null; width: number | null; height: number | null; pix_fmt: string | null; fps: number | null; channels: number | null; sample_rate: number | null; bit_rate: number | null; language: string | null; default: boolean; cover_art: boolean; }
+export interface ProbeStream { index: number; type: "video" | "audio" | "subtitle" | "attachment" | "data"; codec: string; codec_tag: string | null; profile: string | null; width: number | null; height: number | null; pix_fmt: string | null; fps: number | null; channels: number | null; sample_rate: number | null; bit_rate: number | null; language: string | null; default: boolean; cover_art: boolean; /** This stream's own length in seconds, when ffprobe gave one. */ duration_s?: number | null; }
 export interface ProbeChapter { index: number; start_s: number; end_s: number; title: string | null; }
 export interface ProbeResult {
   path: string; size_bytes: number; format: string; duration_s: number | null; bit_rate: number | null;
@@ -52,7 +52,7 @@ export function normalizeProbe(raw: Raw, path: string, sizeBytes: number): Probe
       codec: str(stream.codec_name) ?? "unknown", codec_tag: str(stream.codec_tag_string), profile: str(stream.profile),
       width: num(stream.width), height: num(stream.height), pix_fmt: str(stream.pix_fmt), fps: type === "video" ? fps(stream.avg_frame_rate) : null,
       channels: num(stream.channels), sample_rate: num(stream.sample_rate), bit_rate: num(stream.bit_rate), language: str(lowerTags(stream.tags).language),
-      default: disposition.default === 1, cover_art: disposition.attached_pic === 1,
+      default: disposition.default === 1, cover_art: disposition.attached_pic === 1, duration_s: num(stream.duration),
     };
   });
   const video = streams.find((stream) => stream.type === "video" && !stream.cover_art) ?? null;

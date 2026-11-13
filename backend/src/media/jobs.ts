@@ -14,7 +14,7 @@ import { probeFile, type ProbeResult } from "./probe";
 import { idleArgv, spawnRunner, type Runner, type RunResult } from "./run";
 import { defaultToolbox, MediaToolError, type MediaToolbox } from "./tools";
 import { mkdirSync } from "node:fs";
-import { concatCompatible, concatCopyArgs, concatEncodeArgs, concatListLine, crossfadeArgs, transitionArgs, crossfadeMinLength, concatMembers, EditInput, editInputProblem, fadeArgs, frameArgs, gainArgs, hasKeyframeAt, keyframeArgs, MAX_EDIT_SECONDS, muteArgs, overlayArgs, trimArgs, reframeArgs, gradeArgs, filmLookArgs, letterboxArgs, speedArgs, speedRampArgs, reverseArgs, reverseDurationProblem, freezeArgs, loopArgs, kenBurnsArgs, fpsBoostArgs, flipArgs, rotateArgs, sharpenArgs, denoiseArgs, rippleArgs, pipArgs, captionsArgs, titleCardArgs, creditsArgs, type Clip } from "./editOps";
+import { concatCompatible, concatCopyArgs, concatEncodeArgs, concatListLine, crossfadeArgs, transitionArgs, crossfadeMinLength, concatMembers, EditInput, editInputProblem, fadeArgs, frameArgs, gainArgs, hasKeyframeAt, keyframeArgs, MAX_EDIT_SECONDS, muteArgs, overlayArgs, trimArgs, reframeArgs, gradeArgs, filmLookArgs, letterboxArgs, speedArgs, speedRampArgs, reverseArgs, reverseDurationProblem, freezeArgs, loopArgs, kenBurnsArgs, fpsBoostArgs, flipArgs, rotateArgs, sharpenArgs, denoiseArgs, rippleArgs, pipArgs, captionsArgs, titleCardArgs, creditsArgs, creditsLayout, intermediateArgs, audioMatchesVideo, loopPassSeconds, type Clip } from "./editOps";
 import { SPATIAL_LINES } from "./spatialRender";
 import { spatialFailure, spatialSoundClip, type SpatialOutcome } from "./spatialSound";
 import { cutoutClip, CUTOUT_FAILED, CUTOUT_MODEL_MISSING, CUTOUT_NO_MEMORY, CUTOUT_NO_SUBJECT } from "./cutout";
@@ -691,6 +691,7 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
       const label = `step ${i + 1} of ${input.ops.length}: ${op.op}`;
       progress({ status: label, percent: Math.round((i / input.ops.length) * 100) });
       let args: string[]; let action = "encode"; let expected = clip.probe.duration_s ?? 0;
+      let copyFallback: string[] | null = null; // the encode that replaces a stream-copy join whose sound came out a different length from its picture
       const needsVideo = (what: string) => { if (!clip.probe.has_video) throw fail({ code: "bad_input", message: `Step ${i + 1} (${what}) needs a picture and the clip has none.` }); };
       if (op.op === "trim") {
         const total = clip.probe.duration_s ?? 0;
@@ -742,10 +743,10 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
         needsVideo("freeze"); if (op.at_s >= (clip.probe.duration_s ?? 0)) throw fail({ code: "bad_input", message: `Step ${i + 1} (freeze) asks for ${op.at_s} s but the clip is only ${clip.probe.duration_s ?? 0} s long. Choose an earlier frame.` });
         args = freezeArgs(ffmpeg, clip, target, op); expected += op.hold_s;
       } else if (op.op === "loop") {
-        needsVideo("loop"); expected *= op.times; tooLong("The looped film", expected); args = loopArgs(ffmpeg, clip, target, op.times);
+        needsVideo("loop"); expected = loopPassSeconds(expected, clip.probe.streams.find((stream) => stream.type === "video" && !stream.cover_art)?.fps ?? 24, op.seam_s ?? 0.5) * op.times; tooLong("The looped film", expected); args = loopArgs(ffmpeg, clip, target, op.times, op.seam_s ?? 0.5);
       } else if (op.op === "kenburns") {
         const still = i === 0 && /\.(png|jpe?g)$/i.test(sources[0]!);
-        needsVideo("kenburns"); args = kenBurnsArgs(ffmpeg, clip, target, op, still); expected = op.duration_s ?? 5;
+        needsVideo("kenburns"); args = kenBurnsArgs(ffmpeg, clip, target, op, still); expected = still ? op.duration_s ?? 5 : op.duration_s !== undefined ? Math.min(op.duration_s, clip.probe.duration_s ?? op.duration_s) : clip.probe.duration_s ?? 5;
       } else if (op.op === "fps_boost") {
         needsVideo("fps_boost"); if ((clip.probe.duration_s ?? 0) > 30) throw fail({ code: "bad_input", message: `Step ${i + 1} (fps_boost) is slow on clips longer than 30 seconds. Trim the clip first.` }); args = fpsBoostArgs(ffmpeg, clip, target, op.fps);
       } else if (op.op === "flip") { needsVideo("flip"); args = flipArgs(ffmpeg, clip, target, op.direction);
@@ -817,7 +818,7 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
         needsVideo(op.op);
         const font = ["/System/Library/Fonts/Supplemental/Arial.ttf", "/System/Library/Fonts/Helvetica.ttc", "/System/Library/Fonts/Supplemental/Verdana.ttf"].find((path) => existsSync(path));
         if (!font) throw fail({ code: "bad_input", message: `${op.op === "title_card" ? "Title cards" : "Credits"} need a system font file. Install a font or choose another computer.` });
-        const duration = op.op === "title_card" ? op.duration_s : op.duration_s ?? Math.max(3, Math.min(120, Math.ceil((((op.lines.length * 2 + (op.title ? 2 : 0)) / 11 + 1) * (clip.probe.height ?? 720)) / op.speed)));
+        const duration = op.op === "title_card" ? op.duration_s : creditsLayout(op, Math.max(2, Math.round((clip.probe.height ?? 720) / 2) * 2)).duration;
         expected = clip.probe.duration_s ?? 0;
         const cardPath = join(work, `card${i}.mp4`);
         const assPath = join(work, `card${i}.ass`);
@@ -863,7 +864,7 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
         if (concatCompatible(clips)) {
           const list = join(work, `list${i}.txt`);
           writeFileSync(list, clips.map((member) => concatListLine(member.path)).join("\n") + "\n");
-          args = concatCopyArgs(ffmpeg, list, target); action = "copy";
+          args = concatCopyArgs(ffmpeg, list, target); action = "copy"; copyFallback = concatEncodeArgs(ffmpeg, clips, target);
         } else args = concatEncodeArgs(ffmpeg, clips, target);
       }
       const base = i / input.ops.length; const share = 1 / input.ops.length;
@@ -872,16 +873,27 @@ async function runEdit(job: Job, signal: AbortSignal, progress: JobProgress): Pr
         steps.push({ op: op.op, action }); clip = { path: target, probe: checked };
         continue;
       }
+      if (!last) args = intermediateArgs(args);
       const result = await mediaDeps.run(args, { signal, onStdoutLine: (line) => { const seconds = parseProgressSeconds(line); if (seconds !== null && expected > 0) progress({ status: label, percent: Math.min(99, Math.round((base + Math.min(1, seconds / expected) * share) * 100)) }); } });
       if (result.aborted || signal.aborted) throw new Error("Cancelled.");
       if (op.op === "trim" && action === "copy" && result.code === 0 && existsSync(target)) {
         // A stream copy cut on a B-frame stream can start the picture late; keep it only when it is within 40 ms of the request.
         const copied = await probe(target, `The result of step ${i + 1}`);
-        if (Math.abs((copied.duration_s ?? 0) - expected) > 0.04) {
+        if (Math.abs((copied.duration_s ?? 0) - expected) > 0.04 || !audioMatchesVideo(copied)) {
           rmSync(target, { force: true });
           const again = trimArgs(ffmpeg, clip.path, target, op, clip.probe, false, true);
-          args = again.args; action = again.action;
+          args = last ? again.args : intermediateArgs(again.args); action = again.action;
           const retry = await mediaDeps.run(args, { signal });
+          if (retry.aborted || signal.aborted) throw new Error("Cancelled.");
+          result.code = retry.code; result.stderr = retry.stderr;
+        }
+      }
+      if (op.op === "concat" && action === "copy" && copyFallback && result.code === 0 && existsSync(target)) {
+        const copied = await probe(target, `The result of step ${i + 1}`);
+        if (!audioMatchesVideo(copied)) {
+          rmSync(target, { force: true });
+          action = "encode";
+          const retry = await mediaDeps.run(last ? copyFallback : intermediateArgs(copyFallback), { signal });
           if (retry.aborted || signal.aborted) throw new Error("Cancelled.");
           result.code = retry.code; result.stderr = retry.stderr;
         }

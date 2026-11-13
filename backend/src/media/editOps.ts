@@ -43,6 +43,8 @@ const AudioOverlayOp = z.object({
   start_s: Seconds.default(0),
   /** Lower the clip's own sound while the overlay plays. */
   duck: z.boolean().default(false),
+  /** Who is lowered while the other plays: the clip's own sound under the overlay (default: the overlay is a voice) or the overlay under the clip's sound (the overlay is music). */
+  duck_target: z.enum(["clip", "overlay"]).optional(),
   /** Loudness-normalise the mix to this integrated loudness. */
   loudness_lufs: z.number().min(-40).max(-5).optional(),
   /** Fade the overlay alone in over this many seconds from where it starts (the clip's own sound is untouched). */
@@ -65,7 +67,8 @@ const SpeedOp = z.object({ op: z.literal("speed"), factor: z.number().min(0.25).
 const SpeedRampOp = z.object({ op: z.literal("speed_ramp"), from_factor: z.number().min(0.25).max(4), to_factor: z.number().min(0.25).max(4), at_s: Seconds, over_s: z.number().min(0.3).max(10) }).strict();
 const ReverseOp = z.object({ op: z.literal("reverse") }).strict();
 const FreezeOp = z.object({ op: z.literal("freeze"), at_s: Seconds, hold_s: z.number().min(0.5).max(5) }).strict();
-const LoopOp = z.object({ op: z.literal("loop"), times: z.number().int().min(2).max(6) }).strict();
+/** `seam_s` (default 0.5): the last seconds of each pass blend into its first seconds so the end meets the start with no jump; 0 is a plain repeat. */
+const LoopOp = z.object({ op: z.literal("loop"), times: z.number().int().min(2).max(6), seam_s: z.number().min(0).max(2).default(0.5) }).strict();
 const KenBurnsOp = z.object({ op: z.literal("kenburns"), zoom_from: z.number().min(1).max(2), zoom_to: z.number().min(1).max(2), pan: z.enum(["none", "left", "right", "up", "down"]), duration_s: z.number().min(1).max(30).optional() }).strict();
 const FpsBoostOp = z.object({ op: z.literal("fps_boost"), fps: z.union([z.literal(30), z.literal(48), z.literal(60)]) }).strict();
 const FlipOp = z.object({ op: z.literal("flip"), direction: z.enum(["horizontal", "vertical"]) }).strict();
@@ -218,7 +221,16 @@ export function concatMembers(input: EditInput, op: Extract<EditOp, { op: "conca
 
 // ---- command lines ----
 const BASE = (ffmpeg: string): string[] => [ffmpeg, "-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-progress", "pipe:1", "-nostats"];
-const ENCODE_V = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p"];
+/** bt709 on every encode: a player that guesses for an untagged file shifts reds and greens. */
+const COLOUR_TAGS = ["-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709"];
+/** Final encodes are CRF 18; the runner drops every step but the last to CRF 14 (intermediateArgs) so a film that goes through five steps loses little. */
+const ENCODE_V = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", ...COLOUR_TAGS, "-fps_mode", "cfr"];
+/** The same command line at the intermediate quality (CRF 14). Everything else is untouched. */
+export function intermediateArgs(args: string[]): string[] {
+  const at = args.indexOf("-crf");
+  if (at < 0 || args[at + 1] !== "18") return args;
+  const next = [...args]; next[at + 1] = "14"; return next;
+}
 const ENCODE_A = ["-c:a", "aac", "-b:a", "160k"];
 const FASTSTART = ["-movflags", "+faststart"];
 const num = (value: number): string => String(Math.round(value * 1000) / 1000);
@@ -244,6 +256,17 @@ export function keyframeArgs(ffprobe: string, src: string, from: number): string
 export function hasKeyframeAt(stdout: string, at: number, fps: number | null): boolean {
   const tolerance = Math.min(0.02, (fps ? 0.5 / fps : 0.02));
   return stdout.split("\n").some((line) => { const time = Number(line.trim().split(",")[0]); return Number.isFinite(time) && Math.abs(time - at) <= tolerance; });
+}
+
+/**
+ * True when a stream-copied file's sound is as long as its picture (within 150 ms). Joining AAC streams by copy keeps each file's encoder delay, and a cut that
+ * starts between audio packets does the same: the result can have 83 s of picture and 42 s of sound. A copy that fails this check is made again as an encode.
+ */
+export function audioMatchesVideo(probe: ProbeResult): boolean {
+  const video = probe.streams.find((stream) => stream.type === "video" && !stream.cover_art)?.duration_s;
+  const audio = probe.streams.find((stream) => stream.type === "audio")?.duration_s;
+  if (!probe.has_audio || !probe.has_video || !video || !audio) return true;
+  return Math.abs(video - audio) <= 0.15;
 }
 
 export function muteArgs(ffmpeg: string, src: string, out: string): string[] {
@@ -311,6 +334,20 @@ export const crossfadeMinLength = (d: number): number => 2 * d;
 export function crossfadeArgs(ffmpeg: string, clips: Clip[], d: number, out: string): string[] {
   return transitionArgs(ffmpeg, clips, "fade", d, out);
 }
+/**
+ * Frame-exact seams. xfade takes seconds and rounds to a frame, acrossfade is sample exact, so an offset between frames drifts the picture up to a frame
+ * per seam against the sound (LTX clips are 8n+1 frames, 121 frames is 5.0417 s). The blend is an even number of frames (an odd split rounds up twice) and
+ * every offset is a whole number of frames, counted from the frame counts of the clips.
+ */
+export function crossfadeTiming(durations: number[], d: number, rate: number): { d: number; frames: number; offsets: number[] } {
+  const frames = Math.max(2, Math.round(d * rate / 2) * 2);
+  const frameCounts = durations.map((seconds) => Math.max(frames, Math.round(seconds * rate)));
+  const offsets: number[] = [];
+  let sum = frameCounts[0] ?? 0;
+  for (let k = 1; k < frameCounts.length; k++) { offsets.push((sum - frames) / rate); sum = sum - frames + frameCounts[k]!; }
+  return { d: frames / rate, frames, offsets };
+}
+const exact = (value: number): string => String(Math.round(value * 1e6) / 1e6);
 export function transitionArgs(ffmpeg: string, clips: Clip[], kind: typeof TRANSITION_KINDS[number], d: number, out: string): string[] {
   const target = videoOf(clips[0]!.probe)!;
   const width = Math.max(2, Math.round((target.width ?? 1280) / 2) * 2); const height = Math.max(2, Math.round((target.height ?? 720) / 2) * 2);
@@ -325,15 +362,13 @@ export function transitionArgs(ffmpeg: string, clips: Clip[], kind: typeof TRANS
       ? `[${index}:a:0]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,asetpts=PTS-STARTPTS[a${index}]`
       : `anullsrc=r=48000:cl=stereo,atrim=0:${num(clip.probe.duration_s ?? 0)},aformat=sample_fmts=fltp:channel_layouts=stereo,asetpts=PTS-STARTPTS[a${index}]`);
   });
-  let sum = clips[0]!.probe.duration_s ?? 0;
+  const timing = crossfadeTiming(clips.map((clip) => clip.probe.duration_s ?? 0), d, Number(rate));
   let video = "[v0]"; let audio = "[a0]";
   for (let k = 1; k < clips.length; k++) {
-    const offset = sum - d; // sum of the previous lengths minus k*d, accumulated
     const last = k === clips.length - 1;
-    parts.push(`${video}[v${k}]xfade=transition=${XFADE_NAME[kind] ?? kind}:duration=${num(d)}:offset=${num(offset)}[${last ? "v" : `x${k}`}]`);
+    parts.push(`${video}[v${k}]xfade=transition=${XFADE_NAME[kind] ?? kind}:duration=${exact(timing.d)}:offset=${exact(timing.offsets[k - 1]!)}[${last ? "v" : `x${k}`}]`);
     video = `[x${k}]`;
-    if (anyAudio) { parts.push(`${audio}[a${k}]acrossfade=d=${num(d)}[${last ? "a" : `y${k}`}]`); audio = `[y${k}]`; }
-    sum = offset + (clips[k]!.probe.duration_s ?? 0);
+    if (anyAudio) { parts.push(`${audio}[a${k}]acrossfade=d=${exact(timing.d)}[${last ? "a" : `y${k}`}]`); audio = `[y${k}]`; }
   }
   args.push("-filter_complex", parts.join(";"), "-map", "[v]");
   if (anyAudio) args.push("-map", "[a]");
@@ -344,6 +379,9 @@ export function transitionArgs(ffmpeg: string, clips: Clip[], kind: typeof TRANS
 }
 
 /** Lay a second audio file over the clip's own sound; the picture is copied untouched. */
+const LIMIT = "0.89";
+/** Integrated loudness a mix is normalised to when the op names none. */
+export const MIX_LUFS = -16;
 export function overlayArgs(ffmpeg: string, clip: Clip, overlayPath: string, out: string, op: Extract<EditOp, { op: "audio_overlay" }>, overlaySeconds: number | null = null): string[] {
   const length = clip.probe.duration_s ?? 0;
   const layout = "aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo";
@@ -357,12 +395,18 @@ export function overlayArgs(ffmpeg: string, clip: Clip, overlayPath: string, out
   if (span !== null) shaping.push(`atrim=0:${num(span)}`, "asetpts=PTS-STARTPTS");
   if (op.fade_in_s > 0) shaping.push(`afade=t=in:st=0:d=${num(op.fade_in_s)}`);
   if (op.fade_out_s > 0 && own !== null) shaping.push(`afade=t=out:st=${num(Math.max(0, own - op.fade_out_s))}:d=${num(op.fade_out_s)}`);
-  filters.push(`[1:a:0]${shaping.map((step) => `${step},`).join("")}volume=${num(op.gain_db)}dB,${layout}${delay > 0 ? `,adelay=${delay}|${delay}` : ""}${op.duck ? ",asplit=2[o][k]" : "[o]"}`);
-  let clipLabel = "[c]";
-  if (op.duck) { filters.push("[c][k]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400:makeup=1[d]"); clipLabel = "[d]"; }
-  const mixed = op.loudness_lufs === undefined ? "[m]" : "[x]";
-  filters.push(`${clipLabel}[o]amix=inputs=2:duration=first:normalize=0${mixed}`);
-  if (op.loudness_lufs !== undefined) filters.push(`[x]loudnorm=I=${num(op.loudness_lufs)}:TP=-1.5:LRA=11,aresample=48000[m]`);
+  const duckOverlay = op.duck && op.duck_target === "overlay";
+  filters.push(`[1:a:0]${shaping.map((step) => `${step},`).join("")}volume=${num(op.gain_db)}dB,${layout}${delay > 0 ? `,adelay=${delay}|${delay}` : ""}${op.duck && !duckOverlay ? ",asplit=2[o][k]" : "[o]"}`);
+  let clipLabel = "[c]"; let overlayLabel = "[o]";
+  const DUCK = "sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400:makeup=1";
+  if (op.duck && !duckOverlay) { filters.push(`[c][k]${DUCK}[d]`); clipLabel = "[d]"; }
+  // The overlay is music: the clip's own sound (the voice) keys the compressor that lowers it.
+  if (duckOverlay) { filters.push("[c]asplit=2[cm][k]"); filters.push(`[o][k]${DUCK}[od]`); clipLabel = "[cm]"; overlayLabel = "[od]"; }
+  const mixed = "[x]";
+  filters.push(`${clipLabel}${overlayLabel}amix=inputs=2:duration=first:normalize=0${mixed}`);
+  // Never clip: a limiter on the sum, then loudness to the target (default -16 LUFS), then a final limiter for loudnorm's overshoot.
+  filters.push(`[x]alimiter=limit=${LIMIT}:level=0[y]`);
+  filters.push(`[y]loudnorm=I=${num(op.loudness_lufs ?? MIX_LUFS)}:TP=-1.5:LRA=11,aresample=48000,alimiter=limit=${LIMIT}:level=0[m]`);
   const args = [...BASE(ffmpeg), "-i", clip.path, "-i", overlayPath, "-filter_complex", filters.join(";")];
   if (clip.probe.has_video) args.push("-map", "0:v:0", "-c:v", "copy");
   args.push("-map", "[m]", "-sn", "-dn", ...ENCODE_A);
@@ -507,10 +551,63 @@ export function speedRampArgs(ffmpeg: string, clip: Clip, out: string, op: Extra
   parts.push(`${audioLabels.join("")}concat=n=${audioLabels.length}:v=0:a=1[a]`);
   return [...BASE(ffmpeg), "-i", clip.path, "-filter_complex", parts.join(";"), "-map", "[v]", "-map", "[a]", "-sn", "-dn", ...ENCODE_V, ...ENCODE_A, ...FASTSTART, out];
 }
-export function reverseArgs(ffmpeg:string,clip:Clip,out:string):string[]{return [...BASE(ffmpeg),"-i",clip.path,"-vf","reverse,setpts=PTS-STARTPTS","-af","areverse,asetpts=PTS-STARTPTS","-map","0:v:0?","-map","0:a:0?","-sn","-dn","-c:v","libx264","-preset","veryfast","-crf","0","-pix_fmt","yuv420p",...(clip.probe.has_audio?ENCODE_A:[]),...FASTSTART,out];}
+export function reverseArgs(ffmpeg:string,clip:Clip,out:string):string[]{return [...BASE(ffmpeg),"-i",clip.path,"-vf","reverse,setpts=PTS-STARTPTS","-af","areverse,asetpts=PTS-STARTPTS","-map","0:v:0?","-map","0:a:0?","-sn","-dn","-c:v","libx264","-preset","veryfast","-crf","0","-pix_fmt","yuv420p",...COLOUR_TAGS,...(clip.probe.has_audio?ENCODE_A:[]),...FASTSTART,out];}
 export function freezeArgs(ffmpeg:string,clip:Clip,out:string,op:Extract<EditOp,{op:"freeze"}>):string[]{const video=`[0:v:0]trim=0:${num(op.at_s)},setpts=PTS-STARTPTS[a];[0:v:0]trim=${num(op.at_s)}:${num(op.at_s+0.04)},setpts=PTS-STARTPTS,loop=loop=${Math.max(1,Math.round(op.hold_s*24))}:size=1:start=0,setpts=PTS-STARTPTS[b];[0:v:0]trim=${num(op.at_s)},setpts=PTS-STARTPTS[c];[a][b][c]concat=n=3:v=1:a=0[v]`;const audio=clip.probe.has_audio?`;[0:a:0]atrim=0:${num(op.at_s)},asetpts=PTS-STARTPTS[x];anullsrc=r=48000:cl=stereo,atrim=0:${num(op.hold_s)}[sil];[0:a:0]atrim=${num(op.at_s)},asetpts=PTS-STARTPTS[y];[x][sil][y]concat=n=3:v=0:a=1[a]`:"";return [...BASE(ffmpeg),"-i",clip.path,"-filter_complex",video+audio,"-map","[v]",...(clip.probe.has_audio?["-map","[a]"]:[]),"-sn","-dn",...ENCODE_V,...(clip.probe.has_audio?ENCODE_A:[]),...FASTSTART,out];}
-export function loopArgs(ffmpeg:string,clip:Clip,out:string,times:number):string[]{const inputs=Array.from({length:times},()=>["-i",clip.path]).flat();const parts:string[]=[];const labels:string[]=[];for(let i=0;i<times;i++){parts.push(`[${i}:v:0]setpts=PTS-STARTPTS[v${i}]`);labels.push(`[v${i}]`);if(clip.probe.has_audio){parts.push(`[${i}:a:0]asetpts=PTS-STARTPTS[a${i}]`);labels.push(`[a${i}]`);}}parts.push(`${labels.join("")}concat=n=${times}:v=1:a=${clip.probe.has_audio?1:0}[v]${clip.probe.has_audio?"[a]":""}`);return [...BASE(ffmpeg),...inputs,"-filter_complex",parts.join(";"),"-map","[v]",...(clip.probe.has_audio?["-map","[a]"]:[]),"-sn","-dn",...ENCODE_V,...(clip.probe.has_audio?ENCODE_A:[]),...FASTSTART,out];}
-export function kenBurnsArgs(ffmpeg:string,clip:Clip,out:string,op:Extract<EditOp,{op:"kenburns"}>,still=false):string[]{const w=still?1280:Math.max(2,Math.round((clip.probe.width??1280)/2)*2),h=still?720:Math.max(2,Math.round((clip.probe.height??720)/2)*2),dur=op.duration_s??5;const pan=op.pan==="left"?"x=(iw-iw/zoom)*(1-on/(duration*24))":op.pan==="right"?"x=(iw-iw/zoom)*on/(duration*24)":op.pan==="up"?"y=(ih-ih/zoom)*(1-on/(duration*24))":op.pan==="down"?"y=(ih-ih/zoom)*on/(duration*24)":"x=(iw-iw/zoom)/2:y=(ih-ih/zoom)/2";const zoom=`z='${num(op.zoom_from)}+((${num(op.zoom_to)}-${num(op.zoom_from)})*on/(duration*24))'`;const vf=`scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},zoompan=${zoom}:${pan}:d=1:s=${w}x${h}:fps=24`;const args=[...BASE(ffmpeg),...(still?["-loop","1"]:[]),"-i",clip.path];if(still)args.push("-f","lavfi","-i","anullsrc=r=48000:cl=stereo");args.push("-vf",vf,"-t",String(dur),"-map","0:v:0",...(still?["-map","1:a:0"]:["-map","0:a:0?"]),"-sn","-dn",...ENCODE_V,...(still?ENCODE_A:clip.probe.has_audio?["-c:a","copy"]:[]),...(still?["-shortest"]:[]),...FASTSTART,out);return args;}
+/** Seam length for a seamless loop: a whole number of frames, at most a quarter of the clip, 0 when off or the clip is too short to spare it. */
+export function loopSeamSeconds(clipSeconds: number, fps: number, wanted: number): number {
+  if (!(wanted > 0) || !(clipSeconds > 0) || !(fps > 0)) return 0;
+  const frames = Math.floor(Math.min(wanted, clipSeconds / 4) * fps);
+  return frames >= 2 ? frames / fps : 0;
+}
+/** One pass of a seamless loop is the clip with its last `seam` seconds blended into its first `seam` seconds: the pass starts on the blend, then plays on from the clip's seam mark, so its end flows into its own start. Length: clip minus seam. */
+export function loopPassSeconds(clipSeconds: number, fps: number, seam: number): number { return clipSeconds - loopSeamSeconds(clipSeconds, fps, seam); }
+export function loopArgs(ffmpeg: string, clip: Clip, out: string, times: number, seamSeconds = 0.5): string[] {
+  const hasAudio = clip.probe.has_audio;
+  const fps = videoOf(clip.probe)?.fps ?? 24;
+  const length = clip.probe.duration_s ?? 0;
+  const d = loopSeamSeconds(length, fps, seamSeconds);
+  const L = num(length), D = num(d), T = num(length - d), M = num(d);
+  const inputs = Array.from({ length: times }, () => ["-i", clip.path]).flat();
+  const parts: string[] = []; const labels: string[] = [];
+  for (let i = 0; i < times; i++) {
+    if (d > 0) {
+      parts.push(`[${i}:v:0]setpts=PTS-STARTPTS,split=3[vh${i}][vm${i}][vt${i}]`);
+      parts.push(`[vh${i}]trim=0:${D},setpts=PTS-STARTPTS[vhh${i}]`, `[vt${i}]trim=${T}:${L},setpts=PTS-STARTPTS[vtt${i}]`, `[vm${i}]trim=${M}:${T},setpts=PTS-STARTPTS[vmm${i}]`);
+      parts.push(`[vtt${i}][vhh${i}]xfade=transition=fade:duration=${D}:offset=0[vs${i}]`, `[vs${i}][vmm${i}]concat=n=2:v=1:a=0[v${i}]`);
+      if (hasAudio) {
+        parts.push(`[${i}:a:0]asetpts=PTS-STARTPTS,asplit=3[ah${i}][am${i}][at${i}]`);
+        parts.push(`[ah${i}]atrim=0:${D},asetpts=PTS-STARTPTS[ahh${i}]`, `[at${i}]atrim=${T}:${L},asetpts=PTS-STARTPTS[att${i}]`, `[am${i}]atrim=${M}:${T},asetpts=PTS-STARTPTS[amm${i}]`);
+        parts.push(`[att${i}][ahh${i}]acrossfade=d=${D}[as${i}]`, `[as${i}][amm${i}]concat=n=2:v=0:a=1[a${i}]`);
+      }
+    } else {
+      parts.push(`[${i}:v:0]setpts=PTS-STARTPTS[v${i}]`);
+      if (hasAudio) parts.push(`[${i}:a:0]asetpts=PTS-STARTPTS[a${i}]`);
+    }
+    labels.push(`[v${i}]`); if (hasAudio) labels.push(`[a${i}]`);
+  }
+  parts.push(`${labels.join("")}concat=n=${times}:v=1:a=${hasAudio ? 1 : 0}[v]${hasAudio ? "[a]" : ""}`);
+  return [...BASE(ffmpeg), ...inputs, "-filter_complex", parts.join(";"), "-map", "[v]", ...(hasAudio ? ["-map", "[a]"] : []), "-sn", "-dn", ...ENCODE_V, ...(hasAudio ? ENCODE_A : []), ...FASTSTART, out];
+}
+/**
+ * Ken Burns by zoompan. zoompan's `d` is output frames per INPUT frame and `on` counts output frames, so the move is timed in frames: the last frame
+ * lands exactly on zoom_to (and the pan edge) at the end of the clip. A video keeps its own frame rate and length (frames in = frames out, d=1); a still is
+ * read at 24 fps for duration_s. The picture is scaled to twice the output size first so zoompan's whole-pixel steps are half a pixel after it scales back.
+ */
+export function kenBurnsArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "kenburns" }>, still = false): string[] {
+  const w = still ? 1280 : Math.max(2, Math.round((clip.probe.width ?? 1280) / 2) * 2), h = still ? 720 : Math.max(2, Math.round((clip.probe.height ?? 720) / 2) * 2);
+  const fps = still ? 24 : (videoOf(clip.probe)?.fps && videoOf(clip.probe)!.fps! > 0 ? videoOf(clip.probe)!.fps! : 24);
+  const clipSeconds = clip.probe.duration_s ?? 0;
+  const seconds = still ? op.duration_s ?? 5 : op.duration_s !== undefined ? (clipSeconds > 0 ? Math.min(op.duration_s, clipSeconds) : op.duration_s) : clipSeconds > 0 ? clipSeconds : 5;
+  const last = Math.max(1, Math.round(seconds * fps) - 1);
+  const p = `on/${last}`;
+  const pan = op.pan === "left" ? `x=(iw-iw/zoom)*(1-${p})` : op.pan === "right" ? `x=(iw-iw/zoom)*${p}` : op.pan === "up" ? `y=(ih-ih/zoom)*(1-${p})` : op.pan === "down" ? `y=(ih-ih/zoom)*${p}` : "x=(iw-iw/zoom)/2:y=(ih-ih/zoom)/2";
+  const zoom = `z='${num(op.zoom_from)}+((${num(op.zoom_to)}-${num(op.zoom_from)})*${p})'`;
+  const vf = `scale=${w * 2}:${h * 2}:force_original_aspect_ratio=increase,crop=${w * 2}:${h * 2},zoompan=${zoom}:${pan}:d=1:s=${w}x${h}:fps=${num(fps)}`;
+  const args = [...BASE(ffmpeg), ...(still ? ["-loop", "1", "-framerate", "24"] : []), "-i", clip.path];
+  if (still) args.push("-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo");
+  args.push("-vf", vf, "-t", num(seconds), "-map", "0:v:0", ...(still ? ["-map", "1:a:0"] : ["-map", "0:a:0?"]), "-sn", "-dn", ...ENCODE_V, ...(still ? ENCODE_A : clip.probe.has_audio ? ["-c:a", "copy"] : []), ...(still ? ["-shortest"] : []), ...FASTSTART, out);
+  return args;
+}
 export function fpsBoostArgs(ffmpeg:string,clip:Clip,out:string,fps:number):string[]{return [...BASE(ffmpeg),"-i",clip.path,"-vf",`minterpolate=fps=${fps}:mi_mode=mci:mc_mode=aobmc:vsbmc=1`,"-map","0:v:0","-map","0:a:0?","-sn","-dn",...ENCODE_V,...(clip.probe.has_audio?["-c:a","copy"]:[]),...FASTSTART,out];}
 export function flipArgs(ffmpeg:string,clip:Clip,out:string,direction:string):string[]{return [...BASE(ffmpeg),"-i",clip.path,"-vf",direction==="horizontal"?"hflip":"vflip","-map","0:v:0","-map","0:a:0?","-sn","-dn",...ENCODE_V,...(clip.probe.has_audio?["-c:a","copy"]:[]),...FASTSTART,out];}
 export function rotateArgs(ffmpeg:string,clip:Clip,out:string,degrees:number):string[]{const vf=degrees===90?"transpose=1":degrees===270?"transpose=2":"hflip,vflip";return [...BASE(ffmpeg),"-i",clip.path,"-vf",vf,"-map","0:v:0","-map","0:a:0?","-sn","-dn",...ENCODE_V,...(clip.probe.has_audio?["-c:a","copy"]:[]),...FASTSTART,out];}
@@ -556,26 +653,46 @@ export function titleCardArgs(ffmpeg: string, clip: Clip, out: string, op: Extra
   const args = [...BASE(ffmpeg), "-f", "lavfi", "-i", `color=c=${rgb(op.background)}:s=${width}x${height}:r=${rate}:d=${num(op.duration_s)}`, "-f", "lavfi", "-i", `anullsrc=r=${targetDimensions(clip).sampleRate}:cl=stereo`, "-filter_complex", `[0:v]format=yuv420p,setsar=1,${textFilter}${subtitle}${fades}[v];[1:a]atrim=0:${num(op.duration_s)},asetpts=PTS-STARTPTS[a]`, "-map", "[v]", "-map", "[a]", "-t", num(op.duration_s), "-shortest", "-r", rate, ...ENCODE_V, ...ENCODE_A];
   return [...args, ...FASTSTART, out];
 }
+/**
+ * How far the credits roll and for how long. The block is as tall as its last row sits below the first (`lastRow` rows of h/11 under the frame's bottom edge);
+ * the scroll runs from the first row just under the bottom to the last row 10 percent of the height above the top, so every line crosses the frame and leaves.
+ * With no duration_s the length is distance / speed (pixels per second) plus a half second of black; with one, the card is exactly that long and the roll is timed to
+ * end with it (the length the caller chose wins over speed).
+ */
+export function creditsLayout(op: { lines: { role?: string | undefined; name: string }[]; speed: number; duration_s?: number | undefined; title?: string | undefined }, height: number, lastRow?: number): { rows: number; distance: number; seconds: number; duration: number } {
+  const rows = lastRow ?? (op.lines.length - 1 + (op.title ? 1.4 : 0));
+  const distance = height + rows * height / 11 + 0.1 * height;
+  if (op.duration_s !== undefined) return { rows, distance, seconds: op.duration_s, duration: op.duration_s };
+  const seconds = distance / op.speed;
+  return { rows, distance, seconds, duration: Math.max(3, Math.min(120, Math.ceil((seconds + 0.5) * 10) / 10)) };
+}
+const CREDITS_FADE_S = 0.5;
 export function creditsArgs(ffmpeg: string, clip: Clip, out: string, op: Extract<EditOp, { op: "credits" }>, font: string, assPath?: string): string[] {
   const { width, height, rate, sampleRate } = targetDimensions(clip);
-  const duration = op.duration_s ?? Math.max(3, Math.min(120, Math.ceil((((op.lines.length * 2 + (op.title ? 2 : 0)) / 11 + 1) * height) / op.speed)));
   const fonts = resolveFonts();
   if (fonts && assPath) {
-    const end = -Math.round(height * .45), rows: string[] = [];
+    const layout = creditsLayout(op, height), duration = layout.duration, travelMs = Math.round(Math.min(layout.seconds, duration) * 1000);
+    const rows: string[] = [];
     const rowOffset = op.title ? 1.4 : 0;
-    if (op.title) rows.push(`Dialogue: 0,0:00:00.00,${assTime(duration)},Title,,0,0,0,,{\\an5\\move(${width / 2},${height},${width / 2},${end})}${assText(op.title.toLocaleUpperCase())}`);
-    op.lines.forEach((line, i) => { const y0 = Math.round(height + (i + rowOffset) * height / 11), y1 = Math.round(end + (i + rowOffset) * height / 11); if (!line.role) rows.push(`Dialogue: 0,0:00:00.00,${assTime(duration)},Name,,0,0,0,,{\\an5\\move(${width / 2},${y0},${width / 2},${y1})}${assText(line.name)}`); else { rows.push(`Dialogue: 0,0:00:00.00,${assTime(duration)},Role,,0,0,0,,{\\an6\\move(${Math.round(width * .49)},${y0},${Math.round(width * .49)},${y1})}${assText(line.role.toLocaleUpperCase())}`); rows.push(`Dialogue: 0,0:00:00.00,${assTime(duration)},Name,,0,0,0,,{\\an4\\move(${Math.round(width * .51)},${y0},${Math.round(width * .51)},${y1})}${assText(line.name)}`); } });
+    const fade = `\\fad(${Math.round(CREDITS_FADE_S * 1000)},0)`;
+    const move = (x: number, y0: number) => `\\move(${x},${y0},${x},${Math.round(y0 - layout.distance)},0,${travelMs})${fade}`;
+    if (op.title) rows.push(`Dialogue: 0,0:00:00.00,${assTime(duration)},Title,,0,0,0,,{\\an5${move(width / 2, height)}}${assText(op.title.toLocaleUpperCase())}`);
+    op.lines.forEach((line, i) => { const y0 = Math.round(height + (i + rowOffset) * height / 11); if (!line.role) rows.push(`Dialogue: 0,0:00:00.00,${assTime(duration)},Name,,0,0,0,,{\\an5${move(width / 2, y0)}}${assText(line.name)}`); else { rows.push(`Dialogue: 0,0:00:00.00,${assTime(duration)},Role,,0,0,0,,{\\an6${move(Math.round(width * .49), y0)}}${assText(line.role.toLocaleUpperCase())}`); rows.push(`Dialogue: 0,0:00:00.00,${assTime(duration)},Name,,0,0,0,,{\\an4${move(Math.round(width * .51), y0)}}${assText(line.name)}`); } });
     const styles = `Style: Role,${fonts.smallCaps},${Math.round(height / 36)},${assColor(op.text_color)},${assColor(op.text_color)},&H00000000,&H00000000,0,0,0,0,100,100,${Math.round(height * .006)},0,1,0,0,6,0,0,0,1\nStyle: Name,${fonts.names},${Math.round(height / 24)},${assColor(op.text_color)},${assColor(op.text_color)},&H00000000,&H00000000,0,0,0,0,100,100,${Math.round(height * .002)},0,1,0,0,4,0,0,0,1\nStyle: Title,${fonts.display},${Math.round(height / 12)},${assColor(op.text_color)},${assColor(op.text_color)},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1`;
     writeAss(assPath, ASS_HEADER(width, height, styles) + rows.join("\n") + "\n");
     const graph = `[0:v]format=yuv420p,setsar=1,ass=${assFilterPath(assPath)}:fontsdir=${assFilterPath(fonts.fontsdir)}[v];[1:a]atrim=0:${num(duration)},asetpts=PTS-STARTPTS[a]`;
     return [...BASE(ffmpeg), "-f", "lavfi", "-i", `color=c=${rgb(op.background)}:s=${width}x${height}:r=${rate}:d=${num(duration)}`, "-f", "lavfi", "-i", `anullsrc=r=${sampleRate}:cl=stereo`, "-filter_complex", graph, "-map", "[v]", "-map", "[a]", "-t", num(duration), "-shortest", "-r", rate, ...ENCODE_V, ...ENCODE_A, ...FASTSTART, out];
   }
 
-  const entries = [...(op.title ? [{ text: op.title, size: "h/11", y: `h - t*${num(op.speed)}` }] : []), ...op.lines.flatMap((line, i) => [
-    ...(line.role ? [{ text: line.role, size: "h/24", y: `h - t*${num(op.speed)} + ${i * 2 + (op.title ? 2 : 0)}*h/11` }] : []),
-    { text: line.name, size: "h/15", y: `h - t*${num(op.speed)} + ${i * 2 + (op.title ? 2 : 0) + (line.role ? 1 : 0)}*h/11` },
+  const lastLine = op.lines[op.lines.length - 1]!;
+  const lastRow = (op.lines.length - 1) * 2 + (op.title ? 2 : 0) + (lastLine.role ? 1 : 0);
+  const layout = creditsLayout(op, height, lastRow), duration = layout.duration;
+  const speed = op.duration_s !== undefined ? layout.distance / layout.duration : op.speed;
+  const entries = [...(op.title ? [{ text: op.title, size: "h/11", y: `h - t*${num(speed)}` }] : []), ...op.lines.flatMap((line, i) => [
+    ...(line.role ? [{ text: line.role, size: "h/24", y: `h - t*${num(speed)} + ${i * 2 + (op.title ? 2 : 0)}*h/11` }] : []),
+    { text: line.name, size: "h/15", y: `h - t*${num(speed)} + ${i * 2 + (op.title ? 2 : 0) + (line.role ? 1 : 0)}*h/11` },
   ])];
-  const filters = entries.map((entry) => `drawtext=fontfile='${filterEscape(font)}':text='${filterEscape(entry.text)}':fontsize=${entry.size}:fontcolor=${rgb(op.text_color)}:x=(w-text_w)/2:y=${entry.y}`).join(",");
+  const filters = entries.map((entry) => `drawtext=fontfile='${filterEscape(font)}':text='${filterEscape(entry.text)}':fontsize=${entry.size}:fontcolor=${rgb(op.text_color)}:x=(w-text_w)/2:y=${entry.y}:alpha='min(1,t/${CREDITS_FADE_S})'`).join(",");
   const args = [...BASE(ffmpeg), "-f", "lavfi", "-i", `color=c=${rgb(op.background)}:s=${width}x${height}:r=${rate}:d=${num(duration)}`, "-f", "lavfi", "-i", `anullsrc=r=${sampleRate}:cl=stereo`, "-filter_complex", `[0:v]format=yuv420p,setsar=1,${filters}[v];[1:a]atrim=0:${num(duration)},asetpts=PTS-STARTPTS[a]`, "-map", "[v]", "-map", "[a]", "-t", num(duration), "-shortest", "-r", rate, ...ENCODE_V, ...ENCODE_A];
   return [...args, ...FASTSTART, out];
 }
