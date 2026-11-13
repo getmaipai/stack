@@ -790,7 +790,7 @@ export const STACK_IMAGE_MODEL: CatalogModelLike = {
   },
 };
 
-// IMAGETOOLS-01: the three small ONNX models behind the image tools,
+// IMAGETOOLS-01: the ONNX models behind the image tools,
 // pinned by revision and sha256 and placed in the hub cache like every
 // `hub_file` pin. They are components of the `image` role (never selected
 // as the image generator) for the `image-tools` runtime. Benchmarked on
@@ -816,6 +816,7 @@ export const STACK_IMAGE_TOOL_MODELS: CatalogModelLike[] = [
   imageToolPin("image-tool-isnet-general", "tool-isnet-general", "imgly/isnet-general-onnx", "440dea96dd4a3b06bbbf5abec3e26569dd7ec49f", "onnx/model.onnx", "MIT", "cc2c9f5c1751b9737cb81e708ff0c5e9542c2205daed22418a4fd2ab5d4c481a", 176_149_806, 3_400_000_000),
   imageToolPin("image-tool-lama-big", "tool-lama", "Carve/LaMa-ONNX", "c3c0c9e468934d62e79c329e35d82dd09ff8c444", "lama_fp32.onnx", "Apache-2.0", "1faef5301d78db7dda502fe59966957ec4b79dd64e16f03ed96913c7a4eb68d6", 208_044_816, 2_000_000_000),
   imageToolPin("image-tool-realesrgan-general-x4v3", "tool-realesrgan", "Heliosoph/realesrgan-onnx", "488e5dda07333179f229a6205d92135eea4c25e9", "realesr-general-x4v3.onnx", "BSD-3-Clause", "09b757accd747d7e423c1d352b3e8f23e77cc5742d04bae958d4eb8082b76fa4", 4_871_181, 1_500_000_000),
+  imageToolPin("image-tool-depth-anything-v2-small", "tool-depth", "onnx-community/depth-anything-v2-small", "4472b7362082ad9968fee890ca0f1e5aca36b93d", "onnx/model.onnx", "Apache-2.0", "afb6a5c28f3b6bf1618c6e43f02073ef9dfdc70e937502d51603e57b0a1df10c", 99_060_839, 1_500_000_000),
 ];
 
 // TALK-06: exact upstream files at the supplied model revision. The model

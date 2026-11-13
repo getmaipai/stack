@@ -350,7 +350,7 @@ const MAX_UPLOAD_BYTES = 40 * 1024 * 1024;
 const ImageEditFormSchema = z.object({
   image: z.custom<File>((value) => value instanceof File, "The picture in the `image` field.").openapi({ type: "string", format: "binary" }),
   mask: z.custom<File>((value) => value instanceof File, "The mask in the `mask` field.").openapi({ type: "string", format: "binary" }).optional(),
-  operation: z.enum([...IMAGE_TOOLS_OPERATIONS, "edit", "edit_masked", "segment"]).openapi({ description: "segment: SAM 2.1 still-picture mask; prompt is JSON {box?: [x0,y0,x1,y1], points?: [{x,y,label:1|0}]} in picture pixels. Other operations include background removal, erase, upscale, resize, people masks and edits." }),
+  operation: z.enum([...IMAGE_TOOLS_OPERATIONS, "edit", "edit_masked", "segment"]).openapi({ description: "depth: grayscale Depth Anything V2 Small map (near is white, far is black); segment: SAM 2.1 still-picture mask; prompt is JSON {box?: [x0,y0,x1,y1], points?: [{x,y,label:1|0}]} in picture pixels. Other operations include background removal, erase, upscale, resize, people masks and edits." }),
   instruction: z.string().optional().openapi({ description: "edit and edit_masked: what to change, in words (`prompt` is accepted too)." }),
   prompt: z.string().optional().openapi({ description: "segment: JSON prompt with an optional pixel box and up to 16 positive (label 1) or negative (label 0) points; at least a box or positive point is required. Picture limit: 12 megapixels and 4096 pixels on the long side." }),
   region: z.string().optional().openapi({ description: "edit_masked: x,y,width,height as fractions of the picture, like 0.4,0.5,0.2,0.2; the area to change when no mask is sent." }),
@@ -374,7 +374,7 @@ const ImageEditFormSchema = z.object({
 });
 const ImageEditResponseSchema = z.object({ created: z.number().int().optional(), job: z.string().optional(), data: z.array(z.object({ b64_json: z.string().optional(), width: z.number().optional(), height: z.number().optional(), content_type: z.string().optional(), operation: z.string().optional(), engine: z.string().optional(), model: z.string().optional(), ms: z.number().optional(), area: z.number().min(0).max(1).optional() }).passthrough()) });
 const ImageEditErrorSchema = z.object({ error: z.string(), code: z.string().optional(), job: z.string().optional() });
-const imageEditsRoute = createRoute({ method: "post", path: "/images/edits", tags: ["Roles"], summary: "Image edits: remove background, erase, upscale, resize (the job API with a wait)", request: { body: { content: { "multipart/form-data": { schema: ImageEditFormSchema } } } }, responses: {
+const imageEditsRoute = createRoute({ method: "post", path: "/images/edits", tags: ["Roles"], summary: "Image edits: remove background, erase, upscale, resize, depth (the job API with a wait)", request: { body: { content: { "multipart/form-data": { schema: ImageEditFormSchema } } } }, responses: {
   200: { content: { "application/json": { schema: ImageEditResponseSchema } }, description: "`data` holds one `{ b64_json, width, height, content_type, operation, engine, model, ms }`: a PNG with no metadata. `segment` also returns `area` (0 to 1)." },
   202: { content: { "application/json": { schema: ImageEditResponseSchema } }, description: "Still running past timeout_ms; fetch the PNG from GET /v1/images/edits/{job} when /stack/v1/jobs/{job} says done." },
   400: { content: { "application/json": { schema: ImageEditErrorSchema } }, description: "The form is incomplete." },

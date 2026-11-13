@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { IMAGE_TOOL_MODEL_IDS, ImageToolError, ImageToolsService, imageToolsRequirementsFileFor, keepResult, stashInput, takeResult, unstashInput, workerHandle, type ImageToolsDeps, type WorkerHandle, type WorkerRequest, type WorkerReply } from "@/imagetools/imageTools";
+import { IMAGE_TOOLS_OPERATIONS, IMAGE_TOOL_MODEL_IDS, ImageToolError, ImageToolsService, imageToolsRequirementsFileFor, keepResult, stashInput, takeResult, unstashInput, workerHandle, type ImageToolsDeps, type WorkerHandle, type WorkerRequest, type WorkerReply } from "@/imagetools/imageTools";
 import { STACK_IMAGE_TOOL_MODELS, STACK_MODELS } from "@/lib/modelCatalog";
 import { buildInstallPlan } from "@/lib/installPlan";
 import { removeWorkerDir, startLeakyWorker, waitForWorkerRequest, waitForWorkerTreeGone, waitForWorkerPids } from "./helpers/leakyWorker";
@@ -45,6 +45,27 @@ test("an erase request reaches the worker with the mask and the installed model,
   expect(released).toBe(1);
 });
 
+test("depth is a public operation, requires its model, and round-trips a worker PNG", async () => {
+  expect((IMAGE_TOOLS_OPERATIONS as readonly string[]).includes("depth")).toBe(true);
+  const missing = new ImageToolsService(deps({ modelPath: (id) => id === IMAGE_TOOL_MODEL_IDS.depth ? null : "/models/x.onnx" }));
+  const error = await missing.run({ operation: "depth", image: PNG }).catch((caught) => caught as ImageToolError);
+  expect((error as ImageToolError).code).toBe("model_missing");
+  expect((error as ImageToolError).message).toContain("depth model");
+  missing.stop();
+  const service = new ImageToolsService(deps({}, (request) => ({ id: request.id, ok: true, width: 10, height: 20, engine: "depth-anything-v2-small", model: "depth-anything-v2-small", ms: 5 })));
+  const result = await service.run({ operation: "depth", image: PNG });
+  expect(requests.at(-1)!.op).toBe("depth");
+  expect(requests.at(-1)!.models.depth).toBe("/models/x.onnx");
+  expect(result).toMatchObject({ png: PNG, width: 10, height: 20, operation: "depth", model: "depth-anything-v2-small" });
+  service.stop();
+});
+
+test("depth model availability is exposed in image-tools status", () => {
+  const service = new ImageToolsService(deps({ modelPath: (id) => id === IMAGE_TOOL_MODEL_IDS.depth ? "/models/depth.onnx" : null }));
+  expect(service.status().models.depth).toBe(true);
+  service.stop();
+});
+
 test("one worker serves several edits and requests run one at a time", async () => {
   const service = new ImageToolsService(deps());
   await Promise.all([service.run({ operation: "resize", image: PNG, params: { width: 5 } }), service.run({ operation: "resize", image: PNG, params: { factor: 2 } })]);
@@ -60,6 +81,21 @@ test("a missing model is a 503 that says to install the tools, and nothing is se
   expect((error as ImageToolError).status).toBe(503);
   expect((error as ImageToolError).message).toContain("Install the image tools");
   expect(requests).toHaveLength(0);
+  service.stop();
+});
+
+test("depth requires its pinned model and round-trips a worker PNG reply", async () => {
+  expect((IMAGE_TOOLS_OPERATIONS as readonly string[]).includes("depth")).toBe(true);
+  const missing = new ImageToolsService(deps({ modelPath: (id) => id === IMAGE_TOOL_MODEL_IDS.depth ? null : "/models/x.onnx" }));
+  const error = await missing.run({ operation: "depth", image: PNG }).catch((caught) => caught as ImageToolError);
+  expect((error as ImageToolError).code).toBe("model_missing");
+  expect((error as ImageToolError).message).toContain("depth model");
+  missing.stop();
+  const service = new ImageToolsService(deps({}, (request) => ({ id: request.id, ok: true, width: 10, height: 20, engine: "depth-anything-v2-small", model: "depth-anything-v2-small", ms: 5 })));
+  const result = await service.run({ operation: "depth", image: PNG });
+  expect(requests.at(-1)!.op).toBe("depth");
+  expect(requests.at(-1)!.models.depth).toBe("/models/x.onnx");
+  expect(result).toMatchObject({ png: PNG, width: 10, height: 20, operation: "depth", model: "depth-anything-v2-small" });
   service.stop();
 });
 
@@ -143,7 +179,7 @@ test("pictures wait in memory only between the route and the runner, and results
   expect(takeResult("r7")).not.toBeNull();
 });
 
-test("the three pins are verified components of the image role with licences, never a selectable image model", () => {
+test("the image tool pins are verified components of the image role with licences, never selectable image models", () => {
   const editorPins = STACK_IMAGE_TOOL_MODELS.filter((pin) => pin.component !== "tool-look");
   expect(editorPins.map((pin) => pin.id).sort()).toEqual(Object.values(IMAGE_TOOL_MODEL_IDS).sort());
   for (const pin of editorPins) {
@@ -160,7 +196,7 @@ test("the three pins are verified components of the image role with licences, ne
 
 test("every tier's install plan carries the image tools and the requirements file is hashed", async () => {
   const plan = buildInstallPlan({ platform: "darwin", arch: "arm64", totalMemoryBytes: 128 * 1_073_741_824, unifiedMemory: true, freeDiskBytes: 1e12, cudaDevices: [] } as never, { vramOverrideGb: 64 });
-  expect(plan.models.filter((model) => model.id.startsWith("image-tool-"))).toHaveLength(3);
+  expect(plan.models.filter((model) => model.id.startsWith("image-tool-"))).toHaveLength(4);
   const text = await Bun.file(imageToolsRequirementsFileFor("darwin", "arm64")!).text();
   expect(text).toContain("onnxruntime==1.31.0");
   expect(text).toContain("--hash=sha256:");

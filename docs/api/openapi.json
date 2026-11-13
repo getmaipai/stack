@@ -2320,7 +2320,7 @@
         "tags": [
           "Roles"
         ],
-        "summary": "Image edits: remove background, erase, upscale, resize (the job API with a wait)",
+        "summary": "Image edits: remove background, erase, upscale, resize, depth (the job API with a wait)",
         "requestBody": {
           "content": {
             "multipart/form-data": {
@@ -2342,6 +2342,7 @@
                       "erase",
                       "upscale",
                       "resize",
+                      "depth",
                       "find_people",
                       "people_mask",
                       "erase_people",
@@ -2351,7 +2352,7 @@
                       "edit_masked",
                       "segment"
                     ],
-                    "description": "segment: SAM 2.1 still-picture mask; prompt is JSON {box?: [x0,y0,x1,y1], points?: [{x,y,label:1|0}]} in picture pixels. Other operations include background removal, erase, upscale, resize, people masks and edits."
+                    "description": "depth: grayscale Depth Anything V2 Small map (near is white, far is black); segment: SAM 2.1 still-picture mask; prompt is JSON {box?: [x0,y0,x1,y1], points?: [{x,y,label:1|0}]} in picture pixels. Other operations include background removal, erase, upscale, resize, people masks and edits."
                   },
                   "instruction": {
                     "type": "string",

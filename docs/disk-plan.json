@@ -4,30 +4,30 @@
   "headroom_warn_bytes": 5368709120,
   "gib_bytes": 1073741824,
   "installer": {
-    "p16.required_free_bytes": 50852025142,
+    "p16.required_free_bytes": 50970898149,
     "p16.minimum_required_free_bytes": 13976383571,
-    "p16.everything_required_free_bytes": 69069907386,
-    "p16.needed_bytes": 43152488409,
+    "p16.everything_required_free_bytes": 69188780392,
+    "p16.needed_bytes": 43251549248,
     "p16.home_required_free_bytes": 3176323277,
-    "p16.ai_required_free_bytes": 47675701865,
-    "p32.required_free_bytes": 69603836662,
+    "p16.ai_required_free_bytes": 47794574872,
+    "p32.required_free_bytes": 69722709669,
     "p32.minimum_required_free_bytes": 31047800378,
-    "p32.everything_required_free_bytes": 92905893942,
-    "p32.needed_bytes": 58778998009,
+    "p32.everything_required_free_bytes": 93024766949,
+    "p32.needed_bytes": 58878058848,
     "p32.home_required_free_bytes": 3176323277,
-    "p32.ai_required_free_bytes": 66427513385,
-    "p64.required_free_bytes": 156054142724,
+    "p32.ai_required_free_bytes": 66546386392,
+    "p64.required_free_bytes": 156173015731,
     "p64.minimum_required_free_bytes": 56807128855,
-    "p64.everything_required_free_bytes": 223020353382,
-    "p64.needed_bytes": 131157506990,
+    "p64.everything_required_free_bytes": 223139226389,
+    "p64.needed_bytes": 131256567829,
     "p64.home_required_free_bytes": 3176323277,
-    "p64.ai_required_free_bytes": 152877819447,
-    "p128.required_free_bytes": 190720461273,
+    "p64.ai_required_free_bytes": 152996692454,
+    "p128.required_free_bytes": 190839334280,
     "p128.minimum_required_free_bytes": 56807128855,
-    "p128.everything_required_free_bytes": 508397169136,
-    "p128.needed_bytes": 160172569558,
+    "p128.everything_required_free_bytes": 508516042143,
+    "p128.needed_bytes": 160271630397,
     "p128.home_required_free_bytes": 3176323277,
-    "p128.ai_required_free_bytes": 187544137996
+    "p128.ai_required_free_bytes": 187663011003
   },
   "tiers": {
     "p16": {
@@ -136,13 +136,14 @@
           "kind": "model",
           "need": "recommended",
           "selectable": true,
-          "download_bytes": 389065803,
-          "installed_bytes": 389065803,
+          "download_bytes": 488126642,
+          "installed_bytes": 488126642,
           "peak_temp_bytes": 0,
           "model_ids": [
             "image-tool-isnet-general",
             "image-tool-lama-big",
-            "image-tool-realesrgan-general-x4v3"
+            "image-tool-realesrgan-general-x4v3",
+            "image-tool-depth-anything-v2-small"
           ],
           "engines": [
             "engine:image-tools",
@@ -431,11 +432,11 @@
         }
       ],
       "default": {
-        "download_bytes": 35571349440,
-        "installed_bytes": 38497683663,
+        "download_bytes": 35670410279,
+        "installed_bytes": 38596744502,
         "peak_temp_bytes": 4654804746,
-        "needed_bytes": 43152488409,
-        "required_free_bytes": 50852025142
+        "needed_bytes": 43251549248,
+        "required_free_bytes": 50970898149
       },
       "minimum": {
         "download_bytes": 8495179560,
@@ -445,11 +446,11 @@
         "required_free_bytes": 13976383571
       },
       "everything": {
-        "download_bytes": 44979455299,
-        "installed_bytes": 49970918866,
+        "download_bytes": 45078516138,
+        "installed_bytes": 50069979705,
         "peak_temp_bytes": 9104804746,
-        "needed_bytes": 59075723612,
-        "required_free_bytes": 69069907386
+        "needed_bytes": 59174784451,
+        "required_free_bytes": 69188780392
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -605,13 +606,14 @@
           "kind": "model",
           "need": "recommended",
           "selectable": true,
-          "download_bytes": 389065803,
-          "installed_bytes": 389065803,
+          "download_bytes": 488126642,
+          "installed_bytes": 488126642,
           "peak_temp_bytes": 0,
           "model_ids": [
             "image-tool-isnet-general",
             "image-tool-lama-big",
-            "image-tool-realesrgan-general-x4v3"
+            "image-tool-realesrgan-general-x4v3",
+            "image-tool-depth-anything-v2-small"
           ],
           "engines": [
             "engine:image-tools",
@@ -935,11 +937,11 @@
         }
       ],
       "default": {
-        "download_bytes": 51197859040,
-        "installed_bytes": 54124193263,
+        "download_bytes": 51296919879,
+        "installed_bytes": 54223254102,
         "peak_temp_bytes": 4654804746,
-        "needed_bytes": 58778998009,
-        "required_free_bytes": 69603836662
+        "needed_bytes": 58878058848,
+        "required_free_bytes": 69722709669
       },
       "minimum": {
         "download_bytes": 22721360232,
@@ -949,11 +951,11 @@
         "required_free_bytes": 31047800378
       },
       "everything": {
-        "download_bytes": 64263863506,
-        "installed_bytes": 69696070774,
+        "download_bytes": 64362924345,
+        "installed_bytes": 69795131613,
         "peak_temp_bytes": 9270609013,
-        "needed_bytes": 78966679787,
-        "required_free_bytes": 92905893942
+        "needed_bytes": 79065740626,
+        "required_free_bytes": 93024766949
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -1176,13 +1178,14 @@
           "kind": "model",
           "need": "recommended",
           "selectable": true,
-          "download_bytes": 389065803,
-          "installed_bytes": 389065803,
+          "download_bytes": 488126642,
+          "installed_bytes": 488126642,
           "peak_temp_bytes": 0,
           "model_ids": [
             "image-tool-isnet-general",
             "image-tool-lama-big",
-            "image-tool-realesrgan-general-x4v3"
+            "image-tool-realesrgan-general-x4v3",
+            "image-tool-depth-anything-v2-small"
           ],
           "engines": [
             "engine:image-tools",
@@ -1713,11 +1716,11 @@
         }
       ],
       "default": {
-        "download_bytes": 120983161892,
-        "installed_bytes": 124483178667,
+        "download_bytes": 121082222731,
+        "installed_bytes": 124582239506,
         "peak_temp_bytes": 6674328323,
-        "needed_bytes": 131157506990,
-        "required_free_bytes": 156054142724
+        "needed_bytes": 131256567829,
+        "required_free_bytes": 156173015731
       },
       "minimum": {
         "download_bytes": 42781325861,
@@ -1727,11 +1730,11 @@
         "required_free_bytes": 56807128855
       },
       "everything": {
-        "download_bytes": 168244933872,
-        "installed_bytes": 175047059099,
+        "download_bytes": 168343994711,
+        "installed_bytes": 175146119938,
         "peak_temp_bytes": 12963882463,
-        "needed_bytes": 188010941562,
-        "required_free_bytes": 223020353382
+        "needed_bytes": 188110002401,
+        "required_free_bytes": 223139226389
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -1977,13 +1980,14 @@
           "kind": "model",
           "need": "recommended",
           "selectable": true,
-          "download_bytes": 389065803,
-          "installed_bytes": 389065803,
+          "download_bytes": 488126642,
+          "installed_bytes": 488126642,
           "peak_temp_bytes": 0,
           "model_ids": [
             "image-tool-isnet-general",
             "image-tool-lama-big",
-            "image-tool-realesrgan-general-x4v3"
+            "image-tool-realesrgan-general-x4v3",
+            "image-tool-depth-anything-v2-small"
           ],
           "engines": [
             "engine:image-tools",
@@ -2778,11 +2782,11 @@
         }
       ],
       "default": {
-        "download_bytes": 148894901324,
-        "installed_bytes": 152739458572,
+        "download_bytes": 148993962163,
+        "installed_bytes": 152838519411,
         "peak_temp_bytes": 7433110986,
-        "needed_bytes": 160172569558,
-        "required_free_bytes": 190720461273
+        "needed_bytes": 160271630397,
+        "required_free_bytes": 190839334280
       },
       "minimum": {
         "download_bytes": 42781325861,
@@ -2792,11 +2796,11 @@
         "required_free_bytes": 56807128855
       },
       "everything": {
-        "download_bytes": 403174695199,
-        "installed_bytes": 411765715554,
+        "download_bytes": 403273756038,
+        "installed_bytes": 411864776393,
         "peak_temp_bytes": 14278310471,
-        "needed_bytes": 426044026025,
-        "required_free_bytes": 508397169136
+        "needed_bytes": 426143086864,
+        "required_free_bytes": 508516042143
       },
       "measured_on": "2026-10-17",
       "default_selected": [

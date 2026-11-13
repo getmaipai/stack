@@ -39,13 +39,13 @@ import subjectsHelperSource from "./subjectmask.swift" with { type: "file" };
 
 export const IMAGE_TOOLS_NAME = "image-tools";
 export const IMAGE_TOOLS_VERSION = MANAGED_RUNTIMES.find((runtime) => runtime.name === IMAGE_TOOLS_NAME)?.version ?? "1.0.0";
-export const IMAGE_TOOLS_OPERATIONS = ["remove_background", "erase", "upscale", "resize", "find_people", "people_mask", "erase_people", "find_subjects", "erase_subjects"] as const;
+export const IMAGE_TOOLS_OPERATIONS = ["remove_background", "erase", "upscale", "resize", "depth", "find_people", "people_mask", "erase_people", "find_subjects", "erase_subjects"] as const;
 /** MAKER-A, MAKER-B and MAKER-C: the Stack's own jobs call these (clip_track with a folder of clip frames, emotion_bake with the pose pictures the orchestrator made, pack_assemble with a staging folder); it is not on the picture-upload route, so it stays out of IMAGE_TOOLS_OPERATIONS (which that route and the status list publish). */
 export const IMAGE_TOOLS_INTERNAL_OPERATIONS = ["clip_track", "emotion_bake", "pack_assemble", "shapes_bake"] as const;
 export type ImageToolOperation = typeof IMAGE_TOOLS_OPERATIONS[number] | typeof IMAGE_TOOLS_INTERNAL_OPERATIONS[number];
 
 /** The pinned model records the worker loads, by the name the worker uses. */
-export const IMAGE_TOOL_MODEL_IDS = { isnet: "image-tool-isnet-general", lama: "image-tool-lama-big", esrgan: "image-tool-realesrgan-general-x4v3" } as const;
+export const IMAGE_TOOL_MODEL_IDS = { isnet: "image-tool-isnet-general", lama: "image-tool-lama-big", esrgan: "image-tool-realesrgan-general-x4v3", depth: "image-tool-depth-anything-v2-small" } as const;
 export const LOOK_MODEL_ID = "image-tool-yolox-nano";
 export const LOOK_ALL_MODEL_ID = "image-tool-yolox-s";
 /** What the worker holds at its largest (IS-Net on CPU peaked at 3.2 GB in the bench, plus the decoded picture), asked of the governor while the worker lives. */
@@ -53,7 +53,7 @@ export const IMAGE_TOOLS_ESTIMATED_BYTES = 4 * 1_073_741_824;
 /** Megapixels each tool accepts; the worker enforces them and says them in words. Mirrored here so the status route and the docs state them once. */
 export const IMAGE_TOOL_LIMITS = { remove_background_in: 25, erase_in: 25, upscale_in: 6, upscale_out: 36, resize_out: 36 } as const;
 const idleMs = (): number => Number(process.env.IMAGE_TOOLS_IDLE_MS ?? 120_000);
-const DEADLINE_MS: Record<ImageToolOperation, number> = { remove_background: 120_000, erase: 120_000, upscale: 300_000, resize: 60_000, find_people: 60_000, people_mask: 60_000, erase_people: 120_000, find_subjects: 120_000, erase_subjects: 180_000, clip_track: 300_000, emotion_bake: 300_000, pack_assemble: 600_000, shapes_bake: 300_000 };
+const DEADLINE_MS: Record<ImageToolOperation, number> = { remove_background: 120_000, erase: 120_000, upscale: 300_000, resize: 60_000, depth: 120_000, find_people: 60_000, people_mask: 60_000, erase_people: 120_000, find_subjects: 120_000, erase_subjects: 180_000, clip_track: 300_000, emotion_bake: 300_000, pack_assemble: 600_000, shapes_bake: 300_000 };
 const RESULT_KEEP = 6;
 const RESULT_TTL_MS = 10 * 60_000;
 
@@ -319,12 +319,12 @@ export class ImageToolsService {
     try {
       const worker = await this.ensureWorker(onStatus, options.signal);
       lease = heavyGate.attach({ role: "imagetools", worker: worker.pausable });
-      const needed = input.operation === "erase" || input.operation === "erase_people" || input.operation === "erase_subjects" ? ["lama"] : input.operation === "upscale" ? ["esrgan"] : input.operation === "remove_background" ? ["isnet"] : [];
+      const needed = input.operation === "erase" || input.operation === "erase_people" || input.operation === "erase_subjects" ? ["lama"] : input.operation === "upscale" ? ["esrgan"] : input.operation === "remove_background" ? ["isnet"] : input.operation === "depth" ? ["depth"] : [];
       const models = Object.fromEntries(Object.entries(IMAGE_TOOL_MODEL_IDS).map(([name, id]) => [name, this.deps.modelPath(id)]));
       for (const name of needed) {
         // Apple's finder needs no model; the ONNX one is the fallback and is required only when no helper exists or the engine is forced.
         if (name === "isnet" && this.helper && (input.params?.engine ?? "auto") !== "isnet") continue;
-        if (!models[name]) throw new ImageToolError("model_missing", `The ${name === "lama" ? "erase" : name === "esrgan" ? "upscale" : "background"} model is not installed yet. Install the image tools from Home's Engines page, then try again.`, 503);
+        if (!models[name]) throw new ImageToolError("model_missing", `The ${name === "lama" ? "erase" : name === "esrgan" ? "upscale" : name === "depth" ? "depth" : "background"} model is not installed yet. Install the image tools from Home's Engines page, then try again.`, 503);
       }
       writeFileSync(files[0]!, input.image);
       if (input.mask) writeFileSync(files[1]!, input.mask);

@@ -202,7 +202,7 @@ const LABELS: Record<string, { label: string; summary: string }> = {
   "chatterbox-turbo-fp16": { label: "Voice: Chatterbox Turbo", summary: "A more expressive speaking voice for larger computers." },
   wakeword: { label: "Wake word (Hey MaiPai)", summary: "Lets a speaker or robot wake up when someone says the wake word." },
   ffmpeg: { label: "Audio and video tools (ffmpeg)", summary: "Cuts, mixes and changes sound and video" },
-  "image-tools": { label: "Picture tools", summary: "Remove a background, erase an object, upscale or resize a picture." },
+  "image-tools": { label: "Picture tools", summary: "Remove a background, erase an object, upscale, resize or make a depth map for a picture." },
   liveportrait: { label: "Talking pictures", summary: "Makes the mouth and blink pictures a talking companion plays back while it speaks." },
   "tool-look": { label: "Look", summary: "Names household objects, wall colour and light in a picture." },
   "flux2-klein-4b": { label: "Pictures: FLUX.2 Klein 4B", summary: "The everyday picture model. Makes and edits pictures in a few seconds." },

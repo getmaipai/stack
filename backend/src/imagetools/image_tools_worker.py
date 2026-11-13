@@ -1,5 +1,5 @@
 """The Stack's image tools worker (IMAGETOOLS-01): background removal, erase
-(inpainting), upscale and resize on images the person already has.
+(inpainting), upscale, resize and depth estimation on images the person already has.
 
 One request per line on stdin (JSON), one reply per line on stdout. The
 images travel as files the Stack wrote under its own data directory; the
@@ -436,6 +436,38 @@ def upscale(request, params):
         big = np.dstack([big, alpha])
     save_png(big, request["output"])
     return {"width": width * scale, "height": height * scale, "engine": "real-esrgan-general-x4v3", "model": "realesr-general-x4v3"}
+
+
+def depth(request, params):
+    src = load(request["input"], "erase_in")
+    width, height = src.size
+    sess = session("depth", request["models"].get("depth"))
+    # Keep the source aspect ratio while fitting the preprocessor's 518 px
+    # size and rounding each dimension to the ViT patch size (14).
+    scale = 518.0 / max(width, height)
+    proc_w = max(14, int(round(width * scale / 14.0)) * 14)
+    proc_h = max(14, int(round(height * scale / 14.0)) * 14)
+    resized = src.convert("RGB").resize((proc_w, proc_h), Image.Resampling.BICUBIC)
+    x = np.asarray(resized, dtype=np.float32) / 255.0
+    mean = np.asarray([0.485, 0.456, 0.406], dtype=np.float32)
+    std = np.asarray([0.229, 0.224, 0.225], dtype=np.float32)
+    x = ((x - mean) / std).transpose(2, 0, 1)[None].astype(np.float32)
+    input_name = sess.get_inputs()[0].name
+    predicted = sess.run(None, {input_name: x})[0]
+    predicted = np.asarray(predicted, dtype=np.float32).squeeze()
+    if predicted.ndim != 2:
+        raise Refused("failed", "The depth model returned an unexpected picture shape.")
+    low, high = float(np.nanmin(predicted)), float(np.nanmax(predicted))
+    if not np.isfinite(low) or not np.isfinite(high):
+        raise Refused("failed", "The depth model returned invalid values.")
+    normalized = np.zeros_like(predicted) if high - low < 1e-8 else (predicted - low) / (high - low)
+    # Depth Anything predicts larger values for nearer points. Normalize to
+    # white near and black far, then restore the original picture dimensions.
+    gray = np.clip(normalized * 255.0 + 0.5, 0, 255).astype(np.uint8)
+    gray = cv2.resize(gray, (width, height), interpolation=cv2.INTER_CUBIC)
+    gray = np.clip(gray, 0, 255).astype(np.uint8)
+    Image.fromarray(gray, "L").save(request["output"], format="PNG", optimize=False)
+    return {"width": width, "height": height, "engine": "depth-anything-v2-small", "model": "depth-anything-v2-small"}
 
 
 def resize(request, params):
@@ -1817,7 +1849,7 @@ def shapes_bake(request, params):
     return {"report": report, "width": width, "height": height, "engine": "dis", "model": "none"}
 
 
-OPS = {"remove_background": remove_background, "erase": erase, "upscale": upscale, "resize": resize, "find_people": find_people, "people_mask": people_mask, "erase_people": erase_people, "find_subjects": find_subjects, "erase_subjects": erase_subjects, "clip_track": clip_track, "shapes_bake": shapes_bake, "emotion_bake": emotion_bake, "pack_assemble": pack_assemble}
+OPS = {"remove_background": remove_background, "erase": erase, "upscale": upscale, "resize": resize, "depth": depth, "find_people": find_people, "people_mask": people_mask, "erase_people": erase_people, "find_subjects": find_subjects, "erase_subjects": erase_subjects, "clip_track": clip_track, "shapes_bake": shapes_bake, "emotion_bake": emotion_bake, "pack_assemble": pack_assemble}
 
 
 def main():
@@ -1833,7 +1865,7 @@ def main():
             reply["id"] = request.get("id")
             op = OPS.get(request.get("op"))
             if op is None:
-                raise Refused("bad_operation", "That operation is not one of remove_background, erase, upscale, resize, find_people, erase_people, find_subjects, erase_subjects, clip_track, emotion_bake, pack_assemble or shapes_bake.")
+                raise Refused("bad_operation", "That operation is not one of remove_background, erase, upscale, resize, depth, find_people, erase_people, find_subjects, erase_subjects, clip_track, emotion_bake, pack_assemble or shapes_bake.")
             reply.update(op(request, request.get("params") or {}))
             reply["ok"] = True
         except Refused as refused:
