@@ -724,6 +724,10 @@
     "seedvr2-3b-ema-vae-fp16": {
       "download_bytes": 501324814,
       "installed_bytes": 501324814
+    },
+    "mossformer2-se-48k": {
+      "download_bytes": 110652628,
+      "installed_bytes": 110652628
     }
   }
 }
