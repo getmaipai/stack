@@ -386,3 +386,13 @@ test("ffmpeg is a listed, required tool with its size, licence and a row in the 
   expect(view.licence_name).toContain("GPL-3.0-or-later");
   expect(view.full_bytes).toBe(32_902_204);
 });
+
+test("fpcalc is a listed song naming tool with the Chromaprint LGPL licence", async () => {
+  __setComponentUnitsForTests(null);
+  const unit = componentDefs().find((candidate) => candidate.id === "fpcalc")!;
+  expect(unit).toBeTruthy();
+  expect(unit.pins).toEqual([]);
+  expect(unit.envs.map((e) => e.name)).toEqual(["fpcalc"]);
+  const view = (await listComponents(hw())).components.find((candidate) => candidate.id === "fpcalc")!;
+  expect(view).toMatchObject({ label: "Song naming tool (chromaprint)", summary: "Listens to a few seconds of music and makes a fingerprint so Home can name the song", group: "tools", licence_name: "LGPL-2.1-or-later" });
+});

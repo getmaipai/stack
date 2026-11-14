@@ -24,6 +24,8 @@ import linuxX64Requirements from "./yt-dlp.linux-x64.requirements.txt" with { ty
 
 export const FFMPEG_NAME = "ffmpeg";
 export const FFMPEG_TAG = "v8.1.3-1";
+export const FPCALC_NAME = "fpcalc";
+export const FPCALC_TAG = "v1.6.2";
 export const YT_DLP_NAME = "yt-dlp";
 export const YT_DLP_VERSION = "2026.08.19";
 
@@ -49,6 +51,29 @@ export const FFMPEG_PINS: EngineBinaryPin[] = [
 export function ffmpegPinFor(platform = process.platform, arch = process.arch): EngineBinaryPin | null {
   return FFMPEG_PINS.find((pin) => pin.platform === platform && pin.arch === arch) ?? null;
 }
+
+const fpcalcRelease = `https://github.com/acoustid/chromaprint/releases/download/${FPCALC_TAG}`;
+function fpcalcPin(platform: "darwin" | "linux", arch: "arm64" | "x64", asset: string, sha256: string, bytes: number, verified: boolean): EngineBinaryPin {
+  const label = `${platform === "darwin" ? "macOS" : "Linux"} ${arch}`;
+  return {
+    id: `fpcalc-${FPCALC_TAG}-${platform}-${arch}`, name: FPCALC_NAME, tag: FPCALC_TAG, platform, arch, tool: "fpcalc", requiresNvidia: false,
+    label: `fpcalc 1.6.2 (Chromaprint, ${label})`, docsUrl: "https://github.com/acoustid/chromaprint",
+    archive: { label: `Chromaprint fpcalc 1.6.2 (${label})`, url: `${fpcalcRelease}/${asset}`, sha256, approxBytes: bytes },
+    verified,
+  };
+}
+
+/** One archive per platform holding fpcalc. The macOS arm64 archive was downloaded, hashed and run; the other release assets are pinned but not yet verified locally. */
+export const FPCALC_PINS: EngineBinaryPin[] = [
+  fpcalcPin("darwin", "arm64", "chromaprint-fpcalc-1.6.2-macos-arm64.tar.gz", "f3bc56cb42d89a01237bb3f3629329e4ec75f7c1b0217acf6e9bf952ac47979b", 1_322_220, true),
+  fpcalcPin("darwin", "x64", "chromaprint-fpcalc-1.6.2-macos-x86_64.tar.gz", "5f7b21964163e9e1719ca76d89e71873e2bdba87e9c01d1bcb06da67132da2bb", 1_376_075, false),
+  fpcalcPin("linux", "x64", "chromaprint-fpcalc-1.6.2-linux-x86_64.tar.gz", "c968ad4a0821592a79b158fb2e1f46cbe0a22a0a1dbc0743c67d68e75d15d2bb", 2_398_043, false),
+  fpcalcPin("linux", "arm64", "chromaprint-fpcalc-1.6.2-linux-arm64.tar.gz", "3aa1498126ed272d805bc9d081c77965c9e1e1a0891bb112c13b56ef2ad47bad", 1_408_792, false),
+];
+
+export function fpcalcPinFor(platform = process.platform, arch = process.arch): EngineBinaryPin | null {
+  return FPCALC_PINS.find((pin) => pin.platform === platform && pin.arch === arch) ?? null;
+}
 export function ytDlpRequirementsFileFor(platform = process.platform, arch = process.arch): string | null {
   if (platform === "darwin" && arch === "arm64") return darwinArm64Requirements;
   if (platform === "linux" && arch === "arm64") return linuxArm64Requirements;
@@ -59,6 +84,7 @@ export function ytDlpRequirementsFileFor(platform = process.platform, arch = pro
 /** The licence record for every part of the service, rendered into docs/components.md and served by GET /stack/v1/media. */
 export interface MediaComponent { name: string; version: string; licence: string; source: string; why: string; }
 export const MEDIA_COMPONENTS: MediaComponent[] = [
+  { name: "fpcalc (chromaprint)", version: "1.6.2", licence: "LGPL-2.1-or-later", source: "github.com/acoustid/chromaprint, release v1.6.2, per platform, sha256 pinned", why: "Turns a few seconds of music into a fingerprint so Home can name the song; the audio never leaves this computer, only the fingerprint goes to AcoustID" },
   { name: "ffmpeg", version: "8.1.3 (jellyfin-ffmpeg 8.1.3-1)", licence: "GPL-3.0-or-later (built with --enable-gpl --enable-version3, no nonfree parts)", source: "github.com/jellyfin/jellyfin-ffmpeg, release v8.1.3-1, portable build per platform, sha256 pinned", why: "Transcode to H.264 and AAC, thumbnails, storyboards and preview clips; the only static build with a clear licence on every platform the Stack runs on." },
   { name: "ffprobe", version: "8.1.3 (jellyfin-ffmpeg 8.1.3-1)", licence: "GPL-3.0-or-later (same archive as ffmpeg)", source: "the same archive as ffmpeg", why: "Reads duration, codecs, chapters, tags, embedded date and source URL of a file." },
   { name: "yt-dlp", version: YT_DLP_VERSION, licence: "Unlicense (public domain); its default extras: brotli MIT, certifi MPL-2.0, mutagen GPL-2.0-or-later, pycryptodomex BSD-2-Clause, requests Apache-2.0, urllib3 MIT, websockets BSD-3-Clause, yt-dlp-ejs Unlicense", source: "pypi.org, yt-dlp==2026.8.19 with every file hash in the requirements file, in a uv environment", why: "Fetches a link the person chose; FileTube's precedent." },

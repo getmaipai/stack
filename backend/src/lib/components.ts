@@ -27,7 +27,7 @@ import { selectEngineBinary } from "@/lib/engineCatalog";
 import { splashDraftPossible } from "@/lib/splash";
 import { ensureEngine, engineDir, engineToolPath } from "@/lib/engineInstall";
 import { ENGINE_READY_MARKER } from "@/lib/engineCatalog";
-import { FFMPEG_NAME, FFMPEG_TAG, MEDIA_COMPONENTS, ffmpegPinFor } from "@/media/pins";
+import { FFMPEG_NAME, FFMPEG_TAG, FPCALC_NAME, FPCALC_TAG, MEDIA_COMPONENTS, ffmpegPinFor, fpcalcPinFor } from "@/media/pins";
 import { uvEnvironmentReady } from "@/lib/uvEnvironment";
 import { loadedRoleForModel, selectedModel } from "@/lib/supervisor";
 import { ensureImageGenEnvironment, imageGen, imageGenEnvironmentReady, imageGenRoot } from "@/images/imageEngine";
@@ -181,6 +181,17 @@ const envFfmpeg: EnvDef = {
     await ensureEngine(pin, () => {}, { signal, activate: true });
   },
 };
+const fpcalcRoot = (): string => { const pin = fpcalcPinFor(); return pin ? engineDir(pin) : engineTagRoot(FPCALC_NAME, FPCALC_TAG); };
+const fpcalcReady = (): boolean => { const pin = fpcalcPinFor(); return !!pin && existsSync(join(engineDir(pin), ENGINE_READY_MARKER)) && existsSync(engineToolPath(pin, "fpcalc")); };
+const envFpcalc: EnvDef = {
+  name: FPCALC_NAME, approxBytes: engineDownloadBytes(FPCALC_NAME) ?? 1_322_220, root: fpcalcRoot, ready: fpcalcReady, link: engineCurrentPath(FPCALC_NAME),
+  build: async (onPhase, signal) => {
+    const pin = fpcalcPinFor();
+    if (!pin) throw new Error(`The song naming tool is not available on ${process.platform} ${process.arch} yet.`);
+    onPhase("the song naming tool");
+    await ensureEngine(pin, () => {}, { signal, activate: true });
+  },
+};
 const envPocket: EnvDef = { name: "pocket-tts", approxBytes: ENV_BYTES.pocket, root: pocketTtsRoot, ready: pocketTtsInstalled, build: (onPhase, signal) => ensurePocketTtsEnvironment(onPhase, { signal }) };
 const envMlxAudio: EnvDef = { name: "mlx-audio", approxBytes: ENV_BYTES.mlxAudio, root: mlxAudioRoot, ready: mlxAudioInstalled, build: (onPhase, signal) => ensureMlxAudioEnvironment(onPhase, { signal }) };
 const envRecordedSpeech: EnvDef = { name: RECORDED_SPEECH_NAME, approxBytes: ENV_BYTES.recordedSpeech, root: recordedSpeechRoot, ready: recordedSpeechEnvironmentReady, build: (onPhase, signal) => ensureRecordedSpeechEnvironment(onPhase, signal), stop: () => recordedSpeech.stop() };
@@ -202,6 +213,7 @@ const LABELS: Record<string, { label: string; summary: string }> = {
   "chatterbox-turbo-fp16": { label: "Voice: Chatterbox Turbo", summary: "A more expressive speaking voice for larger computers." },
   wakeword: { label: "Wake word (Hey MaiPai)", summary: "Lets a speaker or robot wake up when someone says the wake word." },
   ffmpeg: { label: "Audio and video tools (ffmpeg)", summary: "Cuts, mixes and changes sound and video" },
+  fpcalc: { label: "Song naming tool (chromaprint)", summary: "Listens to a few seconds of music and makes a fingerprint so Home can name the song" },
   "image-tools": { label: "Picture tools", summary: "Remove a background, erase an object, upscale, resize or make a depth map for a picture." },
   liveportrait: { label: "Talking pictures", summary: "Makes the mouth and blink pictures a talking companion plays back while it speaks." },
   "tool-look": { label: "Look", summary: "Names household objects, wall colour and light in a picture." },
@@ -293,6 +305,12 @@ export function componentDefs(): UnitDef[] {
     platformBlock: () => ffmpegPinFor() ? null : `Audio and video tools are not available on ${process.platform} ${process.arch} yet.`,
     usedBy: () => ["Songs and sound effects", "Changing a voice", "Video and picture clips"],
     busy: () => activeJobFor((kind) => kind.startsWith("media") || kind === "music_edit") ? "A clip or a song edit is running right now." : null,
+  });
+  units.push({
+    id: "fpcalc", ...LABELS.fpcalc!, group: "tools", role: "media", pins: [], envs: [envFpcalc],
+    licenceName: MEDIA_COMPONENTS.find((component) => component.name === "fpcalc (chromaprint)")!.licence,
+    platformBlock: () => fpcalcPinFor() ? null : `The song naming tool is not available on ${process.platform} ${process.arch} yet.`,
+    usedBy: () => ["Name a song from a recording"], busy: () => null,
   });
   units.push({
     id: "liveportrait", ...LABELS.liveportrait!, group: "tools", role: "image", pins: STACK_LIVEPORTRAIT_MODELS, envs: [envLivePortrait],
