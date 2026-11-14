@@ -6,25 +6,25 @@
   "installer": {
     "p16.required_free_bytes": 50970898149,
     "p16.minimum_required_free_bytes": 13976383571,
-    "p16.everything_required_free_bytes": 69188780392,
+    "p16.everything_required_free_bytes": 69190820392,
     "p16.needed_bytes": 43251549248,
     "p16.home_required_free_bytes": 3176323277,
     "p16.ai_required_free_bytes": 47794574872,
     "p32.required_free_bytes": 69722709669,
     "p32.minimum_required_free_bytes": 31047800378,
-    "p32.everything_required_free_bytes": 93024766949,
+    "p32.everything_required_free_bytes": 93026806949,
     "p32.needed_bytes": 58878058848,
     "p32.home_required_free_bytes": 3176323277,
     "p32.ai_required_free_bytes": 66546386392,
     "p64.required_free_bytes": 156173015731,
     "p64.minimum_required_free_bytes": 56807128855,
-    "p64.everything_required_free_bytes": 231880438735,
+    "p64.everything_required_free_bytes": 231882478735,
     "p64.needed_bytes": 131256567829,
     "p64.home_required_free_bytes": 3176323277,
     "p64.ai_required_free_bytes": 152996692454,
     "p128.required_free_bytes": 190839334280,
     "p128.minimum_required_free_bytes": 56807128855,
-    "p128.everything_required_free_bytes": 517257254489,
+    "p128.everything_required_free_bytes": 517259294489,
     "p128.needed_bytes": 160271630397,
     "p128.home_required_free_bytes": 3176323277,
     "p128.ai_required_free_bytes": 187663011003
@@ -311,6 +311,21 @@
           "basis": "measured"
         },
         {
+          "id": "shazam-signature",
+          "label": "Song signature tool (shazamio-core)",
+          "note": "Makes a small signature from a few seconds of music so Home can name the song. MIT; audio stays on this computer.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 1700000,
+          "installed_bytes": 1700000,
+          "peak_temp_bytes": 0,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -446,11 +461,11 @@
         "required_free_bytes": 13976383571
       },
       "everything": {
-        "download_bytes": 45078516138,
-        "installed_bytes": 50069979705,
+        "download_bytes": 45080216138,
+        "installed_bytes": 50071679705,
         "peak_temp_bytes": 9104804746,
-        "needed_bytes": 59174784451,
-        "required_free_bytes": 69188780392
+        "needed_bytes": 59176484451,
+        "required_free_bytes": 69190820392
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -801,6 +816,21 @@
           "basis": "measured"
         },
         {
+          "id": "shazam-signature",
+          "label": "Song signature tool (shazamio-core)",
+          "note": "Makes a small signature from a few seconds of music so Home can name the song. MIT; audio stays on this computer.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 1700000,
+          "installed_bytes": 1700000,
+          "peak_temp_bytes": 0,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -951,11 +981,11 @@
         "required_free_bytes": 31047800378
       },
       "everything": {
-        "download_bytes": 64362924345,
-        "installed_bytes": 69795131613,
+        "download_bytes": 64364624345,
+        "installed_bytes": 69796831613,
         "peak_temp_bytes": 9270609013,
-        "needed_bytes": 79065740626,
-        "required_free_bytes": 93024766949
+        "needed_bytes": 79067440626,
+        "required_free_bytes": 93026806949
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -1526,6 +1556,21 @@
           "basis": "measured"
         },
         {
+          "id": "shazam-signature",
+          "label": "Song signature tool (shazamio-core)",
+          "note": "Makes a small signature from a few seconds of music so Home can name the song. MIT; audio stays on this computer.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 1700000,
+          "installed_bytes": 1700000,
+          "peak_temp_bytes": 0,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -1751,11 +1796,11 @@
         "required_free_bytes": 56807128855
       },
       "everything": {
-        "download_bytes": 175628338333,
-        "installed_bytes": 182430463560,
+        "download_bytes": 175630038333,
+        "installed_bytes": 182432163560,
         "peak_temp_bytes": 12963882463,
-        "needed_bytes": 195394346023,
-        "required_free_bytes": 231880438735
+        "needed_bytes": 195396046023,
+        "required_free_bytes": 231882478735
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -2553,6 +2598,21 @@
           "basis": "measured"
         },
         {
+          "id": "shazam-signature",
+          "label": "Song signature tool (shazamio-core)",
+          "note": "Makes a small signature from a few seconds of music so Home can name the song. MIT; audio stays on this computer.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 1700000,
+          "installed_bytes": 1700000,
+          "peak_temp_bytes": 0,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "search",
           "label": "Search helper",
           "note": "Looks up web search results for adults, when web search is turned on.",
@@ -2838,11 +2898,11 @@
         "required_free_bytes": 56807128855
       },
       "everything": {
-        "download_bytes": 410558099660,
-        "installed_bytes": 419149120015,
+        "download_bytes": 410559799660,
+        "installed_bytes": 419150820015,
         "peak_temp_bytes": 14278310471,
-        "needed_bytes": 433427430486,
-        "required_free_bytes": 517257254489
+        "needed_bytes": 433429130486,
+        "required_free_bytes": 517259294489
       },
       "measured_on": "2026-10-17",
       "default_selected": [
