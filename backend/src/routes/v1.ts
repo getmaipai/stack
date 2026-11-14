@@ -29,6 +29,7 @@ import { TokenCountRequest, TokenCountResponse } from "@maipai/spec/stack/ts/tok
 import { SttEndpointResponse } from "@maipai/spec/stack/ts/stt-endpoint-response.js";
 import { EndpointModelMissingError, scoreEndpoint } from "@/speech/endpoint";
 import { WaveFormatError } from "@/speech/audio";
+import { SPEAKER_EMBEDDING_PATH } from "@/speech/server";
 
 const MessageSchema = z.object({ role: z.string(), content: z.unknown() }).passthrough();
 const ChatRequestSchema = RoleRequest.extend({ messages: z.array(MessageSchema) });
@@ -42,6 +43,7 @@ const TranscriptionFormSchema = z.object({
   timeout_ms: z.coerce.number().int().positive().optional(),
 });
 const TranscriptionResponseSchema = z.object({ text: z.string() });
+const SpeakerEmbeddingResponseSchema = z.object({ model_id: z.string(), dim: z.number().int().positive(), embedding: z.array(z.number()) });
 // The speech form is spec/voice's (`text`, an optional `voice_url`
 // naming a preset or a voice URL); `model` and `timeout_ms` ride as
 // text fields and `model` is optional because this path serves one role.
@@ -246,6 +248,22 @@ const chatRoute = createRoute({ method: "post", path: "/chat/completions", tags:
 const tokenizeRoute = createRoute({ method: "post", path: "/tokenize", tags: ["Roles"], summary: "Token count by role, from the engine's own template and tokenizer", request: { body: { content: { "application/json": { schema: TokenizeRequestSchema } } } }, responses: { ...inferenceResponses, 200: { content: { "application/json": { schema: TokenizeResponseSchema } }, description: "The engine's token count: `messages` (with `tools` and `chat_template_kwargs` when sent) rendered with its chat template, no generation prompt, or `content` as given, with the identity headers. Image parts count as the template's media marker only, not the image's own tokens." }, 501: { content: { "application/json": { schema: CannotCountSchema } }, description: "The engine bound to the role has no token-count route." } } });
 const embeddingsRoute = createRoute({ method: "post", path: "/embeddings", tags: ["Roles"], summary: "Embeddings by role", request: { body: { content: { "application/json": { schema: EmbeddingsRequestSchema } } } }, responses: inferenceResponses });
 const transcriptionsRoute = createRoute({ method: "post", path: "/audio/transcriptions", tags: ["Roles"], summary: "Speech to text (one WAV file, spec/voice's transcribe form)", request: { body: { content: { "multipart/form-data": { schema: TranscriptionFormSchema } } } }, responses: { ...inferenceResponses, 200: { content: { "application/json": { schema: TranscriptionResponseSchema } }, description: "SttTranscribeResponse: the transcript, empty when the file holds no speech, with the identity headers." } } });
+const speakerEmbeddingRoute = createRoute({
+  method: "post", path: "/audio/speaker-embedding", tags: ["Roles"],
+  summary: "Speaker embedding for a short audio clip",
+  request: { body: { content: {
+    "multipart/form-data": { schema: TranscriptionFormSchema },
+    "application/json": { schema: z.object({ audio_base64: z.string() }) },
+  } } },
+  responses: {
+    ...inferenceResponses,
+    200: { content: { "application/json": { schema: SpeakerEmbeddingResponseSchema } }, description: "A deterministic TitaNet speaker vector, with its model id and actual dimension." },
+    400: { content: { "application/json": { schema: z.object({ error: z.string() }) } }, description: "The audio encoding is invalid." },
+    413: { content: { "application/json": { schema: z.object({ error: z.string() }) } }, description: "The clip exceeds 15 seconds; trim it and try again." },
+    422: { content: { "application/json": { schema: z.object({ error: z.string() }) } }, description: "The clip is shorter than one second." },
+    503: { content: { "application/json": { schema: z.object({ error: z.string(), code: z.string() }) } }, description: "Install titanet-small-en from Home's Engines page." },
+  },
+});
 const endpointRoute = createRoute({ method: "post", path: "/audio/endpoint", tags: ["Roles"], summary: "End-of-turn check (one WAV of the utterance so far; the last 8 seconds are read)", request: { body: { content: { "multipart/form-data": { schema: z.object({ file: z.custom<File>((value) => value instanceof File, "A WAV file in the `file` field.").openapi({ type: "string", format: "binary" }) }) } } } }, responses: { 200: { content: { "application/json": { schema: SttEndpointResponse } }, description: "SttEndpointResponse: whether the speaker has finished, with the probability." }, 400: { content: { "application/json": { schema: z.object({ error: z.string() }) } }, description: "The file is not a 16-bit PCM WAV." }, 503: { content: { "application/json": { schema: z.object({ error: z.string(), reason: z.string() }) } }, description: "The end-of-turn model is not installed." } } });
 const speechRoute = createRoute({ method: "post", path: "/audio/speech", tags: ["Roles"], summary: "Text to speech (spec/voice's form, the WAV streamed as it is generated)", request: { body: { content: { "multipart/form-data": { schema: SpeechFormSchema } } } }, responses: { ...inferenceResponses, 400: { content: { "application/json": { schema: z.union([UnknownModelSchema, VoiceRefusedSchema]) } }, description: "Unknown role or model id, or a voice the Stack cannot pin and verify (reason voice-not-pinnable)." }, 409: { content: { "application/json": { schema: z.union([UnverifiedModelSchema, VoiceRefusedSchema]) } }, description: "The named model's provenance is incomplete, or the voice needs voice cloning that is off or has no token (reason voice-cloning-unavailable)." }, 200: { content: { "audio/wav": { schema: z.string().openapi({ format: "binary" }) } }, description: "TtsSynthesizeResult: a chunked audio/wav body whose header carries the format and a placeholder data size, with the identity headers. Abort the request to cancel." } } });
 const ImageResponseSchema = z.object({ created: z.number().int(), job: z.string(), data: z.array(z.record(z.string(), z.unknown())) });
@@ -270,6 +288,26 @@ v1Routes.openapi(transcriptionsRoute, async (c) => {
   const form = c.req.valid("form");
   const audio_base64 = Buffer.from(await form.file.arrayBuffer()).toString("base64");
   return reply(c, "transcription", { model: form.model ?? "stt", timeout_ms: form.timeout_ms, audio_base64 }) as never;
+});
+v1Routes.openapi(speakerEmbeddingRoute, async (c) => {
+  let audio_base64: string;
+  if (c.req.header("content-type")?.startsWith("application/json")) {
+    const body = await c.req.json().catch(() => null) as { audio_base64?: unknown } | null;
+    if (typeof body?.audio_base64 !== "string") return jsonReply(c, { error: "Send audio_base64 containing a WAV, or raw 16 kHz mono float or int16 PCM with its content type." }, 400, identityHeaders(null)) as never;
+    audio_base64 = body.audio_base64;
+  } else {
+    const form = await c.req.formData().catch(() => null);
+    const file = form?.get("file");
+    if (!(file instanceof Blob)) return jsonReply(c, { error: "Send a WAV file in the multipart field `file`." }, 400, identityHeaders(null)) as never;
+    audio_base64 = Buffer.from(await file.arrayBuffer()).toString("base64");
+  }
+  try {
+    const result = await requestRole("stt", SPEAKER_EMBEDDING_PATH, { audio_base64 }, c.req.raw.signal);
+    return jsonReply(c, result.body, result.status, result.headers) as never;
+  } catch (error) {
+    if (error instanceof EngineUnavailableError) { const result = noEngineResponse("stt", error.reason); return jsonReply(c, result.body, result.status, result.headers) as never; }
+    return jsonReply(c, { error: "The speaker embedding engine is not ready. Start the stt engine, then try again." }, 503, identityHeaders(null)) as never;
+  }
 });
 v1Routes.openapi(endpointRoute, async (c) => {
   const form = c.req.valid("form");

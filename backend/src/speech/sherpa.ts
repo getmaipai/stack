@@ -24,9 +24,11 @@ interface SherpaResult { text: string; lang?: string; tokens?: string[]; timesta
 interface SherpaModule {
   OfflineRecognizer: new (config: unknown) => { createStream(hotwords?: string): SherpaStream; decodeAsync(stream: SherpaStream): Promise<void>; getResult(stream: SherpaStream): SherpaResult };
   OfflineSpeakerDiarization: new (config: unknown) => { sampleRate: number; process(samples: Float32Array): Array<{ start: number; end: number; speaker: number }> };
+  SpeakerEmbeddingExtractor: new (config: unknown) => { dim: number; createStream(): SpeakerEmbeddingStream; compute(stream: SpeakerEmbeddingStream): Float32Array };
   Vad: new (config: unknown, bufferSizeInSeconds: number) => { acceptWaveform(samples: Float32Array): void; isDetected(): boolean; reset(): void; clear(): void };
 }
 interface SherpaStream { acceptWaveform(input: { samples: Float32Array; sampleRate: number }): void; }
+interface SpeakerEmbeddingStream { acceptWaveform(input: { samples: Float32Array; sampleRate: number }): void; }
 
 function loadModule(): SherpaModule {
   // A require, not an import: the addon and its dylibs load at call time
@@ -177,6 +179,19 @@ export function loadSilero(modelPath: string): VoiceDetector {
 }
 
 export interface Diarizer { diarize(samples: Float32Array, numSpeakers?: number): SpeakerTurn[]; }
+export interface SpeakerEmbedder { readonly dim: number; embed(samples: Float32Array): number[]; }
+export function loadSpeakerEmbedder(embeddingPath: string, threads = 2): SpeakerEmbedder {
+  if (!existsSync(embeddingPath)) throw new Error("The speaker embedding model is not installed.");
+  const extractor = new (loadModule().SpeakerEmbeddingExtractor)({ model: embeddingPath, numThreads: threads, debug: 0, provider: "cpu" });
+  return {
+    dim: extractor.dim,
+    embed(samples) {
+      const stream = extractor.createStream();
+      stream.acceptWaveform({ samples, sampleRate: TARGET_SAMPLE_RATE });
+      return Array.from(extractor.compute(stream));
+    },
+  };
+}
 /** pyannote segmentation plus a speaker embedding and fast clustering, all
  * on the CPU. `numSpeakers` fixes the count; without it the clusterer
  * decides from a distance threshold. */

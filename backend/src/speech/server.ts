@@ -19,6 +19,7 @@ export const TRANSCRIBE_TIMED_PATH = "/v1/audio/transcriptions/timed-span";
 export const TRANSCRIBE_SPANS_PATH = "/v1/audio/transcriptions/detect-spans";
 
 export const DIARIZE_PATH = "/v1/audio/transcriptions/diarize";
+export const SPEAKER_EMBEDDING_PATH = "/v1/audio/speaker-embedding";
 
 export interface SpeechServerOptions {
   port: number;
@@ -30,6 +31,7 @@ export interface SpeechServerOptions {
   detector: () => VoiceDetector;
   /** Speaker detection; null when its models are not installed. */
   diarizer?: () => { diarize(samples: Float32Array, numSpeakers?: number): Array<{ start: number; end: number; speaker: number }> } | null;
+  speakerEmbedder?: () => { readonly dim: number; embed(samples: Float32Array): number[] } | null;
   session?: Partial<SttSessionConfig>;
 }
 
@@ -52,6 +54,31 @@ async function wavFromRequest(request: Request): Promise<Uint8Array | null> {
     return typeof body?.audio_base64 === "string" ? Uint8Array.from(Buffer.from(body.audio_base64, "base64")) : null;
   }
   return null;
+}
+
+async function embeddingSamples(request: Request): Promise<Float32Array | null> {
+  const type = request.headers.get("content-type") ?? "";
+  if (type.startsWith("audio/wav") || type.startsWith("audio/x-wav")) {
+    const bytes = new Uint8Array(await request.arrayBuffer());
+    return toRecognizerRate(decodeWave(bytes));
+  }
+  if (type.startsWith("audio/pcm;")) {
+    if (!/rate=16000/.test(type) || !/channels=1/.test(type)) return null;
+    const bytes = new Uint8Array(await request.arrayBuffer());
+    if (/format=float32/.test(type)) {
+      if (bytes.length % 4) return null;
+      const aligned = new Uint8Array(bytes.length); aligned.set(bytes); return new Float32Array(aligned.buffer);
+    }
+    if (/format=s16le/.test(type)) {
+      if (bytes.length % 2) return null;
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), samples = new Float32Array(bytes.length / 2);
+      for (let i = 0; i < samples.length; i++) samples[i] = view.getInt16(i * 2, true) / 32768;
+      return samples;
+    }
+  }
+  if (type.startsWith("audio/wav") || type.startsWith("audio/x-wav")) return toRecognizerRate(decodeWave(new Uint8Array(await request.arrayBuffer())));
+  const wav = await wavFromRequest(request);
+  return wav ? toRecognizerRate(decodeWave(wav)) : null;
 }
 
 export function startSpeechServer(options: SpeechServerOptions) {
@@ -119,6 +146,26 @@ export function startSpeechServer(options: SpeechServerOptions) {
         } catch (error) {
           if (error instanceof WaveFormatError) return jsonResponse({ error: error.message }, 400);
           return jsonResponse({ error: "Speakers could not be detected in this audio." }, 500);
+        }
+      }
+      if (request.method === "POST" && url.pathname === SPEAKER_EMBEDDING_PATH) {
+        const started = performance.now();
+        try {
+          const samples = await embeddingSamples(request);
+          if (!samples) return jsonResponse({ error: "Send a 16-bit PCM WAV, or raw 16 kHz mono float32 or s16le PCM with its content type." }, 400);
+          const duration = samples.length / 16_000;
+          if (duration > 15) return jsonResponse({ error: "Audio must be 15 seconds or shorter. Trim the clip and try again." }, 413);
+          if (duration < 1) return jsonResponse({ error: "Audio must contain at least one second of speech-length audio." }, 422);
+          const engine = options.speakerEmbedder?.() ?? null;
+          if (!engine) return jsonResponse({ error: "The speaker embedding model is not installed. Install titanet-small-en from Home's Engines page, then try again.", code: "component_not_ready" }, 503);
+          const embedding = engine.embed(samples);
+          if (embedding.length !== engine.dim) return jsonResponse({ error: "The speaker embedding model returned an invalid vector." }, 500);
+          console.log(`speaker-embedding duration_s=${duration.toFixed(3)} status=ok ms=${Math.round(performance.now() - started)}`);
+          return jsonResponse({ model_id: "nemo-titanet-small-v1", dim: engine.dim, embedding });
+        } catch (error) {
+          if (error instanceof WaveFormatError) return jsonResponse({ error: error.message }, 400);
+          console.log(`speaker-embedding status=failed ms=${Math.round(performance.now() - started)}`);
+          return jsonResponse({ error: "A speaker embedding could not be calculated for this audio." }, 500);
         }
       }
       return jsonResponse({ error: "Not found." }, 404);

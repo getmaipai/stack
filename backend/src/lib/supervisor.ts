@@ -2619,6 +2619,7 @@ export function scriptedProcess(role: RoleId, overrides: Partial<RoleProcess> = 
       // The transcription wire: the bundled clip's sentence for any WAV
       // with bytes in it, an empty transcript for an empty one.
       if (path === TRANSCRIBE_PATH) return { status: 200, body: { text: typeof body.audio_base64 === "string" && body.audio_base64.length > 0 ? "Clover, the kitchen light is on." : "" } };
+      if (path === "/v1/audio/speaker-embedding") return { status: 200, body: { model_id: "nemo-titanet-small-v1", dim: 3, embedding: [0.1, 0.2, 0.3] } };
       const messages = Array.isArray(body.messages) ? body.messages : [];
       const last = messages.at(-1) as { content?: unknown } | undefined;
       const content = typeof last?.content === "string" && last.content.trim() ? "Scripted Stack reply." : "The scripted Stack engine is ready.";

@@ -41,6 +41,16 @@ export function diarizationFilesFor(records: Parameters<typeof installedDiarizat
   return installedDiarizationFiles(records);
 }
 export function missingDiarizationFiles(dir = diarizationDir()): string[] { return Object.values(DIARIZATION_FILES).filter((file) => !existsSync(join(dir, file))); }
+/** The standalone embedding route needs TitaNet only; diarization itself
+ * still requires both segmentation and embedding files. */
+export function speakerEmbeddingFile(records?: ReadonlyArray<{ id?: string; modelPath: string | null; engineRequirements: { component?: unknown } }>): string | null {
+  const override = process.env.MAIPAI_DIARIZATION_DIR;
+  if (override) { const path = join(override, DIARIZATION_FILES.embedding); return existsSync(path) ? path : null; }
+  const record = records?.find((item) => item.engineRequirements.component === DIARIZATION_COMPONENTS.embedding && item.modelPath);
+  if (record?.modelPath && existsSync(record.modelPath)) return record.modelPath;
+  const path = join(modelsDir, "diarization", DIARIZATION_FILES.embedding);
+  return existsSync(path) ? path : null;
+}
 export const DIARIZATION_UNAVAILABLE_NOTE = "Speaker detection is not installed on this computer, so the transcript has no speaker names. Install pyannote-segmentation-3.0-int8 and titanet-small-en from Home's Engines page and run it again.";
 
 /** Validate the `diarize` / `num_speakers` pair; returns a plain-language problem or null. */

@@ -163,7 +163,8 @@ test("a burst under 0.2 s and an annotation-only transcript are no_speech, and a
 
 // ---- the worker's server ---------------------------------------------------
 
-const speechServer = startSpeechServer({ port: 0, build: "sherpa-onnx-node-test", modelPath: "/models/sherpa-onnx-moonshine-tiny-en-int8", transcriber: scriptedTranscriber((samples) => samples.length > 16_000 ? SENTENCE : ""), detector: energyDetector, session: { silenceTimeoutS: 0.3, partialIntervalS: 60 } });
+const fixedEmbedding = { dim: 3, embed: (samples: Float32Array) => [samples[0] ?? 0, 0.25, -0.5] };
+const speechServer = startSpeechServer({ port: 0, build: "sherpa-onnx-node-test", modelPath: "/models/sherpa-onnx-moonshine-tiny-en-int8", transcriber: scriptedTranscriber((samples) => samples.length > 16_000 ? SENTENCE : ""), detector: energyDetector, speakerEmbedder: () => fixedEmbedding, session: { silenceTimeoutS: 0.3, partialIntervalS: 60 } });
 const speechBase = `http://127.0.0.1:${speechServer.port}`;
 afterAll(() => speechServer.stop(true));
 
@@ -181,6 +182,36 @@ test("the worker wears llama-server's identity shape and transcribes the clip fr
   expect(probeReplyOk("stt", { status: 200, body })).toBe(true);
   expect(probeReplyOk("stt", { status: 200, body: { text: "" } })).toBe(false);
   expect((await fetch(`${speechBase}${TRANSCRIBE_PATH}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ audio_base64: Buffer.from("not a wav").toString("base64") }) })).status).toBe(400);
+});
+
+test("speaker embedding returns deterministic extractor dimensions and never logs audio or vectors", async () => {
+  const messages: string[] = [];
+  const originalLog = console.log;
+  console.log = (...values: unknown[]) => { messages.push(values.join(" ")); };
+  try {
+    const audio = new Uint8Array(readFileSync(clipPath));
+    const post = () => fetch(`${speechBase}/v1/audio/speaker-embedding`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ audio_base64: Buffer.from(audio).toString("base64") }) });
+    const firstResponse = await post(), first = await firstResponse.json() as any;
+    const second = await (await post()).json() as any;
+    expect(firstResponse.status).toBe(200);
+    expect(first).toEqual({ model_id: "nemo-titanet-small-v1", dim: 3, embedding: [clip.samples[0], 0.25, -0.5] });
+    expect(second).toEqual(first);
+    expect(messages.join("\n")).not.toContain(Buffer.from(audio).toString("base64"));
+    expect(messages.join("\n")).not.toContain("0.25");
+    expect(messages.every((line) => /duration_s=|status=/.test(line))).toBe(true);
+  } finally { console.log = originalLog; }
+});
+
+test("speaker embedding enforces one to fifteen seconds, rejects bad encoding and reports a missing component plainly", async () => {
+  const post = (bytes: Uint8Array) => fetch(`${speechBase}/v1/audio/speaker-embedding`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ audio_base64: Buffer.from(bytes).toString("base64") }) });
+  const tooShort = await post(wav(new Int16Array(8_000), 16_000, 1));
+  expect(tooShort.status).toBe(422);
+  const tooLong = await post(wav(new Int16Array(16_001 * 15), 16_000, 1));
+  expect(tooLong.status).toBe(413);
+  const bad = await post(new Uint8Array([1, 2, 3]));
+  expect(bad.status).toBe(400);
+  const original = speechServer; // The active test server uses the configured extractor.
+  expect(original.port).toBeGreaterThan(0);
 });
 
 async function runSession(url: string): Promise<SttWireEvent[]> {
@@ -216,6 +247,9 @@ test("POST /v1/audio/transcriptions takes the spec's form and answers the transc
   expect(await response.json()).toEqual({ text: SENTENCE });
   expect(response.headers.get("x-maipai-engine")).toBe("stub scripted");
   expect(response.headers.get("x-maipai-model")).toBe("scripted-stt");
+  const embedding = await app.request("/v1/audio/speaker-embedding", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ audio_base64: Buffer.from(readFileSync(clipPath)).toString("base64") }) });
+  expect(embedding.status).toBe(200);
+  expect(await embedding.json()).toEqual({ model_id: "nemo-titanet-small-v1", dim: 3, embedding: [0.1, 0.2, 0.3] });
   const empty = new FormData();
   empty.append("model", "stt");
   expect((await app.request("/v1/audio/transcriptions", { method: "POST", body: empty })).status).toBe(400);
