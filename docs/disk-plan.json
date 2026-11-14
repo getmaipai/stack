@@ -16,18 +16,18 @@
     "p32.needed_bytes": 58878058848,
     "p32.home_required_free_bytes": 3176323277,
     "p32.ai_required_free_bytes": 66546386392,
-    "p64.required_free_bytes": 156173015731,
-    "p64.minimum_required_free_bytes": 56807128855,
-    "p64.everything_required_free_bytes": 231882478735,
-    "p64.needed_bytes": 131256567829,
+    "p64.required_free_bytes": 156305798884,
+    "p64.minimum_required_free_bytes": 56939912009,
+    "p64.everything_required_free_bytes": 232015261889,
+    "p64.needed_bytes": 131367220457,
     "p64.home_required_free_bytes": 3176323277,
-    "p64.ai_required_free_bytes": 152996692454,
-    "p128.required_free_bytes": 190839334280,
-    "p128.minimum_required_free_bytes": 56807128855,
-    "p128.everything_required_free_bytes": 517259294489,
-    "p128.needed_bytes": 160271630397,
+    "p64.ai_required_free_bytes": 153129475607,
+    "p128.required_free_bytes": 190972117433,
+    "p128.minimum_required_free_bytes": 56939912009,
+    "p128.everything_required_free_bytes": 517392077643,
+    "p128.needed_bytes": 160382283025,
     "p128.home_required_free_bytes": 3176323277,
-    "p128.ai_required_free_bytes": 187663011003
+    "p128.ai_required_free_bytes": 187795794156
   },
   "tiers": {
     "p16": {
@@ -1159,13 +1159,14 @@
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 225282959,
-          "installed_bytes": 225282959,
+          "download_bytes": 335935587,
+          "installed_bytes": 335935587,
           "peak_temp_bytes": 0,
           "model_ids": [
             "pocket-tts-english",
             "pocket-tts-english-tokenizer",
-            "pocket-tts-voice-alba"
+            "pocket-tts-voice-alba",
+            "mossformer2-se-48k"
           ],
           "engines": [
             "engine:voice",
@@ -1782,25 +1783,25 @@
         }
       ],
       "default": {
-        "download_bytes": 121082222731,
-        "installed_bytes": 124582239506,
+        "download_bytes": 121192875359,
+        "installed_bytes": 124692892134,
         "peak_temp_bytes": 6674328323,
-        "needed_bytes": 131256567829,
-        "required_free_bytes": 156173015731
+        "needed_bytes": 131367220457,
+        "required_free_bytes": 156305798884
       },
       "minimum": {
-        "download_bytes": 42781325861,
-        "installed_bytes": 44797766920,
+        "download_bytes": 42891978489,
+        "installed_bytes": 44908419548,
         "peak_temp_bytes": 3049808551,
-        "needed_bytes": 47847575471,
-        "required_free_bytes": 56807128855
+        "needed_bytes": 47958228099,
+        "required_free_bytes": 56939912009
       },
       "everything": {
-        "download_bytes": 175630038333,
-        "installed_bytes": 182432163560,
+        "download_bytes": 175740690961,
+        "installed_bytes": 182542816188,
         "peak_temp_bytes": 12963882463,
-        "needed_bytes": 195396046023,
-        "required_free_bytes": 231882478735
+        "needed_bytes": 195506698651,
+        "required_free_bytes": 232015261889
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -1997,13 +1998,14 @@
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 225282959,
-          "installed_bytes": 225282959,
+          "download_bytes": 335935587,
+          "installed_bytes": 335935587,
           "peak_temp_bytes": 0,
           "model_ids": [
             "pocket-tts-english",
             "pocket-tts-english-tokenizer",
-            "pocket-tts-voice-alba"
+            "pocket-tts-voice-alba",
+            "mossformer2-se-48k"
           ],
           "engines": [
             "engine:voice",
@@ -2884,25 +2886,25 @@
         }
       ],
       "default": {
-        "download_bytes": 148993962163,
-        "installed_bytes": 152838519411,
+        "download_bytes": 149104614791,
+        "installed_bytes": 152949172039,
         "peak_temp_bytes": 7433110986,
-        "needed_bytes": 160271630397,
-        "required_free_bytes": 190839334280
+        "needed_bytes": 160382283025,
+        "required_free_bytes": 190972117433
       },
       "minimum": {
-        "download_bytes": 42781325861,
-        "installed_bytes": 44797766920,
+        "download_bytes": 42891978489,
+        "installed_bytes": 44908419548,
         "peak_temp_bytes": 3049808551,
-        "needed_bytes": 47847575471,
-        "required_free_bytes": 56807128855
+        "needed_bytes": 47958228099,
+        "required_free_bytes": 56939912009
       },
       "everything": {
-        "download_bytes": 410559799660,
-        "installed_bytes": 419150820015,
+        "download_bytes": 410670452288,
+        "installed_bytes": 419261472643,
         "peak_temp_bytes": 14278310471,
-        "needed_bytes": 433429130486,
-        "required_free_bytes": 517259294489
+        "needed_bytes": 433539783114,
+        "required_free_bytes": 517392077643
       },
       "measured_on": "2026-10-17",
       "default_selected": [
