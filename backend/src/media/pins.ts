@@ -21,6 +21,7 @@ import type { EngineBinaryPin } from "@/lib/engineCatalog";
 import darwinArm64Requirements from "./yt-dlp.darwin-arm64.requirements.txt" with { type: "file" };
 import linuxArm64Requirements from "./yt-dlp.linux-arm64.requirements.txt" with { type: "file" };
 import linuxX64Requirements from "./yt-dlp.linux-x64.requirements.txt" with { type: "file" };
+import shazamSignatureRequirements from "./shazamio-core.requirements.txt" with { type: "file" };
 
 export const FFMPEG_NAME = "ffmpeg";
 export const FFMPEG_TAG = "v8.1.3-1";
@@ -28,6 +29,8 @@ export const FPCALC_NAME = "fpcalc";
 export const FPCALC_TAG = "v1.6.2";
 export const YT_DLP_NAME = "yt-dlp";
 export const YT_DLP_VERSION = "2026.08.19";
+export const SHAZAM_SIGNATURE_NAME = "shazam-signature";
+export const SHAZAM_SIGNATURE_VERSION = "2.0.0";
 
 const release = `https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/${FFMPEG_TAG}`;
 function ffmpegPin(platform: "darwin" | "linux", arch: "arm64" | "x64", asset: string, sha256: string, bytes: number, verified: boolean): EngineBinaryPin {
@@ -80,11 +83,16 @@ export function ytDlpRequirementsFileFor(platform = process.platform, arch = pro
   if (platform === "linux" && arch === "x64") return linuxX64Requirements;
   return null;
 }
+export function shazamSignatureRequirementsFileFor(platform = process.platform, arch = process.arch): string | null {
+  if ((platform === "darwin" || platform === "linux") && (arch === "arm64" || arch === "x64")) return shazamSignatureRequirements;
+  return null;
+}
 
 /** The licence record for every part of the service, rendered into docs/components.md and served by GET /stack/v1/media. */
 export interface MediaComponent { name: string; version: string; licence: string; source: string; why: string; }
 export const MEDIA_COMPONENTS: MediaComponent[] = [
   { name: "fpcalc (chromaprint)", version: "1.6.2", licence: "LGPL-2.1-or-later", source: "github.com/acoustid/chromaprint, release v1.6.2, per platform, sha256 pinned", why: "Turns a few seconds of music into a fingerprint so Home can name the song; the audio never leaves this computer, only the fingerprint goes to AcoustID" },
+  { name: "shazam-signature (shazamio-core)", version: SHAZAM_SIGNATURE_VERSION, licence: "MIT", source: "pypi.org, shazamio-core==2.0.0 with every wheel hash in the requirements file, in a uv environment", why: "Turns a few seconds of music into a small signature so Home can name the song; the audio never leaves this computer, only the signature goes to Shazam" },
   { name: "ffmpeg", version: "8.1.3 (jellyfin-ffmpeg 8.1.3-1)", licence: "GPL-3.0-or-later (built with --enable-gpl --enable-version3, no nonfree parts)", source: "github.com/jellyfin/jellyfin-ffmpeg, release v8.1.3-1, portable build per platform, sha256 pinned", why: "Transcode to H.264 and AAC, thumbnails, storyboards and preview clips; the only static build with a clear licence on every platform the Stack runs on." },
   { name: "ffprobe", version: "8.1.3 (jellyfin-ffmpeg 8.1.3-1)", licence: "GPL-3.0-or-later (same archive as ffmpeg)", source: "the same archive as ffmpeg", why: "Reads duration, codecs, chapters, tags, embedded date and source URL of a file." },
   { name: "yt-dlp", version: YT_DLP_VERSION, licence: "Unlicense (public domain); its default extras: brotli MIT, certifi MPL-2.0, mutagen GPL-2.0-or-later, pycryptodomex BSD-2-Clause, requests Apache-2.0, urllib3 MIT, websockets BSD-3-Clause, yt-dlp-ejs Unlicense", source: "pypi.org, yt-dlp==2026.8.19 with every file hash in the requirements file, in a uv environment", why: "Fetches a link the person chose; FileTube's precedent." },

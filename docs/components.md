@@ -321,11 +321,12 @@ Installed beside the model, never selected on its own: `ace-step-1-5-lm-0-6b` (p
 
 ## media (the media service: probe, fetch, transcode, preview)
 
-Tools the media jobs run, fetched on the first job that needs them, each pinned by checksum. ffmpeg and ffprobe are one verified archive per platform; fpcalc is one Chromaprint archive per platform; yt-dlp is a hashed PyPI requirements file in a uv environment.
+Tools the media jobs run, fetched on the first job that needs them, each pinned by checksum. ffmpeg and ffprobe are one verified archive per platform; fpcalc is one Chromaprint archive per platform; yt-dlp and shazam-signature are hashed PyPI requirements files in uv environments.
 
 | Tool | Build | Licence | Source | Why |
 |---|---|---|---|---|
 | `fpcalc (chromaprint)` | 1.6.2 | LGPL-2.1-or-later | github.com/acoustid/chromaprint, release v1.6.2, per platform, sha256 pinned | Turns a few seconds of music into a fingerprint so Home can name the song; the audio never leaves this computer, only the fingerprint goes to AcoustID |
+| `shazam-signature (shazamio-core)` | 2.0.0 | MIT | pypi.org, shazamio-core==2.0.0 with every wheel hash in the requirements file, in a uv environment | Turns a few seconds of music into a small signature so Home can name the song; the audio never leaves this computer, only the signature goes to Shazam |
 | `ffmpeg` | 8.1.3 (jellyfin-ffmpeg 8.1.3-1) | GPL-3.0-or-later (built with --enable-gpl --enable-version3, no nonfree parts) | github.com/jellyfin/jellyfin-ffmpeg, release v8.1.3-1, portable build per platform, sha256 pinned | Transcode to H.264 and AAC, thumbnails, storyboards and preview clips; the only static build with a clear licence on every platform the Stack runs on. |
 | `ffprobe` | 8.1.3 (jellyfin-ffmpeg 8.1.3-1) | GPL-3.0-or-later (same archive as ffmpeg) | the same archive as ffmpeg | Reads duration, codecs, chapters, tags, embedded date and source URL of a file. |
 | `yt-dlp` | 2026.08.19 | Unlicense (public domain); its default extras: brotli MIT, certifi MPL-2.0, mutagen GPL-2.0-or-later, pycryptodomex BSD-2-Clause, requests Apache-2.0, urllib3 MIT, websockets BSD-3-Clause, yt-dlp-ejs Unlicense | pypi.org, yt-dlp==2026.8.19 with every file hash in the requirements file, in a uv environment | Fetches a link the person chose; FileTube's precedent. |
@@ -343,4 +344,11 @@ Tools the media jobs run, fetched on the first job that needs them, each pinned 
 | `fpcalc-v1.6.2-darwin-x64` | darwin x64 | pinned, not yet verified |
 | `fpcalc-v1.6.2-linux-x64` | linux x64 | pinned, not yet verified |
 | `fpcalc-v1.6.2-linux-arm64` | linux arm64 | pinned, not yet verified |
+
+| Hashed requirements file | Package | Platform | Status |
+|---|---|---|---|
+| `backend/src/media/shazamio-core.requirements.txt` | shazamio-core==2.0.0 | darwin arm64 | pinned, wheel hashes required |
+| `backend/src/media/shazamio-core.requirements.txt` | shazamio-core==2.0.0 | darwin x64 | pinned, wheel hashes required |
+| `backend/src/media/shazamio-core.requirements.txt` | shazamio-core==2.0.0 | linux arm64 | pinned, wheel hashes required |
+| `backend/src/media/shazamio-core.requirements.txt` | shazamio-core==2.0.0 | linux x64 | pinned, wheel hashes required |
 

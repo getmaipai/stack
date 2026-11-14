@@ -50,6 +50,9 @@ test("the real catalog renders the household chat and judge pins", () => {
   expect(doc).toContain("`qwen3-8b-instruct-q4-k-m`");
   expect(doc).toContain("`qwen3-4b-q4-k-m`");
   expect(doc.startsWith("<!-- GENERATED")).toBe(true);
+  expect(doc).toContain("shazam-signature (shazamio-core)");
+  expect(doc).toContain("shazamio-core==2.0.0");
+  expect(doc).toContain("MIT");
 });
 
 test("the real catalog lists coding with no row on p16 and p32 and the Qwen3.8-27B pin on p64 and p128 (CODE-STACK-01 S1)", () => {

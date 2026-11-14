@@ -27,8 +27,8 @@ import { selectEngineBinary } from "@/lib/engineCatalog";
 import { splashDraftPossible } from "@/lib/splash";
 import { ensureEngine, engineDir, engineToolPath } from "@/lib/engineInstall";
 import { ENGINE_READY_MARKER } from "@/lib/engineCatalog";
-import { FFMPEG_NAME, FFMPEG_TAG, FPCALC_NAME, FPCALC_TAG, MEDIA_COMPONENTS, ffmpegPinFor, fpcalcPinFor } from "@/media/pins";
-import { uvEnvironmentReady } from "@/lib/uvEnvironment";
+import { FFMPEG_NAME, FFMPEG_TAG, FPCALC_NAME, FPCALC_TAG, MEDIA_COMPONENTS, SHAZAM_SIGNATURE_NAME, SHAZAM_SIGNATURE_VERSION, ffmpegPinFor, fpcalcPinFor, shazamSignatureRequirementsFileFor } from "@/media/pins";
+import { ensureUvEnvironment, uvEnvironmentReady, uvVenvPath } from "@/lib/uvEnvironment";
 import { loadedRoleForModel, selectedModel } from "@/lib/supervisor";
 import { ensureImageGenEnvironment, imageGen, imageGenEnvironmentReady, imageGenRoot } from "@/images/imageEngine";
 import { imageLoras } from "@/images/loras";
@@ -109,7 +109,7 @@ const GB = 1_000_000_000;
 const ENV_BYTES = { align: engineDownloadBytes("align") ?? 0.3 * GB, beats: engineDownloadBytes("beats") ?? 0.5 * GB, stems: engineDownloadBytes("stems") ?? 0.25 * GB, voiceConvert: engineDownloadBytes("voice-convert") ?? 4 * GB, recordedSpeech: engineDownloadBytes("recorded-speech") ?? 1.7 * GB, image: engineDownloadBytes("image-gen") ?? 1.1 * GB, video: engineDownloadBytes("video-gen") ?? 1.0 * GB, ltx25: engineDownloadBytes("ltx25-gen") ?? 0.25 * GB, ltx25max: engineDownloadBytes("ltx25-max-gen") ?? 0.25 * GB, mask: engineDownloadBytes("mask-gen") ?? 0.6 * GB, music: engineDownloadBytes("music-gen") ?? 0.8 * GB, tools: engineDownloadBytes("image-tools") ?? 0.4 * GB, pocket: engineDownloadBytes("pocket-tts") ?? 0.72 * GB, mlxAudio: engineDownloadBytes("mlx-audio") ?? 0.47 * GB };
 /** The disk plan's row for a component, where the plan has one (its optional rows are the wizard's unchecked extras). */
 /** The install-plan row each component stands for (the size and need shown beside it). A test keeps every plan row covered. */
-export const DISK_ROW: Record<string, string> = { "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "ernie-image-turbo": "pictures-ernie", "qwen-image-2512-q8": "pictures-qwen", "seedvr2-3b": "pictures-clearer", "image-tools": "image-tools", ffmpeg: "ffmpeg", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fish-audio-drama-3-4bit": "recorded-speech", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "sam2.1-hiera-small": "video-mask", "ace-step-1-5-turbo": "music", "ace-step-1-5-xl-turbo-bf16": "music-boost", "ace-step-1-5-xl-sft-bf16": "music-max", "htdemucs": "stems", "htdemucs_ft": "stems-ft", "htdemucs_6s": "stems-6s", "mms-fa-align": "align", "soulx-singer-svc": "voice-convert", "soulx-singer-rmvpe": "voice-convert", "soulx-singer-whisper-base": "voice-convert", "ltx-2-5-q8-distilled-mlx": "video-ltx25", "ltx-2-5-bf16-distilled-mlx-max": "video-ltx25-max", "stable-audio-3-small-sfx": "sound-effects" };
+export const DISK_ROW: Record<string, string> = { "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "ernie-image-turbo": "pictures-ernie", "qwen-image-2512-q8": "pictures-qwen", "seedvr2-3b": "pictures-clearer", "image-tools": "image-tools", ffmpeg: "ffmpeg", "shazam-signature": "shazam-signature", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fish-audio-drama-3-4bit": "recorded-speech", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "sam2.1-hiera-small": "video-mask", "ace-step-1-5-turbo": "music", "ace-step-1-5-xl-turbo-bf16": "music-boost", "ace-step-1-5-xl-sft-bf16": "music-max", "htdemucs": "stems", "htdemucs_ft": "stems-ft", "htdemucs_6s": "stems-6s", "mms-fa-align": "align", "soulx-singer-svc": "voice-convert", "soulx-singer-rmvpe": "voice-convert", "soulx-singer-whisper-base": "voice-convert", "ltx-2-5-q8-distilled-mlx": "video-ltx25", "ltx-2-5-bf16-distilled-mlx-max": "video-ltx25-max", "stable-audio-3-small-sfx": "sound-effects" };
 
 const envImage: EnvDef = { name: "image-gen", approxBytes: ENV_BYTES.image, root: imageGenRoot, ready: imageGenEnvironmentReady, build: (onPhase, signal) => ensureImageGenEnvironment(onPhase, { signal }), stop: () => imageGen.stop() };
 const envVideo: EnvDef = {
@@ -192,6 +192,13 @@ const envFpcalc: EnvDef = {
     await ensureEngine(pin, () => {}, { signal, activate: true });
   },
 };
+const shazamSignatureRoot = (): string => engineTagRoot(SHAZAM_SIGNATURE_NAME, SHAZAM_SIGNATURE_VERSION);
+const shazamSignatureSpec = () => { const root = shazamSignatureRoot(); return { name: SHAZAM_SIGNATURE_NAME, version: SHAZAM_SIGNATURE_VERSION, root, requirements: shazamSignatureRequirementsFileFor(), proof: join(uvVenvPath(root), "bin", "python") }; };
+const envShazamSignature: EnvDef = {
+  name: SHAZAM_SIGNATURE_NAME, approxBytes: 1_700_000, root: shazamSignatureRoot,
+  ready: () => uvEnvironmentReady(shazamSignatureSpec()),
+  build: async (onPhase, signal) => { onPhase("the song signature tool"); await ensureUvEnvironment(shazamSignatureSpec(), onPhase, { signal }); },
+};
 const envPocket: EnvDef = { name: "pocket-tts", approxBytes: ENV_BYTES.pocket, root: pocketTtsRoot, ready: pocketTtsInstalled, build: (onPhase, signal) => ensurePocketTtsEnvironment(onPhase, { signal }) };
 const envMlxAudio: EnvDef = { name: "mlx-audio", approxBytes: ENV_BYTES.mlxAudio, root: mlxAudioRoot, ready: mlxAudioInstalled, build: (onPhase, signal) => ensureMlxAudioEnvironment(onPhase, { signal }) };
 const envRecordedSpeech: EnvDef = { name: RECORDED_SPEECH_NAME, approxBytes: ENV_BYTES.recordedSpeech, root: recordedSpeechRoot, ready: recordedSpeechEnvironmentReady, build: (onPhase, signal) => ensureRecordedSpeechEnvironment(onPhase, signal), stop: () => recordedSpeech.stop() };
@@ -214,6 +221,7 @@ const LABELS: Record<string, { label: string; summary: string }> = {
   wakeword: { label: "Wake word (Hey MaiPai)", summary: "Lets a speaker or robot wake up when someone says the wake word." },
   ffmpeg: { label: "Audio and video tools (ffmpeg)", summary: "Cuts, mixes and changes sound and video" },
   fpcalc: { label: "Song naming tool (chromaprint)", summary: "Listens to a few seconds of music and makes a fingerprint so Home can name the song" },
+  "shazam-signature": { label: "Song signature tool (shazamio-core)", summary: "Makes a small signature from a few seconds of music so Home can name the song" },
   "image-tools": { label: "Picture tools", summary: "Remove a background, erase an object, upscale, resize or make a depth map for a picture." },
   liveportrait: { label: "Talking pictures", summary: "Makes the mouth and blink pictures a talking companion plays back while it speaks." },
   "tool-look": { label: "Look", summary: "Names household objects, wall colour and light in a picture." },
@@ -310,6 +318,12 @@ export function componentDefs(): UnitDef[] {
     id: "fpcalc", ...LABELS.fpcalc!, group: "tools", role: "media", pins: [], envs: [envFpcalc],
     licenceName: MEDIA_COMPONENTS.find((component) => component.name === "fpcalc (chromaprint)")!.licence,
     platformBlock: () => fpcalcPinFor() ? null : `The song naming tool is not available on ${process.platform} ${process.arch} yet.`,
+    usedBy: () => ["Name a song from a recording"], busy: () => null,
+  });
+  units.push({
+    id: SHAZAM_SIGNATURE_NAME, ...LABELS[SHAZAM_SIGNATURE_NAME]!, group: "tools", role: "media", pins: [], envs: [envShazamSignature],
+    licenceName: MEDIA_COMPONENTS.find((component) => component.name === "shazam-signature (shazamio-core)")!.licence,
+    platformBlock: () => shazamSignatureRequirementsFileFor() ? null : `The song signature tool is not available on ${process.platform} ${process.arch} yet.`,
     usedBy: () => ["Name a song from a recording"], busy: () => null,
   });
   units.push({

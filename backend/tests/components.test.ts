@@ -396,3 +396,16 @@ test("fpcalc is a listed song naming tool with the Chromaprint LGPL licence", as
   const view = (await listComponents(hw())).components.find((candidate) => candidate.id === "fpcalc")!;
   expect(view).toMatchObject({ label: "Song naming tool (chromaprint)", summary: "Listens to a few seconds of music and makes a fingerprint so Home can name the song", group: "tools", licence_name: "LGPL-2.1-or-later" });
 });
+
+test("shazam-signature is a listed MIT song signature tool and explains unsupported platforms", async () => {
+  __setComponentUnitsForTests(null);
+  const unit = componentDefs().find((candidate) => candidate.id === "shazam-signature")!;
+  expect(unit).toMatchObject({ label: "Song signature tool (shazamio-core)", summary: "Makes a small signature from a few seconds of music so Home can name the song", group: "tools", role: "media", licenceName: "MIT" });
+  expect(unit.pins).toEqual([]);
+  expect(unit.envs.map((environment) => environment.name)).toEqual(["shazam-signature"]);
+  expect(unit.envs[0]!.approxBytes).toBe(1_700_000);
+  expect(DISK_ROW[unit.id]).toBe("shazam-signature");
+  const view = (await listComponents(hw())).components.find((candidate) => candidate.id === unit.id)!;
+  expect(view.install_block).toBeNull();
+  expect(view.licence_name).toBe("MIT");
+});

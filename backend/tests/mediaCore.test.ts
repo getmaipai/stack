@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { fetchArgs, FetchInput, parseFetchedItem, parseFetchProgress, parseProgressSeconds, PreviewInput, storyboardArgs, TranscodeInput, transcodePlan } from "@/media/commands";
 import { BACKGROUND_GAP_MS, classifyFetchFailure, HostLimiter, hostKey, QUIET_AFTER_FAILURES, QUIET_MS } from "@/media/hosts";
 import { isoDate, normalizeProbe } from "@/media/probe";
-import { ffmpegPinFor, FFMPEG_PINS, fpcalcPinFor, FPCALC_PINS, MEDIA_COMPONENTS, ytDlpRequirementsFileFor } from "@/media/pins";
+import { ffmpegPinFor, FFMPEG_PINS, fpcalcPinFor, FPCALC_PINS, MEDIA_COMPONENTS, shazamSignatureRequirementsFileFor, ytDlpRequirementsFileFor } from "@/media/pins";
 
 test("a host key groups a site's subdomains and keeps an IP or a two-part suffix whole", () => {
   expect(hostKey("https://www.example.com/watch?v=1")).toBe("example.com");
@@ -215,8 +215,8 @@ test("the pins: sha256 and size recorded for every platform, one licence record 
   for (const pin of FFMPEG_PINS) { expect(pin.archive.sha256).toMatch(/^[0-9a-f]{64}$/); expect(pin.archive.url).toContain("jellyfin-ffmpeg"); expect(pin.archive.approxBytes).toBeGreaterThan(1_000_000); }
   expect(ffmpegPinFor("darwin", "arm64")?.verified).toBe(true);
   expect(ffmpegPinFor("win32", "x64")).toBeNull();
-  expect(MEDIA_COMPONENTS.map((component) => component.name)).toEqual(["fpcalc (chromaprint)", "ffmpeg", "ffprobe", "yt-dlp"]);
-  for (const component of MEDIA_COMPONENTS) expect(component.licence.length).toBeGreaterThan(5);
+  expect(MEDIA_COMPONENTS.map((component) => component.name)).toEqual(["fpcalc (chromaprint)", "shazam-signature (shazamio-core)", "ffmpeg", "ffprobe", "yt-dlp"]);
+  for (const component of MEDIA_COMPONENTS) expect(component.licence.length).toBeGreaterThan(2);
   expect(ytDlpRequirementsFileFor("win32", "x64")).toBeNull();
   expect(ytDlpRequirementsFileFor("darwin", "arm64")).not.toBeNull();
 });
@@ -227,4 +227,15 @@ test("fpcalc is pinned for all supported platforms with its LGPL licence record"
   expect(fpcalcPinFor("darwin", "arm64")?.archive.sha256).toBe("f3bc56cb42d89a01237bb3f3629329e4ec75f7c1b0217acf6e9bf952ac47979b");
   expect(fpcalcPinFor("win32", "x64")).toBeNull();
   expect(MEDIA_COMPONENTS.find((component) => component.name === "fpcalc (chromaprint)")?.licence).toBe("LGPL-2.1-or-later");
+});
+
+test("shazamio-core requirements are pinned for macOS and Linux arm64 and x64", async () => {
+  const platforms = [["darwin", "arm64"], ["darwin", "x64"], ["linux", "arm64"], ["linux", "x64"]] as const;
+  for (const [platform, arch] of platforms) expect(shazamSignatureRequirementsFileFor(platform, arch)).not.toBeNull();
+  expect(shazamSignatureRequirementsFileFor("win32", "x64")).toBeNull();
+  expect(shazamSignatureRequirementsFileFor("linux", "ia32")).toBeNull();
+  const requirements = await Bun.file(shazamSignatureRequirementsFileFor("darwin", "arm64")!).text();
+  expect(requirements).toContain("shazamio-core==2.0.0");
+  expect(requirements.match(/--hash=sha256:/g)).toHaveLength(11);
+  expect(MEDIA_COMPONENTS.find((component) => component.name === "shazam-signature (shazamio-core)")?.licence).toBe("MIT");
 });

@@ -224,6 +224,7 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   // ffmpeg and ffprobe: one pinned archive (media/pins.ts), required because songs, voice shifting and clips cut with it. No model pins.
   const ffmpeg = table.engines.ffmpeg!;
   rows.push({ id: "ffmpeg", label: "Audio and video tools (ffmpeg)", note: "Cuts, mixes and changes sound and video. GPL 3 or later.", kind: "model", need: "required", selectable: false, download_bytes: ffmpeg.download_bytes, installed_bytes: ffmpeg.installed_bytes, peak_temp_bytes: ffmpeg.peak_temp_bytes, model_ids: [], engines: [], installed: false, basis: ffmpeg.basis });
+  rows.push({ id: "shazam-signature", label: "Song signature tool (shazamio-core)", note: "Makes a small signature from a few seconds of music so Home can name the song. MIT; audio stays on this computer.", kind: "model", need: "optional", selectable: true, download_bytes: 1_700_000, installed_bytes: 1_700_000, peak_temp_bytes: 0, model_ids: [], engines: [], installed: false, basis: "pins" });
   const search = table.engines["search-helper"]!;
   rows.push({ id: "search", label: "Search helper", note: "Looks up web search results for adults, when web search is turned on.", kind: "model", need: "recommended", selectable: false, download_bytes: search.download_bytes, installed_bytes: search.installed_bytes, peak_temp_bytes: search.peak_temp_bytes, model_ids: [], engines: [], installed: false, basis: search.basis });
   const used = new Set(rows.flatMap((row) => row.engines));

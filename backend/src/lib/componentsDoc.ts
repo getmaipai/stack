@@ -141,7 +141,7 @@ export function renderComponentsDoc(catalog: ComponentsCatalog): string {
   // The media service is not a model role: its tools are listed once, with the licence the pin records (MEDIA-STACK-01).
   lines.push("## media (the media service: probe, fetch, transcode, preview)");
   lines.push("");
-  lines.push("Tools the media jobs run, fetched on the first job that needs them, each pinned by checksum. ffmpeg and ffprobe are one verified archive per platform; fpcalc is one Chromaprint archive per platform; yt-dlp is a hashed PyPI requirements file in a uv environment.");
+  lines.push("Tools the media jobs run, fetched on the first job that needs them, each pinned by checksum. ffmpeg and ffprobe are one verified archive per platform; fpcalc is one Chromaprint archive per platform; yt-dlp and shazam-signature are hashed PyPI requirements files in uv environments.");
   lines.push("");
   lines.push("| Tool | Build | Licence | Source | Why |");
   lines.push("|---|---|---|---|---|");
@@ -154,6 +154,10 @@ export function renderComponentsDoc(catalog: ComponentsCatalog): string {
   lines.push("| fpcalc (Chromaprint) archive | Platform | Status |");
   lines.push("|---|---|---|");
   for (const pin of FPCALC_PINS) lines.push(`| \`${pin.id}\` | ${pin.platform} ${pin.arch} | ${pin.verified ? "pinned, verified" : "pinned, not yet verified"} |`);
+  lines.push("");
+  lines.push("| Hashed requirements file | Package | Platform | Status |");
+  lines.push("|---|---|---|---|");
+  for (const platform of ["darwin arm64", "darwin x64", "linux arm64", "linux x64"]) lines.push(`| \`backend/src/media/shazamio-core.requirements.txt\` | shazamio-core==2.0.0 | ${platform} | pinned, wheel hashes required |`);
   lines.push("");
   return lines.join("\n");
 }
