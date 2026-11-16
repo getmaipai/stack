@@ -1423,6 +1423,23 @@ export const STACK_VIDEO_LTX25_MODEL: CatalogModelLike = {
 };
 export const STACK_VIDEO_LTX25_MODELS: CatalogModelLike[] = [STACK_VIDEO_LTX25_MODEL];
 
+// H3-VIDEO-STACK-01: the CLI runtime and license are registered now. Exact
+// model file hashes/revisions remain a hard prerequisite to a verified install.
+export const STACK_VIDEO_H3_MODEL_ID = "minimax-h3";
+export const H3_VIDEO_LICENSE = "MiniMax H3 Community License";
+export const H3_VIDEO_LICENSE_NOTICE = {
+  id: "minimax-h3-community-2026-08-02",
+  name: "MiniMax H3 Community License Agreement (2026-08-02)",
+  url: "https://huggingface.co/MiniMaxAI/MiniMax-H3",
+  summary: ["The model comes from the maker's published files for household use.", "Territory restrictions apply; authorisation is required above US$20M revenue. Read the licence before accepting."],
+};
+export const STACK_VIDEO_H3_MODEL: CatalogModelLike = {
+  id: STACK_VIDEO_H3_MODEL_ID, role: "video", license: H3_VIDEO_LICENSE,
+  engine: "minimax-h3-video-gen", sizing: { profile: "p128", quantization: "8-bit or Core4 stream2" },
+  measured: { footprintBytes: 42_100_000_000, contextLength: 0, hardware: "Apple M5 Max, 128 GB unified memory" },
+};
+export const STACK_VIDEO_H3_MODELS: CatalogModelLike[] = [STACK_VIDEO_H3_MODEL];
+
 // LTX25-MAX-01: the LTX-2.5 Max pack, for the Max video slot (1024x576, 10 s). The distilled transformer at bf16 with the Gemma 4 text
 // encoder (its own folder, `gemma4-12b-ltx-v1`), the connector, the VAEs, the audio VAE, the vocoder, the duration head and the x2
 // spatial upscaler, from the UNGATED mlx-community conversion (no account or login; the official dgrauet packs are gated and cannot be

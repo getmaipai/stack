@@ -18,6 +18,11 @@ import { overallPercent, VideoError, videoGen, VIDEO_SPECS, type VideoQuality, t
 import { ltx25MaxPeakBytes, ltx25PeakBytes, LTX25_ICLORA_PEAK_BYTES, LTX25_INGREDIENTS_PEAK_BYTES } from "./ltx25";
 import { checkEdit, EditSourceError, editRuntime, extendLatentFrames, extendPixelFrames, fitArgs, ltx25EditAdmitBytes, planSource, probeSource, retakeStartLatent, type Ltx25EditKind } from "./ltx25Edit";
 import { resolveReadable } from "@/media/paths";
+import { upscaleClip } from "@/media/upscale";
+import { defaultToolbox } from "@/media/tools";
+import { probeFile } from "@/media/probe";
+import { spawnRunner } from "@/media/run";
+import { finishH3Clip } from "./h3";
 
 export const VIDEO_JOB_KIND = "video_generation";
 export function videoAdmission(input: { quality?: VideoQuality; size?: string; seconds?: number; mode?: string; edit?: Ltx25EditKind; lora_admit_bytes?: number }): { requestedBytes: number; measuredPeakBytes: number; engine: string } {
@@ -165,6 +170,14 @@ export function registerVideoJobs(): void {
         onStage: (stage, n, of) => { tracker.enter(stage, n, of); update({ percent: Math.round(tracker.snapshot().fraction * 100) }); },
         onPreview: () => tracker.setPreview(null, null),
       });
+      if (quality === "h3" || quality === "h3stream") try { await finishH3Clip(async (path) => {
+        const ffmpeg = await defaultToolbox.path("ffmpeg", (status) => update({ status }), signal);
+        const ffprobe = await defaultToolbox.path("ffprobe", (status) => update({ status }), signal);
+        const probe = await probeFile(spawnRunner, ffprobe, path, signal);
+        const target = join(outputDir, "video-upscaled.mp4");
+        await upscaleClip({ ffmpeg, run: spawnRunner, input: path, target, work: outputDir, probe, signal, progress: (next) => update(next), basePercent: 95, percentSpan: 4 });
+        copyFileSync(target, path);
+      }, join(outputDir, "video.mp4")); } catch (error) { if (signal.aborted) throw error; update({ status: "The clip is kept as made: the sharpening step could not run, so it is not sharpened." }); }
       recordRun(tracker.key, tracker.finish());
       const video = join(outputDir, "video.mp4");
       const poster = join(outputDir, "poster.jpg");

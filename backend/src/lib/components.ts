@@ -15,7 +15,7 @@ import { createJob, finishJob, getJob, jobSignal, listJobs, updateJob } from "@/
 import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { getModel, installCatalogModel, removeModel, removeModelsAtomically, type CatalogModelLike, type DownloadModelOptions } from "@/lib/modelStore";
-import { H3_LICENCE_NOTICE, STACK_IMAGE_H3_ID, STACK_IMAGE_H3_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_RESTORE_MODELS, STACK_IMAGE_RESTORE_ID, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS, LTX_LICENCE_NOTICE, SFX_LICENCE_NOTICE, STACK_SFX_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_SFT_ID, STACK_MUSIC_XL_ID, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_STEMS_MODELS, STACK_RECORDED_SPEECH_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MODEL_ID, STACK_VIDEO_MASK_MODELS, STACK_VIDEO_MASK_MODEL_ID, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
+import { H3_LICENCE_NOTICE, STACK_IMAGE_H3_ID, STACK_IMAGE_H3_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_RESTORE_MODELS, STACK_IMAGE_RESTORE_ID, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS, LTX_LICENCE_NOTICE, H3_VIDEO_LICENSE_NOTICE, STACK_VIDEO_H3_MODEL, STACK_VIDEO_H3_MODEL_ID, SFX_LICENCE_NOTICE, STACK_SFX_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_SFT_ID, STACK_MUSIC_XL_ID, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_STEMS_MODELS, STACK_RECORDED_SPEECH_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MODEL_ID, STACK_VIDEO_MASK_MODELS, STACK_VIDEO_MASK_MODEL_ID, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
 import { licenceAcceptance, recordLicenceAcceptance, type LicenceNotice } from "@/lib/licenceAcceptance";
 import { buildInstallPlan } from "@/lib/installPlan";
 import { diskPlanForTier, diskTotalsFor, engineDownloadBytes, type DiskPlan } from "@/lib/diskPlan";
@@ -236,6 +236,7 @@ const LABELS: Record<string, { label: string; summary: string }> = {
   "qwen-image-2512-q8": { label: "Pictures: Qwen-Image 20B (best quality)", summary: "The best picture model, used for Max pictures. Draws clear words and fine detail. A very large download (about 36 GB); a picture takes about three minutes." },
   "seedvr2-3b": { label: "Make clearer, best quality (SeedVR2 3B)", summary: "The most careful repair for old, soft or damaged pictures, used by the Best level of Make clearer. It redraws fine detail, so a face can change slightly; Home checks faces and keeps the original when one does. About 7.3 GB, Apache-2.0; a picture takes a few seconds and needs about 12 GB of free memory while it runs." },
   "minimax-h3-image": { label: "Pictures: MiniMax H3-Image", summary: "Makes pictures and changes them, keeps words spelled right, and takes up to sixteen reference pictures. One model for new pictures and edits." },
+  "minimax-h3": { label: "Video: MiniMax H3", summary: "Makes five-second clips with stereo sound from a written description." },
   "ernie-image-turbo": { label: "Pictures: ERNIE-Image-Turbo", summary: "Draws words inside pictures correctly. Makes new pictures from a sentence; FLUX.2 Klein stays for edits." },
   "ace-step-1-5-turbo": { label: "Music: ACE-Step 1.5", summary: "Makes and changes songs in chat" },
   "stable-audio-3-small-sfx": { label: "Make sound effects (Stable Audio 3 Small-SFX)", summary: "Makes short sound effects and ambience from a sentence, up to 47 seconds. About 3.5 GB, and the maker's licence applies." },
@@ -364,6 +365,7 @@ export function componentDefs(): UnitDef[] {
       return activeJobFor((kind) => kind.startsWith("video")) ? "A video clip is waiting or being made right now." : null;
     },
   });
+  units.push({ id: STACK_VIDEO_H3_MODEL_ID, ...LABELS[STACK_VIDEO_H3_MODEL_ID]!, group: "video", role: "video", pins: [STACK_VIDEO_H3_MODEL], envs: [], tiers: ["p16", "p32", "p64", "p128"], licenceNotice: H3_VIDEO_LICENSE_NOTICE, usedBy: () => ["MiniMax H3 videos with sound in chat and the Video app"], busy: () => activeJobFor((kind) => kind.startsWith("video")) ? "A video clip is waiting or being made right now." : null });
   units.push({
     id: STACK_VIDEO_LTX25_MAX_MODEL_ID, ...LABELS[STACK_VIDEO_LTX25_MAX_MODEL_ID]!, group: "video", role: "video", pins: STACK_VIDEO_LTX25_MAX_MODELS, envs: [envLtx25Max], tiers: ["p128"], licenceNotice: LTX_LICENCE_NOTICE,
     platformBlock: () => videoAvailability().code === "unsupported" ? videoAvailability().reason : null,

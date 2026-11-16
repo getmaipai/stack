@@ -24,6 +24,9 @@
 // (Home owns the gate). Age and surface gates, the household-name gate on the
 // prompt, and the two absolute lines live in Home, where the person is known.
 import { engineIdleMs } from "@/lib/engineIdle";
+import { defaultToolbox } from "@/media/tools";
+import { H3_VIDEO_ID, H3_VIDEO_VERSION, h3VideoCommand, type H3VideoBuild } from "./h3";
+import { spawnRunner } from "@/media/run";
 import { heavyGate, PausableProcess, type Lease, type PausableWorker } from "@/lib/heavyGate";
 import { TreeSnapshot } from "@/lib/processTree";
 import { registerOwned } from "@/lib/ownedProcesses";
@@ -68,7 +71,7 @@ export const VIDEO_TIERS = ["p128"] as const;
 /**
  * The video models are Wan Quick and LTX-2.5 Standard, Boost and Max. Every number is a hard ceiling in the Stack, measured on the Studio, never a setting.
  */
-export type VideoQuality = "quick" | "ltx25" | "ltx25max";
+export type VideoQuality = "quick" | "ltx25" | "ltx25max" | "h3" | "h3stream";
 export const VIDEO_QUALITIES: readonly VideoQuality[] = ["quick", "ltx25", "ltx25max"];
 export interface VideoSpec {
   quality: VideoQuality; modelId: string; maxSeconds: number; frameStep: number; defaultSize: string; maxPixels: number; sizeStep: number; minSide: number;
@@ -85,6 +88,8 @@ export const VIDEO_SPECS: Record<VideoQuality, VideoSpec> = {
   ltx25: { quality: "ltx25", modelId: STACK_VIDEO_LTX25_MODEL_ID, maxSeconds: LTX25_MAX_SECONDS, frameStep: 8, defaultSize: LTX25_DEFAULT_SIZE, maxPixels: 768 * 448, sizeStep: 32, minSide: 256, audio: true, peakBytes: LTX25_PEAK_BYTES, loraBase: "ltx-2.5", worker: "ltx25_worker.py", imageToVideo: true, endImage: true },
   // LTX25-MAX-01: the Max profile (1024x576, 10 s) on the dgrauet runtime and the bf16 pack; the peak is its admission figure (measured footprint with headroom).
   ltx25max: { quality: "ltx25max", modelId: STACK_VIDEO_LTX25_MAX_MODEL_ID, maxSeconds: LTX25_MAX_PROFILE_SECONDS, frameStep: 8, defaultSize: LTX25_MAX_DEFAULT_SIZE, maxPixels: 1024 * 576, sizeStep: 64, minSide: 256, audio: true, peakBytes: LTX25_MAX_PEAK_BYTES, loraBase: "ltx-2.5", worker: "ltx25_worker.py", imageToVideo: true, endImage: true },
+  h3: { quality: "h3", modelId: H3_VIDEO_ID, maxSeconds: 5, frameStep: 1, defaultSize: "864x480", maxPixels: 864 * 480, sizeStep: 1, minSide: 1, audio: true, peakBytes: 42_100_000_000, loraBase: "minimax-h3", worker: "ltx25_worker.py", imageToVideo: false, endImage: false },
+  h3stream: { quality: "h3stream", modelId: H3_VIDEO_ID, maxSeconds: 5, frameStep: 1, defaultSize: "864x480", maxPixels: 864 * 480, sizeStep: 1, minSide: 1, audio: true, peakBytes: 14_800_000_000, loraBase: "minimax-h3", worker: "ltx25_worker.py", imageToVideo: false, endImage: false },
 };
 /** Whether a quality's runtime and weights come from the LTX-2.5 engine (its own environment). */
 export const usesLtx25Engine = (quality: VideoQuality): boolean => quality === "ltx25" || quality === "ltx25max";
@@ -95,6 +100,8 @@ export function qualityOfModelName(name: string | undefined): VideoQuality | nul
   if (name === "detailed" || name === "ltx-2-3-distilled-mlx") return null;
   if ((LTX25_MODEL_NAMES as readonly string[]).includes(name) || name === VIDEO_SPECS.ltx25.modelId) return "ltx25";
   if ((LTX25_MAX_MODEL_NAMES as readonly string[]).includes(name) || name === VIDEO_SPECS.ltx25max.modelId) return "ltx25max";
+  if (name === H3_VIDEO_ID || name === "minimax-h3-8bit") return "h3";
+  if (name === "minimax-h3-streaming") return "h3stream";
   return null;
 }
 /** The environment root a quality runs in (the LTX-2.5 engine has its own, and Max has a second one). */
@@ -142,9 +149,18 @@ export function buildWorkerRequest(quality: VideoQuality, paths: VideoModelPaths
     ...(edit ? { source_video: edit.sourcePath, ffmpeg: edit.ffmpeg, ffprobe: edit.ffprobe, ...(edit.kind === "extend" ? { extend_frames: edit.extendFrames } : { retake_start_latent: edit.retakeStartLatent }) } : {}) };
 }
 
-export interface VideoModelPaths { modelDir: string; tokenizerDir: string; /** The model's own text folder, when required by its worker. */ textEncoderDir?: string; }
+export interface VideoModelPaths { modelDir: string; tokenizerDir: string; textEncoderDir?: string; h3Home?: string; h3Build?: H3VideoBuild; }
 /** The installed, verified weights and text folders of one quality, or null when any is missing. */
 export function videoModelPaths(quality: VideoQuality = "quick"): VideoModelPaths | null {
+  if (quality === "h3" || quality === "h3stream") {
+    const home = process.env.MAIPAI_H3_VIDEO_HOME || engineTagRoot("minimax-h3-video-gen", H3_VIDEO_VERSION);
+    const models = join(home, "models/minimax_h3");
+    const required = [join(home, "node/scripts/generate_staged.py"), join(home, ".venv/bin/python"), join(models, "upstream/FL2VA"), join(models, "qwen/8-bit")];
+    const stream = join(models, "transformers/4-bit-pruned-stream2");
+    const build: H3VideoBuild = quality === "h3stream" ? "streaming-24gb" : "boost-8bit";
+    if (!required.every(existsSync) || (quality === "h3stream" ? !existsSync(stream) : !existsSync(join(models, "transformers/8-bit")))) return null;
+    return { modelDir: models, tokenizerDir: join(models, "qwen/8-bit"), h3Home: home, h3Build: build };
+  }
   if (quality === "ltx25max") { const paths = ltx25MaxModelPaths(); return paths ? { modelDir: paths.modelDir, tokenizerDir: paths.gemmaDir, textEncoderDir: paths.gemmaDir } : null; }
   if (quality === "ltx25") { const paths = ltx25ModelPaths(); return paths ? { modelDir: paths.modelDir, tokenizerDir: join(paths.modelDir, "text_encoder"), textEncoderDir: join(paths.modelDir, "text_encoder") } : null; }
   const model = getModel(STACK_VIDEO_MODEL_ID);
@@ -202,12 +218,15 @@ export interface VideoGenDeps {
   ensureEnvironment: (onProgress: (phase: string) => void, signal?: AbortSignal, quality?: VideoQuality) => Promise<void>;
   spawn: (quality: VideoQuality) => Promise<WorkerHandle>;
   paths: (quality: VideoQuality) => VideoModelPaths | null;
+  run?: typeof spawnRunner;
+  ffmpeg?: (quality: VideoQuality) => string | null;
 }
 
 export const defaultVideoGenDeps: VideoGenDeps = {
   supported: () => !!videoRequirementsFileFor(),
   ensureEnvironment: (onProgress, signal, quality) => quality === "ltx25max" ? ensureLtx25MaxEnvironment(onProgress, { signal }) : quality === "ltx25" ? ensureLtx25Environment(onProgress, { signal }) : ensureVideoGenEnvironment(onProgress, { signal }),
   paths: videoModelPaths,
+  run: spawnRunner,
   spawn: async (quality) => {
     if (quality === "ltx25" || quality === "ltx25max") return spawnLtx25(quality);
     const root = videoGenRoot();
@@ -342,7 +361,7 @@ export class VideoGenService {
   status(): { state: VideoState; phase: string | null; building: string | null; models: boolean; environment: boolean } {
     const availability = tierAvailability();
     // Any installed video pack can make a video.
-    const models = this.deps.paths("quick") !== null || this.deps.paths("ltx25") !== null || this.deps.paths("ltx25max") !== null;
+    const models = this.deps.paths("quick") !== null || this.deps.paths("ltx25") !== null || this.deps.paths("ltx25max") !== null || this.deps.paths("h3") !== null || this.deps.paths("h3stream") !== null;
     const state: VideoState = !this.deps.supported() ? "unsupported" : !availability.available ? "off" : !models ? "not-installed" : this.building ? "building" : this.busy > 0 ? "running" : this.worker ? "idle" : "needs-setup";
     return { state, phase: this.busy > 0 ? this.lastPhase : null, building: this.building, models, environment: videoGenEnvironmentReady() };
   }
@@ -407,6 +426,36 @@ export class VideoGenService {
     if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
     let lease: Lease | undefined;
     try {
+      if (quality === "h3" || quality === "h3stream") {
+        lease = heavyGate.attach({ role: "video", jobId: options.jobId, worker: undefined });
+        mkdirSync(input.outputDir, { recursive: true, mode: 0o700 });
+        const output = join(input.outputDir, "video.mp4");
+        const home = paths.h3Home!; const models = paths.modelDir;
+        const lora = join(models, "loras/minimax_h3_turbo_v4_step600_ema.safetensors");
+        const hasLora = existsSync(lora);
+        const transformer = paths.h3Build === "streaming-24gb" ? join(models, "transformers/4-bit-pruned-stream2") : join(models, "transformers/8-bit");
+        const argv = h3VideoCommand(join(home, ".venv/bin/python"), join(home, "node/scripts/generate_staged.py"), {
+          prompt: input.prompt, build: paths.h3Build!, checkpoint: join(models, "upstream/FL2VA"), transformer,
+          qwenDir: join(models, "qwen/8-bit"), output,
+          seconds: Math.max(4, Math.min(5, Math.round(input.frames / VIDEO_FPS))), width: input.width, height: input.height,
+          seed: input.seed, steps: hasLora ? 7 : 12, ...(hasLora ? { lora } : {}),
+        });
+        onPhase("loading", 0);
+        const result = await (this.deps.run ?? spawnRunner)(argv, { cwd: home, signal: options.signal, env: { HF_HUB_OFFLINE: "1", PYTHONPATH: join(home, "node"), PYTHONUNBUFFERED: "1" }, onStdoutLine: (line) => {
+          const stage = /(?:stage|step)\s*[:#]?\s*(\d+)(?:\s*\/\s*(\d+))?/i.exec(line);
+          if (stage) options.onStage?.("render", Number(stage[1]), stage[2] ? Number(stage[2]) : null);
+          else if (/load|model/i.test(line)) onPhase("loading", 10);
+          else if (/audio|encode|write|save/i.test(line)) onPhase("encoding", 80);
+          else onPhase("rendering", 30);
+        } });
+        if (result.aborted || options.signal?.aborted) throw new VideoError("cancelled", "Cancelled.", 499);
+        if (result.code !== 0 || !existsSync(output)) throw new VideoError("failed", "MiniMax H3 could not finish the clip. Check that its files are available in MAIPAI_H3_VIDEO_HOME.", 500);
+        const ffmpeg = this.deps.ffmpeg ? this.deps.ffmpeg(quality) : (ffmpegPath(rootOf(quality)) ?? await defaultToolbox.path("ffmpeg", () => {}, options.signal).catch(() => null));
+        if (!ffmpeg) throw new VideoError("failed", "The video tools are not installed (no_ffmpeg).", 503);
+        await (this.deps.run ?? spawnRunner)([ffmpeg, "-y", "-i", output, "-frames:v", "1", join(input.outputDir, "poster.jpg")], { signal: options.signal });
+        this.lastSuccessAt = Date.now();
+        return { width: input.width, height: input.height, frames: input.frames, fps: VIDEO_FPS, seed: input.seed, ms: 0, peakBytes: VIDEO_SPECS[quality].peakBytes, audio: true };
+      }
       const worker = await this.ensureWorker(quality, onPhase, options.signal);
       lease = heavyGate.attach({ role: "video", jobId: options.jobId, worker: worker.pausable });
       mkdirSync(input.outputDir, { recursive: true, mode: 0o700 });

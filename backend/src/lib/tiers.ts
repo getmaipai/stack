@@ -7,6 +7,7 @@ const STACK_MUSIC_MODEL_ID = "ace-step-1-5-turbo";
 const STACK_VIDEO_MODEL_ID = "fastwan2-2-ti2v-5b-mlx-bf16";
 const STACK_VIDEO_LTX25_MODEL_ID = "ltx-2-5-q8-distilled-mlx";
 const STACK_VIDEO_LTX25_MAX_MODEL_ID = "ltx-2-5-bf16-distilled-mlx-max";
+const STACK_VIDEO_H3_ID = "minimax-h3";
 const STACK_VIDEO_MASK_MODEL_ID = "sam2.1-hiera-small";
 
 export type TierId = "reduced" | "standard" | "boost" | "max";
@@ -53,6 +54,8 @@ export const TIER_CANDIDATES: TierCandidate[] = [
     { options: { size: "768x448", seconds: 5 }, peakBytes: 45_800_000_000, status: "measured", note: "Boost slot." },
   ], tiers: [], vetting: "VIDEO-TIERS-01: the Stack runs it (LTX25-ENGINE-01); Home's design step moves the Standard and Boost video slots here while the Wan Quick lane remains available for minors. The Max profile (1024x576, 10 s, 48.6 GB, LTX25-MAX-01) is the separate model ltx-2-5-bf16-distilled-mlx-max on the dgrauet runtime; its slot is Home's to enable." },
   { id: STACK_VIDEO_LTX25_MAX_MODEL_ID, category: "video", family: "ltx", label: "LTX-2.5 Video Max", profiles: ["p128"], peaks: [{ options: { input: "words" }, peakBytes: 51_000_000_000, status: "measured", note: "LTX25 Max words peak from video/ltx25.ts." }, { options: { input: "picture" }, peakBytes: 61_500_000_000, status: "measured", note: "LTX25 Max picture peak from video/ltx25.ts." }], tiers: ["max"] },
+  { id: STACK_VIDEO_H3_ID, category: "video", family: "minimax-h3", label: "MiniMax H3 Video (8-bit)", profiles: ["p128"], peaks: [{ options: { build: "8bit", size: "864x480", seconds: 5 }, peakBytes: 42_100_000_000, status: "measured", note: "Home H3 eval 2026-11-15: 8-bit, 25 steps, 864x480, 5 s, stereo sound; 641 s and 42.1 GB." }], tiers: ["boost"] },
+  { id: STACK_VIDEO_H3_ID, category: "video", family: "minimax-h3", label: "MiniMax H3 Video (streaming)", profiles: ["p16", "p32", "p64", "p128"], peaks: [{ options: { build: "streaming", size: "864x480", seconds: 5 }, peakBytes: 14_800_000_000, status: "measured", note: "Home H3 eval 2026-11-16: Core4 stream2, 5 steps, 864x480, 5 s; 170 s and 14.8 GB." }], tiers: ["reduced", "standard"] },
   { id: STACK_MUSIC_MODEL_ID, category: "music", family: "ace-step", label: "ACE-Step 1.5 Turbo", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 16_400_000_000, status: "measured", note: "Tier eval 2026-10-30, MLX peak." }], tiers: ["standard"] },
   { id: "chatterbox-turbo-fp16", category: "voice", family: "chatterbox", label: "Chatterbox Turbo", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 4_580_000_000, status: "measured", note: "Tier eval 2026-10-30, MLX peak." }], tiers: ["standard"] },
   { id: "chatterbox-nano", category: "voice", family: "chatterbox", label: "Chatterbox Nano", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 2_770_000_000, status: "measured", note: "Tier eval 2026-10-30, MLX peak with cloning; needs a pinned mlx-audio or a config-reading patch before it ships." }], tiers: ["reduced"] },

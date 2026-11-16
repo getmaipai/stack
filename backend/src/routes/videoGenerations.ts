@@ -63,7 +63,7 @@ const VideoDataSchema = z.object({
   poster_url: z.string().openapi({ description: "GET this for the JPEG of frame 0." }),
   content_type: z.literal("video/mp4"),
   width: z.number().int(), height: z.number().int(), frames: z.number().int(), fps: z.number().int(), seconds: z.number().int(), seed: z.number().int(),
-  model: z.string(), quality: z.enum(["quick", "ltx25", "ltx25max"]), audio: z.boolean().openapi({ description: "Whether the model made a sound track. Wan Quick is silent." }), mode: z.enum(["text-to-video", "image-to-video", "extend", "retake", "ic_lora"]), lora_ids: z.array(z.string()), ms: z.number().int(), bytes: z.number().int(), poster_bytes: z.number().int(),
+  model: z.string(), quality: z.enum(["quick", "ltx25", "ltx25max", "h3", "h3stream"]), audio: z.boolean().openapi({ description: "Whether the model made a sound track. Wan Quick is silent." }), mode: z.enum(["text-to-video", "image-to-video", "extend", "retake", "ic_lora"]), lora_ids: z.array(z.string()), ms: z.number().int(), bytes: z.number().int(), poster_bytes: z.number().int(),
 });
 const VideoResponseSchema = z.object({ created: z.number().int(), job: z.string(), data: z.array(VideoDataSchema), lora_warnings: z.array(z.object({ id: z.string(), code: z.enum(["untested_on_25", "tested_on_25"]), message: z.string() })).optional().openapi({ description: "LTXD-18B. Present when an LTX-2.3 style ran on an LTX-2.5 clip: one entry per such style. `untested_on_25` = no bench result; `tested_on_25` = a bench clip showed it changes the output." }) });
 const ErrorBody = z.object({ error: z.string(), code: z.string(), job: z.string().optional() });
@@ -177,6 +177,10 @@ export function parseVideoSize(size: string | undefined, quality: VideoQuality =
     // The clip is made, kept and reported at its true size.
     return ltx25TrueSize(Number(found[1]), Number(found[2]));
   }
+  if (quality === "h3" || quality === "h3stream") {
+    if ((size ?? spec.defaultSize) !== "864x480") return "MiniMax H3 currently makes 864x480 clips only. Choose 864x480.";
+    return { width: 864, height: 480 };
+  }
   const match = /^(\d{3,4})x(\d{3,4})$/.exec(size ?? spec.defaultSize);
   if (!match) return `The size must look like ${spec.defaultSize}.`;
   const width = Number(match[1]); const height = Number(match[2]);
@@ -248,6 +252,8 @@ videoV1Routes.openapi(postRoute, async (c) => {
   if (body.model === "detailed" || body.model === "ltx-2-3-distilled-mlx") return fail(c, 422, "retired_model", "The Detailed video model was retired. Use ltx25-q8 or ltx25-max.");
   if (!quality) return fail(c, 422, "unknown_model", "That video model is not one this computer has. Use quick, ltx25-q8 or ltx25-max.");
   const spec = VIDEO_SPECS[quality];
+  const h3Refusal = "MiniMax H3 makes video from words only for now; pictures as the first frame are not available yet";
+  if ((quality === "h3" || quality === "h3stream") && (body.image !== undefined || body.end_image !== undefined || body.source_video !== undefined || body.extend_seconds !== undefined || body.retake_from_seconds !== undefined || body.loras?.length)) return fail(c, 422, "reference_unsupported", h3Refusal);
   const editKind: Ltx25EditKind | null = body.extend_seconds !== undefined ? "extend" : body.retake_from_seconds !== undefined ? "retake" : null;
   if (editKind !== null || body.source_video !== undefined) return await submitEdit(c, body, quality, editKind);
   if (body.image !== undefined && !spec.imageToVideo) return fail(c, 422, "reference_unsupported", "This video model cannot start from a picture. Use Quick or LTX-2.5.");
@@ -260,7 +266,7 @@ videoV1Routes.openapi(postRoute, async (c) => {
   }
   const size = parseVideoSize(body.size, quality);
   if (typeof size === "string") return fail(c, 422, "bad_size", size);
-  const seconds = body.seconds ?? (quality === "quick" ? VIDEO_MAX_SECONDS : 5);
+  const seconds = quality === "h3" || quality === "h3stream" ? Math.max(4, Math.min(5, body.seconds ?? 5)) : body.seconds ?? (quality === "quick" ? VIDEO_MAX_SECONDS : 5);
   if (quality === "ltx25max") { const refusal = ltx25MaxRefusal(size.width, size.height, seconds * VIDEO_FPS + 1); if (refusal) return fail(c, 422, "bad_seconds", refusal); }
   if (quality === "ltx25") { const refusal = ltx25Refusal(size.width, size.height, seconds * VIDEO_FPS + 1); if (refusal) return fail(c, 422, "bad_seconds", refusal); }
   if (seconds > spec.maxSeconds) return fail(c, 422, "bad_seconds", `This clip is at most ${spec.maxSeconds} seconds on this computer.`);

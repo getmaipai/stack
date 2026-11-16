@@ -6,6 +6,7 @@
 // real binary.
 import { existsSync } from "node:fs";
 import { registerOwned } from "@/lib/ownedProcesses";
+import { TreeSnapshot } from "@/lib/processTree";
 
 export interface RunOptions {
   signal?: AbortSignal;
@@ -32,13 +33,13 @@ export function idleArgv(argv: string[]): string[] {
 
 export const spawnRunner: Runner = async (argv, options = {}) => {
   const child = Bun.spawn(idleArgv(argv), { stdin: "ignore", stdout: "pipe", stderr: "pipe", ...(options.cwd ? { cwd: options.cwd } : {}), env: { ...process.env as Record<string, string>, ...options.env } });
-  const owned = registerOwned("media-runner", child.pid ?? -1);
+  const tree = new TreeSnapshot(child.pid ?? -1); tree.refresh();
+  const owned = registerOwned("media-runner", tree);
   let aborted = false;
   let killTimer: ReturnType<typeof setTimeout> | null = null;
   const stop = () => {
     aborted = true;
-    try { child.kill("SIGTERM"); } catch { /* gone */ }
-    killTimer = setTimeout(() => { try { child.kill("SIGKILL"); } catch { /* gone */ } }, 2000);
+    void tree.stopAll(2000);
   };
   if (options.signal?.aborted) stop(); else options.signal?.addEventListener("abort", stop, { once: true });
   let stdout = "";
@@ -60,6 +61,7 @@ export const spawnRunner: Runner = async (argv, options = {}) => {
     (async () => { for await (const chunk of child.stderr as unknown as AsyncIterable<Uint8Array>) stderr = (stderr + new TextDecoder().decode(chunk)).slice(-STDERR_TAIL); })().catch(() => {}),
   ];
   const code = await child.exited;
+  tree.refresh();
   owned.refresh();
   owned.finished();
   await Promise.all(reading);

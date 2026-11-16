@@ -20,7 +20,7 @@ export interface VideoResultMeta {
   seed: number;
   model: string;
   /** Quick or LTX-2.5 (older results have none: Quick). */
-  quality?: "quick" | "detailed" | "ltx25" | "ltx25max";
+  quality?: "quick" | "detailed" | "ltx25" | "ltx25max" | "h3" | "h3stream";
   /** The clip has a sound track the model made (older results have none: no). */
   audio?: boolean;
   mode: "text-to-video" | "image-to-video" | "extend" | "retake" | "ic_lora";
