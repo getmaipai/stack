@@ -24,6 +24,8 @@ import { ltx25EnvironmentReady, ltx25LoraProfile, LTX25_UNFUSED_ADMIT_FACTOR, LT
 import { ltx25EditAdmitBytes, ltx25EditPeakBytes, ltx25MaxEditSupported, LTX25_EDIT_EXTEND_MAX_SECONDS, LTX25_EDIT_EXTEND_MIN_SECONDS, LTX25_EDIT_MAX_SOURCE_FRAMES, LTX25_EDIT_MIN_SOURCE_FRAMES, LTX25_EDIT_RETAKE_MAX_SECONDS, LTX25_EDIT_RETAKE_MIN_SECONDS, LTX25_MAX_EDIT_MEASURED } from "@/video/ltx25Edit";
 import { LTX25_GEN_NAME, LTX25_GEN_VERSION, LTX25_MAX_GEN_NAME, LTX25_MAX_GEN_VERSION, LTX25_MAX_MEASURED, ltx25MaxEnvironmentReady, ltx25MaxPeakBytes, LTX25_MAX_PICTURE_PEAK_MEASURED_BYTES } from "@/video/ltx25";
 import { memoryVerdict, tierAvailability, videoGen, VIDEO_SPECS, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_GEN_NAME, VIDEO_GEN_VERSION, VIDEO_MAX_FRAMES, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_PEAK_BYTES, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, videoGenEnvironmentReady, videoGenSourceInstalled } from "@/video/videoGen";
+import { H3_VIDEO_LICENSE_NOTICE, H3_VIDEO_CAPABILITIES } from "@/video/h3";
+import { videoModelPaths } from "@/video/videoGen";
 
 const PlanModelSchema = z.object({
   id: z.string(), role: z.string(), repo: z.string().optional(), url: z.string(), sha256: z.string(), approx_bytes: z.number().int(), licence: z.string(), revision: z.string(),
@@ -83,7 +85,7 @@ const StatusSchema = z.object({
   worker: z.object({ alive: z.boolean(), idle_exit_seconds: z.number().int() }),
   environment: z.object({ engine: z.string(), version: z.string(), source: z.boolean(), ready: z.boolean() }),
   install: z.object({ models: z.array(PlanModelSchema), remaining_bytes: z.number().int() }).openapi({ description: "The pinned models to pull (POST /stack/v1/models, shaped as an install-plan model) and how many bytes are still to come." }),
-  qualities: z.object({ quick: QualitySchema, detailed: QualitySchema.openapi({ description: "Deprecated compatibility entry. The Detailed video model was retired. Use ltx25 or ltx25max." }), ltx25: Ltx25QualitySchema, ltx25max: Ltx25MaxQualitySchema }).openapi({ description: "`quick` is Wan Quick. `detailed` is deprecated and retained for older Home versions; the model was retired. Use `ltx25` (LTX-2.5 Standard and Boost) or `ltx25max` (LTX-2.5 Max)." }),
+  qualities: z.object({ quick: QualitySchema, detailed: QualitySchema.openapi({ description: "Deprecated compatibility entry. The Detailed video model was retired. Use ltx25 or ltx25max." }), ltx25: Ltx25QualitySchema, ltx25max: Ltx25MaxQualitySchema, h3: QualitySchema.extend({ ready: z.boolean(), video_to_video: z.boolean(), reference_pictures: z.boolean(), reference_videos: z.boolean(), reference_audio: z.boolean(), loras: z.object({ supported: z.boolean() }) }), h3stream: QualitySchema.extend({ ready: z.boolean(), video_to_video: z.boolean(), reference_pictures: z.boolean(), reference_videos: z.boolean(), reference_audio: z.boolean(), loras: z.object({ supported: z.boolean() }) }).optional() }).openapi({ description: "`quick` is Wan Quick. H3 entries report what their installed one-shot runner can do." }),
 });
 const statusRoute = createRoute({ method: "get", path: "/", tags: ["Video"], summary: "The video role's state, limits, and what to install", responses: { 200: { content: { "application/json": { schema: z.object({ video: StatusSchema }) } }, description: "Additive. Home enables the video control from `available` and `state`." } } });
 
@@ -223,9 +225,27 @@ videoRoutes.openapi(statusRoute, (c) => {
       detailed: { id: "ltx-2-3-distilled-mlx", installed: false, available: false, audio: true, image_to_video: false, end_image: false, reason: "The Detailed video model was retired. Use ltx25 or ltx25max.", limits: { max_seconds: 0, fps: VIDEO_FPS, default_size: "768x448", max_pixels: 768 * 448, size_step: 64, min_side: 256, max_frames: 0 }, memory: { fits: false, reason: "The Detailed video model was retired.", peak_gb: 0 }, install: { models: [], remaining_bytes: 0, download_bytes: 0 }, licence: null, lora_base_model: "ltx-2.3" },
       ltx25: ltx25View(videoLtx25InstallModels(installed), installed, availability.available),
       ltx25max: ltx25MaxView(videoLtx25MaxInstallModels(installed), installed, availability.available),
+      h3: h3View("h3"),
+      ...(videoModelPaths("h3stream") ? { h3stream: h3View("h3stream") } : {}),
     },
   } }, 200 as const);
 });
+
+function h3View(quality: "h3" | "h3stream") {
+  const spec = VIDEO_SPECS[quality];
+  const ready = videoModelPaths(quality) !== null;
+  const verdict = memoryVerdict(quality);
+  return {
+    id: spec.modelId, installed: ready, available: ready, ready, audio: true,
+    image_to_video: H3_VIDEO_CAPABILITIES.first_picture, end_image: H3_VIDEO_CAPABILITIES.last_picture,
+    video_to_video: false, reference_pictures: false, reference_videos: false, reference_audio: false,
+    limits: { max_seconds: 5, fps: VIDEO_FPS, default_size: "864x480" },
+    memory: { fits: verdict.ok, reason: verdict.ok ? null : verdict.reason, peak_gb: Math.round(spec.peakBytes / 1e8) / 10 },
+    install: { models: [], remaining_bytes: 0, download_bytes: 0 },
+    licence: { id: H3_VIDEO_LICENSE_NOTICE.id, name: H3_VIDEO_LICENSE_NOTICE.name, url: H3_VIDEO_LICENSE_NOTICE.url },
+    lora_base_model: "minimax-h3", loras: { supported: false },
+  };
+}
 
 videoRoutes.openapi(listRoute, (c) => c.json({ loras: listLoras(), base_model: LORA_BASE_MODEL, base_models: [...LORA_BASE_MODELS], max_per_clip: MAX_LORAS_PER_JOB }, 200));
 

@@ -439,6 +439,7 @@ export class VideoGenService {
           qwenDir: join(models, "qwen/8-bit"), output,
           seconds: Math.max(4, Math.min(5, Math.round(input.frames / VIDEO_FPS))), width: input.width, height: input.height,
           seed: input.seed, steps: hasLora ? 7 : 12, ...(hasLora ? { lora } : {}),
+          ...(input.imagePath ? { firstImage: input.imagePath } : {}), ...(input.endImagePath ? { lastImage: input.endImagePath } : {}),
         });
         onPhase("loading", 0);
         const result = await (this.deps.run ?? spawnRunner)(argv, { cwd: home, signal: options.signal, env: { HF_HUB_OFFLINE: "1", PYTHONPATH: join(home, "node"), PYTHONUNBUFFERED: "1" }, onStdoutLine: (line) => {

@@ -33,6 +33,7 @@ import { MediaPathError, resolveReadable } from "@/media/paths";
 import { stashClip, unstashClip, videoFailure, videoPreviewPath, videoProgress, videoTracker, VIDEO_JOB_KIND, type StashedClip } from "@/video/jobs";
 import { LTX25_ICLORA_PEAK_BYTES, LTX25_INGREDIENTS_PEAK_BYTES, LTX25_INGREDIENTS_HEIGHT, LTX25_INGREDIENTS_MAX_SECONDS, LTX25_INGREDIENTS_MAX_SHEETS, LTX25_INGREDIENTS_MIN_SECONDS, LTX25_INGREDIENTS_WIDTH, ltx25IngredientsFrames } from "@/video/ltx25";
 import { sha256OfFile } from "@/lib/fileHash";
+import { H3_KEYFRAMES } from "@/video/h3";
 
 const DEFAULT_WAIT_MS = 30_000;
 const MAX_WAIT_MS = 30 * 60_000;
@@ -252,13 +253,15 @@ videoV1Routes.openapi(postRoute, async (c) => {
   if (body.model === "detailed" || body.model === "ltx-2-3-distilled-mlx") return fail(c, 422, "retired_model", "The Detailed video model was retired. Use ltx25-q8 or ltx25-max.");
   if (!quality) return fail(c, 422, "unknown_model", "That video model is not one this computer has. Use quick, ltx25-q8 or ltx25-max.");
   const spec = VIDEO_SPECS[quality];
-  const h3Refusal = "MiniMax H3 makes video from words only for now; pictures as the first frame are not available yet";
-  if ((quality === "h3" || quality === "h3stream") && (body.image !== undefined || body.end_image !== undefined || body.source_video !== undefined || body.extend_seconds !== undefined || body.retake_from_seconds !== undefined || body.loras?.length)) return fail(c, 422, "reference_unsupported", h3Refusal);
+  const isH3 = quality === "h3" || quality === "h3stream";
+  const h3Refusal = "MiniMax H3 cannot do source video edits, extensions, retakes or household LoRAs yet.";
+  if (isH3 && (body.source_video !== undefined || body.extend_seconds !== undefined || body.retake_from_seconds !== undefined || body.loras?.length)) return fail(c, 422, "reference_unsupported", h3Refusal);
+  if (isH3 && !H3_KEYFRAMES && (body.image !== undefined || body.end_image !== undefined)) return fail(c, 422, "reference_unsupported", "MiniMax H3 cannot start or end a clip with a picture yet.");
+  if (body.end_image !== undefined && body.image === undefined) return fail(c, 422, "bad_image", "A last picture needs a first picture. Send image as well, or leave end_image out.");
   const editKind: Ltx25EditKind | null = body.extend_seconds !== undefined ? "extend" : body.retake_from_seconds !== undefined ? "retake" : null;
   if (editKind !== null || body.source_video !== undefined) return await submitEdit(c, body, quality, editKind);
-  if (body.image !== undefined && !spec.imageToVideo) return fail(c, 422, "reference_unsupported", "This video model cannot start from a picture. Use Quick or LTX-2.5.");
-  if (body.end_image !== undefined && !spec.endImage) return fail(c, 422, "reference_unsupported", "This video model cannot end on a picture. Ask for an LTX-2.5 video to give both a first and a last picture, or send only the first picture.");
-  if (body.end_image !== undefined && body.image === undefined) return fail(c, 422, "bad_image", "A last picture needs a first picture. Send image as well, or leave end_image out.");
+  if (body.image !== undefined && !spec.imageToVideo && !isH3) return fail(c, 422, "reference_unsupported", "This video model cannot start from a picture. Use Quick or LTX-2.5.");
+  if (body.end_image !== undefined && !spec.endImage && !isH3) return fail(c, 422, "reference_unsupported", "This video model cannot end on a picture. Ask for an LTX-2.5 video to give both a first and a last picture, or send only the first picture.");
   const ltx25Lora = quality === "ltx25" || quality === "ltx25max" ? ltx25LoraProfile(quality) : null;
   if (ltx25Lora && (body.loras ?? []).length > 0) {
     if (!ltx25Lora.supported) return fail(c, 422, "lora_unsupported", `${ltx25Lora.reason ?? "This video model takes no style files yet."} Leave the styles out, or ask for a Max video to use one.`);
@@ -305,7 +308,7 @@ videoV1Routes.openapi(postRoute, async (c) => {
   const basePeak = quality === "ltx25max" ? ltx25MaxPeakBytes(image !== null) : quality === "ltx25" ? ltx25PeakBytes(size.width, size.height, seconds * VIDEO_FPS + 1, image !== null) : undefined;
   const peak = basePeak === undefined ? undefined : basePeak + loraAdmit;
   if (peak !== undefined && peak > LTX25_CLIP_CAP_BYTES) return fail(c, 422, "lora_too_large", "These styles are too large to run with this clip on this computer. Use a smaller style, or only one.");
-  return await runClip(c, body, quality, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, endImage, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, preview: body.preview !== false }, { size: `${size.width}x${size.height}`, seconds, mode: image ? "image-to-video" : "text-to-video", ...(loraMode && loras.length > 0 ? { lora_mode: loraMode, lora_admit_bytes: loraAdmit } : {}), ...(loras.some((lora) => lora.warnings.length > 0) ? { lora_warnings: loras.flatMap((lora) => lora.warnings) } : {}) }, peak);
+  return await runClip(c, body, quality, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, endImage, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, preview: body.preview !== false }, { size: `${size.width}x${size.height}`, seconds, mode: image ? "image-to-video" : "text-to-video", ...(loraMode && loras.length > 0 ? { lora_mode: loraMode, lora_admit_bytes: loraAdmit } : {}) }, peak);
 });
 
 videoV1Routes.openapi(restyleRoute, async (c) => {
