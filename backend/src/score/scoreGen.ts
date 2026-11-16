@@ -51,7 +51,7 @@ const defaultRunWorker: ScoreDeps["runWorker"] = async (request, signal, stage) 
       }
     }
     if (!settled) throw new Error("The score engine stopped before the MIDI was ready. Try again.");
-    const code = await child.exited; owned.refresh(); owned.finished(); if (code && settled.ok) throw new Error("The score engine stopped unexpectedly. Try again.");
+    try { child.stdin.end(); } catch { /* already closed */ } const code = await child.exited; owned.refresh(); owned.finished(); if (code && settled.ok) throw new Error("The score engine stopped unexpectedly. Try again.");
     return settled;
   } finally { signal.removeEventListener("abort", abort); stop(); workerStops.delete(stop); owned.finished(); }
 };
