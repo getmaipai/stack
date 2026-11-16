@@ -179,8 +179,8 @@ export function parseVideoSize(size: string | undefined, quality: VideoQuality =
     return ltx25TrueSize(Number(found[1]), Number(found[2]));
   }
   if (quality === "h3" || quality === "h3stream") {
-    if ((size ?? spec.defaultSize) !== "864x480") return "MiniMax H3 currently makes 864x480 clips only. Choose 864x480.";
-    return { width: 864, height: 480 };
+    if (!["864x480", "480x864"].includes(size ?? spec.defaultSize)) return "MiniMax H3 makes 864x480 (wide) or 480x864 (tall) clips. Choose one of those.";
+    return (size ?? spec.defaultSize) === "480x864" ? { width: 480, height: 864 } : { width: 864, height: 480 };
   }
   const match = /^(\d{3,4})x(\d{3,4})$/.exec(size ?? spec.defaultSize);
   if (!match) return `The size must look like ${spec.defaultSize}.`;
