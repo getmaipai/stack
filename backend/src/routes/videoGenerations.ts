@@ -308,7 +308,7 @@ videoV1Routes.openapi(postRoute, async (c) => {
   const basePeak = quality === "ltx25max" ? ltx25MaxPeakBytes(image !== null) : quality === "ltx25" ? ltx25PeakBytes(size.width, size.height, seconds * VIDEO_FPS + 1, image !== null) : undefined;
   const peak = basePeak === undefined ? undefined : basePeak + loraAdmit;
   if (peak !== undefined && peak > LTX25_CLIP_CAP_BYTES) return fail(c, 422, "lora_too_large", "These styles are too large to run with this clip on this computer. Use a smaller style, or only one.");
-  return await runClip(c, body, quality, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, endImage, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, preview: body.preview !== false }, { size: `${size.width}x${size.height}`, seconds, mode: image ? "image-to-video" : "text-to-video", ...(loraMode && loras.length > 0 ? { lora_mode: loraMode, lora_admit_bytes: loraAdmit } : {}) }, peak);
+  return await runClip(c, body, quality, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, endImage, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, preview: body.preview !== false }, { size: `${size.width}x${size.height}`, seconds, mode: image ? "image-to-video" : "text-to-video", ...(loraMode && loras.length > 0 ? { lora_mode: loraMode, lora_admit_bytes: loraAdmit } : {}), ...(loras.some((lora) => lora.warnings.length > 0) ? { lora_warnings: loras.flatMap((lora) => lora.warnings) } : {}) }, peak);
 });
 
 videoV1Routes.openapi(restyleRoute, async (c) => {
