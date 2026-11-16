@@ -51,7 +51,9 @@ const findTool = (name: string): string | null => {
   for (const path of [`/opt/homebrew/bin/${name}`, `/usr/local/bin/${name}`, `/usr/bin/${name}`]) if (existsSync(path)) return path;
   return null;
 };
-const ffmpeg = findTool("ffmpeg"); const ffprobe = findTool("ffprobe");
+// These tests draw text, so they need an ffmpeg built with the drawtext filter (the Stack's managed one has it; a bare Homebrew build may not).
+const hasDrawtext = (path: string | null): boolean => { if (!path) return false; try { return /drawtext/.test(Bun.spawnSync([path, "-hide_banner", "-filters"]).stdout.toString()); } catch { return false; } };
+const ffmpegFound = findTool("ffmpeg"); const ffmpeg = hasDrawtext(ffmpegFound) ? ffmpegFound : null; const ffprobe = findTool("ffprobe");
 const real = ffmpeg && ffprobe ? describe : describe.skip;
 if (!(ffmpeg && ffprobe)) console.warn("media.edit finish real-ffmpeg test skipped: ffmpeg and ffprobe are required.");
 real("media.edit finishing operations with ffmpeg", () => {

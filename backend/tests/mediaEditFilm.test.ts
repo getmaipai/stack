@@ -37,7 +37,9 @@ describe("media.edit film operation builders", () => {
   });
 });
 
-const ffmpeg = findTool("ffmpeg"); const ffprobe = findTool("ffprobe");
+// These tests draw text, so they need an ffmpeg built with the drawtext filter (the Stack's managed one has it; a bare Homebrew build may not).
+const hasDrawtext = (path: string | null): boolean => { if (!path) return false; try { return /drawtext/.test(Bun.spawnSync([path, "-hide_banner", "-filters"]).stdout.toString()); } catch { return false; } };
+const ffmpegFound = findTool("ffmpeg"); const ffmpeg = hasDrawtext(ffmpegFound) ? ffmpegFound : null; const ffprobe = findTool("ffprobe");
 const real = ffmpeg && ffprobe ? test : test.skip;
 real("real ffmpeg transition, title card and rolling credits produce the expected duration", async () => {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), "media-edit-film-")));
