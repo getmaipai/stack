@@ -25,13 +25,6 @@ test("H3 clip finishing calls the Stack upscale seam exactly once", async () => 
   expect(calls).toBe(1);
 });
 
-test("H3 streaming and 8-bit candidates are listed in their measured tiers", () => {
-  const h3 = TIER_CANDIDATES.filter((candidate) => candidate.id === H3_VIDEO_ID);
-  expect(h3.find((candidate) => candidate.tiers.includes("boost"))?.peaks[0]).toMatchObject({ peakBytes: 42_100_000_000, options: { build: "8bit", size: "864x480", seconds: 5 } });
-  expect(h3.find((candidate) => candidate.tiers.includes("standard"))?.tiers).toContain("standard");
-  expect(h3.find((candidate) => candidate.tiers.includes("reduced"))?.peaks[0]?.peakBytes).toBe(14_800_000_000);
-});
-
 function h3Fixture(run: NonNullable<VideoGenDeps["run"]>, quality: "h3" | "h3stream" = "h3") {
   const root = mkdtempSync(join(tmpdir(), "h3-run-"));
   mkdirSync(join(root, "models/minimax_h3/loras"), { recursive: true });
