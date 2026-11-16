@@ -581,7 +581,7 @@ test("GET /stack/v1/image reports state, models, limits, edit and what to instal
   const body = await (await app.request("/stack/v1/image")).json() as { image: Record<string, any> };
   const image = body.image;
   expect(image).toMatchObject({ state: "needs-setup", available: true, tier: "p128", default_model: "flux2-klein-4b", loras_supported: true, idle_unload_s: 600, edit: { generative: true, masked: true, model: "flux2-klein-4b" } });
-  expect(image.models.map((m: { id: string }) => m.id)).toEqual(["flux2-klein-4b", "z-image-turbo", "ernie-image-turbo", "qwen-image-2512-q8"]);
+  expect(image.models.map((m: { id: string }) => m.id)).toEqual(["flux2-klein-4b", "z-image-turbo", "ernie-image-turbo", "qwen-image-2512-q8", "minimax-h3-image"]);
   expect(image.models[0]).toMatchObject({ installed: true, default: true, edit: true, steps_default: 4, peak_gb: 15, quantize: 8, available: true });
   expect(image.models[1]).toMatchObject({ steps_default: 9, edit: false, peak_gb: 34 });
   expect(image.models[2]).toMatchObject({ label: "ERNIE-Image-Turbo", steps_default: 8, edit: false, peak_gb: 21 });

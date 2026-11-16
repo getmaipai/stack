@@ -32,7 +32,12 @@ import { log, logger } from "@/lib/log";
 import { engineTagRoot } from "@/lib/store/layout";
 import { ensureUvEnvironment, managedEnv, uvEnvironmentReady, uvVenvPath, uvVenvPython, type UvEnvironmentSpec } from "@/lib/uvEnvironment";
 import { READY_TTL_MS, type RoleStateRecord } from "@/roles";
-import { familyInstalled, familySnapshot, IMAGE_FAMILIES, imageAvailability, installedFamilies, peakBytes, type ImageFamilyId } from "@/images/models";
+import { familyInstalled, familySnapshot, IMAGE_FAMILIES, IMAGE_MAX_SIDE, IMAGE_MIN_SIDE, IMAGE_SIZE_STEP, imageAvailability, installedFamilies, peakBytes, type ImageFamilyId } from "@/images/models";
+import { ImageError } from "@/images/errors";
+import { defaultH3Deps, h3EditPrompt, h3ModeFor, runH3, takeH3Mode, type H3Deps } from "@/images/h3Runner";
+import { STACK_IMAGE_H3_ID } from "@/lib/modelCatalog";
+import { imageDimensions } from "@/media/maskStill";
+import { readFileSync } from "node:fs";
 import { RESTORE_FAMILY, RESTORE_LABEL, RESTORE_PEAK_BYTES, restoreSnapshot, type RestoreFamilyId } from "@/images/restore";
 import darwinArm64Requirements from "./image-gen.darwin-arm64.requirements.txt" with { type: "file" };
 import workerScript from "./mflux_worker.py" with { type: "file" };
@@ -42,9 +47,7 @@ export const IMAGE_GEN_VERSION = MANAGED_RUNTIMES.find((runtime) => runtime.name
 const idleMs = (): number => engineIdleMs("image");
 const deadlineMs = (family: ImageFamilyId | RestoreFamilyId, count: number): number => Number(process.env.IMAGE_DEADLINE_MS ?? (family === "qwen-image-2512-q8" ? 8 : family === "z-image-turbo" ? 4 : 2) * 60_000 * Math.max(1, count));
 
-export class ImageError extends Error {
-  constructor(readonly code: string, message: string, readonly status: number) { super(message); }
-}
+export { ImageError };
 const STATUS_BY_CODE: Record<string, number> = { bad_request: 422, unsupported_edit: 422, mask_empty: 422, model_missing: 503, out_of_memory: 507, timeout: 504, cancelled: 499, worker_stopped: 500, failed: 500 };
 const MESSAGE_BY_CODE: Record<string, string> = {
   mask_empty: "The mask is empty. Paint the part of the picture to change, then try again.",
@@ -101,6 +104,8 @@ export interface ImageGenDeps {
   snapshot: (family: ImageFamilyId | RestoreFamilyId) => string | null;
   /** Test seam for the governor's incremental pool-growth verdict. */
   poolGrowthFits?: (activeRequestPeakBytes: number) => boolean;
+  /** MiniMax H3-Image runs one process per picture (images/h3Runner.ts); the suite swaps in a fake here. */
+  h3?: H3Deps;
 }
 
 export const defaultImageGenDeps: ImageGenDeps = {
@@ -277,11 +282,28 @@ export class ImageGenService {
     return true;
   }
 
+  /** MiniMax H3-Image: no warm worker. One process per picture, started and stopped inside this call; the mode is the one the governor's grant was sized for. */
+  private async executeH3(input: ImageRunInput, options: ImageRunOptions, modelsDir: string, onPhase: (phase: string, percent: number) => void): Promise<ImageRunResult> {
+    const op = input.op === "edit" ? "edit" : "generate";
+    const mode = takeH3Mode(options.jobId) ?? h3ModeFor(getGovernorStatus(), op);
+    const pictures = op === "edit" ? [input.image, ...(input.references ?? [])].filter((path): path is string => !!path) : [];
+    const size = op === "edit" ? editSize(input.image) : { width: input.width ?? 1024, height: input.height ?? 1024 };
+    this.busy += 1;
+    try {
+      const result = await runH3({ op, prompt: op === "edit" ? h3EditPrompt(input.prompt, pictures.length) : input.prompt, ...size, seed: input.seed, count: op === "edit" ? 1 : input.count ?? 1, pictures, outDir: input.outDir, modelsDir, mode }, { signal: options.signal, jobId: options.jobId, onPhase, onImage: options.onImage }, this.deps.h3 ?? defaultH3Deps);
+      this.lastSuccessAt = Date.now();
+      return { seeds: result.seeds, ms: result.ms, peakBytes: result.peakBytes, width: null, height: null };
+    } finally {
+      this.busy -= 1;
+    }
+  }
+
   private async execute(input: ImageRunInput, options: ImageRunOptions): Promise<ImageRunResult> {
     const onPhase = (phase: string, percent: number) => { this.lastPhase = phase; options.onPhase?.(phase, percent); };
     if (options.signal?.aborted) throw new ImageError("cancelled", "Cancelled.", 499);
     const modelDir = this.deps.snapshot(input.family);
     if (!modelDir) throw new ImageError("model_missing", input.family === RESTORE_FAMILY ? `${RESTORE_LABEL} is not installed yet. An admin can add it in Settings, AI & models.` : `${IMAGE_FAMILIES[input.family as ImageFamilyId].label} is not installed yet. Install it from Home's Engines page, then try again.`, 503);
+    if (input.family === STACK_IMAGE_H3_ID) return this.executeH3(input, options, modelDir, onPhase);
     this.busy += 1;
     if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
     let killTimer: ReturnType<typeof setTimeout> | null = null;
@@ -333,6 +355,14 @@ export class ImageGenService {
       if (this.worker && this.busy === 0) this.idleTimer = setTimeout(() => { log("picture worker stopped after being idle"); this.stopWorker(); }, idleMs());
     }
   }
+}
+
+/** An H3 edit makes the picture at the size of the one it changes: each side rounded to a multiple of 16 and held to the picture limits; 1024 square when the picture's size cannot be read. */
+function editSize(path: string | undefined): { width: number; height: number } {
+  const dimensions = path ? (() => { try { return imageDimensions(new Uint8Array(readFileSync(path))); } catch { return null; } })() : null;
+  if (!dimensions) return { width: 1024, height: 1024 };
+  const fit = (side: number) => Math.min(IMAGE_MAX_SIDE, Math.max(IMAGE_MIN_SIDE, Math.round(side / IMAGE_SIZE_STEP) * IMAGE_SIZE_STEP));
+  return { width: fit(dimensions.width), height: fit(dimensions.height) };
 }
 
 export const IMAGE_POOL_PEAK_BYTES = GovernorRules.imagePoolPeakBytes;

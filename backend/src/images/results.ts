@@ -19,6 +19,8 @@ export interface ImageResultMeta {
   steps: number;
   quantize: number | null;
   lora_ids: string[];
+  /** Plain sentences about what the Stack ignored or changed in the request (a fixed-step model that was sent `steps`). */
+  notes?: string[];
   /** ADULT-LOCK-04: the job was made for an adult audience; the Stack serves its files only to the full view. */
   audience?: "adult";
   ms: number;

@@ -13,6 +13,7 @@ import { ensureMlxAudioEnvironment, mlxAudioInstalled, mlxAudioRoot, MLX_AUDIO_N
 import { ensureOmlxEnvironment, omlxInstalled, omlxRoot, OMLX_NAME } from "@/chat/omlx";
 import { comfyuiInstalled, comfyuiRoot, COMFYUI_NAME, ensureComfyuiEnvironment } from "@/generators/comfyui";
 import { ensureImageGenEnvironment, IMAGE_GEN_NAME, imageGen, imageGenEnvironmentReady } from "@/images/imageEngine";
+import { ensureH3GenEnvironment, H3_GEN_NAME, h3GenEnvironmentReady, h3GenRoot } from "@/images/h3Engine";
 import { ensureLtx25Environment, ensureLtx25MaxEnvironment, ltx25EnvironmentReady, ltx25GenRoot, ltx25MaxEnvironmentReady, ltx25MaxGenRoot, LTX25_GEN_NAME, LTX25_MAX_GEN_NAME } from "@/video/ltx25";
 import { ensureVideoGenEnvironment, videoGen, videoGenEnvironmentReady, videoGenRoot, VIDEO_GEN_NAME } from "@/video/videoGen";
 import { ensureMusicGenEnvironment, musicGen, musicGenEnvironmentReady, musicGenRoot, MUSIC_GEN_NAME } from "@/music/musicGen";
@@ -90,10 +91,10 @@ enginesRoutes.openapi(listRoute, async (c) => {
   // on every platform, installed when the environment is built.
   const managed = MANAGED_RUNTIMES.map((runtime) => {
     const status = getRoleStatus(engineRole(runtime.name));
-    const installed = runtime.name === POCKET_TTS_NAME ? pocketTtsInstalled() : runtime.name === MLX_AUDIO_NAME ? mlxAudioInstalled() : runtime.name === OMLX_NAME ? omlxInstalled() : runtime.name === COMFYUI_NAME ? comfyuiInstalled() : runtime.name === VIDEO_GEN_NAME ? videoGenEnvironmentReady() : runtime.name === MUSIC_GEN_NAME ? musicGenEnvironmentReady() : runtime.name === IMAGE_GEN_NAME ? imageGenEnvironmentReady() : runtime.name === LTX25_GEN_NAME ? ltx25EnvironmentReady() : runtime.name === LTX25_MAX_GEN_NAME ? ltx25MaxEnvironmentReady() : false;
+    const installed = runtime.name === POCKET_TTS_NAME ? pocketTtsInstalled() : runtime.name === MLX_AUDIO_NAME ? mlxAudioInstalled() : runtime.name === OMLX_NAME ? omlxInstalled() : runtime.name === COMFYUI_NAME ? comfyuiInstalled() : runtime.name === VIDEO_GEN_NAME ? videoGenEnvironmentReady() : runtime.name === MUSIC_GEN_NAME ? musicGenEnvironmentReady() : runtime.name === IMAGE_GEN_NAME ? imageGenEnvironmentReady() : runtime.name === H3_GEN_NAME ? h3GenEnvironmentReady() : runtime.name === LTX25_GEN_NAME ? ltx25EnvironmentReady() : runtime.name === LTX25_MAX_GEN_NAME ? ltx25MaxEnvironmentReady() : false;
     const running = engineRole(runtime.name) === "chat" && runningEngine("chat") !== runtime.name ? null : status.identity?.build ?? null;
     const version = deriveEngineVersionState({ running, currentTag: installed ? runtime.version : null, newestTag: runtime.version, needsRestart: false });
-    return { id: `${runtime.name}-${runtime.version}`, name: runtime.name, label: `${runtime.name} ${runtime.version}, an environment the Stack assembles through uv`, platform: process.platform, arch: process.arch, verified: true, installed, matchesThisMachine: true, ...version, directory: runtime.name === POCKET_TTS_NAME ? pocketTtsRoot() : runtime.name === MLX_AUDIO_NAME ? mlxAudioRoot() : runtime.name === OMLX_NAME ? omlxRoot() : runtime.name === COMFYUI_NAME ? comfyuiRoot() : runtime.name === VIDEO_GEN_NAME ? videoGenRoot() : runtime.name === MUSIC_GEN_NAME ? musicGenRoot() : runtime.name === LTX25_GEN_NAME ? ltx25GenRoot() : runtime.name === LTX25_MAX_GEN_NAME ? ltx25MaxGenRoot() : "", roleState: status.state, roleReason: status.reason };
+    return { id: `${runtime.name}-${runtime.version}`, name: runtime.name, label: `${runtime.name} ${runtime.version}, an environment the Stack assembles through uv`, platform: process.platform, arch: process.arch, verified: true, installed, matchesThisMachine: true, ...version, directory: runtime.name === POCKET_TTS_NAME ? pocketTtsRoot() : runtime.name === MLX_AUDIO_NAME ? mlxAudioRoot() : runtime.name === OMLX_NAME ? omlxRoot() : runtime.name === COMFYUI_NAME ? comfyuiRoot() : runtime.name === VIDEO_GEN_NAME ? videoGenRoot() : runtime.name === MUSIC_GEN_NAME ? musicGenRoot() : runtime.name === H3_GEN_NAME ? h3GenRoot() : runtime.name === LTX25_GEN_NAME ? ltx25GenRoot() : runtime.name === LTX25_MAX_GEN_NAME ? ltx25MaxGenRoot() : "", roleState: status.state, roleReason: status.reason };
   });
   return c.json({ engines: [...pins, ...managed] }, 200);
 });
@@ -128,6 +129,18 @@ enginesRoutes.openapi(installRoute, async (c) => {
       .catch((error) => finishJob(job.id, { ok: false, reason: error instanceof Error ? error.message : String(error) }))
       .finally(() => { environmentJobs.delete(IMAGE_GEN_NAME); });
     return c.json({ job: job.id, engine: IMAGE_GEN_NAME, staged: false }, 202);
+  }
+  if (name === H3_GEN_NAME) {
+    // MiniMax H3-Image's environment (H3-IMAGE-STACK-01): its own uv environment from PyPI by hash, no source archive. One build at a time, a second request joins it. Its models are pulled by POST /stack/v1/image/install or one by one.
+    const inFlight = environmentJobs.get(H3_GEN_NAME);
+    if (inFlight) return c.json({ job: inFlight, engine: H3_GEN_NAME, staged: false }, 202);
+    const job = createJob({ kind: "engine.install", totalBytes: 0, status: "downloading", input: { engine: `${H3_GEN_NAME}-env` } });
+    environmentJobs.set(H3_GEN_NAME, job.id);
+    void ensureH3GenEnvironment((phase) => updateJob(job.id, { status: `building ${phase}` }), { signal: jobSignal(job.id) })
+      .then(() => { finishJob(job.id, { ok: true, result: { engine: H3_GEN_NAME } }); emit({ id: "engine.state", data: { engine: H3_GEN_NAME, state: "installed" } }); })
+      .catch((error) => finishJob(job.id, { ok: false, reason: error instanceof Error ? error.message : String(error) }))
+      .finally(() => { environmentJobs.delete(H3_GEN_NAME); });
+    return c.json({ job: job.id, engine: H3_GEN_NAME, staged: false }, 202);
   }
   if (name === OMLX_NAME) {
     // The chat engine's environment (ENGINE-MLX-01): uv, a managed Python,
@@ -221,6 +234,11 @@ for (const action of ["start", "stop", "restart"] as const) enginesRoutes.openap
   // The picture worker is the picture service's, started by the first picture and stopped after ten idle minutes.
   if (name === IMAGE_GEN_NAME) {
     if (action === "stop" || action === "restart") { imageGen.stop(); return c.json({ ok: true }, 200); }
+    return c.json({ ok: true, reason: "The picture engine starts by itself when a picture is made." }, 200);
+  }
+  // MiniMax H3-Image has no worker: one process per picture, gone when the picture is. Stop and restart have nothing to stop between pictures.
+  if (name === H3_GEN_NAME) {
+    if (action === "stop" || action === "restart") return c.json({ ok: true, reason: "MiniMax H3-Image keeps nothing running between pictures." }, 200);
     return c.json({ ok: true, reason: "The picture engine starts by itself when a picture is made." }, 200);
   }
   // The video worker is the video service's, started by the first clip and stopped after ten idle minutes.

@@ -17,23 +17,28 @@ describe("tier resolver", () => {
     const reduced = resolveTier({ category: "chat", tier: "reduced", profile: "p128", roomBytes: 72 * GB });
     expect(slots.find((row) => row.category === "chat" && row.tier === "reduced")?.peak_bytes).toBe(reduced?.peakBytes);
     expect(slots.filter((row) => row.peak_bytes !== null).map(({ category, tier }) => `${category}:${tier}`)).toEqual(["chat:reduced", "chat:standard", "chat:boost", "chat:max", "pictures:standard", "pictures:boost", "pictures:max", "video:standard", "video:max", "music:standard", "voice:reduced", "voice:standard", "stems:standard"]);
-    expect(budgetSlots("p16", 12 * GB).filter((row) => row.peak_bytes !== null).every((row) => row.category === "chat" || row.category === "voice" || row.category === "stems")).toBe(true);
-    expect(budgetSlots("p16", 12 * GB).some((row) => row.category === "pictures" || row.category === "video" || row.category === "music")).toBe(false);
+    // p16 has the streaming MiniMax H3-Image as its Standard picture candidate (H3-IMAGE-STACK-01); nothing else but chat, voice and stems.
+    expect(budgetSlots("p16", 12 * GB).filter((row) => row.peak_bytes !== null).every((row) => row.category === "chat" || row.category === "voice" || row.category === "stems" || (row.category === "pictures" && row.tier === "standard" && row.model === "minimax-h3-image"))).toBe(true);
+    expect(budgetSlots("p16", 12 * GB).some((row) => row.category === "video" || row.category === "music")).toBe(false);
     expect(budgetSlots(null)).toEqual([]);
   });
 
   test("resolves the requested profile ladders", () => {
     expect(resolveLadder("chat", "p16", 12 * GB).map((row) => row.resolved?.model ?? null)).toEqual(["qwen3-8b-instruct-q4-k-m", null, null]);
     expect(resolveLadder("chat", "p32", 30 * GB)[0]?.resolved?.model).toBe("muse-glimmer-30b-q4-k-m");
-    expect(resolveLadder("pictures", "p32", 20 * GB)[0]?.resolved?.model).toBe("flux2-klein-4b");
+    // Standard pictures on a 32 GB computer: MiniMax H3-Image streaming (2.5 GB) is recommended; FLUX.2 Klein stays a candidate and can be picked.
+    expect(resolveLadder("pictures", "p32", 20 * GB)[0]?.resolved).toMatchObject({ model: "minimax-h3-image", peakBytes: 2_500_000_000, options: { ditMode: "stream" } });
+    expect(resolveTier({ category: "pictures", tier: "standard", profile: "p32", roomBytes: 20 * GB, slot: { model: "flux2-klein-4b" } })?.model).toBe("flux2-klein-4b");
     const chat64 = resolveLadder("chat", "p64", 40 * GB);
     expect(chat64[1]?.resolved?.model).toBe("muse-glimmer-30b-q4-k-xl");
     expect(chat64[1]?.resolved?.options).toEqual({ thinking: true, reasoningBudget: 4096 });
     expect(chat64[1]?.resolved?.switchCost).toBe("option");
     expect(chat64[1]?.hidden).toBe(false);
     const pic64 = resolveLadder("pictures", "p64", 40 * GB);
-    expect(pic64[0]?.resolved?.model).toBe("ernie-image-turbo");
-    expect(pic64[1]?.resolved?.model).toBe("z-image-turbo");
+    expect(pic64[0]?.resolved?.model).toBe("minimax-h3-image");
+    // Boost picks the same MiniMax H3-Image as Standard, so the ladder collapses the rung (Z-Image stays a pickable Boost candidate).
+    expect(pic64[1]?.resolved?.model).toBe("minimax-h3-image");
+    expect(pic64[1]?.hiddenReason).toBe("same_as_below");
     // Measured 16.4 GB music peak: Standard needs 0.6 R, so R = 24 GB is still short and R = 28 GB holds it. Boost and Max music stay empty.
     expect(resolveLadder("music", "p64", 24 * GB).map((row) => row.resolved?.model ?? null)).toEqual([null, null, null]);
     expect(resolveLadder("music", "p64", 28 * GB).map((row) => row.resolved?.model ?? null)).toEqual(["ace-step-1-5-turbo", null, null]);
@@ -111,8 +116,9 @@ describe("tier candidate lists for the slot dialog", () => {
     expect(zimage.fits).toBe(false);
     expect(zimage.refusal).toBe("This needs 26 GB. Standard keeps Home free, so it can't hold it. Use Boost or Max.");
     expect(levels[1]!.candidates.find((row) => row.id === "z-image-turbo")).toMatchObject({ fits: true, refusal: null });
-    expect(standard.recommended).toBe("ernie-image-turbo");
-    expect(levels[1]!.recommended).toBe("z-image-turbo");
+    expect(standard.recommended).toBe("minimax-h3-image");
+    expect(standard.candidates.map((row) => row.id)).toEqual(expect.arrayContaining(["ernie-image-turbo", "flux2-klein-4b", "z-image-turbo", "minimax-h3-image"]));
+    expect(levels[1]!.recommended).toBe("minimax-h3-image");
   });
 
   test("Reduced-only models are never offered as a pick, and a profile with no models lists nothing", () => {

@@ -16,6 +16,8 @@ import { recordGeneratedImage } from "@/video/provenance";
 import { commitResult, workDir, type ImageResultMeta } from "@/images/results";
 import { ImageError, imageGen, overallPercent } from "@/images/imageEngine";
 import { IMAGE_FAMILIES, isFamilyId, peakBytes } from "@/images/models";
+import { decideH3Mode } from "@/images/h3Runner";
+import { H3_IMAGE_ENGINE, STACK_IMAGE_H3_ID } from "@/lib/modelCatalog";
 import { RESTORE_FAMILY, RESTORE_PEAK_BYTES } from "@/images/restore";
 import { GenTracker, historyKey, previewExists, previewFile, recordRun } from "@/lib/genProgress";
 
@@ -45,6 +47,8 @@ export interface StashedImage {
   derived?: boolean;
   /** GENPREVIEW-01: draw a small preview after each step (default on). */
   preview?: boolean;
+  /** Plain sentences for the reply: what the Stack ignored or changed in the request (a `steps` a fixed-step model does not take). */
+  notes?: string[];
 }
 const pending = new Map<string, StashedImage & { at: number }>();
 const STASH_TTL_MS = 30 * 60_000;
@@ -93,6 +97,8 @@ function memoryFor(job: Job) {
   const input = (job.input ?? {}) as { family?: string; mode?: string; quantize?: number | null; lora_ids?: string[]; count?: number };
   if (input.mode === "restore") return { requestedBytes: RESTORE_PEAK_BYTES, measuredPeakBytes: RESTORE_PEAK_BYTES, engine: "image-gen" };
   const family = isFamilyId(input.family ?? "") ? input.family as keyof typeof IMAGE_FAMILIES : "flux2-klein-4b";
+  // MiniMax H3-Image: resident when the governor can hold it now, streaming otherwise; the runner takes the mode chosen here.
+  if (family === STACK_IMAGE_H3_ID) { const { peakBytes: held } = decideH3Mode(job.id, input.mode === "edit" ? "edit" : "generate"); return { requestedBytes: held, measuredPeakBytes: held, engine: H3_IMAGE_ENGINE }; }
   const peak = peakBytes(family, input.mode === "edit" ? "edit" : "generate", input.quantize ?? null, input.lora_ids?.length ?? 0);
   return { requestedBytes: peak, measuredPeakBytes: peak, engine: "image-gen" };
 }
@@ -151,7 +157,7 @@ export function registerImageJobs(): void {
         }
         const meta: ImageResultMeta = {
           job: job.id, created: Math.floor(new Date(job.createdAt).getTime() / 1000), mode: item.op === "restore" ? "restore" : item.op === "edit" ? (item.mask || item.region ? "edit-masked" : "edit") : item.initImage ? "image-to-image" : "generate",
-          model: item.op === "restore" ? RESTORE_FAMILY : IMAGE_FAMILIES[family].catalogId, steps: item.steps, quantize: item.quantize, lora_ids: item.loraIds, ...((job.input as { audience?: unknown } | null)?.audience === "adult" ? { audience: "adult" as const } : {}), ms: result.ms, mlx_peak_gb: result.peakBytes === null ? null : Math.round(result.peakBytes / 1e8) / 10, images,
+          model: item.op === "restore" ? RESTORE_FAMILY : IMAGE_FAMILIES[family].catalogId, steps: item.steps, quantize: item.quantize, lora_ids: item.loraIds, ...(item.notes?.length ? { notes: item.notes } : {}), ...((job.input as { audience?: unknown } | null)?.audience === "adult" ? { audience: "adult" as const } : {}), ms: result.ms, mlx_peak_gb: result.peakBytes === null ? null : Math.round(result.peakBytes / 1e8) / 10, images,
         };
         update({ status: "ready", percent: 100 });
         commitResult(meta, work);

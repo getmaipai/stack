@@ -1,6 +1,6 @@
 import { hfUrl } from "@/lib/hf";
 import type { CatalogModelLike } from "@/lib/modelStore";
-import { ERNIE_IMAGE_TURBO_FILES, ERNIE_IMAGE_TURBO_PRIMARY, ERNIE_IMAGE_TURBO_REPO, ERNIE_IMAGE_TURBO_REVISION, KLEIN_4B_FILES, KLEIN_4B_PRIMARY, QWEN_IMAGE_FILES, QWEN_IMAGE_PRIMARY, QWEN_IMAGE_REPO, QWEN_IMAGE_REVISION, SEEDVR2_FILES, SEEDVR2_PRIMARY, SEEDVR2_REPO, SEEDVR2_REVISION, KLEIN_4B_REPO, KLEIN_4B_REVISION, ZIMAGE_TURBO_FILES, ZIMAGE_TURBO_PRIMARY, ZIMAGE_TURBO_REPO, ZIMAGE_TURBO_REVISION, type ImagePinFile } from "@/images/pins";
+import { H3_IMAGE_FILES, H3_IMAGE_PRIMARY, ERNIE_IMAGE_TURBO_FILES, ERNIE_IMAGE_TURBO_PRIMARY, ERNIE_IMAGE_TURBO_REPO, ERNIE_IMAGE_TURBO_REVISION, KLEIN_4B_FILES, KLEIN_4B_PRIMARY, QWEN_IMAGE_FILES, QWEN_IMAGE_PRIMARY, QWEN_IMAGE_REPO, QWEN_IMAGE_REVISION, SEEDVR2_FILES, SEEDVR2_PRIMARY, SEEDVR2_REPO, SEEDVR2_REVISION, KLEIN_4B_REPO, KLEIN_4B_REVISION, ZIMAGE_TURBO_FILES, ZIMAGE_TURBO_PRIMARY, ZIMAGE_TURBO_REPO, ZIMAGE_TURBO_REVISION, type ImagePinFile } from "@/images/pins";
 
 // The first standalone Stack chat pin: an official Qwen GGUF, small enough
 // for p16 while retaining a useful local conversation experience. The
@@ -1503,6 +1503,33 @@ export const STACK_IMAGE_KLEIN_MODELS = imageFamily(STACK_IMAGE_KLEIN_ID, KLEIN_
 export const STACK_IMAGE_ZIMAGE_MODELS = imageFamily(STACK_IMAGE_ZIMAGE_ID, ZIMAGE_TURBO_REPO, ZIMAGE_TURBO_REVISION, ZIMAGE_TURBO_PRIMARY, ZIMAGE_TURBO_FILES, "p128", 30_100_000_000);
 export const STACK_IMAGE_ERNIE_MODELS = imageFamily(STACK_IMAGE_ERNIE_ID, ERNIE_IMAGE_TURBO_REPO, ERNIE_IMAGE_TURBO_REVISION, ERNIE_IMAGE_TURBO_PRIMARY, ERNIE_IMAGE_TURBO_FILES, "p64", 15_000_000_000);
 export const STACK_IMAGE_QWEN_MODELS = imageFamily(STACK_IMAGE_QWEN_ID, QWEN_IMAGE_REPO, QWEN_IMAGE_REVISION, QWEN_IMAGE_PRIMARY, QWEN_IMAGE_FILES, "p128", 37_400_000_000, "8-bit, prebuilt");
+// H3-IMAGE-STACK-01: MiniMax H3-Image, run by the h3-image-gen engine (its own uv environment, PyPI h3-image-mlx 0.1.0a8), one
+// process per picture. Five pinned files from two repositories; the primary record is the DiT and the four others are components.
+// Each file sits in the hub cache at its own repository and revision, and the runner's `--models` folder is assembled from them at
+// run time (images/h3Layout.ts). 49.3 GB on disk. Studio bakeoff 2026-11-15: 19.7 GB whole-process-tree peak resident, 1.8 GB streaming.
+export const H3_IMAGE_ENGINE = "h3-image-gen";
+export const STACK_IMAGE_H3_ID = "minimax-h3-image";
+export const H3_LICENCE = "MiniMax-H3-Image Community License";
+export const H3_LICENCE_URL = "https://huggingface.co/MiniMaxAI/MiniMax-H3-Image";
+/** What an admin reads and accepts once before MiniMax H3-Image installs (Home shows it in Settings; the Stack records the acceptance). The install is never refused on licence grounds beyond that one acceptance. */
+export const H3_LICENCE_NOTICE = {
+  id: "minimax-h3-image-community-2026-11-10",
+  name: `${H3_LICENCE} Agreement (2026-11-10)`,
+  url: H3_LICENCE_URL,
+  summary: [
+    "The MiniMax H3-Image model is not part of MaiPai: this computer downloads it from the maker's published files, for your household's use.",
+    "The licence limits where the model may be used (its Applicable Territory), and some regions and larger companies must apply to MiniMax separately. Read it before you accept.",
+  ],
+};
+export const STACK_IMAGE_H3_MODELS: CatalogModelLike[] = H3_IMAGE_FILES.map((file): CatalogModelLike => {
+  const primary = file.file === H3_IMAGE_PRIMARY;
+  return {
+    id: primary ? STACK_IMAGE_H3_ID : `${STACK_IMAGE_H3_ID}-${file.part}`, role: "image", ...(primary ? {} : { component: `${STACK_IMAGE_H3_ID}:${file.file}` }),
+    repo: file.repo, license: H3_LICENCE, revision: file.revision, engine: H3_IMAGE_ENGINE, sizing: { profile: "p16", quantization: "int8, prebuilt (ConvRot)" },
+    download: { url: hfUrl(`${file.repo}/resolve/${file.revision}/${file.file}`), sha256: file.sha256, approx_bytes: file.bytes, hub_file: file.file },
+    ...(primary ? { measured: { footprintBytes: 19_700_000_000, contextLength: 0, hardware: "Apple M5 Max, 128 GB unified memory" } } : {}),
+  };
+});
 export const STACK_IMAGE_ENGINE_MODELS: CatalogModelLike[] = [...STACK_IMAGE_KLEIN_MODELS, ...STACK_IMAGE_ZIMAGE_MODELS, ...STACK_IMAGE_ERNIE_MODELS, ...STACK_IMAGE_QWEN_MODELS];
 // MAKE-CLEARER-2026-11-13: SeedVR2 3B restores a picture (the Best level of Make clearer). It is not a picture family (it makes no picture from words and
 // is not an LoRA base), so it is not in STACK_IMAGE_ENGINE_MODELS; the same mflux worker runs it, from this folder, offline. Footprint measured through mflux
@@ -1598,7 +1625,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_DIARIZATION_SEGMENTATION_MODEL, STACK_DIARIZATION_EMBEDDING_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_RECORDED_SPEECH_MODEL, STACK_DEREVERB_MODEL, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_LIVEPORTRAIT_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_IMAGE_RESTORE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_MASK_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, ...STACK_MUSIC_XL_MODELS, ...STACK_MUSIC_MAX_MODELS, ...STACK_STEMS_MODELS, ...STACK_ALIGN_MODELS, ...STACK_SFX_MODELS, ...STACK_VOICE_CONVERT_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_DIARIZATION_SEGMENTATION_MODEL, STACK_DIARIZATION_EMBEDDING_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_RECORDED_SPEECH_MODEL, STACK_DEREVERB_MODEL, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_LIVEPORTRAIT_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_IMAGE_H3_MODELS, ...STACK_IMAGE_RESTORE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_MASK_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, ...STACK_MUSIC_XL_MODELS, ...STACK_MUSIC_MAX_MODELS, ...STACK_STEMS_MODELS, ...STACK_ALIGN_MODELS, ...STACK_SFX_MODELS, ...STACK_VOICE_CONVERT_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

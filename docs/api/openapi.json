@@ -2156,7 +2156,7 @@
                 "properties": {
                   "model": {
                     "type": "string",
-                    "description": "`image` (the default), or a picture model id from GET /stack/v1/image (`flux2-klein-4b`, `z-image-turbo`, `ernie-image-turbo`). Choosing a LoRA selects the base model it was made for."
+                    "description": "`image` (the default), or a picture model id from GET /stack/v1/image (`flux2-klein-4b`, `z-image-turbo`, `ernie-image-turbo`, `qwen-image-2512-q8`, `minimax-h3-image`). Choosing a LoRA selects the base model it was made for."
                   },
                   "prompt": {
                     "type": "string",
@@ -2189,7 +2189,7 @@
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 30,
-                    "description": "Denoising steps. Default 4 for Klein, 9 for Z-Image-Turbo, or 8 for ERNIE-Image-Turbo."
+                    "description": "Denoising steps. Default 4 for Klein, 9 for Z-Image-Turbo, or 8 for ERNIE-Image-Turbo. MiniMax H3-Image always runs 6: a different value is ignored and the reply says so in `notes`."
                   },
                   "loras": {
                     "type": "array",
@@ -2521,6 +2521,10 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "model": {
+                    "type": "string",
+                    "description": "edit and edit_masked: the picture model that makes the edit: `flux2-klein-4b` (the default, also what `image` means) or `minimax-h3-image`. MiniMax H3-Image edits by instruction only (no mask or region), takes up to 15 reference pictures, and always runs 6 steps (a `steps` value is ignored, with a note in the reply)."
+                  },
                   "image": {
                     "type": "string",
                     "format": "binary"
@@ -2662,6 +2666,163 @@
                       "adult"
                     ],
                     "description": "edit and edit_masked: who the picture is for."
+                  },
+                  "reference3": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "edit with model `minimax-h3-image` only: more reference pictures, `reference3` to `reference15`, each with its own `reference<n>_source`. The edit text may name them (<Picture 1> is the `image`, <Picture 2> is `reference`, <Picture 3> is `reference2`, and so on)."
+                  },
+                  "reference3_source": {
+                    "type": "string",
+                    "enum": [
+                      "generated",
+                      "uploaded",
+                      "household_photo"
+                    ]
+                  },
+                  "reference4": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "reference4_source": {
+                    "type": "string",
+                    "enum": [
+                      "generated",
+                      "uploaded",
+                      "household_photo"
+                    ]
+                  },
+                  "reference5": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "reference5_source": {
+                    "type": "string",
+                    "enum": [
+                      "generated",
+                      "uploaded",
+                      "household_photo"
+                    ]
+                  },
+                  "reference6": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "reference6_source": {
+                    "type": "string",
+                    "enum": [
+                      "generated",
+                      "uploaded",
+                      "household_photo"
+                    ]
+                  },
+                  "reference7": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "reference7_source": {
+                    "type": "string",
+                    "enum": [
+                      "generated",
+                      "uploaded",
+                      "household_photo"
+                    ]
+                  },
+                  "reference8": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "reference8_source": {
+                    "type": "string",
+                    "enum": [
+                      "generated",
+                      "uploaded",
+                      "household_photo"
+                    ]
+                  },
+                  "reference9": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "reference9_source": {
+                    "type": "string",
+                    "enum": [
+                      "generated",
+                      "uploaded",
+                      "household_photo"
+                    ]
+                  },
+                  "reference10": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "reference10_source": {
+                    "type": "string",
+                    "enum": [
+                      "generated",
+                      "uploaded",
+                      "household_photo"
+                    ]
+                  },
+                  "reference11": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "reference11_source": {
+                    "type": "string",
+                    "enum": [
+                      "generated",
+                      "uploaded",
+                      "household_photo"
+                    ]
+                  },
+                  "reference12": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "reference12_source": {
+                    "type": "string",
+                    "enum": [
+                      "generated",
+                      "uploaded",
+                      "household_photo"
+                    ]
+                  },
+                  "reference13": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "reference13_source": {
+                    "type": "string",
+                    "enum": [
+                      "generated",
+                      "uploaded",
+                      "household_photo"
+                    ]
+                  },
+                  "reference14": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "reference14_source": {
+                    "type": "string",
+                    "enum": [
+                      "generated",
+                      "uploaded",
+                      "household_photo"
+                    ]
+                  },
+                  "reference15": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "reference15_source": {
+                    "type": "string",
+                    "enum": [
+                      "generated",
+                      "uploaded",
+                      "household_photo"
+                    ]
                   }
                 },
                 "required": [
@@ -11345,6 +11506,13 @@
                       "type": "integer",
                       "nullable": true,
                       "description": "Place in line while queued (1 is next)."
+                    },
+                    "notes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "What the Stack ignored or changed in the request; the same sentences the reply carries."
                     },
                     "tier": {
                       "type": "string",
@@ -24006,8 +24174,20 @@
                               "steps_default": {
                                 "type": "integer"
                               },
+                              "steps_fixed": {
+                                "type": "boolean",
+                                "description": "True when the model always runs steps_default steps (MiniMax H3-Image): a different `steps` is ignored, with a note in the reply."
+                              },
+                              "max_references": {
+                                "type": "integer",
+                                "description": "Extra pictures an edit with this model takes beside the one it changes; absent for a model that cannot edit."
+                              },
                               "peak_gb": {
                                 "type": "number"
+                              },
+                              "stream_peak_gb": {
+                                "type": "number",
+                                "description": "Present for a model that can stream its weights from disk: the peak in that mode (peak_gb is the resident one)."
                               },
                               "warm_seconds": {
                                 "type": "number"
@@ -24134,6 +24314,13 @@
                             },
                             "model": {
                               "type": "string"
+                            },
+                            "models": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              },
+                              "description": "Every installed model that can edit and this computer runs (`model` is the one an edit uses when the request names none)."
                             }
                           },
                           "required": [

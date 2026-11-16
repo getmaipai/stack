@@ -5,7 +5,7 @@
 import { PROFILE_MODEL_BINDINGS, sizeMachine, type ProfileTier } from "@/profiles";
 import { knownAppleChip, type HardwareInfo, type MemorySource } from "@/lib/hardware";
 import { splashDraftWanted } from "@/lib/splash";
-import { STACK_CHAT_MODEL, STACK_SFX_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_RESTORE_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_XL_MODELS, STACK_STEMS_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_MASK_MODELS, STACK_VIDEO_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS, STACK_DEREVERB_MODEL } from "@/lib/modelCatalog";
+import { STACK_CHAT_MODEL, STACK_SFX_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_H3_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_RESTORE_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_XL_MODELS, STACK_STEMS_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_MASK_MODELS, STACK_VIDEO_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS, STACK_DEREVERB_MODEL } from "@/lib/modelCatalog";
 import { tierDefaultTtsEngine } from "@/speech/ttsEngines";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import type { RoleId } from "@/roles";
@@ -127,7 +127,7 @@ export function recordedSpeechInstallModels(installedIds: Iterable<string> = [])
 /** The pins the picture generator needs, in the shape of a pull, for the image status route: Home installs a family when the person turns pictures on (FLUX.2 Klein 4B by default; Z-Image-Turbo is offered on the biggest computers). Klein is in the first-run plan on every tier that has image (AIMODELS-DATA-01); the other families are not. */
 export function imageInstallModels(family: ImageFamilyId, installedIds: Iterable<string> = []): PlanModel[] {
   const installed = new Set(installedIds);
-  const pins = family === "flux2-klein-4b" ? STACK_IMAGE_KLEIN_MODELS : family === "z-image-turbo" ? STACK_IMAGE_ZIMAGE_MODELS : family === "qwen-image-2512-q8" ? STACK_IMAGE_QWEN_MODELS : STACK_IMAGE_ERNIE_MODELS;
+  const pins = family === "flux2-klein-4b" ? STACK_IMAGE_KLEIN_MODELS : family === "z-image-turbo" ? STACK_IMAGE_ZIMAGE_MODELS : family === "qwen-image-2512-q8" ? STACK_IMAGE_QWEN_MODELS : family === "minimax-h3-image" ? STACK_IMAGE_H3_MODELS : STACK_IMAGE_ERNIE_MODELS;
   return pins.flatMap((pin) => view(pin, installed, false) ?? []);
 }
 

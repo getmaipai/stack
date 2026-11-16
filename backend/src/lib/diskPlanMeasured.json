@@ -130,6 +130,12 @@
       "download_bytes": 32902204,
       "peak_temp_bytes": 32902204,
       "basis": "measured"
+    },
+    "h3-image-gen": {
+      "installed_bytes": 250000000,
+      "download_bytes": 80000000,
+      "peak_temp_bytes": 80000000,
+      "basis": "estimate"
     }
   },
   "pins": {
@@ -728,6 +734,26 @@
     "mossformer2-se-48k": {
       "download_bytes": 110652628,
       "installed_bytes": 110652628
+    },
+    "minimax-h3-image": {
+      "download_bytes": 20979314802,
+      "installed_bytes": 20979314802
+    },
+    "minimax-h3-image-text-encoder": {
+      "download_bytes": 27141342152,
+      "installed_bytes": 27141342152
+    },
+    "minimax-h3-image-vae": {
+      "download_bytes": 1168505312,
+      "installed_bytes": 1168505312
+    },
+    "minimax-h3-image-tokenizer": {
+      "download_bytes": 7032403,
+      "installed_bytes": 7032403
+    },
+    "minimax-h3-image-vae-config": {
+      "download_bytes": 1826,
+      "installed_bytes": 1826
     }
   }
 }

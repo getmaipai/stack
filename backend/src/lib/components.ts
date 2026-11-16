@@ -15,7 +15,7 @@ import { createJob, finishJob, getJob, jobSignal, listJobs, updateJob } from "@/
 import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { getModel, installCatalogModel, removeModel, removeModelsAtomically, type CatalogModelLike, type DownloadModelOptions } from "@/lib/modelStore";
-import { STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_RESTORE_MODELS, STACK_IMAGE_RESTORE_ID, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS, LTX_LICENCE_NOTICE, SFX_LICENCE_NOTICE, STACK_SFX_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_SFT_ID, STACK_MUSIC_XL_ID, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_STEMS_MODELS, STACK_RECORDED_SPEECH_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MODEL_ID, STACK_VIDEO_MASK_MODELS, STACK_VIDEO_MASK_MODEL_ID, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
+import { H3_LICENCE_NOTICE, STACK_IMAGE_H3_ID, STACK_IMAGE_H3_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_RESTORE_MODELS, STACK_IMAGE_RESTORE_ID, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS, LTX_LICENCE_NOTICE, SFX_LICENCE_NOTICE, STACK_SFX_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_SFT_ID, STACK_MUSIC_XL_ID, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_STEMS_MODELS, STACK_RECORDED_SPEECH_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MODEL_ID, STACK_VIDEO_MASK_MODELS, STACK_VIDEO_MASK_MODEL_ID, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
 import { licenceAcceptance, recordLicenceAcceptance, type LicenceNotice } from "@/lib/licenceAcceptance";
 import { buildInstallPlan } from "@/lib/installPlan";
 import { diskPlanForTier, diskTotalsFor, engineDownloadBytes, type DiskPlan } from "@/lib/diskPlan";
@@ -32,6 +32,7 @@ import { ensureUvEnvironment, uvEnvironmentReady, uvVenvPath } from "@/lib/uvEnv
 import { loadedRoleForModel, selectedModel } from "@/lib/supervisor";
 import { ensureImageGenEnvironment, imageGen, imageGenEnvironmentReady, imageGenRoot } from "@/images/imageEngine";
 import { imageLoras } from "@/images/loras";
+import { ensureH3GenEnvironment, H3_GEN_NAME, h3GenEnvironmentReady, h3GenRoot } from "@/images/h3Engine";
 import { ensureLtx25Environment, ensureLtx25MaxEnvironment, ltx25EnvironmentReady, ltx25GenRoot, ltx25MaxEnvironmentReady, ltx25MaxGenRoot, LTX25_GEN_NAME, LTX25_MAX_GEN_NAME } from "@/video/ltx25";
 import { ensureVideoGenEnvironment, tierAvailability as videoAvailability, videoGen, videoGenEnvironmentReady, videoGenRoot, VIDEO_GEN_NAME } from "@/video/videoGen";
 import { ensureMusicGenEnvironment, tierAvailability as musicAvailability, musicGen, musicGenEnvironmentReady, musicGenRoot, MUSIC_GEN_NAME } from "@/music/musicGen";
@@ -106,12 +107,14 @@ export interface UnitDef {
 
 const GB = 1_000_000_000;
 /** Environment downloads come from the disk plan's measured table (one definition with the wizard); the figures are a fallback only. */
-const ENV_BYTES = { align: engineDownloadBytes("align") ?? 0.3 * GB, beats: engineDownloadBytes("beats") ?? 0.5 * GB, stems: engineDownloadBytes("stems") ?? 0.25 * GB, voiceConvert: engineDownloadBytes("voice-convert") ?? 4 * GB, recordedSpeech: engineDownloadBytes("recorded-speech") ?? 1.7 * GB, image: engineDownloadBytes("image-gen") ?? 1.1 * GB, video: engineDownloadBytes("video-gen") ?? 1.0 * GB, ltx25: engineDownloadBytes("ltx25-gen") ?? 0.25 * GB, ltx25max: engineDownloadBytes("ltx25-max-gen") ?? 0.25 * GB, mask: engineDownloadBytes("mask-gen") ?? 0.6 * GB, music: engineDownloadBytes("music-gen") ?? 0.8 * GB, tools: engineDownloadBytes("image-tools") ?? 0.4 * GB, pocket: engineDownloadBytes("pocket-tts") ?? 0.72 * GB, mlxAudio: engineDownloadBytes("mlx-audio") ?? 0.47 * GB };
+const ENV_BYTES = { align: engineDownloadBytes("align") ?? 0.3 * GB, beats: engineDownloadBytes("beats") ?? 0.5 * GB, stems: engineDownloadBytes("stems") ?? 0.25 * GB, voiceConvert: engineDownloadBytes("voice-convert") ?? 4 * GB, recordedSpeech: engineDownloadBytes("recorded-speech") ?? 1.7 * GB, image: engineDownloadBytes("image-gen") ?? 1.1 * GB, h3: engineDownloadBytes("h3-image-gen") ?? 0.08 * GB, video: engineDownloadBytes("video-gen") ?? 1.0 * GB, ltx25: engineDownloadBytes("ltx25-gen") ?? 0.25 * GB, ltx25max: engineDownloadBytes("ltx25-max-gen") ?? 0.25 * GB, mask: engineDownloadBytes("mask-gen") ?? 0.6 * GB, music: engineDownloadBytes("music-gen") ?? 0.8 * GB, tools: engineDownloadBytes("image-tools") ?? 0.4 * GB, pocket: engineDownloadBytes("pocket-tts") ?? 0.72 * GB, mlxAudio: engineDownloadBytes("mlx-audio") ?? 0.47 * GB };
 /** The disk plan's row for a component, where the plan has one (its optional rows are the wizard's unchecked extras). */
 /** The install-plan row each component stands for (the size and need shown beside it). A test keeps every plan row covered. */
-export const DISK_ROW: Record<string, string> = { "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "ernie-image-turbo": "pictures-ernie", "qwen-image-2512-q8": "pictures-qwen", "seedvr2-3b": "pictures-clearer", "image-tools": "image-tools", ffmpeg: "ffmpeg", "shazam-signature": "shazam-signature", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fish-audio-drama-3-4bit": "recorded-speech", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "sam2.1-hiera-small": "video-mask", "ace-step-1-5-turbo": "music", "ace-step-1-5-xl-turbo-bf16": "music-boost", "ace-step-1-5-xl-sft-bf16": "music-max", "htdemucs": "stems", "htdemucs_ft": "stems-ft", "htdemucs_6s": "stems-6s", "mms-fa-align": "align", "soulx-singer-svc": "voice-convert", "soulx-singer-rmvpe": "voice-convert", "soulx-singer-whisper-base": "voice-convert", "ltx-2-5-q8-distilled-mlx": "video-ltx25", "ltx-2-5-bf16-distilled-mlx-max": "video-ltx25-max", "stable-audio-3-small-sfx": "sound-effects" };
+export const DISK_ROW: Record<string, string> = { "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "ernie-image-turbo": "pictures-ernie", "qwen-image-2512-q8": "pictures-qwen", "minimax-h3-image": "pictures-h3", "seedvr2-3b": "pictures-clearer", "image-tools": "image-tools", ffmpeg: "ffmpeg", "shazam-signature": "shazam-signature", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fish-audio-drama-3-4bit": "recorded-speech", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "sam2.1-hiera-small": "video-mask", "ace-step-1-5-turbo": "music", "ace-step-1-5-xl-turbo-bf16": "music-boost", "ace-step-1-5-xl-sft-bf16": "music-max", "htdemucs": "stems", "htdemucs_ft": "stems-ft", "htdemucs_6s": "stems-6s", "mms-fa-align": "align", "soulx-singer-svc": "voice-convert", "soulx-singer-rmvpe": "voice-convert", "soulx-singer-whisper-base": "voice-convert", "ltx-2-5-q8-distilled-mlx": "video-ltx25", "ltx-2-5-bf16-distilled-mlx-max": "video-ltx25-max", "stable-audio-3-small-sfx": "sound-effects" };
 
 const envImage: EnvDef = { name: "image-gen", approxBytes: ENV_BYTES.image, root: imageGenRoot, ready: imageGenEnvironmentReady, build: (onPhase, signal) => ensureImageGenEnvironment(onPhase, { signal }), stop: () => imageGen.stop() };
+// MiniMax H3-Image's own environment (h3-image-gen). It has no warm worker, so nothing needs stopping before it is rebuilt.
+const envH3: EnvDef = { name: H3_GEN_NAME, approxBytes: ENV_BYTES.h3, root: h3GenRoot, ready: h3GenEnvironmentReady, build: (onPhase, signal) => ensureH3GenEnvironment(onPhase, { signal }), stop: () => {} };
 const envVideo: EnvDef = {
   name: VIDEO_GEN_NAME, approxBytes: ENV_BYTES.video, root: videoGenRoot, ready: videoGenEnvironmentReady, link: engineCurrentPath(VIDEO_GEN_NAME), stop: () => videoGen.stop(),
   build: async (onPhase, signal) => {
@@ -229,6 +232,7 @@ const LABELS: Record<string, { label: string; summary: string }> = {
   "z-image-turbo": { label: "Pictures: Z-Image-Turbo", summary: "A higher-detail picture model for the largest computers. A big download." },
   "qwen-image-2512-q8": { label: "Pictures: Qwen-Image 20B (best quality)", summary: "The best picture model, used for Max pictures. Draws clear words and fine detail. A very large download (about 36 GB); a picture takes about three minutes." },
   "seedvr2-3b": { label: "Make clearer, best quality (SeedVR2 3B)", summary: "The most careful repair for old, soft or damaged pictures, used by the Best level of Make clearer. It redraws fine detail, so a face can change slightly; Home checks faces and keeps the original when one does. About 7.3 GB, Apache-2.0; a picture takes a few seconds and needs about 12 GB of free memory while it runs." },
+  "minimax-h3-image": { label: "Pictures: MiniMax H3-Image", summary: "Makes pictures and changes them, keeps words spelled right, and takes up to sixteen reference pictures. One model for new pictures and edits." },
   "ernie-image-turbo": { label: "Pictures: ERNIE-Image-Turbo", summary: "Draws words inside pictures correctly. Makes new pictures from a sentence; FLUX.2 Klein stays for edits." },
   "ace-step-1-5-turbo": { label: "Music: ACE-Step 1.5", summary: "Makes and changes songs in chat" },
   "stable-audio-3-small-sfx": { label: "Make sound effects (Stable Audio 3 Small-SFX)", summary: "Makes short sound effects and ambience from a sentence, up to 47 seconds. About 3.5 GB, and the maker's licence applies." },
@@ -283,8 +287,8 @@ export function componentDefs(): UnitDef[] {
     if (state === "running" || state === "building") return "A picture is being made right now.";
     return activeJobFor((kind) => kind === "image_generation" || kind === "image" || kind.startsWith("image")) ? "A picture is waiting or being made right now." : null;
   };
-  const familyUnit = (id: "flux2-klein-4b" | "z-image-turbo" | "ernie-image-turbo" | "qwen-image-2512-q8", pins: CatalogModelLike[], tiers: Tier[], usedBy: string): UnitDef => ({
-    id, ...LABELS[id]!, group: "pictures", role: "image", pins, envs: [envImage], tiers,
+  const familyUnit = (id: "flux2-klein-4b" | "z-image-turbo" | "ernie-image-turbo" | "qwen-image-2512-q8" | "minimax-h3-image", pins: CatalogModelLike[], tiers: Tier[], usedBy: string, extra: Partial<UnitDef> = {}): UnitDef => ({
+    id, ...LABELS[id]!, group: "pictures", role: "image", pins, envs: [envImage], tiers, ...extra,
     platformBlock: () => imageGen.supported() ? null : "Pictures are not available on this kind of computer yet.",
     usedBy: () => { const count = imageLoras.list().filter((lora) => lora.base_model === id).length; return [usedBy, ...(count ? [`${count} picture style${count === 1 ? "" : "s"} (LoRAs)`] : [])]; },
     busy: pictureBusy,
@@ -293,6 +297,8 @@ export function componentDefs(): UnitDef[] {
   units.push(familyUnit("z-image-turbo", STACK_IMAGE_ZIMAGE_MODELS, ["p128"], "Pictures, when chosen as the model"));
   units.push(familyUnit("ernie-image-turbo", STACK_IMAGE_ERNIE_MODELS, ["p64", "p128"], "Pictures, when chosen as the model"));
   units.push(familyUnit("qwen-image-2512-q8", STACK_IMAGE_QWEN_MODELS, ["p128"], "Max pictures"));
+  // H3-IMAGE-STACK-01: its own environment, and the maker's licence accepted once before the download.
+  units.push(familyUnit(STACK_IMAGE_H3_ID, STACK_IMAGE_H3_MODELS, ["p16", "p32", "p64", "p128"], "Pictures in chat and the Pictures app", { envs: [envH3], licenceNotice: H3_LICENCE_NOTICE }));
   // MAKE-CLEARER-2026-11-13: the Best level of Make clearer. Optional, and recommended only where a 12 GB peak fits beside chat (the 64 GB tier and up).
   units.push({
     id: STACK_IMAGE_RESTORE_ID, ...LABELS[STACK_IMAGE_RESTORE_ID]!, group: "tools", role: "image", pins: STACK_IMAGE_RESTORE_MODELS, envs: [envImage], tiers: ["p64", "p128"],

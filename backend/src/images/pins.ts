@@ -111,3 +111,22 @@ export const SEEDVR2_FILES: ImagePinFile[] = [
   { file: "seedvr2_ema_3b_fp16.safetensors", sha256: "2fd0e03a3dad24e07086750360727ca437de4ecd456f769856e960ae93e2b304", bytes: 6783018808 },
   { file: "ema_vae_fp16.safetensors", sha256: "20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1", bytes: 501324814 },
 ];
+
+// H3-IMAGE-STACK-01: MiniMax H3-Image (Studio bakeoff 2026-11-15). Five files from two repositories, each pinned by the
+// revision its URL resolves at (the Comfy-Org listing was taken at b8ebf14be96f02e5c58960620a101de71b0bd9f3; its files resolve at
+// 892de7cb61df49753bf15145a711154803a355cb). `layout` is where the h3-image-mlx runner expects the file under its `--models`
+// folder; the folder is assembled from the installed files at run time (images/h3Layout.ts). Licence: MiniMax-H3-Image Community
+// License Agreement (release 2026-11-10), accepted in Settings before the download.
+export interface H3PinFile extends ImagePinFile { repo: string; revision: string; /** The path in the repository (the hub-cache path). */ file: string; /** The path under the runner's models folder. */ layout: string; /** The catalog record suffix ("" is the primary). */ part: string; }
+export const H3_COMFY_REPO = "Comfy-Org/MiniMax-H3-Image";
+export const H3_COMFY_REVISION = "892de7cb61df49753bf15145a711154803a355cb";
+export const H3_MINIMAX_REPO = "MiniMaxAI/MiniMax-H3-Image";
+export const H3_MINIMAX_REVISION = "492fd8c4eca666f1085f57e30738c1e0d86b3439";
+export const H3_IMAGE_PRIMARY = "diffusion_models/minimax_h3_image_pruned_int8_convrot.safetensors";
+export const H3_IMAGE_FILES: H3PinFile[] = [
+  { repo: H3_COMFY_REPO, revision: H3_COMFY_REVISION, part: "", file: H3_IMAGE_PRIMARY, layout: H3_IMAGE_PRIMARY, sha256: "83eb140f1ff95c068f8a6886e6d3f3d0d4ab2e07bb2fe6d2ef992a51146ee622", bytes: 20_979_314_802 },
+  { repo: H3_COMFY_REPO, revision: H3_COMFY_REVISION, part: "text-encoder", file: "text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors", layout: "text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors", sha256: "bc2ced0fbea64757fa9acddccfc0b3f4819d1dcf1da6c124d690d368be283923", bytes: 27_141_342_152 },
+  { repo: H3_COMFY_REPO, revision: H3_COMFY_REVISION, part: "vae", file: "vae/minimax_h3_image_vae_fp16.safetensors", layout: "vae/minimax_h3_image_vae_fp16.safetensors", sha256: "d80e9c2e5cfc9844869961ff5a58c9a9e52182df6bfb30b26018dd7f348721af", bytes: 1_168_505_312 },
+  { repo: H3_MINIMAX_REPO, revision: H3_MINIMAX_REVISION, part: "tokenizer", file: "tokenizer/tokenizer.json", layout: "tokenizer.json", sha256: "a5d85b6dcc535e6b93115a9ef287e6132fdbf30270da6218194ba742261173c7", bytes: 7_032_403 },
+  { repo: H3_MINIMAX_REPO, revision: H3_MINIMAX_REVISION, part: "vae-config", file: "vae/config.json", layout: "vae/config.json", sha256: "7fcc21bec549804ff0a04d8246e7f90e679d4f8d4b0a27a252bbd18c30e3e4bb", bytes: 1_826 },
+];

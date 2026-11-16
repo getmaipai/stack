@@ -378,7 +378,7 @@ async function ensureCloningLoaded(role: RoleId, signal: AbortSignal): Promise<v
 v1Routes.openapi(imagesRoute, (c) => {
   const body = c.req.valid("json") as ImageGenerationBody;
   const model = body.model ?? "image";
-  if (imageEngineActive() && (model === "image" || model === "flux2-klein-4b" || model === "z-image-turbo" || model === "ernie-image-turbo" || model === "qwen-image-2512-q8")) return generateImages(c, body) as never;
+  if (imageEngineActive() && (model === "image" || model === "flux2-klein-4b" || model === "z-image-turbo" || model === "ernie-image-turbo" || model === "qwen-image-2512-q8" || model === "minimax-h3-image")) return generateImages(c, body) as never;
   return reply(c, "job", { ...body, model }) as never;
 });
 
@@ -386,7 +386,16 @@ v1Routes.openapi(imagesRoute, (c) => {
 // job API with a wait, like /images/generations; the picture and mask ride
 // as files in the form, never in the job record.
 const MAX_UPLOAD_BYTES = 40 * 1024 * 1024;
+// H3-IMAGE-STACK-01: MiniMax H3-Image takes up to 16 input pictures in one edit, the one being changed and 15 more (`reference` to `reference15`); FLUX.2 Klein keeps its two.
+const H3_REFERENCE_FIELDS = 15;
+const REFERENCE_SOURCES = z.enum(["generated", "uploaded", "household_photo"]);
+const moreReferenceFields: Record<string, z.ZodTypeAny> = {};
+for (let n = 3; n <= H3_REFERENCE_FIELDS; n += 1) {
+  moreReferenceFields[`reference${n}`] = z.custom<File>((value) => value instanceof File, `Reference picture ${n}.`).openapi({ type: "string", format: "binary", description: n === 3 ? "edit with model `minimax-h3-image` only: more reference pictures, `reference3` to `reference15`, each with its own `reference<n>_source`. The edit text may name them (<Picture 1> is the `image`, <Picture 2> is `reference`, <Picture 3> is `reference2`, and so on)." : undefined }).optional();
+  moreReferenceFields[`reference${n}_source`] = REFERENCE_SOURCES.optional();
+}
 const ImageEditFormSchema = z.object({
+  model: z.string().optional().openapi({ description: "edit and edit_masked: the picture model that makes the edit: `flux2-klein-4b` (the default, also what `image` means) or `minimax-h3-image`. MiniMax H3-Image edits by instruction only (no mask or region), takes up to 15 reference pictures, and always runs 6 steps (a `steps` value is ignored, with a note in the reply)." }),
   image: z.custom<File>((value) => value instanceof File, "The picture in the `image` field.").openapi({ type: "string", format: "binary" }),
   mask: z.custom<File>((value) => value instanceof File, "The mask in the `mask` field.").openapi({ type: "string", format: "binary" }).optional(),
   operation: z.enum([...IMAGE_TOOLS_OPERATIONS, "edit", "edit_masked", "segment", "restore"]).openapi({ description: "restore: SeedVR2 3B repair at the picture's own size (`scale` 1) or doubled (`scale` 2), the Best level of Make clearer; a generative model, so it can change faces and hands. depth: grayscale Depth Anything V2 Small map (near is white, far is black); segment: SAM 2.1 still-picture mask; prompt is JSON {box?: [x0,y0,x1,y1], points?: [{x,y,label:1|0}]} in picture pixels. Other operations include background removal, erase, upscale, resize, people masks and edits." }),
@@ -410,6 +419,7 @@ const ImageEditFormSchema = z.object({
   reference2: z.custom<File>((value) => value instanceof File, "A second reference picture.").openapi({ type: "string", format: "binary" }).optional(),
   reference2_source: z.enum(["generated", "uploaded", "household_photo"]).optional(),
   audience: z.enum(["all-ages", "adult"]).optional().openapi({ description: "edit and edit_masked: who the picture is for." }),
+  ...moreReferenceFields,
 });
 const ImageEditResponseSchema = z.object({ created: z.number().int().optional(), job: z.string().optional(), data: z.array(z.object({ b64_json: z.string().optional(), width: z.number().optional(), height: z.number().optional(), content_type: z.string().optional(), operation: z.string().optional(), engine: z.string().optional(), model: z.string().optional(), ms: z.number().optional(), area: z.number().min(0).max(1).optional() }).passthrough()) });
 const ImageEditErrorSchema = z.object({ error: z.string(), code: z.string().optional(), job: z.string().optional() });
@@ -424,6 +434,11 @@ const imageEditsRoute = createRoute({ method: "post", path: "/images/edits", tag
 } });
 const imageEditResultRoute = createRoute({ method: "get", path: "/images/edits/{job}", tags: ["Roles"], summary: "The PNG a finished edit produced (kept in memory for a few minutes)", request: { params: z.object({ job: z.string() }) }, responses: { 200: { content: { "image/png": { schema: z.string().openapi({ format: "binary" }) } }, description: "The edited picture." }, 404: { content: { "application/json": { schema: ImageEditErrorSchema } }, description: "No such result (it expired or was never made)." } } });
 
+function moreReferences(form: Record<string, unknown>): Array<{ file: File; source: "generated" | "uploaded" | "household_photo" | undefined }> {
+  const found: Array<{ file: File; source: "generated" | "uploaded" | "household_photo" | undefined }> = [];
+  for (let n = 3; n <= H3_REFERENCE_FIELDS; n += 1) if (form[`reference${n}`] instanceof File) found.push({ file: form[`reference${n}`] as File, source: form[`reference${n}_source`] as "generated" | "uploaded" | "household_photo" | undefined });
+  return found;
+}
 v1Routes.openapi(imageEditsRoute, async (c) => {
   const form = c.req.valid("form");
   if (form.operation === "segment") {
@@ -454,7 +469,7 @@ v1Routes.openapi(imageEditsRoute, async (c) => {
   if (form.operation === "edit" || form.operation === "edit_masked") {
     if (form.image.size === 0 || form.image.size > MAX_UPLOAD_BYTES) return jsonReply(c, { error: `The picture must be between 1 byte and ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.`, code: "too_large" }, 413, identityHeaders(null)) as never;
     if (form.mask && form.mask.size > MAX_UPLOAD_BYTES) return jsonReply(c, { error: "The mask is too big.", code: "too_large" }, 413, identityHeaders(null)) as never;
-    return editImages(c, { image: form.image, mask: form.mask, operation: form.operation, instruction: form.instruction, prompt: form.prompt, region: form.region, feather: form.feather, seed: form.seed, steps: form.steps, timeout_ms: form.timeout_ms, image_source: form.image_source, audience: form.audience, references: [...(form.reference ? [{ file: form.reference, source: form.reference_source }] : []), ...(form.reference2 ? [{ file: form.reference2, source: form.reference2_source }] : [])] }) as never;
+    return editImages(c, { image: form.image, mask: form.mask, operation: form.operation, instruction: form.instruction, prompt: form.prompt, region: form.region, feather: form.feather, seed: form.seed, steps: form.steps, timeout_ms: form.timeout_ms, image_source: form.image_source, audience: form.audience, model: form.model, references: [...(form.reference ? [{ file: form.reference, source: form.reference_source }] : []), ...(form.reference2 ? [{ file: form.reference2, source: form.reference2_source }] : []), ...moreReferences(form as Record<string, unknown>)] }) as never;
   }
   if (form.image.size === 0 || form.image.size > MAX_UPLOAD_BYTES) return jsonReply(c, { error: `The picture must be between 1 byte and ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.`, code: "too_large" }, 413, identityHeaders(null)) as never;
   if (form.mask && form.mask.size > MAX_UPLOAD_BYTES) return jsonReply(c, { error: "The mask is too big.", code: "too_large" }, 413, identityHeaders(null)) as never;

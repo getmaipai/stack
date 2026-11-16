@@ -1,5 +1,6 @@
 // Ids are literals, not imports from modelCatalog: the governor imports this file, and the catalog reaches the governor through settings (an import cycle). tests/tiers.test.ts checks each literal against the catalog constant.
 const STACK_IMAGE_ERNIE_ID = "ernie-image-turbo";
+const STACK_IMAGE_H3_ID = "minimax-h3-image";
 const STACK_IMAGE_KLEIN_ID = "flux2-klein-4b";
 const STACK_IMAGE_ZIMAGE_ID = "z-image-turbo";
 const STACK_MUSIC_MODEL_ID = "ace-step-1-5-turbo";
@@ -36,6 +37,9 @@ export const TIER_CANDIDATES: TierCandidate[] = [
   { id: "qwen3.8-27b-ud-q4-k-m", category: "chat", family: "qwen3.8", label: "Qwen3.8 27B", profiles: ["p64", "p128"], peaks: [{ options: { thinking: true }, peakBytes: 22_200_000_000, status: "unverified", note: "22.2 GB peak measured with thinking off and no MTP draft; the thinking figure and the MTP run are still open." }], tiers: ["boost"] },
   { id: "qwen3-6-35b-a3b-ud-q4-k-xl", category: "chat", family: "qwen3.6", label: "Qwen3.6 35B A3B", profiles: ["p64", "p128"], peaks: [{ options: { thinking: false }, peakBytes: 23_600_000_000, status: "measured", note: "Tier eval 2026-10-30: 70 tok/s, 9 of 9 searches." }], tiers: [], vetting: "MODEL-VET-01: replacement candidate for Muse at Standard; CHAT-AB-01, KS-BENCH-01 and a licence read come first." },
   { id: "ornith-1-5-122b-mlx-4bit", category: "chat", family: "ornith", label: "Ornith 122B", profiles: ["p128"], peaks: [{ options: {}, peakBytes: 68_700_000_000, status: "measured", note: "Measured design note peak." }], tiers: ["max"] },
+  // H3-IMAGE-STACK-01: MiniMax H3-Image goes first, so it is the recommended Standard and Boost picture model wherever it fits; the others stay as candidates. Resident (22 GB held, 19.7 GB measured) on p64 and p128; a streaming Standard candidate (2.5 GB held, 1.8 GB measured) on p16 and p32. Max stays on Qwen-Image: the 2048 and 4096 px Max numbers are an open bench (H3-MAX-01).
+  { id: STACK_IMAGE_H3_ID, category: "pictures", family: "minimax-h3", label: "MiniMax H3-Image", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 22_000_000_000, status: "measured", note: "Studio bakeoff 2026-11-15, 1024 x 1024, 6 steps: resident 11 to 15 s, 19.7 GB whole-process-tree peak (22 GB held); streaming from disk 27 to 33 s at 1.8 GB." }], tiers: ["standard", "boost"] },
+  { id: STACK_IMAGE_H3_ID, category: "pictures", family: "minimax-h3", label: "MiniMax H3-Image (streaming)", profiles: ["p16", "p32"], peaks: [{ options: { ditMode: "stream" }, peakBytes: 2_500_000_000, status: "measured", note: "Studio bakeoff 2026-11-15, 1024 x 1024, 6 steps: streaming from disk 27 to 33 s at 1.8 GB (2.5 GB held)." }], tiers: ["standard"] },
   { id: STACK_IMAGE_ERNIE_ID, category: "pictures", family: "ernie", label: "ERNIE Image Turbo", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 18_800_000_000, status: "measured" }], tiers: ["standard"] },
   { id: STACK_IMAGE_KLEIN_ID, category: "pictures", family: "klein", label: "FLUX.2 Klein 4B", profiles: ["p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 10_200_000_000, status: "measured" }], tiers: ["standard"] },
   { id: STACK_IMAGE_ZIMAGE_ID, category: "pictures", family: "z-image", label: "Z-Image Turbo", profiles: ["p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 25_800_000_000, status: "measured" }], tiers: ["boost"] },

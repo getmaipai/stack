@@ -329,8 +329,10 @@ async function pump(role: string): Promise<void> {
   preempt.catch(() => {});
   try {
     const imagePool = role === "image" && (next.kind === "image_generation" || next.kind === "image_edit_generative");
-    const warmWorker = imagePool ? "image-pool" : role === "video" ? "video-worker" : role === "music" ? "music-worker" : role === "stems" ? "stems-worker" : null;
-    const imageEdit = imagePool && next.kind === "image_edit_generative";
+    // MiniMax H3-Image has no warm worker (one process per picture), so it is admitted as its own burst job, not as the mflux pool.
+    const h3Picture = imagePool && (next.input as { family?: string } | null)?.family === "minimax-h3-image";
+    const warmWorker = imagePool && !h3Picture ? "image-pool" : role === "video" ? "video-worker" : role === "music" ? "music-worker" : role === "stems" ? "stems-worker" : null;
+    const imageEdit = imagePool && !h3Picture && next.kind === "image_edit_generative";
     const tier = (next.input as { tier?: JobTier } | null)?.tier;
     const videoQuiet = role === "video" ? jobs.get(next.id)?.input as { quiet_seconds?: number; quiet_max_wait_seconds?: number | null } | null : null;
     handle = await admitJob(next.id, { id: warmWorker ?? next.id, role, class: ROLES[role as keyof typeof ROLES]?.memoryClass ?? "burst", kind: "generator", caller: callerOf(next.id), ...(tier ? { tier } : {}), ...(warmWorker ? { retainWarm: true, keepAliveSeconds: 0 } : {}), ...(imageEdit ? { poolPeakBytes: GovernorRules.imagePoolPeakBytes } : {}), ...(videoQuiet?.quiet_seconds !== undefined ? { quietSeconds: videoQuiet.quiet_seconds } : {}), ...(videoQuiet?.quiet_max_wait_seconds !== undefined ? { quietMaxWaitSeconds: videoQuiet.quiet_max_wait_seconds } : {}), ...runner.options.generator.memory(jobs.get(next.id)!) }, preempt);

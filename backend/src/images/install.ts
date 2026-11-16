@@ -10,6 +10,8 @@ import { modelsDir } from "@/lib/paths";
 import { emit } from "@/lib/events";
 import { ensureImageGenEnvironment, imageGenEnvironmentReady, imageRequirementsFileFor } from "@/images/imageEngine";
 import { installPlanFor, type ImageFamilyId } from "@/images/models";
+import { ensureH3GenEnvironment, H3_GEN_NAME, h3GenEnvironmentReady, h3RequirementsFileFor } from "@/images/h3Engine";
+import { STACK_IMAGE_H3_ID } from "@/lib/modelCatalog";
 
 const inFlight = new Map<ImageFamilyId, string>();
 
@@ -42,6 +44,16 @@ export function startImageInstall(family: ImageFamilyId): { job: string; joined:
         done += pin.download.approx_bytes;
         const nextItems = getJob(job.id)?.items?.map((item) => item.id !== pin.id ? item : { ...item, completedBytes: item.totalBytes, state: "done" as const });
         updateJob(job.id, { completedBytes: done, ...(nextItems ? { items: nextItems } : {}) });
+      }
+      if (family === STACK_IMAGE_H3_ID) {
+        // MiniMax H3-Image runs in its own environment (h3-image-gen), not mflux's.
+        if (h3RequirementsFileFor() && !h3GenEnvironmentReady()) {
+          updateJob(job.id, { status: "building the picture engine", percent: 99 });
+          await ensureH3GenEnvironment((phase) => updateJob(job.id, { status: `building ${phase}` }), { signal: jobSignal(job.id) });
+        }
+        finishJob(job.id, { ok: true, result: { family } });
+        emit({ id: "engine.state", data: { engine: H3_GEN_NAME, state: "installed" } });
+        return;
       }
       if (imageRequirementsFileFor() && !imageGenEnvironmentReady()) {
         updateJob(job.id, { status: "building the picture engine", percent: 99 });

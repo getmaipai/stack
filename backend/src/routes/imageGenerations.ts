@@ -30,8 +30,9 @@ import { RESTORE_FAMILY, RESTORE_LABEL, RESTORE_PEAK_BYTES, RESTORE_SCALES, rest
 import { imageDimensions } from "@/media/maskStill";
 import {
   DEFAULT_FAMILY, familyInstalled, IMAGE_DEFAULT_SIZE, IMAGE_FAMILIES, IMAGE_FEATHER_DEFAULT, IMAGE_FEATHER_MAX, IMAGE_REFERENCES_MAX, IMAGE_MAX_COUNT, IMAGE_MAX_INPUT_BYTES, IMAGE_MAX_PROMPT_CHARS, IMAGE_QUEUE_MAX, imageAvailability, installedFamilies,
-  isFamilyId, parseSize, peakBytes, quantizeFor, type ImageFamilyId,
+  isFamilyId, parseSize, peakBytes, quantizeFor, referencesMaxFor, type ImageFamilyId,
 } from "@/images/models";
+import { STACK_IMAGE_H3_ID } from "@/lib/modelCatalog";
 import { IMAGE_EDIT_JOB_KIND, IMAGE_JOB_KIND, imageFailure, imagePreviewPath, imageProgress, imageTracker, stashImage, unstashImage } from "@/images/jobs";
 import { getGovernorStatus } from "@/lib/governor";
 
@@ -45,13 +46,13 @@ const LoraEntry = z.object({
   strength: z.number().min(0).max(2).optional().openapi({ description: "Alias of `scale`." }),
 });
 export const ImageGenerationBodySchema = z.object({
-  model: z.string().optional().openapi({ description: "`image` (the default), or a picture model id from GET /stack/v1/image (`flux2-klein-4b`, `z-image-turbo`, `ernie-image-turbo`). Choosing a LoRA selects the base model it was made for." }),
+  model: z.string().optional().openapi({ description: "`image` (the default), or a picture model id from GET /stack/v1/image (`flux2-klein-4b`, `z-image-turbo`, `ernie-image-turbo`, `qwen-image-2512-q8`, `minimax-h3-image`). Choosing a LoRA selects the base model it was made for." }),
   prompt: z.string().trim().min(1).max(IMAGE_MAX_PROMPT_CHARS),
   negative_prompt: z.string().max(IMAGE_MAX_PROMPT_CHARS).optional().openapi({ description: "Accepted. The distilled models run without guidance, so it has no effect on the picture." }),
   size: z.string().regex(/^\d{3,4}x\d{3,4}$/).optional().openapi({ description: `<width>x<height>, each 256 to 2048 and a multiple of 16. Default ${IMAGE_DEFAULT_SIZE}.`, example: IMAGE_DEFAULT_SIZE }),
   n: z.number().int().min(1).max(IMAGE_MAX_COUNT).optional().openapi({ description: `Pictures to make, 1 to ${IMAGE_MAX_COUNT}, seeds seed, seed+1, and so on. Default 1.` }),
   seed: z.number().int().min(0).max(4_294_967_295).optional(),
-  steps: z.number().int().min(1).max(30).optional().openapi({ description: "Denoising steps. Default 4 for Klein, 9 for Z-Image-Turbo, or 8 for ERNIE-Image-Turbo." }),
+  steps: z.number().int().min(1).max(30).optional().openapi({ description: "Denoising steps. Default 4 for Klein, 9 for Z-Image-Turbo, or 8 for ERNIE-Image-Turbo. MiniMax H3-Image always runs 6: a different value is ignored and the reply says so in `notes`." }),
   loras: z.array(LoraEntry).max(MAX_LORAS_PER_IMAGE).optional().openapi({ description: "LoRAs from the household library (GET /stack/v1/image/loras), by id or sha256, with a scale. Home decides which ids this caller may name." }),
   audience: z.enum(["all-ages", "adult"]).optional().openapi({ description: "Who the picture is for, set by Home from the person's age band and the surface. Default all-ages. An adult-only LoRA in the list with audience all-ages is refused (422 lora_not_allowed)." }),
   init_image: z.string().optional().openapi({ description: "Image to image: the starting picture, base64 (a data: URL is fine), PNG, JPEG or WebP, at most 40 MB." }),
@@ -71,7 +72,7 @@ const PicSchema = z.object({
   seed: z.number().int(), width: z.number().int(), height: z.number().int(), model: z.string(), steps: z.number().int(), ms: z.number().int(), lora_ids: z.array(z.string()),
   mode: z.enum(["generate", "image-to-image", "edit", "edit-masked", "restore"]),
 });
-export const ImageResponseSchema = z.object({ created: z.number().int(), job: z.string(), data: z.array(PicSchema) });
+export const ImageResponseSchema = z.object({ created: z.number().int(), job: z.string(), data: z.array(PicSchema), notes: z.array(z.string()).optional().openapi({ description: "Plain sentences about what the Stack ignored or changed in the request (for example a `steps` value a fixed-step model does not take). Absent when there is nothing to say." }) });
 export const ImageErrorBody = z.object({ error: z.string(), code: z.string(), job: z.string().optional() });
 const JobStatusSchema = z.object({
   job: z.string(),
@@ -88,6 +89,7 @@ const JobStatusSchema = z.object({
   preview_url: z.string().nullable().openapi({ description: "GET this for the latest preview JPEG while running (the `v` query changes with every new one); null when none exists yet, the request asked for none, or the job ended." }),
   preview_step: z.number().int().nullable().openapi({ description: "The step the preview shows." }),
   position: z.number().int().nullable().openapi({ description: "Place in line while queued (1 is next)." }),
+  notes: z.array(z.string()).optional().openapi({ description: "What the Stack ignored or changed in the request; the same sentences the reply carries." }),
   tier: TierStatusSchema,
   error: z.string().nullable(), code: z.string().nullable(),
   data: z.array(PicSchema),
@@ -166,8 +168,11 @@ function statusOf(job: Job) {
     error: job.state === "failed" ? failure?.message ?? job.reason ?? "The picture failed." : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? job.reason ?? "Paused: this computer is low on memory." : "The picture was cancelled.") : null,
     code: job.state === "failed" ? (job.status === "never_fits" ? "never_fits" : job.status === "no_memory" ? "no_memory" : failure?.code ?? "failed") : job.state === "cancelled" ? (job.status === PAUSED_LOW_MEMORY ? "no_memory" : "cancelled") : null,
     data: result ? entries(result, false) : [],
+    ...(imageNotes(job) ? { notes: imageNotes(job)! } : {}),
   };
 }
+/** The notes the job's submitter was given (the job record carries them so a poller sees what a waiter saw). */
+function imageNotes(job: Job): string[] | null { const notes = (job.input as { notes?: unknown } | null)?.notes; return Array.isArray(notes) && notes.length > 0 ? notes.filter((note): note is string => typeof note === "string") : null; }
 
 /** Picks the base model: the one named, else the one the LoRAs were made for, else the default, else whatever is installed. */
 function chooseFamily(model: string | undefined, loraRequests: LoraRequest[]): { family: ImageFamilyId } | { error: { status: number; code: string; message: string } } {
@@ -192,15 +197,18 @@ function chooseFamily(model: string | undefined, loraRequests: LoraRequest[]): {
   return { family: familyInstalled(DEFAULT_FAMILY) ? DEFAULT_FAMILY : installed[0]! };
 }
 
+/** The sentence for a `steps` a fixed-step model did not take. */
+export const stepsNote = (label: string, asked: number, fixed: number): string => `${label} always runs ${fixed} steps, so steps: ${asked} was ignored.`;
+
 function loraRequests(list: ImageGenerationBody["loras"]): LoraRequest[] {
   return (list ?? []).map((entry) => ({ ...(entry.id !== undefined ? { id: entry.id } : {}), ...(entry.sha256 !== undefined ? { sha256: entry.sha256 } : {}), ...(entry.scale !== undefined ? { strength: entry.scale } : entry.strength !== undefined ? { strength: entry.strength } : {}) }));
 }
 
 type Source = "generated" | "uploaded" | "household_photo" | undefined;
-async function waitAndReply<T extends Context>(c: T, jobId: string, createdAt: string, timeoutMs: number) {
+async function waitAndReply<T extends Context>(c: T, jobId: string, createdAt: string, timeoutMs: number, notes: string[] = []) {
   const settled = await waitForJob(jobId, timeoutMs);
   const created = Math.floor(new Date(createdAt).getTime() / 1000);
-  if (!settled || settled.state === "queued" || settled.state === "running" || settled.state === "stalled") return reply(c, { created, job: jobId, data: [] }, 202);
+  if (!settled || settled.state === "queued" || settled.state === "running" || settled.state === "stalled") return reply(c, { created, job: jobId, data: [], ...(notes.length ? { notes } : {}) }, 202);
   if (settled.state === "cancelled" && settled.status === PAUSED_LOW_MEMORY) return fail(c, 503, "no_memory", settled.reason ?? "Paused: this computer is low on memory.", settled.id);
   if (settled.state === "cancelled") return fail(c, 499, "cancelled", "The picture was cancelled.", settled.id);
   if (settled.state === "failed" && settled.status === "never_fits") return fail(c, 503, "never_fits", settled.reason ?? "This is too big for this computer even with everything else paused.", settled.id);
@@ -211,7 +219,7 @@ async function waitAndReply<T extends Context>(c: T, jobId: string, createdAt: s
   }
   const meta = readResult(settled.id);
   if (!meta) return fail(c, 500, "expired", "The picture is no longer held. Make it again.", settled.id);
-  return reply(c, { created, job: settled.id, data: entries(meta, true) }, 200);
+  return reply(c, { created, job: settled.id, data: entries(meta, true), ...(meta.notes?.length ? { notes: meta.notes } : {}) }, 200);
 }
 
 function precheck<T extends Context>(c: T, kind: string): Response | null {
@@ -235,10 +243,15 @@ export async function generateImages<T extends Context>(c: T, body: ImageGenerat
   const info = IMAGE_FAMILIES[family];
   const tier = getGovernorStatus().tier;
   if (!(info.tiers as string[]).includes(tier)) return fail(c, 503, "not_available_on_this_computer", `${info.label} needs a computer with more memory than this one. Use FLUX.2 Klein 4B instead.`);
-  const steps = body.steps ?? info.stepsDefault;
+  // A fixed-step model (MiniMax H3-Image) ignores a different `steps` and says so; it is not an error.
+  const fixedSteps = info.stepsMax === info.stepsDefault;
+  const notes: string[] = [];
+  if (fixedSteps && body.steps !== undefined && body.steps !== info.stepsDefault) notes.push(stepsNote(info.label, body.steps, info.stepsDefault));
+  const steps = fixedSteps ? info.stepsDefault : body.steps ?? info.stepsDefault;
   if (steps > info.stepsMax) return fail(c, 422, "bad_steps", `${info.label} needs at most ${info.stepsMax} steps; ${info.stepsDefault} is the default.`);
   let initImage: Uint8Array | null = null;
   let derived = false;
+  if (body.init_image !== undefined && family === STACK_IMAGE_H3_ID) return fail(c, 422, "unsupported_init_image", `${info.label} does not start from a picture. Send the picture and what to change to /v1/images/edits instead.`);
   if (body.init_image !== undefined) {
     initImage = decodeImage(body.init_image);
     if (!initImage || !looksLikePicture(initImage)) return fail(c, 422, "bad_image", "The starting picture could not be read. Send a PNG, JPEG or WebP as base64.");
@@ -252,22 +265,24 @@ export async function generateImages<T extends Context>(c: T, body: ImageGenerat
   }
   if (activeJobs() >= IMAGE_QUEUE_MAX) return fail(c, 429, "queue_full", `${IMAGE_QUEUE_MAX} pictures are already waiting. Try again when one finishes.`);
   const quantize = quantizeFor(family, "generate", tier);
-  const verdict = governorDecides(body.tier) ? { ok: true as const } : memoryVerdict(peakBytes(family, "generate", quantize, loras.length));
+  const verdict = governorDecides(body.tier) ? { ok: true as const } : memoryVerdict(peakBytes(family, "generate", quantize, loras.length, 1, family === STACK_IMAGE_H3_ID));
   if (!verdict.ok) return fail(c, 503, "no_memory", verdict.reason);
   const seed = body.seed ?? Math.floor(Math.random() * 2 ** 32);
   const token = crypto.randomUUID();
   const loraIds = loras.map((lora) => lora.record.id);
   stashImage(token, {
     op: "generate", prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, family, quantize, width: size.width, height: size.height, steps, seed, count,
-    loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, initImage, strength: body.strength ?? 0.6, image: null, mask: null, region: null, feather: 0, derived, preview: body.preview !== false,
+    loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, initImage, strength: body.strength ?? 0.6, image: null, mask: null, region: null, feather: 0, derived, preview: body.preview !== false, ...(notes.length ? { notes } : {}),
   });
-  const submitted = submitJob({ caller: admissionCaller(c), kind: IMAGE_JOB_KIND, role: "image", input: { token, family, mode: "generate", quantize, size: `${size.width}x${size.height}`, steps, seed, count, lora_ids: loraIds, image_to_image: initImage !== null, ...adultInput(body.audience), ...tierInput(body.tier) } });
+  const submitted = submitJob({ caller: admissionCaller(c), kind: IMAGE_JOB_KIND, role: "image", input: { token, family, mode: "generate", quantize, size: `${size.width}x${size.height}`, steps, seed, count, lora_ids: loraIds, image_to_image: initImage !== null, ...(notes.length ? { notes } : {}), ...adultInput(body.audience), ...tierInput(body.tier) } });
   if ("refused" in submitted) return fail(c, 503, submitted.code ?? "unsupported", submitted.reason);
-  return waitAndReply(c, submitted.job.id, submitted.job.createdAt, body.timeout_ms ?? DEFAULT_WAIT_MS);
+  return waitAndReply(c, submitted.job.id, submitted.job.createdAt, body.timeout_ms ?? DEFAULT_WAIT_MS, notes);
 }
 
 export interface EditForm {
-  image: File; mask?: File; operation: "edit" | "edit_masked"; instruction?: string; prompt?: string; region?: string; feather?: number; seed?: number; steps?: number; timeout_ms?: number; image_source?: Source; audience?: "all-ages" | "adult"; /** IMGEDIT-01: up to two more pictures the edit may draw on (a person to add, an object to copy). Each is declared like the main picture. */ references?: Array<{ file: File; source?: Source }>;
+  /** The picture model: `flux2-klein-4b` (the default) or `minimax-h3-image`. */
+  model?: string;
+  image: File; mask?: File; operation: "edit" | "edit_masked"; instruction?: string; prompt?: string; region?: string; feather?: number; seed?: number; steps?: number; timeout_ms?: number; image_source?: Source; audience?: "all-ages" | "adult"; /** IMGEDIT-01: up to two more pictures the edit may draw on (a person to add, an object to copy), fifteen for MiniMax H3-Image. Each is declared like the main picture. */ references?: Array<{ file: File; source?: Source }>;
 }
 
 /** Normalized x,y,w,h from "0.1,0.2,0.3,0.3", or the sentence to return. */
@@ -294,10 +309,17 @@ export async function editImages<T extends Context>(c: T, form: EditForm) {
   if (!(feather >= 0 && feather <= IMAGE_FEATHER_MAX)) return fail(c, 422, "bad_feather", `The feather is 0 to ${IMAGE_FEATHER_MAX} pixels.`);
   const image = new Uint8Array(await form.image.arrayBuffer());
   if (!looksLikePicture(image)) return fail(c, 422, "bad_image", "The picture could not be read. Send a PNG, JPEG or WebP.");
+  // The model that makes the edit: FLUX.2 Klein 4B unless MiniMax H3-Image is named (H3-IMAGE-STACK-01).
+  const asked = form.model && form.model !== "image" ? form.model : null;
+  if (asked !== null && !isFamilyId(asked)) return fail(c, 422, "unknown_model", `Unknown picture model "${asked.slice(0, 60)}". Edits use flux2-klein-4b or ${STACK_IMAGE_H3_ID}.`);
+  const family: ImageFamilyId = asked ?? "flux2-klein-4b";
+  if (!IMAGE_FAMILIES[family].edit) return fail(c, 422, "unsupported_edit", `${IMAGE_FAMILIES[family].label} cannot edit a picture. Edits use FLUX.2 Klein 4B or MiniMax H3-Image.`);
+  const h3 = family === STACK_IMAGE_H3_ID;
+  if (h3 && (form.operation === "edit_masked" || form.mask || region)) return fail(c, 422, "unsupported_edit", `${IMAGE_FAMILIES[family].label} changes a picture by instruction only. Leave out the mask and region, or use FLUX.2 Klein 4B for a masked edit.`);
   // IMGEDIT-01: reference pictures ride beside the main one. Any picture is accepted; where it came from only decides whether the result is recorded as a free starting picture.
   const refs: Uint8Array[] = [];
   let derived = form.image_source !== "generated";
-  for (const ref of (form.references ?? []).slice(0, IMAGE_REFERENCES_MAX)) {
+  for (const ref of (form.references ?? []).slice(0, referencesMaxFor(family))) {
     const bytes = new Uint8Array(await ref.file.arrayBuffer());
     if (!looksLikePicture(bytes)) return fail(c, 422, "bad_image", "A reference picture could not be read. Send a PNG, JPEG or WebP.");
     if (ref.source !== "generated") derived = true;
@@ -305,20 +327,22 @@ export async function editImages<T extends Context>(c: T, form: EditForm) {
   }
   const mask = form.mask ? new Uint8Array(await form.mask.arrayBuffer()) : null;
   if (mask && !looksLikePicture(mask)) return fail(c, 422, "bad_image", "The mask could not be read. Send a PNG, JPEG or WebP.");
-  const family: ImageFamilyId = "flux2-klein-4b";
   if (!familyInstalled(family)) return fail(c, 503, "not_installed", `${IMAGE_FAMILIES[family].label} is not installed yet. Install it from Home's Engines page, then try again.`);
   const tier = getGovernorStatus().tier;
   if (!(IMAGE_FAMILIES[family].tiers as string[]).includes(tier)) return fail(c, 503, "not_available_on_this_computer", "Editing needs a computer with 32 GB of memory or more.");
   if (activeJobs() >= IMAGE_QUEUE_MAX) return fail(c, 429, "queue_full", `${IMAGE_QUEUE_MAX} pictures are already waiting. Try again when one finishes.`);
-  const verdict = memoryVerdict(peakBytes(family, "edit", null, 0));
+  const verdict = memoryVerdict(peakBytes(family, "edit", null, 0, 1, h3));
   if (!verdict.ok) return fail(c, 503, "no_memory", verdict.reason);
-  const steps = form.steps ?? IMAGE_FAMILIES[family].stepsDefault;
+  const info = IMAGE_FAMILIES[family];
+  const notes: string[] = [];
+  if (info.stepsMax === info.stepsDefault && form.steps !== undefined && form.steps !== info.stepsDefault) notes.push(stepsNote(info.label, form.steps, info.stepsDefault));
+  const steps = info.stepsMax === info.stepsDefault ? info.stepsDefault : form.steps ?? info.stepsDefault;
   const seed = form.seed ?? Math.floor(Math.random() * 2 ** 32);
   const token = crypto.randomUUID();
-  stashImage(token, { op: "edit", prompt: instruction, negativePrompt: null, family, quantize: null, width: 0, height: 0, steps, seed, count: 1, loras: [], loraIds: [], initImage: null, strength: 0, image, mask, region: region ?? null, feather, references: refs, derived });
-  const submitted = submitJob({ caller: admissionCaller(c), kind: IMAGE_EDIT_JOB_KIND, role: "image", input: { token, family, mode: "edit", quantize: null, steps, seed, count: 1, ...adultInput(form.audience), lora_ids: [], masked: mask !== null || region !== null, references: refs.length } });
+  stashImage(token, { op: "edit", prompt: instruction, negativePrompt: null, family, quantize: null, width: 0, height: 0, steps, seed, count: 1, loras: [], loraIds: [], initImage: null, strength: 0, image, mask, region: region ?? null, feather, references: refs, derived, ...(notes.length ? { notes } : {}) });
+  const submitted = submitJob({ caller: admissionCaller(c), kind: IMAGE_EDIT_JOB_KIND, role: "image", input: { token, family, mode: "edit", quantize: null, steps, seed, count: 1, ...adultInput(form.audience), lora_ids: [], masked: mask !== null || region !== null, references: refs.length, ...(notes.length ? { notes } : {}) } });
   if ("refused" in submitted) return fail(c, 503, submitted.code ?? "unsupported", submitted.reason);
-  return waitAndReply(c, submitted.job.id, submitted.job.createdAt, form.timeout_ms ?? DEFAULT_WAIT_MS);
+  return waitAndReply(c, submitted.job.id, submitted.job.createdAt, form.timeout_ms ?? DEFAULT_WAIT_MS, notes);
 }
 
 export interface RestoreForm { image: File; scale?: number; seed?: number; timeout_ms?: number; image_source?: Source; audience?: "all-ages" | "adult"; }
