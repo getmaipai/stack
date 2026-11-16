@@ -2586,6 +2586,25 @@
           "basis": "pins"
         },
         {
+          "id": "video-minimax-h3",
+          "label": "Videos with sound (MiniMax H3)",
+          "note": "Not installable yet, set MAIPAI_H3_VIDEO_HOME. Five-second clips with stereo sound; model files must be supplied locally.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 0,
+          "installed_bytes": 0,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "minimax-h3"
+          ],
+          "engines": [
+            "engine:minimax-h3-video-gen"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "video-mask",
           "label": "Subject masks on clips (SAM 2.1)",
           "note": "Optional background removal and cutouts for clips. Apache-2.0; 4.9 GB measured running peak.",

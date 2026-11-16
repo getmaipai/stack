@@ -4259,7 +4259,9 @@
                             "enum": [
                               "quick",
                               "ltx25",
-                              "ltx25max"
+                              "ltx25max",
+                              "h3",
+                              "h3stream"
                             ]
                           },
                           "audio": {
@@ -4408,7 +4410,9 @@
                             "enum": [
                               "quick",
                               "ltx25",
-                              "ltx25max"
+                              "ltx25max",
+                              "h3",
+                              "h3stream"
                             ]
                           },
                           "audio": {
@@ -4817,7 +4821,9 @@
                             "enum": [
                               "quick",
                               "ltx25",
-                              "ltx25max"
+                              "ltx25max",
+                              "h3",
+                              "h3stream"
                             ]
                           },
                           "audio": {
@@ -4966,7 +4972,9 @@
                             "enum": [
                               "quick",
                               "ltx25",
-                              "ltx25max"
+                              "ltx25max",
+                              "h3",
+                              "h3stream"
                             ]
                           },
                           "audio": {
@@ -5218,7 +5226,9 @@
                             "enum": [
                               "quick",
                               "ltx25",
-                              "ltx25max"
+                              "ltx25max",
+                              "h3",
+                              "h3stream"
                             ]
                           },
                           "audio": {
@@ -5367,7 +5377,9 @@
                             "enum": [
                               "quick",
                               "ltx25",
-                              "ltx25max"
+                              "ltx25max",
+                              "h3",
+                              "h3stream"
                             ]
                           },
                           "audio": {
@@ -5738,7 +5750,9 @@
                             "enum": [
                               "quick",
                               "ltx25",
-                              "ltx25max"
+                              "ltx25max",
+                              "h3",
+                              "h3stream"
                             ]
                           },
                           "audio": {
