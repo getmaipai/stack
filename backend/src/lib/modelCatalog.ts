@@ -915,6 +915,37 @@ export const STACK_VIDEO_MASK_MODEL: CatalogModelLike = {
 };
 export const STACK_VIDEO_MASK_MODELS: CatalogModelLike[] = [STACK_VIDEO_MASK_MODEL];
 
+// MODELS-STAGED-2026-11-15: weights fetched to the Studio's hub cache on Jesse's approval, before any engine uses them.
+// Nothing here is in STACK_MODELS, so no first-run install, tier plan or component row names them until an engine is
+// wired; each is checked by sha256 and by size against the installed hub-cache blob (tests/stagedModels.test.ts).
+// All were read from the authors' own repositories on 2026-11-15, never a mirror. The pickled .pth files
+// (GFPGAN, facexlib) are data until a loader is written and reviewed: nothing loads them yet.
+export const STACK_STAGED_STATE = "installed" as const;
+/** GFPGAN v1.4 face repair (TencentARC/GFPGAN, release v1.3.0 asset GFPGANv1.4.pth). Apache-2.0 (LICENSE, 2026-11-15; its third-party notices cover tqdm only). */
+export const STACK_FACE_REPAIR_GFPGAN: CatalogModelLike = {
+  id: "gfpgan-v1-4", role: "image", repo: "TencentARC/GFPGAN", license: "Apache-2.0", revision: "v1.3.0", engine: "face-repair",
+  sizing: { profile: "p32", quantization: "fp32" },
+  download: { url: "https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.4.pth", sha256: "e2cd4703ab14f4d01fd1383a8a8b266f9a5833dacee8e6a79d3bf21a1b6be5ad", approx_bytes: 348_632_874, hub_file: "GFPGANv1.4.pth" },
+};
+/** facexlib face detector GFPGAN calls first (xinntao/facexlib release v0.1.0). MIT. */
+export const STACK_FACE_REPAIR_DETECTOR: CatalogModelLike = {
+  id: "facexlib-detection-resnet50", role: "image", repo: "xinntao/facexlib", license: "MIT", revision: "v0.1.0", engine: "face-repair", component: "face-repair-detector",
+  download: { url: "https://github.com/xinntao/facexlib/releases/download/v0.1.0/detection_Resnet50_Final.pth", sha256: "6d1de9c2944f2ccddca5f5e010ea5ae64a39845a86311af6fdf30841b0a5a16d", approx_bytes: 109_497_761, hub_file: "detection_Resnet50_Final.pth" },
+};
+/** facexlib face parser GFPGAN pastes the repaired face back with (xinntao/facexlib release v0.2.2). MIT. */
+export const STACK_FACE_REPAIR_PARSER: CatalogModelLike = {
+  id: "facexlib-parsing-parsenet", role: "image", repo: "xinntao/facexlib", license: "MIT", revision: "v0.2.2", engine: "face-repair", component: "face-repair-parser",
+  download: { url: "https://github.com/xinntao/facexlib/releases/download/v0.2.2/parsing_parsenet.pth", sha256: "3d558d8d0e42c20224f13cf5a29c79eba2d59913419f945545d8cf7b72920de2", approx_bytes: 85_331_193, hub_file: "parsing_parsenet.pth" },
+};
+/** Chatterbox voice change: the S3Gen decoder (ResembleAI/chatterbox, s3gen.safetensors) renders a source speaker's speech tokens in the reference voice. MIT. The repository's pickled conds.pt and the .pt twins are not installed. */
+export const STACK_VOICE_CHANGE_CHATTERBOX: CatalogModelLike = {
+  id: "chatterbox-vc-s3gen", role: "tts", repo: "ResembleAI/chatterbox", license: "MIT", revision: "5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18", engine: "chatterbox-vc",
+  download: { url: hfUrl("ResembleAI/chatterbox/resolve/5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18/s3gen.safetensors"), sha256: "2b78103c654207393955e4900aac14a12de8ef25f4b09424f1ef91941f161d4e", approx_bytes: 1_056_484_620, hub_file: "s3gen.safetensors" },
+};
+export const STACK_STAGED_MODELS: CatalogModelLike[] = [STACK_FACE_REPAIR_GFPGAN, STACK_FACE_REPAIR_DETECTOR, STACK_FACE_REPAIR_PARSER, STACK_VOICE_CHANGE_CHATTERBOX];
+/** Held by the coordinator on 2026-11-15 (a possible engine switch may replace them): recorded, never downloaded. */
+export const STACK_HELD_MODELS = ["LTX-2.5 IC-LoRA adapters", "CrossView-Warp adapter", "MoGe-2", "MuseTalk 1.5", "LatentSync 1.6"] as const;
+
 // MUSIC-GEN-01 (docs/design/music-generation-2026-10-17.md in Home, section
 // 3): the `music` role's pins. ACE-Step 1.5 (MIT; the card states it was
 // trained on licensed, royalty-free and synthetic audio and that output may
@@ -1582,7 +1613,11 @@ export const ROLE_CANDIDATES: Partial<Record<string, RoleCandidate[]>> = {
   tts: [
     { name: "Kokoro 82M through the stt worker's runtime, rejected by the owner's ear on 2026-09-04; the alternative if he reverses it", kind: "model", source: "dev.md, The speech roles" },
   ],
+  image: [
+    { name: "GFPGAN v1.4 face repair with the facexlib detector and parser (Apache-2.0 and MIT, installed in the hub cache, no engine yet)", kind: "model", source: "STACK_STAGED_MODELS, 2026-11-15" },
+  ],
   video: [
+    { name: "HELD, not downloaded (a possible engine switch): LTX-2.5 IC-LoRA adapters, CrossView-Warp adapter with MoGe-2, MuseTalk 1.5, LatentSync 1.6", kind: "model", source: "coordinator hold, 2026-11-15" },
     { name: "Kandinsky 6.0 Lite distill (3B, MIT, sound-capable), the second pin; no MLX port yet", kind: "model", source: "docs/design/video-generation-2026-10-17.md in Home, VIDEO-GEN-10" },
     { name: "Wan2.2 A14B (the quality profile, two 14B experts)", kind: "model", source: "docs/design/video-generation-2026-10-17.md in Home, VIDEO-GEN-10" },
   ],
