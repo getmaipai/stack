@@ -38,6 +38,8 @@ import { ensureVideoGenEnvironment, tierAvailability as videoAvailability, video
 import { ensureMusicGenEnvironment, tierAvailability as musicAvailability, musicGen, musicGenEnvironmentReady, musicGenRoot, MUSIC_GEN_NAME } from "@/music/musicGen";
 import { ensureSfxGenEnvironment, sfxGen, sfxGenEnvironmentReady, sfxGenRoot, sfxTierAvailability, SFX_GEN_NAME } from "@/sound/sfxGen";
 import { SOUND_JOB_KIND } from "@/sound/jobs";
+import { SCORE_JOB_KIND } from "@/score/jobs";
+import { ensureScoreGenEnvironment, scoreGenEnvironmentReady, scoreGenRoot, scoreRequirementsFileFor, SCORE_GEN_NAME } from "@/score/scoreGen";
 import { align, ALIGN_NAME, ensureAlignEnvironment, alignRoot, alignEnvironmentReady } from "@/align/align";
 import { BEATS_JOB_KIND } from "@/beats/jobs";
 import { beats, BEATS_NAME, ensureBeatsEnvironment, beatsRoot, beatsEnvironmentReady } from "@/beats/beats";
@@ -110,7 +112,7 @@ const GB = 1_000_000_000;
 const ENV_BYTES = { align: engineDownloadBytes("align") ?? 0.3 * GB, beats: engineDownloadBytes("beats") ?? 0.5 * GB, stems: engineDownloadBytes("stems") ?? 0.25 * GB, voiceConvert: engineDownloadBytes("voice-convert") ?? 4 * GB, recordedSpeech: engineDownloadBytes("recorded-speech") ?? 1.7 * GB, image: engineDownloadBytes("image-gen") ?? 1.1 * GB, h3: engineDownloadBytes("h3-image-gen") ?? 0.08 * GB, video: engineDownloadBytes("video-gen") ?? 1.0 * GB, ltx25: engineDownloadBytes("ltx25-gen") ?? 0.25 * GB, ltx25max: engineDownloadBytes("ltx25-max-gen") ?? 0.25 * GB, mask: engineDownloadBytes("mask-gen") ?? 0.6 * GB, music: engineDownloadBytes("music-gen") ?? 0.8 * GB, tools: engineDownloadBytes("image-tools") ?? 0.4 * GB, pocket: engineDownloadBytes("pocket-tts") ?? 0.72 * GB, mlxAudio: engineDownloadBytes("mlx-audio") ?? 0.47 * GB };
 /** The disk plan's row for a component, where the plan has one (its optional rows are the wizard's unchecked extras). */
 /** The install-plan row each component stands for (the size and need shown beside it). A test keeps every plan row covered. */
-export const DISK_ROW: Record<string, string> = { "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "ernie-image-turbo": "pictures-ernie", "qwen-image-2512-q8": "pictures-qwen", "minimax-h3-image": "pictures-h3", "seedvr2-3b": "pictures-clearer", "image-tools": "image-tools", ffmpeg: "ffmpeg", "shazam-signature": "shazam-signature", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fish-audio-drama-3-4bit": "recorded-speech", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "sam2.1-hiera-small": "video-mask", "ace-step-1-5-turbo": "music", "ace-step-1-5-xl-turbo-bf16": "music-boost", "ace-step-1-5-xl-sft-bf16": "music-max", "htdemucs": "stems", "htdemucs_ft": "stems-ft", "htdemucs_6s": "stems-6s", "mms-fa-align": "align", "soulx-singer-svc": "voice-convert", "soulx-singer-rmvpe": "voice-convert", "soulx-singer-whisper-base": "voice-convert", "ltx-2-5-q8-distilled-mlx": "video-ltx25", "ltx-2-5-bf16-distilled-mlx-max": "video-ltx25-max", "stable-audio-3-small-sfx": "sound-effects" };
+export const DISK_ROW: Record<string, string> = { "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "z-image-turbo": "pictures-zimage", "ernie-image-turbo": "pictures-ernie", "qwen-image-2512-q8": "pictures-qwen", "minimax-h3-image": "pictures-h3", "seedvr2-3b": "pictures-clearer", "image-tools": "image-tools", ffmpeg: "ffmpeg", "shazam-signature": "shazam-signature", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fish-audio-drama-3-4bit": "recorded-speech", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "sam2.1-hiera-small": "video-mask", "ace-step-1-5-turbo": "music", "ace-step-1-5-xl-turbo-bf16": "music-boost", "ace-step-1-5-xl-sft-bf16": "music-max", "htdemucs": "stems", "htdemucs_ft": "stems-ft", "htdemucs_6s": "stems-6s", "mms-fa-align": "align", "soulx-singer-svc": "voice-convert", "soulx-singer-rmvpe": "voice-convert", "soulx-singer-whisper-base": "voice-convert", "ltx-2-5-q8-distilled-mlx": "video-ltx25", "ltx-2-5-bf16-distilled-mlx-max": "video-ltx25-max", "stable-audio-3-small-sfx": "sound-effects", "score-gen": "score-transcription" };
 
 const envImage: EnvDef = { name: "image-gen", approxBytes: ENV_BYTES.image, root: imageGenRoot, ready: imageGenEnvironmentReady, build: (onPhase, signal) => ensureImageGenEnvironment(onPhase, { signal }), stop: () => imageGen.stop() };
 // MiniMax H3-Image's own environment (h3-image-gen). It has no warm worker, so nothing needs stopping before it is rebuilt.
@@ -166,6 +168,7 @@ const envSfx: EnvDef = {
     await ensureSfxGenEnvironment(onPhase, { signal });
   },
 };
+const envScore: EnvDef = { name: SCORE_GEN_NAME, approxBytes: engineDownloadBytes(SCORE_GEN_NAME) ?? 180 * 1024 * 1024, root: scoreGenRoot, ready: scoreGenEnvironmentReady, build: (onPhase, signal) => ensureScoreGenEnvironment(onPhase, signal) };
 const envAlign: EnvDef = { name: ALIGN_NAME, approxBytes: ENV_BYTES.align, root: alignRoot, ready: alignEnvironmentReady, build: (onPhase, signal) => ensureAlignEnvironment(onPhase, signal), stop: () => align.stop() };
 const envBeats: EnvDef = { name: BEATS_NAME, approxBytes: ENV_BYTES.beats, root: beatsRoot, ready: beatsEnvironmentReady, build: (onPhase, signal) => ensureBeatsEnvironment(onPhase, signal), stop: () => beats.stop() };
 const envStems: EnvDef = { name: STEMS_NAME, approxBytes: ENV_BYTES.stems, root: stemsRoot, ready: stemsEnvironmentReady, build: (onPhase, signal) => ensureStemsEnvironment(onPhase, signal), stop: () => stems.stop() };
@@ -236,6 +239,7 @@ const LABELS: Record<string, { label: string; summary: string }> = {
   "ernie-image-turbo": { label: "Pictures: ERNIE-Image-Turbo", summary: "Draws words inside pictures correctly. Makes new pictures from a sentence; FLUX.2 Klein stays for edits." },
   "ace-step-1-5-turbo": { label: "Music: ACE-Step 1.5", summary: "Makes and changes songs in chat" },
   "stable-audio-3-small-sfx": { label: "Make sound effects (Stable Audio 3 Small-SFX)", summary: "Makes short sound effects and ambience from a sentence, up to 47 seconds. About 3.5 GB, and the maker's licence applies." },
+  "score-gen": { label: "Score transcription (Spotify Basic Pitch)", summary: "Turns audio into MIDI and a note list. The small model is bundled with the package under Apache-2.0." },
   "ace-step-1-5-xl-turbo-bf16": { label: "Music: Boost (ACE-Step XL Turbo)", summary: "A larger song model with clearer voices, used for Boost songs. About 10 GB; a Boost song takes about a minute." },
   "ace-step-1-5-xl-sft-bf16": { label: "Music: Max (ACE-Step XL SFT)", summary: "The best song model, with its larger planning model, used for Max songs. About 18 GB; a Max song takes about three minutes." },
   "fastwan2-2-ti2v-5b-mlx-bf16": { label: "Video: Quick (Wan 2.2 FastWan 5B)", summary: "Makes short silent video clips from words or a picture." },
@@ -399,6 +403,7 @@ export function componentDefs(): UnitDef[] {
       return activeJobFor((kind) => kind === SOUND_JOB_KIND) ? "A sound is waiting or being made right now." : null;
     },
   });
+  units.push({ id: "score-gen", ...LABELS["score-gen"]!, group: "music", role: "music", pins: [], envs: [envScore], tiers: ["p16", "p32", "p64", "p128"], platformBlock: () => scoreRequirementsFileFor() ? null : `Score transcription is not available on ${process.platform} ${process.arch} yet.`, usedBy: () => ["Audio score transcription"], busy: () => activeJobFor((kind) => kind === SCORE_JOB_KIND) ? "A score is waiting or being made right now." : null });
   units.push({ id: STACK_MUSIC_WHISPER.id, label: "Music: sung words check", summary: "Transcribes finished songs so Home can check the words.", group: "music", role: "music", pins: [STACK_MUSIC_WHISPER], envs: [envMusic], tiers: ["p64", "p128"], usedBy: () => ["Checking words in finished songs"], busy: () => activeJobFor((kind) => kind === "music_generation") ? "A song is being made right now." : null });
   units.push({
     id: STACK_MUSIC_XL_ID, ...LABELS[STACK_MUSIC_XL_ID]!, group: "music", role: "music", pins: STACK_MUSIC_XL_MODELS, envs: [envMusic], tiers: ["p128"],

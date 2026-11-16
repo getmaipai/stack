@@ -101,6 +101,9 @@ export function musicMaxInstallModels(installedIds: Iterable<string> = []): Plan
   return STACK_MUSIC_MAX_MODELS.flatMap((pin) => view(pin, installed, false) ?? []);
 }
 
+/** SCORE-STACK-01: Basic Pitch is distributed with its model bundled in the package, so it has no separate model download. */
+export function scoreInstallModels(_installedIds: Iterable<string> = []): PlanModel[] { return []; }
+
 export function stemsInstallModels(installedIds: Iterable<string> = []): PlanModel[] {
   const installed = new Set(installedIds);
   return STACK_STEMS_MODELS.flatMap((pin) => view(pin, installed, false) ?? []);

@@ -6,25 +6,25 @@
   "installer": {
     "p16.required_free_bytes": 50970898149,
     "p16.minimum_required_free_bytes": 13976383571,
-    "p16.everything_required_free_bytes": 69190820392,
+    "p16.everything_required_free_bytes": 69790820392,
     "p16.needed_bytes": 43251549248,
     "p16.home_required_free_bytes": 3176323277,
     "p16.ai_required_free_bytes": 47794574872,
     "p32.required_free_bytes": 69722709669,
     "p32.minimum_required_free_bytes": 31047800378,
-    "p32.everything_required_free_bytes": 93026806949,
+    "p32.everything_required_free_bytes": 93626806949,
     "p32.needed_bytes": 58878058848,
     "p32.home_required_free_bytes": 3176323277,
     "p32.ai_required_free_bytes": 66546386392,
     "p64.required_free_bytes": 215841234678,
     "p64.minimum_required_free_bytes": 56939912009,
-    "p64.everything_required_free_bytes": 291550697683,
+    "p64.everything_required_free_bytes": 292150697683,
     "p64.needed_bytes": 180993416952,
     "p64.home_required_free_bytes": 3176323277,
     "p64.ai_required_free_bytes": 212664911401,
     "p128.required_free_bytes": 250507553227,
     "p128.minimum_required_free_bytes": 56939912009,
-    "p128.everything_required_free_bytes": 576927513437,
+    "p128.everything_required_free_bytes": 577527513437,
     "p128.needed_bytes": 210008479520,
     "p128.home_required_free_bytes": 3176323277,
     "p128.ai_required_free_bytes": 247331229950
@@ -172,6 +172,24 @@
           ],
           "installed": false,
           "basis": "pins"
+        },
+        {
+          "id": "score-transcription",
+          "label": "Turn audio into notes (Spotify Basic Pitch)",
+          "note": "Optional audio-to-MIDI transcription. The small Apache-2.0 model is bundled with the engine package.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 0,
+          "installed_bytes": 0,
+          "peak_temp_bytes": 0,
+          "model_ids": [],
+          "engines": [
+            "engine:score",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "measured"
         },
         {
           "id": "stems",
@@ -386,6 +404,21 @@
           "basis": "measured"
         },
         {
+          "id": "engine:score",
+          "label": "Score engine tools",
+          "note": "What turning audio into notes runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 180000000,
+          "installed_bytes": 350000000,
+          "peak_temp_bytes": 180000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
+        },
+        {
           "id": "engine:stems",
           "label": "Stem splitting tools",
           "note": "What separating song stems runs on.",
@@ -461,11 +494,11 @@
         "required_free_bytes": 13976383571
       },
       "everything": {
-        "download_bytes": 45080216138,
-        "installed_bytes": 50071679705,
-        "peak_temp_bytes": 9104804746,
-        "needed_bytes": 59176484451,
-        "required_free_bytes": 69190820392
+        "download_bytes": 45260216138,
+        "installed_bytes": 50421679705,
+        "peak_temp_bytes": 9284804746,
+        "needed_bytes": 59706484451,
+        "required_free_bytes": 69790820392
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -677,6 +710,24 @@
           ],
           "installed": false,
           "basis": "pins"
+        },
+        {
+          "id": "score-transcription",
+          "label": "Turn audio into notes (Spotify Basic Pitch)",
+          "note": "Optional audio-to-MIDI transcription. The small Apache-2.0 model is bundled with the engine package.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 0,
+          "installed_bytes": 0,
+          "peak_temp_bytes": 0,
+          "model_ids": [],
+          "engines": [
+            "engine:score",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "measured"
         },
         {
           "id": "stems",
@@ -906,6 +957,21 @@
           "basis": "measured"
         },
         {
+          "id": "engine:score",
+          "label": "Score engine tools",
+          "note": "What turning audio into notes runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 180000000,
+          "installed_bytes": 350000000,
+          "peak_temp_bytes": 180000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
+        },
+        {
           "id": "engine:stems",
           "label": "Stem splitting tools",
           "note": "What separating song stems runs on.",
@@ -981,11 +1047,11 @@
         "required_free_bytes": 31047800378
       },
       "everything": {
-        "download_bytes": 64364624345,
-        "installed_bytes": 69796831613,
-        "peak_temp_bytes": 9270609013,
-        "needed_bytes": 79067440626,
-        "required_free_bytes": 93026806949
+        "download_bytes": 64544624345,
+        "installed_bytes": 70146831613,
+        "peak_temp_bytes": 9450609013,
+        "needed_bytes": 79597440626,
+        "required_free_bytes": 93626806949
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -1444,6 +1510,24 @@
           "basis": "pins"
         },
         {
+          "id": "score-transcription",
+          "label": "Turn audio into notes (Spotify Basic Pitch)",
+          "note": "Optional audio-to-MIDI transcription. The small Apache-2.0 model is bundled with the engine package.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 0,
+          "installed_bytes": 0,
+          "peak_temp_bytes": 0,
+          "model_ids": [],
+          "engines": [
+            "engine:score",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
           "id": "stems",
           "label": "Split songs into stems (HTDemucs)",
           "note": "Separates songs made in Home into vocals, drums, bass and other. Recommended, about 0.3 GB.",
@@ -1761,6 +1845,21 @@
           "basis": "measured"
         },
         {
+          "id": "engine:score",
+          "label": "Score engine tools",
+          "note": "What turning audio into notes runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 180000000,
+          "installed_bytes": 350000000,
+          "peak_temp_bytes": 180000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
+        },
+        {
           "id": "engine:stems",
           "label": "Stem splitting tools",
           "note": "What separating song stems runs on.",
@@ -1836,11 +1935,11 @@
         "required_free_bytes": 56939912009
       },
       "everything": {
-        "download_bytes": 225116887456,
-        "installed_bytes": 232089012683,
-        "peak_temp_bytes": 13043882463,
-        "needed_bytes": 245132895146,
-        "required_free_bytes": 291550697683
+        "download_bytes": 225296887456,
+        "installed_bytes": 232439012683,
+        "peak_temp_bytes": 13223882463,
+        "needed_bytes": 245662895146,
+        "required_free_bytes": 292150697683
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -2527,6 +2626,24 @@
           "basis": "pins"
         },
         {
+          "id": "score-transcription",
+          "label": "Turn audio into notes (Spotify Basic Pitch)",
+          "note": "Optional audio-to-MIDI transcription. The small Apache-2.0 model is bundled with the engine package.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 0,
+          "installed_bytes": 0,
+          "peak_temp_bytes": 0,
+          "model_ids": [],
+          "engines": [
+            "engine:score",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "measured"
+        },
+        {
           "id": "stems",
           "label": "Split songs into stems (HTDemucs)",
           "note": "Separates songs made in Home into vocals, drums, bass and other. Recommended, about 0.3 GB.",
@@ -2904,6 +3021,21 @@
           "basis": "measured"
         },
         {
+          "id": "engine:score",
+          "label": "Score engine tools",
+          "note": "What turning audio into notes runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 180000000,
+          "installed_bytes": 350000000,
+          "peak_temp_bytes": 180000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
+        },
+        {
           "id": "engine:stems",
           "label": "Stem splitting tools",
           "note": "What separating song stems runs on.",
@@ -2979,11 +3111,11 @@
         "required_free_bytes": 56939912009
       },
       "everything": {
-        "download_bytes": 460046648783,
-        "installed_bytes": 468807669138,
-        "peak_temp_bytes": 14358310471,
-        "needed_bytes": 483165979609,
-        "required_free_bytes": 576927513437
+        "download_bytes": 460226648783,
+        "installed_bytes": 469157669138,
+        "peak_temp_bytes": 14538310471,
+        "needed_bytes": 483695979609,
+        "required_free_bytes": 577527513437
       },
       "measured_on": "2026-10-17",
       "default_selected": [

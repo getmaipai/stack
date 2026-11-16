@@ -29,6 +29,8 @@ export interface UvEnvironmentSpec {
   root: string;
   /** The hashed requirements file for this platform, or null when none exists yet. */
   requirements: string | null;
+  /** Install an explicitly closed, hashed wheel set without following upstream extras or conditional dependencies. */
+  noDeps?: boolean;
   /** A file that proves the environment can serve (the console script, the entry file). */
   proof: string;
 }
@@ -131,7 +133,7 @@ async function buildUvEnvironment(spec: UvEnvironmentSpec, onProgress: (phase: s
   // In the compiled daemon the requirements file lives in Bun's virtual
   // filesystem (/$bunfs/...), which uv cannot open: write it to disk first.
   const requirements = await materializeRequirements(spec.root, spec.requirements);
-  await run([uv, "pip", "sync", "--python", uvVenvPython(spec.root), "--require-hashes", requirements], env, options.signal);
+  await run([uv, "pip", ...(spec.noDeps ? ["install", "--no-deps"] : ["sync"]), "--python", uvVenvPython(spec.root), "--require-hashes", requirements], env, options.signal);
   if (!existsSync(spec.proof)) throw new Error(`The ${spec.name} environment built but ${spec.proof.split("/").pop()} is not in it.`);
   writeFileSync(join(spec.root, ENV_READY_MARKER), new Date().toISOString());
   // An engine whose archive wrote the manifest keeps it; an environment

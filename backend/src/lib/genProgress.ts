@@ -22,7 +22,7 @@ export interface StageDef {
   fixed?: boolean;
 }
 
-export type GenKind = "image" | "video" | "video_edit" | "music" | "sound" | "speech";
+export type GenKind = "image" | "video" | "video_edit" | "music" | "sound" | "score" | "speech";
 
 /** Video stages. Weights and seconds are the medians of measured runs (832x480, 5 s, 128 GB Mac); see the design note "Stack API as built". */
 export const VIDEO_STAGES: StageDef[] = [
@@ -69,13 +69,19 @@ export const SOUND_STAGES: StageDef[] = [
   { id: "save", weight: 0.1, seconds: 0.5, fixed: true, label: () => "Saving" },
 ];
 
+export const SCORE_STAGES: StageDef[] = [
+  { id: "load", weight: 0.08, seconds: 2, fixed: true, label: () => "Getting ready" },
+  { id: "score", weight: 0.88, seconds: 8, label: () => "Finding the notes" },
+  { id: "save", weight: 0.04, seconds: 0.5, fixed: true, label: () => "Saving the score" },
+];
+
 export const SPEECH_STAGES: StageDef[] = [
   { id: "load", weight: 0.12, seconds: 30, fixed: true, label: () => "Loading the speech model" },
   { id: "render", weight: 0.83, seconds: 45, label: () => "Rendering the recording" },
   { id: "save", weight: 0.05, seconds: 1, fixed: true, label: () => "Saving the recording" },
 ];
 
-export const stagesFor = (kind: GenKind): StageDef[] => (kind === "video" ? VIDEO_STAGES : kind === "video_edit" ? VIDEO_EDIT_STAGES : kind === "music" ? MUSIC_STAGES : kind === "sound" ? SOUND_STAGES : kind === "speech" ? SPEECH_STAGES : IMAGE_STAGES);
+export const stagesFor = (kind: GenKind): StageDef[] => (kind === "video" ? VIDEO_STAGES : kind === "video_edit" ? VIDEO_EDIT_STAGES : kind === "music" ? MUSIC_STAGES : kind === "sound" ? SOUND_STAGES : kind === "score" ? SCORE_STAGES : kind === "speech" ? SPEECH_STAGES : IMAGE_STAGES);
 
 // ---- history: the last few stage durations per kind and size ----
 

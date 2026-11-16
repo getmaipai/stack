@@ -34,6 +34,15 @@ export const PRIVACY_ROWS: PrivacyRow[] = [
     hosts: ["huggingface.co", "github.com"],
   },
   {
+    id: "score-environment",
+    what: "Building the offline score transcription environment",
+    when: "Only when Home installs Score transcription or its first request builds the environment",
+    carries: "Names and hashes of pinned Python packages; audio remains on this computer and the worker has no network access",
+    receiver: "The Python Package Index, straight from this computer",
+    setting: null,
+    hosts: ["pypi.org", "files.pythonhosted.org"],
+  },
+  {
     id: "beats-environment",
     what: "Building the offline beat analysis environment",
     when: "Only when Home installs beat and section analysis or its first request builds the environment",

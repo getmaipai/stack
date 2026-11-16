@@ -7,6 +7,7 @@ import { livePortraitTmpDir, sweepLivePortraitTmp } from "@/liveportrait/livepor
 import { jobsDir, sweepJobDirs } from "@/media/paths";
 import { sweepVideoTmp, sweepResults as sweepVideoResults } from "@/video/results";
 import { sweepMusicTmp, sweepResults as sweepMusicResults } from "@/music/results";
+import { sweepScoreInputs, sweepScoreResults } from "@/score/scoreGen";
 import { sweepImageTmp, sweepResults as sweepImageResults } from "@/images/results";
 import { modelsDir } from "@/lib/paths";
 import { runTidy } from "@/lib/tidy";
@@ -56,6 +57,8 @@ export async function runSweeps(reason: string): Promise<SweepSummary> {
     ["video-results", sweepVideoResults, join(dataDir, "video", "results")],
     ...(atStart ? [["music-tmp", sweepMusicTmp, join(dataDir, "tmp", "music")] as [string, () => number | void, string]] : []),
     ["music-results", sweepMusicResults, join(dataDir, "music", "results")],
+    ["score-results", sweepScoreResults, join(dataDir, "score", "results")],
+    ["score-inputs", sweepScoreInputs, join(dataDir, "score", "inputs")],
     ...(atStart ? [["image-tmp", sweepImageTmp, join(dataDir, "tmp", "images")] as [string, () => number | void, string]] : []),
     ["image-results", sweepImageResults, join(dataDir, "images", "results")],
     ["voice-clips", () => sweepVoiceClips(), voiceClipDir()],

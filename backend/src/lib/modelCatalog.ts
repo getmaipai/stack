@@ -1270,6 +1270,9 @@ export const STACK_ALIGN_MODELS: CatalogModelLike[] = [STACK_ALIGN_MODEL];
 // registration with Stability; outputs may not train a foundation model) for the model, and Google's Gemma Terms of Use for the
 // text encoder; LICENSE.md, LICENSE_GEMMA.md and NOTICE ship in the folder, and an admin accepts SFX_LICENCE_NOTICE once before
 // the install (components.ts). Optional: never bundled, never in the first-run plan.
+/** SCORE-STACK-01: Basic Pitch ships its small ONNX model in the pinned package wheel; there is no separate model file to catalog or accept. */
+export const STACK_SCORE_MODEL_BUNDLE = { id: "basic-pitch-0.4.0", role: "music" as const, component: "score-gen", license: "Apache-2.0", revision: "0.4.0", bundled: true } as const;
+
 export const STACK_SFX_MODEL_ID = "stable-audio-3-small-sfx";
 export const SFX_REPO = "ddalcu/Stable-Audio-3-Small-SFX-MLX-Serve";
 export const SFX_REVISION = "977fd4791852ba56657a8c814cfd3b0049b2ebae";

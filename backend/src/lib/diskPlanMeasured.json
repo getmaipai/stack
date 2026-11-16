@@ -95,6 +95,12 @@
       "peak_temp_bytes": 165804267,
       "basis": "measured"
     },
+    "score-gen": {
+      "installed_bytes": 350000000,
+      "download_bytes": 180000000,
+      "peak_temp_bytes": 180000000,
+      "basis": "estimate"
+    },
     "stems": {
       "installed_bytes": 1200000000,
       "download_bytes": 800000000,

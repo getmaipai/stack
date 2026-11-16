@@ -8646,6 +8646,319 @@
         }
       }
     },
+    "/v1/audio/score": {
+      "post": {
+        "tags": [
+          "Score"
+        ],
+        "summary": "Transcribe an audio file or Stack host path into MIDI and notes",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            },
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Score job created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Audio was missing or unreadable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Audio is too large.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Send multipart form data with a file, or JSON with a Stack host path.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The queue is full.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Engine unavailable or memory unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audio/score/{id}": {
+      "get": {
+        "tags": [
+          "Score"
+        ],
+        "summary": "Read score job state",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job status and available result links.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such job.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audio/score/{id}/file": {
+      "get": {
+        "tags": [
+          "Score"
+        ],
+        "summary": "Fetch the MIDI or JSON notes",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "midi",
+                "notes"
+              ]
+            },
+            "required": true,
+            "name": "kind",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The requested score file.",
+            "content": {
+              "audio/midi": {
+                "schema": {
+                  "nullable": true
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The result expired or does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/audio/align": {
       "post": {
         "tags": [
@@ -23677,6 +23990,113 @@
                   },
                   "required": [
                     "sound"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/score": {
+      "get": {
+        "tags": [
+          "Score"
+        ],
+        "summary": "Score engine readiness",
+        "responses": {
+          "200": {
+            "description": "Engine and bundled model state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "score": {
+                      "type": "object",
+                      "properties": {
+                        "installed": {
+                          "type": "boolean"
+                        },
+                        "ready": {
+                          "type": "boolean"
+                        },
+                        "available": {
+                          "type": "boolean"
+                        },
+                        "engine": {
+                          "type": "string"
+                        },
+                        "model": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "bundled": {
+                              "type": "boolean"
+                            },
+                            "licence": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "bundled",
+                            "licence"
+                          ]
+                        },
+                        "limits": {
+                          "type": "object",
+                          "properties": {
+                            "max_seconds": {
+                              "type": "number"
+                            },
+                            "max_notes": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "max_seconds",
+                            "max_notes"
+                          ]
+                        },
+                        "memory": {
+                          "type": "object",
+                          "properties": {
+                            "peak_gb": {
+                              "type": "number"
+                            },
+                            "basis": {
+                              "type": "string",
+                              "enum": [
+                                "estimate"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "peak_gb",
+                            "basis"
+                          ]
+                        },
+                        "queue_max": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "installed",
+                        "ready",
+                        "available",
+                        "engine",
+                        "model",
+                        "limits",
+                        "memory",
+                        "queue_max"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "score"
                   ]
                 }
               }
