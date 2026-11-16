@@ -3,9 +3,9 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
-import { fitsEverForTier, getGovernorStatus, liveReducedFreedBytes, tierRoomBytes } from "@/lib/governor";
+import { fitsEverForTier, getGovernorStatus, reducedRoomBytes, tierRoomBytes } from "@/lib/governor";
 import { currentMachineTier } from "@/lib/supervisor";
-import { reducedFreedBytes, resolveTier, tierCapBytes, TIER_CANDIDATES, type ProfileId, type TierCategory } from "@/lib/tiers";
+import { resolveTier, tierCapBytes, TIER_CANDIDATES, type ProfileId, type TierCategory } from "@/lib/tiers";
 
 const CATEGORIES = [["chat", "chat"], ["image", "pictures"], ["video", "video"], ["music", "music"], ["voice", "voice"]] as const satisfies ReadonlyArray<readonly [string, TierCategory]>;
 const LEVELS = ["standard", "boost", "max"] as const;
@@ -26,15 +26,15 @@ export const capabilitiesRoutes = apiRouter<AppEnv>();
 capabilitiesRoutes.openapi(route, (c) => {
   const profile = (currentMachineTier() ?? null) as ProfileId | null;
   const room = tierRoomBytes();
-  // Max may use the memory Reduced chat and voice free, the same figure the governor is given for a Max job.
-  const freed = profile ? Math.max(liveReducedFreedBytes(), reducedFreedBytes(profile, room)) : 0;
+  // Max is sized from the Max room: the resident room plus what Reduced frees, the same room the governor sizes a Max job from (TIER-ROOM-01).
+  const freed = profile ? reducedRoomBytes() : 0;
   const rows = CATEGORIES.flatMap(([category, tierCategory]) => LEVELS.map((tier) => {
     const reducedFreed = tier === "max" ? freed : 0;
     const cap_bytes = Math.round(tierCapBytes(tier, room, reducedFreed));
     const resolved = profile ? resolveTier({ category: tierCategory, tier, profile, roomBytes: room, reducedFreedBytes: reducedFreed }) : null;
     const smallest = profile ? TIER_CANDIDATES.filter((item) => item.category === tierCategory && item.profiles.includes(profile) && item.tiers.includes(tier)).flatMap((item) => item.peaks.map((peak) => peak.peakBytes)).sort((a, b) => a - b)[0] ?? null : null;
     const needs_bytes = resolved?.model === "ltx-2-5-bf16-distilled-mlx-max" ? Math.max(...(TIER_CANDIDATES.find((item) => item.id === resolved.model)?.peaks.map((peak) => peak.peakBytes) ?? [resolved.peakBytes])) : resolved?.peakBytes ?? smallest;
-    const fits_ever = needs_bytes !== null && fitsEverForTier({ id: `capability-${category}-${tier}`, kind: "generator", requestedBytes: needs_bytes, tier }, { reducedFreedBytes: reducedFreed }).fits;
+    const fits_ever = needs_bytes !== null && fitsEverForTier({ id: `capability-${category}-${tier}`, kind: "generator", requestedBytes: needs_bytes, tier }).fits;
     return { category, tier, fits_ever: resolved ? fits_ever : false, needs_bytes, cap_bytes, model: resolved?.model ?? null };
   }));
   return c.json({ machine_class: profile ?? "unknown", total_bytes: getGovernorStatus().totalMemoryBytes, rows }, 200);

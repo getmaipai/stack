@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { STACK_IMAGE_ERNIE_ID, STACK_IMAGE_KLEIN_ID, STACK_IMAGE_ZIMAGE_ID, STACK_MUSIC_MODEL_ID, STACK_VIDEO_MODEL_ID } from "@/lib/modelCatalog";
-import { budgetSlots, tierCandidateLists, customPickRefusal, minorTierClamp, resolveLadder, resolveTier, thinkingAllowedFor, TIER_CANDIDATES } from "@/lib/tiers";
+import { budgetSlots, tierCandidateLists, tierCapBytes, customPickRefusal, minorTierClamp, resolveLadder, resolveTier, thinkingAllowedFor, TIER_CANDIDATES } from "@/lib/tiers";
 
 const GB = 1_000_000_000;
 
@@ -124,6 +124,31 @@ describe("tier candidate lists for the slot dialog", () => {
   test("a model this computer can never hold says so", () => {
     const max = tierCandidateLists("video", "p128", 30 * GB)[2]!;
     expect(max.candidates.some((row) => row.id === "ltx-2-3-distilled-mlx")).toBe(false);
+  });
+
+  // TIER-ROOM-01: Max is sized from the Max room (the resident room plus what Reduced frees), Standard and Boost from the resident room.
+  test("the Max cap counts what Reduced frees and the Standard and Boost caps do not", () => {
+    const levels = tierCandidateLists("video", "p128", 41.5 * GB, 36 * GB);
+    expect(levels.map((level) => level.capBytes)).toEqual([0.6 * 41.5 * GB, 0.85 * 41.5 * GB, 77.5 * GB]);
+    expect(tierCapBytes("max", 41.5 * GB, 36 * GB)).toBe(77.5 * GB);
+    expect(tierCapBytes("boost", 41.5 * GB, 36 * GB)).toBe(tierCapBytes("boost", 41.5 * GB));
+    const ltx = levels[2]!.candidates.find((row) => row.id === "ltx-2-5-bf16-distilled-mlx-max")!;
+    expect(ltx).toMatchObject({ peakBytes: 61_500_000_000, fits: true, refusal: null });
+    expect(levels[2]!.recommended).toBe("ltx-2-5-bf16-distilled-mlx-max");
+    const wan = levels[0]!.candidates.find((row) => row.id === "fastwan2-2-ti2v-5b-mlx-bf16")!;
+    expect(wan).toMatchObject({ fits: false, refusal: "This needs 25 GB. Standard keeps Home free, so it can't hold it. Use Boost or Max." });
+  });
+
+  test("\"can never hold it\" is said only when the peak is above the Max room with Reduced counted", () => {
+    const pick = { category: "video" as const, profile: "p128" as const, model: "ltx-2-5-bf16-distilled-mlx-max", options: { input: "picture" } };
+    // 61.5 GB against a 40 GB room: never with 10 GB freed, Boost or Max with 25 GB freed, fits Max with 25 GB freed.
+    expect(customPickRefusal({ ...pick, tier: "standard", roomBytes: 40 * GB, reducedFreedBytes: 10 * GB })).toBe("This needs 62 GB and this computer can never hold it.");
+    expect(customPickRefusal({ ...pick, tier: "max", roomBytes: 40 * GB, reducedFreedBytes: 10 * GB })).toBe("This needs 62 GB and this computer can never hold it.");
+    expect(customPickRefusal({ ...pick, tier: "standard", roomBytes: 40 * GB, reducedFreedBytes: 25 * GB })).toBe("This needs 62 GB. Standard keeps Home free, so it can't hold it. Use Boost or Max.");
+    expect(customPickRefusal({ ...pick, tier: "boost", roomBytes: 40 * GB, reducedFreedBytes: 25 * GB })).toBe("This needs 62 GB. Boost keeps Home free, so it can't hold it. Use Max.");
+    expect(customPickRefusal({ ...pick, tier: "max", roomBytes: 40 * GB, reducedFreedBytes: 25 * GB })).toBeNull();
+    // The Reduced saving never changes a Standard or Boost refusal into a fit.
+    expect(customPickRefusal({ ...pick, tier: "boost", roomBytes: 40 * GB, reducedFreedBytes: 100 * GB })).toBe("This needs 62 GB. Boost keeps Home free, so it can't hold it. Use Max.");
   });
 
   test("a vetting-only model is catalogued but never resolved or offered", () => {

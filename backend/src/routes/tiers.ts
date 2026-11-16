@@ -1,11 +1,12 @@
 // TIER-HOME-04: the tier catalog as Home's slot dialogs need it (read only). The profile is this machine's proposed one and the room is the
-// governor's tier room, so a candidate's "fits" is the same answer the resolver and the governor give.
+// governor's tier room, so a candidate's "fits" is the same answer the resolver and the governor give. Max is sized from the Max room,
+// the resident room plus what Reduced frees (TIER-ROOM-01), as the governor sizes a Max job at admission.
 import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { detectHardware } from "@/lib/hardware";
 import { proposeProfile } from "@/profiles";
-import { tierRoomBytes } from "@/lib/governor";
+import { reducedRoomBytes, tierRoomBytes } from "@/lib/governor";
 import { tierCandidateLists, type TierCategory } from "@/lib/tiers";
 import { controlReducedChat } from "@/lib/reducedChatLease";
 
@@ -28,7 +29,7 @@ tiersRoutes.openapi(candidatesRoute, async (c) => {
   const { computerName: _name, ...hardware } = await detectHardware();
   const profile = proposeProfile(hardware as Parameters<typeof proposeProfile>[0])?.id ?? null;
   const roomBytes = tierRoomBytes();
-  const levels = profile ? tierCandidateLists(category as TierCategory, profile, roomBytes) : [];
+  const levels = profile ? tierCandidateLists(category as TierCategory, profile, roomBytes, reducedRoomBytes()) : [];
   return c.json({
     category, profile, room_bytes: roomBytes,
     levels: levels.map((level) => ({ tier: level.tier, cap_bytes: level.capBytes, recommended: level.recommended, candidates: level.candidates.map((row) => ({ id: row.id, label: row.label, family: row.family, peak_bytes: row.peakBytes, verified: row.verified, fits: row.fits, refusal: row.refusal })) })),

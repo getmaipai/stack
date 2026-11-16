@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, fitsEverForTier, getGovernorDecisions, getGovernorStatus, getMaxWindow, getReclaimSteps, liveReducedFreedBytes, NEVER_FITS_MESSAGE, neverFitCapacityBytes, refreshMeasuredPeak, release, setMaxWindowHook, setMetalCapBytes, startGovernor, type GovernorHandle, type MaxWindowChange } from "@/lib/governor";
+import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, fitsEverForTier, getGovernorDecisions, getGovernorStatus, getMaxWindow, getReclaimSteps, liveReducedFreedBytes, NEVER_FITS_MESSAGE, neverFitCapacityBytes, reducedRoomBytes, refreshMeasuredPeak, release, setMaxWindowHook, setMetalCapBytes, startGovernor, tierRoomBytes, type GovernorHandle, type MaxWindowChange } from "@/lib/governor";
 import { __resetMaxWindowReducedForTests, maxWindowReducedIdle, unwireMaxWindowReduced, wireMaxWindowReduced } from "@/lib/maxWindowReduced";
 import { __setReducedLeaseForTests } from "@/lib/reducedChatLease";
 import { resetReducedChatForTests, setReducedChatState } from "@/lib/reducedChat";
@@ -16,6 +16,24 @@ test("job tier caps use the governor room and Max can include reclaimed reduced 
   expect(fitsEverForTier({ id: "boost", kind: "generator", requestedBytes: 60 * GB, tier: "boost" }).capBytes).toBeCloseTo(63.75 * GB);
   expect(fitsEverForTier({ id: "max", kind: "generator", requestedBytes: 70 * GB, tier: "max" }).capBytes).toBe(75 * GB);
   expect(fitsEverForTier({ id: "max-reclaimed", kind: "generator", requestedBytes: 80 * GB, tier: "max" }, { reducedFreedBytes: 5 * GB }).capBytes).toBe(80 * GB);
+});
+
+// TIER-ROOM-01: tierRoomBytes("max") is the resident room plus what Reduced frees, and canAdmit sizes the Max owner from it.
+test("the Max room is the resident room plus the live Reduced saving, and the Max owner is admitted against it", async () => {
+  const chat = await admit({ id: "chat", role: "chat", kind: "resident", requestedBytes: 39_700_000_000 }) as GovernorHandle;
+  refreshMeasuredPeak(chat, 39_700_000_000);
+  const resident = tierRoomBytes();
+  expect(tierRoomBytes("resident")).toBe(resident);
+  expect(reducedRoomBytes()).toBe(39_700_000_000 - 5_700_000_000);
+  expect(tierRoomBytes("max")).toBe(resident + 39_700_000_000 - 5_700_000_000);
+  // A household Max job just above the resident room is sized from the Max room: not refused as never fitting, and once it owns the window it is admitted.
+  const peak = resident + 10 * GB;
+  expect(fitsEverForTier({ id: "max-owner", role: "video", kind: "generator", requestedBytes: peak, tier: "max" })).toMatchObject({ fits: true, capBytes: tierRoomBytes("max") });
+  expect(fitsEverForTier({ id: "max-dev", role: "video", kind: "generator", requestedBytes: peak, tier: "max", caller: "dev" })).toMatchObject({ fits: false, capBytes: resident });
+  const answer = await admit({ id: "max-owner", role: "video", kind: "generator", requestedBytes: peak, tier: "max" });
+  expect("refused" in (answer as object)).toBe(false);
+  if ("queued" in (answer as object)) expect(getMaxWindow()).toMatchObject({ ownerId: "max-owner" });
+  else release(answer as GovernorHandle);
 });
 
 test("only one boost or max item can be loaded at a time", async () => {
