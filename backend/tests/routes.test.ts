@@ -282,7 +282,10 @@ test("hardware, budget, backup and the diagnostics bundle answer as data without
   expect(budget.margin_bytes).toBe(4 * GB);
   expect(budget.reading_degraded).toBe(false);
   expect(budget.profile).toBe("p16");
-  expect(budget.slots.every((slot) => (slot as { category: string }).category === "chat")).toBe(true);
+  // TIER-BUDGET-01: the slots are per level on this computer, so every category this profile has a model for is listed, not only chat.
+  const slots = budget.slots as Array<{ category: string; tier: string; model: string | null; peak_bytes: number | null; fits_ever: boolean }>;
+  expect(slots.some((slot) => slot.category === "chat" && slot.tier === "reduced" && slot.model !== null)).toBe(true);
+  expect(slots.every((slot) => ["chat", "pictures", "video", "music", "voice", "stems"].includes(slot.category) && typeof slot.fits_ever === "boolean" && (slot.model === null) === (slot.peak_bytes === null))).toBe(true);
   expect(budget.totalMemoryBytes).toBeGreaterThan(0);
   expect(budget.freeMemoryBytes).toBeGreaterThan(0);
   expect(budget.loaded).toEqual(expect.any(Array));
