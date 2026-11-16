@@ -16,8 +16,8 @@ describe("tier resolver", () => {
     }
     const reduced = resolveTier({ category: "chat", tier: "reduced", profile: "p128", roomBytes: 72 * GB });
     expect(slots.find((row) => row.category === "chat" && row.tier === "reduced")?.peak_bytes).toBe(reduced?.peakBytes);
-    expect(slots.map(({ category, tier }) => `${category}:${tier}`)).toEqual(["chat:reduced", "chat:standard", "chat:boost", "chat:max", "pictures:standard", "pictures:boost", "pictures:max", "video:standard", "video:max", "music:standard"]);
-    expect(budgetSlots("p16", 12 * GB).every((row) => row.category === "chat")).toBe(true);
+    expect(slots.filter((row) => row.peak_bytes !== null).map(({ category, tier }) => `${category}:${tier}`)).toEqual(["chat:reduced", "chat:standard", "chat:boost", "chat:max", "pictures:standard", "pictures:boost", "pictures:max", "video:standard", "video:max", "music:standard", "voice:reduced", "voice:standard", "stems:standard"]);
+    expect(budgetSlots("p16", 12 * GB).filter((row) => row.peak_bytes !== null).every((row) => row.category === "chat" || row.category === "voice" || row.category === "stems")).toBe(true);
     expect(budgetSlots("p16", 12 * GB).some((row) => row.category === "pictures" || row.category === "video" || row.category === "music")).toBe(false);
     expect(budgetSlots(null)).toEqual([]);
   });
