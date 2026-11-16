@@ -109,7 +109,7 @@ These sit under the org platform principles in
    machine and nothing else. Anything that needs to know who is asking
    belongs to Home and never appears here because it was convenient.
 4. **One residency budget, owned here.** Hardware sizing, memory
-   pressure, admission (one generator at a time; queue or refuse with a
+   pressure, admission (generators by fit, one Boost or Max at a time; queue or refuse with a
    reason) and eviction live in the Stack and nowhere else, for the
    processes the Stack launched.
 5. **Provenance before selection.** Source, revision, licence, checksum
@@ -201,7 +201,7 @@ residency class, in one `ROLES` constant in `backend/src/roles.ts`:
 | `stt` | `spec/voice`'s transcribe form at the OpenAI audio path, plus the `SttWireEvent` streaming session for live speech | resident, small |
 | `tts` | `spec/voice`'s speech form and streaming WAV at the OpenAI audio path, phrase by phrase with cancel; an OpenAI-shaped request only when the spec carries it | resident, small |
 | `wakeword` | not served over HTTP; a model the Stack installs for a body process to load in-process | installed, not loaded |
-| `image`, `video`, `music` | jobs, with a synchronous OpenAI-shaped wrapper for simple callers | JIT, one generator at a time |
+| `image`, `video`, `music` | jobs, with a synchronous OpenAI-shaped wrapper for simple callers | JIT, admitted by fit beside what is loaded |
 
 The request `model` field carries a role id (`"chat"`) or a concrete
 installed model id when Home must name one. A role name is the default
@@ -608,8 +608,11 @@ creates the job `queued` in that role's queue, one job in flight per
 role, in submission order, each queued job carrying its 1-based
 position and renumbered as the queue moves. When a job's turn comes the
 queue asks the governor to admit it as a `generator` request (the
-estimate, or the measured peak once one exists): the governor holds
-one generator at a time across every role and the memory budget's say.
+estimate, or the measured peak once one exists): the governor admits it
+when its peak fits beside everything loaded (QUEUE-FIT-01): one Boost or
+Max at a time, Max alone, a smaller job that fits goes ahead of a bigger
+one that waits until that one has waited `backfillMaxWaitMs` (10 minutes),
+and the Max chat lease holds only Boost and Max.
 A peak the budget can never hold (more than the models cap, computed
 the way the governor computes it: the measured peak, else the model
 file times the engine's multiplier, else the requested bytes) is

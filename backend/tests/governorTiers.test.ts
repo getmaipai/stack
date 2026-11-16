@@ -28,12 +28,13 @@ test("only one boost or max item can be loaded at a time", async () => {
 
 const queued = (answer: unknown): { admitted: Promise<unknown> } => answer as { admitted: Promise<unknown> };
 
+// QUEUE-FIT-01: a draining Max window holds Boost and Max work and anything else that does not fit; a Standard job that fits still starts (tests/governorFit.test.ts).
 test("a Max job drains running work, holds new admissions, then the held queue restarts in order", async () => {
   const running = await admit({ id: "pic-run", kind: "generator", class: "burst", role: "image", requestedBytes: 10 * GB }) as GovernorHandle;
   const max = await admit({ id: "max-job", kind: "generator", class: "burst", role: "video", requestedBytes: 40 * GB, tier: "max" });
   expect(max).toMatchObject({ queued: true });
   expect(getMaxWindow().state).toBe("draining");
-  const held = [await admit({ id: "held-1", kind: "generator", class: "burst", role: "image", requestedBytes: 5 * GB }), await admit({ id: "held-2", kind: "generator", class: "burst", role: "image", requestedBytes: 5 * GB }), await admit({ id: "held-3", kind: "generator", class: "burst", role: "image", requestedBytes: 5 * GB })];
+  const held = [await admit({ id: "held-1", kind: "generator", class: "burst", role: "image", requestedBytes: 5 * GB, tier: "boost" }), await admit({ id: "held-2", kind: "generator", class: "burst", role: "image", requestedBytes: 5 * GB, tier: "boost" }), await admit({ id: "held-3", kind: "generator", class: "burst", role: "image", requestedBytes: 5 * GB, tier: "boost" })];
   expect(held.every((answer) => "queued" in (answer as object))).toBe(true);
   expect(getGovernorStatus().queue.map((entry) => entry.id)).toEqual(["max-job", "held-1", "held-2", "held-3"]);
   expect(getGovernorDecisions().filter((decision) => decision.reasonCode === "max_window").length).toBe(3);

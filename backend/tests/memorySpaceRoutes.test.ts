@@ -108,10 +108,12 @@ test("a lease queued behind a running job, admitted later, is released when it e
   __setLeaseTtlForTests(60);
   try {
     const holder = await admit({ id: "running-household", kind: "generator", class: "burst", role: "image", requestedBytes: 5 * GB }) as Parameters<typeof release>[0];
+    __setGovernorTuningForTestsOnly({ freeMemoryBytes: 20 * GB }); // the running job holds the memory
     const response = await app.request("/stack/v1/memory/admission-leases", { method: "POST", headers: { "content-type": "application/json", "x-stack-caller": "dev" }, body: JSON.stringify({ id: "bench", role: "image", bytes: 5 * GB }) });
     expect(response.status).toBe(202);
     const { lease } = await response.json() as { lease: string };
     expect(getGovernorStatus().queue.map((entry) => entry.id)).toEqual([`script-lease:${lease}`]);
+    __setGovernorTuningForTestsOnly({ freeMemoryBytes: 100 * GB });
     release(holder);
     await Bun.sleep(5);
     expect(getGovernorStatus().loaded.map((item) => item.id)).toEqual([`script-lease:${lease}`]);

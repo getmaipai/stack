@@ -97,11 +97,13 @@ test("a render the budget can never hold is refused with the numbers, not left w
 test("while the governor holds another generator, the job waits in the governor's queue and runs when that one releases", async () => {
   const sidecar = scriptedSidecar();
   const other = await admit({ id: "another-generator", kind: "generator", requestedBytes: 1 * GB }) as GovernorHandle;
+  __setGovernorTuningForTestsOnly({ freeMemoryBytes: 2 * GB }); // the running generator holds the memory (QUEUE-FIT-01: waiting is by fit)
   expect("id" in other).toBe(true);
   const job = submit("after the other");
   await new Promise((resolve) => setTimeout(resolve, 350));
   expect(getJob(job.id)).toMatchObject({ state: "running", status: expect.stringContaining("Waiting for its turn") });
   expect(sidecar.started).toEqual([]);
+  __setGovernorTuningForTestsOnly({ freeMemoryBytes: 24 * GB });
   release(other);
   const done = await waitForJob(job.id, 3_000);
   expect(done?.state).toBe("done");
@@ -163,6 +165,7 @@ test("the refusal mirrors the governor's own peak: a model file times the engine
 test("cancelling a render that waits in the governor's queue frees the role at once, and its late admission is released, not run", async () => {
   const sidecar = scriptedSidecar();
   const other = await admit({ id: "another-generator", kind: "generator", requestedBytes: 1 * GB }) as GovernorHandle;
+  __setGovernorTuningForTestsOnly({ freeMemoryBytes: 2 * GB }); // the running generator holds the memory (QUEUE-FIT-01: waiting is by fit)
   const waiting = submit("will be cancelled");
   await new Promise((resolve) => setTimeout(resolve, 300));
   expect(getJob(waiting.id)?.status).toMatch(/Waiting for its turn/);
@@ -171,6 +174,7 @@ test("cancelling a render that waits in the governor's queue frees the role at o
   await new Promise((resolve) => setTimeout(resolve, 300));
   // The role moved on: the next job is the one now waiting, not stuck behind the cancelled one.
   expect(getJob(next.id)?.state).toBe("running");
+  __setGovernorTuningForTestsOnly({ freeMemoryBytes: 24 * GB });
   release(other);
   const done = await waitForJob(next.id, 4_000);
   expect(done?.state).toBe("done");
@@ -242,6 +246,7 @@ test("a pause while a render waits fails it with the pause as the reason", async
   const { pauseAll, resumeAll } = await import("@/lib/governor");
   scriptedSidecar();
   const other = await admit({ id: "another-generator", kind: "generator", requestedBytes: 1 * GB }) as GovernorHandle;
+  __setGovernorTuningForTestsOnly({ freeMemoryBytes: 2 * GB }); // the running generator holds the memory (QUEUE-FIT-01: waiting is by fit)
   const job = submit("paused away");
   await new Promise((resolve) => setTimeout(resolve, 300));
   await pauseAll();

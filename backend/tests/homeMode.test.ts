@@ -120,7 +120,7 @@ test("generator work waits in the governor with the coding_mode reason code", as
   __resetGovernorForTests();
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 32 * 1_073_741_824, freeMemoryBytes: 24 * 1_073_741_824, tier: "p32" });
   setCodingModeActive(true);
-  const result = await admit({ id: "generator-in-coding-mode", kind: "generator", requestedBytes: 1_073_741_824 });
+  const result = await admit({ id: "generator-in-coding-mode", kind: "generator", tier: "boost", requestedBytes: 1_073_741_824 });
   expect(result).toMatchObject({ queued: true });
   expect(getGovernorDecisions()[0]).toMatchObject({ decision: "Queued", reasonCode: "coding_mode" });
   setCodingModeActive(false);
@@ -233,10 +233,13 @@ test("while the large coding mode holds generators, a picture, video or song req
   __resetJobsForTests();
   registerJobRunner("held_test", async () => ({ ok: true }), { generator: { role: "image", memory: () => ({ requestedBytes: 1 }) } });
   setCodingModeActive(true);
-  const refused = submitJob({ kind: "held_test", role: "image" });
+  expect("job" in submitJob({ kind: "held_test", role: "image", input: { tier: "standard" } })).toBe(true);
+  __resetJobsForTests();
+  registerJobRunner("held_test", async () => ({ ok: true }), { generator: { role: "image", memory: () => ({ requestedBytes: 1 }) } });
+  const refused = submitJob({ kind: "held_test", role: "image", input: { tier: "boost" } });
   expect(refused).toMatchObject({ refused: true, code: "coding_mode", reason: REFUSED_BY_MODE_TEXT });
   expect(REFUSED_BY_MODE_TEXT).not.toMatch(/mode|coding/i);
   setCodingModeActive(false);
-  expect("job" in submitJob({ kind: "held_test", role: "image" })).toBe(true);
+  expect("job" in submitJob({ kind: "held_test", role: "image", input: { tier: "boost" } })).toBe(true);
   __resetJobsForTests();
 });

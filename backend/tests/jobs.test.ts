@@ -67,6 +67,7 @@ test("a queued generator stays queued at WARN and starts when memory returns to 
 test("a fitting job stays queued past the configured admission wait and runs when memory frees", async () => {
   __setAdmissionWaitForTests(20);
   const holder = await admit({ id: "other-work", kind: "generator", class: "burst", requestedBytes: GB }) as GovernorHandle;
+  __setGovernorTuningForTestsOnly({ freeMemoryBytes: 2 * GB }); // the running job holds the memory
   let ran = false;
   registerJobRunner("waiting-picture", async () => { ran = true; return {}; }, { generator: { role: "image", memory: () => ({ requestedBytes: GB }) } });
   const submitted = submitJob({ kind: "waiting-picture" });
@@ -74,6 +75,7 @@ test("a fitting job stays queued past the configured admission wait and runs whe
   await new Promise((resolve) => setTimeout(resolve, 60));
   expect(getJob(submitted.job.id)).toMatchObject({ state: "running", status: expect.stringContaining("Waiting for its turn") });
   expect(getJob(submitted.job.id)?.status).not.toBe("no_memory");
+  __setGovernorTuningForTestsOnly({ freeMemoryBytes: 32 * GB });
   release(holder);
   for (let index = 0; index < 20 && !ran; index++) await new Promise((resolve) => setTimeout(resolve, 5));
   expect(ran).toBe(true);
