@@ -18,6 +18,8 @@ export const GovernorRules = {
   chatOverageRetryMs: 10 * 60_000,
   /** A Max job that waited with nothing running, nothing left to give back and no pressure this long can never pass canAdmit: it fails with never_fits and the window closes. */
   drainNeverFitMs: 3 * 60_000,
+  /** QUEUE-FIT-01: a waiting job that smaller jobs have been admitted past for this long closes the way: no further job is admitted past it until it runs. */
+  backfillMaxWaitMs: 10 * 60_000,
   systemLowWaterPct: 0.1,
   systemLowWaterFloorBytes: GB,
   systemSustainedPolls: 2,
@@ -118,7 +120,9 @@ export interface GovernorStatus {
   queue: Array<{ id: string; position: number; kind: GovernorKind; class: GovernorClass; tier?: JobTier; caller: AdmissionCaller }>;
 }
 
-export interface GovernorDecision { at: string; decision: string; reason: string; model: string; caller?: AdmissionCaller; reasonCode?: "coding_mode" | "max_window"; }
+/** `backfill`: a smaller job was admitted past a waiting one. `backfill_closed`: a job that fits was held because a waiting one has been passed too long. */
+export type DecisionReasonCode = "coding_mode" | "max_window" | "backfill" | "backfill_closed";
+export interface GovernorDecision { at: string; decision: string; reason: string; model: string; caller?: AdmissionCaller; reasonCode?: DecisionReasonCode; }
 
 interface LoadedInternal extends GovernorLoadedModel {
   /** Which admission this entry is: a release or an eviction removes
@@ -147,6 +151,7 @@ interface GovernorTuning {
   idleTtlSeconds: number;
   queueMax: number;
   drainNeverFitMs: number;
+  backfillMaxWaitMs: number;
   systemLowWaterPct: number;
   systemLowWaterFloorBytes: number;
   systemSustainedPolls: number;
@@ -171,7 +176,7 @@ let runState: RunState = "running";
 /** An item's own idle limit in seconds, in place of the governor-wide one: the coding engine's keep-warm setting (CODE-STACK-01 S2). */
 const idleTtlOverrides = new Map<string, number>();
 const loaded = new Map<string, LoadedInternal>();
-type QueuedEntry = { request: GovernorRequest; settled: boolean; headSince: number | null; admitted: Promise<GovernorHandle | { refused: true; reason: string }>; resolve: (result: GovernorHandle | { refused: true; reason: string }) => void };
+type QueuedEntry = { request: GovernorRequest; settled: boolean; headSince: number | null; queuedAt: number; passedOver: boolean; closedLogged: boolean; admitted: Promise<GovernorHandle | { refused: true; reason: string }>; resolve: (result: GovernorHandle | { refused: true; reason: string }) => void };
 const queue: QueuedEntry[] = [];
 const refusalCounts = new Map<string, number>();
 const decisions: GovernorDecision[] = [];
@@ -288,10 +293,12 @@ function nowIso(): string {
 
 let codingModeActive = false;
 export function setCodingModeActive(active: boolean): void { codingModeActive = active; }
-/** True while the large coding mode holds picture, video and music work back. */
-export function generatorsHeldByMode(): boolean { return codingModeActive; }
+const isBoostOrMax = (tier: JobTier | undefined): boolean => tier === "boost" || tier === "max";
+/** True while the large coding mode (the Max chat lease) holds a job back. It holds only Boost and Max generators; a Standard one follows the ordinary memory-fit rules (QUEUE-FIT-01). */
+export function generatorsHeldByMode(tier?: JobTier): boolean { return codingModeActive && isBoostOrMax(tier); }
+function heldByCodingMode(request: GovernorRequest): boolean { return request.kind === "generator" && generatorsHeldByMode(request.tier); }
 
-function decide(decision: string, reason: string, model: string, reasonCode?: "coding_mode" | "max_window", caller?: AdmissionCaller): void {
+function decide(decision: string, reason: string, model: string, reasonCode?: DecisionReasonCode, caller?: AdmissionCaller): void {
   decisions.unshift({ at: nowIso(), decision, reason, model, ...(caller ? { caller } : {}), ...(reasonCode ? { reasonCode } : {}) });
   if (decisions.length > 200) decisions.length = 200;
 }
@@ -610,9 +617,24 @@ let admissionGate: AdmissionGate | null = null;
 export function setAdmissionGate(gate: AdmissionGate | null): void { admissionGate = gate; }
 export function gateVerdict(request: GovernorRequest, peakBytes: number): { ok: true } | { ok: false; reason: string } { return admissionGate ? admissionGate(request, peakBytes) : { ok: true }; }
 
+/** Whether the Max window keeps this request out. While a Max job is open nothing but the owner and reserved items starts; while it only drains, a generator that is not Boost or Max may still start by fit (QUEUE-FIT-01), and the backfill guard stops that once the Max job has waited too long. */
+function windowHolds(request: GovernorRequest): boolean {
+  if (maxWindow.state === "none" || request.id === maxWindow.ownerId || requestClass(request) === "reserved") return false;
+  if (maxWindow.state === "draining" && request.kind === "generator" && !isBoostOrMax(request.tier)) return false;
+  return true;
+}
+
+/** The tier rules that outlive the single-generator rule: one Boost or Max loaded at a time, and a Max job runs alone among generators. */
+function tierRulesHold(request: GovernorRequest, existing: LoadedInternal | undefined): boolean {
+  const others = [...loaded.values()].filter((item) => item !== existing);
+  if (isBoostOrMax(request.tier) && others.some((item) => isBoostOrMax(item.tier))) return false;
+  if (request.tier === "max" && others.some((item) => item.kind === "generator")) return false;
+  return true;
+}
+
 function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
-  if (maxWindow.state !== "none" && request.id !== maxWindow.ownerId && requestClass(request) !== "reserved") return false;
-  if (codingModeActive && request.kind === "generator") return false;
+  if (windowHolds(request)) return false;
+  if (heldByCodingMode(request)) return false;
   if (memoryReadingDegraded) return false;
   // The Max owner is sized from the Max room, the same room the candidates and capabilities answers are built from (TIER-ROOM-01).
   const maxRoom = request.tier === "max" && request.caller !== "dev" && request.caller !== "test" && maxWindow.ownerId === request.id;
@@ -620,9 +642,7 @@ function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
   if (!gateVerdict(request, peakBytes).ok) return false;
   if (pressure === "critical" || (pressure === "warn" && requestClass(request) !== "reserved")) return false;
   const existing = loaded.get(request.id);
-  const generatorBusy = request.kind === "generator" && [...loaded.values()].some((item) => item.kind === "generator" && item !== existing);
-  if (generatorBusy) return false;
-  if ((request.tier === "boost" || request.tier === "max") && [...loaded.values()].some((item) => item !== existing && (item.tier === "boost" || item.tier === "max"))) return false;
+  if (!tierRulesHold(request, existing)) return false;
   const cap = effectiveCapBytes();
   const growth = Math.max(0, peakBytes - (existing?.peakBytes ?? 0));
   if (loadedBytes() + overageBytes() + growth > cap) return false;
@@ -632,8 +652,36 @@ function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
 /** Whether the request would be admitted if `freedBytes` of loaded jit memory were gone. The memory watchdog's gate is not asked: it reads real memory, which the item to be evicted still holds. */
 function wouldAdmitAfterFreeing(request: GovernorRequest, peakBytes: number, freedBytes: number): boolean {
   if (memoryReadingDegraded || pressure !== "normal") return false;
-  if (request.kind === "generator" && [...loaded.values()].some((item) => item.kind === "generator")) return false;
+  if (!tierRulesHold(request, loaded.get(request.id))) return false;
   return loadedBytes() + overageBytes() - freedBytes + peakBytes <= effectiveCapBytes() && freeMemoryBytes + freedBytes - peakBytes >= workingMargin();
+}
+
+/** QUEUE-FIT-01: only a generator that is not reserved passes a waiting job; chat, voice and the warm models keep their own rules. */
+function canBackfill(request: GovernorRequest): boolean { return request.kind === "generator" && requestClass(request) !== "reserved"; }
+/** A waiting job closes the way once smaller jobs have been admitted past it and it has waited `backfillMaxWaitMs`: it is never starved. */
+function agedOut(entry: QueuedEntry, now = Date.now()): boolean { return entry.passedOver && now - entry.queuedAt >= tuning.backfillMaxWaitMs; }
+const BACKFILL_TEXT = "A smaller job fit beside the work running, so it went ahead of one that is still waiting.";
+const BACKFILL_CLOSED_TEXT = "A bigger job has waited long enough, so nothing starts ahead of it now. This starts after it.";
+/** The queued jobs a new or waiting job would pass: those that cannot be admitted themselves right now. */
+function waitingAhead(request: GovernorRequest): QueuedEntry[] { return queue.filter((entry) => !entry.settled && entry.request.id !== request.id && !canAdmit(entry.request, peakFor(entry.request).bytes)); }
+
+/** One look at the queue in order, used after a release and on every poll. A job that fits is admitted even when a bigger one before it still waits; once a waiting job has been passed for `backfillMaxWaitMs`, nothing more goes past it. */
+function admitFromQueue(): void {
+  const blocked: QueuedEntry[] = [];
+  let index = 0;
+  while (index < queue.length) {
+    const entry = queue[index]!;
+    if (entry.settled) { queue.splice(index, 1); continue; }
+    if (!canAdmit(entry.request, peakFor(entry.request).bytes)) { blocked.push(entry); index++; continue; }
+    const passing = blocked.length > 0 && canBackfill(entry.request);
+    if (passing && blocked.some((waiting) => agedOut(waiting))) {
+      if (!entry.closedLogged) { entry.closedLogged = true; decide("Held", BACKFILL_CLOSED_TEXT, entry.request.id, "backfill_closed", entry.request.caller); }
+      blocked.push(entry); index++; continue;
+    }
+    settleAdmission(entry);
+    queue.splice(index, 1);
+    if (passing) { for (const waiting of blocked) waiting.passedOver = true; decide("Admitted", BACKFILL_TEXT, entry.request.id, "backfill", entry.request.caller); }
+  }
 }
 
 export async function admit(request: GovernorRequest): Promise<GovernorHandle | { queued: true; position: number; class: GovernorClass; admitted: Promise<GovernorHandle | { refused: true; reason: string }> } | { refused: true; reason: string }> {
@@ -659,7 +707,10 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
     decide("Refused", "The memory reading is unavailable.", request.id, undefined, request.caller);
     return { refused: true, reason: "The memory reading is unavailable." };
   }
-  if (!canAdmit(request, peak.bytes)) {
+  const passed = canBackfill(request) && !loaded.has(request.id) ? waitingAhead(request) : [];
+  const fits = canAdmit(request, peak.bytes);
+  const closedByBackfill = fits && passed.some((waiting) => agedOut(waiting));
+  if (closedByBackfill || !fits) {
     for (let index = queue.length - 1; index >= 0; index--) if (queue[index]!.settled) queue.splice(index, 1);
     const refusals = (refusalCounts.get(request.id) ?? 0) + 1;
     refusalCounts.set(request.id, refusals);
@@ -672,7 +723,7 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
     if (existing >= 0) return { queued: true, position: existing + 1, class: requestClass(request), admitted: queue[existing]!.admitted };
     let resolveQueued!: (result: GovernorHandle | { refused: true; reason: string }) => void;
     const admitted: Promise<GovernorHandle | { refused: true; reason: string }> = new Promise<GovernorHandle | { refused: true; reason: string }>((resolve) => { resolveQueued = resolve; });
-    const entry: QueuedEntry = { request, settled: false, headSince: null, admitted, resolve: resolveQueued };
+    const entry: QueuedEntry = { request, settled: false, headSince: null, queuedAt: Date.now(), passedOver: false, closedLogged: closedByBackfill, admitted, resolve: resolveQueued };
     if (request.tier === "max" && request.caller !== "dev" && request.caller !== "test" && maxWindow.state === "none") {
       maxWindow = { state: "draining", ownerId: request.id, since: Date.now() };
       reclaim(request.id, "window_drain", "", 0);
@@ -688,13 +739,15 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
     }
     for (let index = queue.length - 1; index >= 0; index--) if (queue[index]!.settled) queue.splice(index, 1);
     const gated = gateVerdict(request, peak.bytes);
-    const heldByMode = codingModeActive && request.kind === "generator";
-    const heldByWindow = maxWindow.state !== "none" && request.id !== maxWindow.ownerId && requestClass(request) !== "reserved";
-    decide("Queued", heldByWindow ? "A Max job is waiting for the computer. This one starts after it." : heldByMode ? "The large coding mode is holding picture, video and music work." : !gated.ok ? gated.reason : pressure !== "normal" ? `Memory pressure is ${pressure}.` : "The current memory budget cannot admit the request.", request.id, heldByWindow ? "max_window" : heldByMode ? "coding_mode" : undefined, request.caller);
+    const heldByMode = heldByCodingMode(request);
+    const heldByWindow = windowHolds(request);
+    const closed = closedByBackfill && !heldByWindow && !heldByMode;
+    decide("Queued", heldByWindow ? "A Max job is waiting for the computer. This one starts after it." : heldByMode ? "The large coding mode is holding Boost and Max picture, video and music work." : closed ? BACKFILL_CLOSED_TEXT : !gated.ok ? gated.reason : pressure !== "normal" ? `Memory pressure is ${pressure}.` : "The current memory budget cannot admit the request.", request.id, heldByWindow ? "max_window" : heldByMode ? "coding_mode" : closed ? "backfill_closed" : undefined, request.caller);
     return { queued: true, position: queue.indexOf(entry) + 1, class: requestClass(request), admitted };
   }
   refusalCounts.delete(request.id);
   resolveHealth("admission-refused-repeatedly");
+  if (passed.length > 0) for (const waiting of passed) waiting.passedOver = true;
   const borrowsFlexBand = usesFlexBand(request, peak.bytes);
   const existing = loaded.get(request.id);
   if (existing) {
@@ -718,6 +771,7 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
   loaded.set(request.id, item);
   if (borrowsFlexBand) flexBandBorrowerToken = item.token;
   decide("Admitted", "The current memory budget has room.", request.id, undefined, request.caller);
+  if (passed.length > 0) decide("Admitted", BACKFILL_TEXT, request.id, "backfill", request.caller);
   if (request.tier === "max" && request.caller !== "dev" && request.caller !== "test") { maxWindow = { state: "open", ownerId: request.id, since: Date.now() }; windowEvent({ state: "open", owner: request.id, tier: "max" }, request); }
   return { id: request.id, kind: request.kind, class: requestClass(request), requestedBytes: peak.bytes, token: item.token, retainWarm: request.retainWarm, ...(request.tier ? { tier: request.tier } : {}) };
 }
@@ -808,13 +862,7 @@ export function release(handle: GovernorHandle): void {
   loaded.delete(handle.id);
   if (item.token === flexBandBorrowerToken) flexBandBorrowerToken = null;
   if (memoryReadingDegraded) return;
-  while (queue.length > 0) {
-    const next = queue[0]!;
-    if (next.settled) { queue.shift(); continue; }
-    if (!canAdmit(next.request, peakFor(next.request).bytes)) break;
-    queue.shift();
-    settleAdmission(next);
-  }
+  admitFromQueue();
 }
 
 /** Removes a queued request before it is admitted and settles its
@@ -1050,7 +1098,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
     // asked: only items that declared `yieldsToGenerators` are.
     if (unloadItem && queue.length > 0) {
       const head = queue.find((entry) => !entry.settled);
-        if (!codingModeActive && head && head.request.kind === "generator") {
+        if (head && head.request.kind === "generator" && !heldByCodingMode(head.request)) {
         const yielding = [...loaded.values()].filter((item) => item.kind === "jit" && item.yieldsToGenerators && !item.evicting && !item.pinned);
         const headPeak = peakFor(head.request).bytes;
         if (yielding.length > 0 && !canAdmit(head.request, headPeak) && wouldAdmitAfterFreeing(head.request, headPeak, yielding.reduce((sum, item) => sum + item.peakBytes, 0))) {
@@ -1091,7 +1139,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
       const reclaimable = reclaim.items;
       // An item inside its pool grace (MEM-SPACE-01) is about to go; the ladder is not empty yet.
       const reclaimPollBusy = (!unloadItem && reclaimable.length > 0) || reclaim.heldForGraceBytes > 0;
-      if (head && head.request.caller !== "dev" && head.request.caller !== "test" && head.request.kind === "generator" && head.request.role === "video" && !codingModeActive && !canAdmit(head.request, peakFor(head.request).bytes) && !options.chatWindowShrunk?.() && !evictionPending && reclaimable.length === 0 && !reclaimPollBusy && (quiet || maxWaitPassed)) {
+      if (head && head.request.caller !== "dev" && head.request.caller !== "test" && head.request.kind === "generator" && head.request.role === "video" && !heldByCodingMode(head.request) && !canAdmit(head.request, peakFor(head.request).bytes) && !options.chatWindowShrunk?.() && !evictionPending && reclaimable.length === 0 && !reclaimPollBusy && (quiet || maxWaitPassed)) {
         videoShrinkMaxWaitSeconds = maxWait;
         videoQuietSeconds = quietSeconds;
         chatYieldBusy = true;
@@ -1109,7 +1157,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
     // SPLASH-MEM-01: a picture, video or song job is held, nothing lighter can be freed, and chat has grown past what it
     // was admitted for by enough to let the job in: chat is restarted between turns (its cache is the growth; the fresh
     // process starts at its admitted size). Owner's ruling 2026-11-12: allowed while idle, never mid-turn.
-    if (options.restartChat && !chatYieldBusy && head && head.request.kind === "generator" && !codingModeActive && !canAdmit(head.request, peakFor(head.request).bytes)) {
+    if (options.restartChat && !chatYieldBusy && head && head.request.kind === "generator" && !heldByCodingMode(head.request) && !canAdmit(head.request, peakFor(head.request).bytes)) {
       const chatOverage = overageOf("chat");
       const interactiveAt = options.lastInteractiveAt?.() ?? null;
       const quietSeconds = head.request.quietSeconds ?? 60;
@@ -1147,17 +1195,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
           reclaim(maxOwner.request.id, draining ? "window_drain" : "window_wait", "", 0);
         }
       }
-      let index = 0;
-      while (index < queue.length) {
-        const entry = queue[index]!;
-        if (entry.settled) {
-          queue.splice(index, 1);
-          continue;
-        }
-        if (!canAdmit(entry.request, peakFor(entry.request).bytes)) break;
-        settleAdmission(entry);
-        queue.splice(index, 1);
-      }
+      admitFromQueue();
       const head = (maxWindow.state === "draining" ? queue.find((entry) => entry.request.id === maxWindow.ownerId) : undefined) ?? queue[0];
       if (head && unloadItem && !head.settled && !canAdmit(head.request, peakFor(head.request).bytes)) {
         const required = peakFor(head.request).bytes;
@@ -1228,6 +1266,7 @@ export function __resetGovernorForTests(): void {
     idleTtlSeconds: GovernorRules.idleTtlSeconds,
     queueMax: GovernorRules.queueMax,
     drainNeverFitMs: GovernorRules.drainNeverFitMs,
+    backfillMaxWaitMs: GovernorRules.backfillMaxWaitMs,
     systemLowWaterPct: GovernorRules.systemLowWaterPct,
     systemLowWaterFloorBytes: GovernorRules.systemLowWaterFloorBytes,
     systemSustainedPolls: GovernorRules.systemSustainedPolls,

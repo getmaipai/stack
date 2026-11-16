@@ -750,9 +750,9 @@ test("admission-refused-repeatedly still raises after three refusals of the same
 });
 
 test("a release during a degraded read keeps the head queued with its promise pending, and the next good read admits it", async () => {
-  await admit({ id: "busy", kind: "generator", requestedBytes: GB });
+  await admit({ id: "busy", kind: "generator", tier: "boost", requestedBytes: GB });
   const first = await admit({ id: "first", kind: "resident", requestedBytes: GB }) as GovernorHandle;
-  const queued = await admit({ id: "queued", kind: "generator", requestedBytes: 2 * GB });
+  const queued = await admit({ id: "queued", kind: "generator", tier: "boost", requestedBytes: 2 * GB });
   expect(queued).toMatchObject({ queued: true, position: 1 });
   const stop = startGovernor({ pid: 1, pollMs: 1, memoryReader: scriptedMemoryReader([
     { totalBytes: 64 * GB, freeBytes: 8 * GB, availablePercent: 12, pressure: "warn", degraded: false },

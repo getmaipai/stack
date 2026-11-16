@@ -867,7 +867,7 @@ no way to bring a recording in (Home's note, section 9: no uploaded audio and no
 **Edits.** `task: edit` runs no model: the worker trims, fades or normalises the decoded samples and encodes the file again, well under a second. It takes no governor
 admission, but it goes through the same single chain as a song, so the worker is never shared: an edit sent while a song is being made starts when the song ends.
 
-Memory: a song holds one governor admission through the generator queue (one generator job at a time across pictures, video and music; the loser shows `waiting for memory`)
+Memory: a song holds one governor admission through the generator queue (jobs run together when their peaks fit; one that does not fit shows `waiting for memory`)
 of `MUSIC_PEAK_BYTES` (33 GB: the measured 32 GB peak of a 240 s detailed song plus a gigabyte; a requested transcript adds 2 GB, for 35 GB total). XL qualities reserve 52 GB, or 54 GB with a transcript. A song that can never fit beside what is resident is 503 `no_memory` at once, and so is any song while
 the memory watchdog's level is not `normal`. Four songs may be waiting (429 `queue_full`).
 
@@ -892,7 +892,7 @@ model records (revision, sha256, bytes, licence per file; about 16 GB for Klein,
 role stays on the supervised ComfyUI checkpoint exactly as before (`GET /stack/v1/roles` shows which). Design and the measurements: Home
 `docs/design/image-engine-2026-10-17.md`.
 
-Memory: a job holds one governor admission through the generator queue (one generator job at a time across pictures and video; the loser shows
+Memory: a job holds one governor admission through the generator queue (jobs run together when their peaks fit; one that does not fit shows
 `waiting for memory`): Klein 8-bit 15 GB (13 GB at 4-bit on a 32 GB Mac, which is the only change a tier makes), Klein reference edit at bf16 18 GB,
 Z-Image-Turbo 34 GB (p128 only), plus 1 GB while LoRAs are applied (unbaked: about 0.6 s a picture slower, no rebuild to change a scale). A request that can
 never fit beside what is resident is 503 `no_memory` at once. Four jobs may be waiting (429 `queue_full`).

@@ -203,7 +203,7 @@ export function submitJob(input: { kind: string; role?: string | null; caller?: 
     void pumpLane(lane.name);
     return { job: jobs.get(job.id)! };
   }
-  if (runner.options.generator && generatorsHeldByMode()) return { refused: true, code: "coding_mode", reason: REFUSED_BY_MODE_TEXT };
+  if (runner.options.generator && generatorsHeldByMode((input.input as { tier?: JobTier } | null)?.tier)) return { refused: true, code: "coding_mode", reason: REFUSED_BY_MODE_TEXT };
   if (runner.options.generator) {
     const role = runner.options.generator.role;
     const queue = queues.get(role) ?? [];
@@ -396,7 +396,7 @@ async function admitJob(jobId: string, request: GovernorRequest, preempt: Promis
   const refreshQueuedStatus = (): void => {
     const latest = getReclaimSteps(request.id).at(-1);
     const maxWaiting = getGovernorStatus().queue.some((entry) => entry.id !== request.id && entry.tier === "max");
-    const status = maxWaiting ? "A Max job is waiting for the computer. This one starts after it." : latest?.step === "pool_idle_wait" ? "Waiting for the picture model to go idle (up to 2 minutes), then making room." : latest?.step === "evict_pool" ? "Put the picture model away to make room." : latest?.step === "evict_idle" ? "Put an idle model away to make room." : latest?.step === "window_drain" ? MAX_DRAIN_STATUS : latest?.step === "window_wait" ? MAX_WAIT_STATUS : generatorsHeldByMode() ? HELD_BY_MODE_TEXT : waitingText(peak, answer.position);
+    const status = maxWaiting ? "A Max job is waiting for the computer. This one starts after it." : latest?.step === "pool_idle_wait" ? "Waiting for the picture model to go idle (up to 2 minutes), then making room." : latest?.step === "evict_pool" ? "Put the picture model away to make room." : latest?.step === "evict_idle" ? "Put an idle model away to make room." : latest?.step === "window_drain" ? MAX_DRAIN_STATUS : latest?.step === "window_wait" ? MAX_WAIT_STATUS : generatorsHeldByMode(request.tier) ? HELD_BY_MODE_TEXT : waitingText(peak, answer.position);
     if (getJob(jobId)?.status !== status) updateJob(jobId, { status });
   };
   refreshQueuedStatus();

@@ -222,6 +222,8 @@ test("a video clip holding the generator admission makes a picture wait, never r
   imageGen.useDeps(scripted());
   const held = await admit({ id: "video-job", kind: "generator", requestedBytes: 44 * GB, engine: "video-gen" });
   expect("queued" in held || "refused" in held).toBe(false);
+  // The clip holds the computer's memory (QUEUE-FIT-01: a picture waits for lack of room, not for a rule against two generators).
+  __setGovernorTuningForTestsOnly({ freeMemoryBytes: 8 * GB });
   const response = await post({ prompt: "a boat", timeout_ms: 60 });
   expect(response.status).toBe(202);
   const job = ((await response.json()) as { job: string }).job;
