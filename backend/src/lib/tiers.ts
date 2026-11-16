@@ -118,17 +118,22 @@ export function resolveLadder(category: TierCategory, profile: ProfileId, roomBy
   });
 }
 
-/** The resolved tier peaks Home needs to describe this machine's tier options. */
-export function budgetSlots(profile: ProfileId | null | undefined, roomBytes = 0): Array<{ category: "chat" | "pictures" | "video" | "music"; tier: TierId; model: string; peak_bytes: number; verified: boolean }> {
+export interface BudgetSlot { category: TierCategory; tier: TierId; model: string | null; peak_bytes: number | null; basis: "measured" | "estimated" | null; verified: boolean; resident_bytes: number | null; fits_ever: boolean }
+const BUDGET_CATEGORIES: TierCategory[] = ["chat", "pictures", "video", "music", "voice", "stems"];
+const BUDGET_TIERS: TierId[] = ["reduced", "standard", "boost", "max"];
+/**
+ * TIER-BUDGET-01: what each level of each category needs on this profile, from the tier room (what the machine can ever hold), never from memory free now; fit-now is the governor's call at admission. A category appears when the profile has a candidate for it; inside it every level is listed, with nulls when no model is catalogued. Resolution ignores the cap so an oversized model still shows its peak; `fits_ever` compares it with the level's cap. `resident_bytes` is null: no design footprint is catalogued yet. TIER-ROOM-01 (the "max" mode of tierRoomBytes) is where the Max cells would use the Max room.
+ */
+export function budgetSlots(profile: ProfileId | null | undefined, roomBytes = 0): BudgetSlot[] {
   if (!profile) return [];
-  const rows: Array<{ category: "chat" | "pictures" | "video" | "music"; tier: TierId; model: string; peak_bytes: number; verified: boolean }> = [];
-  for (const category of ["chat", "pictures", "video", "music"] as const) {
-    if (category === "chat") {
-      const reduced = resolveTier({ category, tier: "reduced", profile, roomBytes });
-      if (reduced) rows.push({ category, tier: "reduced", model: reduced.model, peak_bytes: reduced.peakBytes, verified: reduced.verified });
-    }
-    for (const { tier, resolved } of resolveLadder(category, profile, roomBytes)) {
-      if (resolved) rows.push({ category, tier, model: resolved.model, peak_bytes: resolved.peakBytes, verified: resolved.verified });
+  const rows: BudgetSlot[] = [];
+  for (const category of BUDGET_CATEGORIES) {
+    if (!TIER_CANDIDATES.some((candidate) => candidate.category === category && candidate.profiles.includes(profile) && !candidate.vetting && candidate.tiers.length > 0)) continue;
+    const ladder = resolveLadder(category, profile, Number.MAX_SAFE_INTEGER);
+    for (const tier of BUDGET_TIERS) {
+      const resolved = tier === "reduced" ? resolveTier({ category, tier, profile, roomBytes: Number.MAX_SAFE_INTEGER }) : ladder.find((row) => row.tier === tier)?.resolved ?? null;
+      if (tier === "reduced" && !resolved && category !== "chat" && category !== "voice") continue;
+      rows.push({ category, tier, model: resolved?.model ?? null, peak_bytes: resolved?.peakBytes ?? null, basis: resolved ? (resolved.verified ? "measured" : "estimated") : null, verified: resolved?.verified ?? false, resident_bytes: null, fits_ever: resolved ? resolved.peakBytes <= (tier === "reduced" ? roomBytes : tierCapBytes(tier, roomBytes)) : false });
     }
   }
   return rows;
